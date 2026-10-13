@@ -45,9 +45,9 @@ cd ~/src/score
 CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
 ```
 
-`chopin connect` saves the server, so you set `CHOPIN_URL` only this once. Later
-commands, and the background service, use the saved server. Without
-`CHOPIN_URL` or a saved server, `chopin` uses `https://chopin.githubnext.com`.
+Once it connects, `chopin connect` saves the server, so you set `CHOPIN_URL`
+only this once. Later commands use the saved server. Without `CHOPIN_URL` or a
+saved server, `chopin` uses `https://chopin.githubnext.com`.
 
 The first time, `chopin connect` pairs this machine with your Chopin account:
 
@@ -80,10 +80,11 @@ Work from any document in that repository now runs in this checkout.
 ## Keep it running
 
 `chopin service install` runs your connection in the background, so it starts
-again after a reboot and needs no open terminal. It takes no arguments and runs
-what `chopin connect` last ran, with the server it saved.
+again after a reboot and needs no open terminal. It takes no arguments. It
+copies what `chopin connect` last ran, server included, and runs that copy.
 
 1. Run `chopin connect` once, as above, and press Ctrl-C after `✓ Connected.`
+   A connect that stops before then saves nothing.
 2. Install the service:
 
    ```sh
@@ -93,17 +94,21 @@ what `chopin connect` last ran, with the server it saved.
 The service can't answer permission prompts, so give your agent its approval
 flag, such as `--allow-all`.
 
-To change what the service runs, run `chopin connect` again with new arguments,
-then restart the service:
+A later `chopin connect`, here or in another checkout, doesn't change what the
+service runs. To change it, connect again with the new arguments, then install
+again:
 
 ```sh
-chopin connect ~/src/other-project -- copilot --acp --allow-all
-chopin service restart
+chopin connect ~/src/other-project -- copilot --acp --allow-all   # Ctrl-C after ✓ Connected.
+chopin service install
 ```
 
-If the service is already running that checkout, `chopin connect` only saves
-your settings and prints
-`The chopin service is running this checkout. Saved your settings; run chopin service restart to use them.`
+If the service is running the checkout you connect, `chopin connect` saves your
+settings without connecting and prints:
+
+```text
+The chopin service is running this checkout. Saved your settings; run chopin service install to use them.
+```
 
 Each operating system has its own catch:
 
@@ -129,9 +134,13 @@ Machine:    paired as build-box (octocat); Chopin accepts it
 Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
 Service:    running (systemd, pid 4242)
             definition: /home/me/.config/systemd/user/chopin.service
+            runs /home/me/src/score with /home/me/.local/bin/copilot --acp --allow-all, on https://your-chopin-instance.example
 Log:        /home/me/.local/state/chopin/connector/chopin.log
 Base dir:   /home/me/.local/state/chopin/connector
 ```
+
+If you have connected something else since you installed the service, status
+shows that too, with a reminder to run `chopin service install`.
 
 `chopin status` asks Chopin whether it still accepts this machine. It never
 pairs, connects or changes anything.
@@ -176,17 +185,17 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 ## Commands
 
-| Command                                               | What it does                                                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `chopin connect [checkout] -- <agent>`                | Runs work from Chopin with your agent in this checkout. Pairs first if needed. |
-| `chopin pair [--label <name>]`                        | Pairs this machine, or pairs it again. The label defaults to the hostname.     |
-| `chopin status [--json]`                              | Shows the server, pairing, running connectors, service and log.                |
-| `chopin service install [--allow-downgrade]`          | Runs what `chopin connect` last ran as a background service.                   |
-| `chopin service status`                               | Prints `running`, `stopped`, `restart-pending` or `not-installed`.             |
-| `chopin service restart`                              | Restarts the service with your latest settings, or after an update.            |
-| `chopin service uninstall`                            | Removes the service. The pairing, settings and past runs stay.                 |
-| `chopin update [version] [--allow-downgrade] [--yes]` | Installs the release your server asks for, or the one you name.                |
-| `chopin unpair`                                       | Revokes this machine in Chopin and deletes its token.                          |
+| Command                                               | What it does                                                                              |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `chopin connect [checkout] -- <agent>`                | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
+| `chopin pair [--label <name>]`                        | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
+| `chopin status [--json]`                              | Shows the server, pairing, running connectors, the service and what it runs, and the log. |
+| `chopin service install [--allow-downgrade]`          | Copies what `chopin connect` last ran and runs it as a background service.                |
+| `chopin service status`                               | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                        |
+| `chopin service restart`                              | Restarts the service with the settings it has, for example after an update.               |
+| `chopin service uninstall`                            | Removes the service. The pairing, settings and past runs stay.                            |
+| `chopin update [version] [--allow-downgrade] [--yes]` | Installs the release your server asks for, or the one you name.                           |
+| `chopin unpair`                                       | Revokes this machine in Chopin and deletes its token.                                     |
 
 Every command takes `--base-dir <dir>`, or `CHOPIN_HOME`, to keep its files
 somewhere other than the default folder.
@@ -201,9 +210,9 @@ see
 `chopin connect` saved. Run `chopin connect` again with the server you want in
 `CHOPIN_URL`, then `chopin service install`.
 
-**"Run chopin connect once in your checkout first (it saves what the service
-runs), then chopin service install."** Run `chopin connect` in your checkout,
-wait for `✓ Connected.`, press Ctrl-C, then install again.
+**"Run chopin connect once in your checkout first, then chopin service
+install."** Run `chopin connect` in your checkout, wait for `✓ Connected.`,
+press Ctrl-C, then install again.
 
 **"This machine is not paired with …"** The service can't pair. Run
 `chopin pair` at a terminal, then the command the message names.

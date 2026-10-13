@@ -4,22 +4,24 @@ The details behind [Use your own machine with Chopin](chopin-cli.md).
 
 ## Which server chopin uses
 
-You set `CHOPIN_URL` once, for `chopin connect`. It saves that server in
-`config.json`, and the other commands and the service use the saved one.
+You set `CHOPIN_URL` once, for `chopin connect`. Once connected, it saves that
+server in `config.json`, and the other commands use the saved one.
+`chopin service install` copies it for the service.
 
-| Command                                                          | Server                                                                                               |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `chopin connect`                                                 | `CHOPIN_URL`, else the saved server, else `https://chopin.githubnext.com`. It saves the one it uses. |
-| `chopin pair`, `chopin unpair`, `chopin status`, `chopin update` | The same order, but they save nothing.                                                               |
-| `chopin service install` and the service                         | The saved server. Install refuses when `CHOPIN_URL` names another one.                               |
+| Command                                                          | Server                                                                                                      |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `chopin connect`                                                 | `CHOPIN_URL`, else the saved server, else `https://chopin.githubnext.com`. It saves the one it connects to. |
+| `chopin pair`, `chopin unpair`, `chopin status`, `chopin update` | The same order, but they save nothing.                                                                      |
+| `chopin service install`                                         | The saved server. It refuses when `CHOPIN_URL` names another one.                                           |
+| The service                                                      | The server install copied.                                                                                  |
 
 `CHOPIN_URL` must be the server's origin alone, such as
 `https://your-chopin-instance.example`. Plain HTTP works only on `localhost`,
 `127.0.0.1` and `[::1]`.
 
 To move to another server, run `chopin connect` again with the new
-`CHOPIN_URL`. If the service is running, run `chopin pair` too when the machine
-isn't paired with that server yet, then `chopin service restart`.
+`CHOPIN_URL`. If you use the service, run `chopin service install` again after
+it connects.
 
 ## Where chopin keeps its files
 
@@ -30,7 +32,7 @@ isn't paired with that server yet, then `chopin service restart`.
 | File or folder | Holds                                                                                            |
 | -------------- | ------------------------------------------------------------------------------------------------ |
 | `machine.json` | The machine token for each server. Only you can read it (mode `0600`). `chopin` never prints it. |
-| `config.json`  | What `chopin connect` last ran, with its server, and the installed service. No secrets.          |
+| `config.json`  | What `chopin connect` last ran, and the service with its own copy of that. No secrets.           |
 | `chopin.log`   | The service's output.                                                                            |
 | `*.lock`       | One lock for each checkout that a connector is serving.                                          |
 | `runs/`        | A Git worktree for each job, kept for you to inspect.                                            |
@@ -96,10 +98,10 @@ again.
 ## How the service runs
 
 The service runs the installed `chopin` by its absolute path, as
-`chopin connect --base-dir <dir> --service`. When it starts, it reads what
-`chopin connect` saved, including the server, and the machine token. No token
-or other secret goes into the service definition. There is one service per
-user account.
+`chopin connect --base-dir <dir> --service`. When it starts, it reads its own
+settings, which install copied from `chopin connect`, server included, and the
+machine token. No token or other secret goes into the service definition. There
+is one service per user account.
 
 Before writing anything, install finds the agent's absolute path and builds the
 PATH the service runs with. That PATH leaves out folders that disappear on
@@ -145,13 +147,15 @@ Scheduler then refuses `restart` or `uninstall`, run them as administrator too.
 
 `chopin status --json` prints one object. Later releases only add keys.
 
-| Key          | Value                                                                                                                                                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`    | The CLI version, `dev` from source.                                                                                                                                                                                                  |
-| `protocol`   | The connector protocol it speaks.                                                                                                                                                                                                    |
-| `server`     | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                             |
-| `machine`    | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
-| `connectors` | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
-| `service`    | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
-| `log`        | The service's log file.                                                                                                                                                                                                              |
-| `baseDir`    | The state directory the report is for.                                                                                                                                                                                               |
+| Key           | Value                                                                                                                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`     | The CLI version, `dev` from source.                                                                                                                                                                                                  |
+| `protocol`    | The connector protocol it speaks.                                                                                                                                                                                                    |
+| `server`      | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                             |
+| `machine`     | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`. |
+| `connectors`  | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601) and `planners`.                                                                      |
+| `service`     | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                   |
+| `log`         | The service's log file.                                                                                                                                                                                                              |
+| `baseDir`     | The state directory the report is for.                                                                                                                                                                                               |
+| `serviceRuns` | What the service runs: `server`, `checkout`, `command`, `planners` and `plannerCommand`, or `null` before an install.                                                                                                                |
+| `lastConnect` | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                           |
