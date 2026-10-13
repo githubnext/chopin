@@ -218,6 +218,13 @@ test("right-aligns a comment card to the column wherever its passage starts", ()
 	expect(narrow).toMatchObject({ left: 320, width: 280 });
 });
 
+test("keeps a draft at its selection's left edge, inside the column", () => {
+	let options = { align: "passage" as const };
+	expect(commentCardPoint(passage(200), column, host, 320, 200, options))
+		.toEqual({ top: 132, left: 200, width: 320, side: "below" });
+	expect(commentCardPoint(passage(200, 600, 690), column, host, 320, 200, options).left).toBe(280);
+});
+
 test("flips a comment card above its passage when there is no room below", () => {
 	expect(commentCardPoint(passage(600), column, host, 320, 200))
 		.toEqual({ top: 292, left: 280, width: 320, side: "above" });

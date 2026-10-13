@@ -1083,14 +1083,14 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let editorRoot = editor.getRootElement();
 	let column = editorRoot ? proseColumn(editorRoot) : page;
 	let cardWidth = Math.min(320, host.clientWidth - 24);
-	let cardPlacement = (passage: Rect, id: string) => {
+	let cardPlacement = (passage: Rect, id: string, align?: "passage") => {
 		let { side, ...style } = commentCardPoint(
 			passage,
 			column,
 			page,
 			cardWidth,
 			cardHeights[id] ?? 0,
-			{ lane: MARKER_LANE },
+			{ align, lane: MARKER_LANE },
 		);
 		return { side, style };
 	};
@@ -1394,7 +1394,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 						),
 						className: "plan-comment-card",
 						onMeasure: element => rememberHeight("draft", element),
-						...cardPlacement(draft.placement, "draft"),
+						...cardPlacement(draft.placement, "draft", "passage"),
 					}
 					: undefined}
 			/>
