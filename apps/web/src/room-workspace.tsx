@@ -1509,20 +1509,21 @@ export function RoomWorkspace(
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
-	// has no build of its own.
-	let buildSlot = profile.implementation && presentation.type !== "parent-with-child" && (
-		<BuildPlanButton
-			build={build}
-			canEdit={!!workspaceCanEdit && status === "connected"}
-			compact={mode !== "split"}
-			hot={buildHover === "tab"}
-			onExplain={phone ? explainBuild : undefined}
-			phone={phone}
-			onHover={on => setBuildHover(on ? "capsule" : undefined)}
-			onOpen={() => selectDestination("build")}
-			tabReady={build.tabReady}
-		/>
-	);
+	// has no build of its own. A phone shows this room's bar only off Document, so it keeps it.
+	let buildSlot = profile.implementation && (presentation.type !== "parent-with-child" || phone)
+		&& (
+			<BuildPlanButton
+				build={build}
+				canEdit={!!workspaceCanEdit && status === "connected"}
+				compact={mode !== "split"}
+				hot={buildHover === "tab"}
+				onExplain={phone ? explainBuild : undefined}
+				phone={phone}
+				onHover={on => setBuildHover(on ? "capsule" : undefined)}
+				onOpen={() => selectDestination("build")}
+				tabReady={build.tabReady}
+			/>
+		);
 
 	// The tab bar's pencil edits the document on screen: an open child, or else this one.
 	let barEdit = childOpen
@@ -1616,7 +1617,8 @@ export function RoomWorkspace(
 					header={phone
 						? (
 							<PhoneHeader
-								child={presentation.type === "parent-with-child"
+								// The child's bar goes with its document: Chat, Decisions and Build are this room's.
+								child={presentation.type === "parent-with-child" && planVisible
 									? { onReturn: presentation.onChildClose, slot: setChildTitleSlot }
 									: undefined}
 								label={metadata.title}
@@ -1628,7 +1630,7 @@ export function RoomWorkspace(
 									comments={openComments}
 									context={buildSlot}
 									editing={titleEdit}
-									editingDocument={!!barEdit?.editing}
+									editingDocument={!childOpen && !!barEdit?.editing}
 									label={metadata.title}
 									members={members}
 									onAction={action => onDocumentAction(room, action)}

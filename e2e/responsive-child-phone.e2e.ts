@@ -188,6 +188,21 @@ test("a child takes the phone's top bar: Back, its own title and actions, and it
 		await field.press("Escape");
 		await expect(field).toHaveCount(0);
 
+		// Off Document the bar is the root's again: its Documents, title and build.
+		let tabs = page.getByRole("navigation", { name: "Workspace view" });
+		for (let tab of [/^Chat/, /^Decisions/]) {
+			await tabs.getByRole("button", { name: tab }).tap();
+			await expect(bar.getByRole("button", { name: "Documents", exact: true })).toBeVisible();
+			await expect(bar.getByRole("button", { name: /^Back to / })).toHaveCount(0);
+			await expect(bar.locator(".phone-top-bar-title")).toHaveText(parent);
+			await expect(bar.locator(".phone-top-bar-subtitle")).toContainText("score");
+			await expect(bar.getByRole("button", { name: `Actions for ${parent}` })).toBeVisible();
+		}
+		await tabs.getByRole("button", { name: "Document", exact: true }).tap();
+		await expect(surface).toBeVisible();
+		await expect(bar.locator(".phone-top-bar-title")).toHaveText(child);
+		await expect(bar.locator(".phone-top-bar-subtitle")).toHaveText(`in ${parent}`);
+
 		let back = bar.getByRole("button", { name: `Back to ${parent}` });
 		let backBox = (await back.boundingBox())!;
 		expect(Math.min(backBox.width, backBox.height)).toBeGreaterThanOrEqual(43.5);
