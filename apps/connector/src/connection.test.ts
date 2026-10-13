@@ -531,9 +531,13 @@ test("a connection failure's cause never shows credentials from the error", () =
 		new Error("connect via https://alice:supersecret@proxy.example.test:8080/ failed. More detail"),
 		{ code: "ECONNRESET" },
 	);
-	expect(failureCause(reset)).toBe("ECONNRESET: connect via https://[redacted]@proxy.example.test:8080/ failed");
+	expect(failureCause(reset)).toBe(
+		"ECONNRESET: connect via https://[redacted]@proxy.example.test:8080/ failed",
+	);
 	let wrapped = new TypeError("fetch failed", {
-		cause: new Error("token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 and Bearer abcdef0123456789xyz rejected"),
+		cause: new Error(
+			"token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 and Bearer abcdef0123456789xyz rejected",
+		),
 	});
 	let text = failureCause(wrapped);
 	expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
