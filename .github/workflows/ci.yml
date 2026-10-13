@@ -89,6 +89,7 @@ jobs:
         shard: [1, 2, 3, 4]
     env:
       PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/blob-report
+      PLAYWRIGHT_BLOB_OUTPUT_NAME: shard-${{ matrix.shard }}.zip
     steps:
       - uses: actions/checkout@v7
 
@@ -194,8 +195,8 @@ jobs:
             e2e/test-results
           retention-days: 7
 
-  # Keep the existing `e2e` check as the gate for every browser job. A partial merged report
-  # can still help diagnose a failed shard, but must never turn that failure green.
+  # Keep the existing `e2e` check as the gate for every browser job and report. Producer success
+  # alone is insufficient if a report is no longer available when the collector reruns.
   browser:
     name: e2e
     needs: [browser-integration, browser-design]
@@ -223,7 +224,14 @@ jobs:
 
       - name: Merge integration results, retries, and traces
         if: ${{ !cancelled() && steps.blobs.outcome == 'success' }}
-        run: bun node_modules/@playwright/test/cli.js merge-reports --reporter=html,json e2e/blob-report
+        run: |
+          for shard in 1 2 3 4; do
+            if [ ! -f "e2e/blob-report/shard-$shard.zip" ]; then
+              echo "::error::Missing integration report for shard $shard"
+              exit 1
+            fi
+          done
+          bun node_modules/@playwright/test/cli.js merge-reports --reporter=html,json e2e/blob-report
         env:
           PLAYWRIGHT_HTML_OPEN: never
           PLAYWRIGHT_HTML_OUTPUT_DIR: e2e/playwright-report/integration
@@ -244,6 +252,9 @@ jobs:
         run: |
           test "$INTEGRATION_RESULT" = success
           test "$DESIGN_RESULT" = success
+          test -f e2e/.scratch/ci-reports/design.json
+          test -f e2e/.scratch/ci-reports/gallery.json
+          test -f e2e/.scratch/ci-reports/integration.json
 
       - name: Summarise browser results and retries
         id: browser_summary
