@@ -166,6 +166,89 @@ test("Ctrl-C while backing off exits at once", async () => {
 	expect(performance.now() - started).toBeLessThan(500);
 });
 
+test("Ctrl-C while Chopin withholds its handshake exits at once", async () => {
+	let entered = Promise.withResolvers<void>();
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			entered.resolve();
+			await new Promise(resolve => request.signal.addEventListener("abort", resolve));
+			return new Response(null, { status: 503 });
+		},
+	});
+	servers.push(server);
+	let abort = new AbortController();
+	let serving = serveWork({
+		connect: signal => remote(`http://127.0.0.1:${server.port}`, "token", signal),
+		signal: abort.signal,
+		output: terminal().output,
+		run: async () => {},
+	});
+	await entered.promise;
+	let started = performance.now();
+	abort.abort();
+	await serving;
+	expect(performance.now() - started).toBeLessThan(1000);
+});
+
+test("Ctrl-C while a claim is withheld exits at once and gives the work back", async () => {
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let fake = chopin({
+		wait_for_work: () => ({ id: "work-1", kind: "experiment" }),
+		claim_experiment: async () => {
+			entered.resolve();
+			await release.promise;
+			return { claimed: "work-1" };
+		},
+	});
+	let abort = new AbortController();
+	let ran = 0;
+	let serving = serveWork({
+		connect: signal => remote(fake.url, "token", signal),
+		signal: abort.signal,
+		output: terminal().output,
+		run: async () => void ran++,
+	});
+	await entered.promise;
+	let started = performance.now();
+	abort.abort();
+	await serving;
+	expect(performance.now() - started).toBeLessThan(1000);
+	release.resolve();
+	await Bun.sleep(50);
+	expect(ran).toBe(0);
+	// Leaving interrupts whatever the server handed this connection meanwhile.
+	expect(fake.calls).toEqual(["wait_for_work", "claim_experiment", "disconnect_workspace"]);
+});
+
+test("a claim answered after Ctrl-C is given back, not run", async () => {
+	let abort = new AbortController();
+	let calls: string[] = [];
+	let ran = 0;
+	await serveWork({
+		// A link that answers even after its signal aborted, as a reply already on the wire does.
+		connect: async () =>
+			({
+				close: async () => {},
+				tools: async () => ({ tools: [] }),
+				invoke: async () => ({ content: [] }),
+				async call(name: string) {
+					calls.push(name);
+					if (name === "wait_for_work") return { id: "work-1", kind: "experiment" };
+					if (name === "claim_experiment") abort.abort();
+					return {};
+				},
+			}) as unknown as Awaited<ReturnType<typeof remote>>,
+		signal: abort.signal,
+		output: terminal().output,
+		run: async () => void ran++,
+	});
+	expect(ran).toBe(0);
+	expect(calls).toEqual(["wait_for_work", "claim_experiment", "disconnect_workspace"]);
+});
+
 test("retries back off, are announced only at first, and start over after a minute up", async () => {
 	let abort = new AbortController();
 	let clock = 0;

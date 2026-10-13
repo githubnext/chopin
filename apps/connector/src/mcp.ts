@@ -30,20 +30,34 @@ export async function refusal(response: Response) {
 	}
 }
 
-export async function remote(origin: string, token: string) {
+/** Connect to Chopin; `signal` abandons the handshake, as Ctrl-C does. */
+export async function remote(origin: string, token: string, signal?: AbortSignal) {
 	let client = new Client({ name: "chopin-connector", version: VERSION });
-	await client.connect(
-		new StreamableHTTPClientTransport(new URL("/connector/mcp", origin), {
-			requestInit: { headers: { Authorization: `Bearer ${token}`, ...CONNECTOR_HEADERS } },
-			// The SDK would quote the refusal's JSON inside its own HTTP error message.
-			fetch: async (url, init) => {
-				let response = await fetch(url, init);
-				let refused = await refusal(response);
-				if (refused) throw refused;
-				return response;
-			},
-		}),
-	);
+	// The client keeps listening to the signal it was given, so it gets one that ends here.
+	let handshake = new AbortController();
+	let give = () => handshake.abort(signal!.reason);
+	signal?.addEventListener("abort", give, { once: true });
+	if (signal?.aborted) give();
+	try {
+		await client.connect(
+			new StreamableHTTPClientTransport(new URL("/connector/mcp", origin), {
+				requestInit: { headers: { Authorization: `Bearer ${token}`, ...CONNECTOR_HEADERS } },
+				// The SDK would quote the refusal's JSON inside its own HTTP error message.
+				fetch: async (url, init) => {
+					let response = await fetch(url, init);
+					let refused = await refusal(response);
+					if (refused) throw refused;
+					return response;
+				},
+			}),
+			{ signal: handshake.signal },
+		);
+	} catch (error) {
+		await client.close().catch(() => {});
+		throw error;
+	} finally {
+		signal?.removeEventListener("abort", give);
+	}
 	return {
 		close: () => client.close(),
 		tools: () => client.listTools(),

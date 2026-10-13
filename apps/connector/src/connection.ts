@@ -70,7 +70,11 @@ function abandoned<T>(promise: Promise<T>, signal?: AbortSignal) {
  * server it is leaving, and throws `ConnectorStopped` when retrying cannot help.
  */
 export async function serveWork(options: {
-	connect: () => Promise<Api>;
+	/**
+	 * Opens a connection. The connector's own signal is passed for the first connection, so Ctrl-C
+	 * abandons its handshake; a run's report after Ctrl-C reconnects without it.
+	 */
+	connect: (signal?: AbortSignal) => Promise<Api>;
 	run: (api: Link, kind: WorkKind, claim: unknown) => Promise<void>;
 	signal: AbortSignal;
 	output: Output;
@@ -101,7 +105,8 @@ export async function serveWork(options: {
 		void api.close().catch(() => {});
 	};
 	// A call that fails transiently drops its connection, so a run's next report connects anew,
-	// as the token of a connection the server forgot is refused for good.
+	// as the token of a connection the server forgot is refused for good. A call Ctrl-C cut short
+	// keeps it, so the stop report and the disconnect that gives back claimed work still go out.
 	let link: Link = {
 		async call(name, args, callSignal) {
 			let api = current ?? await abandoned(
@@ -112,7 +117,7 @@ export async function serveWork(options: {
 			try {
 				return await api.call(name, args, callSignal);
 			} catch (error) {
-				if (transient(classify(error))) drop(api);
+				if (!signal.aborted && transient(classify(error))) drop(api);
 				throw error;
 			}
 		},
@@ -120,7 +125,10 @@ export async function serveWork(options: {
 	while (!signal.aborted) {
 		let api: Api | undefined;
 		try {
-			api = current = await options.connect();
+			let opening = options.connect(signal);
+			// A connection that opens only after Ctrl-C is closed unused.
+			opening.then(late => signal.aborted && void late.close().catch(() => {}), () => {});
+			api = current = await abandoned(opening, signal);
 			if (failures) output.reconnected();
 			failures = 0;
 			forgottenSince = undefined;
@@ -179,12 +187,14 @@ async function serve(
 	try {
 		while (!signal.aborted) {
 			let offered = await api.call("wait_for_work", {}, signal) as { id?: string; kind?: WorkKind };
+			if (signal.aborted) break;
 			if (!offered.id || !offered.kind) continue;
 			let claim;
 			try {
 				claim = await api.call(
 					offered.kind === "implementation" ? "claim_implementation_build" : "claim_experiment",
 					{ id: offered.id },
+					signal,
 				);
 			} catch (error) {
 				if (
@@ -196,6 +206,8 @@ async function serve(
 				}
 				throw error;
 			}
+			// A claim answered after Ctrl-C is not run; leaving disconnects, which gives it back.
+			if (signal.aborted) break;
 			await options.run(offered.kind, claim);
 		}
 	} catch (error) {

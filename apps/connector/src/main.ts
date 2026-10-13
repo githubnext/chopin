@@ -154,8 +154,8 @@ async function connect(args: string[]) {
 		await serveWork({
 			// Every connection registers anew with the machine token: a connection token lasts only
 			// while the server runs, so after a restart Chopin refuses the old one for good.
-			connect: async () => {
-				let api = await remote(url, await register(url, machine, checkout));
+			connect: async signal => {
+				let api = await remote(url, await register(url, machine, checkout, signal), signal);
 				if (!announced) output.connected(info.repository);
 				announced = true;
 				return api;
