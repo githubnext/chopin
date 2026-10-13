@@ -5,6 +5,10 @@
  * socket upgrades. The `attach` that follows names a document whose repository
  * its account can push to or administer, and makes that account the document's
  * Planner owner. Nothing is posted to the document by attaching or refusing.
+ *
+ * The bearer may instead be a paired machine's Planner credential, which
+ * attaches only the document it was issued for, with the machine's own GitHub
+ * token and no browser sign-in (see `machine-planners.ts`).
  */
 
 import { LINK_CLOSE } from "@chopin/planner-link";
@@ -17,15 +21,18 @@ import {
 	DEFAULT_LINK_PING_MS,
 	DEFAULT_LINK_TIMEOUT_MS,
 } from "../../config";
+import { MachineError } from "../../auth/machines";
 import { locateDocument } from "../../mcp/hosted";
 import { forbiddenMessage } from "./attachments";
 import { PlannerLink } from "./link";
+import { MachinePlanners } from "./machine-planners";
 
 import type { ServerWebSocket } from "bun";
 import type { HostedAuth } from "../../auth/routes";
 import type { HostedCaller } from "../../mcp/hosted";
 import type { PlannerAttachments } from "./attachments";
 import type { AttachOutcome, LinkOptions, LinkSocket } from "./link";
+import type { MachineGrant } from "./machine-planners";
 
 export type PlannerLinkAuth = Pick<HostedAuth, "admission" | "config" | "github" | "storage">;
 
@@ -37,6 +44,8 @@ export type PlannerLinkSocketData = {
 	plannerLink: true;
 	sidebar?: undefined;
 	caller: HostedCaller;
+	/** Set when the bearer was a paired machine's Planner credential rather than a GitHub token. */
+	machine?: MachineGrant & { planners: MachinePlanners };
 	link?: PlannerLink;
 	/** The link's liveness: any frame from the client is `heard`; `stop` ends its pings. */
 	alive?: { heard(): void; stop(): void };
@@ -77,7 +86,8 @@ function refusal(status: number, text: string): Response {
 }
 
 function revoked(err: unknown): boolean {
-	return err instanceof AdmissionDenied || err instanceof GitHubError && err.status === 401;
+	return err instanceof AdmissionDenied || err instanceof MachineError
+		|| err instanceof GitHubError && err.status === 401;
 }
 
 /**
@@ -88,6 +98,7 @@ export async function admitPlannerLink(
 	request: Request,
 	auth: PlannerLinkAuth,
 	enabled = true,
+	planners?: MachinePlanners,
 ): Promise<Response | PlannerLinkSocketData> {
 	if (!enabled) return refusal(404, "This Chopin does not accept Planner links.");
 	let origin = request.headers.get("origin");
@@ -97,11 +108,25 @@ export async function admitPlannerLink(
 	let token = request.headers.get("authorization")?.match(BEARER)?.[1];
 	if (!token) return refusal(401, "unauthorized");
 	try {
+		if (MachinePlanners.claims(token)) {
+			let grant = await planners?.redeem(token);
+			if (!grant) return refusal(401, "unauthorized");
+			let user = await auth.storage.users.get(grant.machine.userId);
+			return {
+				plannerLink: true,
+				caller: {
+					oauthToken: "",
+					user: { id: grant.machine.userId, login: user?.login ?? "", avatarUrl: "" },
+				},
+				machine: { ...grant, planners: planners! },
+			};
+		}
 		return {
 			plannerLink: true,
 			caller: { oauthToken: token, user: await auth.admission.user(token) },
 		};
 	} catch (err) {
+		if (err instanceof MachineError) return refusal(401, "unauthorized");
 		if (err instanceof AdmissionDenied) return refusal(403, "forbidden");
 		if (err instanceof GitHubError) {
 			if (err.status === 401) return refusal(401, "unauthorized");
@@ -114,17 +139,25 @@ export async function admitPlannerLink(
 	}
 }
 
-/** A link for one admitted caller, attaching only documents whose repository it can write. */
+/**
+ * A link for one admitted caller, attaching only documents whose repository it can write. A
+ * machine's link reads GitHub with the machine's own token and attaches only its grant's document.
+ */
 export function plannerLink(
 	caller: HostedCaller,
 	auth: PlannerLinkAuth,
 	socket: LinkSocket,
 	hooks: PlannerLinkHooks,
+	machine?: PlannerLinkSocketData["machine"],
 ): PlannerLink {
 	let channelId: string | undefined;
 	let link: PlannerLink;
+	let locate = (document: string) =>
+		machine
+			? machine.planners.locate(machine.machine, document)
+			: locateDocument(auth, caller, document);
 	async function attach(message: { document: string }): Promise<AttachOutcome> {
-		let located = await locateDocument(auth, caller, message.document);
+		let located = await locate(message.document);
 		if (located === "forbidden") {
 			return {
 				ok: false,
@@ -140,6 +173,13 @@ export function plannerLink(
 			};
 		}
 		let { channel, repository } = located;
+		if (machine && channel.id !== machine.channelId) {
+			return {
+				ok: false,
+				code: "repository-forbidden",
+				message: "This Planner credential was issued for another document.",
+			};
+		}
 		if (channel.archivedAt) {
 			return { ok: false, code: "document-archived", message: "This document is archived." };
 		}
@@ -148,10 +188,12 @@ export function plannerLink(
 			return { ok: false, code: "repository-forbidden", message: forbiddenMessage(fullName) };
 		}
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+		let login = machine ? await machine.planners.login(machine.machine) : undefined;
 		let granted = await hooks.attachments.attach({
 			channelId: channel.id,
 			repository: { id: repository.id, owner: repository.owner, name: repository.name },
 			user: { id: caller.user.id, login: caller.user.login },
+			...(login ? { login, machine: machine!.machine.label } : {}),
 		}, link);
 		if (!granted.ok) return granted;
 		channelId = channel.id;
@@ -164,8 +206,9 @@ export function plannerLink(
 	async function revalidate(): Promise<boolean> {
 		if (!channelId) return false;
 		try {
-			await auth.admission.user(caller.oauthToken);
-			let located = await locateDocument(auth, caller, channelId);
+			if (machine) await machine.planners.current(machine.machine);
+			else await auth.admission.user(caller.oauthToken);
+			let located = await locate(channelId);
 			return typeof located === "object" && located.channel.id === channelId
 				&& writable(located.repository)
 				&& !located.channel.archivedAt && !hooks.unavailable?.(channelId)
@@ -200,10 +243,16 @@ export function openPlannerLinkSocket(
 	auth: PlannerLinkAuth,
 	hooks: PlannerLinkHooks,
 ): void {
-	let link = plannerLink(ws.data.caller, auth, {
-		send: text => void ws.send(text),
-		close: (code, reason) => ws.close(code, reason),
-	}, hooks);
+	let link = plannerLink(
+		ws.data.caller,
+		auth,
+		{
+			send: text => void ws.send(text),
+			close: (code, reason) => ws.close(code, reason),
+		},
+		hooks,
+		ws.data.machine,
+	);
 	ws.data.link = link;
 	// A network that silently goes away sends no FIN or RST. Bun's server-wide
 	// idle timeout is two minutes and every send resets it, so a link the server

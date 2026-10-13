@@ -16,6 +16,8 @@ import {
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
 import { documentsPath } from "@chopin/protocol/document-url";
+import { documentUrl } from "../channels/document-url";
+import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
 import type { Connection } from "./connections";
 import { Experiments, fail } from "./service";
@@ -48,6 +50,8 @@ type Options = {
 	) => Promise<void>;
 	/** The chopin release this server recommends, which `chopin update` installs by default. */
 	connectorVersion?: string;
+	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
+	planners?: MachinePlanners;
 };
 const label = z.string().trim().min(1).max(100);
 /** `chopin pair` names a checkout only when it runs inside one. */
@@ -407,6 +411,26 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			connection: { id: connection.id, source: connection.source },
 			machine: machine.id,
 		});
+	});
+	/**
+	 * `chopin connect --planner`: a short-lived credential with which the machine's Planner backend
+	 * attaches one document over `/planner-link`, checked with the machine's own GitHub token.
+	 */
+	route("POST", "/api/connector/planner", async request => {
+		let planners = options.planners;
+		if (!planners) fail("not-found");
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let { document } = z.object({ document: z.string().min(1).max(2048) }).strict().parse(
+			await body(request),
+		);
+		let located = await machineRefusal(() => planners.locate(machine, document));
+		if (located === "forbidden") fail("repository-forbidden");
+		if (!located) fail("not-found");
+		let { channel } = await documentAccess(await machineCaller(machine), located.channel.id, true);
+		await auth.machines.seen(machine);
+		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+		return json({ ...planners.issue(machine, channel.id), document: { id: channel.id, url } });
 	});
 	/** `chopin unpair`: the machine revokes itself with its own token. */
 	route("POST", "/api/connector/machine/revoke", async request => {

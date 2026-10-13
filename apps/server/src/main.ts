@@ -19,6 +19,7 @@ import {
 	openPlannerLinkSocket,
 } from "./harness/remote/endpoint";
 import { notAttachedMessage, PlannerAttachments } from "./harness/remote/attachments";
+import { MachinePlanners } from "./harness/remote/machine-planners";
 import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
@@ -1450,7 +1451,12 @@ function listen(): Server<SocketData> {
 				return upgraded(req, self, outcome.data);
 			}
 			if (url.pathname === PLANNER_LINK_PATH) {
-				let outcome = await admitPlannerLink(req, hostedAuth, !!plannerAttachments);
+				let outcome = await admitPlannerLink(
+					req,
+					hostedAuth,
+					!!plannerAttachments,
+					machinePlanners,
+				);
 				if (outcome instanceof Response) return outcome;
 				return upgraded(req, self, outcome);
 			}
@@ -1950,7 +1956,12 @@ let hostedAuth = registerAuthRoutes(router, {
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
 });
+// A paired machine's Planner backend attaches with a credential from the connector routes.
+let machinePlanners = config.agent && config.harness === "remote"
+	? new MachinePlanners(hostedAuth)
+	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
+	planners: machinePlanners,
 	implementations: () => implementations,
 	connectorVersion: config.connectorVersion,
 	lease() {

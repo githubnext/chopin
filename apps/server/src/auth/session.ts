@@ -64,7 +64,15 @@ type MemorySession = {
 	refreshToken: string;
 	refreshExpiresAt: Date;
 	revision: number;
+	/** A delegated login's GitHub token comes from here instead of its own refresh token. */
+	source?: DelegatedSource;
 };
+
+/**
+ * Where a delegated login reads its GitHub access token: the current one, or a fresh one when
+ * `rejected` is the token GitHub refused. A terminal `GitHubTokenError` ends the login.
+ */
+export type DelegatedSource = (rejected?: string) => Promise<{ token: string; expiresAt: Date }>;
 
 type SessionOptions = {
 	persistence?: { key: Uint8Array; origin: string; clientId: string };
@@ -270,6 +278,46 @@ export class Sessions {
 		};
 	}
 
+	/**
+	 * A login for `userId` that no browser holds: it has no cookie, keeps no credentials in
+	 * storage, is never found by `forUser`, and reads its GitHub token from `source`. A paired
+	 * machine's Planner owns documents through one. Returns its id.
+	 */
+	async delegate(userId: string, source: DelegatedSource): Promise<string> {
+		let id = crypto.randomUUID();
+		let createdAt = this.#clock();
+		let expiresAt = new Date(createdAt.getTime() + SESSION_TTL_MS);
+		let user = await this.#storage.users.get(userId);
+		if (!user) throw new Error("cannot create a session for a missing user");
+		let access = await source();
+		let session = { id, userId, expiresAt, createdAt };
+		await this.#storage.sessions.create(session);
+		this.#sessions.set(id, {
+			...this.#fromGrant(
+				session,
+				user,
+				hash(random(SECRET_BYTES)),
+				{
+					accessToken: access.token,
+					accessExpiresIn: 0,
+					refreshToken: "",
+					refreshExpiresIn: SESSION_TTL_MS / 1_000,
+				},
+				1,
+				createdAt,
+			),
+			accessExpiresAt: new Date(access.expiresAt),
+			source,
+		});
+		return id;
+	}
+
+	/** Ends a login this process holds, as signing out does. */
+	async end(id: string): Promise<void> {
+		let current = this.#sessions.get(id);
+		if (current) await this.#revokeExact(current);
+	}
+
 	async authenticate(request: Request): Promise<AuthenticatedSession | undefined> {
 		let parsed = this.#parse(request);
 		if (!parsed) return undefined;
@@ -382,7 +430,7 @@ export class Sessions {
 	/** An MCP handoff may borrow an existing login to claim ownership, never the caller's bearer. */
 	async forUser(userId: string): Promise<AuthenticatedSession | undefined> {
 		for (let current of [...this.#sessions.values()].toReversed()) {
-			if (current.session.userId !== userId) continue;
+			if (current.session.userId !== userId || current.source) continue;
 			let resolved = await this.resolve(current.session.id);
 			if (resolved) return resolved;
 		}
@@ -549,6 +597,7 @@ export class Sessions {
 			await this.#revokeExact(current);
 			return this.#sessions.get(id);
 		}
+		if (current.source) return this.#rotateDelegated(current, rejectedRevision);
 		let refresh = this.#options.refresh;
 		if (!refresh) {
 			if (current.accessExpiresAt > now && rejectedRevision === undefined) return current;
@@ -616,6 +665,40 @@ export class Sessions {
 			}
 			throw err;
 		}
+	}
+
+	/** Takes a delegated login's newer token from its source; nothing is stored. */
+	async #rotateDelegated(
+		current: MemorySession,
+		rejectedRevision: number | undefined,
+	): Promise<MemorySession | undefined> {
+		let id = current.session.id;
+		let access;
+		try {
+			access = await current.source!(
+				rejectedRevision === undefined ? undefined : current.accessToken,
+			);
+		} catch (err) {
+			if (err instanceof GitHubTokenError && err.terminal) {
+				await this.#revokeExact(current);
+				return this.#sessions.get(id);
+			}
+			if (rejectedRevision === undefined && current.accessExpiresAt > this.#clock()) return current;
+			throw err;
+		}
+		if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
+		if (access.token === current.accessToken) return current;
+		await this.#options.beforeRefresh?.(id, current.revision);
+		if (this.#sessions.get(id) !== current) return this.#sessions.get(id);
+		let replacement: MemorySession = {
+			...current,
+			accessToken: access.token,
+			accessExpiresAt: new Date(access.expiresAt),
+			revision: current.revision + 1,
+		};
+		this.#sessions.set(id, replacement);
+		this.#options.invalidate?.(current.accessToken);
+		return replacement;
 	}
 
 	#fromGrant(

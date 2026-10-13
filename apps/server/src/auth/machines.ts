@@ -68,6 +68,7 @@ export class Machines {
 	readonly #grants = new Map<string, Grant>();
 	readonly #refreshes = new Map<string, Promise<Grant>>();
 	readonly #seen = new Map<string, number>();
+	readonly #ended = new Set<(machineId: string) => void>();
 
 	constructor(storage: StorageAdapter, clock: Clock, options: Options) {
 		this.#storage = storage;
@@ -139,8 +140,44 @@ export class Machines {
 
 	async revoke(id: string, userId: string): Promise<boolean> {
 		let revoked = await this.#storage.machines.revoke(id, userId, this.#clock());
-		if (revoked) this.#forget(id);
+		if (revoked) {
+			this.#forget(id);
+			this.#end(id);
+		}
 		return revoked;
+	}
+
+	/** Calls `listener` with a machine's id once it is revoked or must be authorized again. */
+	onEnded(listener: (machineId: string) => void): () => void {
+		this.#ended.add(listener);
+		return () => this.#ended.delete(listener);
+	}
+
+	#end(id: string): void {
+		for (let listener of this.#ended) {
+			try {
+				listener(id);
+			} catch (error) {
+				console.error("[machines] reporting an ended machine failed:", error);
+			}
+		}
+	}
+
+	/**
+	 * The machine's current GitHub access token, refreshed when it is about to expire or when
+	 * `rejected` names it because GitHub refused it.
+	 */
+	async access(
+		machine: StoredMachine,
+		rejected?: string,
+	): Promise<{ token: string; expiresAt: Date }> {
+		let grant = await this.#grant(machine);
+		if (
+			grant.accessToken === rejected
+			|| grant.accessExpiresAt <= this.#clock().getTime() + REFRESH_EARLY_MS
+		) grant = await this.#rotate(machine, grant);
+		await this.#admitted(machine, grant);
+		return { token: grant.accessToken, expiresAt: new Date(grant.accessExpiresAt) };
 	}
 
 	/**
@@ -255,6 +292,7 @@ export class Machines {
 			if (newer) return newer;
 		}
 		this.#forget(machine.id);
+		this.#end(machine.id);
 		throw new MachineError("machine-reauthorize");
 	}
 
@@ -268,6 +306,7 @@ export class Machines {
 	async #reauthorize(machine: StoredMachine, grant: Grant): Promise<never> {
 		await this.#storage.machines.reauthorize(machine.id, grant.revision, this.#clock());
 		this.#forget(machine.id);
+		this.#end(machine.id);
 		throw new MachineError("machine-reauthorize");
 	}
 

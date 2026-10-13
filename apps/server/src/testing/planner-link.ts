@@ -20,6 +20,7 @@ import type { Repository } from "../github/client";
 import type { AttachmentAuth } from "../harness/remote/attachments";
 import type { PlannerLinkAuth, PlannerLinkSocketData } from "../harness/remote/endpoint";
 import type { PlannerLink } from "../harness/remote/link";
+import type { MachinePlanners } from "../harness/remote/machine-planners";
 
 export const MEMBER_TOKEN = "member-token";
 export const RIVAL_TOKEN = "rival-token";
@@ -37,6 +38,15 @@ const ACCOUNTS: Record<string, { id: string; login: string; push: boolean; signe
 
 function loginToken(login: string): string {
 	return `${login}-browser-login`;
+}
+
+/** A paired machine's own GitHub token for `login`, as `machineToken("member", 1)`. */
+export function machineToken(login: string, revision = 1): string {
+	return `${login}-machine-${revision}`;
+}
+
+function machineAccount(token: string) {
+	return Object.values(ACCOUNTS).find(value => token.startsWith(`${value.login}-machine-`));
 }
 
 function scoreRepository(owner: string, name: string, push: boolean): Repository {
@@ -102,7 +112,7 @@ export async function linkAuth(channelId?: string) {
 		admission: {
 			async user(token: string) {
 				if (token === DENIED_TOKEN) throw new AdmissionDenied();
-				let account = ACCOUNTS[token];
+				let account = ACCOUNTS[token] ?? machineAccount(token);
 				if (account) return { id: account.id, login: account.login, avatarUrl: "" };
 				if (token === OUTSIDER_TOKEN) return { id: "U_outsider", login: "outsider", avatarUrl: "" };
 				throw new GitHubError("Bad credentials", 401);
@@ -113,12 +123,13 @@ export async function linkAuth(channelId?: string) {
 		},
 		github: {
 			async repository(token: string, owner: string, name: string): Promise<Repository> {
-				let account = ACCOUNTS[token];
+				let account = ACCOUNTS[token] ?? machineAccount(token);
 				if (!account) throw new GitHubError("Not Found", 404);
 				return scoreRepository(owner, name, account.push);
 			},
 			async repositoryAccess(token: string, owner: string, name: string) {
-				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token);
+				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
+					?? machineAccount(token);
 				return account ? scoreRepository(owner, name, account.push) : undefined;
 			},
 		},
@@ -151,6 +162,7 @@ export function linkServer(
 	revalidateEveryMs?: number,
 	graceMs = 2_000,
 	liveness?: { pingEveryMs: number; pongTimeoutMs: number; maxSilenceMs?: number },
+	planners?: MachinePlanners,
 ) {
 	let links: PlannerLink[] = [];
 	let sockets = new Set<ServerWebSocket<PlannerLinkSocketData>>();
@@ -159,7 +171,7 @@ export function linkServer(
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request, self) {
-			let outcome = await admitPlannerLink(request, auth);
+			let outcome = await admitPlannerLink(request, auth, true, planners);
 			if (outcome instanceof Response) return outcome;
 			return self.upgrade(request, { data: outcome })
 				? undefined

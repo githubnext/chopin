@@ -9,6 +9,10 @@
  * same account can reattach without losing it; then the ownership is cleared.
  * Ending that login, resetting the document's Planner, or any other release of
  * the stored ownership closes the link and frees the document at once.
+ *
+ * A paired machine's Planner owns through the machine's delegated login
+ * instead, whose GitHub token is the machine's own; it ends when the machine
+ * is revoked or must be authorized again, never with a browser sign-out.
  */
 
 import { GitHubError } from "../../github/client";
@@ -35,6 +39,12 @@ export type AttachRequest = {
 	channelId: string;
 	repository: { id: string; owner: string; name: string };
 	user: { id: string; login: string };
+	/**
+	 * The login to own the document through instead of the account's browser sign-in: a paired
+	 * machine's delegated login, with the machine's label for what its links are told.
+	 */
+	login?: string;
+	machine?: string;
 };
 
 export type AttachRefusal = {
@@ -56,6 +66,8 @@ type Hold = {
 	login: string;
 	ownerSessionId: string;
 	generation: number;
+	/** The paired machine whose delegated login owns the document, by label. */
+	machine?: string;
 	link?: PlannerLink;
 	forget?: () => void;
 	timer?: ReturnType<typeof setTimeout>;
@@ -64,6 +76,7 @@ type Hold = {
 
 type PendingAttach = {
 	login: string;
+	machine?: string;
 	held?: Hold;
 	sessionIds: Set<string>;
 	invalidated?: AttachRefusal;
@@ -140,12 +153,14 @@ export class PlannerAttachments {
 		let origin = this.#auth.config.origin;
 		for (let pending of this.#pending.values()) {
 			if (!pending.sessionIds.has(sessionId)) continue;
-			pending.invalidated ??= pending.held?.ownerSessionId === sessionId
+			pending.invalidated ??= pending.machine !== undefined
+				? machineEndedRefusal(pending.machine, pending.login)
+				: pending.held?.ownerSessionId === sessionId
 				? signInEndedRefusal(origin, pending.login)
 				: signInRefusal(origin, pending.login);
 		}
 		let held = [...this.#holds.values()].filter(hold => hold.ownerSessionId === sessionId);
-		for (let hold of held) this.#invalidate(hold, signInEndedRefusal(origin, hold.login));
+		for (let hold of held) this.#invalidate(hold, endedRefusal(origin, hold));
 		await Promise.all(held.map(hold => this.#release(hold)));
 	}
 
@@ -169,7 +184,7 @@ export class PlannerAttachments {
 		let live = await this.#auth.sessions.resolve(hold.ownerSessionId);
 		if (this.#holds.get(channelId) !== hold || hold.link !== link) return false;
 		if (!live) {
-			this.#invalidate(hold, signInEndedRefusal(this.#auth.config.origin, hold.login));
+			this.#invalidate(hold, endedRefusal(this.#auth.config.origin, hold));
 			await this.#release(hold);
 			return false;
 		}
@@ -198,6 +213,7 @@ export class PlannerAttachments {
 		if (held && (held.link || held.userId !== user.id)) return attachedRefusal(held);
 		let pending: PendingAttach = {
 			login: user.login,
+			...(request.machine !== undefined ? { machine: request.machine } : {}),
 			held,
 			sessionIds: new Set(held ? [held.ownerSessionId] : []),
 		};
@@ -225,6 +241,18 @@ export class PlannerAttachments {
 		if (pending.invalidated) return pending.invalidated;
 		let now = this.#auth.clock();
 		let held = pending.held;
+		// A machine owns through its own login and a browser client through a sign-in; neither
+		// keeps a hold that rests on the other's.
+		if (
+			held
+			&& (request.login ? held.ownerSessionId !== request.login : held.machine !== undefined)
+		) {
+			if (this.#holds.get(channelId) === held) {
+				this.#drop(held);
+				await this.#release(held);
+			}
+			held = undefined;
+		}
 		if (held && this.#holds.get(channelId) === held) {
 			let stored = await this.#auth.storage.channels.readAgent(channelId, now);
 			let live = await this.#auth.sessions.resolve(held.ownerSessionId);
@@ -245,7 +273,9 @@ export class PlannerAttachments {
 			// Storage refuses a claim for a sign-in that ended after its last check.
 			if (pending.invalidated) return pending.invalidated;
 			if (!await this.#auth.sessions.resolve(login.session.id)) {
-				return signInRefusal(this.#auth.config.origin, user.login);
+				return request.machine !== undefined
+					? machineEndedRefusal(request.machine, user.login)
+					: signInRefusal(this.#auth.config.origin, user.login);
 			}
 			throw error;
 		}
@@ -256,10 +286,11 @@ export class PlannerAttachments {
 			login: user.login,
 			ownerSessionId: login.session.id,
 			generation: claimed.generation,
+			...(request.machine !== undefined ? { machine: request.machine } : {}),
 		};
 		let live = await this.#auth.sessions.resolve(hold.ownerSessionId);
 		let refusal = pending.invalidated
-			?? (live ? undefined : signInRefusal(this.#auth.config.origin, user.login));
+			?? (live ? undefined : endedRefusal(this.#auth.config.origin, hold, false));
 		if (refusal) {
 			await this.#release(hold);
 			return refusal;
@@ -278,8 +309,14 @@ export class PlannerAttachments {
 	): Promise<AuthenticatedSession | AttachRefusal> {
 		let { repository, user } = request;
 		let fullName = `${repository.owner}/${repository.name}`;
-		let login = await this.#auth.sessions.forUser(user.id);
-		if (!login) return signInRefusal(this.#auth.config.origin, user.login);
+		let login = request.login
+			? await this.#auth.sessions.resolve(request.login)
+			: await this.#auth.sessions.forUser(user.id);
+		if (!login) {
+			return request.machine !== undefined
+				? machineEndedRefusal(request.machine, user.login)
+				: signInRefusal(this.#auth.config.origin, user.login);
+		}
 		pending.sessionIds.add(login.session.id);
 		let checked;
 		try {
@@ -289,7 +326,9 @@ export class PlannerAttachments {
 			);
 		} catch (error) {
 			if (error instanceof GitHubError && error.status === 401) {
-				return signInRefusal(this.#auth.config.origin, user.login);
+				return request.machine !== undefined
+					? machineEndedRefusal(request.machine, user.login)
+					: signInRefusal(this.#auth.config.origin, user.login);
 			}
 			throw error;
 		}
@@ -422,6 +461,22 @@ function signInRefusal(origin: string, login: string): AttachRefusal {
 		code: "sign-in-required",
 		message: `Sign in to Chopin at ${origin} in a browser as ${login}, then attach again. `
 			+ `The Planner's repository tools act with that sign-in.`,
+	};
+}
+
+/** Why a hold's login ended: a browser sign-in, or `ended` false when it never began. */
+function endedRefusal(origin: string, hold: Hold, ended = true): AttachRefusal {
+	if (hold.machine !== undefined) return machineEndedRefusal(hold.machine, hold.login);
+	return ended ? signInEndedRefusal(origin, hold.login) : signInRefusal(origin, hold.login);
+}
+
+function machineEndedRefusal(machine: string, login: string): AttachRefusal {
+	return {
+		ok: false,
+		code: "access-revoked",
+		message: `The paired machine ${machine} that made ${login} this document's Planner was `
+			+ `disconnected from Chopin or must be paired again, so the Planner was released. `
+			+ "Run `chopin pair` on it, then attach again.",
 	};
 }
 
