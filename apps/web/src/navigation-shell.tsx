@@ -773,9 +773,21 @@ export function NavigationShell(
 		workspaceDocumentAction,
 	]);
 
+	// The Show sidebar button leaves as the sidebar arrives, so focus on it moves to Hide sidebar.
+	let focusSidebar = useRef(false);
+	let showSidebar = useCallback(() => {
+		focusSidebar.current = !!drawerOpener.current?.contains(document.activeElement);
+		setCollapsed(false);
+	}, []);
+	useLayoutEffect(() => {
+		if (!sidebarVisible || !focusSidebar.current) return;
+		focusSidebar.current = false;
+		document.querySelector<HTMLElement>(".project-sidebar-frame [aria-label='Hide sidebar']")
+			?.focus({ preventScroll: true });
+	}, [sidebarVisible]);
 	let expandSidebar = useCallback(
-		() => mode === "drawer" ? setDrawerOpen(true) : setCollapsed(false),
-		[mode],
+		() => mode === "drawer" ? setDrawerOpen(true) : showSidebar(),
+		[mode, showSidebar],
 	);
 
 	let signOut = async () => {
@@ -813,7 +825,7 @@ export function NavigationShell(
 		shortcuts: () => showDialog("shortcuts"),
 		"toggle-sidebar": () => {
 			if (mode === "drawer") return setDrawerOpen(true);
-			if (collapsed) return setCollapsed(false);
+			if (collapsed) return showSidebar();
 			let inside = document.activeElement?.closest(".project-sidebar-frame");
 			setCollapsed(true);
 			if (inside) requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));

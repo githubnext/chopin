@@ -183,7 +183,7 @@ Rectangular controls use a restrained four-step radius scale: small for grips an
 - **Do** use shared color, type, radius, spacing, shadow, and motion tokens when extending the interface.
 - **Do** use the established semantic color pairs for status and feedback.
 - **Do** keep the focus ring keyboard-only for buttons, menus, and the Chat composer (a click leaves it a quiet brand edge), and always visible on other text fields. Give a ring room to draw: clip only the axis that must clip.
-- **Do** slide the Projects sidebar and split Chat the same way for their shortcuts as for a click, so the space a pane takes or gives back is always visible; reduced motion settles them at once. Other keyboard-driven changes (menus, dialogs, document views, compact panes, and count or icon feedback) still settle immediately.
+- **Do** slide the inline Projects sidebar and split Chat the same way for their shortcuts as for a click, so the space a pane takes or gives back is always visible; reduced motion and a layout change settle them at once. Other keyboard-driven changes (the Projects drawer, menus, dialogs, document views, compact panes, and count or icon feedback) still settle immediately.
 - **Do** check new controls in the development design audit alongside their default, focus, disabled, and error states.
 
 ### Don't:

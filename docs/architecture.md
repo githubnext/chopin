@@ -233,7 +233,7 @@ retention. The shared `ContentSwapLayer` owns presence timing: it makes an
 inactive layer `inert` and `aria-hidden` immediately, then hides it and notifies
 the host after its visual exit. Pointer input follows the host's transition
 contract; keyboard input and reduced-motion preferences settle the transition
-immediately. The Projects sidebar and split Chat tracks are not content swaps:
+immediately. The inline Projects sidebar and split Chat tracks are not content swaps:
 they slide for keyboard shortcuts too, and settle only under reduced motion.
 
 The editor's questionnaire host renders the current question and retains at most

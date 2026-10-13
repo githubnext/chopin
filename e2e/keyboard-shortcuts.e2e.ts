@@ -175,6 +175,27 @@ test("the sidebar and Chat chords settle at once under reduced motion", async ({
 	expect(await runs()).toEqual({ chat: 0, sidebar: 0 });
 });
 
+test("Enter on Show sidebar moves focus to Hide sidebar", async ({ join, page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await join("ana");
+	await page.getByRole("button", { name: "Hide sidebar" }).click();
+	let show = page.getByRole("button", { name: "Show sidebar" });
+	await show.focus();
+	await page.keyboard.press("Enter");
+	await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeFocused();
+});
+
+test("widening into the split layout settles Chat without sliding it in", async ({ join, page }) => {
+	await page.setViewportSize({ width: 700, height: 900 });
+	await join("ana");
+	await expect(page.locator("[data-workspace-mode='compact']")).toHaveCount(1);
+	let runs = await recordPaneMotion(page);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await expect(chatPane(page)).toBeVisible();
+	await page.waitForTimeout(400);
+	expect((await runs()).chat).toBe(0);
+});
+
 test("Alt+N starts a new document only when nobody is typing", async ({ join }) => {
 	let page = await join("ana");
 	let created = 0;

@@ -312,11 +312,14 @@ export function Workspace(
 	// Phones crossfade rather than cut under reduced motion, so only keyboard input is immediate.
 	let immediately = phone ? motionImmediately(undefined, false) : motionImmediately();
 	let contentSwapMotion = phone ? motionContract("tab-slide") : motionContract("content-swap");
-	// Split Chat slides for its shortcut as for a click; compact panes still swap at once by keyboard.
+	let previousMode = useRef(mode);
+	let modeChanged = previousMode.current !== mode;
+	// Split Chat slides for its shortcut as for a click; compact panes still swap at once by keyboard,
+	// and a layout change settles Chat where it lands.
 	let chatPresence = useTransitionPresence(
 		presentation.chatVisible ? true : undefined,
 		phone ? contentSwapMotion.closeDuration : 220,
-		mode === "split" ? false : immediately,
+		modeChanged || (mode !== "split" && immediately),
 	);
 	let chatTrack = usePaneMotion(chatPresence.phase);
 	let documentSwap = useRef<HTMLDivElement>(null);
@@ -360,7 +363,6 @@ export function Workspace(
 		previousChatOpen.current = state.chatOpen;
 	}, [mode, state.chatOpen]);
 
-	let previousMode = useRef(mode);
 	useLayoutEffect(() => {
 		if (previousMode.current === mode) return;
 		previousMode.current = mode;
