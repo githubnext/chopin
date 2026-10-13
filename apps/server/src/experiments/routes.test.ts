@@ -644,13 +644,16 @@ test(
 					.status,
 			)
 				.toBe(200);
-			await until(
-				async () => (await runtime.service.store.get(id))?.state !== "queued",
-				"the connector to claim the run",
-			);
-			// Claimed through the connection registered after the restart.
+			// The agent is `false`, so the run fails as soon as it starts; `running` lasts only as long
+			// as its start takes, and its failure report is the stable sign the connector ran it.
+			let settled = async () => {
+				let state = (await runtime.service.store.get(id))?.state;
+				return state !== "queued" && state !== "running";
+			};
+			await until(settled, "the connector to run the work");
+			// Claimed and reported through the connection registered after the restart.
 			let claimed = await runtime.service.store.get(id);
-			expect(claimed?.state).toBe("running");
+			expect(claimed).toMatchObject({ state: "failed", generation: 1 });
 			expect(claimed?.connectionId).not.toBe(paired.connection.id);
 			expect(paths).toContain("/api/connector/connections");
 			expect(paths.filter(path => path.startsWith("/api/connector/pairings"))).toEqual([]);
