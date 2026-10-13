@@ -790,7 +790,8 @@ body {
 
 /*
  * Status keeps its live regions mounted, so the rule before the faces follows visible notices and
- * Build. Status and Build stay 12px clear of the rule, as do the faces after it.
+ * Build. The rule sits 8px from each side, so the faces get 8px on every side and Build stays
+ * more than 12px from them.
  */
 .document-title-status {
 	display: flex;
@@ -799,12 +800,12 @@ body {
 }
 
 .document-title-status:has(> :not(.sr-only, [data-level="hidden"])) {
-	padding-inline-end: calc(var(--spacing) * 3);
+	padding-inline-end: calc(var(--spacing) * 2);
 }
 
 .document-title-status:has(> :not(.sr-only, [data-level="hidden"])) + .room-members {
 	align-self: stretch;
-	padding-inline-start: calc(var(--spacing) * 3);
+	padding-inline-start: calc(var(--spacing) * 2);
 	border-inline-start: var(--edge-width) solid var(--color-divider);
 }
 

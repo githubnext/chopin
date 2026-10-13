@@ -347,8 +347,8 @@ function capsuleBuild(page: import("@playwright/test").Page) {
 }
 
 /**
- * Build ends 12px before the rule and the first face starts 12px after it; the faces sit as far
- * from the bar's end as from its top and bottom.
+ * Build stays 12px from the faces, with the rule as far from Build as from the first face; the faces
+ * sit as far from the rule as from the bar's end, top and bottom.
  */
 async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 	let people = build.page().getByRole("group", { name: /^People here/ });
@@ -365,18 +365,19 @@ async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 		return {
 			rule,
 			start: box.left,
-			face: face.left - box.left - rule,
-			end: outer.right - box.right,
+			first: face.left,
+			left: face.left - box.left - rule,
+			right: outer.right - box.right,
 			top: face.top - outer.top,
 			bottom: outer.bottom - edge - face.bottom,
 		};
 	});
-	let before = gaps.start - control;
 	expect(gaps.rule).toBeGreaterThan(0);
-	expect(before).toBeGreaterThanOrEqual(12);
-	expect(Math.abs(before - gaps.face)).toBeLessThanOrEqual(0.5);
-	expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(0.5);
-	expect(Math.abs(gaps.end - gaps.top)).toBeLessThanOrEqual(0.5);
+	expect(gaps.first - control).toBeGreaterThanOrEqual(12);
+	expect(Math.abs(gaps.start - control - gaps.left)).toBeLessThanOrEqual(0.5);
+	for (let side of [gaps.right, gaps.top, gaps.bottom]) {
+		expect(Math.abs(side - gaps.left)).toBeLessThanOrEqual(0.5);
+	}
 }
 
 for (let state of ["Build plan", "Build stopped"] as const) {
