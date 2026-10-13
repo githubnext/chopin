@@ -204,6 +204,45 @@ test("an agent, interpreter or git that lives under a runtime directory is refus
 	}
 });
 
+test("an agent that links through a runtime directory's link to a stable one is refused", async () => {
+	let { home, calls, host, program } = await machine("linux", systemd);
+	let run = join(home, "run");
+	let payload = join(home, "stable", "payload");
+	let bin = join(home, "stable", "bin");
+	await mkdir(payload, { recursive: true });
+	await mkdir(bin, { recursive: true });
+	await mkdir(run);
+	await writeFile(join(payload, "agent"), "#!/bin/sh\n", { mode: 0o755 });
+	// The agent ends up stable, but only through a link that lives in the runtime directory.
+	// Both links are relative, so each resolves against its own directory.
+	await symlink(join("..", "stable", "payload"), join(run, "alias"));
+	await symlink(join("..", "..", "run", "alias", "agent"), join(bin, "agent"));
+	host.env = { XDG_RUNTIME_DIR: run, PATH: `${bin}:/usr/bin` };
+	let error = await installService(host, program, { server: SERVER }).catch(error => error);
+	expect(error).toBeInstanceOf(Error);
+	expect(error.message).toContain(join(run, "alias"));
+	expect(error.message).toContain("Nothing was installed.");
+	expect(existsSync(unitPath(home))).toBe(false);
+	expect(calls).toEqual([]);
+	// A reboot empties the runtime directory, and with it the only way to the agent.
+	await rm(run, { recursive: true });
+	expect(existsSync(join(bin, "agent"))).toBe(false);
+});
+
+test("a version manager's shim is installed by its own name, so it still dispatches on it", async () => {
+	let { home, host, program } = await machine("linux", systemd);
+	let mise = join(home, "mise");
+	await mkdir(join(mise, "shims"), { recursive: true });
+	await mkdir(join(mise, "bin"));
+	await writeFile(join(mise, "bin", "mise"), "#!/bin/sh\n", { mode: 0o755 });
+	await symlink(join("..", "bin", "mise"), join(mise, "shims", "agent"));
+	await symlink(join(mise, "shims"), join(home, "shims"));
+	host.env = { PATH: `${join(home, "shims")}:/usr/bin:/bin` };
+	await installService(host, program, { server: SERVER });
+	let shim = join(await realpath(join(mise, "shims")), "agent");
+	expect(await readFile(unitPath(home), "utf8")).toContain(`"${shim}" "--acp"`);
+});
+
 test("on macOS, install writes the LaunchAgent and bootstraps it into the login session", async () => {
 	let { home, bin, calls, host, program } = await machine(
 		"darwin",

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
@@ -469,25 +469,56 @@ async function interpreter(file: string) {
 	return head.match(/^#!\s*\S*\/env\s+(?:-S\s+)?([^\s-][^\s]*)/)?.[1];
 }
 
+/** The target of the link at `entry`, or undefined when it is not a link. */
+async function linkTarget(entry: string) {
+	let stats = await lstat(entry).catch(() => undefined);
+	return stats?.isSymbolicLink() ? await readlink(entry).catch(() => undefined) : undefined;
+}
+
 /**
- * The paths `file` goes through to reach what it runs, each with its directory resolved through
- * links: first `file` itself under its directory's real path, last its real path. The first
- * keeps the file's own name, which shims such as mise's and Volta's dispatch on.
+ * Follows `start` a component at a time, as opening it does: each link on the way, to a file or a
+ * directory, is read where it lies, and a relative target resolves against the link's own
+ * directory. Returns the links passed, in order, and the path they end at.
+ */
+async function walk(platform: NodeJS.Platform, start: string) {
+	let path = paths(platform);
+	let split = (value: string) =>
+		value.slice(path.parse(value).root.length).split(platform === "win32" ? /[\\/]+/ : /\/+/)
+			.filter(Boolean);
+	let reached = path.parse(start).root;
+	let rest = split(start);
+	let hops: string[] = [];
+	while (rest.length) {
+		let part = rest.shift()!;
+		if (part === ".") continue;
+		if (part === "..") {
+			reached = path.dirname(reached);
+			continue;
+		}
+		let entry = path.join(reached, part);
+		// Past 40 links, as the system gives up, the rest is taken as it reads.
+		let target = hops.length < 40 ? await linkTarget(entry) : undefined;
+		if (target === undefined) {
+			reached = entry;
+			continue;
+		}
+		hops.push(entry);
+		if (path.isAbsolute(target)) reached = path.parse(path.resolve(reached, target)).root;
+		rest.unshift(...split(target));
+	}
+	return { hops, end: reached };
+}
+
+/**
+ * The paths `file` goes through to reach what it runs: first `file` itself in its directory with
+ * links resolved, which keeps the file's own name that shims such as mise's and Volta's dispatch
+ * on, then every link the service passes from there, file or directory, and last where they end.
  */
 async function links(platform: NodeJS.Platform, file: string) {
 	let path = paths(platform);
-	let passed: string[] = [];
-	let current = file;
-	for (let hop = 0; hop < 40; hop++) {
-		let parent = path.dirname(current);
-		let directory = await realpath(parent).catch(() => parent);
-		current = path.join(directory, path.basename(current));
-		passed.push(current);
-		let target = await readlink(current).catch(() => undefined);
-		if (target === undefined) break;
-		current = path.resolve(directory, target);
-	}
-	return passed;
+	let first = path.join((await walk(platform, path.dirname(file))).end, path.basename(file));
+	let { hops, end } = await walk(platform, first);
+	return [first, ...hops, end];
 }
 
 /** Refuses a program that is, or links through, a path gone after a reboot. */
@@ -496,9 +527,9 @@ function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: 
 	if (fleeting === undefined) return;
 	throw new ServiceError(
 		[
-			`${what} resolves to ${fleeting}, which lies in a directory that lasts only as long as `
-			+ "this login or shell, so the service would not find it after a reboot. Nothing was "
-			+ "installed.",
+			`${what} is, or links through, ${fleeting}, which lies in a directory that lasts only as `
+			+ "long as this login or shell, so the service would not find it after a reboot. Nothing "
+			+ "was installed.",
 			fix,
 		].join("\n"),
 	);
