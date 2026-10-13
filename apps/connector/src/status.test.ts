@@ -184,6 +184,32 @@ test("status shows what the service runs, and the last connect when it differs",
 	expect(same).not.toContain("last ran");
 });
 
+test("status shows an agent that failed to start under its connector", async () => {
+	let { directory, host } = await machine();
+	let lock = `${"e".repeat(64)}`;
+	await writeFile(
+		join(directory, `${lock}.lock`),
+		JSON.stringify({ pid: process.pid, root: "/work/score", service: true }),
+	);
+	let at = Date.UTC(2026, 9, 13, 9, 30);
+	await writeFile(
+		join(directory, `${lock}.failures.json`),
+		JSON.stringify([{ kind: "agent", how: "exit 127", stderr: "agent: no credentials", at }]),
+	);
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.connectors[0]?.failures).toEqual([
+		{
+			kind: "agent",
+			how: "exit 127",
+			stderr: "agent: no credentials",
+			at: "2026-10-13T09:30:00.000Z",
+		},
+	]);
+	expect(formatStatus(report)).toContain(
+		"              Agent: failing (exit 127: agent: no credentials)",
+	);
+});
+
 test("status of an unpaired machine asks Chopin nothing", async () => {
 	using server = chopin(() => Response.json({}));
 	let { directory, host } = await machine();

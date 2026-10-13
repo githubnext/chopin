@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { machineFile } from "./machine";
 import { createOutput } from "./output";
 import { commandWords, servePlanners, stopBackend } from "./planner";
-import { git } from "./workspace";
+import type { ServiceHost } from "./service";
+import { collectStatus, formatStatus } from "./status";
+import { git, lockWorkspace, startFailures } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -346,6 +348,93 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 	40_000,
+);
+
+/** A backend whose first launch can't find its interpreter, as `#!/usr/bin/env node` can't. */
+const FAILING_BACKEND = `
+import { appendFileSync, readFileSync } from "node:fs";
+let log = process.argv[2];
+let launches = 0;
+try { launches = readFileSync(log, "utf8").split("\\n").filter(Boolean).length; } catch {}
+appendFileSync(log, process.pid + "\\n");
+if (launches === 0) {
+	process.stderr.write("\\n/usr/bin/env: 'node': No such file or directory (ghp_${
+	"A".repeat(20)
+})\\nmore\\n");
+	process.exit(127);
+}
+process.on("SIGTERM", () => process.exit(0));
+setInterval(() => {}, 1000);
+`;
+
+test.skipIf(process.platform === "win32")(
+	"chopin status shows a Planner backend that exits early until one stays up",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () =>
+				Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", url: "http://x" },
+				}),
+		});
+		let directory = await mkdtemp(join(scratch, "failing-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.log");
+		await writeFile(script, FAILING_BACKEND);
+		let release = await lockWorkspace(directory, directory, { planners: ["D_1"] });
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let status = () =>
+			collectStatus({ directory, server: "https://chopin.example", source: "config", host });
+		let abort = new AbortController();
+		let quiet = { write: () => true };
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			output: createOutput(quiet, quiet, {}),
+			signal: abort.signal,
+			failures: startFailures(directory, directory),
+			healthyMs: 1000,
+		});
+		try {
+			await until(async () => !!(await status()).connectors[0]?.failures, 10_000);
+			let report = await status();
+			let [failure] = report.connectors[0]!.failures!;
+			expect(failure).toEqual({
+				kind: "planner",
+				document: "D_1",
+				how: "exit 127",
+				stderr: "/usr/bin/env: 'node': No such file or directory ([redacted])",
+				at: expect.any(String),
+				retryAt: expect.any(String),
+			});
+			expect(formatStatus(report, Date.parse(failure!.retryAt!) - 22_000)).toContain(
+				"              Planner for D_1: failing (exit 127: /usr/bin/env: 'node': No such file or "
+					+ "directory ([redacted])), retrying in 22s",
+			);
+			// The next launch stays up, so the failure goes.
+			await until(async () => !(await status()).connectors[0]?.failures, 10_000);
+			expect(formatStatus(await status())).toContain("              Planner for D_1");
+		} finally {
+			abort.abort();
+			await serving;
+			await release();
+			await chopin.stop(true);
+		}
+	},
+	30_000,
 );
 
 test("on Windows a stopped backend's process tree is ended with taskkill", async () => {

@@ -20,6 +20,11 @@ export type AgentOptions = {
 	stderr?: (chunk: string) => void;
 	/** Added to the agent's environment, such as Git configuration that refuses pushes. */
 	env?: Record<string, string>;
+	/**
+	 * Called once the agent has a session, or with how it ended and the first line of its stderr
+	 * when it fails before one.
+	 */
+	onStart?: (failure?: { how: string; stderr?: string }) => void;
 };
 
 /** One protocol implementation; agent-specific launch arguments belong to local configuration. */
@@ -38,7 +43,19 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 			else child.kill(signal);
 		} catch { /* Process may have already exited. */ }
 	};
-	child.stderr.on("data", chunk => options.stderr?.(String(chunk)));
+	let head = "";
+	child.stderr.on("data", chunk => {
+		if (head.length < 4096) head += String(chunk);
+		options.stderr?.(String(chunk));
+	});
+	let ended: string | undefined;
+	let exited = new Promise(resolve => {
+		child.once("error", error => resolve(ended ??= error.message));
+		child.once(
+			"exit",
+			(code, signal) => resolve(ended ??= signal ? `signal ${signal}` : `exit ${code}`),
+		);
+	});
 	let app = new ClientApp()
 		.onNotification("session/update", ({ params }) => options.onUpdate(params))
 		.onRequest("session/request_permission", async ({ params: request }) => {
@@ -93,6 +110,7 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 				: options.mcpServers,
 		});
 		sessionId = session.sessionId;
+		options.onStart?.();
 		await options.onSession?.(sessionId);
 		clearTimeout(deadline);
 		deadline = setTimeout(
@@ -108,6 +126,17 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 			prompt: [{ type: "text", text: options.prompt }],
 		});
 		return response.stopReason;
+	} catch (error) {
+		if (!sessionId && !options.signal.aborted && options.onStart) {
+			// Its exit, and the rest of its stderr, may come just after the failure they caused.
+			await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 1000))]);
+			let stderr = head.split("\n").map(line => line.trim()).find(Boolean);
+			options.onStart({
+				how: ended ?? (error instanceof Error ? error.message : String(error)),
+				...(stderr ? { stderr } : {}),
+			});
+		}
+		throw error;
 	} finally {
 		options.signal.removeEventListener("abort", cancel);
 		if (timer) clearTimeout(timer);

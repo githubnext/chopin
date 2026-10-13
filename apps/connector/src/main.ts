@@ -27,7 +27,7 @@ import {
 import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { connectors, lockWorkspace, stateDirectory, workspace } from "./workspace";
+import { connectors, lockWorkspace, startFailures, stateDirectory, workspace } from "./workspace";
 
 const DEFAULT_URL = "https://chopin.githubnext.com";
 
@@ -228,6 +228,7 @@ async function connect(args: string[]) {
 		return;
 	}
 	let release = await lockWorkspace(info.root, directory, { service, planners: plannerDocuments });
+	let failures = startFailures(directory, info.root);
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -276,6 +277,7 @@ async function connect(args: string[]) {
 				cwd: info.root,
 				output,
 				signal: AbortSignal.any([abort.signal, planners.signal]),
+				failures,
 			});
 			try {
 				await serveWork({
@@ -303,6 +305,7 @@ async function connect(args: string[]) {
 							output,
 							permissions,
 							interrupt: stop,
+							failures,
 						}),
 				});
 				return;

@@ -50,7 +50,7 @@ const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
 const TOKEN = /\b(?:gh[opsur]_|github_pat_|chopin_m_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
 
 /** `text` with URL credentials and token-shaped strings masked, for the terminal. */
-function redacted(text: string) {
+export function redacted(text: string) {
 	return text
 		.replace(USERINFO, "$1[redacted]@")
 		.replace(TOKEN, (_match, bearer?: string) => `${bearer ?? ""}[redacted]`);

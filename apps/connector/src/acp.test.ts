@@ -52,3 +52,30 @@ test("ACP cancellation finishes the active turn through the standard protocol", 
 	});
 	expect(stop).toBe("cancelled");
 });
+
+test.skipIf(process.platform === "win32")(
+	"an agent that exits before its session reports how, and one that starts says so",
+	async () => {
+		let starts: unknown[] = [];
+		let options = {
+			cwd: process.cwd(),
+			prompt: "Investigate",
+			mcpServers: [],
+			signal: new AbortController().signal,
+			onUpdate: () => {},
+			permission: async () => undefined,
+			onStart: (failure?: unknown) => void starts.push(failure),
+		};
+		let failed = await runAgent({
+			...options,
+			command: ["/bin/sh", "-c", "echo 'agent: no credentials' >&2; exit 127"],
+		}).catch(error => error);
+		expect(failed).toBeInstanceOf(Error);
+		expect(starts).toEqual([{ how: "exit 127", stderr: "agent: no credentials" }]);
+		await runAgent({
+			...options,
+			command: [process.execPath, new URL("./testing/fake-agent.ts", import.meta.url).pathname],
+		});
+		expect(starts).toEqual([{ how: "exit 127", stderr: "agent: no credentials" }, undefined]);
+	},
+);

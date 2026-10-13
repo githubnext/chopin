@@ -3,7 +3,7 @@ import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { connectors, processStart } from "./workspace";
+import { connectors, processStart, type StartFailure } from "./workspace";
 
 /** Where the server origin came from: CHOPIN_URL, config.json, or Chopin's own default. */
 export type ServerSource = "CHOPIN_URL" | "config" | "default";
@@ -52,6 +52,14 @@ export type StatusReport = {
 		started?: string;
 		/** The documents whose Planner backends it runs, as its lock records them. */
 		planners?: string[];
+		/**
+		 * The latest failure to start of its agent and of each Planner backend, while it runs:
+		 * `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`,
+		 * `signal SIGKILL`), the first line of its `stderr`, `at` and the Planner's `retryAt`.
+		 */
+		failures?: Array<
+			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
+		>;
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	log: string;
@@ -143,6 +151,15 @@ export async function collectStatus(options: {
 			...(item.version ? { version: item.version } : {}),
 			...(item.started ? { started: new Date(item.started).toISOString() } : {}),
 			...(item.planners ? { planners: item.planners } : {}),
+			...(item.failures
+				? {
+					failures: item.failures.map(({ at, retryAt, ...failure }) => ({
+						...failure,
+						at: new Date(at).toISOString(),
+						...(retryAt ? { retryAt: new Date(retryAt).toISOString() } : {}),
+					})),
+				}
+				: {}),
 		})),
 		service,
 		log: logPath(host.platform, directory),
@@ -175,8 +192,17 @@ function describe(settings: ConnectSettings) {
 	}${planners}, on ${settings.server}`;
 }
 
-/** The report as lines for a person. */
-export function formatStatus(report: StatusReport) {
+type Failure = NonNullable<StatusReport["connectors"][number]["failures"]>[number];
+
+function failing(failure: Failure, now: number) {
+	let wait = failure.retryAt ? Math.ceil((Date.parse(failure.retryAt) - now) / 1000) : undefined;
+	return `: failing (${failure.how}${failure.stderr ? `: ${failure.stderr}` : ""})${
+		wait === undefined ? "" : wait > 0 ? `, retrying in ${wait}s` : ", retrying now"
+	}`;
+}
+
+/** The report as lines for a person; `now` says when a failing Planner is tried again. */
+export function formatStatus(report: StatusReport, now = Date.now()) {
 	let { machine, service } = report;
 	let named = `paired as ${machine.label ?? "this machine"}${
 		machine.login ? ` (${machine.login})` : ""
@@ -190,19 +216,27 @@ export function formatStatus(report: StatusReport) {
 		unreachable: `${named}; can't reach Chopin to check it (${machine.detail})`,
 		error: `${named}; Chopin's answer was ${machine.detail}`,
 	}[machine.check];
-	let held = report.connectors.flatMap(item =>
-		item.running
+	let held = report.connectors.flatMap(item => {
+		let failures = item.failures ?? [];
+		let agent = failures.find(failure => failure.kind === "agent");
+		let planner = (document: string) =>
+			failures.find(failure => failure.kind === "planner" && failure.document === document);
+		return item.running
 			? [
 				`running for ${item.checkout} (pid ${item.pid}${
 					item.version ? `, chopin ${item.version}` : ""
 				}${item.service ? ", the service" : ""})`,
-				...(item.planners ?? []).map(document => `  Planner for ${document}`),
+				...(agent ? [`  Agent${failing(agent, now)}`] : []),
+				...(item.planners ?? []).map(document => {
+					let failure = planner(document);
+					return `  Planner for ${document}${failure ? failing(failure, now) : ""}`;
+				}),
 			]
 			: [
 				`stale lock for ${item.checkout}: its connector (pid ${item.pid}) has exited; the next `
 				+ "connect replaces it",
-			]
-	);
+			];
+	});
 	let serviceLine = service.state === "unknown"
 		? `unknown (${service.detail})`
 		: `${service.state} (${service.manager}${service.pid ? `, pid ${service.pid}` : ""})`;

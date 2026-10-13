@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readdir, readFile, realpath, rm } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, win32 } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
+import { redacted } from "./connection";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 export function git(cwd: string, ...args: string[]): string {
@@ -142,8 +143,7 @@ export async function lockWorkspace(
 	} = {},
 ) {
 	await mkdir(directory, { recursive: true, mode: 0o700 });
-	let id = createHash("sha256").update(root).digest("hex");
-	let path = join(directory, `${id}.lock`);
+	let path = join(directory, `${lockId(root)}.lock`);
 	let file;
 	try {
 		file = await open(path, "wx", 0o600);
@@ -175,8 +175,60 @@ export async function lockWorkspace(
 	return async () => {
 		await file.close();
 		await rm(path, { force: true });
+		await rm(path.replace(/\.lock$/, ".failures.json"), { force: true });
 	};
 }
+
+function lockId(root: string) {
+	return createHash("sha256").update(root).digest("hex");
+}
+
+/**
+ * How the agent or a document's Planner backend last failed to start or exited early: how it
+ * ended, the first line of its stderr, when, and when the Planner backend is started again.
+ * Times are in ms.
+ */
+export type StartFailure = {
+	kind: "agent" | "planner";
+	document?: string;
+	how: string;
+	stderr?: string;
+	at: number;
+	retryAt?: number;
+};
+
+/**
+ * The latest start failure of a connector's agent and of each of its Planner backends, kept for
+ * `chopin status` in a file beside the checkout's lock, without credentials. A successful start
+ * clears its own.
+ */
+export function startFailures(directory: string, root: string) {
+	let path = join(directory, `${lockId(root)}.failures.json`);
+	let current = new Map<string, StartFailure>();
+	// A connector that crashed may have left its failures behind.
+	let writing = rm(path, { force: true }).catch(() => {});
+	let save = () =>
+		writing = writing.then(() =>
+			current.size
+				? writeFile(path, JSON.stringify([...current.values()]), { mode: 0o600 })
+				: rm(path, { force: true })
+		).catch(() => {});
+	return {
+		failed(failure: StartFailure) {
+			current.set(failure.document ?? "", {
+				...failure,
+				how: redacted(failure.how).slice(0, 200),
+				...(failure.stderr ? { stderr: redacted(failure.stderr).slice(0, 200) } : {}),
+			});
+			return save();
+		},
+		started(document?: string) {
+			return current.delete(document ?? "") ? save() : writing;
+		},
+	};
+}
+
+export type StartFailures = ReturnType<typeof startFailures>;
 
 /** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
 function gone(pid: number) {
@@ -233,6 +285,8 @@ export type RunningConnector = {
 	version?: string;
 	protocol?: number;
 	started?: number;
+	/** How its agent or Planner backends last failed to start, while it runs. */
+	failures?: StartFailure[];
 };
 
 /**
@@ -254,10 +308,16 @@ export async function connectors(
 		}
 		let { pid, root, version, protocol, started, planners } = held;
 		if (!Number.isSafeInteger(pid) || (pid as number) <= 0 || typeof root !== "string") continue;
+		let running = await holds(held, probe);
+		let failures = running
+			? await readFile(join(directory, name.replace(/\.lock$/, ".failures.json")), "utf8")
+				.then(text => JSON.parse(text) as StartFailure[])
+				.catch(() => undefined)
+			: undefined;
 		found.push({
 			pid: pid as number,
 			root,
-			running: await holds(held, probe),
+			running,
 			service: held.service === true,
 			...(Array.isArray(planners) && planners.length
 					&& planners.every(document => typeof document === "string")
@@ -266,6 +326,7 @@ export async function connectors(
 			...(typeof version === "string" ? { version } : {}),
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),
+			...(Array.isArray(failures) && failures.length ? { failures } : {}),
 		});
 	}
 	return found;

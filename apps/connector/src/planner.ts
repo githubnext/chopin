@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
+import type { StartFailures } from "./workspace";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -50,7 +51,8 @@ export function commandWords(line: string): string[] {
  * Planner credential, passed only in its environment as CHOPIN_URL, CHOPIN_DOCUMENT and
  * CHOPIN_PLANNER_TOKEN. A backend that exits, as one whose link closed or whose credential was
  * refused does, is started again on the reconnect backoff. A revoked machine or a document Chopin
- * refuses stops that document's backend.
+ * refuses stops that document's backend. One that exits within `healthyMs` is recorded in
+ * `failures` for `chopin status`, until one stays up that long.
  */
 export async function servePlanners(options: {
 	url: string;
@@ -60,6 +62,8 @@ export async function servePlanners(options: {
 	cwd: string;
 	output: Output;
 	signal: AbortSignal;
+	failures?: StartFailures;
+	healthyMs?: number;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
 }
@@ -72,8 +76,11 @@ async function servePlanner(options: {
 	cwd: string;
 	output: Output;
 	signal: AbortSignal;
+	failures?: StartFailures;
+	healthyMs?: number;
 }) {
 	let { output, signal, document } = options;
+	let healthyMs = options.healthyMs ?? HEALTHY_MS;
 	for (let attempt = 0; !signal.aborted;) {
 		let started = Date.now();
 		let credential;
@@ -98,13 +105,27 @@ async function servePlanner(options: {
 			continue;
 		}
 		output.say(`› Planner for ${document} started.`);
-		let code = await launch(options, credential.token);
+		let launched = Date.now();
+		let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
+		let { how, stderr } = await launch(options, credential.token);
+		clearTimeout(healthy);
 		if (signal.aborted) return;
 		if (Date.now() - started >= HEALTHY_MS) attempt = 0;
 		let wait = backoff(attempt++);
+		if (Date.now() - launched < healthyMs) {
+			let at = Date.now();
+			await options.failures?.failed({
+				kind: "planner",
+				document,
+				how,
+				...(stderr ? { stderr } : {}),
+				at,
+				retryAt: at + wait,
+			});
+		}
 		output.say(
 			output.style.dim(
-				`… Planner for ${document} exited (${code}); starting it again in ${
+				`… Planner for ${document} exited (${how}); starting it again in ${
 					Math.ceil(wait / 1000)
 				}s.`,
 			),
@@ -113,14 +134,17 @@ async function servePlanner(options: {
 	}
 }
 
-/** Run the backend once; resolves with how it exited. Aborting stops it, then kills it. */
+/**
+ * Run the backend once; resolves with how it exited and the first line of its stderr, which
+ * still reaches this process's own. Aborting stops it, then kills it.
+ */
 async function launch(options: {
 	url: string;
 	document: string;
 	command: string[];
 	cwd: string;
 	signal: AbortSignal;
-}, token: string): Promise<string> {
+}, token: string): Promise<{ how: string; stderr?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
@@ -129,13 +153,19 @@ async function launch(options: {
 			CHOPIN_DOCUMENT: options.document,
 			CHOPIN_PLANNER_TOKEN: token,
 		},
-		stdio: ["ignore", "inherit", "inherit"],
+		stdio: ["ignore", "inherit", "pipe"],
 		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.
 		detached: process.platform !== "win32",
 	});
+	let head = "";
+	child.stderr!.on("data", chunk => {
+		process.stderr.write(chunk);
+		if (head.length < 4096) head += String(chunk);
+	});
+	let drained = new Promise(resolve => child.stderr!.once("close", resolve));
 	let exited = new Promise<string>(resolve => {
 		child.once("error", error => resolve(error.message));
-		child.once("exit", (code, name) => resolve(name ? `signal ${name}` : `code ${code}`));
+		child.once("exit", (code, name) => resolve(name ? `signal ${name}` : `exit ${code}`));
 	});
 	let stop!: () => void;
 	let stopped = new Promise<undefined>(resolve => {
@@ -148,7 +178,10 @@ async function launch(options: {
 	// A backend that exited by itself may leave children in its process group; they go too. On
 	// Windows its process id may already belong to another process, so nothing more is stopped.
 	if (how === undefined || process.platform !== "win32") await stopBackend(child);
-	return how ?? await exited;
+	how ??= await exited;
+	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
+	let stderr = head.split("\n").map(line => line.trim()).find(Boolean);
+	return { how, ...(stderr ? { stderr } : {}) };
 }
 
 /** How a backend's processes are stopped: on which platform, running which commands, how patiently. */

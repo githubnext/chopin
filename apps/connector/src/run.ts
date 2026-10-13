@@ -11,7 +11,13 @@ import { createOutput } from "./output";
 import type { Output } from "./output";
 import { ask, describePermission, permissionMemory } from "./permission";
 import { stopProcessesIn } from "./processes";
-import { discardWorkspace, git, noPushEnvironment, prepareWorkspace } from "./workspace";
+import {
+	discardWorkspace,
+	git,
+	noPushEnvironment,
+	prepareWorkspace,
+	type StartFailures,
+} from "./workspace";
 import {
 	implementationPrompt,
 	liveImplementationPrompt,
@@ -40,6 +46,8 @@ type Options = {
 	forgetMs?: number;
 	/** The jitter source for retries, for tests. */
 	random?: () => number;
+	/** Where an agent that fails to start is recorded for `chopin status`. */
+	failures?: StartFailures;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 
@@ -188,6 +196,10 @@ export async function runWork(
 			command: options.command,
 			cwd: path,
 			...(claim.spike ? { env: noPushEnvironment() } : {}),
+			onStart: failure =>
+				void (failure
+					? options.failures?.failed({ kind: "agent", ...failure, at: Date.now() })
+					: options.failures?.started()),
 			prompt: rebuild
 				? rebuildPrompt
 				: implementation
