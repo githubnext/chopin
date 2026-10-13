@@ -44,6 +44,20 @@ export async function authenticate(
 	expect(session).toBeTruthy();
 	let [name, value] = session!.split(";", 1)[0]!.split("=", 2);
 	await page.context().addCookies([{ name: name!, value: value!, url: baseURL }]);
+	// Pairing a connector authorizes the machine with GitHub, which returns at once for an App the
+	// person already authorized. Playwright cannot intercept the redirect to GitHub, so the step
+	// that starts it answers with the fake GitHub callback instead.
+	await page.context().route(`${baseURL}/auth/github/connector?**`, async route => {
+		let started = await route.fetch({ maxRedirects: 0 });
+		let authorize = new URL(started.headers()["location"]!);
+		let back = new URL(authorize.searchParams.get("redirect_uri")!);
+		back.searchParams.set("code", `e2e-${handle}`);
+		back.searchParams.set("state", authorize.searchParams.get("state")!);
+		await route.fulfill({
+			status: 302,
+			headers: { location: back.href, "set-cookie": started.headers()["set-cookie"]! },
+		});
+	});
 	return callback.headers.get("location")!;
 }
 

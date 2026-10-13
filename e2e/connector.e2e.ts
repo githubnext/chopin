@@ -1,8 +1,8 @@
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { content, expect, test } from "./room";
+import { authenticate, content, expect, test } from "./room";
 import { ROOT } from "./servers";
 import { testChannelPath } from "./database";
 
@@ -116,3 +116,76 @@ for (let transport of ["stdio", "http"] as const) {
 		}
 	});
 }
+
+/** Start `connect` for a checkout and collect its output until it exits. */
+function start(baseURL: string, root: string, state: string) {
+	let child = spawn("bun", [
+		join(ROOT, "apps/connector/src/main.ts"),
+		"connect",
+		root,
+		"--",
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-agent.ts"),
+	], {
+		cwd: ROOT,
+		env: { ...process.env, CHOPIN_URL: baseURL, CHOPIN_CONNECTOR_STATE_DIR: state },
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	let output = "";
+	child.stdout.on("data", chunk => output += String(chunk));
+	child.stderr.on("data", chunk => output += String(chunk));
+	let exited = new Promise<number | null>(resolve => child.once("exit", code => resolve(code)));
+	return { child, output: () => output, exited };
+}
+
+test("a paired machine reconnects without pairing, until it is disconnected in the browser", async ({ baseURL, join: enter }) => {
+	let root = await mkdtemp(join(tmpdir(), "chopin-machine-e2e-"));
+	let state = await mkdtemp(join(tmpdir(), "chopin-machine-state-"));
+	let git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { stdio: "pipe" });
+	git("init");
+	git("config", "user.name", "Fixture");
+	git("config", "user.email", "fixture@example.test");
+	git("remote", "add", "origin", "https://github.com/octo-org/score.git");
+	await writeFile(join(root, "sample.txt"), "sample");
+	git("add", ".");
+	git("commit", "-m", "fixture");
+	let first = start(baseURL!, root, state);
+	let second: ReturnType<typeof start> | undefined;
+	try {
+		await expect.poll(() => first.output().match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/))
+			.toBeTruthy();
+		let handle = person();
+		let page = await enter(handle);
+		// Connect goes through the machine's own GitHub authorization and back.
+		await page.goto(first.output().match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/)![0]);
+		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await expect(page.getByRole("status")).toHaveText("Connected.");
+		await expect.poll(first.output).toContain("✓ Connected.");
+		first.child.kill("SIGINT");
+		expect(await first.exited, first.output()).toBe(0);
+
+		// Signing out of the browser does not end the machine; it reconnects without pairing.
+		await page.request.post("/auth/logout", { headers: { origin: new URL(baseURL!).origin } });
+		second = start(baseURL!, root, state);
+		await expect.poll(second.output, { timeout: 15_000 }).toContain("✓ Connected.");
+		expect(second.output()).not.toContain("/connect?pairing=");
+
+		await authenticate(page, handle, baseURL!);
+		await page.goto("/connect");
+		let machines = page.getByRole("list", { name: "Paired machines" });
+		await expect(machines.getByText(hostname(), { exact: true })).toBeVisible();
+		await expect(machines).toContainText("Connected");
+		await machines.getByRole("button", { name: `Disconnect machine ${hostname()}` }).click();
+		await expect(machines).toHaveCount(0);
+		expect(await second.exited, second.output()).toBe(1);
+		expect(second.output()).toContain("no longer paired");
+		for (let secret of second.output().match(/chopin_m_[\w-]+/g) ?? []) {
+			throw new Error(`The connector printed its machine token: ${secret.slice(0, 12)}…`);
+		}
+	} finally {
+		first.child.kill("SIGKILL");
+		second?.child.kill("SIGKILL");
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});

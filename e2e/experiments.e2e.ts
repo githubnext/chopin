@@ -1,8 +1,13 @@
 import { performance } from "../packages/experiment/src/fixtures";
+import { CONNECTOR_PROTOCOL_HEADER } from "../packages/protocol/connector";
+import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { testChannelPath } from "./database";
 import { content, expect, test } from "./room";
 
 import type { Page } from "@playwright/test";
+
+/** What the current connector sends with each request. */
+const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL) };
 
 /** A connection serves every document in its repository, so each pairing test is its own person. */
 function person() {
@@ -67,7 +72,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	let page = await join(person());
 	let pairing = await (await fetch(`${baseURL}/api/connector/pairings`, {
 		method: "POST",
-		headers: { "content-type": "application/json" },
+		headers: { "content-type": "application/json", ...CONNECTOR },
 		body: JSON.stringify({
 			repository: "octo-org/score",
 			commit: "a".repeat(40),
@@ -87,10 +92,24 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		.toHaveAttribute("href", "/documents/octo-org/score");
 	await expect(page.getByText("a".repeat(8))).toHaveCount(0);
 	await page.goto(testChannelPath(room));
-	let paired = await (await fetch(`${baseURL}/api/connector/pairings/${pairing.id}/claim`, {
+	let machine = await (await fetch(`${baseURL}/api/connector/pairings/${pairing.id}/claim`, {
 		method: "POST",
-		headers: { "content-type": "application/json" },
+		headers: { "content-type": "application/json", ...CONNECTOR },
 		body: JSON.stringify({ secret: pairing.secret }),
+	})).json();
+	// The paired machine connects its checkout, as `chopin connect` does.
+	let paired = await (await fetch(`${baseURL}/api/connector/connections`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: `Bearer ${machine.token}`,
+			...CONNECTOR,
+		},
+		body: JSON.stringify({
+			repository: "octo-org/score",
+			commit: "a".repeat(40),
+			label: "Ana laptop",
+		}),
 	})).json();
 
 	await expect(page.getByRole("button", { name: "Investigations", exact: true })).toHaveCount(0);
@@ -113,7 +132,11 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	async function tool(name: string, args: unknown, token = paired.token) {
 		let response = await fetch(`${baseURL}/connector/mcp`, {
 			method: "POST",
-			headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+			headers: {
+				"content-type": "application/json",
+				authorization: `Bearer ${token}`,
+				...CONNECTOR,
+			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
 				id: 1,
