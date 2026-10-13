@@ -81,7 +81,7 @@ import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
-import { PhoneHeader } from "./phone-header";
+import { PhoneHeader, PhoneHeaderContent } from "./phone-header";
 import { DocumentSkeleton } from "./phone-skeleton";
 import { useEditorFocus, useKeyboardOpen } from "./keyboard-open";
 import { motionContract } from "./motion-contract";
@@ -1427,7 +1427,33 @@ export function RoomWorkspace(
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
-				{childTitle?.slot && createPortal(childTitleControl, childTitle.slot)}
+				{childTitle?.slot && (childTitle.phone
+					? createPortal(
+						<PhoneHeaderContent
+							archivedAt={workspaceArchivedAt}
+							canManage={effectiveCanManage}
+							comments={openComments}
+							editing={titleEdit}
+							editingDocument={editMode === "editing"}
+							label={metadata.title}
+							members={members}
+							onAction={action => onDocumentAction(room, action)}
+							onComments={() => {
+								childChrome?.showDocument();
+								openCommentList(room);
+							}}
+							onEditingChange={setTitleEdit}
+							onRenamed={updateMetadata}
+							context={
+								<span className="truncate">
+									in {presentation.parent?.label ?? childTitle.parent}
+								</span>
+							}
+							room={room}
+						/>,
+						childTitle.slot,
+					)
+					: createPortal(childTitleControl, childTitle.slot))}
 				{childTitle?.motion === "lift" && (
 					<div
 						className="document-title-bar panel-header flex shrink-0 items-center px-(--panel-toolbar-padding-inline) hairline-b"
@@ -1480,7 +1506,10 @@ export function RoomWorkspace(
 				slot: setChildTitleSlot,
 			}
 			: undefined;
-	let childTitleValue = presentation.type === "parent-with-child" && mode === "split"
+	// A phone's top bar takes the child's title, controls and people in place of this room's.
+	let childTitleValue = presentation.type === "parent-with-child" && phone
+		? { motion: "zoom" as const, parent: metadata.title, phone: true, slot: childTitleSlot }
+		: presentation.type === "parent-with-child" && mode === "split"
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
@@ -1591,24 +1620,33 @@ export function RoomWorkspace(
 					header={phone
 						? (
 							<PhoneHeader
-								archivedAt={workspaceArchivedAt}
-								canManage={effectiveCanManage}
-								comments={openComments}
-								editing={titleEdit}
-								editingDocument={!!barEdit?.editing}
+								child={presentation.type === "parent-with-child"
+									? { onReturn: presentation.onChildClose, slot: setChildTitleSlot }
+									: undefined}
 								label={metadata.title}
-								onAction={action => onDocumentAction(room, action)}
-								onComments={() => {
-									// The list stands over the document, so it opens from any tab onto it.
-									selectDestination("plan");
-									openCommentList(room);
-								}}
-								onEditingChange={setTitleEdit}
-								onRenamed={updateMetadata}
 								presentation={presentation}
-								room={room}
-								build={buildSlot}
-							/>
+							>
+								<PhoneHeaderContent
+									archivedAt={workspaceArchivedAt}
+									canManage={effectiveCanManage}
+									comments={openComments}
+									context={buildSlot}
+									editing={titleEdit}
+									editingDocument={!!barEdit?.editing}
+									label={metadata.title}
+									members={members}
+									onAction={action => onDocumentAction(room, action)}
+									onComments={() => {
+										// The list stands over the document, so it opens from any tab onto it.
+										selectDestination("plan");
+										openCommentList(room);
+									}}
+									onEditingChange={setTitleEdit}
+									onRenamed={updateMetadata}
+									project={repository.name}
+									room={room}
+								/>
+							</PhoneHeader>
 						)
 						: <Header {...titleProps} build={buildSlot} members={members} />}
 					title={

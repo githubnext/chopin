@@ -1,4 +1,4 @@
-import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon, WrenchIcon } from "@chopin/icons";
+import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 
 import {
@@ -342,7 +342,7 @@ export function BuildPlanButton(
 		onOpen: () => void;
 		/** Phone: touch has no tooltip, so a tap that cannot act shows this reason instead. */
 		onExplain?: (reason: string) => void;
-		/** A phone's top bar: Build plan shows as its glyph. */
+		/** A phone's top bar: the status and its action read as links in the title's subtitle. */
 		phone?: boolean;
 		/** Build can open; until then a phone tap on the glyph explains instead. */
 		tabReady?: boolean;
@@ -394,9 +394,8 @@ export function BuildPlanButton(
 				<button
 					aria-describedby={blocked ? reason : undefined}
 					aria-disabled={blocked ? true : undefined}
-					aria-label={phone ? "Build plan" : undefined}
 					className={phone
-						? "btn btn-icon btn-primary build-plan shrink-0"
+						? "build-status-link"
 						: "btn btn-compact btn-primary build-plan shrink-0"}
 					data-tooltip={blocked}
 					data-tooltip-detail={blocked ? "" : undefined}
@@ -411,8 +410,7 @@ export function BuildPlanButton(
 					}}
 					type="button"
 				>
-					{/* A phone's top bar keeps the title centred, so Build plan is its glyph there. */}
-					{phone ? <WrenchIcon aria-hidden="true" size={18} /> : "Build plan"}
+					Build plan
 				</button>
 				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
 				{live}
@@ -426,18 +424,18 @@ export function BuildPlanButton(
 		: look.kind === "failed" && look.retry && canEdit
 		? { name: "Retry", run: build.rebuild }
 		: look.kind === "stale" && look.build && canEdit
-		// On a phone the Build tab sits just below, so the action names what it builds.
-		? { name: compact ? "Build changes" : "Build", run: build.rebuild }
+		// Compact names what it builds; a phone's subtitle follows the status, which already says.
+		? { name: compact && !phone ? "Build changes" : "Build", run: build.rebuild }
 		: undefined;
 	let refused = action?.run === build.rebuild ? build.rebuildError : undefined;
 	let busy = build.busy || build.rebuilding;
 	return (
 		<>
-			<span className="build-capsule-row" key="capsule">
+			<span className={phone ? "build-status" : "build-capsule-row"} key="capsule">
 				<button
 					aria-describedby={look.tip ? reason : undefined}
 					aria-label={compact ? label : undefined}
-					className="build-capsule"
+					className={phone ? "build-status-link" : "build-capsule"}
 					data-compact={compact || undefined}
 					data-hot={hot || undefined}
 					data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
@@ -456,17 +454,27 @@ export function BuildPlanButton(
 					<span className="build-capsule-glyph" ref={glyph}>
 						<BuildGlyph look={look} />
 					</span>
-					{!compact && <span className="build-capsule-label" key={label}>{label}</span>}
+					{(!compact || phone) && (
+						<span className="build-capsule-label" key={label}>
+							{/* Beside its Build, a phone's narrow subtitle needs only the count. */}
+							{phone && action && look.kind === "stale"
+								? `${look.changes} ${look.changes === 1 ? "change" : "changes"}`
+								: label}
+						</span>
+					)}
 				</button>
 				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
 				{action && (
 					<>
+						{phone && <span aria-hidden="true">·</span>}
 						{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
 						<button
 							aria-busy={busy || undefined}
 							aria-describedby={blocked ? actionReason : undefined}
 							aria-disabled={blocked || busy ? true : undefined}
-							className="btn btn-compact btn-outline build-capsule-action"
+							className={phone
+								? "build-status-link build-capsule-action"
+								: "btn btn-compact btn-outline build-capsule-action"}
 							data-tooltip={blocked}
 							data-tooltip-detail={blocked ? "" : undefined}
 							data-tooltip-verbatim={blocked ? "" : undefined}

@@ -303,9 +303,10 @@ export function Workspace(
 	let liftCovered = lift && !childClosing;
 	// Split Zoom puts the child at the end of the title bar's path and folds the views away, since
 	// a child has none. Compact has no title bar, so it keeps the stack bar, on every view, so a
-	// child left open under Decisions or Build is still in sight and one click away.
+	// child left open under Decisions or Build is still in sight and one click away. A phone's top
+	// bar becomes the child's, with Back, so it needs no stack bar.
 	let zoom = !!nested && !lift;
-	let stackBar = zoom && mode !== "split";
+	let stackBar = zoom && mode !== "split" && !phone;
 	let planCovered = zoom && view === "plan";
 	let viewsFolded = zoom && mode === "split" && view === "plan" && !childClosing;
 	// Phones crossfade rather than cut under reduced motion, so only keyboard input is immediate.

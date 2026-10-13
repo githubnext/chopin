@@ -42,34 +42,11 @@
 	padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 
-/*
- * A child's stack bar sits under the top bar and tucks away with it, leaving the screen entirely.
- * The child card runs from the top edge like any phone pane, so nothing shows a second band
- * through the glass, and its document starts below both bars.
- */
-.workspace-root[data-workspace-phone] .workspace-stack-bar {
-	z-index: 21;
-	top: var(--phone-top-chrome);
-	transition:
-		opacity var(--child-close-dur) var(--child-ease),
-		transform var(--phone-bar-dur) var(--ease-out),
-		visibility 0s;
-}
-
-.workspace-root[data-workspace-phone][data-workspace-bar="hidden"] .workspace-stack-bar {
-	visibility: hidden;
-	opacity: 0;
-	transform: translateY(calc(-1 * (var(--phone-top-chrome) + var(--child-bar-height))));
-	transition:
-		opacity var(--phone-bar-dur) var(--ease-out),
-		transform var(--phone-bar-dur) var(--ease-out),
-		visibility 0s linear var(--phone-bar-dur);
-}
-
+/* The child card runs from the top edge like any phone pane, under the bar it has taken. */
 .workspace-root[data-workspace-phone][data-workspace-mode]
 	.workspace-document-stack
 	.anchored-child-card {
-	--document-top-inset: calc(var(--phone-pane-top) + var(--child-bar-height));
+	--document-top-inset: var(--phone-pane-top);
 	inset: 0;
 }
 
@@ -156,40 +133,40 @@
 	pointer-events: none;
 }
 
-/* The small title waits until the document's own title has scrolled away. */
+/*
+ * The title waits until the document's own title has scrolled away; meanwhile the subtitle,
+ * which names the project and the build, settles onto the bar's centre line on its own.
+ */
 .phone-top-bar-center {
-	display: grid;
+	display: flex;
 	min-width: 0;
-	place-items: center;
+	flex-direction: column;
+	align-items: center;
+	transition: transform var(--duration-base) var(--ease-out);
 }
 
 .phone-top-bar-center > * {
-	grid-area: 1 / 1;
+	max-width: 100%;
 }
 
-.phone-top-bar-title,
-.phone-top-bar-mode {
+.phone-top-bar-title {
 	transition: opacity var(--duration-base) var(--ease-out);
 }
 
-.workspace-root[data-workspace-title="hidden"] .phone-top-bar-title {
-	opacity: 0;
+.workspace-root[data-workspace-title="hidden"] .phone-top-bar:not([data-phone-child]) {
+	.phone-top-bar-title:not(:has(input)) {
+		opacity: 0;
+	}
+
+	.phone-top-bar-center:not(:has(input)) {
+		transform: translateY(calc(var(--text-sm) * -0.6));
+	}
 }
 
-/* Stands in for the hidden title while editing, so the mode is always on screen. */
+/* Editing names itself in the subtitle, so the mode is always on screen. */
 .phone-top-bar-mode {
-	padding: calc(var(--spacing) / 2) calc(var(--spacing) * 2);
-	border-radius: var(--radius-full);
-	background: var(--color-brand-wash);
 	color: var(--color-brand-ink);
-	font-size: var(--text-2xs);
 	font-weight: var(--font-weight-medium);
-	opacity: 0;
-	pointer-events: none;
-}
-
-.workspace-root[data-workspace-title="hidden"] .phone-top-bar-mode {
-	opacity: 1;
 }
 
 .phone-top-bar-slot {
@@ -230,9 +207,48 @@
 }
 
 .phone-top-bar-subtitle {
+	display: flex;
+	max-width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: var(--spacing);
 	font-size: var(--text-2xs);
-	font-weight: var(--font-weight-normal);
+	line-height: var(--text-2xs--line-height);
+	white-space: nowrap;
 	color: var(--color-text-tertiary);
+}
+
+.phone-top-bar-subtitle > .truncate {
+	min-width: 0;
+}
+
+/* Links in the subtitle reach a thumb through their own invisible target, not their line box. */
+.room-header.phone-top-bar .phone-top-bar-subtitle button {
+	min-width: 0;
+	min-height: 0;
+}
+
+/* The project gives way first; the build's state is what changes. */
+.phone-top-bar-project {
+	flex: 0 1 auto;
+}
+
+/* With the bar's gap, the build's state in the subtitle keeps more than 12px clear of the faces. */
+.phone-top-bar-people {
+	display: flex;
+	flex: none;
+	align-items: center;
+	padding-inline: calc(var(--spacing) * 2.5) var(--spacing);
+	font-size: var(--text-2xs);
+	color: var(--color-text-tertiary);
+}
+
+.phone-top-bar-people > * + * {
+	margin-left: calc(var(--spacing) * -1.5);
+}
+
+.phone-top-bar-people > .phone-top-bar-more {
+	margin-left: var(--spacing);
 }
 
 /* Bottom tab bar ------------------------------------------------------- */
@@ -651,7 +667,6 @@
 	}
 
 	.workspace-root[data-workspace-phone] > .phone-top-bar,
-	.workspace-root[data-workspace-phone] .workspace-stack-bar,
 	.phone-tab-indicator,
 	.phone-tab-row,
 	.phone-tab-bar,
