@@ -437,6 +437,7 @@ export function ProjectSidebar(
 		currentDocumentId,
 		onAccount,
 		focusProjectId,
+		machinesCurrent,
 		onAddProject,
 		onFocusedProject,
 		onCollapse,
@@ -468,6 +469,8 @@ export function ProjectSidebar(
 		newDocumentPhase?: DocumentCreationPhase | "loading";
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		currentDocumentId?: string;
+		/** /connect is open, so the Machines entry is the current page. */
+		machinesCurrent?: boolean;
 		onAccount: () => void;
 		focusProjectId?: string;
 		onAddProject: () => void;
@@ -639,7 +642,7 @@ export function ProjectSidebar(
 					<span>Archived</span>
 				</button>
 			)}
-			<MachinesEntry placement="sidebar" />
+			<MachinesEntry current={machinesCurrent} placement="sidebar" />
 		</div>
 	);
 	return (

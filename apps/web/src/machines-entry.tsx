@@ -5,12 +5,16 @@ import { machinesLabel, useMachineSummary } from "./machine-summary";
 
 /**
  * The navigation's way to the person's machines and their setup at /connect: how many are paired,
- * and a dot while any is connected. Its accessible name says the same in words.
+ * and a dot while any is connected. Its accessible name says the same in words, and it is the
+ * current page while /connect is open.
  */
-export function MachinesEntry({ placement }: { placement: "sidebar" | "sheet" }) {
+export function MachinesEntry(
+	{ current = false, placement }: { current?: boolean; placement: "sidebar" | "sheet" },
+) {
 	let summary = useMachineSummary();
 	return (
 		<a
+			aria-current={current ? "page" : undefined}
 			aria-label={machinesLabel(summary)}
 			className={placement === "sheet" ? "documents-sheet-link" : "project-sidebar-primary-action"}
 			href="/connect"

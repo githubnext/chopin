@@ -10,11 +10,20 @@ test("install uses the released installer for each shell", () => {
 	);
 });
 
-test("connect names this server and installs the service in one step", () => {
+test("connect breaks between whole arguments, with each shell's own line continuation", () => {
 	expect(connectCommand("https://chopin.example", "sh")).toBe(
-		"CHOPIN_URL=https://chopin.example chopin connect . --install-service -- copilot --acp --allow-all",
+		[
+			"CHOPIN_URL=https://chopin.example chopin connect . \\",
+			"  --install-service \\",
+			"  -- copilot --acp --allow-all",
+		].join("\n"),
 	);
 	expect(connectCommand("https://chopin.example", "powershell")).toBe(
-		'$env:CHOPIN_URL="https://chopin.example"; chopin connect . --install-service -- copilot --acp --allow-all',
+		[
+			'$env:CHOPIN_URL="https://chopin.example"',
+			"chopin connect . `",
+			"  --install-service `",
+			"  -- copilot --acp --allow-all",
+		].join("\n"),
 	);
 });

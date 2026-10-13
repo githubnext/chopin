@@ -1,17 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { ArrowUpIcon, CloseIcon, EllipsisIcon } from "@chopin/icons";
-import {
-	Badge,
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@chopin/visuals";
+import { CloseIcon, EllipsisIcon } from "@chopin/icons";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@chopin/visuals";
 import { ago } from "../build-model";
+import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
 import { listMachines, updateAvailable } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
@@ -21,6 +14,7 @@ import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { experimentRequest } from "./api";
 
+import type { KeyboardEvent } from "react";
 import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 
@@ -139,18 +133,25 @@ function DisconnectMachineDialog(
 
 /**
  * A row's actions menu. Disconnect is its one action, and it asks first. The menu sits on the
- * page, below its button, because the table's scrolling container would clip it.
+ * page, below its button, because the table's scrolling container would clip it. Its keys are the
+ * document actions menu's: Up or Down on the button opens it, arrows, Home and End move within it,
+ * and Escape closes it.
  */
 function MachineActions({ machine, onDisconnect }: { machine: Machine; onDisconnect: () => void }) {
 	let id = useId();
 	let trigger = useRef<HTMLButtonElement>(null);
 	let menu = useRef<HTMLDivElement>(null);
 	let [open, setOpen] = useState(false);
+	let initialItem = useRef<"first" | "last">("first");
 	let presence = useTransitionPresence(open ? true : undefined, 150, motionImmediately());
 	let mounted = presence.phase !== "closed";
 	let close = (restoreFocus: boolean) => {
 		setOpen(false);
 		if (restoreFocus) trigger.current?.focus();
+	};
+	let openAt = (item: "first" | "last") => {
+		initialItem.current = item;
+		setOpen(true);
 	};
 	useMenuDismissal(open, [trigger, menu], close);
 	useLayoutEffect(() => {
@@ -170,8 +171,33 @@ function MachineActions({ machine, onDisconnect }: { machine: Machine; onDisconn
 		};
 	}, [mounted]);
 	useEffect(() => {
-		if (open) menu.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+		if (!open) return;
+		let items = menu.current?.querySelectorAll<HTMLElement>("[role=menuitem]");
+		items?.[initialItem.current === "last" ? items.length - 1 : 0]?.focus();
 	}, [open]);
+	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		if (event.key === "Tab") {
+			close(false);
+			return;
+		}
+		let action = documentMenuKeyAction(event.key);
+		if (!action) return;
+		event.preventDefault();
+		if (action === "close") {
+			close(true);
+			return;
+		}
+		let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+		let current = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
+		let next = action === "first"
+			? 0
+			: action === "last"
+			? items.length - 1
+			: action === "next"
+			? (current + 1) % items.length
+			: (current - 1 + items.length) % items.length;
+		items[next]?.focus();
+	};
 	return (
 		<>
 			<IconButton
@@ -180,7 +206,12 @@ function MachineActions({ machine, onDisconnect }: { machine: Machine; onDisconn
 				aria-haspopup="menu"
 				aria-label={`Actions for ${machine.label}`}
 				data-tooltip="Machine actions"
-				onClick={() => setOpen(value => !value)}
+				onClick={() => open ? close(false) : openAt("first")}
+				onKeyDown={event => {
+					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+					event.preventDefault();
+					openAt(event.key === "ArrowUp" ? "last" : "first");
+				}}
 				ref={trigger}
 			>
 				<EllipsisIcon aria-hidden="true" />
@@ -192,9 +223,7 @@ function MachineActions({ machine, onDisconnect }: { machine: Machine; onDisconn
 					className={`machines-menu motion-dropdown ${presence.className}`}
 					id={id}
 					inert={presence.phase === "closing"}
-					onKeyDown={event => {
-						if (event.key === "Tab") close(false);
-					}}
+					onKeyDown={menuKeyDown}
 					ref={menu}
 					role="menu"
 				>
@@ -241,13 +270,31 @@ function Status({ machine, now }: { machine: Machine; now: number }) {
 	);
 }
 
-function Version({ machine, recommended }: { machine: Machine; recommended: string | null }) {
-	if (!machine.version) return <span className="text-text-tertiary">Unknown</span>;
+/**
+ * The machine's chopin release. Unknown reads as a dash under the Version heading; on a phone,
+ * where the version sits under the name without that heading, it says so in words.
+ */
+function Version(
+	{ inline = false, machine, recommended }: {
+		inline?: boolean;
+		machine: Machine;
+		recommended: string | null;
+	},
+) {
+	if (!machine.version) {
+		if (inline) return <span className="text-text-tertiary">Version unknown</span>;
+		return (
+			<span className="text-text-tertiary">
+				<span aria-hidden="true">—</span>
+				<span className="sr-only">Version unknown</span>
+			</span>
+		);
+	}
 	return (
 		<span className="machines-version">
 			<span className="tabular-nums">{machine.version}</span>
 			{updateAvailable(machine.version, recommended) && (
-				<Badge icon={ArrowUpIcon} label="Update available" size="sm" tone="warning" />
+				<span className="machines-update">Update available</span>
 			)}
 		</span>
 	);
@@ -291,7 +338,7 @@ export function MachineTable(
 										<span className="machines-detail">Builds and prototypes automatically</span>
 									)}
 									<span className="machines-version-inline machines-detail">
-										<Version machine={machine} recommended={recommended} />
+										<Version inline machine={machine} recommended={recommended} />
 									</span>
 								</span>
 							</TableCell>

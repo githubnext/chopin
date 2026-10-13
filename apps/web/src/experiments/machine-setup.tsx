@@ -4,7 +4,7 @@ import { connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
 
 import type { SetupShell } from "./setup-commands";
 
-/** A command to run, with a button that copies it. */
+/** A command to run, with a button that copies it. Its lines break only where the command does. */
 function Command({ label, text }: { label: string; text: string }) {
 	let [copied, setCopied] = useState<"copied" | "failed">();
 	useEffect(() => {
@@ -14,7 +14,9 @@ function Command({ label, text }: { label: string; text: string }) {
 	}, [copied]);
 	return (
 		<div className="machines-command">
-			<code>{text}</code>
+			<pre>
+				<code>{text}</code>
+			</pre>
 			<button
 				aria-label={copied === "copied" ? "Copied" : `Copy ${label}`}
 				className="btn btn-sm btn-ghost shrink-0"

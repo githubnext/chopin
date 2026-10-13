@@ -1,7 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { MachineIcon } from "@chopin/icons";
 import { UnfoldPanel, useUnfold } from "@chopin/visuals/unfold";
-import chopinIcon from "../assets/figma/navigation/chopin.svg";
 import { experimentRequest } from "./api";
 import { MachineSetup } from "./machine-setup";
 import { MachineTable, useMachines } from "./machines";
@@ -18,7 +17,10 @@ type Pairing = {
 	connected?: string;
 };
 
-/** The frame every /connect view shares: Chopin's header, then the page title and its action. */
+/**
+ * The frame every /connect view shares inside the navigation: the page title and its action, on
+ * the ground, scrolling on its own.
+ */
 function MachinesFrame(
 	{ action, children, description, title }: {
 		action?: ReactNode;
@@ -28,14 +30,7 @@ function MachinesFrame(
 	},
 ) {
 	return (
-		<div className="sign-in-page" data-hosted="">
-			<header className="sign-in-header">
-				<a className="machines-home" href="/">
-					<img alt="" height={16} src={chopinIcon} width={16} />
-					<span className="text-sm font-semibold text-brand">Chopin</span>
-				</a>
-				<span className="text-sm text-text-tertiary">A GitHub Next research prototype</span>
-			</header>
+		<div className="machines-page" data-hosted="">
 			<main className="machines-main">
 				<div className="machines-title">
 					<div className="min-w-0">
@@ -198,10 +193,12 @@ export default function PairingPage() {
 						)
 						: (
 							<>
-								<p className="m-0 text-text-secondary">
-									Check that your terminal shows{" "}
+								<div className="machines-code-check">
+									<p className="m-0 text-text-secondary">
+										Check that your terminal shows this code
+									</p>
 									<code className="machines-code">{pairing.code}</code>
-								</p>
+								</div>
 								<label className="flex items-start gap-2">
 									<input
 										checked={autoRun}
@@ -212,14 +209,18 @@ export default function PairingPage() {
 									/>
 									<span>Let Chopin build and prototype automatically on this machine</span>
 								</label>
-								<button
-									className="btn btn-md btn-primary self-start"
-									disabled={busy}
-									onClick={() => void connect()}
-									type="button"
-								>
-									Connect
-								</button>
+								<div className="machines-pairing-actions">
+									<button
+										className="btn btn-md btn-primary"
+										disabled={busy}
+										onClick={() => void connect()}
+										type="button"
+									>
+										Connect
+									</button>
+									{/* Nothing to cancel on the server: an unapproved pairing expires on its own. */}
+									<a className="btn btn-md btn-ghost" href="/connect">Not my machine</a>
+								</div>
 							</>
 						)}
 				</div>

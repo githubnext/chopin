@@ -515,6 +515,7 @@ export function NavigationShell(
 	useEffect(() => {
 		if (
 			route.page !== "channel" && route.page !== "document" && route.page !== "child"
+			&& route.page !== "machines"
 			&& navigation?.projects.length === 0
 		) {
 			showDialog("add");
@@ -862,7 +863,7 @@ export function NavigationShell(
 		if (destination.origin !== location.origin) return;
 		if (
 			destination.pathname !== "/"
-			&& !/^\/(?:channels|documents|repositories)(?:\/|$)/.test(destination.pathname)
+			&& !/^\/(?:channels|connect|documents|repositories)(?:\/|$)/.test(destination.pathname)
 		) return;
 		event.preventDefault();
 		// Lexical's clickable-link listener is attached at the editor root. Stop
@@ -876,6 +877,7 @@ export function NavigationShell(
 	let catalogue = {
 		catalogueMode,
 		currentDocumentId,
+		machinesCurrent: route.page === "machines",
 		onAddProject: () => showDialog("add"),
 		onCatalogueModeChange: setCatalogueMode,
 		onCreateDocument: (project: Api.NavigationProject) => void createDocument(project),

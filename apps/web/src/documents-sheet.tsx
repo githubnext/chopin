@@ -48,6 +48,7 @@ export function DocumentsSheet(
 		activeRepositoryId,
 		catalogueMode,
 		currentDocumentId,
+		machinesCurrent,
 		onAddProject,
 		onCatalogueModeChange,
 		onCreateDocument,
@@ -65,6 +66,8 @@ export function DocumentsSheet(
 		activeRepositoryId?: string;
 		catalogueMode: "active" | "archived";
 		currentDocumentId?: string;
+		/** /connect is open, so the Machines row is the current page. */
+		machinesCurrent?: boolean;
 		onAddProject: () => void;
 		onCatalogueModeChange: (mode: "active" | "archived") => void;
 		onCreateDocument: (project: Api.NavigationProject) => void;
@@ -383,8 +386,8 @@ export function DocumentsSheet(
 												<ChevronIcon aria-hidden="true" className="ml-auto" size={14} />
 											</button>
 										</li>
-										<li className="documents-sheet-row">
-											<MachinesEntry placement="sheet" />
+										<li className="documents-sheet-row" data-current={machinesCurrent || undefined}>
+											<MachinesEntry current={machinesCurrent} placement="sheet" />
 										</li>
 										<li className="documents-sheet-row">
 											<button

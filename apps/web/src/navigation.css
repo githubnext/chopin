@@ -711,6 +711,16 @@
 	color: var(--color-text-tertiary);
 }
 
+/* On /connect the entry is the current page, marked as a current document is. */
+.project-sidebar-primary-action[aria-current="page"] {
+	background: var(--project-sidebar-selected);
+	color: var(--color-text-primary);
+
+	& .machines-entry-icon {
+		color: var(--color-text-secondary);
+	}
+}
+
 .machines-entry-count {
 	display: flex;
 	flex: 0 0 auto;

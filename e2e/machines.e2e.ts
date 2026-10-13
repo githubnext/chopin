@@ -2,6 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { connectCommand } from "../apps/web/src/experiments/setup-commands";
 import { expect, test } from "./room";
 import { ROOT } from "./servers";
 
@@ -67,21 +68,23 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect(page).toHaveURL(/\/connect$/);
 	await expect(page.getByRole("heading", { level: 1, name: "Machines", exact: true }))
 		.toBeVisible();
+	// The page sits inside the navigation, with Machines marked as the current page.
+	await expect(entry).toHaveAttribute("aria-current", "page");
 
 	// With nothing paired, setup leads, filled in with this server's own origin.
 	let origin = new URL(baseURL!).origin;
 	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
 	let steps = setup.getByRole("listitem");
 	await expect(steps).toHaveCount(3);
-	// The browser's own system is chosen first; either can be picked.
+	// The browser's own system is chosen first; either can be picked. The connect command keeps
+	// its own line breaks, each with the shell's continuation.
+	let command = steps.nth(1).locator("code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect(steps.nth(0)).toContainText("install.sh | sh");
-	await expect(steps.nth(1)).toContainText(
-		`CHOPIN_URL=${origin} chopin connect . --install-service -- copilot --acp --allow-all`,
-	);
+	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
 	await setup.getByRole("button", { name: "Windows", exact: true }).click();
 	await expect(steps.nth(0)).toContainText("install.ps1 | iex");
-	await expect(steps.nth(1)).toContainText(`$env:CHOPIN_URL="${origin}"; chopin connect .`);
+	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 
 	let machine = await connector(baseURL!);
@@ -91,8 +94,15 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 		await pairing.goto(machine.output().match(PAIRING)![0]);
 		await expect(pairing.getByRole("heading", { level: 1, name: "Connect this machine?" }))
 			.toBeVisible();
+		await expect(machinesEntry(pairing, "Machines, none connected"))
+			.toHaveAttribute("aria-current", "page");
+		await expect(pairing.getByText("Check that your terminal shows this code", { exact: true }))
+			.toBeVisible();
+		await expect(pairing.getByRole("link", { name: "Not my machine", exact: true }))
+			.toHaveAttribute("href", "/connect");
 		await pairing.getByRole("button", { name: "Connect", exact: true }).click();
-		await expect(pairing.getByRole("status")).toHaveText("Connected.");
+		await expect(pairing.getByRole("status").filter({ hasText: "Connected." }))
+			.toHaveText("Connected.");
 		await expect.poll(machine.output).toContain("✓ Connected.");
 		await pairing.close();
 
@@ -103,20 +113,39 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 		await expect(setup).toHaveCount(0);
 		await expect(page.getByRole("button", { name: "Add a machine", exact: true })).toBeVisible();
 
+		// Its actions open from the keyboard, as the document actions menu does.
+		let actions = row.getByRole("button", { name: /^Actions for / });
+		await actions.focus();
+		await page.keyboard.press("ArrowDown");
+		await expect(page.getByRole("menuitem", { name: "Disconnect machine", exact: true }))
+			.toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(actions).toBeFocused();
+
 		await page.goto("/");
 		let counted = machinesEntry(page, "Machines, 1 connected");
 		await expect(counted).toContainText("1");
 		await counted.click();
 		await expect(page).toHaveURL(/\/connect$/);
 
-		// A phone finds the same entry in its documents sheet.
+		// A phone finds the same entry in its documents sheet, marked current on /connect.
 		let phone = await enter(handle, PHONE);
 		await phone.locator(".phone-top-bar").getByRole("button", { name: "Documents", exact: true })
 			.click();
+		let sheetEntry = phone.getByRole("dialog", { name: "Documents" })
+			.getByRole("link", { name: "Machines, 1 connected", exact: true });
+		await expect(sheetEntry).toBeVisible();
+		await sheetEntry.click();
+		await expect(phone).toHaveURL(/\/connect$/);
+		await expect(
+			phone.getByRole("table", { name: "Your machines" })
+				.getByRole("row", { name: new RegExp(hostname()) }),
+		).toContainText("Connected");
+		await phone.getByRole("button", { name: "Show sidebar", exact: true }).click();
 		await expect(
 			phone.getByRole("dialog", { name: "Documents" })
 				.getByRole("link", { name: "Machines, 1 connected", exact: true }),
-		).toBeVisible();
+		).toHaveAttribute("aria-current", "page");
 	} finally {
 		await machine.stop();
 	}

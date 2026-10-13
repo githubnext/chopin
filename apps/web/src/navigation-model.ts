@@ -12,6 +12,7 @@ export type NavigationRoute =
 	| DocumentRouteIdentitySource
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
+	| { page: "machines" }
 	| { page: "missing" };
 
 export const NAVIGATION_INLINE_MIN = 1198;

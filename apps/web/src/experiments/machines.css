@@ -1,9 +1,14 @@
 /* /connect: the person's machines, how to add one, and the pairing confirmation. */
-.machines-home {
+
+/* Inside the navigation, the page fills the workspace and scrolls on its own. */
+.machines-page {
+	position: absolute;
+	inset: 0;
 	display: flex;
-	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	border-radius: var(--radius-sm);
+	flex-direction: column;
+	overflow-y: auto;
+	background: var(--color-ground);
+	container: machines-page / inline-size;
 }
 
 .machines-main {
@@ -14,7 +19,15 @@
 	flex-direction: column;
 	gap: calc(var(--spacing) * 8);
 	margin-inline: auto;
-	padding: calc(var(--spacing) * 6) calc(var(--spacing) * 6) calc(var(--spacing) * 20);
+	padding: calc(var(--spacing) * 12 + env(safe-area-inset-top)) calc(var(--spacing) * 6)
+		calc(var(--spacing) * 20 + env(safe-area-inset-bottom));
+}
+
+/* Where the title could meet the floating Show sidebar button, it starts below it. */
+@container machines-page (width < 56rem) {
+	.navigation-content[data-project-sidebar-trigger] .machines-main {
+		padding-top: calc(var(--spacing) * 14 + env(safe-area-inset-top));
+	}
 }
 
 .machines-title {
@@ -81,28 +94,32 @@
 	}
 }
 
+/* A real ordered list: each number sits in the gutter, on the first line of its step. */
 .machines-steps {
-	display: flex;
-	flex-direction: column;
-	gap: calc(var(--spacing) * 5);
 	margin: 0;
 	padding-left: calc(var(--spacing) * 5);
 	list-style: decimal;
 
 	& > li {
-		display: flex;
-		flex-direction: column;
-		gap: calc(var(--spacing) * 2);
 		padding-left: calc(var(--spacing) * 1);
+	}
+
+	& > li + li {
+		margin-top: calc(var(--spacing) * 5);
+	}
+
+	& > li > * + * {
+		margin-top: calc(var(--spacing) * 2);
 	}
 
 	& > li::marker {
 		color: var(--color-text-tertiary);
+		font-variant-numeric: tabular-nums;
 		font-weight: 500;
 	}
 
 	& p {
-		margin: 0;
+		margin-block: 0;
 		max-width: 65ch;
 	}
 }
@@ -117,15 +134,22 @@
 	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1)
 		calc(var(--spacing) * 3);
 
-	& code {
+	/* Lines break only where the command does; a line too long for the box scrolls instead. */
+	& pre {
 		flex: 1;
 		min-width: 0;
+		margin: 0;
+		overflow-x: auto;
 		padding-block: calc(var(--spacing) * 1);
+		scrollbar-width: thin;
+		white-space: pre;
+	}
+
+	& code {
 		color: var(--color-text-primary);
 		font-family: var(--font-mono);
 		font-size: var(--text-xs);
 		line-height: var(--text-xs--line-height);
-		overflow-wrap: anywhere;
 		user-select: all;
 	}
 
@@ -183,8 +207,16 @@
 .machines-version {
 	display: inline-flex;
 	flex-wrap: wrap;
-	align-items: center;
+	align-items: baseline;
 	gap: calc(var(--spacing) * 2);
+}
+
+.machines-update {
+	color: var(--color-warning-ink);
+	font-size: var(--text-xs);
+	font-weight: 500;
+	line-height: var(--text-xs--line-height);
+	white-space: nowrap;
 }
 
 .machines-version-inline {
@@ -225,12 +257,31 @@
 	font-size: var(--text-base);
 }
 
+/* The code as the terminal prints it, in a well like the setup commands, so it is easy to compare. */
+.machines-code-check {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+}
+
 .machines-code {
+	align-self: flex-start;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
 	color: var(--color-text-primary);
 	font-family: var(--font-mono);
-	font-size: var(--text-base);
+	font-size: var(--text-xl);
 	font-weight: 600;
-	letter-spacing: 0.04em;
+	letter-spacing: 0.16em;
+	line-height: var(--text-xl--line-height);
+}
+
+.machines-pairing-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: calc(var(--spacing) * 2);
 }
 
 /* Phones keep the name and status; the version moves under the name. */
@@ -241,7 +292,8 @@
 
 	.machines-main {
 		gap: calc(var(--spacing) * 6);
-		padding: calc(var(--spacing) * 2) calc(var(--spacing) * 4) calc(var(--spacing) * 16);
+		padding-inline: calc(var(--spacing) * 4);
+		padding-bottom: calc(var(--spacing) * 16 + env(safe-area-inset-bottom));
 	}
 
 	.machines-title {
