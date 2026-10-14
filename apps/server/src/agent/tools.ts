@@ -13,6 +13,7 @@ import {
 	answer,
 	applyAnchors,
 	applyBlockEdit,
+	documentSnapshot,
 	documentView,
 	EDIT_OPERATIONS_SCHEMA,
 } from "./document-ops";
@@ -174,8 +175,7 @@ const roomContext = z.object({
 });
 const referenceContext = roomContext.extend({ repository: z.object({ id: z.string() }) });
 type Owner = Pick<ActiveOwnerBinding, "revalidate" | "signal">;
-// The owner is needed only to reach into a child, as for the child tools.
-const replyContext = roomContext.extend({
+const ownerContext = roomContext.extend({
 	owner: z.custom<Owner>(value =>
 		!!value && typeof (value as Owner).revalidate === "function" && !!(value as Owner).signal
 	).optional(),
@@ -429,12 +429,15 @@ export const documentTools = {
 	}),
 
 	ask: tool({
-		contextSchema: roomContext,
+		contextSchema: ownerContext,
 		description: "Ask the people in the room one or more multiple-choice questions and wait for "
 			+ "their shared answer. Every question also accepts free text. Batch related "
 			+ "questions into one call. The questionnaire is recorded in the plan and the "
-			+ "answer is attributed to whoever gave it. Ask only what the repository cannot "
-			+ "tell you, and do not ask for permission to proceed. Use the revision from "
+			+ "answer is attributed to whoever gave it. If current_plan is present after "
+			+ "an answer, it has read_plan's revision, source, and blocks; edit from that "
+			+ "revision. Otherwise call read_plan before editing. Reread if an edit is stale. "
+			+ "Ask only what the repository cannot tell you, and do not ask for permission "
+			+ "to proceed. Use the revision from "
 			+ "`read_plan` and relate every question to its returned blocks.",
 		inputSchema: jsonSchema({
 			type: "object",
@@ -490,7 +493,7 @@ export const documentTools = {
 			additionalProperties: false,
 		}),
 		metadata: { skipPermission: true },
-		execute: (raw, { context: { room: context }, abortSignal }) =>
+		execute: (raw, { context: { room: context, owner }, abortSignal }) =>
 			answer("ask", async () => {
 				if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
 				let args = Arguments.askPlan(raw);
@@ -506,7 +509,7 @@ export const documentTools = {
 					context.anchors,
 					abortSignal,
 				);
-				return {
+				let result = {
 					outcomes: ended.map(outcome =>
 						outcome.status === "answered"
 							? {
@@ -517,6 +520,20 @@ export const documentTools = {
 							: { status: "cancelled", cancelled_by: outcome.resolver }
 					),
 				};
+				let stopped = () => !!abortSignal?.aborted || !!owner?.signal.aborted;
+				if (!ended.some(outcome => outcome.status === "answered") || !owner || stopped()) {
+					return result;
+				}
+				try {
+					let document = await documentIdentity(context.plan);
+					if (stopped() || !await owner.revalidate() || stopped()) return result;
+					let current = await context.exclusive(async () =>
+						stopped() ? undefined : documentSnapshot(context.plan, document)
+					);
+					return stopped() || !current ? result : { ...result, current_plan: current };
+				} catch {
+					return result;
+				}
 			}),
 	}),
 	read_implementation_graph: tool({
@@ -658,7 +675,7 @@ export const documentTools = {
 	}),
 
 	reply_comment: tool({
-		contextSchema: replyContext,
+		contextSchema: ownerContext,
 		description: "Reply in the comment thread this turn was sent. Use it once, after any edit "
 			+ "and `anchor_plan`, to answer the latest note sent to you — briefly, since it is "
 			+ "shown in a small card beside the passage. Only that thread can be answered, and "

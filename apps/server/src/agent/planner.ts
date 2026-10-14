@@ -174,8 +174,11 @@ ask later questions in place; never replace or hide the plan because one is open
 
 The plan is yours to write. Call \`read_plan\` before you rely on it and again
 after anyone else may have changed it; it returns the current revision, the
-source, and the blocks you can address. Write with \`edit_plan\`, quoting the
-revision you read. If the plan moved on, your batch is refused and you are told
+source, and the blocks you can address. After \`ask\`, use \`current_plan\` when
+present: it has those same fields, so you can edit from its revision without
+another read. Otherwise call \`read_plan\` before editing. Write with
+\`edit_plan\`, quoting the revision you read. If the plan moved on, your batch is
+refused and you are told
 which blocks changed — read again and retry rather than forcing the edit.
 
 Every successful \`edit_plan\` returns \`anchors_pending\`, and you MUST clear it

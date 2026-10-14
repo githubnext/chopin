@@ -483,6 +483,14 @@ every turn.
   inside the session, such as an Atomic extension, can use either to address
   that document over MCP.
 
+After an `ask` questionnaire has a saved answer, its result also includes
+`current_plan` with the same document, revision, source, block outline, comments,
+and question records as `read_plan`. The Planner can edit from that revision and
+still uses `anchor_plan` to relate the answer to prose. When none of a batch's
+questions were answered, the result has only its outcomes. If document lookup
+or owner revalidation fails, the answer outcomes remain available but no document
+snapshot is returned.
+
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.
 References persist with their message, but `read_reference` accepts only the
