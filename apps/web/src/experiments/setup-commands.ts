@@ -22,7 +22,7 @@ function words(list: string[], shell: SetupShell): string {
 	return list.map(word => quote(word, shell)).join(" ");
 }
 
-/** What follows `chopin connect .` for this agent, short of the service: its `--env`, then `--`. */
+/** What follows `chopin connect` for this agent, short of the service: its `--env`, then `--`. */
 export function agentArguments(agent: CodingAgent): string[] {
 	return [...agent.env.flatMap(variable => ["--env", variable]), "--", ...agent.acp];
 }
@@ -37,16 +37,22 @@ export function runsAsService(agent: CodingAgent): boolean {
 }
 
 /**
- * Everything after `chopin`, one line per whole argument group: connect this checkout, run it as a
- * background service if the agent can run unattended, its variables, then the agent it starts.
+ * `connect` and its arguments, as the installer is given them: as the background service if
+ * `background`, the agent's variables, then the agent it starts. PowerShell takes a bare -- as the
+ * end of a script block's own parameters and passes nothing for it, so there it goes in quotes.
  */
-export function connectArguments(agent: CodingAgent, shell: SetupShell = "sh"): string[] {
+export function connectArguments(
+	agent: CodingAgent,
+	shell: SetupShell,
+	background = runsAsService(agent),
+): string {
 	return [
-		"connect .",
-		...(runsAsService(agent) ? ["--install-service"] : []),
+		"connect",
+		...(background ? ["--install-service"] : []),
 		...agent.env.map(variable => `--env ${quote(variable, shell)}`),
-		`-- ${words(agent.acp, shell)}`,
-	];
+		shell === "powershell" ? "'--'" : "--",
+		words(agent.acp, shell),
+	].join(" ");
 }
 
 /** Installs the agent, then signs in to it: one block, each line a command of its own. */
@@ -75,59 +81,57 @@ export function pairCommand(label: string): string {
 	return `chopin pair --label "${label}"`;
 }
 
-/** Where install.sh and install.ps1 put chopin, so the command runs it before PATH has it. */
-const INSTALLED = {
-	sh: "~/.local/bin/chopin",
-	powershell: '"$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe"',
-};
+export type SetupSystem = "linux" | "macos" | "windows";
+
+/** The system this browser runs on, as the likeliest one to set up; phones get Linux. */
+export function guessSystem(userAgent: string): SetupSystem {
+	if (userAgent.includes("Windows")) return "windows";
+	if (userAgent.includes("Macintosh")) return "macos";
+	return "linux";
+}
+
+export function shellFor(system: SetupSystem): SetupShell {
+	return system === "windows" ? "powershell" : "sh";
+}
 
 /**
- * The one command that sets up a machine: install chopin, then, only if that worked, connect this
- * checkout with a single-use pairing key, running chopin by the path the installer used. Over
- * several lines so it never wraps inside an argument; it runs as one when pasted.
+ * The one command that sets up a machine: the installer installs chopin, then, only if that
+ * worked, runs `chopin connect` for this checkout itself. Without a key, connect prints a link to
+ * approve in the browser; with one (for a server, where nobody opens a browser), it pairs at once.
+ * Two lines, broken at the pipe, so the installer's URL stays whole.
  *
- * sh downloads the installer to a file first, since `curl | sh` succeeds when curl fails and sh
- * reads nothing; each step runs only if the one before it succeeded, so a failure stops with
- * curl's or the installer's own message. The key goes in the environment of the one command,
- * where other users can't read it as they can a command line.
+ * sh passes CHOPIN_URL and the key in the environment of `sh` alone, where other users can't read
+ * them as they can a command line. If curl can't download the installer, it says why and sh,
+ * given no script, runs nothing.
  *
- * PowerShell connects only if install.ps1 left $LASTEXITCODE 0, and sets the key in the
- * environment for chopin alone, removing it afterwards even on Ctrl-C. It is first assigned to
- * `$token` because PSReadLine (2.0.4 and later) keeps a line that assigns a value to a variable
- * named like a token or secret out of its history file. PSReadLine 2.0.0, which Windows PowerShell
- * 5.1 ships, saves every line; the key is single-use and spent by this command, so that copy
- * outlives its use by ten minutes at most.
+ * PowerShell sets them in the session, and install.ps1 removes the key once chopin has run (or
+ * the install failed). The key is first assigned to `$token`, removed at once, because PSReadLine
+ * (2.0.4 and later) keeps a line that assigns a literal to a variable named like a token out of
+ * its history file. PSReadLine 2.0.0, which Windows PowerShell 5.1 ships, saves every line; the
+ * key is single-use and spent by this command, so that copy outlives its use by ten minutes at most.
  */
 export function setupCommand(
 	origin: string,
 	shell: SetupShell,
 	agent: CodingAgent,
-	key: string,
+	{ key, background }: { key?: string; background?: boolean } = {},
 ): string {
-	let [connect, ...rest] = connectArguments(agent, shell);
+	let connect = connectArguments(agent, shell, background);
 	if (shell === "powershell") {
-		let lines = [`& ${INSTALLED.powershell} ${connect}`, ...rest.map(line => `  ${line}`)];
+		let literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 		return [
-			`irm ${RELEASES}/install.ps1 | iex`,
-			"if ($LASTEXITCODE -eq 0) {",
-			`  $token = '${key.replaceAll("'", "''")}'`,
-			`  $env:CHOPIN_URL = "${origin}"`,
-			"  $env:CHOPIN_PAIRING_KEY = $token",
-			"  try {",
-			...lines.map((line, index) => `    ${line}${index < lines.length - 1 ? " `" : ""}`),
-			"  } finally { Remove-Item Env:CHOPIN_PAIRING_KEY; Remove-Variable token }",
-			"}",
+			[
+				`$env:CHOPIN_URL = ${literal(origin)}`,
+				...(key
+					? [`$env:CHOPIN_PAIRING_KEY = ($token = ${literal(key)})`, "Remove-Variable token"]
+					: []),
+			].join("; "),
+			`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) ${connect}`,
 		].join("\n");
 	}
-	let lines = [
-		"installer=$(mktemp)",
-		'  && curl -fsSL -o "$installer"',
-		`  ${RELEASES}/install.sh`,
-		'  && sh "$installer" && rm -f "$installer"',
-		`  && CHOPIN_URL=${quote(origin, shell)}`,
-		`  CHOPIN_PAIRING_KEY=${quote(key, shell)}`,
-		`  ${INSTALLED.sh} ${connect}`,
-		...rest.map(line => `  ${line}`),
+	let environment = [
+		`CHOPIN_URL=${quote(origin, shell)}`,
+		...(key ? [`CHOPIN_PAIRING_KEY=${quote(key, shell)}`] : []),
 	];
-	return lines.map((line, index) => index < lines.length - 1 ? `${line} \\` : line).join("\n");
+	return `curl -fsSL ${RELEASES}/install.sh | \\\n  ${environment.join(" ")} sh -s -- ${connect}`;
 }

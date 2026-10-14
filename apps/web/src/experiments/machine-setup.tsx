@@ -230,7 +230,7 @@ export function MachineSetup(
 						<Command
 							label="setup command"
 							place={`${shell === "powershell" ? "PowerShell" : "Terminal"}, in your repository`}
-							text={setupCommand(location.origin, shell, agent, pairing.key)}
+							text={setupCommand(location.origin, shell, agent, { key: pairing.key })}
 						/>
 					)
 					: <Pending pairing={pairing} renew={renew} />}

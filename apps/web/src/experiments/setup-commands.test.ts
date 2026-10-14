@@ -6,6 +6,7 @@ import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
 	connectArguments,
+	guessSystem,
 	pairCommand,
 	quote,
 	runsAsService,
@@ -14,163 +15,148 @@ import {
 
 const KEY = `chopin_k_${"Ab3-_".repeat(9).slice(0, 43)}`;
 const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
+const ORIGIN = "https://chopin.example";
 
-test("one command installs chopin, then connects with the key by chopin's installed path", () => {
-	expect(setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY)).toBe(
+test("one sh command: the installer runs chopin connect itself, with a key only for a server", () => {
+	let copilot = findAgent("copilot");
+	expect(setupCommand(ORIGIN, "sh", copilot)).toBe(
 		[
-			"installer=$(mktemp) \\",
-			'  && curl -fsSL -o "$installer" \\',
-			`  ${RELEASES}/install.sh \\`,
-			'  && sh "$installer" && rm -f "$installer" \\',
-			"  && CHOPIN_URL=https://chopin.example \\",
-			`  CHOPIN_PAIRING_KEY=${KEY} \\`,
-			"  ~/.local/bin/chopin connect . \\",
-			"  --install-service \\",
-			"  -- copilot --acp --allow-all",
+			`curl -fsSL ${RELEASES}/install.sh | \\`,
+			"  CHOPIN_URL=https://chopin.example sh -s -- connect --install-service -- copilot --acp --allow-all",
 		].join("\n"),
 	);
+	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY })).toBe(
+		[
+			`curl -fsSL ${RELEASES}/install.sh | \\`,
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --install-service -- copilot --acp --allow-all`,
+		].join("\n"),
+	);
+	// Run in the terminal instead, and the agent's own variables.
+	expect(setupCommand(ORIGIN, "sh", copilot, { background: false }).split("\n")[1])
+		.toBe("  CHOPIN_URL=https://chopin.example sh -s -- connect -- copilot --acp --allow-all");
+	expect(setupCommand(ORIGIN, "sh", findAgent("atomic")).split("\n")[1]).toEndWith(
+		"sh -s -- connect --install-service --env ATOMIC_ACP_HEADLESS=1 -- atomic-acp",
+	);
+	expect(setupCommand(ORIGIN, "sh", findAgent("claude-code")).split("\n")[1])
+		.toEndWith("sh -s -- connect -- claude-agent-acp");
 });
 
-test("PowerShell connects only once install.ps1 succeeded, with the key in that command's environment", () => {
-	let command = setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY);
-	expect(command).toBe(
+test("one PowerShell command: the key in the session only, on a line PSReadLine keeps out of its history file", () => {
+	let copilot = findAgent("copilot");
+	let installer =
+		`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) connect --install-service '--' copilot --acp --allow-all`;
+	expect(setupCommand(ORIGIN, "powershell", copilot)).toBe(
+		["$env:CHOPIN_URL = 'https://chopin.example'", installer].join("\n"),
+	);
+	let keyed = setupCommand(ORIGIN, "powershell", copilot, { key: KEY });
+	expect(keyed).toBe(
 		[
-			`irm ${RELEASES}/install.ps1 | iex`,
-			"if ($LASTEXITCODE -eq 0) {",
-			`  $token = '${KEY}'`,
-			'  $env:CHOPIN_URL = "https://chopin.example"',
-			"  $env:CHOPIN_PAIRING_KEY = $token",
-			"  try {",
-			'    & "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
-			"      --install-service `",
-			"      -- copilot --acp --allow-all",
-			"  } finally { Remove-Item Env:CHOPIN_PAIRING_KEY; Remove-Variable token }",
-			"}",
+			`$env:CHOPIN_URL = 'https://chopin.example'; $env:CHOPIN_PAIRING_KEY = ($token = '${KEY}'); Remove-Variable token`,
+			installer,
 		].join("\n"),
 	);
 	// Never on chopin's command line, where other programs on the machine can read it.
-	expect(command).not.toContain("--key");
+	expect(keyed).not.toContain("--key");
+	expect(setupCommand(ORIGIN, "powershell", findAgent("claude-code")).split("\n")[1])
+		.toEndWith("connect '--' claude-agent-acp");
 });
 
-test("the agent's --env goes on its own line, and an agent that asks permission runs in the terminal", () => {
-	expect(
-		setupCommand("https://chopin.example", "sh", findAgent("atomic"), KEY).split("\n").slice(-3),
-	)
-		.toEqual(["  --install-service \\", "  --env ATOMIC_ACP_HEADLESS=1 \\", "  -- atomic-acp"]);
-	let claude = findAgent("claude-code");
-	expect(runsAsService(claude)).toBe(false);
-	expect(setupCommand("https://chopin.example", "sh", claude, KEY).split("\n").slice(-2))
-		.toEqual(["  ~/.local/bin/chopin connect . \\", "  -- claude-agent-acp"]);
-	expect(
-		setupCommand("https://chopin.example", "powershell", claude, KEY).split("\n").slice(-4, -2),
-	)
-		.toEqual([
-			'    & "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
-			"      -- claude-agent-acp",
-		]);
+test("the system is guessed from the browser", () => {
+	expect(guessSystem("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("windows");
+	expect(guessSystem("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toBe("macos");
+	expect(guessSystem("Mozilla/5.0 (X11; Linux x86_64)")).toBe("linux");
+	expect(guessSystem("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe("linux");
 });
 
-/** A curl stand-in's first lines: write to the file `-o` names, else to standard output. */
-const CURL_OUTPUT =
-	'out=/dev/stdout\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done\n';
+/**
+ * A curl that hands sh an installer standing in for install.sh: it records the environment and
+ * arguments it was given, as the chopin it would run.
+ */
+const RECORDING_INSTALLER =
+	`printf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$HOME/ran"\n`;
+
+async function pastedIntoSh(curl: string, run: (shims: string, home: string) => Promise<void>) {
+	let home = await mkdtemp(join(tmpdir(), "chopin-setup-command-"));
+	try {
+		let shims = join(home, "shims");
+		await mkdir(shims);
+		await writeFile(join(shims, "curl"), `#!/bin/sh\n${curl}`);
+		await chmod(join(shims, "curl"), 0o755);
+		await run(shims, home);
+	} finally {
+		await rm(home, { recursive: true, force: true });
+	}
+}
 
 test.skipIf(process.platform === "win32")(
-	"the one sh command stops with the installer's own message, never running chopin, when installing fails",
+	"sh, bash and zsh hand the installer every argument and the key exactly",
 	async () => {
-		let home = await mkdtemp(join(tmpdir(), "chopin-setup-command-"));
-		try {
-			let shims = join(home, "shims");
-			await mkdir(shims);
-			let failures = {
-				// curl -f: GitHub answered with an error, so there is no installer to run.
-				download: "echo 'curl: (22) The requested URL returned error: 404' >&2\nexit 22\n",
-				// The installer ran and refused, as install.sh does when it can't fetch chopin.
-				installer:
-					`${CURL_OUTPUT}printf '%s\\n' "echo 'chopin install: could not download chopin' >&2" 'exit 1' > "$out"\n`,
-			};
-			for (let [name, body] of Object.entries(failures)) {
-				await writeFile(join(shims, "curl"), `#!/bin/sh\n${body}`);
-				await chmod(join(shims, "curl"), 0o755);
-				for (let shell of ["sh", "bash", "zsh"]) {
-					let found = Bun.which(shell);
-					if (!found) continue;
-					let command = setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY);
-					let run = Bun.spawnSync([found, "-c", command], {
-						env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
-						stderr: "pipe",
-					});
-					let said = run.stderr.toString();
-					expect(run.exitCode, `${shell} ${name}: ${said}`).not.toBe(0);
-					expect(said).toContain(
-						name === "download" ? "returned error: 404" : "chopin install: could not download",
-					);
-					expect(said).not.toContain("not found");
-					expect(said).not.toContain("No such file");
-				}
-			}
-		} finally {
-			await rm(home, { recursive: true, force: true });
-		}
-	},
-);
-
-test.skipIf(process.platform === "win32")(
-	"sh, bash and zsh each run the one command as one: install, then chopin with the key",
-	async () => {
-		let home = await mkdtemp(join(tmpdir(), "chopin-setup-command-"));
-		try {
-			let shims = join(home, "shims");
-			await mkdir(shims);
-			// curl hands sh an installer that puts a chopin in ~/.local/bin, as install.sh does.
-			let chopin =
-				`#!/bin/sh\nprintf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$HOME/ran"\n`;
-			await writeFile(
-				join(shims, "curl"),
-				`#!/bin/sh\n${CURL_OUTPUT}cat > "$out" <<'EOF'\nmkdir -p "$HOME/.local/bin"\ncat > "$HOME/.local/bin/chopin" <<'END'\n${chopin}END\nchmod 755 "$HOME/.local/bin/chopin"\nEOF\n`,
-			);
-			await chmod(join(shims, "curl"), 0o755);
+		await pastedIntoSh(`cat <<'EOF'\n${RECORDING_INSTALLER}EOF\n`, async (shims, home) => {
 			for (let shell of ["sh", "bash", "zsh"]) {
 				let found = Bun.which(shell);
 				if (!found) continue;
 				for (let agent of AGENTS) {
-					await rm(join(home, ".local"), { recursive: true, force: true });
-					let command = setupCommand("https://chopin.example", "sh", agent, KEY);
-					let run = Bun.spawnSync([found, "-c", command], {
-						env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
-						stderr: "pipe",
-					});
-					expect(run.stderr.toString(), `${shell} ${agent.id}`).toBe("");
-					expect(run.exitCode).toBe(0);
-					expect((await readFile(join(home, "ran"), "utf8")).split("\n").slice(0, -1)).toEqual([
-						"https://chopin.example",
-						KEY,
-						"connect",
-						".",
-						...runsAsService(agent) ? ["--install-service"] : [],
-						...agent.env.flatMap(variable => ["--env", variable]),
-						"--",
-						...agent.acp,
-					]);
+					for (let key of [undefined, KEY]) {
+						await rm(join(home, "ran"), { force: true });
+						let command = setupCommand(ORIGIN, "sh", agent, { key });
+						let run = Bun.spawnSync([found, "-c", command], {
+							env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
+							stderr: "pipe",
+						});
+						expect(run.stderr.toString(), `${shell} ${agent.id}`).toBe("");
+						expect(run.exitCode).toBe(0);
+						expect((await readFile(join(home, "ran"), "utf8")).split("\n").slice(0, -1)).toEqual([
+							ORIGIN,
+							key ?? "",
+							"connect",
+							...runsAsService(agent) ? ["--install-service"] : [],
+							...agent.env.flatMap(variable => ["--env", variable]),
+							"--",
+							...agent.acp,
+						]);
+					}
 				}
 			}
-		} finally {
-			await rm(home, { recursive: true, force: true });
-		}
+		});
+	},
+);
+
+// curl -f writes nothing on an HTTP error, so sh reads no script and runs nothing.
+test.skipIf(process.platform === "win32")(
+	"when the installer can't be downloaded, curl says why and nothing runs",
+	async () => {
+		await pastedIntoSh(
+			"echo 'curl: (22) The requested URL returned error: 404' >&2\nexit 22\n",
+			async (shims, home) => {
+				for (let shell of ["sh", "bash", "zsh"]) {
+					let found = Bun.which(shell);
+					if (!found) continue;
+					let run = Bun.spawnSync(
+						[found, "-c", setupCommand(ORIGIN, "sh", findAgent("copilot"), { key: KEY })],
+						{ env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` }, stderr: "pipe" },
+					);
+					expect(run.stderr.toString(), shell).toBe(
+						"curl: (22) The requested URL returned error: 404\n",
+					);
+					expect(await Bun.file(join(home, "ran")).exists()).toBe(false);
+				}
+			},
+		);
 	},
 );
 
 const PWSH = Bun.which("pwsh");
 
 /**
- * The PowerShell setup command pasted into pwsh, with `installer` (a PowerShell script) standing in
- * for install.ps1 and a chopin.exe that records its environment and arguments.
+ * The PowerShell setup command pasted into pwsh, line by line as PSReadLine runs a paste, with
+ * `installer` (a PowerShell script) standing in for install.ps1.
  */
-async function pasted(installer: string, env: Record<string, string> = {}) {
+async function pasted(installer: string, key?: string) {
 	let home = await mkdtemp(join(tmpdir(), "chopin-setup-powershell-"));
 	try {
 		let script = join(home, "install.ps1");
 		await writeFile(script, installer);
-		let command = setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY)
+		let command = setupCommand(ORIGIN, "powershell", findAgent("atomic"), { key })
 			.replace(`irm ${RELEASES}/install.ps1`, `Get-Content -Raw '${script}'`);
 		let run = Bun.spawnSync([
 			PWSH!,
@@ -178,7 +164,7 @@ async function pasted(installer: string, env: Record<string, string> = {}) {
 			"-NonInteractive",
 			"-Command",
 			`${command}\n"after: [$env:CHOPIN_PAIRING_KEY] [$token]"`,
-		], { env: { ...process.env, LOCALAPPDATA: home, ...env }, stdout: "pipe", stderr: "pipe" });
+		], { env: { ...process.env, LOCALAPPDATA: home }, stdout: "pipe", stderr: "pipe" });
 		let ran = await readFile(join(home, "ran"), "utf8").catch(() => undefined);
 		return { output: run.stdout.toString() + run.stderr.toString(), ran };
 	} finally {
@@ -186,48 +172,66 @@ async function pasted(installer: string, env: Record<string, string> = {}) {
 	}
 }
 
-test.skipIf(!PWSH || process.platform === "win32")(
-	"pasted into PowerShell, the command runs chopin only after install.ps1 succeeded, and clears the key",
+test.skipIf(!PWSH)(
+	"pasted into PowerShell, install.ps1 gets every argument, -- included, and the key, which goes",
 	async () => {
-		// Installs a chopin.exe (a sh script here) as install.ps1 does.
-		let fake = join(await mkdtemp(join(tmpdir(), "chopin-setup-fake-")), "chopin.exe");
-		await writeFile(
-			fake,
-			`#!/bin/sh\nprintf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$LOCALAPPDATA/ran"\n`,
-		);
-		await chmod(fake, 0o755);
-		let installs = [
-			'$bin = Join-Path $env:LOCALAPPDATA "chopin/bin"',
-			"New-Item -ItemType Directory -Force $bin | Out-Null",
-			`Copy-Item '${fake}' (Join-Path $bin "chopin.exe")`,
-			"$global:LASTEXITCODE = 0",
+		let recording = [
+			'$lines = @("$env:CHOPIN_URL", "$env:CHOPIN_PAIRING_KEY") + $args',
+			'Set-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "ran") -Value $lines',
+			"Remove-Item Env:CHOPIN_PAIRING_KEY -ErrorAction SilentlyContinue",
 		].join("\n");
-		let installed = await pasted(installs);
-		expect(installed.ran?.split("\n").slice(0, -1), installed.output).toEqual([
-			"https://chopin.example",
-			KEY,
-			"connect",
-			".",
-			"--install-service",
-			"--",
-			"copilot",
-			"--acp",
-			"--allow-all",
-		]);
-		expect(installed.output).toContain("after: [] []");
+		for (let key of [undefined, KEY]) {
+			let result = await pasted(recording, key);
+			expect(result.ran?.split(/\r?\n/).slice(0, -1), result.output).toEqual([
+				ORIGIN,
+				key ?? "",
+				"connect",
+				"--install-service",
+				"--env",
+				"ATOMIC_ACP_HEADLESS=1",
+				"--",
+				"atomic-acp",
+			]);
+			expect(result.output).toContain("after: [] []");
+		}
 
-		// The real install.ps1 refusing (here, a version that isn't one) stops it before chopin.
+		// The real install.ps1 refusing (here, as it isn't Windows) runs no chopin, and the key goes.
 		let install = await readFile(
 			join(import.meta.dir, "../../../connector/install/install.ps1"),
 			"utf8",
 		);
-		let refused = await pasted(install, { CHOPIN_VERSION: "0.2.0\nevil" });
+		let refused = await pasted(install, KEY);
 		expect(refused.output).toContain("chopin install:");
 		expect(refused.ran).toBeUndefined();
-		expect(refused.output).not.toContain("chopin.exe");
 		expect(refused.output).toContain("after: [] []");
 	},
 	60_000,
+);
+
+// PSReadLine 2.0.4 and later leave a line out of the history file when it assigns a literal to a
+// variable named like a token; Windows PowerShell 5.1's PSReadLine 2.0.0 saves every line.
+test.skipIf(!PWSH)(
+	"PSReadLine keeps the line with the key out of its history file, and only that line",
+	() => {
+		let lines = setupCommand(ORIGIN, "powershell", findAgent("copilot"), { key: KEY }).split("\n");
+		let check = Bun.spawnSync([
+			PWSH!,
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			[
+				"Import-Module PSReadLine",
+				...lines.map(line =>
+					`[Microsoft.PowerShell.PSConsoleReadLine]::GetDefaultAddToHistoryOption('${
+						line.replaceAll("'", "''")
+					}').ToString()`
+				),
+			].join("\n"),
+		], { stdout: "pipe", stderr: "pipe" });
+		expect(check.stdout.toString().trim().split(/\r?\n/), check.stderr.toString())
+			.toEqual(["MemoryOnly", "MemoryAndFile"]);
+	},
+	30_000,
 );
 
 test("every agent that can run unattended connects as the service, in either shell", () => {
@@ -236,6 +240,7 @@ test("every agent that can run unattended connects as the service, in either she
 		for (let shell of ["sh", "powershell"] as const) {
 			expect(connectArguments(agent, shell).includes("--install-service"))
 				.toBe(runsAsService(agent));
+			expect(connectArguments(agent, shell, false).includes("--install-service")).toBe(false);
 		}
 	}
 	expect(AGENTS.filter(runsAsService).map(agent => agent.id))

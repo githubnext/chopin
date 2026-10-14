@@ -148,14 +148,14 @@ test("one copied command installs chopin and pairs the machine, with no browser 
 	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
 	await expect(picker).toHaveValue("copilot");
 	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "sh", findAgent("copilot"), key!));
+		.toBe(setupCommand(origin, "sh", findAgent("copilot"), { key: key! }));
 	await setup.getByRole("button", { name: "Windows", exact: true }).click();
 	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "powershell", findAgent("copilot"), key!));
+		.toBe(setupCommand(origin, "powershell", findAgent("copilot"), { key: key! }));
 	await picker.selectOption({ label: "Claude Code" });
 	await expect(setup.getByText("Keep this terminal open.", { exact: true })).toBeVisible();
 	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "powershell", findAgent("claude-code"), key!));
+		.toBe(setupCommand(origin, "powershell", findAgent("claude-code"), { key: key! }));
 	await picker.selectOption({ label: "GitHub Copilot CLI" });
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect(setup.getByText("Keep this terminal open.", { exact: true })).toHaveCount(0);
