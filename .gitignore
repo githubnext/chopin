@@ -24,7 +24,8 @@ e2e/blob-report/
 # Agents
 .codex/
 /.lane/
-.claude/settings.local.json
+.claude/
+.Claude/
 .opencode/*
 /docs/superpowers
 

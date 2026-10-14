@@ -48,7 +48,7 @@
 }
 .build-blocker-row {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: var(--menu-item-gap-compact);
 	width: 100%;
 	min-height: var(--menu-item-height-normal);
@@ -71,9 +71,17 @@
 	height: var(--icon-size-default);
 	flex-shrink: 0;
 }
+.build-blocker-row .build-blocker-glyphs,
+.build-blocker-arrow {
+	margin-top: calc((1lh - var(--icon-size-default)) / 2);
+}
 .build-blocker-title {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
 	flex: 1;
 	min-width: 0;
+	overflow: hidden;
 	overflow-wrap: anywhere;
 }
 .build-blocker-arrow {
