@@ -5,7 +5,6 @@ import { join } from "node:path";
 
 import { documentSlug } from "../../channels/slug";
 import { storageContract } from "../contract";
-import { StorageError } from "../errors";
 import { ResearchProjectionConflict } from "../model";
 import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
@@ -1008,6 +1007,7 @@ if (url) {
 				"018_plan_images",
 				"019_investigation_children",
 				"020_machines",
+				"021_document_titles",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([
@@ -1056,12 +1056,12 @@ if (url) {
 					now,
 				}),
 			]);
-			expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
-			let rejected = results.find(result => result.status === "rejected");
-			expect(rejected?.status === "rejected" && rejected.reason).toBeInstanceOf(StorageError);
-			if (rejected?.status === "rejected" && rejected.reason instanceof StorageError) {
-				expect(rejected.reason.failure).toBe("conflict");
-			}
+			expect(results.filter(result => result.status === "fulfilled")).toHaveLength(2);
+			let channels = (await storage.channels.list(repositoryId, 10)).channels;
+			expect(channels.map(channel => channel.slug).sort()).toEqual([
+				"shared-title",
+				"shared-title-2",
+			]);
 		} finally {
 			await storage.close();
 		}

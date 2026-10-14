@@ -1,3 +1,6 @@
+import * as Service from "../plan/service";
+import type { Server } from "bun";
+import type { SocketData } from "../wire";
 import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
 
@@ -204,6 +207,7 @@ async function setup(random?: () => number) {
 		}),
 		pairings: {},
 	};
+	let lease = (await storage.leases.acquire("writer", "routes-test", 60_000))!;
 	let router = new Router();
 	let reset: string[] = [];
 	let renamed: string[] = [];
@@ -211,6 +215,19 @@ async function setup(random?: () => number) {
 	let restored: Array<{ id: string; changed: boolean }> = [];
 	let deleted: string[] = [];
 	registerChannelRoutes(router, auth, {
+		renameChannel: async (id, title) => {
+			let opened = await Service.open(id, {
+				documentTitles: true,
+				storage,
+				lease: () => lease,
+				fatal: () => {},
+			}, { publish() {} } as unknown as Server<SocketData>);
+			try {
+				return await Service.exclusive(opened, () => Service.rename(opened, title));
+			} finally {
+				await Service.close(opened);
+			}
+		},
 		onAgentReset: async id => {
 			reset.push(id);
 		},
@@ -488,7 +505,7 @@ describe("channel routes", () => {
 		expect(await storage.navigation.get("U_octocat")).toBeUndefined();
 	});
 
-	it("lets an editor rename a document without changing its plan revision", async () => {
+	it("lets an editor rename the authored title and channel atomically", async () => {
 		let { router, storage, cookie, renamed, now } = await setup();
 		let channel = await storage.channels.create({
 			id: crypto.randomUUID(),
@@ -511,8 +528,11 @@ describe("channel routes", () => {
 			id: channel.id,
 			title: "Launch plan",
 			slug: "launch-plan",
-			revision: channel.revision,
+			revision: channel.revision + 2,
 		});
+		expect((await storage.collaboration.load(channel.id, now))?.snapshot?.source).toBe(
+			"# Launch plan\n",
+		);
 		expect((await storage.channels.get(channel.id))!.title).toBe("Launch plan");
 		expect(renamed).toEqual(["Launch plan"]);
 
@@ -525,7 +545,7 @@ describe("channel routes", () => {
 		expect(renamed).toEqual(["Launch plan"]);
 	});
 
-	it("validates rename titles and preserves a document after a title conflict", async () => {
+	it("normalizes blank and long names and allows duplicate display titles", async () => {
 		let { router, storage, cookie, now } = await setup();
 		let channel = await storage.channels.create({
 			id: crypto.randomUUID(),
@@ -553,14 +573,16 @@ describe("channel routes", () => {
 			}));
 
 		expect((await patch({}))!.status).toBe(400);
-		expect((await patch({ title: " " }))!.status).toBe(400);
-		expect((await patch({ title: "x".repeat(121) }))!.status).toBe(400);
-		let conflict = await patch({ title: "launch PLAN" });
-		expect(conflict!.status).toBe(409);
-		expect(await conflict!.json()).toEqual({
-			error: "a document with this title already exists",
+		expect((await patch({ title: " " }))!.status).toBe(200);
+		expect((await storage.channels.get(channel.id))!.title).toBe("Untitled");
+		expect((await patch({ title: "x".repeat(51) }))!.status).toBe(200);
+		expect((await storage.channels.get(channel.id))!.title).toBe("x".repeat(50));
+		let duplicate = await patch({ title: "launch PLAN" });
+		expect(duplicate!.status).toBe(200);
+		expect((await storage.channels.get(channel.id))!).toMatchObject({
+			title: "launch PLAN",
+			slug: "launch-plan-2",
 		});
-		expect((await storage.channels.get(channel.id))!.title).toBe("Release plan");
 	});
 
 	it("requires current write access and the configured origin to rename", async () => {
@@ -959,7 +981,7 @@ describe("channel routes", () => {
 		expect(secondBody.channel.title).not.toBe(firstBody.channel.title);
 	});
 
-	it("tries another generated title when its random starting title is reserved", async () => {
+	it("permits a duplicate generated title with its own slug", async () => {
 		let { router, storage, cookie, now } = await setup(() => 0);
 		await storage.channels.create({
 			id: crypto.randomUUID(),
@@ -976,7 +998,10 @@ describe("channel routes", () => {
 			{ method: "POST", headers: { origin: "https://chopin.test" }, body: "{}" },
 		));
 		expect(created!.status).toBe(201);
-		expect((await created!.json()).channel.title).toBe("amber-arch");
+		expect((await created!.json()).channel).toMatchObject({
+			title: "amber-anchor",
+			slug: "amber-anchor-2",
+		});
 	});
 
 	it("keeps viewers read-only and requires a matching Origin", async () => {

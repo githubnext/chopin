@@ -444,7 +444,7 @@ export function researchPublicationContract(factory: StorageFactory): void {
 		}
 	});
 
-	it("reserves available titles and slugs during research publication", async () => {
+	it("reserves distinct slugs for duplicate titles during research publication", async () => {
 		let storage = await opened(factory);
 		try {
 			let { userId, channelId, repositoryId, lease } = await userAndChannel(storage);
@@ -467,7 +467,8 @@ export function researchPublicationContract(factory: StorageFactory): void {
 				now: new Date("2026-01-07T03:07:05.000Z"),
 				lease,
 			});
-			expect(collisionPublished.channel.title).toBe("api COMPATIBILITY report (2)");
+			expect(collisionPublished.channel.title).toBe("api COMPATIBILITY report");
+			expect(collisionPublished.channel.slug).toBe("api-compatibility-report-2");
 
 			let slugParent = await storage.channels.create({
 				id: id("slug-publication-parent"),

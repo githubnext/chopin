@@ -1,3 +1,5 @@
+import { displayTitle } from "@chopin/dialect";
+import * as Plan from "../plan/service";
 import { documentPath } from "@chopin/protocol/document-url";
 import { MAX_GITHUB_REFERENCES, parseGitHubReferenceKey } from "@chopin/protocol/github-reference";
 
@@ -15,7 +17,12 @@ import type { GitHubReference, GitHubReferencesResponse } from "@chopin/protocol
 import type { Repository } from "../github/client";
 import type { GitHubReferences } from "../github/references";
 import type { Router } from "../http/router";
-import type { ChannelArchiveResult, ChannelCursor, ChannelRecord } from "../storage/model";
+import type {
+	ChannelArchiveResult,
+	ChannelCursor,
+	ChannelRecord,
+	RenameResult,
+} from "../storage/model";
 
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const REPOSITORY = /^[A-Za-z0-9._-]{1,100}$/;
@@ -141,7 +148,7 @@ async function requestedTitle(
 		let raw = (value as Record<string, unknown>).title;
 		if (raw === undefined) return { valid: optional };
 		let title = normalizedTitle(raw);
-		return title ? { valid: true, title } : { valid: false };
+		return title !== undefined ? { valid: true, title } : { valid: false };
 	} catch {
 		return { valid: false };
 	}
@@ -212,6 +219,7 @@ export function registerChannelRoutes(
 		onChannelArchived?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		onChannelDeleted?: (channelId: string) => Promise<boolean>;
 		onChannelRenamed?: (channel: ChannelRecord) => void;
+		renameChannel?: (id: string, title: string) => Promise<RenameResult>;
 		onChannelRestored?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		random?: () => number;
 		references?: GitHubReferences;
@@ -298,7 +306,7 @@ export function registerChannelRoutes(
 				}
 				let title = await requestedTitle(request, true);
 				if (!title.valid) {
-					return json({ error: "title must be between 1 and 120 characters" }, 400);
+					return json({ error: "title must be a string" }, 400);
 				}
 				let channel: ChannelRecord | undefined;
 				let candidates = title.title === undefined
@@ -311,7 +319,8 @@ export function registerChannelRoutes(
 							repositoryId: repo.id,
 							repositoryOwner: repo.owner,
 							repositoryName: repo.name,
-							title: candidate,
+							title: displayTitle(candidate),
+							initial: await Plan.initial("", undefined, candidate),
 							createdBy: session.user.id,
 							now: auth.clock(),
 						});
@@ -457,14 +466,13 @@ export function registerChannelRoutes(
 				return json({ error: "repository write access is required" }, 403);
 			}
 			let requested = await requestedTitle(request, false);
-			if (!requested.valid || !requested.title) {
-				return json({ error: "title must be between 1 and 120 characters" }, 400);
+			if (!requested.valid || requested.title === undefined) {
+				return json({ error: "title must be a string" }, 400);
 			}
-			let renamed = await auth.storage.channels.rename({
-				id,
-				title: requested.title,
-				now: auth.clock(),
-			});
+			if (!options.renameChannel) {
+				throw new StorageError("unavailable", "document rename is unavailable");
+			}
+			let renamed = await options.renameChannel(id, requested.title);
 			if (renamed.changed) options.onChannelRenamed?.(renamed.channel);
 			return json({
 				repository: repository(repo),
@@ -473,8 +481,11 @@ export function registerChannelRoutes(
 				channel: serialized(renamed.channel),
 			});
 		} catch (err) {
+			if (err instanceof Plan.ImplementationActiveError) {
+				return json({ error: "document editing is locked during implementation" }, 409);
+			}
 			if (err instanceof StorageError && err.failure === "conflict") {
-				return json({ error: "a document with this title already exists" }, 409);
+				return json({ error: "document cannot be renamed in its current state" }, 409);
 			}
 			return failure(err, request, auth);
 		}

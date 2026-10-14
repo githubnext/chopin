@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { createHeadlessEditor } from "@lexical/headless";
 import { createYjsBinding, syncLexicalUpdateToYjs, syncYjsChangesToLexical } from "@lexical/yjs";
 import * as Y from "yjs";
+import { $createHeadingNode, $isHeadingNode } from "@chopin/dialect";
 
 import {
 	$createDecisionNode,
@@ -27,10 +28,12 @@ import {
 	$importPlan,
 	assert,
 	assertIntroducedUrls,
+	boundDocumentTitle,
 	ExperimentNode,
 	exportPlan,
 	InvestigationNode,
 	limits,
+	normalizeDocumentTitle,
 	parse,
 	PlanParseError,
 	PlanValidationError,
@@ -53,10 +56,12 @@ export { QuestionnaireProjectionError } from "./card-projections";
 export type { CardChange } from "./card-projections";
 import {
 	$createParagraphNode,
+	$createTextNode,
 	$getNodeByKey,
 	$getRoot,
 	$isElementNode,
 	$isParagraphNode,
+	$isTextNode,
 	$nodesOfType,
 } from "lexical";
 
@@ -100,6 +105,9 @@ export const LIMITS = {
 };
 
 export type Document = {
+	/** Product title identity; standalone rooms have no title mode. */
+	titleKey?: string;
+	titleBodyKeys?: Set<string>;
 	/** Identifies one Yjs history. Updates carrying another are rejected. */
 	epoch: string;
 	doc: Y.Doc;
@@ -436,6 +444,7 @@ export async function rebuild(target: Document): Promise<Document> {
 	let restored = build(ulid());
 	Y.applyUpdate(restored.doc, target.checkpoint, REMOTE);
 	await settle();
+	if (target.titleKey !== undefined) enableTitle(restored);
 	restored.checkpoint = Y.encodeStateAsUpdate(restored.doc);
 	return restored;
 }
@@ -461,7 +470,9 @@ export async function replace(source: string): Promise<Document> {
  */
 export async function compact(target: Document): Promise<Document | undefined> {
 	if (!needsCompaction(target)) return undefined;
-	return replace(project(target));
+	let compacted = await replace(project(target));
+	if (target.titleKey !== undefined) enableTitle(compacted);
+	return compacted;
 }
 
 // -- server-authored mutations ---------------------------------------------
@@ -472,6 +483,72 @@ export type Mutation = {
 	/** Canonical source afterwards. */
 	source: string;
 };
+
+/** Initialize product title mode, then keep its identity through ordinary edits. */
+export function enableTitle(target: Document, fallback = ""): Mutation | undefined {
+	return mutate(target, () => $normalizeTitle(target, fallback));
+}
+
+/** Rebind title identity after a committed staged Yjs delta replaces the heading. */
+export function trackTitle(target: Document): void {
+	target.editor.getEditorState().read(() => {
+		let root = $getRoot();
+		let title = root.getFirstChild();
+		if (!$isHeadingNode(title) || title.getTag() !== "h1") {
+			throw new Error("document title is missing");
+		}
+		target.titleKey = title.getKey();
+		target.titleBodyKeys = new Set(root.getChildren().slice(1).map(node => node.getKey()));
+	});
+}
+
+function $normalizeTitle(target: Document, fallback = ""): boolean {
+	let root = $getRoot();
+	let known = target.titleKey !== undefined;
+	let node = known ? $getNodeByKey(target.titleKey!) : root.getFirstChild();
+	let heading = $isHeadingNode(node) && (known || node.getTag() === "h1") ? node : undefined;
+	let changed = false;
+	let first = root.getFirstChild();
+	if (
+		known && (!heading || heading.getParent() !== root) && $isHeadingNode(first)
+		&& first.getTag() === "h1"
+		&& first.getTextContent() === "" && !target.titleBodyKeys?.has(first.getKey())
+	) heading = first;
+	if (!heading || heading.getParent() !== root) {
+		heading = $createHeadingNode("h1");
+		let text = normalizeDocumentTitle(known ? "" : fallback);
+		if (text) heading.append($createTextNode(text));
+		let first = root.getFirstChild();
+		if (first) first.insertBefore(heading);
+		else root.append(heading);
+		changed = true;
+	}
+	if (heading !== root.getFirstChild()) {
+		root.getFirstChild()!.insertBefore(heading);
+		changed = true;
+	}
+	if (heading.getTag() !== "h1") {
+		heading.setTag("h1");
+		changed = true;
+	}
+	let text = known
+		? boundDocumentTitle(heading.getTextContent())
+		: normalizeDocumentTitle(heading.getTextContent());
+	let children = heading.getChildren();
+	if (
+		heading.getTextContent() !== text
+		|| children.some(child => !$isTextNode(child) || child.getFormat() !== 0)
+	) {
+		heading.clear();
+		if (text) heading.append($createTextNode(text));
+		changed = true;
+	}
+	target.titleKey = heading.getKey();
+	target.titleBodyKeys = new Set(
+		root.getChildren().filter(node => node !== heading).map(node => node.getKey()),
+	);
+	return changed;
+}
 
 /**
  * Apply a change of our own to the live document.
@@ -490,6 +567,7 @@ function mutate(target: Document, change: () => boolean): Mutation | undefined {
 		() => {
 			try {
 				changed = change();
+				if (target.titleKey !== undefined) changed = $normalizeTitle(target) || changed;
 			} catch (err) {
 				failure = err;
 			}
@@ -739,6 +817,12 @@ export function reconcile(
 			if (!found) throw new Error("a plan block has no live node");
 			return found;
 		});
+		if (
+			target.titleKey !== undefined && after[0]?.type === "heading"
+			&& after[0].depth === 1 && !before.includes(after[0])
+		) {
+			target.titleKey = ordered[0]!.getKey();
+		}
 		let surviving = new Set(ordered);
 		let caretBefore = new Map<LexicalNode, LexicalNode[]>();
 		let groups = new Map<LexicalNode, LexicalNode[]>();

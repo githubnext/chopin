@@ -183,7 +183,7 @@ export class Experiments {
 			let document = investigationDocument(value.id, value.brief, result);
 			let saved = await this.store.publish(value, current.revision, {
 				title: document.title,
-				initial: await Plan.initial(document.source),
+				initial: await Plan.initial(document.source, undefined, document.title),
 				now: new Date(value.updatedAt),
 			}, this.lease());
 			if (saved) {

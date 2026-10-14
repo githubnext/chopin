@@ -150,11 +150,12 @@ hash, generator version, source job ID, and projection timestamp. A newer job
 does not clear the current projection when it is enqueued or fails, so the last
 completed description remains visible and searchable.
 
-Channel titles have a case-insensitive unique constraint within each repository.
-Slug values are also unique per repository, with one canonical slug per channel.
+Display titles may repeat. Slug values remain unique per repository, with one
+canonical slug per channel. Authored title changes commit the document state,
+display title and slug in the same fenced collaboration transaction.
 A rename promotes a new collision-suffixed slug but retains all former slugs as
 aliases that cannot be assigned to another channel while it exists. Archived
-channels continue to reserve their titles and aliases.
+channels continue to reserve their aliases.
 
 ## Archival and deletion
 

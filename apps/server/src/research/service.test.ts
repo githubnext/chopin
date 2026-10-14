@@ -455,6 +455,30 @@ describe("research workspace service", () => {
 		expect((await context.jobs.list(context.channelId, 100))?.jobs).toHaveLength(1);
 	});
 
+	it("publishes a long report title bounded in both child metadata and its initial H1", async () => {
+		let context = await setup();
+		let started = await context.service.start({
+			channelId: context.channelId,
+			question: "Which API contracts changed?",
+			requestId: requestId(1),
+			requestedBy: context.userId,
+		});
+		await settle(context, "research-evidence", evidenceArtifact);
+		await reconciledRequest(context.service, context.channelId, started.request.id);
+		let answer = await settle(context, "research-answer", job => {
+			let artifact = answerArtifact(job) as Record<string, JsonValue>;
+			return { ...artifact, report: { ...REPORT, title: "😀".repeat(60) } } as JsonValue;
+		});
+		await context.service.jobChanged(answer.job);
+		let ready = await context.service.request(context.channelId, started.request.id);
+		let child = await context.storage.channels.get(ready!.child!.id);
+		expect(child?.title).toBe("😀".repeat(50));
+		let stored = await context.storage.collaboration.load(child!.id, context.advance());
+		expect((await Plan.readStored(stored!)).source.startsWith("# " + "😀".repeat(50) + "\n")).toBe(
+			true,
+		);
+	});
+
 	it("publishes one canonical child while reconciling a completed initial answer after restart", async () => {
 		let context = await setup();
 		let started = await context.service.start({
@@ -555,7 +579,7 @@ describe("research workspace service", () => {
 		}
 	});
 
-	it("reserves a title collision atomically during publication", async () => {
+	it("reserves a distinct slug atomically during publication", async () => {
 		let context = await setup();
 		let started = await context.service.start({
 			channelId: context.channelId,
@@ -587,7 +611,10 @@ describe("research workspace service", () => {
 		try {
 			await expect(context.service.jobChanged(answer.job)).resolves.toBeUndefined();
 			let ready = await context.service.request(context.channelId, started.request.id);
-			expect(ready?.child?.title).toBe(`${REPORT.title} (2)`);
+			expect(ready?.child?.title).toBe(REPORT.title);
+			expect((await context.storage.channels.get(ready!.child!.id))?.slug).toBe(
+				"compatibility-report-2",
+			);
 		} finally {
 			publication.mockRestore();
 		}
@@ -974,7 +1001,7 @@ describe("research workspace service", () => {
 		expect(recovered!.turns[0]!.evidenceJobId).not.toBe(oldJobId);
 	});
 
-	it("publishes a deterministic available child title when the report title already exists", async () => {
+	it("publishes a separate child with the same authored title", async () => {
 		let context = await setup();
 		await context.storage.channels.create({
 			id: crypto.randomUUID(),
@@ -997,7 +1024,10 @@ describe("research workspace service", () => {
 		await context.service.jobChanged(answer.job);
 
 		let ready = await context.service.request(context.channelId, started.request.id);
-		expect(ready?.child?.title).toBe(`${REPORT.title} (2)`);
+		expect(ready?.child?.title).toBe(REPORT.title);
+		expect((await context.storage.channels.get(ready!.child!.id))?.slug).toBe(
+			"compatibility-report-2",
+		);
 	});
 
 	it("bounds long evidence history while retaining the initial and newest batches", () => {

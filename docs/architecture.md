@@ -272,7 +272,8 @@ document uses `/documents/:owner/:repository/:slug`; a child uses
 entry loads both channels and rejects a repository or recorded-parent mismatch.
 Slugs retain Unicode letters, numbers, and marks, add numeric suffixes for
 collisions, and keep every former canonical slug as an alias. Renaming changes
-the canonical route without changing the UUID or plan revision.
+the leading H1, display title and canonical slug in one fenced transaction. The UUID
+stays stable; source changes advance the document revision.
 
 Browser creation `Location` headers and MCP `create_document.url` expose the
 readable route. MCP `read_document`, `update_document`, and `read_implementation`

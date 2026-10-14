@@ -260,6 +260,8 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
 
 function documentBackend(): Service.Backend {
 	return {
+		documentTitles: true,
+		onChannelRenamed: announceChannel,
 		storage,
 		lease: () => {
 			if (!writerLease.held) throw new Error("storage writer lease is unavailable");
@@ -278,6 +280,10 @@ function documentBackend(): Service.Backend {
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
 		onEditingUnlocked: id => {
+			void withDocumentLock(id, async () => {
+				let opened = Rooms.get(id)?.plan;
+				if (opened) await Service.exclusive(opened, () => Service.activateTitles(opened));
+			}).catch(err => console.error("chopin: could not initialize unlocked document title -", err));
 			void relinkDecisions(id).catch(err =>
 				console.error("chopin: could not re-link decisions after a build -", err)
 			);
@@ -917,6 +923,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "plan:open": {
 			try {
 				let opened = await plan(room, server);
+				let currentChannel = await storage.channels.get(room.id);
+				if (currentChannel) applyChannelAccess(ws, currentChannel, ws.data.canManage);
 				implementations?.track(room.id);
 				let parent = room.parentChannelId;
 				await greetJoinedPlan(
@@ -1811,6 +1819,12 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 	summaryCoordinator?.resume(channelId);
 	let current = Rooms.get(channelId);
 	if (current?.plan) {
+		let opened = current.plan;
+		await withDocumentLock(
+			channelId,
+			() => Service.exclusive(opened, () => Service.activateTitles(opened)),
+		);
+		result.channel = await storage.channels.get(channelId) ?? result.channel;
 		await conversationRuntime.attach(current, current.plan, false, !result.channel.parentChannelId);
 	}
 	announceChannel(result.channel);
@@ -2366,7 +2380,11 @@ registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
 	onChannelDeleted: deleteChannel,
-	onChannelRenamed: announceChannel,
+	renameChannel: (id, title) =>
+		withImplementationPlan(
+			id,
+			opened => Service.exclusive(opened, () => Service.rename(opened, title)),
+		),
 	onChannelRestored: restoreChannel,
 	references: hostedAuth.github instanceof GitHubClient
 		? new GitHubReferences(hostedAuth.github)

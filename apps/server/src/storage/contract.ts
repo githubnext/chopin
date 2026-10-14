@@ -1081,7 +1081,7 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("keeps renamed document titles unique within their repository", async () => {
+		it("allows duplicate display titles while reserving distinct slugs", async () => {
 			let storage = await opened(factory);
 			try {
 				let { userId, channelId, repositoryId } = await userAndChannel(storage);
@@ -1096,11 +1096,9 @@ export function storageContract(name: string, factory: Factory): void {
 					now,
 				});
 
-				expect(storage.channels.rename({
-					id: channelId,
-					title: "launch PLAN",
-					now,
-				})).rejects.toBeInstanceOf(StorageError);
+				let duplicate = await storage.channels.rename({ id: channelId, title: "launch PLAN", now });
+				expect(duplicate.channel.title).toBe("launch PLAN");
+				expect(duplicate.channel.slug).toBe("launch-plan-2");
 				let recased = await storage.channels.rename({
 					id: other.id,
 					title: "LAUNCH PLAN",
@@ -1112,12 +1110,12 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("keeps document titles unique within a repository without regard to case", async () => {
+		it("allows duplicate titles at creation without reusing a slug", async () => {
 			let storage = await opened(factory);
 			try {
 				let { userId, repositoryId } = await userAndChannel(storage);
 				let now = new Date("2026-01-03T03:04:05.000Z");
-				await storage.channels.create({
+				let first = await storage.channels.create({
 					id: id("channel"),
 					repositoryId,
 					repositoryOwner: "octo-org",
@@ -1126,7 +1124,7 @@ export function storageContract(name: string, factory: Factory): void {
 					createdBy: userId,
 					now,
 				});
-				expect(storage.channels.create({
+				let second = await storage.channels.create({
 					id: id("channel"),
 					repositoryId,
 					repositoryOwner: "octo-org",
@@ -1134,7 +1132,9 @@ export function storageContract(name: string, factory: Factory): void {
 					title: "release NOTES",
 					createdBy: userId,
 					now,
-				})).rejects.toBeInstanceOf(StorageError);
+				});
+				expect(first.slug).toBe("release-notes");
+				expect(second.slug).toBe("release-notes-2");
 			} finally {
 				await storage.close();
 			}
@@ -1221,7 +1221,7 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("atomically reserves one title for concurrent creators", async () => {
+		it("atomically reserves distinct slugs for concurrent same-title creators", async () => {
 			let storage = await opened(factory);
 			try {
 				let { userId, repositoryId } = await userAndChannel(storage);
@@ -1237,8 +1237,8 @@ export function storageContract(name: string, factory: Factory): void {
 						now,
 					});
 				let results = await Promise.allSettled([create(id("channel")), create(id("channel"))]);
-				expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
-				expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+				expect(results.filter(result => result.status === "fulfilled")).toHaveLength(2);
+				expect(results.filter(result => result.status === "rejected")).toHaveLength(0);
 			} finally {
 				await storage.close();
 			}
@@ -1472,6 +1472,82 @@ export function storageContract(name: string, factory: Factory): void {
 					expect(err).toBeInstanceOf(StorageError);
 					expect((err as StorageError).failure).toBe("conflict");
 				}
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("commits authored titles with source, returns metadata, and rolls back stale replacements", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, repositoryId, lease } = await userAndChannel(storage);
+				let now = new Date();
+				let input = {
+					channelId,
+					lease,
+					expectedRevision: 0,
+					operationId: id("title-replace"),
+					generation: "title-generation",
+					epoch: "title-epoch",
+					title: "Launch plan",
+					source: "# Launch plan\n\nBody.\n",
+					sourceHash: "title-hash",
+					document: new Uint8Array([1]),
+					sidecar: null,
+					now,
+				};
+				let committed = await storage.collaboration.replace(input);
+				expect(committed.channel).toMatchObject({
+					title: "Launch plan",
+					slug: "launch-plan",
+					revision: 1,
+				});
+				expect((await storage.collaboration.load(channelId, now))?.snapshot?.source).toBe(
+					"# Launch plan\n\nBody.\n",
+				);
+				await expect(
+					attempt(() =>
+						storage.collaboration.replace({
+							...input,
+							operationId: id("stale-title"),
+							title: "Rejected",
+							source: "# Rejected\n",
+						})
+					),
+				).rejects.toMatchObject({ failure: "conflict" });
+				expect((await storage.channels.get(channelId))?.title).toBe("Launch plan");
+				expect(await storage.channels.resolve(repositoryId, "rejected")).toBeUndefined();
+				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id).toBe(channelId);
+				let renamed = await storage.collaboration.commit({
+					channelId,
+					lease,
+					expectedRevision: 1,
+					operationId: id("title-delta"),
+					epoch: "title-epoch",
+					update: new Uint8Array([2]),
+					title: "Release plan",
+					events: [],
+					now,
+				});
+				expect(renamed.channel).toMatchObject({
+					title: "Release plan",
+					slug: "release-plan",
+					revision: 2,
+				});
+				expect((await storage.channels.resolve(repositoryId, "launch-plan"))?.id).toBe(channelId);
+				expect(
+					(await storage.collaboration.commit({
+						channelId,
+						lease,
+						expectedRevision: 1,
+						operationId: id("title-delta-repeat"),
+						epoch: "title-epoch",
+						title: "Never saved",
+						events: [],
+						now,
+					}).catch(error => error)).failure,
+				).toBe("conflict");
+				expect(await storage.channels.resolve(repositoryId, "never-saved")).toBeUndefined();
 			} finally {
 				await storage.close();
 			}

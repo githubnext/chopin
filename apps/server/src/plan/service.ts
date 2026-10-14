@@ -1,3 +1,10 @@
+import {
+	displayTitle,
+	documentTitleText,
+	normalizeDocumentTitleTree,
+	serialize,
+	withDocumentTitle,
+} from "@chopin/dialect";
 import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
 import { announceImplementation, implementationStatus } from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
@@ -110,10 +117,13 @@ type Meter = {
 };
 
 export type Backend = {
+	/** Product documents enforce a leading title; standalone domain rooms remain generic. */
+	documentTitles?: boolean;
 	storage: StorageAdapter;
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
 	onDocumentPersisted?: (target: DocumentTarget) => void;
+	onChannelRenamed?: (channel: ChannelRecord) => void;
 	/** Keep a finished build's source so later edits can rebuild onto its pull requests. */
 	liveBuild?: boolean;
 	/** A build reached a terminal state after its stop was persisted. */
@@ -158,6 +168,8 @@ type Persistence = Backend & {
 	channelId: string;
 	repositoryId: string;
 	committedUnanswered: number;
+	committedTitle: string;
+	pendingChannel?: ChannelRecord;
 	revision: number;
 	sequence: number;
 	lastSidecar: string;
@@ -172,6 +184,8 @@ type Persistence = Backend & {
 };
 
 type Captured = {
+	finalizeTitleReceipt?: boolean;
+	title?: string;
 	revision: number;
 	epoch: string;
 	source: string;
@@ -346,6 +360,9 @@ function capture(plan: Plan, chat?: ChatView): Captured {
 	let sidecar = jsonState(plan, chat);
 	let source = room.project(plan.document);
 	return {
+		...(plan.document.titleKey !== undefined
+			? { title: displayTitle(documentTitleText(parse(source)) ?? "") }
+			: {}),
 		revision: plan.revision,
 		epoch: plan.document.epoch,
 		source,
@@ -851,10 +868,12 @@ export function sourceHash(source: string): string {
 export async function initial(
 	source: string,
 	creation?: CreationMetadata,
+	title?: string,
 ): Promise<InitialChannel> {
 	// A new document has no stored links to spare from the newer URL rules.
 	assertIntroducedUrls([], parse(source).children);
 	let document = await room.create(source);
+	if (title !== undefined) room.enableTitle(document, title);
 	try {
 		let canonical = room.project(document);
 		let sidecar: Sidecar = {
@@ -900,7 +919,10 @@ async function commitHosted(
 	notifyDocumentPersisted = true,
 ): Promise<void> {
 	let durable = plan.persistence;
-	if (!update && captured.sidecarText === durable.lastSidecar) {
+	if (
+		!update && captured.sidecarText === durable.lastSidecar
+		&& (captured.title === undefined || captured.title === durable.committedTitle)
+	) {
 		scheduleCheckpoint(plan);
 		return;
 	}
@@ -914,8 +936,10 @@ async function commitHosted(
 			expectedRevision: durable.revision,
 			operationId,
 			epoch: captured.epoch,
+			...(!allowArchived && captured.title !== undefined ? { title: captured.title } : {}),
 			...(update ? { update } : {}),
 			sidecar: captured.sidecar,
+			...(captured.finalizeTitleReceipt ? { finalizeTitleReceipt: true } : {}),
 			events: [],
 			now: new Date(),
 			...(researchProjections.length > 0 ? { researchProjections } : {}),
@@ -932,6 +956,7 @@ async function commitHosted(
 				expectedRevision: durable.revision,
 				operationId: `state:${crypto.randomUUID()}`,
 				epoch: captured.epoch,
+				...(!allowArchived && captured.title !== undefined ? { title: captured.title } : {}),
 				sidecar: captured.sidecar,
 				events: [],
 				now: new Date(),
@@ -940,11 +965,19 @@ async function commitHosted(
 			durable.revision = stateResult.revision;
 			durable.sequence = stateResult.sequence;
 		}
+		if (result.sidecar !== undefined) {
+			captured.sidecar = result.sidecar;
+			captured.sidecarText = JSON.stringify(result.sidecar);
+		}
 		durable.lastSidecar = captured.sidecarText;
 		durable.committedEpoch = captured.epoch;
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		if (result.channel && result.channel.title !== durable.committedTitle) {
+			durable.committedTitle = result.channel.title;
+			durable.pendingChannel = result.channel;
+		}
 		announceUnanswered(plan);
 		// A living document's sync status flips only here, between rebuilds.
 		if (plan.live && wasInSync !== (captured.source === plan.live.baseSource)) {
@@ -970,6 +1003,18 @@ async function commitHosted(
 	} catch (err) {
 		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
 		throw err;
+	}
+}
+
+function announceTitle(plan: Plan): void {
+	let durable = plan.persistence;
+	let channel = durable.pendingChannel;
+	if (!channel) return;
+	durable.pendingChannel = undefined;
+	try {
+		durable.onChannelRenamed?.(channel);
+	} catch (error) {
+		console.warn(`[plan] could not announce title for ${plan.id}:`, error);
 	}
 }
 
@@ -1122,6 +1167,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 			operationId,
 			generation: crypto.randomUUID(),
 			epoch: captured.epoch,
+			...(captured.title !== undefined ? { title: captured.title } : {}),
 			source: captured.source,
 			sourceHash: sourceHash(captured.source),
 			document: captured.document,
@@ -1132,11 +1178,19 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 			durable.revision = result.revision;
 			durable.sequence = result.sequence;
 		}
+		if (result.sidecar !== undefined) {
+			captured.sidecar = result.sidecar;
+			captured.sidecarText = JSON.stringify(result.sidecar);
+		}
 		durable.lastSidecar = captured.sidecarText;
 		durable.committedEpoch = captured.epoch;
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		if (result.channel && result.channel.title !== durable.committedTitle) {
+			durable.committedTitle = result.channel.title;
+			durable.pendingChannel = result.channel;
+		}
 		announceUnanswered(plan);
 		plan.document.checkpoint = new Uint8Array(captured.document);
 		if (durable.checkpointTimer) clearTimeout(durable.checkpointTimer);
@@ -1422,6 +1476,7 @@ export async function open(
 		channelId: id,
 		repositoryId: loaded.channel.repositoryId,
 		committedUnanswered: sidecarUnansweredDecisions(committed.sidecar),
+		committedTitle: loaded.channel.title,
 		revision: loaded.channel.revision,
 		sequence: loaded.latestSequence,
 		lastSidecar: committed.sidecarText,
@@ -1438,7 +1493,23 @@ export async function open(
 	}
 	try {
 		if (interruptedJobs) await persistExclusive(plan, true);
-		if (needsInitialCheckpoint) await checkpointHosted(plan);
+		let sourceBefore = room.project(document);
+		let alreadyNormalized =
+			serialize(normalizeDocumentTitleTree(parse(sourceBefore), loaded.channel.title))
+				=== sourceBefore
+			&& displayTitle(documentTitleText(parse(sourceBefore)) ?? "") === loaded.channel.title;
+		let titleMode = backend.documentTitles
+			&& (!implementationActive(plan) && !loaded.channel.archivedAt || alreadyNormalized);
+		let normalized = titleMode ? room.enableTitle(document, loaded.channel.title) : undefined;
+		let title = displayTitle(documentTitleText(parse(room.project(document))) ?? "");
+		if (
+			titleMode && !loaded.channel.archivedAt && !implementationActive(plan)
+			&& (normalized || title !== loaded.channel.title)
+		) {
+			if (sourceBefore !== room.project(document)) plan.revision++;
+			await replaceHosted(plan, `title-init:${crypto.randomUUID()}`, capture(plan));
+			announceTitle(plan);
+		} else if (needsInitialCheckpoint) await checkpointHosted(plan);
 	} catch (error) {
 		if (plan.persistence.checkpointTimer) clearTimeout(plan.persistence.checkpointTimer);
 		Questions.shutdown(plan.questions);
@@ -1665,9 +1736,15 @@ async function commit(plan: Plan): Promise<void> {
 	} catch (err) {
 		console.error("[plan] could not carry anchors forward:", err);
 	}
+	let correction = plan.document.titleKey !== undefined || plan.persistence.documentTitles
+		? room.enableTitle(plan.document, plan.persistence.committedTitle)
+		: undefined;
 	let previousRevision = plan.revision;
 	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
-	let merged = Y.mergeUpdates(batch.map(item => item.update));
+	let merged = Y.mergeUpdates([
+		...batch.map(item => item.update),
+		...(correction ? [correction.update] : []),
+	]);
 	let operationId = `plan:${plan.document.epoch}:${
 		createHash("sha256").update(merged).digest("hex")
 	}`;
@@ -1710,6 +1787,16 @@ async function commit(plan: Plan): Promise<void> {
 		});
 	}
 
+	if (correction) {
+		broadcast(plan.server, plan.id, {
+			kind: "plan:update",
+			ts: 0,
+			epoch: plan.document.epoch,
+			update: encode(correction.update),
+			seq: outcome.seq,
+		});
+	}
+	announceTitle(plan);
 	if (relationshipsChanged) anchors(plan, plan.server, plan.id);
 }
 
@@ -1728,6 +1815,12 @@ export async function publish(
 	options?: { agent?: boolean },
 ): Promise<void> {
 	if (implementationActive(plan)) throw new Error("implementation is active");
+	if (plan.persistence.documentTitles && plan.document.titleKey === undefined) {
+		let normalized = room.enableTitle(plan.document, plan.persistence.committedTitle);
+		if (normalized) {
+			mutation = { ...normalized, update: Y.mergeUpdates([mutation.update, normalized.update]) };
+		}
+	}
 	plan.document.seq++;
 	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let operationId = `server:${plan.document.epoch}:${
@@ -1746,6 +1839,7 @@ export async function publish(
 	} catch (err) {
 		console.error("[plan] could not broadcast a persisted update:", err);
 	}
+	announceTitle(plan);
 }
 
 export class ImplementationActiveError extends Error {
@@ -1764,6 +1858,21 @@ export async function publishStaged(
 	options?: { notifyDocumentPersisted?: boolean; agent?: boolean },
 ): Promise<void> {
 	if (implementationActive(plan)) throw new ImplementationActiveError();
+	if (
+		(plan.document.titleKey !== undefined || plan.persistence.documentTitles)
+		&& candidate.document.titleKey === undefined
+	) {
+		let normalized = room.enableTitle(
+			candidate.document,
+			documentTitleText(parse(room.project(plan.document))) ?? plan.persistence.committedTitle,
+		);
+		if (normalized) {
+			mutation = {
+				...normalized,
+				update: mutation ? Y.mergeUpdates([mutation.update, normalized.update]) : normalized.update,
+			};
+		}
+	}
 	let source = room.project(candidate.document);
 	if (!mutation && source !== room.project(plan.document)) {
 		throw new Error("staged document changed without a mutation");
@@ -1788,6 +1897,7 @@ export async function publishStaged(
 		Y.applyUpdate(plan.document.doc, mutation.update);
 		await room.settle();
 	}
+	if (candidate.document.titleKey !== undefined) room.trackTitle(plan.document);
 	plan.document.seq = candidate.document.seq;
 	plan.revision = candidate.revision;
 	plan.records = candidate.records;
@@ -1811,6 +1921,7 @@ export async function publishStaged(
 			console.error("[plan] could not broadcast a persisted update:", err);
 		}
 	}
+	announceTitle(plan);
 }
 
 export async function rewrite(
@@ -1826,6 +1937,9 @@ export async function rewrite(
 		before,
 		[],
 	);
+	if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
+		room.enableTitle(document, plan.persistence.committedTitle);
+	}
 	document.seq = plan.document.seq;
 	let candidate: Plan = {
 		...plan,
@@ -1860,11 +1974,21 @@ export async function rewrite(
 				createHash("sha256").update(outcome.mutation.update).digest("hex")
 			}`
 			: `state:${crypto.randomUUID()}`;
-		await commitHosted(plan, outcome.mutation?.update, operationId, capture(candidate));
+		let captured = {
+			...capture(candidate),
+			finalizeTitleReceipt: candidate.document.titleKey !== undefined,
+		};
+		await commitHosted(plan, outcome.mutation?.update, operationId, captured);
+		if (captured.finalizeTitleReceipt) {
+			let receipt = (captured.sidecar as unknown as { mcpUpdates: McpUpdateRecord[] }).mcpUpdates
+				.at(-1)!;
+			recorded.document = receipt.document;
+		}
 		if (outcome.mutation) {
 			Y.applyUpdate(plan.document.doc, outcome.mutation.update);
 			await room.settle();
 		}
+		if (candidate.document.titleKey !== undefined) room.trackTitle(plan.document);
 		plan.document.seq = document.seq;
 		plan.revision = candidate.revision;
 		plan.mcpUpdates.push(recorded);
@@ -1889,6 +2013,7 @@ export async function rewrite(
 				console.error("[plan] could not broadcast a persisted update:", err);
 			}
 		}
+		announceTitle(plan);
 		return outcome;
 	} finally {
 		document.doc.destroy();
@@ -2186,6 +2311,9 @@ export function placeResearchReference(plan: Plan, id: string): Promise<"placed"
 			room.project(plan.document),
 			[],
 		);
+		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
+			room.enableTitle(document, plan.persistence.committedTitle);
+		}
 		document.seq = plan.document.seq;
 		try {
 			let mutation = room.insertResearch(document, id);
@@ -2220,6 +2348,9 @@ export function placeInvestigationReference(
 			room.project(plan.document),
 			[],
 		);
+		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
+			room.enableTitle(document, plan.persistence.committedTitle);
+		}
 		document.seq = plan.document.seq;
 		try {
 			let { mutation, placement } = room.insertInvestigation(document, id, after);
@@ -2262,6 +2393,9 @@ export function placeExperimentReference(
 			room.project(plan.document),
 			[],
 		);
+		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
+			room.enableTitle(document, plan.persistence.committedTitle);
+		}
 		document.seq = plan.document.seq;
 		try {
 			let mutation = room.placeExperiment(document, experiment, view, decision, remove);
@@ -2272,4 +2406,64 @@ export function placeExperimentReference(
 			document.doc.destroy();
 		}
 	});
+}
+
+/** Caller holds the document queue. The H1, metadata and slug commit before publication. */
+export async function rename(
+	plan: Plan,
+	title: string,
+): Promise<{ channel: ChannelRecord; changed: boolean }> {
+	if (implementationActive(plan)) throw new ImplementationActiveError();
+	let before = room.project(plan.document);
+	let next = withDocumentTitle(before, title);
+	if (next === before) {
+		return { channel: (await plan.persistence.storage.channels.get(plan.id))!, changed: false };
+	}
+	let document = await room.restore(
+		plan.document.epoch,
+		Y.encodeStateAsUpdate(plan.document.doc),
+		before,
+		[],
+	);
+	room.enableTitle(document);
+	document.seq = plan.document.seq;
+	let candidate: Plan = {
+		...plan,
+		document,
+		records: new Map(plan.records),
+		threads: new Map(plan.threads),
+		outlines: new Map(plan.outlines),
+	};
+	try {
+		let outcome = edit.replace(candidate, plan.revision, next);
+		if (!outcome.ok) throw new Error("could not rename document title");
+		await publishStaged(plan, plan.server, plan.id, candidate, outcome.mutation);
+		return { channel: (await plan.persistence.storage.channels.get(plan.id))!, changed: true };
+	} finally {
+		document.doc.destroy();
+	}
+}
+
+/** Caller holds the queue; unlock and restore activate a deferred legacy title without eviction. */
+export async function activateTitles(plan: Plan): Promise<void> {
+	if (
+		!plan.persistence.documentTitles || plan.document.titleKey !== undefined
+		|| implementationActive(plan)
+	) return;
+	let channel = await plan.persistence.storage.channels.get(plan.id);
+	if (!channel || channel.archivedAt) return;
+	let document = await room.restore(
+		plan.document.epoch,
+		Y.encodeStateAsUpdate(plan.document.doc),
+		room.project(plan.document),
+		[],
+	);
+	document.seq = plan.document.seq;
+	try {
+		let mutation = room.enableTitle(document, plan.persistence.committedTitle);
+		await publishStaged(plan, plan.server, plan.id, { ...plan, document }, mutation);
+		room.trackTitle(plan.document);
+	} finally {
+		document.doc.destroy();
+	}
 }

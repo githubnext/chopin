@@ -1,0 +1,1 @@
+DROP INDEX channels_repository_title_ci;

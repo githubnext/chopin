@@ -295,6 +295,10 @@ export type StoredChannel = {
 };
 
 export type CommitChannel = {
+	/** Finalize the new rewrite receipt using this transaction's canonical slug. */
+	finalizeTitleReceipt?: boolean;
+	/** Authored title committed with the document delta; absent for sidecar-only callers. */
+	title?: string;
 	channelId: string;
 	lease: Lease;
 	expectedRevision: number;
@@ -321,6 +325,9 @@ export class ResearchProjectionConflict extends StorageError {
 }
 
 export type CommitResult = {
+	sidecar?: JsonValue;
+	/** Present when the operation synchronizes an authored title. */
+	channel?: ChannelRecord;
 	revision: number;
 	sequence: number;
 	repeated: boolean;
@@ -334,6 +341,7 @@ export type SaveCheckpoint = Omit<ChannelSnapshot, "channelId"> & {
 
 /** Atomically rotate a channel to a complete new Yjs epoch. */
 export type ReplaceChannel = {
+	title?: string;
 	channelId: string;
 	lease: Lease;
 	expectedRevision: number;

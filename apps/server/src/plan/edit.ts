@@ -1,3 +1,4 @@
+import { documentTitleText, normalizeDocumentTitleTree } from "@chopin/dialect";
 /**
  * Agent edits to the plan, addressed by block.
  *
@@ -258,6 +259,9 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 	try {
 		root = parse(source(plan));
 		proposed = parse(nextSource);
+		if (plan.document.titleKey !== undefined) {
+			proposed = normalizeDocumentTitleTree(proposed, documentTitleText(root) ?? "");
+		}
 	} catch (err) {
 		return { ok: false, reason: "invalid", message: reason(err) };
 	}

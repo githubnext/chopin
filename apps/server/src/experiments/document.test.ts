@@ -74,3 +74,11 @@ test("a report cannot embed record-backed components into its child", () => {
 		);
 	}
 });
+
+test("a long investigation heading uses the same bounded title in source and metadata", () => {
+	let result = parseResult({ ...performance, report: "# " + "😀".repeat(60) + "\n\nFinding.\n" });
+	let document = investigationDocument(ID, "Brief", result);
+	expect(document.title).toBe("😀".repeat(50));
+	expect(document.source.startsWith("# " + "😀".repeat(50) + "\n")).toBe(true);
+	expect(document.source).toContain("Finding.");
+});

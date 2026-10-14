@@ -116,3 +116,15 @@ export { render, setRenderer } from "./nodes/render";
 export type { Renderer } from "./nodes/render";
 
 export { ULID, ulid } from "./ulid";
+
+export { $createHeadingNode, $isHeadingNode } from "@lexical/rich-text";
+export {
+	boundDocumentTitle,
+	displayTitle,
+	documentBodySource,
+	documentTitleText,
+	MAX_TITLE_LENGTH,
+	normalizeDocumentTitle,
+	normalizeDocumentTitleTree,
+	withDocumentTitle,
+} from "./title";

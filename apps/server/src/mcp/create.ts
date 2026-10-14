@@ -1,3 +1,5 @@
+import { MAX_TITLE_LENGTH, normalizedTitle } from "../channels/title";
+export { MAX_TITLE_LENGTH };
 import { createHash } from "node:crypto";
 
 import {
@@ -45,7 +47,6 @@ let REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
 export let REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
 /** Allows a maximally sized MDX plan plus JSON escaping and its structured brief. */
 export let MAX_REQUEST_BYTES = limits.MAX_SOURCE_BYTES * 3;
-export let MAX_TITLE_LENGTH = 120;
 
 let OWNER = new RegExp(`^${OWNER_PATTERN}$`);
 let REPOSITORY = new RegExp(`^${REPOSITORY_PATTERN}$`);
@@ -110,14 +111,14 @@ function parseCreationArguments(value: Record<string, unknown>): CreateArguments
 	let idempotencyKey = nonblank(value.idempotencyKey, 128);
 	let baseBranch = nonblank(value.baseBranch, 255);
 	let baseCommit = nonblank(value.baseCommit, 64);
-	let title = nonblank(value.title, MAX_TITLE_LENGTH);
+	let title = normalizedTitle(value.title);
 	let plan = nonblank(value.plan, MAX_REQUEST_BYTES);
 	if (
 		!idempotencyKey
 		|| !isRepository(value.repository)
 		|| !baseBranch
 		|| !baseCommit
-		|| !title
+		|| title === undefined
 		|| !goal
 		|| !constraints
 		|| !settledDecisions

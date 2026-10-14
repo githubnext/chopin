@@ -517,7 +517,7 @@ describe("hosted document rewrite lifecycle", () => {
 		}
 	});
 
-	it("rechecks deletion and uses newly renamed metadata inside the document lock", async () => {
+	it("rechecks deletion and commits the authored title after metadata changes inside the document lock", async () => {
 		let context = await openPlan("# Original\n");
 		await Plan.close(context.plan);
 		let deleting = false;
@@ -547,7 +547,7 @@ describe("hosted document rewrite lifecycle", () => {
 		});
 		expect(await api.update!.update(caller, input(context), client)).toMatchObject({
 			kind: "updated",
-			document: { title: "Renamed" },
+			document: { title: "Changed", url: "/documents/owner/repository/changed" },
 		});
 	});
 });

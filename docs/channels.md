@@ -145,15 +145,23 @@ the repository's active total, which the archiving client applies directly;
 restoring reloads the active catalogue. Archived catalogue views show no counts
 and watch no repositories.
 
-A title is optional during browser creation. Chopin generates one when omitted,
-or accepts a trimmed title from 1 through 120 characters. Titles are unique per
-repository without regard to case.
+A title is optional during browser creation. Chopin generates a friendly name when
+omitted. The leading H1 is the authored title; its plain text supplies the display
+title and canonical URL slug. Titles are bounded to 50 Unicode code points.
+Clearing the H1 keeps an editable blank title; catalogue surfaces show `Untitled`.
+Multiple documents may share a display title.
 
-`PATCH /api/channels/:channelId` accepts `{ "title": "..." }`. It updates the
-document title and canonical slug, but not the canonical MDX heading, UUID
-identity, or plan revision. A changed title updates the channel activity time
-and is broadcast to clients in the open room; submitting the current title is a
-no-op.
+`PATCH /api/channels/:channelId` accepts `{ "title": "..." }`. It runs in the
+same queue as document edits, replaces the leading H1, and commits its Yjs delta,
+display title and canonical slug in one fenced transaction. Source changes advance
+the document revision. Stable UUID identity and old URL aliases survive a rename;
+submitting the current authored title is a no-op. Publication follows persistence,
+with the document delta preceding the metadata notification.
+
+Existing documents adopt their leading H1 on first product open, or initialize one
+from their display name when missing. This migration waits while an implementation
+locks the document, then activates when that lock releases without needing a room restart. Standalone room fixtures use the generic dialect without title
+mode; production browser and MCP opens enable it at the Service boundary.
 
 Slugs are derived from Unicode-normalized, lowercased titles. Unicode letters,
 numbers, and combining marks remain readable while punctuation and spacing
@@ -229,7 +237,7 @@ repository and slug instead:
 ```
 
 Renaming a document promotes its new title-derived slug as canonical while
-retaining the same UUID and plan revision. Browser `Location` headers and the MCP
+retaining the same UUID. An authored title change advances the document revision. Browser `Location` headers and the MCP
 `create_document` result expose the readable route rather than
 `/channels/:channelId`.
 
@@ -237,10 +245,9 @@ retaining the same UUID and plan revision. Browser `Location` headers and the MC
 
 Browser, MCP, and research-child creation initialize storage differently.
 
-Browser creation writes channel metadata first. It has no document checkpoint
-until the first `plan:open`, which lazily creates and persists the empty
-document. An unopened browser-created channel can therefore have metadata and no
-snapshot.
+Browser creation writes channel metadata together with a revision-zero checkpoint
+containing its friendly title H1. Older unopened channels may still lack a
+snapshot; their first product open initializes the title before publication.
 
 MCP `create_document` validates the supplied brief, repository provenance, and
 canonical document source supplied through its current `plan` field before one

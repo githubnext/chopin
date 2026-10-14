@@ -1,3 +1,4 @@
+import { displayTitle, documentTitleText, parse } from "@chopin/dialect";
 import { createHash } from "node:crypto";
 
 import {
@@ -295,12 +296,14 @@ export function hosted(
 		}
 		if (!persistence) throw new Error("document is unavailable");
 		let opened = await Plan.open(channelId, {
+			documentTitles: true,
 			storage: auth.storage,
 			lease: persistence.lease,
 			fatal: error => {
 				throw error;
 			},
 			onDocumentPersisted: callbacks.onDocumentPersisted,
+			onChannelRenamed: callbacks.onChannelRenamed,
 		}, silentServer);
 		try {
 			return await Plan.exclusive(opened, () => action(opened));
@@ -442,17 +445,16 @@ export function hosted(
 				}
 				if (access.channel.archivedAt) return { kind: "archived" as const };
 				try {
-					let result = await auth.storage.channels.rename({
-						id: access.channel.id,
-						title: input.title,
-						now: auth.clock(),
-					});
-					if (result.changed) callbacks.onChannelRenamed?.(result.channel);
+					let result = await serializeDocument(
+						access.channel.id,
+						() => withPlan(access.channel.id, opened => Plan.rename(opened, input.title)),
+					);
 					return {
 						kind: result.changed ? "renamed" as const : "unchanged" as const,
 						document: summary(result.channel),
 					};
 				} catch (err) {
+					if (err instanceof Plan.ImplementationActiveError) return { kind: "locked" as const };
 					if (err instanceof StorageError && err.failure === "conflict") {
 						let current = await auth.storage.channels.get(input.id);
 						if (!current || callbacks.isChannelDeleting?.(input.id)) {
@@ -534,7 +536,7 @@ export function hosted(
 				});
 				let { brief, plan, ...origin } = input;
 				let creation: Plan.CreationMetadata = { brief, origin };
-				let initial = await Plan.initial(plan, creation);
+				let initial = await Plan.initial(plan, creation, input.title);
 				let created: ChannelRecord;
 				try {
 					created = await auth.storage.channels.create({
@@ -542,7 +544,7 @@ export function hosted(
 						repositoryId: repository.id,
 						repositoryOwner: repository.owner,
 						repositoryName: repository.name,
-						title: input.title,
+						title: displayTitle(documentTitleText(parse(initial.source)) ?? input.title),
 						createdBy: caller.user.id,
 						now: auth.clock(),
 						initial,
@@ -671,6 +673,7 @@ export function hosted(
 									: { kind: "protected" as const };
 							}
 
+							let receipt = plan.mcpUpdates.at(-1)!.document;
 							Plan.changes(plan, plan.server, channel.id, outcome.changes, {
 								cursor: false,
 								attribution: {
@@ -685,14 +688,14 @@ export function hosted(
 								kind: "updated" as const,
 								document: document({
 									id: channel.id,
-									title: channel.title,
+									title: receipt.title,
 									...(channel.description
 										? { description: channel.description.value }
 										: {}),
 									creation: plan.creation,
 									source: Plan.source(plan),
 									revision: plan.revision,
-									url,
+									url: receipt.url,
 								}),
 							};
 						});

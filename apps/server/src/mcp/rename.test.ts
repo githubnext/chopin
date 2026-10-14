@@ -82,9 +82,9 @@ describe("the MCP rename protocol", () => {
 
 		for (
 			let arguments_ of [
-				{ id, title: " " },
+				{ id, title: null },
 				{ id: " ", title: "Launch plan" },
-				{ id, title: "x".repeat(121) },
+				{ id, title: 51 },
 				{ id, title: "Launch plan", extra: true },
 			]
 		) {
@@ -95,6 +95,24 @@ describe("the MCP rename protocol", () => {
 			});
 		}
 		expect(called).toBe(false);
+	});
+
+	it("accepts 50 non-BMP Unicode code points through the MCP title boundary", async () => {
+		let title = "😀".repeat(50);
+		let mcp = handler({
+			caller: () => "octocat",
+			documents: reader(),
+			rename: {
+				async rename(_caller, input) {
+					return { kind: "renamed", document: { id, title: input.title } };
+				},
+			},
+		});
+		let response = await json(await mcp(call({ id, title })));
+		expect((response.result as { structuredContent: unknown }).structuredContent).toEqual({
+			id,
+			title,
+		});
 	});
 
 	it("returns stable tool errors for rename failures", async () => {
@@ -109,6 +127,7 @@ describe("the MCP rename protocol", () => {
 		for (
 			let [kind, code] of [
 				["archived", "document-archived"],
+				["locked", "document-locked"],
 				["conflict", "title-conflict"],
 				["forbidden", "repository-forbidden"],
 				["unavailable", "document-unavailable"],

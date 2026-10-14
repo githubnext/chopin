@@ -1,7 +1,6 @@
-import { limits, parse } from "@chopin/dialect";
+import { displayTitle, documentTitleText, limits, parse, withDocumentTitle } from "@chopin/dialect";
 import { ExperimentError } from "@chopin/experiment";
 import type { Result } from "@chopin/experiment";
-import { MAX_TITLE_LENGTH } from "../channels/title";
 import { canonical } from "../mcp/create";
 import { reportText } from "../research/publication";
 
@@ -32,12 +31,14 @@ function split(brief: string, report: string): { title: string; lead: string; bo
 	let heading = match ? plain(match[1]) : "";
 	if (match && heading) {
 		return {
-			title: clip(heading, MAX_TITLE_LENGTH),
-			lead: match[0].trim(),
+			title: displayTitle(heading),
+			lead: withDocumentTitle(match[0], heading).trim(),
 			body: report.slice(match[0].length),
 		};
 	}
-	let title = clip(plain(brief.split("\n").find(line => line.trim()) ?? "") || "Investigation", 80);
+	let title = displayTitle(
+		plain(brief.split("\n").find(line => line.trim()) ?? "") || "Investigation",
+	);
 	return { title, lead: `# ${reportText(title)}`, body: report };
 }
 
@@ -119,5 +120,8 @@ export function investigationDocument(
 			source.issues.map(issue => issue.message).join("; ").slice(0, 4000),
 		);
 	}
-	return { title, source: source.source };
+	return {
+		title: displayTitle(documentTitleText(parse(source.source)) ?? title),
+		source: source.source,
+	};
 }
