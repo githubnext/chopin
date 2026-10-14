@@ -100,3 +100,23 @@ test("offline looks the same everywhere: the machine button and Build plan dimme
 	let described = /aria-describedby="([^"]+)"/.exec(plan)![1];
 	expect(plan).toContain(`<span class="sr-only" id="${described}">build-box is offline</span>`);
 });
+
+test("in Chat, a Planner another account holds makes the button read-only", () => {
+	let held = choice(true, true);
+	held.state!.planner = { state: "held", login: "rival", machine: null };
+	let markup = renderToStaticMarkup(createElement(MachineButton, { choice: held, planner: true }));
+	expect(markup).toContain('aria-label="Planner held by @rival"');
+	expect(markup).toContain('aria-disabled="true"');
+	expect(markup).not.toContain("aria-haspopup");
+	expect(markup).toContain(">Held by @rival<");
+	// Build plan's button still chooses the machine.
+	let build = renderToStaticMarkup(createElement(MachineButton, { choice: held }));
+	expect(build).toContain('aria-haspopup="menu"');
+	let starting = choice(true, true);
+	starting.state!.planner = { state: "starting", login: null, machine: "M_box" };
+	let shown = renderToStaticMarkup(
+		createElement(MachineButton, { choice: starting, planner: true }),
+	);
+	expect(shown).toContain('aria-label="Machine: build-box, starting the Planner"');
+	expect(shown).toContain(">Starting…<");
+});

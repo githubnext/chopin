@@ -19,6 +19,19 @@ export type ChoosableMachine = {
 	service: boolean;
 	/** It can run Planners. */
 	planner: boolean;
+	/** It has a Planner command, so it can run the Planner of a document it is chosen for. */
+	runsPlanners?: boolean;
+};
+
+/**
+ * Who runs the document's Planner, as its chooser sees it: another account `held` (named), the
+ * person's own account `attached` (on which of their machines, if one), the chosen machine's
+ * backend `starting`, or `none`.
+ */
+export type PlannerRunner = {
+	state: "held" | "attached" | "starting" | "none";
+	login: string | null;
+	machine: string | null;
 };
 
 /** `GET /api/documents/:id/machine`: the person's own choice for the document, never anyone else's. */
@@ -30,6 +43,8 @@ export type MachineChoiceState = {
 	/** The machine automatic would use now, when one is connected, and whether it is the favorite. */
 	automatic: { id: string; label: string | null; favorite?: boolean } | null;
 	machines: ChoosableMachine[];
+	/** Who runs the document's Planner; null or absent when Chopin runs no Planners on machines. */
+	planner?: PlannerRunner | null;
 };
 
 export type MachineState = "connected" | "offline" | "reauthorize";
@@ -68,6 +83,44 @@ function automaticLabel(state: MachineChoiceState) {
 export function offlineChoice(state: MachineChoiceState | undefined): string | undefined {
 	let chosen = chosenMachine(state);
 	return chosen && !chosen.connected ? `${chosen.label} is offline` : undefined;
+}
+
+/**
+ * What Chat's machine button says about the document's Planner, or undefined to show the machine
+ * as Build plan's button does: "Held by @someone" (read-only) while another account holds it,
+ * "Starting…" while the chosen machine's backend has yet to attach, or the machine running it.
+ */
+export function plannerButton(
+	state: MachineChoiceState | undefined,
+): { name: string; label: string; readOnly: boolean } | undefined {
+	let planner = state?.planner;
+	if (!state || !planner) return undefined;
+	if (planner.state === "held" && planner.login) {
+		return {
+			name: `Held by @${planner.login}`,
+			label: `Planner held by @${planner.login}`,
+			readOnly: true,
+		};
+	}
+	let machine = planner.machine
+		? state.machines.find(value => value.id === planner.machine)
+		: undefined;
+	if (!machine) return undefined;
+	if (planner.state === "starting") {
+		return {
+			name: "Starting…",
+			label: `Machine: ${machine.label}, starting the Planner`,
+			readOnly: false,
+		};
+	}
+	if (planner.state === "attached") {
+		return {
+			name: machine.label,
+			label: `Machine: ${machine.label}, runs the Planner`,
+			readOnly: false,
+		};
+	}
+	return undefined;
 }
 
 const OS: Record<string, string> = { linux: "Linux", darwin: "macOS", win32: "Windows" };
@@ -109,7 +162,14 @@ export type MachineRow = {
  * The menu's rows: Automatic and what it uses now (saying when the favorite is offline), then each
  * machine, offline ones disabled, the favorite's row alone starred.
  */
-export function machineRows(state: MachineChoiceState, now: number): MachineRow[] {
+export function machineRows(
+	state: MachineChoiceState,
+	now: number,
+	/** Chat's menu: a machine without a Planner command can't be chosen there. */
+	planner = false,
+): MachineRow[] {
+	let plannerless = (machine: ChoosableMachine) =>
+		planner && !!state.planner && !machine.runsPlanners;
 	let chosen = chosenMachine(state);
 	let using = automaticLabel(state);
 	let favorite = state.favorite
@@ -135,9 +195,9 @@ export function machineRows(state: MachineChoiceState, now: number): MachineRow[
 		...state.machines.map(machine => ({
 			id: machine.id,
 			label: machine.label,
-			detail: machineDetail(machine, now),
+			detail: plannerless(machine) ? "Can't run a Planner" : machineDetail(machine, now),
 			checked: chosen?.id === machine.id,
-			disabled: !machine.connected,
+			disabled: !machine.connected || plannerless(machine),
 			favorite: machine.id === state.favorite,
 			machine,
 		})),

@@ -57,6 +57,16 @@
 	color: var(--color-text-primary);
 }
 
+/* Chat's button while another account holds the Planner: it says who, and opens nothing. */
+.machine-button[data-read-only] {
+	cursor: default;
+}
+
+.machine-button[data-read-only]:hover {
+	background: none;
+	color: var(--color-text-secondary);
+}
+
 .machine-button[data-compact] {
 	padding-inline: calc(var(--spacing) * 1.5);
 }

@@ -6,6 +6,7 @@ import {
 	machineDetail,
 	machineRows,
 	offlineChoice,
+	plannerButton,
 } from "./machine-choice";
 
 import type { ChoosableMachine, MachineChoiceState } from "./machine-choice";
@@ -121,4 +122,47 @@ test("Automatic names the machine it uses, saying when the favorite is offline; 
 		note: "build-box is offline",
 	});
 	expect(fallen[0]!.detail).toBe("Uses studio now · build-box is offline");
+});
+
+test("Chat's machine button says who runs the Planner", () => {
+	let desk = machine({ id: "M_desk", label: "desk", runsPlanners: false });
+	let base = { choice: "M_box", machines: [machine({ runsPlanners: true }), desk] };
+	// Chopin runs no Planners on machines: the button is the plain machine button.
+	expect(plannerButton(state({ ...base, planner: null }))).toBeUndefined();
+	expect(plannerButton(state({ ...base, planner: { state: "none", login: null, machine: null } })))
+		.toBeUndefined();
+	expect(
+		plannerButton(
+			state({ ...base, planner: { state: "starting", login: null, machine: "M_box" } }),
+		),
+	).toEqual({
+		name: "Starting…",
+		label: "Machine: build-box, starting the Planner",
+		readOnly: false,
+	});
+	expect(
+		plannerButton(
+			state({ ...base, planner: { state: "attached", login: "mona", machine: "M_box" } }),
+		),
+	).toEqual({ name: "build-box", label: "Machine: build-box, runs the Planner", readOnly: false });
+	expect(
+		plannerButton(state({ ...base, planner: { state: "held", login: "rival", machine: null } })),
+	).toEqual({ name: "Held by @rival", label: "Planner held by @rival", readOnly: true });
+	// In Chat's menu a machine without a Planner command can't be chosen, and says why.
+	let rows = machineRows(
+		state({ ...base, planner: { state: "none", login: null, machine: null } }),
+		NOW,
+		true,
+	);
+	expect(rows.map(row => [row.label, row.disabled, row.detail])).toEqual([
+		["Automatic", false, "No machine connected now"],
+		["build-box", false, "Connected · chopin 0.0.5 · Linux"],
+		["desk", true, "Can't run a Planner"],
+	]);
+	// Build plan's menu, or a server that runs no Planners on machines, offers it as before.
+	expect(machineRows(state({ ...base, planner: null }), NOW, true)[2]!.disabled).toBe(false);
+	expect(
+		machineRows(state({ ...base, planner: { state: "none", login: null, machine: null } }), NOW)[2]!
+			.disabled,
+	).toBe(false);
 });

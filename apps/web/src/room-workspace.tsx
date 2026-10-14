@@ -640,6 +640,11 @@ export function RoomWorkspace(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
 	);
+	// Who runs the Planner changed: Chat's machine button says so at once.
+	let refreshMachine = machineChoice.refresh;
+	useEffect(() => {
+		refreshMachine();
+	}, [plannerAttachment.planner, refreshMachine]);
 	let build = useBuildPlan({
 		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && status === "connected",
 		connected: status === "connected",
@@ -1590,6 +1595,7 @@ export function RoomWorkspace(
 				choice={machineChoice}
 				compact={phone && place === "chat"}
 				phone={phone}
+				planner={place === "chat"}
 			/>
 		);
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent

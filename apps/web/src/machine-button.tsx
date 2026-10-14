@@ -6,7 +6,13 @@ import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon } from "@chop
 
 import { documentMenuKeyAction } from "./document-actions-menu";
 import { FavoriteStar } from "./favorite-star";
-import { chosenMachine, machineButtonLabel, machineRows, machineState } from "./machine-choice";
+import {
+	chosenMachine,
+	machineButtonLabel,
+	machineRows,
+	machineState,
+	plannerButton,
+} from "./machine-choice";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 
@@ -73,8 +79,10 @@ function RowContent({ row }: { row: MachineRow }) {
  * changes all. A phone opens the same rows as a sheet from the bottom edge.
  */
 export function MachineButton(
-	{ choice, compact = false, phone = false }: {
+	{ choice, compact = false, phone = false, planner = false }: {
 		choice: MachineChoice;
+		/** Chat's button: it says who runs the document's Planner. */
+		planner?: boolean;
 		/** The icon and dot alone; the accessible name still says which machine. */
 		compact?: boolean;
 		phone?: boolean;
@@ -89,7 +97,8 @@ export function MachineButton(
 	let mounted = presence.phase !== "closed";
 	let state = choice.state;
 	let chosen = chosenMachine(state);
-	let rows = state ? machineRows(state, Date.now()) : [];
+	let rows = state ? machineRows(state, Date.now(), planner) : [];
+	let runner = planner ? plannerButton(state) : undefined;
 	let close = (restoreFocus: boolean) => {
 		setOpen(false);
 		if (restoreFocus) trigger.current?.focus();
@@ -189,8 +198,8 @@ export function MachineButton(
 			: (current - 1 + items.length) % items.length;
 		items[next]?.focus();
 	};
-	let name = chosen?.label ?? "Automatic";
-	let label = machineButtonLabel(state);
+	let name = runner?.name ?? chosen?.label ?? "Automatic";
+	let label = runner?.label ?? machineButtonLabel(state);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. Only its accessible name says why.
 	let offline = !!chosen && !chosen.connected;
@@ -252,6 +261,25 @@ export function MachineButton(
 		</button>
 	);
 	let [automatic, ...machines] = rows;
+	// Another account holds the Planner: Chat's button says so and opens nothing.
+	if (runner?.readOnly) {
+		return (
+			<button
+				aria-disabled="true"
+				aria-label={label}
+				className="machine-button"
+				data-compact={compact || undefined}
+				data-phone={phone || undefined}
+				data-read-only=""
+				data-tooltip={compact ? name : undefined}
+				data-tooltip-verbatim={compact ? "" : undefined}
+				type="button"
+			>
+				<MachineGlyph />
+				{!compact && <span className="machine-button-name">{name}</span>}
+			</button>
+		);
+	}
 	return (
 		<>
 			<button
@@ -263,7 +291,9 @@ export function MachineButton(
 				className={offline ? "machine-button machine-offline" : "machine-button"}
 				data-compact={compact || undefined}
 				data-phone={phone || undefined}
-				data-tooltip={compact ? chosen?.label ?? label.replace(/^Machine: /, "") : undefined}
+				data-tooltip={compact
+					? runner?.name ?? chosen?.label ?? label.replace(/^Machine: /, "")
+					: undefined}
 				data-tooltip-verbatim={compact ? "" : undefined}
 				onClick={() => open ? close(false) : openAt("first")}
 				onKeyDown={event => {

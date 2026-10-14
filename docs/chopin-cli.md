@@ -405,6 +405,13 @@ that document stop working, so a backend that had yet to attach never does.
 Older `chopin` releases are never asked.
 This needs a server that speaks connector protocol 4.
 
+The machine button in the document's Chat box shows who runs its Planner:
+your machine's name once its Planner is attached, **Starting…** until then,
+the machine greyed out when it is offline, or **Held by @someone** when
+another account holds the Planner (read-only: it opens no menu). In its menu,
+a machine started without `--planner-command` is greyed out with **Can't run a
+Planner**.
+
 ## Update
 
 ```sh
