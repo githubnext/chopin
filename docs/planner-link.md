@@ -575,8 +575,10 @@ shell would, without expanding anything: single and double quotes, also inside
 a word as in `--label="two words"`, and backslash escapes outside single
 quotes; an unmatched quote is refused. `CHOPIN_PLANNER_COMMAND` may hold the
 command as a JSON array of words instead. The command runs in the checkout
-`connect` serves, in its own process group, with its standard output and error
-going to the connector's.
+`connect` serves, in its own process group. Its standard output and error go
+to the connector's a line at a time, with its credential, your `--env` values
+and anything that looks like a token replaced with `[redacted]`; a line too
+long to mask is left out, with a note in its place.
 
 ### Credential
 

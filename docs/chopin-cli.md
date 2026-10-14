@@ -355,9 +355,10 @@ shows that too, with a reminder to run `chopin service install`.
 
 If the agent or a Planner keeps failing to start, status shows the latest
 failure under the connector, with the first line it printed. That line, and
-what a Planner prints to chopin's output, has anything that looks like a token,
-your `--env` values of 8 characters or more and the Planner's credential
-replaced with `[redacted]`:
+everything a Planner prints to chopin's output on stdout or stderr, has
+anything that looks like a token, your `--env` values of 8 characters or more
+and the Planner's credential replaced with `[redacted]`. A line too long to
+mask is left out, with a note in its place:
 
 ```text
 Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)

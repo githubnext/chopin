@@ -1,5 +1,5 @@
 import { afterAll, expect, mock, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { machineFile } from "./machine";
@@ -839,6 +839,173 @@ test.skipIf(process.platform === "win32")(
 				.toBe(0);
 			let [stdout, stderr] = await output;
 			expect(`${stdout}${stderr}`).not.toContain("chopin_p_");
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+/**
+ * A Planner backend that prints its credential and an --env value on stdout, the credential once
+ * split across a line too long to mask, then exits as a failing backend does.
+ */
+const STDOUT_LEAKING_BACKEND = `
+import { appendFileSync } from "node:fs";
+let token = process.env.CHOPIN_PLANNER_TOKEN;
+appendFileSync(process.argv[2], JSON.stringify({ document: process.env.CHOPIN_DOCUMENT, token }) + "\\n");
+process.stdout.write(\`\${"x".repeat(65536)} \${token.slice(0, 8)}\`, () => setTimeout(() => {
+	process.stdout.write(
+		\`\${token.slice(8)}\\nCHOPIN_PLANNER_TOKEN=\${token} OPAQUE_API_KEY=\${process.env.OPAQUE_API_KEY}\\n\`,
+		() => process.exit(127),
+	);
+}, 300));
+`;
+
+test.skipIf(process.platform === "win32")(
+	"a Planner backend's stdout reaches chopin's output masked, for --planner and dispatched backends alike",
+	async () => {
+		let { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+		let { WebStandardStreamableHTTPServerTransport } = await import(
+			"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+		);
+		let { CallToolRequestSchema, ListToolsRequestSchema } = await import(
+			"@modelcontextprotocol/sdk/types.js"
+		);
+		let secret = "review-opaque-api-secret";
+		let issued: string[] = [];
+		let own = "";
+		let assigned = "";
+		let polls = 0;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					let { document } = await request.json() as { document: string };
+					let token = `chopin_p_${
+						Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
+					}`;
+					issued.push(token);
+					return Response.json({
+						token,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: document === own ? { id: "D_1", url: own } : { id: "D_2", url: assigned },
+					});
+				}
+				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				mcp.setRequestHandler(CallToolRequestSchema, async call => {
+					let args = (call.params.arguments ?? {}) as { planners?: string[] };
+					let value: unknown = {};
+					// Chopin asks this machine to run the second document's Planner, then waits.
+					if (call.params.name === "wait_for_work" && args.planners && polls++ === 0) {
+						value = { kind: "planners", planners: [{ id: "D_2", url: assigned }] };
+					} else if (call.params.name === "wait_for_work") await new Promise(() => {});
+					return { content: [{ type: "text", text: JSON.stringify(value) }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await mcp.connect(transport);
+				return transport.handleRequest(request);
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		own = `${origin}/octo-org/score/plan`;
+		assigned = `${origin}/octo-org/score/other`;
+		let directory = await mkdtemp(join(scratch, "stdout-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, STDOUT_LEAKING_BACKEND);
+		let root = await checkout();
+		let state = await mkdtemp(join(scratch, "state-"));
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			root,
+			"--planner",
+			own,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--env",
+			`OPAQUE_API_KEY=${secret}`,
+			"--",
+			process.execPath,
+		], {
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = Promise.all([
+			new Response(connector.stdout).text(),
+			new Response(connector.stderr).text(),
+		]);
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let status = () =>
+			collectStatus({ directory: state, server: "https://chopin.example", source: "config", host });
+		try {
+			// Both backends, the --planner one and the dispatched one, ran and failed.
+			await until(async () => {
+				let documents = new Set((await entries(log)).map(entry => entry.document));
+				return documents.has(own) && documents.has(assigned)
+					&& (await status()).connectors[0]?.failures?.length === 2;
+			}, 20_000);
+			let report = await status();
+			// Read while it runs: a connector that stops clears its failures.
+			let failures = await Promise.all(
+				(await readdir(state)).filter(name => name.endsWith(".failures.json"))
+					.map(name => readFile(join(state, name), "utf8")),
+			);
+			expect(failures).toHaveLength(1);
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			let [stdout, stderr] = await output;
+			let shown = {
+				stdout,
+				stderr,
+				failures: failures.join("\n"),
+				status: formatStatus(report).join("\n"),
+				json: JSON.stringify(report),
+			};
+			let pieces = issued.flatMap(token =>
+				Array.from({ length: token.length - 7 }, (_, at) => token.slice(at, at + 8))
+					.filter(piece => !"chopin_p_".includes(piece))
+			);
+			for (let [where, text] of Object.entries(shown)) {
+				// status --json reports the saved connect settings, --env values among them.
+				let secrets = where === "json" ? pieces : [...pieces, secret];
+				expect({ where, leaked: secrets.filter(piece => text.includes(piece)) })
+					.toEqual({ where, leaked: [] });
+			}
+			// What the backends printed still reaches chopin's output, masked.
+			expect(stdout).toContain("CHOPIN_PLANNER_TOKEN=[redacted] OPAQUE_API_KEY=[redacted]");
+			expect(stdout).toContain("[chopin: dropped a stdout line longer than 65536 characters]");
 		} finally {
 			connector.kill("SIGKILL");
 			await chopin.stop(true);
