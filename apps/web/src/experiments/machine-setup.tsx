@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import { CheckIcon, CopyIcon } from "@chopin/icons";
-import { connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
+import { useEffect, useId, useState } from "react";
+import { CheckIcon, CopyIcon, InfoIcon } from "@chopin/icons";
+import { AGENTS, findAgent } from "./agents";
+import { agentCommand, connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
 
 import type { ReactNode } from "react";
+import type { CodingAgent } from "./agents";
 import type { SetupShell } from "./setup-commands";
 
 /**
@@ -48,10 +50,27 @@ const SHELLS: { shell: SetupShell; label: string }[] = [
 	{ shell: "powershell", label: "Windows" },
 ];
 
+const AGENT_KEY = "chopin:machines:agent";
+
 /**
- * What to run on a machine to set it up with this server: install chopin, then connect a checkout,
- * which pairs the machine through this browser and keeps it running as a service. The last step
- * is `last`: on a first run, the live wait for the machine.
+ * One line on what to know about the picked agent; nothing for a tested one that runs unattended.
+ * The setup guide says how to let an agent that asks run as a service.
+ */
+function agentNote(agent: CodingAgent): string | undefined {
+	let notes = [
+		...(agent.testedWithChopin ? [] : ["Not yet tested with Chopin."]),
+		...(agent.unattended === true ? [] : [
+			"Asks for permission in the terminal, so keep chopin connect open there.",
+		]),
+	];
+	return notes.length ? notes.join(" ") : undefined;
+}
+
+/**
+ * What to run on a machine to set it up with this server: install chopin, install and sign in to
+ * the picked coding agent, then connect a checkout, which pairs the machine through this browser
+ * and keeps it running as a service. The last step is `last`: on a first run, the live wait for
+ * the machine.
  */
 export function MachineSetup(
 	{ headingId, last, title }: { headingId: string; last?: ReactNode; title: string },
@@ -59,10 +78,30 @@ export function MachineSetup(
 	let [shell, setShell] = useState<SetupShell>(() =>
 		navigator.userAgent.includes("Windows") ? "powershell" : "sh"
 	);
+	let [agent, setAgent] = useState(() => findAgent(localStorage.getItem(AGENT_KEY)));
+	let pickerId = useId();
+	let noteId = useId();
+	let note = agentNote(agent);
 	return (
 		<section aria-labelledby={headingId} className="machines-setup">
-			<div className="machines-setup-head">
-				<h2 className="text-base font-semibold" id={headingId}>{title}</h2>
+			<h2 className="text-base font-semibold" id={headingId}>{title}</h2>
+			<div className="machines-setup-choices">
+				<div className="machines-agent">
+					<label htmlFor={pickerId}>Coding agent</label>
+					<select
+						aria-describedby={note ? noteId : undefined}
+						className="field"
+						id={pickerId}
+						onChange={event => {
+							let next = findAgent(event.currentTarget.value);
+							localStorage.setItem(AGENT_KEY, next.id);
+							setAgent(next);
+						}}
+						value={agent.id}
+					>
+						{AGENTS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+					</select>
+				</div>
 				<div aria-label="Operating system" className="machines-shells" role="group">
 					{SHELLS.map(option => (
 						<button
@@ -76,6 +115,12 @@ export function MachineSetup(
 						</button>
 					))}
 				</div>
+				{note && (
+					<p className="machines-agent-note" id={noteId}>
+						<InfoIcon aria-hidden="true" size={14} />
+						<span>{note}</span>
+					</p>
+				)}
 			</div>
 			<ol className="machines-steps">
 				<li>
@@ -83,15 +128,22 @@ export function MachineSetup(
 					<Command label="install command" shell={shell} text={installCommand(shell)} />
 				</li>
 				<li>
-					<p>
-						In a checkout of your repository, connect with your coding agent. It prints a link: open
-						it in this browser to confirm the machine.
-					</p>
+					<p>Install {agent.name} and sign in.</p>
+					<Command label="agent commands" shell={shell} text={agentCommand(agent, shell)} />
+				</li>
+				<li>
+					<p>In a checkout of your repository, connect this machine.</p>
 					<Command
 						label="connect command"
 						shell={shell}
-						text={connectCommand(location.origin, shell)}
+						text={connectCommand(location.origin, shell, agent)}
 					/>
+				</li>
+				<li>
+					<p>
+						Open the link it prints, check that the code matches, and choose Connect. GitHub may ask
+						you to authorize the machine first.
+					</p>
 				</li>
 				<li>
 					{last ?? <p>It appears below under Your machines.</p>}

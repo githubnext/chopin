@@ -2,7 +2,12 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectCommand, installCommand } from "../apps/web/src/experiments/setup-commands";
+import { findAgent } from "../apps/web/src/experiments/agents";
+import {
+	agentCommand,
+	connectCommand,
+	installCommand,
+} from "../apps/web/src/experiments/setup-commands";
 import { expect, test } from "./room";
 import { ROOT } from "./servers";
 
@@ -75,18 +80,48 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	let origin = new URL(baseURL!).origin;
 	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
 	let steps = setup.getByRole("listitem");
-	await expect(steps).toHaveCount(3);
+	await expect(steps).toHaveCount(5);
 	// The browser's own system is chosen first; either can be picked. Each command keeps its own
 	// line breaks, each with the shell's continuation.
 	let install = steps.nth(0).locator("code");
-	let command = steps.nth(1).locator("code");
+	let agentSteps = steps.nth(1).locator("code");
+	let command = steps.nth(2).locator("code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
+	expect(await command.innerText()).toContain(`CHOPIN_URL=${origin} chopin connect .`);
 	await setup.getByRole("button", { name: "Windows", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+
+	// GitHub Copilot CLI is picked first. Picking another coding agent changes only its install and
+	// connect steps, and says what to know about it; the pick outlasts a reload.
+	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
+	await expect(picker).toHaveValue("copilot");
+	await expect(steps.nth(1)).toContainText("Install GitHub Copilot CLI and sign in.");
+	await expect.poll(() => agentSteps.innerText()).toBe(
+		agentCommand(findAgent("copilot"), "powershell"),
+	);
+	await picker.selectOption({ label: "Atomic" });
+	await expect(steps.nth(1)).toContainText("Install Atomic and sign in.");
+	await expect.poll(() => agentSteps.innerText()).toBe(
+		agentCommand(findAgent("atomic"), "powershell"),
+	);
+	await expect.poll(() => command.innerText())
+		.toBe(connectCommand(origin, "powershell", findAgent("atomic")));
+	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
+	await picker.selectOption({ label: "Claude Code" });
+	await expect(picker).toHaveAccessibleDescription(
+		/^Not yet tested with Chopin\. Asks for permission/,
+	);
+	await page.reload();
+	await expect(picker).toHaveValue("claude-code");
+	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
+	await expect.poll(() => command.innerText())
+		.toBe(connectCommand(origin, "sh", findAgent("claude-code")));
+	await picker.selectOption({ label: "GitHub Copilot CLI" });
+	await expect(picker).not.toHaveAttribute("aria-describedby");
 
 	let machine = await connector(baseURL!);
 	try {

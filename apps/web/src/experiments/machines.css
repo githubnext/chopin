@@ -85,12 +85,51 @@
 	font-size: var(--text-sm);
 }
 
-.machines-setup-head {
+/* The coding agent and the system the commands are for, one row above the steps. */
+.machines-setup-choices {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
-	gap: calc(var(--spacing) * 3);
+	gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+}
+
+.machines-agent {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+
+	& label {
+		flex: none;
+		color: var(--color-text-secondary);
+		font-weight: 500;
+	}
+
+	& select {
+		min-width: 0;
+		height: calc(var(--spacing) * 7);
+		padding-inline: calc(var(--spacing) * 2);
+		font-size: var(--text-sm);
+	}
+}
+
+/* What to know about the picked agent before running its commands: quiet, under the picker. */
+.machines-agent-note {
+	display: flex;
+	flex-basis: 100%;
+	gap: calc(var(--spacing) * 1.5);
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	text-wrap: pretty;
+
+	& svg {
+		--color-icon: var(--color-text-tertiary);
+		flex: none;
+		margin-top: calc(var(--spacing) * 0.25);
+	}
 }
 
 .machines-shells {
@@ -545,6 +584,11 @@
 
 /* On touch, the small controls here answer a 44px press without changing their look. */
 :root[data-plan-coarse-pointer] {
+	/* A select opens a full list, so it takes the 44px height itself. */
+	& .machines-agent select {
+		height: var(--control-target-coarse);
+	}
+
 	& .machines-setup .machines-detail a,
 	& .machines-copyable {
 		position: relative;
@@ -601,6 +645,20 @@
 	.machines-setup,
 	.machines-card {
 		padding: calc(var(--spacing) * 4);
+	}
+
+	/* The picker and the system toggle stack, each the full width of the card. */
+	.machines-setup-choices {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.machines-agent select {
+		flex: 1;
+	}
+
+	.machines-shells .btn {
+		flex: 1;
 	}
 
 	.machines-version-column {

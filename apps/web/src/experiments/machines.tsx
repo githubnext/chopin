@@ -630,7 +630,7 @@ export function YourMachines(
 	);
 }
 
-/** Step 3 of the first setup: waiting for the machine, then the machine, connected. */
+/** Step 5 of the first setup: waiting for the machine, then the machine, connected. */
 export function Handshake({ machine }: { machine?: Machine }): ReactNode {
 	if (machine?.connected) {
 		return (
