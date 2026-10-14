@@ -1,4 +1,5 @@
 import { lazy, StrictMode, Suspense } from "react";
+import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
@@ -39,33 +40,41 @@ function PointerCapabilities() {
 	return null;
 }
 
-let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
-	? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
-	: isDiagramGalleryRoute(location.pathname, import.meta.env.DEV)
-	? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
-	: Promise.resolve(<Root />);
+let mount = (
+	value: ReactNode,
+	{ IconTooltip }: typeof import("./icon-tooltip"),
+	feedback?: ReactNode,
+) => {
+	createRoot(root).render(
+		<StrictMode>
+			<PointerCapabilities />
+			{value}
+			<IconTooltip />
+			{feedback}
+		</StrictMode>,
+	);
+};
 
-let Feedback = import.meta.env.DEV
-	? lazy(() =>
+if (import.meta.env.DEV) {
+	let content = isDesignAuditRoute(location.pathname, true)
+		? import("./design-audit/page").then(({ DesignAuditPage }) => <DesignAuditPage />)
+		: isDiagramGalleryRoute(location.pathname, true)
+		? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
+		: <Root />;
+	let Feedback = lazy(() =>
 		import("agentation").then(({ Agentation }) => ({ default: Agentation })).catch(() => ({
 			default: () => null,
 		}))
-	)
-	: undefined;
-
-void Promise.all([content, import("./icon-tooltip")]).then(
-	([value, { IconTooltip }]) => {
-		createRoot(root).render(
-			<StrictMode>
-				<PointerCapabilities />
-				{value}
-				<IconTooltip />
-				{Feedback && (
-					<Suspense fallback={null}>
-						<Feedback appName="Chopin" endpoint="http://127.0.0.1:4747" />
-					</Suspense>
-				)}
-			</StrictMode>,
-		);
-	},
-);
+	);
+	void Promise.all([content, import("./icon-tooltip")]).then(
+		([value, tooltips]) => mount(
+			value,
+			tooltips,
+			<Suspense fallback={null}>
+				<Feedback appName="Chopin" endpoint="http://127.0.0.1:4747" />
+			</Suspense>,
+		),
+	);
+} else {
+	void import("./icon-tooltip").then(tooltips => mount(<Root />, tooltips));
+}
