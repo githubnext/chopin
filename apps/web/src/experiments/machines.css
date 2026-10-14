@@ -187,6 +187,13 @@
 	font-size: var(--text-sm);
 }
 
+/* Close sits at the title's end, its ghost edge just inside the dialog's padding. */
+.machines-dialog-close {
+	position: absolute;
+	top: calc(var(--spacing) * 3.5);
+	right: calc(var(--spacing) * 3.5);
+}
+
 .machines-dialog-body {
 	display: flex;
 	flex-direction: column;
@@ -269,19 +276,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: calc(var(--spacing) * 2.5);
-}
-
-.machines-run-status {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
-	min-height: var(--control-height-compact);
-
-	& > p {
-		margin: 0;
-	}
 }
 
 /* Re-generate, then the key's terms beside it. */
@@ -414,49 +408,7 @@
 	}
 }
 
-/*
- * The wait for the machine: a petrol presence pulse while it waits, then the success tick and the
- * machine's name as it connects. The words carry the baseline whichever mark sits beside them.
- */
-.machines-handshake {
-	display: flex;
-	align-items: baseline;
-	gap: calc(var(--spacing) * 2);
-	color: var(--color-text-secondary);
-
-	& > :first-child {
-		align-self: center;
-	}
-
-	&[data-state="connected"] {
-		color: var(--color-success-ink);
-		font-weight: 500;
-	}
-}
-
-.machines-pulse {
-	flex: none;
-	width: calc(var(--spacing) * 2);
-	height: calc(var(--spacing) * 2);
-	margin-inline: calc(var(--spacing) * 0.5);
-	border-radius: var(--radius-full);
-	background: var(--color-brand);
-	animation: machines-pulse calc(var(--duration-base) * 8) var(--motion-move) infinite;
-}
-
-@keyframes machines-pulse {
-	0%,
-	100% {
-		opacity: var(--opacity-quiet);
-		scale: 0.8;
-	}
-
-	50% {
-		opacity: 1;
-		scale: 1;
-	}
-}
-
+/* The approval page's tick as the machine connects. */
 .machines-handshake-check {
 	--color-icon: var(--color-success-icon);
 }
@@ -466,26 +418,6 @@
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-md);
 	background: var(--color-inset);
-
-	/* The setup command's place before its key is there: as tall as the command will be. */
-	& .machines-command-pending {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
-		min-height: calc(var(--spacing) * 32);
-		padding: calc(var(--spacing) * 4);
-
-		& p {
-			margin: 0;
-			color: var(--color-text-secondary);
-		}
-	}
-
-	&[aria-busy] .machines-command-pending p {
-		animation: machines-skeleton calc(var(--duration-base) * 8) var(--motion-move) infinite
-			alternate;
-	}
 
 	& .machines-command-head {
 		display: flex;
@@ -899,9 +831,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.machines-pulse,
-	.machines-skeleton-bar,
-	.machines-command[aria-busy] .machines-command-pending p {
+	.machines-skeleton-bar {
 		animation: none;
 	}
 

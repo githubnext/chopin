@@ -1,17 +1,26 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CheckIcon, ChevronIcon, CopyIcon, MachineIcon, ServerIcon } from "@chopin/icons";
+import {
+	CheckIcon,
+	ChevronIcon,
+	CloseIcon,
+	CopyIcon,
+	MachineIcon,
+	ServerIcon,
+} from "@chopin/icons";
 import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
+import { session } from "../api";
 import { documentMenuKeyAction } from "../document-actions-menu";
+import { IconButton } from "../icon-button";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem } from "../menu-item";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { agentCommand, guessSystem, runsAsService, setupCommand, shellFor } from "./setup-commands";
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import type { CodingAgent } from "@chopin/protocol/agents";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 import type { SetupShell, SetupSystem } from "./setup-commands";
@@ -173,6 +182,19 @@ export function AgentChoice(
 	);
 }
 
+/** The signed-in person's GitHub login, asked for here so the first page load needn't carry it. */
+function useLogin() {
+	let [login, setLogin] = useState<string>();
+	useEffect(() => {
+		let current = true;
+		session().then(value => current && setLogin(value.user?.login), () => {});
+		return () => {
+			current = false;
+		};
+	}, []);
+	return login;
+}
+
 export type MachineKind = "computer" | "server";
 
 const KINDS: {
@@ -328,31 +350,32 @@ export function AddMachineMenu({ onChoose }: { onChoose: (kind: MachineKind) => 
 
 /**
  * Add your computer: install chopin and connect, with no key. The command prints a link to
- * approve in this browser; `status` is the live wait for the machine, then its arrival.
+ * approve in this browser; the machine then appears in the table, as in Tailscale.
  */
 export function AddComputerDialog(
-	{ login, motion, onDismiss, status }: {
-		login: string;
-		motion: NavigationDialogMotion;
-		onDismiss: () => void;
-		status: ReactNode;
-	},
+	{ motion, onDismiss }: { motion: NavigationDialogMotion; onDismiss: () => void },
 ) {
+	let login = useLogin();
 	let [system, setSystem] = useSystem();
 	let [agent, setAgent] = useAgent();
 	let shell = shellFor(system);
 	return (
 		<NavigationDialog
 			className="machines-computer-dialog"
-			closeButton
 			motion={motion}
 			onDismiss={onDismiss}
 			title="Add your computer"
 		>
+			<span className="machines-dialog-close">
+				<IconButton aria-label="Close" data-tooltip="Close" onClick={onDismiss}>
+					<CloseIcon aria-hidden="true" />
+				</IconButton>
+			</span>
 			<div className="machines-dialog-body">
 				<p className="machines-dialog-lead">
-					Install chopin on it and connect as{" "}
-					<strong className="font-semibold text-text-primary">@{login}</strong>.
+					Install chopin on it and connect as {login
+						? <strong className="font-semibold text-text-primary">@{login}</strong>
+						: "your GitHub account"}.
 				</p>
 				<SystemChoice onChange={setSystem} system={system} />
 				<div className="machines-dialog-agent">
@@ -370,7 +393,6 @@ export function AddComputerDialog(
 						It prints a link; open it here and approve.
 						{!runsAsService(agent) && " Keep the terminal open."}
 					</p>
-					<div className="machines-run-status">{status}</div>
 				</div>
 			</div>
 		</NavigationDialog>

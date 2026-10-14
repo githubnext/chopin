@@ -397,7 +397,7 @@ export function registerAuthRoutes(
 					let authorized = context.pairings.authorized;
 					if (!authorized) return json({ error: "pairing is unavailable" }, 404, clear);
 					authorized(profile.id, session.session.id, grant);
-					return redirected("/connect/server", 303, [clear]);
+					return redirected("/connect?server", 303, [clear]);
 				}
 				if (stored.pairing) {
 					let complete = context.pairings.complete;

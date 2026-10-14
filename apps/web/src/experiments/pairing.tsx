@@ -6,7 +6,7 @@ import { motionImmediately } from "../motion-input";
 import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
 import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
-import { Handshake, useMachines, useNewMachines, YourMachines } from "./machines";
+import { useMachines, useNewMachines, YourMachines } from "./machines";
 import { pairingProblem } from "./pairing-problems";
 import { SETUP_GUIDE } from "./setup-commands";
 
@@ -25,9 +25,6 @@ type Pairing = {
 	/** Where to go once this pairing has its machine, after GitHub authorized it. */
 	connected?: string;
 };
-
-/** How long a machine's tick holds before the dialog closes onto its row. */
-const HOLD_MS = 1600;
 
 /**
  * The frame every /connect view shares inside the navigation: the page title and its action, on
@@ -61,16 +58,16 @@ function MachinesFrame(
 	);
 }
 
-/** Where /connect/server goes: the page for adding a server with a key. */
-const SERVER_PATH = "/connect/server";
+/** The page for adding a server with a key, as /connect?server, so it shares /connect's route. */
+const SERVER_PATH = "/connect?server";
 
 /**
  * The person's machines, under Add machine: Your computer opens a dialog with the command to run,
- * whose status waits for the machine; when it connects the status ticks, holds a moment, and the
- * dialog closes onto the machine's new row. Server or VM goes to its own page. With no machine
- * yet, a banner above the empty table offers the same menu.
+ * Server or VM goes to its own page. Neither waits for the machine: it appears in the table, which
+ * asks again every few seconds, marked New. With no machine yet, a banner above the empty table
+ * offers the same menu.
  */
-function MachinesHome({ login, onServer }: { login: string; onServer: () => void }) {
+function MachinesHome({ onServer }: { onServer: () => void }) {
 	let machines = useMachines();
 	let list = machines.machines;
 	let marks = useNewMachines(list);
@@ -79,29 +76,13 @@ function MachinesHome({ login, onServer }: { login: string; onServer: () => void
 	let dialog = useTransitionPresence(adding ? true : undefined, 150, motionImmediately());
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef<string>(undefined);
-	// The machines there were as the dialog opened; one that wasn't is the one it waits for.
-	let [before, setBefore] = useState<ReadonlySet<string>>();
-	let hasList = !!list;
-	useEffect(() => {
-		if (!adding) setBefore(undefined);
-		else if (hasList) setBefore(current => current ?? new Set(list?.map(machine => machine.id)));
-	}, [adding, hasList, list]);
-	let newcomer = before && list?.find(machine => !before.has(machine.id));
-	let landed = newcomer?.connected ? newcomer : undefined;
-	useEffect(() => {
-		if (!landed) return;
-		announced.current = landed.id;
-		setAnnouncement(`${landed.label} connected`);
-		let close = window.setTimeout(() => setAdding(false), HOLD_MS);
-		return () => window.clearTimeout(close);
-	}, [landed?.id, landed?.label]);
 	// Other machines that turn up while the page is open are announced as they arrive.
 	let arrived = marks.arrived;
 	useEffect(() => {
-		if (!arrived || adding || announced.current === arrived.id) return;
+		if (!arrived || announced.current === arrived.id) return;
 		announced.current = arrived.id;
 		setAnnouncement(`${arrived.label} ${arrived.connected ? "connected" : "paired"}`);
-	}, [arrived, adding]);
+	}, [arrived]);
 	let choose = (kind: MachineKind) => kind === "computer" ? setAdding(true) : onServer();
 	return (
 		<MachinesFrame
@@ -133,53 +114,44 @@ function MachinesHome({ login, onServer }: { login: string; onServer: () => void
 			<YourMachines fresh={marks.marked} machines={machines} />
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
-					login={login}
 					motion={dialog}
 					onDismiss={() => setAdding(false)}
-					status={<Handshake machine={newcomer} />}
 				/>
 			)}
 		</MachinesFrame>
 	);
 }
 
-/** /connect and /connect/server, switched in place, with Back and Forward between them. */
-function MachinesPage({ login }: { login: string }) {
-	let [server, setServer] = useState(() => location.pathname.replace(/\/$/, "") === SERVER_PATH);
-	useEffect(() => {
-		let changed = () => setServer(location.pathname.replace(/\/$/, "") === SERVER_PATH);
-		window.addEventListener("popstate", changed);
-		return () => window.removeEventListener("popstate", changed);
-	}, []);
-	let go = (path: string) => {
-		history.pushState(null, "", path);
-		setServer(path === SERVER_PATH);
-		document.querySelector(".machines-page")?.scrollTo({ top: 0 });
-	};
-	if (server) {
+/**
+ * /connect, or /connect?server for adding a server, read from the address as the navigation shell
+ * renders the route again on every move between them. Its links go either way; Server or VM, a
+ * menu item rather than a link, moves through history the way Back does, which the shell follows.
+ */
+function MachinesPage() {
+	if (new URLSearchParams(location.search).has("server")) {
 		return (
 			<MachinesFrame
 				description="Choose settings, then generate an install script."
 				lead={
-					<a
-						className="machines-back"
-						href="/connect"
-						onClick={event => {
-							event.preventDefault();
-							go("/connect");
-						}}
-					>
+					<a className="machines-back" href="/connect">
 						<ArrowLeftIcon aria-hidden="true" size={14} />
 						Back to Machines
 					</a>
 				}
 				title="Add a server"
 			>
-				<AddServerPage onBack={() => go("/connect")} />
+				<AddServerPage />
 			</MachinesFrame>
 		);
 	}
-	return <MachinesHome login={login} onServer={() => go(SERVER_PATH)} />;
+	return (
+		<MachinesHome
+			onServer={() => {
+				history.pushState(null, "", SERVER_PATH);
+				window.dispatchEvent(new PopStateEvent("popstate"));
+			}}
+		/>
+	);
 }
 
 /** How soon, and how many times, the list is asked again while the just-paired machine connects. */
@@ -230,7 +202,7 @@ function PairingLoading() {
 	);
 }
 
-export default function PairingPage({ login }: { login: string }) {
+export default function PairingPage() {
 	let id = new URLSearchParams(location.search).get("pairing");
 	let [pairing, setPairing] = useState<Pairing>();
 	let [loadError, setLoadError] = useState("");
@@ -280,7 +252,7 @@ export default function PairingPage({ login }: { login: string }) {
 			setBusy(false);
 		}
 	}
-	if (!id) return <MachinesPage login={login} />;
+	if (!id) return <MachinesPage />;
 	let repository = pairing?.input.repository;
 	let label = pairing?.input.label;
 	let problem = loadError

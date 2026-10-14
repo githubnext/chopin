@@ -177,7 +177,9 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 		.toBe(agentCommand(findAgent("copilot"), "sh"));
 	await expect(dialog.getByText(/^If npm stops with EACCES, don't use sudo/)).toBeVisible();
 	await dialog.getByRole("button", { name: "Hide install command", exact: true }).click();
-	await expect(dialog.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+	// The dialog ends at the command, as Tailscale's does: no wait for the machine.
+	await expect(dialog.getByText("It prints a link; open it here and approve.")).toBeVisible();
+	await expect(dialog.getByText(/Waiting/)).toHaveCount(0);
 
 	let laptop = await machine();
 	try {
@@ -201,13 +203,12 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 		expect(await readFile(join(laptop.home, "systemctl.log"), "utf8"))
 			.toContain("systemctl --user enable --now chopin.service");
 
-		// The dialog ticks, then closes onto the machine's new row.
-		await expect(dialog.getByText(`${hostname()} connected`, { exact: true }))
-			.toBeVisible({ timeout: 30_000 });
+		// Closed, the dialog leaves the table, where the machine appears as it connects.
+		await dialog.getByRole("button", { name: "Close", exact: true }).click();
 		await expect(dialog).toHaveCount(0);
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: new RegExp(hostname()) });
-		await expect(row).toContainText("Connected");
+		await expect(row).toContainText("Connected", { timeout: 30_000 });
 		await expect(row).toContainText("New");
 		await expect(page.getByRole("region", { name: "Add your first machine" })).toHaveCount(0);
 		// No key was made on the way.
@@ -223,7 +224,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	let minted = keyRequests(page);
 	await page.goto("/connect");
 	await addMachine(page, "Server or VM");
-	await expect(page).toHaveURL(/\/connect\/server$/);
+	await expect(page).toHaveURL(/\/connect\?server$/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a server");
 	await expect(page.getByText("Choose settings, then generate an install script.")).toBeVisible();
 	// Opening the page makes no key; Generate does.
@@ -251,7 +252,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await page.getByRole("button", { name: "Generate install script", exact: true }).click();
 	let copy = page.getByRole("button", { name: "Copy install script", exact: true });
 	await expect(copy).toBeVisible({ timeout: 30_000 });
-	await expect(page).toHaveURL(/\/connect\/server$/);
+	await expect(page).toHaveURL(/\/connect\?server$/);
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
 	await expect(page.getByText(/^Single use · expires in 10 min$/)).toBeVisible();
 	let shown = async () => {
@@ -273,7 +274,8 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	expect(page.url()).not.toContain(key!);
 	let stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
 	expect(stored).not.toContain(key!);
-	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+	// The page ends at the command, as Tailscale's does: no wait for the machine.
+	await expect(page.getByText(/Waiting/)).toHaveCount(0);
 
 	let server = await machine();
 	try {
@@ -283,45 +285,36 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		expect(server.output()).not.toContain("/connect?pairing=");
 		expect(server.output()).toContain("Installed the chopin service");
 
-		await expect(page.getByText(`${hostname()} connected`, { exact: true }))
-			.toBeVisible({ timeout: 30_000 });
-		await expect(page.getByRole("button", { name: "Re-generate install script" })).toHaveCount(0);
-		let listed = await page.evaluate(async () =>
-			(await (await fetch("/api/connector/machines")).json()).machines
-		);
-		expect(listed).toMatchObject([{ label: hostname(), autoRun: true }]);
+		await expect(page.getByText(hostname())).toHaveCount(0);
+		await expect.poll(
+			() =>
+				page.evaluate(async () => (await (await fetch("/api/connector/machines")).json()).machines),
+		).toMatchObject([{ label: hostname(), autoRun: true }]);
+
+		// Back on Machines, the machine is in the table.
+		await page.getByRole("link", { name: "Back to Machines", exact: true }).click();
+		await expect(page).toHaveURL(/\/connect$/);
+		let row = page.getByRole("table", { name: "Your machines" })
+			.getByRole("row", { name: new RegExp(hostname()) });
+		await expect(row).toContainText("Connected", { timeout: 30_000 });
+		await expect(row).toContainText("New");
 
 		// The key worked once: on a machine not yet paired, the same command is refused.
 		await rm(join(server.home, ".local/state"), { recursive: true, force: true });
 		expect(await server.run(command)).toBe(1);
 		expect(server.output()).toContain("Chopin refused the pairing key");
-
-		await page.getByRole("link", { name: "Back to Machines", exact: true }).last().click();
-		await expect(page).toHaveURL(/\/connect$/);
-		await expect(
-			page.getByRole("table", { name: "Your machines" }).getByRole("row", {
-				name: new RegExp(hostname()),
-			}),
-		).toContainText("Connected");
 	} finally {
 		await server.stop();
 	}
 });
 
-test("a wait past a minute links to troubleshooting, and a phone wraps the command in view", async ({ join: enter }) => {
+test("a phone wraps every command in view", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
-	await page.clock.install();
 	await page.goto("/connect");
 	await addMachine(page, "Your computer", true);
 	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
 	await expect(dialog.getByRole("button", { name: "Copy setup command", exact: true }))
 		.toBeVisible();
-	let help = dialog.getByRole("link", { name: "Troubleshooting", exact: true });
-	await expect(dialog.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
-	await page.clock.fastForward(30_000);
-	await expect(help).toHaveCount(0);
-	await page.clock.fastForward(31_000);
-	await expect(help).toHaveAttribute("href", /docs\/chopin-cli\.md#troubleshooting$/);
 
 	// No command scrolls sideways; each wraps inside its well and still reads as what Copy takes.
 	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();

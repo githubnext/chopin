@@ -1060,15 +1060,6 @@
 	transition-duration: var(--modal-close-dur);
 }
 
-/* A title with its close button at the end, the button's ghost edge aligned with the padding. */
-.navigation-modal-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--spacing) * 3);
-	margin: calc(var(--spacing) * -1) calc(var(--spacing) * -1.5) 0 0;
-}
-
 .navigation-modal-backdrop {
 	position: absolute;
 	inset: 0;

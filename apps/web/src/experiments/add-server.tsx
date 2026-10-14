@@ -10,7 +10,6 @@ import {
 	useAgent,
 	useSystem,
 } from "./machine-setup";
-import { Handshake, useMachines, useNewMachines, YourMachines } from "./machines";
 import { expiryLabel, usePairingKey } from "./pairing-key";
 import { keyProblem } from "./pairing-problems";
 import { runsAsService, setupCommand, shellFor } from "./setup-commands";
@@ -159,25 +158,16 @@ function foreground(agent: CodingAgent) {
 /**
  * Add a server: choose the agent, whether it runs in the background and whether Chopin may build
  * and prototype on it by itself, then generate an install script with a single-use key, which
- * pairs the machine with no browser. The key is made only when Generate is pressed.
+ * pairs the machine with no browser. The key is made only when Generate is pressed. The page ends
+ * at the command; the machine appears in the Machines table when it connects.
  */
-export function AddServerPage({ onBack }: { onBack: () => void }) {
+export function AddServerPage() {
 	let [saved] = useState(storedSettings);
 	let [system, setSystem] = useSystem(saved.system);
 	let [agent, setAgent] = useAgent();
 	let [background, setBackground] = useState(saved.background ?? true);
 	let [autoRun, setAutoRun] = useState(saved.autoRun ?? false);
 	let { key: pairing, generate, reset } = usePairingKey();
-	let machines = useMachines();
-	let list = machines.machines;
-	let marks = useNewMachines(list);
-	// The machines there were before this page made a key; one that wasn't is the one it waits for.
-	let [before, setBefore] = useState<ReadonlySet<string>>();
-	let ready = pairing.state === "ready";
-	useEffect(() => {
-		if (!ready) return;
-		setBefore(current => current ?? new Set(list?.map(machine => machine.id)));
-	}, [ready, list]);
 	useEffect(() => {
 		try {
 			sessionStorage.setItem(SETTINGS_KEY, JSON.stringify({ system, background, autoRun }));
@@ -185,93 +175,72 @@ export function AddServerPage({ onBack }: { onBack: () => void }) {
 			// Without storage the page starts from its defaults after GitHub.
 		}
 	}, [system, background, autoRun]);
-	let newcomer = before && list?.find(machine => !before.has(machine.id));
 	let shell = shellFor(system);
 	let unattended = runsAsService(agent);
 	let runsInBackground = unattended && background;
 	return (
-		<>
-			<ol className="machines-steps">
-				<li className="machines-step">
-					<h2 className="machines-step-title">Set up the machine</h2>
-					<div className="machines-settings">
-						<div className="machines-setting">
-							<AgentChoice agent={agent} onChange={setAgent} />
-							<Needs agent={agent} shell={shell} />
-						</div>
-						<Setting
-							checked={runsInBackground}
-							disabled={foreground(agent)}
-							onChange={setBackground}
-							title="Run in the background"
-						>
-							chopin runs as a service that starts with the machine and stays connected after you
-							log out.
-						</Setting>
-						<Setting
-							checked={autoRun}
-							onChange={value => {
-								setAutoRun(value);
-								// A key carries the choice it was made with, so a new choice needs a new key.
-								if (pairing.state !== "idle") reset();
-							}}
-							title="Build and prototype automatically"
-						>
-							Off: work runs here only when you press Build or Run. On: Chopin can also rebuild what
-							you built when its document changes, and prototype passages you write. Nobody else's
-							work runs here.
-						</Setting>
+		<ol className="machines-steps">
+			<li className="machines-step">
+				<h2 className="machines-step-title">Set up the machine</h2>
+				<div className="machines-settings">
+					<div className="machines-setting">
+						<AgentChoice agent={agent} onChange={setAgent} />
+						<Needs agent={agent} shell={shell} />
 					</div>
-				</li>
-				<li className="machines-step">
-					<h2 className="machines-step-title">Generate install script</h2>
-					<SystemChoice onChange={setSystem} system={system} />
-					{pairing.state === "ready"
-						? (
-							<div className="machines-run">
-								{!newcomer && (
-									<div className="machines-key">
-										<button
-											className="btn btn-md btn-secondary"
-											onClick={() => generate(autoRun)}
-											type="button"
-										>
-											Re-generate install script
-										</button>
-										<Expiry expiresAt={pairing.expiresAt} />
-									</div>
-								)}
-								<p className="machines-run-lead">In your terminal, run:</p>
-								<Command
-									label="install script"
-									place={shellPlace(shell)}
-									text={setupCommand(location.origin, shell, agent, {
-										key: pairing.key,
-										background: runsInBackground,
-									})}
-								/>
-								{!runsInBackground && <p className="machines-detail">Keep the terminal open.</p>}
-								<div className="machines-run-status">
-									<Handshake machine={newcomer} />
-									{newcomer?.connected && (
-										<a
-											className="btn btn-md btn-primary"
-											href="/connect"
-											onClick={event => {
-												event.preventDefault();
-												onBack();
-											}}
-										>
-											Back to Machines
-										</a>
-									)}
-								</div>
+					<Setting
+						checked={runsInBackground}
+						disabled={foreground(agent)}
+						onChange={setBackground}
+						title="Run in the background"
+					>
+						chopin runs as a service that starts with the machine and stays connected after you log
+						out.
+					</Setting>
+					<Setting
+						checked={autoRun}
+						onChange={value => {
+							setAutoRun(value);
+							// A key carries the choice it was made with, so a new choice needs a new key.
+							if (pairing.state !== "idle") reset();
+						}}
+						title="Build and prototype automatically"
+					>
+						Off: work runs here only when you press Build or Run. On: Chopin can also rebuild what
+						you built when its document changes, and prototype passages you write. Nobody else's
+						work runs here.
+					</Setting>
+				</div>
+			</li>
+			<li className="machines-step">
+				<h2 className="machines-step-title">Generate install script</h2>
+				<SystemChoice onChange={setSystem} system={system} />
+				{pairing.state === "ready"
+					? (
+						<div className="machines-run">
+							<div className="machines-key">
+								<button
+									className="btn btn-md btn-secondary"
+									onClick={() => generate(autoRun)}
+									type="button"
+								>
+									Re-generate install script
+								</button>
+								<Expiry expiresAt={pairing.expiresAt} />
 							</div>
-						)
-						: <Generate autoRun={autoRun} generate={generate} pairing={pairing} />}
-				</li>
-			</ol>
-			{newcomer && <YourMachines fresh={marks.marked} machines={machines} />}
-		</>
+							<p className="machines-run-lead">In your terminal, run:</p>
+							<Command
+								label="install script"
+								place={shellPlace(shell)}
+								text={setupCommand(location.origin, shell, agent, {
+									key: pairing.key,
+									background: runsInBackground,
+								})}
+							/>
+							{!runsInBackground && <p className="machines-detail">Keep the terminal open.</p>}
+						</div>
+					)
+					: <Generate autoRun={autoRun} generate={generate} pairing={pairing} />}
+			</li>
+		</ol>
 	);
 }

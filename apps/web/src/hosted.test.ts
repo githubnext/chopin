@@ -75,8 +75,6 @@ let toolbarOf = (markup: string) =>
 describe("hosted routes", () => {
 	it("recognizes canonical document routes and rejects the removed research route", () => {
 		expect(hostedRoute("/")).toEqual({ page: "repositories" });
-		expect(hostedRoute("/connect")).toEqual({ page: "machines" });
-		expect(hostedRoute("/connect/server")).toEqual({ page: "machines" });
 		expect(hostedRoute("/documents/octo-org/score")).toEqual({
 			page: "repository",
 			owner: "octo-org",

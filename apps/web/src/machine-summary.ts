@@ -6,6 +6,7 @@ export type Machine = {
 	label: string;
 	repositories: string[];
 	autoRun: boolean;
+	createdAt: number;
 	lastSeenAt: number;
 	connected: boolean;
 	/** GitHub stopped accepting the machine's authorization; it needs pairing again. */

@@ -32,9 +32,9 @@ import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { experimentRequest } from "./api";
 import { listProblem } from "./pairing-problems";
-import { pairCommand, SETUP_GUIDE_TROUBLESHOOTING, UPDATE_COMMAND } from "./setup-commands";
+import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
 
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent } from "react";
 import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 
@@ -96,9 +96,25 @@ function storedNew(): string[] {
 	}
 }
 
+/** When this tab first listed machines; one paired after it is New, wherever it was added. */
+const SINCE_KEY = "chopin:machines:since";
+
+function sessionSince(): number {
+	try {
+		let stored = Number(sessionStorage.getItem(SINCE_KEY));
+		if (stored > 0) return stored;
+		let now = Date.now();
+		sessionStorage.setItem(SINCE_KEY, String(now));
+		return now;
+	} catch {
+		return Infinity;
+	}
+}
+
 /**
  * Which machines are new this session, and the latest to turn up while the page was open. The
- * first answer only sets what was already there; anything after it that was not is new.
+ * first answer only sets what was already there, besides a machine paired since this tab first
+ * listed them (say, while Add a server was open); anything after it that was not is new.
  */
 export function useNewMachines(list: Machine[] | undefined) {
 	let [marked, setMarked] = useState<string[]>(storedNew);
@@ -120,7 +136,12 @@ export function useNewMachines(list: Machine[] | undefined) {
 		if (!list) return;
 		let previous = known.current;
 		known.current = new Set(list.map(machine => machine.id));
-		if (!previous) return;
+		let since = sessionSince();
+		let paired = list.filter(machine => machine.createdAt > since);
+		if (!previous) {
+			if (paired.length) mark(paired.map(machine => machine.id));
+			return;
+		}
 		let fresh = list.filter(machine => !previous.has(machine.id));
 		if (!fresh.length) return;
 		setArrived(fresh[0]);
@@ -634,49 +655,5 @@ export function YourMachines(
 				recommended={machines.recommended}
 			/>
 		</section>
-	);
-}
-
-/** How long step 5 waits before it links to troubleshooting when the machine hasn't turned up. */
-const SLOW_HANDSHAKE_MS = 60_000;
-
-/**
- * Step 5 of the first setup: waiting for the machine, then the machine, connected. A wait past a
- * minute adds a link to troubleshooting.
- */
-export function Handshake({ machine }: { machine?: Machine }): ReactNode {
-	let waiting = !machine?.connected;
-	let [slow, setSlow] = useState(false);
-	useEffect(() => {
-		if (!waiting) return;
-		let timer = window.setTimeout(() => setSlow(true), SLOW_HANDSHAKE_MS);
-		return () => window.clearTimeout(timer);
-	}, [waiting]);
-	if (machine?.connected) {
-		return (
-			<p className="machines-handshake" data-state="connected">
-				<CheckIcon aria-hidden="true" className="machines-handshake-check" size={16} />
-				<span>{machine.label} connected</span>
-			</p>
-		);
-	}
-	return (
-		<>
-			<p className="machines-handshake">
-				<span aria-hidden="true" className="machines-pulse" />
-				<span>
-					{machine
-						? `${machine.label} is paired. Waiting for it to connect…`
-						: "Waiting for your machine…"}
-				</span>
-			</p>
-			{slow && (
-				<p className="machines-detail">
-					<a href={SETUP_GUIDE_TROUBLESHOOTING} rel="noreferrer" target="_blank">
-						Troubleshooting
-					</a>
-				</p>
-			)}
-		</>
 	);
 }

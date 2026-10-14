@@ -200,8 +200,9 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		expect(second.child.exitCode).toBeNull();
 		await disconnect();
 		await confirm.getByRole("button", { name: "Disconnect machine", exact: true }).click();
-		await expect(machines).toHaveCount(0);
-		await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+		await expect(machines.getByText(hostname(), { exact: true })).toHaveCount(0);
+		await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
+			.toBeVisible();
 		expect(await second.exited, second.output()).toBe(1);
 		expect(second.output()).toContain("no longer paired");
 		// The refused token is forgotten, so the next connect pairs again.
