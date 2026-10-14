@@ -11,7 +11,6 @@ import {
 	PlayIcon,
 	SearchIcon,
 	ServerIcon,
-	SparkleIcon,
 } from "@chopin/icons";
 import {
 	Badge,
@@ -289,8 +288,7 @@ function useMachineDialogs(machines: ReturnType<typeof useMachines>, onDisconnec
 
 /** The desktop table, as Tailscale's: machine, address, version, agent, last seen, and actions. */
 function MachineTable(
-	{ fresh, labelledBy, list, login, machines, onRename, onDisconnect }: {
-		fresh: ReadonlySet<string>;
+	{ labelledBy, list, login, machines, onRename, onDisconnect }: {
 		labelledBy: string;
 		list: Machine[];
 		login: string | undefined;
@@ -317,29 +315,17 @@ function MachineTable(
 			<TableBody>
 				{!list.length && (
 					<TableRow>
-						<TableCell className="machines-empty" colSpan={6}>
-							{machines.machines?.length ? "No machines match." : "No machines yet."}
-						</TableCell>
+						<TableCell className="machines-empty" colSpan={6}>No machines match.</TableCell>
 					</TableRow>
 				)}
 				{list.map(machine => {
-					let isNew = fresh.has(machine.id);
 					let owner = login ? `${login}@github` : undefined;
 					return (
-						<TableRow data-new={isNew || undefined} key={machine.id}>
+						<TableRow key={machine.id}>
 							<TableCell>
 								<span className="machines-stack">
 									<span className="machines-name-line">
 										<span className="machines-name">{machine.label}</span>
-										{isNew && (
-											<Badge
-												icon={SparkleIcon}
-												label="New"
-												size="sm"
-												textSize="2xs"
-												tone="neutral"
-											/>
-										)}
 										{machine.service && (
 											<Badge
 												icon={ServerIcon}
@@ -432,8 +418,7 @@ function page() {
  * a quiet second line, and a chevron to its own view.
  */
 function MachineRows(
-	{ fresh, list, login }: {
-		fresh: ReadonlySet<string>;
+	{ list, login }: {
 		list: Machine[];
 		login: string | undefined;
 	},
@@ -480,15 +465,6 @@ function MachineRows(
 										<StatusDot label={statusWords(machine, now)} state={state} />
 										<span className="machines-name">{machine.label}</span>
 										<MachineIcon aria-hidden="true" className="machines-row-icon" size={14} />
-										{fresh.has(machine.id) && (
-											<Badge
-												icon={SparkleIcon}
-												label="New"
-												size="sm"
-												textSize="2xs"
-												tone="neutral"
-											/>
-										)}
 									</span>
 									<span className="machines-secondary machines-truncate">{detail}</span>
 								</span>
@@ -504,12 +480,11 @@ function MachineRows(
 
 /**
  * The person's machines: a search, how many there are, then the table on a desktop or the list on
- * a phone, and a quiet way to add another. The table asks again every few seconds, so a machine
- * appears as it connects.
+ * a phone, and a quiet way to add another. With none yet, nothing: the page's banner offers the
+ * first. The table asks again every few seconds, so a machine appears as it connects.
  */
 export function YourMachines(
-	{ fresh, login, machines, onChoose }: {
-		fresh: ReadonlySet<string>;
+	{ login, machines, onChoose }: {
 		login: string | undefined;
 		machines: ReturnType<typeof useMachines>;
 		onChoose: (kind: MachineKind) => void;
@@ -524,6 +499,11 @@ export function YourMachines(
 		return machines.error
 			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
 			: <MachinesLoading />;
+	}
+	if (!all.length) {
+		return machines.error
+			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
+			: null;
 	}
 	let list = all.filter(machine => machineMatches(machine, query, login));
 	return (
@@ -548,10 +528,9 @@ export function YourMachines(
 				</span>
 			)}
 			{phone
-				? <MachineRows fresh={fresh} list={list} login={login} />
+				? <MachineRows list={list} login={login} />
 				: (
 					<MachineTable
-						fresh={fresh}
 						labelledBy={headingId}
 						list={list}
 						login={login}

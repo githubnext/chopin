@@ -72,70 +72,21 @@ export function useMachines() {
 	return { machines, error, recommended, forget, retry };
 }
 
-/** Machines paired in this tab stay marked New until it closes, across /connect and pairing. */
-const NEW_KEY = "chopin:new-machines";
-
-function storedNew(): string[] {
-	try {
-		let value = JSON.parse(sessionStorage.getItem(NEW_KEY) ?? "[]");
-		return Array.isArray(value) ? value.filter(item => typeof item === "string") : [];
-	} catch {
-		return [];
-	}
-}
-
-/** When this tab first listed machines; one paired after it is New, wherever it was added. */
-const SINCE_KEY = "chopin:machines:since";
-
-function sessionSince(): number {
-	try {
-		let stored = Number(sessionStorage.getItem(SINCE_KEY));
-		if (stored > 0) return stored;
-		let now = Date.now();
-		sessionStorage.setItem(SINCE_KEY, String(now));
-		return now;
-	} catch {
-		return Infinity;
-	}
-}
-
 /**
- * Which machines are new this session, and the latest to turn up while the page was open. The
- * first answer only sets what was already there, besides a machine paired since this tab first
- * listed them (say, while Add a server was open); anything after it that was not is new.
+ * The latest machine to turn up while the page was open, so it can be announced. The first answer
+ * only sets what was already there.
  */
-export function useNewMachines(list: Machine[] | undefined) {
-	let [marked, setMarked] = useState<string[]>(storedNew);
+export function useArrivedMachine(list: Machine[] | undefined) {
 	let [arrived, setArrived] = useState<Machine>();
 	let known = useRef<Set<string>>(undefined);
-	let mark = useCallback((ids: string[]) => {
-		setMarked(current => {
-			if (ids.every(id => current.includes(id))) return current;
-			let next = [...new Set([...current, ...ids])];
-			try {
-				sessionStorage.setItem(NEW_KEY, JSON.stringify(next));
-			} catch {
-				// Without storage the mark lasts as long as the page.
-			}
-			return next;
-		});
-	}, []);
 	useEffect(() => {
 		if (!list) return;
 		let previous = known.current;
 		known.current = new Set(list.map(machine => machine.id));
-		let since = sessionSince();
-		let paired = list.filter(machine => machine.createdAt > since);
-		if (!previous) {
-			if (paired.length) mark(paired.map(machine => machine.id));
-			return;
-		}
-		let fresh = list.filter(machine => !previous.has(machine.id));
-		if (!fresh.length) return;
-		setArrived(fresh[0]);
-		mark(fresh.map(machine => machine.id));
-	}, [list, mark]);
-	return { arrived, marked: new Set(marked), mark };
+		let fresh = previous && list.find(machine => !previous.has(machine.id));
+		if (fresh) setArrived(fresh);
+	}, [list]);
+	return arrived;
 }
 
 /** A failed load of the machine list, in words, with a way to ask again now. */

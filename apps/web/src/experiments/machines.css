@@ -132,7 +132,7 @@
 	}
 }
 
-/* With no machine yet, the first step sits above the empty table, with the same menu. */
+/* With no machine yet, the first step is all the page shows below its heading. */
 .machines-banner {
 	display: flex;
 	flex-direction: column;
@@ -546,11 +546,6 @@
 
 .machines-table .cv-table-cell {
 	vertical-align: top;
-}
-
-/* A machine paired this session keeps the selected surface, beside its New badge. */
-.machines-table .cv-table-row[data-new] {
-	background: var(--color-selected);
 }
 
 .machines-stack {

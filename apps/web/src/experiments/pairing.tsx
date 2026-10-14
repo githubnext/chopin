@@ -6,8 +6,8 @@ import { motionImmediately } from "../motion-input";
 import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
 import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
-import { MachineDetail, statusWords, YourMachines } from "./machine-list";
-import { goTo, useLogin, useMachines, useNewMachines } from "./machines";
+import { MachineDetail, YourMachines } from "./machine-list";
+import { goTo, useArrivedMachine, useLogin, useMachines } from "./machines";
 import { pairingProblem } from "./pairing-problems";
 import { SETUP_GUIDE } from "./setup-commands";
 
@@ -35,7 +35,7 @@ function MachinesFrame(
 	{ action, children, description, lead, title }: {
 		action?: ReactNode;
 		children: ReactNode;
-		description: ReactNode;
+		description?: ReactNode;
 		lead?: ReactNode;
 		title: string;
 	},
@@ -48,7 +48,11 @@ function MachinesFrame(
 					<div className="machines-title">
 						<div className="min-w-0">
 							<h1 className="text-xl font-semibold">{title}</h1>
-							<p className="machines-description mt-1 text-sm text-text-secondary">{description}</p>
+							{description && (
+								<p className="machines-description mt-1 text-sm text-text-secondary">
+									{description}
+								</p>
+							)}
 						</div>
 						{action}
 					</div>
@@ -65,13 +69,13 @@ const SERVER_PATH = "/connect?server";
 /**
  * The person's machines, under Add machine: Your computer opens a dialog with the command to run,
  * Server or VM goes to its own page. Neither waits for the machine: it appears in the table, which
- * asks again every few seconds, marked New. With no machine yet, a banner above the empty table
- * offers the same menu.
+ * asks again every few seconds. With no machine yet, the page is only the banner offering the same
+ * menu.
  */
 function MachinesHome({ onServer }: { onServer: () => void }) {
 	let machines = useMachines();
 	let list = machines.machines;
-	let marks = useNewMachines(list);
+	let arrived = useArrivedMachine(list);
 	let bannerId = useId();
 	let login = useLogin();
 	let [adding, setAdding] = useState(false);
@@ -79,7 +83,6 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef<string>(undefined);
 	// Other machines that turn up while the page is open are announced as they arrive.
-	let arrived = marks.arrived;
 	useEffect(() => {
 		if (!arrived || announced.current === arrived.id) return;
 		announced.current = arrived.id;
@@ -113,12 +116,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 					</div>
 				</section>
 			)}
-			<YourMachines
-				fresh={marks.marked}
-				login={login}
-				machines={machines}
-				onChoose={choose}
-			/>
+			<YourMachines login={login} machines={machines} onChoose={choose} />
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
 					motion={dialog}
@@ -163,7 +161,8 @@ function MachinesPage() {
 
 /**
  * One machine, as a phone opens it from the list. Back returns to the list where it was: through
- * history when the list is the page before, so its scroll is kept.
+ * history when the list is the page before, so its scroll is kept. Its state shows once, in the
+ * Status row.
  */
 function MachinePage({ id }: { id: string }) {
 	let machines = useMachines();
@@ -171,7 +170,6 @@ function MachinePage({ id }: { id: string }) {
 	let machine = machines.machines?.find(value => value.id === id);
 	return (
 		<MachinesFrame
-			description={machine ? statusWords(machine, Date.now()) : ""}
 			lead={
 				<button
 					className="machines-back"
@@ -197,23 +195,17 @@ const FOLLOW_MS = 500;
 const FOLLOW_TRIES = 10;
 
 /**
- * After pairing, the person's machines, the new one among them and marked New. The machine
- * connects a moment after Connect, so the list is asked again right away until it shows that,
- * rather than a poll later.
+ * After pairing, the person's machines, the new one among them. The machine connects a moment
+ * after Connect, so the list is asked again right away until it shows that, rather than a poll
+ * later.
  */
 function ConnectedMachines({ label }: { label: string }) {
 	let machines = useMachines();
-	let marks = useNewMachines(machines.machines);
-	let mark = marks.mark;
 	let retry = machines.retry;
 	let tries = useRef(0);
 	// Newest first, so the first of that name is the one just paired.
 	let machine = machines.machines?.find(value => value.label === label);
-	let paired = machine?.id;
 	let waiting = !!machines.machines && !machine?.connected;
-	useEffect(() => {
-		if (paired) mark([paired]);
-	}, [paired, mark]);
 	useEffect(() => {
 		if (!waiting || tries.current >= FOLLOW_TRIES) return;
 		let timer = window.setTimeout(() => {
@@ -225,7 +217,6 @@ function ConnectedMachines({ label }: { label: string }) {
 	let login = useLogin();
 	return (
 		<YourMachines
-			fresh={marks.marked}
 			login={login}
 			machines={machines}
 			onChoose={kind => goTo(kind === "server" ? SERVER_PATH : "/connect")}

@@ -154,12 +154,13 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 	await expect(entry).toHaveAttribute("aria-current", "page");
 	await expect(page.getByRole("link", { name: "Learn more", exact: true }))
 		.toHaveAttribute("href", /docs\/chopin-cli\.md$/);
-	// With no machine yet, a banner offers the same menu above the empty table.
+	// With no machine yet, the page is its heading and a banner offering the same menu: no search,
+	// count, table or footer until there is a machine.
 	await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
 		.toBeVisible();
-	await expect(page.getByRole("table", { name: "Your machines" })).toContainText(
-		"No machines yet.",
-	);
+	await expect(page.getByRole("searchbox", { name: "Search machines" })).toHaveCount(0);
+	await expect(page.getByRole("table", { name: "Your machines" })).toHaveCount(0);
+	await expect(page.getByText(/^0 machines$|Connect more machines/)).toHaveCount(0);
 
 	await addMachine(page, "Your computer", true);
 	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
@@ -219,7 +220,8 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: new RegExp(hostname()) });
 		await expect(row).toContainText("Connected", { timeout: 30_000 });
-		await expect(row).toContainText("New");
+		await expect(row).not.toContainText("New");
+		await expect(page.getByText("1 machine", { exact: true })).toBeVisible();
 		await expect(page.getByRole("region", { name: "Add your first machine" })).toHaveCount(0);
 		// No key was made on the way.
 		expect(minted).toEqual([]);
@@ -307,7 +309,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: new RegExp(hostname()) });
 		await expect(row).toContainText("Connected", { timeout: 30_000 });
-		await expect(row).toContainText("New");
+		await expect(row).not.toContainText("New");
 
 		// The key worked once: on a machine not yet paired, the same command is refused.
 		await rm(join(server.home, ".local/state"), { recursive: true, force: true });
@@ -449,6 +451,9 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 test("on a phone, machines are rows that open their own view, where they rename", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	await page.goto("/connect");
+	await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
+		.toBeVisible();
+	await expect(page.getByRole("searchbox", { name: "Search machines" })).toHaveCount(0);
 	await threeMachines(page);
 	let rows = page.getByRole("region", { name: /^@mia-/ });
 	await expect(rows.getByRole("button")).toHaveCount(3);
@@ -461,6 +466,9 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await rows.getByRole("button", { name: /build-box/ }).click();
 	await expect(page).toHaveURL(/\/connect\?machine=/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
+	// The state shows once, in the Status row, not again under the name.
+	await expect(page.locator(".machines-description")).toHaveCount(0);
+	await expect(page.getByRole("main").getByText("Connected", { exact: true })).toHaveCount(1);
 	await expect(page.getByRole("main")).toContainText("build-box.internal");
 	await expect(page.getByRole("main")).toContainText("Linux arm64");
 	await page.getByRole("button", { name: "Edit machine name…" }).click();
