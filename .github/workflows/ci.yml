@@ -194,6 +194,23 @@ jobs:
           docker compose -f compose.yaml -f compose.local.yaml up -d --wait \
             db-e2e db-e2e-fixtures db-e2e-harness db-e2e-local
 
+      # The client is a function of these sources, the lockfile, Bun and the
+      # motion toggle, so a client built from the same ones is reused instead of
+      # rebuilt on every shard of every run. Restored before the install, so the
+      # hash never walks node_modules.
+      - name: Restore a client built from these sources
+        id: client
+        uses: actions/cache@v6
+        with:
+          path: |
+            apps/web/dist
+            apps/connector/dist
+          key: >-
+            client-${{ runner.os }}-bun-${{ env.BUN_VERSION }}-motion-on-${{ hashFiles(
+              'apps/web/**', 'apps/connector/**', 'packages/**', '!**/node_modules/**', '!**/dist/**',
+              'package.json', 'bun.lock', 'tsconfig.json', 'patches/**'
+            ) }}
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
@@ -206,16 +223,21 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      # Build on this runner, and reject development previews before the long
-      # browser suite. It carries the same child-motion toggle as scripts/e2e.ts
-      # and runs while Chromium is restored below.
+      # Build on this runner unless restored above, and either way reject
+      # development previews before the long browser suite. It carries the same
+      # child-motion toggle as scripts/e2e.ts and runs while Chromium is restored.
       - name: Build the client
         id: build
         background: true
         run: |
-          bun run build
+          if [ "$CLIENT_RESTORED" = true ]; then
+            echo "Client restored for these sources; not rebuilding."
+          else
+            bun run build
+          fi
           bun scripts/check-design-production.ts
         env:
+          CLIENT_RESTORED: ${{ steps.client.outputs.cache-hit }}
           VITE_CHILD_MOTION_TOGGLE: "on"
 
       # Keyed on the Playwright version and nothing else. Keying on the
