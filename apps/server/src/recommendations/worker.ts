@@ -30,7 +30,8 @@ export const RECOMMENDATION_POLICY = [
 	"Choose build only when that proposed scope has no unresolved dependencies. Explain concrete reasons and one next action in ordinary language.",
 	"Do not produce a numerical completeness score, universal questionnaire, exhaustive checklist, or confidence unsupported by evidence.",
 	"This is provisional advice. Never approve a graph, authorize a build, start work, perform research, or claim that existing Build eligibility checks have passed.",
-	"The nextAction is a proposed discussion prompt for a person to send directly to the Planner; phrase it as that person's message, without an 'Ask the Planner' preamble. It cannot execute an action itself.",
+	"The nextAction is a proposed discussion or scoping question sent directly to the Planner. Do not ask it to implement, build, approve, or start work; ask it to discuss the proposed scope or help resolve the stated uncertainty.",
+	"Do not infer who will send nextAction or address the Planner as a human participant. Name relevant participants explicitly when asking the Planner to help them decide; omit an 'Ask the Planner' preamble.",
 	"Return only the top-level object {recommendation: the bounded recommendation or null}; no commentary outside the result.",
 ].join(" ");
 
