@@ -328,6 +328,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			input: pending.input,
 			owner: session.user.login,
 			code: pending.code,
+			// Approving hands off to GitHub to authorize the machine, as approve below does.
+			authorize: auth.machines.durable,
 			...(pending.machineId && pending.approval?.owner === session.user.id
 				? { connected: landing(pending.input) }
 				: {}),

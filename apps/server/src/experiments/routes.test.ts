@@ -845,6 +845,8 @@ test("a pairing carries a confirmation code the page can show", async () => {
 			.json();
 	expect(shown.code).toBe(pending.code);
 	expect(shown.documents).toBeUndefined();
+	// Machines hold their own GitHub grant here, so the page can say Connect goes by way of GitHub.
+	expect(shown.authorize).toBe(true);
 });
 
 test("expired pairing and connections cannot be revived by replay", () => {
