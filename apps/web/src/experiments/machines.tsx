@@ -32,7 +32,7 @@ import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { experimentRequest } from "./api";
 import { listProblem } from "./pairing-problems";
-import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
+import { pairCommand, SETUP_GUIDE_TROUBLESHOOTING, UPDATE_COMMAND } from "./setup-commands";
 
 import type { KeyboardEvent, ReactNode } from "react";
 import type { Machine } from "../machine-summary";
@@ -182,7 +182,10 @@ function useCopy() {
 	return { copied, copy };
 }
 
-/** A command shown as itself, which copies on a press; its name says Copy, then Copied. */
+/**
+ * A command shown as itself, which copies on a press; its name says Copy, then Copied. The chip
+ * is drawn inside the button, so on touch the button can take a full 44px row of its own.
+ */
 function CopyableCommand({ command }: { command: string }) {
 	let { copied, copy } = useCopy();
 	return (
@@ -193,10 +196,12 @@ function CopyableCommand({ command }: { command: string }) {
 			onClick={() => void copy(command)}
 			type="button"
 		>
-			<code>{command}</code>
-			{copied === "copied"
-				? <CheckIcon aria-hidden="true" className="machines-copyable-done" size={14} />
-				: <CopyIcon />}
+			<span className="machines-copyable-chip">
+				<code>{command}</code>
+				{copied === "copied"
+					? <CheckIcon aria-hidden="true" className="machines-copyable-done" size={14} />
+					: <CopyIcon />}
+			</span>
 		</button>
 	);
 }
@@ -630,8 +635,21 @@ export function YourMachines(
 	);
 }
 
-/** Step 5 of the first setup: waiting for the machine, then the machine, connected. */
+/** How long step 5 waits before it says what to try when the machine hasn't turned up. */
+const SLOW_HANDSHAKE_MS = 60_000;
+
+/**
+ * Step 5 of the first setup: waiting for the machine, then the machine, connected. A wait past a
+ * minute adds where to look.
+ */
 export function Handshake({ machine }: { machine?: Machine }): ReactNode {
+	let waiting = !machine?.connected;
+	let [slow, setSlow] = useState(false);
+	useEffect(() => {
+		if (!waiting) return;
+		let timer = window.setTimeout(() => setSlow(true), SLOW_HANDSHAKE_MS);
+		return () => window.clearTimeout(timer);
+	}, [waiting]);
 	if (machine?.connected) {
 		return (
 			<p className="machines-handshake" data-state="connected">
@@ -641,13 +659,23 @@ export function Handshake({ machine }: { machine?: Machine }): ReactNode {
 		);
 	}
 	return (
-		<p className="machines-handshake">
-			<span aria-hidden="true" className="machines-pulse" />
-			<span>
-				{machine
-					? `${machine.label} is paired. Waiting for it to connect…`
-					: "Waiting for your machine…"}
-			</span>
-		</p>
+		<>
+			<p className="machines-handshake">
+				<span aria-hidden="true" className="machines-pulse" />
+				<span>
+					{machine
+						? `${machine.label} is paired. Waiting for it to connect…`
+						: "Waiting for your machine…"}
+				</span>
+			</p>
+			{slow && (
+				<p className="machines-detail">
+					Not seeing it? Run <code>chopin status</code> on the machine, or see{" "}
+					<a href={SETUP_GUIDE_TROUBLESHOOTING} rel="noreferrer" target="_blank">
+						Troubleshooting
+					</a>.
+				</p>
+			)}
+		</>
 	);
 }

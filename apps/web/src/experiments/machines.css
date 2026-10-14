@@ -191,13 +191,18 @@
 
 /*
  * The last step of a first setup is live: a petrol presence pulse while it waits for the machine,
- * then the success tick and the machine's name as it connects.
+ * then the success tick and the machine's name as it connects. The words carry the baseline, so
+ * the step's number stays on their line whichever mark sits beside them.
  */
 .machines-handshake {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
 	gap: calc(var(--spacing) * 2);
 	color: var(--color-text-secondary);
+
+	& > :first-child {
+		align-self: center;
+	}
 
 	&[data-state="connected"] {
 		color: var(--color-success-ink);
@@ -382,20 +387,32 @@
 	text-align: right;
 }
 
-/* A command to run, shown as itself; a press copies it. */
+/* A command to run, shown as itself; a press copies it. The chip is drawn inside the button. */
 .machines-copyable {
 	display: inline-flex;
 	max-width: 100%;
 	align-items: center;
-	gap: calc(var(--spacing) * 1.5);
 	margin-inline-start: calc(var(--spacing) * 0.5);
+	border-radius: var(--radius-sm);
+	color: var(--color-text-primary);
+	text-align: start;
+	vertical-align: middle;
+
+	&:hover .machines-copyable-chip {
+		background: var(--color-hover);
+	}
+}
+
+.machines-copyable-chip {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
 	border-radius: var(--radius-sm);
 	background: var(--color-inset);
 	border: var(--edge-width) solid var(--color-edge);
 	padding: 0 calc(var(--spacing) * 1.5);
-	color: var(--color-text-primary);
-	text-align: start;
-	vertical-align: middle;
 
 	& code {
 		overflow: hidden;
@@ -404,10 +421,6 @@
 		line-height: var(--text-xs--line-height);
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	&:hover {
-		background: var(--color-hover);
 	}
 }
 
@@ -610,7 +623,7 @@
 	}
 
 	& .machines-setup .machines-detail a,
-	& .machines-copyable {
+	& .machines-steps p a {
 		position: relative;
 
 		&::after {
@@ -622,6 +635,14 @@
 			height: max(100%, var(--control-target-coarse));
 			translate: 0 -50%;
 		}
+	}
+
+	/*
+	 * A copy command sits in a table cell, which a target grown past it would be clipped by on the
+	 * last row, so the button itself is 44px tall around its chip.
+	 */
+	& .machines-copyable {
+		min-height: var(--control-target-coarse);
 	}
 
 	& .machines-auto-label {
@@ -734,6 +755,10 @@
 		display: flex;
 		width: 100%;
 		margin-inline-start: 0;
+	}
+
+	.machines-copyable-chip {
+		flex: 1;
 
 		& code {
 			width: 0;

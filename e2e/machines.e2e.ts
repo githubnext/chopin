@@ -236,3 +236,28 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 		await machine.stop();
 	}
 });
+
+test("a wait past a minute says where to look, and a phone wraps each command in view", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	await page.clock.install();
+	await page.goto("/connect");
+	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
+	let help = setup.getByText("Not seeing it?");
+	await expect(setup.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+	await page.clock.fastForward(30_000);
+	await expect(help).toHaveCount(0);
+	await page.clock.fastForward(31_000);
+	await expect(help).toHaveText(
+		"Not seeing it? Run chopin status on the machine, or see Troubleshooting.",
+	);
+	await expect(help.getByRole("link", { name: "Troubleshooting", exact: true }))
+		.toHaveAttribute("href", /docs\/chopin-cli\.md#troubleshooting$/);
+
+	// No command scrolls sideways; each wraps inside its well and still reads as what Copy takes.
+	for (let well of await setup.locator(".machines-command pre").all()) {
+		expect(await well.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBe(0);
+	}
+	let install = setup.getByRole("listitem").nth(0).locator("pre code");
+	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
+	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
+});
