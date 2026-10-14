@@ -16,7 +16,8 @@ const MINT_WINDOW_MS = 10 * 60_000;
 const MINTS_PER_WINDOW = 10;
 const KEY = /^chopin_k_[A-Za-z0-9_-]{43}$/;
 
-type Key = { userId: string; sessionId: string; expiresAt: number };
+/** `autoRun`: whether the machine it pairs lets Chopin build and prototype automatically. */
+type Key = { userId: string; sessionId: string; expiresAt: number; autoRun: boolean };
 type Held = { grant: GitHubTokenGrant; sessionId: string; issuedAt: number; until: number };
 
 function digest(key: string) {
@@ -68,8 +69,11 @@ export class PairingKeys {
 		}
 	}
 
-	/** A new key for `userId`, minted in `sessionId`, replacing the one before it. */
-	mint(userId: string, sessionId: string) {
+	/**
+	 * A new key for `userId`, minted in `sessionId`, replacing the one before it. The machine it
+	 * pairs has automatic work on only with `autoRun`, chosen in the browser that minted it.
+	 */
+	mint(userId: string, sessionId: string, autoRun = false) {
 		this.sweep();
 		let now = this.now();
 		let recent = (this.#mints.get(userId) ?? []).filter(time => time > now - MINT_WINDOW_MS);
@@ -80,7 +84,7 @@ export class PairingKeys {
 		let key = `chopin_k_${randomBytes(32).toString("base64url")}`;
 		let hash = digest(key);
 		let expiresAt = now + PAIRING_KEY_MS;
-		this.#keys.set(hash, { userId, sessionId, expiresAt });
+		this.#keys.set(hash, { userId, sessionId, expiresAt, autoRun });
 		this.#current.set(userId, hash);
 		// The lifetime too, so a browser whose clock differs from this one counts it right.
 		return { key, expiresAt, expiresIn: PAIRING_KEY_MS };
@@ -93,17 +97,17 @@ export class PairingKeys {
 	peek(key: string) {
 		let found = KEY.test(key) ? this.#keys.get(digest(key)) : undefined;
 		if (!found || found.expiresAt <= this.now()) fail("pairing-key-invalid");
-		return { userId: found.userId, grant: this.#grant(found) };
+		return { userId: found.userId, grant: this.#grant(found), autoRun: found.autoRun };
 	}
 
 	/** Spend a key: refused unless it is still live, so of two at once only one gets through. */
 	take(key: string) {
-		let { userId, grant } = this.peek(key);
+		let { userId, grant, autoRun } = this.peek(key);
 		let hash = digest(key);
 		this.#keys.delete(hash);
 		if (this.#current.get(userId) === hash) this.#current.delete(userId);
 		this.#grants.delete(userId);
-		return { userId, grant };
+		return { userId, grant, autoRun };
 	}
 
 	/**

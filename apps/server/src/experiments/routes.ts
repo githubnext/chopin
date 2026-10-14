@@ -330,19 +330,23 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * A signed-in person mints a single-use key that pairs one machine as them, as approving its
 	 * pairing would. Where machines hold their own GitHub authorization, GitHub authorizes the next
-	 * machine first, in the browser, and the key carries that authorization to the machine.
+	 * machine first, in the browser, and the key carries that authorization to the machine. The
+	 * key also carries the person's choice of automatic work, as the pairing card's checkbox does.
 	 */
 	route("POST", "/api/connector/pairing-keys", async request => {
-		z.object({}).strict().parse(await body(request));
+		let { autoRun } = z.object({ autoRun: z.boolean().optional() }).strict().parse(
+			await body(request),
+		);
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		if (auth.machines.durable && !keys.authorized(session.user.id, session.session.id)) {
 			return json({ authorize: "/auth/github/connector?key" });
 		}
-		return json(keys.mint(session.user.id, session.session.id));
+		return json(keys.mint(session.user.id, session.session.id, autoRun));
 	});
 	/**
-	 * Pair a machine with a key: approved at once as the key's owner, with automatic work off, and
+	 * Pair a machine with a key: approved at once as the key's owner, with automatic work as they
+	 * chose when minting it (off unless they turned it on), and
 	 * a checkout only one the owner can push to, all as approving in the browser would. The key is
 	 * spent only once those checks pass, or at once if its owner is no longer admitted here.
 	 */
@@ -377,7 +381,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					...(input.branch ? { branch: input.branch } : {}),
 				}]
 				: [],
-			autoRun: false,
+			autoRun: spent.autoRun,
 			...(spent.grant && auth.machines.durable ? { grant: spent.grant } : {}),
 		});
 		return { token };

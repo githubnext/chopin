@@ -899,6 +899,19 @@ test("a pairing key minted in the browser pairs a machine once, at once, with au
 	expect(await mint(alice.cookie)).toEqual({ authorize: "/auth/github/connector?key" });
 });
 
+test("a key minted with automatic work on pairs a machine with it on, as the pairing card's choice does", async () => {
+	let { alice, request, authorizeKeys } = await setup();
+	authorizeKeys("alice");
+	let minted = await (await request("/api/connector/pairing-keys", { autoRun: true }, alice.cookie))
+		.json();
+	expect((await request("/api/connector/pairings", { ...CHECKOUT, key: minted.key })).status)
+		.toBe(200);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toMatchObject([{ label: "Laptop", autoRun: true }]);
+	let wrong = await request("/api/connector/pairing-keys", { autoRun: "yes" }, alice.cookie);
+	expect(await wrong.json()).toEqual({ error: "invalid-request" });
+});
+
 test("two machines racing with one pairing key: exactly one pairs", async () => {
 	let { alice, request, mint, authorizeKeys } = await setup();
 	authorizeKeys("alice");
