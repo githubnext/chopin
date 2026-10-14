@@ -1008,7 +1008,9 @@ test("read-only visitors can browse documents and get creation guidance", async 
 		"contenteditable",
 		"false",
 	);
-	await expect(headerActions(page)).toHaveCount(0);
+	await headerActions(page).click();
+	await expect(page.getByRole("menuitem")).toHaveText(["Copy link", "Research agenda"]);
+	await page.keyboard.press("Escape");
 	await expect(page.getByText("You have read-only access to this document.")).toBeVisible();
 	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
 	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
