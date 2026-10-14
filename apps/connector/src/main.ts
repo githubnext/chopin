@@ -5,7 +5,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { ConnectorStopped, serveWork } from "./connection";
 import { remote } from "./mcp";
 import { parseArgs } from "./args";
-import { connectorMessage, forget, machineToken, pair, register, SELF, unpair } from "./machine";
+import {
+	connectorMessage,
+	forget,
+	machineToken,
+	pair,
+	pairingKey,
+	register,
+	SELF,
+	unpair,
+} from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { commandWords, servePlanners } from "./planner";
@@ -122,12 +131,16 @@ function interruptible() {
 	};
 }
 
-/** `pair [--label <name>]`: pair this machine and store its token, replacing any earlier one. */
+/**
+ * `pair [--label <name>] [--key <key>]`: pair this machine and store its token, replacing any
+ * earlier one. With a pairing key (or CHOPIN_PAIRING_KEY) it needs no browser.
+ */
 async function pairCommand(args: string[]) {
-	let parsed = parseArgs(args, { options: ["label"] });
+	let parsed = parseArgs(args, { options: ["label", "key"] });
 	if (parsed.positional.length || parsed.rest) {
-		throw new Error(`Usage: ${SELF} pair [--label <name>]`);
+		throw new Error(`Usage: ${SELF} pair [--label <name>] [--key <pairing key>]`);
 	}
+	let key = pairingKey(parsed.options.get("key"));
 	let output = createOutput();
 	let label = parsed.options.get("label") ?? hostname();
 	let run = interruptible();
@@ -138,6 +151,7 @@ async function pairCommand(args: string[]) {
 			directory: stateDirectory(),
 			output,
 			signal: run.signal,
+			key,
 		});
 		if (token) output.say(`${output.style.green("✓ Paired.")} This machine is ${label} in Chopin.`);
 	} finally {
@@ -215,7 +229,7 @@ export async function connect(
 ) {
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check"],
-		options: ["planner-command"],
+		options: ["planner-command", "key"],
 		lists: ["planner", "env"],
 	});
 	let service = parsed.flags.has("service");
@@ -224,14 +238,16 @@ export async function connect(
 	if (
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
-			|| parsed.options.has("planner-command") || parsed.flags.has("install-service")
-			|| parsed.flags.has("skip-check"))
+			|| parsed.options.has("planner-command") || parsed.options.has("key")
+			|| parsed.flags.has("install-service") || parsed.flags.has("skip-check"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
 		);
 	}
 	if (service && !saved) throw new Error(CONNECT_FIRST);
+	// Read once and cleared from the environment, so neither the agent nor the service sees it.
+	let key = pairingKey(parsed.options.get("key"));
 	let installing = parsed.flags.has("install-service");
 	let executable = injected.executable ?? installedChopin();
 	if (installing && !executable) throw new ServiceError(NOT_INSTALLED);
@@ -328,6 +344,9 @@ export async function connect(
 						+ `\`${SELF} service restart\`.`,
 				);
 			}
+			if (stored && key) {
+				output.say(`This machine is already paired with ${url}, so the pairing key wasn't used.`);
+			}
 			let machine = stored
 				?? await pair({
 					url,
@@ -336,8 +355,11 @@ export async function connect(
 					output,
 					signal: abort.signal,
 					checkout: source,
+					key,
 				});
 			if (!machine) return;
+			// A key pairs once; pairing again after a revocation goes by the browser.
+			key = undefined;
 			let announced = false;
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
@@ -521,7 +543,8 @@ async function serviceCommand(args: string[]) {
 	}
 }
 
-const USAGE = `Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] `
+const USAGE =
+	`Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] [--key <pairing key>] `
 	+ "[--planner <document URL>]... [--planner-command <command>] [--env KEY=VALUE]... "
 	+ "[--install-service [--skip-check]] -- agent [ACP arguments]";
 
@@ -529,16 +552,19 @@ const HELP = [
 	`Usage: ${SELF} <command> [--base-dir <dir>]`,
 	"",
 	"Commands:",
-	"  pair [--label <name>]",
+	"  pair [--label <name>] [--key <pairing key>]",
 	"      Pair this machine with Chopin (once) and store its token. Pairing again replaces it.",
 	"      --label names the machine in Chopin (default: this computer's hostname).",
+	"      --key (or CHOPIN_PAIRING_KEY) pairs at once with a single-use key from Machines → Add a",
+	"      machine, with no browser; without one you approve the pairing in a browser.",
 	"  unpair",
 	"      Revoke this machine's token in Chopin and delete it here.",
-	"  connect [checkout] -- <agent> [ACP arguments]",
+	"  connect [checkout] [--key <pairing key>] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
-	"      Pairs this machine first if it isn't paired yet. Once connected, saves what it runs",
-	"      for service install. A program this shell finds only through a version manager's",
-	"      per-shell directory is saved by its stable path.",
+	"      Pairs this machine first if it isn't paired yet, with --key or CHOPIN_PAIRING_KEY as",
+	"      pair does. Once connected, saves what it runs for service install (never the key). A",
+	"      program this shell finds only through a version manager's per-shell directory is saved",
+	"      by its stable path.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",

@@ -5,7 +5,7 @@ import type { Server as NetServer } from "node:net";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { failureCause, serveWork } from "./connection";
+import { failureCause, redacted, serveWork } from "./connection";
 import { SELF } from "./machine";
 import { remote } from "./mcp";
 import { createOutput } from "./output";
@@ -542,4 +542,13 @@ test("a connection failure's cause never shows credentials from the error", () =
 	let text = failureCause(wrapped);
 	expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 	expect(text).not.toContain("abcdef0123456789xyz");
+});
+
+test("machine, Planner and pairing key tokens are masked wherever chopin prints text", () => {
+	for (let prefix of ["chopin_m_", "chopin_p_", "chopin_k_"]) {
+		let token = `${prefix}${"Zx9_-".repeat(9).slice(0, 43)}`;
+		expect(redacted(`ran chopin connect --key ${token} -- agent`)).toBe(
+			"ran chopin connect --key [redacted] -- agent",
+		);
+	}
 });

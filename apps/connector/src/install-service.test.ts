@@ -17,13 +17,24 @@ import { git } from "./workspace";
 let scratch = await mkdtemp(join(tmpdir(), "chopin-install-service-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
-async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
+const PAIRING_KEY = `chopin_k_${"K".repeat(43)}`;
+
+async function setup(
+	answer: (line: string) => Partial<Outcome> | undefined,
+	{ paired = true } = {},
+) {
 	let tools: string[] = [];
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request) {
 			let path = new URL(request.url).pathname;
+			if (path === "/api/connector/pairings") {
+				let { key } = await request.json() as { key?: string };
+				return key === PAIRING_KEY
+					? Response.json({ token: `chopin_m_${"M".repeat(43)}` })
+					: Response.json({ error: "pairing-key-invalid" }, { status: 403 });
+			}
 			if (path === "/api/connector/connections") return Response.json({ token: "connection" });
 			if (path !== "/connector/mcp") return new Response(null, { status: 404 });
 			let server = new Server({ name: "fake-chopin", version: "1" }, {
@@ -47,10 +58,12 @@ async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
 	let home = await realpath(await mkdtemp(join(scratch, "home-")));
 	let directory = join(home, "state");
 	await mkdir(directory, { recursive: true });
-	await writeFile(
-		join(directory, "machine.json"),
-		JSON.stringify({ servers: { [url]: { token: `chopin_m_${"M".repeat(43)}`, label: "box" } } }),
-	);
+	if (paired) {
+		await writeFile(
+			join(directory, "machine.json"),
+			JSON.stringify({ servers: { [url]: { token: `chopin_m_${"M".repeat(43)}`, label: "box" } } }),
+		);
+	}
 	let bin = join(home, "bin");
 	await mkdir(bin);
 	// An agent that answers ACP initialize, as install's check needs.
@@ -87,6 +100,7 @@ async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
 	return {
 		calls,
 		tools,
+		home,
 		directory,
 		bin,
 		run: (...flags: string[]) =>
@@ -99,6 +113,7 @@ async function setup(answer: (line: string) => Partial<Outcome> | undefined) {
 				if (value === undefined) delete process.env[name];
 				else process.env[name] = value;
 			}
+			delete process.env.CHOPIN_PAIRING_KEY;
 			await chopin.stop(true);
 		},
 	};
@@ -123,6 +138,29 @@ test.skipIf(process.platform === "win32")(
 		expect(config.service?.executable).toBe("/opt/chopin/bin/chopin");
 		// Its own connection let go of the checkout before the service took it.
 		expect((await readdir(machine.directory)).filter(name => name.endsWith(".lock"))).toEqual([]);
+	},
+	20_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"connect --install-service pairs with a key from the environment and writes it nowhere",
+	async () => {
+		await using machine = await setup(systemd, { paired: false });
+		process.env.CHOPIN_PAIRING_KEY = PAIRING_KEY;
+		await machine.run();
+		expect(machine.calls).toContain("systemctl --user enable --now chopin.service");
+		// Neither the agent the service starts nor anything after inherits it.
+		expect(process.env.CHOPIN_PAIRING_KEY).toBeUndefined();
+		let written = await Array.fromAsync(
+			new Bun.Glob("**/*").scan({ cwd: machine.home, dot: true, onlyFiles: true }),
+		);
+		// The service definition, config.json, machine.json and the log are all under this home.
+		expect(written).toContain(".config/systemd/user/chopin.service");
+		for (let file of written) {
+			let text = await Bun.file(join(machine.home, file)).text();
+			expect(text, file).not.toContain(PAIRING_KEY);
+		}
+		expect(machine.calls.join("\n")).not.toContain(PAIRING_KEY);
 	},
 	20_000,
 );

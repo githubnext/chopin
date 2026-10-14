@@ -47,7 +47,8 @@ function stopped(reason: Exclude<ErrorClass, "retry" | "forgotten">, error: unkn
 }
 
 const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
-const TOKEN = /\b(?:gh[opsur]_|github_pat_|chopin_[mp]_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
+const TOKEN =
+	/\b(?:gh[opsur]_|github_pat_|chopin_[kmp]_|sk-)[A-Za-z0-9_-]{8,}|\b(Bearer\s+)\S{8,}/g;
 
 /**
  * `text` with URL credentials, token-shaped strings and each of the `secrets` it knows, such as

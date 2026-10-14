@@ -17,7 +17,27 @@ const MESSAGES: Record<string, string> = {
 		+ "then connect again.",
 	"machine-reauthorize": "GitHub no longer accepts this machine's authorization. "
 		+ `Run \`${SELF} pair\` to authorize it again.`,
+	"pairing-key-invalid": "Chopin refused the pairing key: it was used, replaced by a newer one, "
+		+ "or expired. Copy a new command from Machines → Add a machine in Chopin, then run it again.",
 };
+
+const PAIRING_KEY = /^chopin_k_[A-Za-z0-9_-]{43}$/;
+
+/**
+ * The pairing key from `--key`, else CHOPIN_PAIRING_KEY, which is then cleared so no process this
+ * one starts inherits it. Something that isn't one is refused before Chopin is asked.
+ */
+export function pairingKey(flag: string | undefined): string | undefined {
+	let key = flag ?? (process.env.CHOPIN_PAIRING_KEY || undefined);
+	delete process.env.CHOPIN_PAIRING_KEY;
+	if (key !== undefined && !PAIRING_KEY.test(key)) {
+		throw new Error(
+			"That isn't a pairing key, which starts chopin_k_. Copy the command again from Machines → "
+				+ "Add a machine in Chopin.",
+		);
+	}
+	return key;
+}
 
 /** What a checkout tells Chopin when it connects. */
 export type Checkout = { repository: string; commit: string; branch?: string; label: string };
@@ -160,8 +180,9 @@ async function post(url: string, body: unknown, token?: string, signal?: AbortSi
 }
 
 /**
- * Pair this machine with a Chopin server: print the link and code, wait for the owner to confirm
- * in the browser, and store the machine token. Returns undefined when stopped first.
+ * Pair this machine with a Chopin server and store the machine token. With a pairing key it pairs
+ * at once; otherwise it prints the link and code and waits for the owner to confirm in the
+ * browser. Returns undefined when stopped first. The key is sent once and kept nowhere.
  */
 export async function pair(options: {
 	url: string;
@@ -170,32 +191,45 @@ export async function pair(options: {
 	output: Output;
 	signal: AbortSignal;
 	checkout?: Omit<Checkout, "label">;
+	key?: string;
 }) {
-	let pairing = await post(
-		options.url + "/api/connector/pairings",
-		{ ...options.checkout, label: options.label },
-		undefined,
-		options.signal,
-	) as { id: string; secret: string; url: string; code: string };
-	options.output.pairing(
-		options.checkout?.repository ?? options.label,
-		pairing.url,
-		pairing.code,
-	);
 	let token: string | undefined;
-	while (!options.signal.aborted && !token) {
-		let claim = await post(
-			`${options.url}/api/connector/pairings/${pairing.id}/claim`,
-			{ secret: pairing.secret },
+	if (options.key) {
+		let paired = await post(
+			options.url + "/api/connector/pairings",
+			{ ...options.checkout, label: options.label, key: options.key },
 			undefined,
 			options.signal,
 		);
-		token = typeof claim.token === "string" ? claim.token : undefined;
-		if (!token) await delay(1000, options.signal);
+		if (typeof paired.token !== "string") throw new Error("Missing machine token.");
+		token = paired.token;
+	} else {
+		let pairing = await post(
+			options.url + "/api/connector/pairings",
+			{ ...options.checkout, label: options.label },
+			undefined,
+			options.signal,
+		) as { id: string; secret: string; url: string; code: string };
+		options.output.pairing(
+			options.checkout?.repository ?? options.label,
+			pairing.url,
+			pairing.code,
+		);
+		while (!options.signal.aborted && !token) {
+			let claim = await post(
+				`${options.url}/api/connector/pairings/${pairing.id}/claim`,
+				{ secret: pairing.secret },
+				undefined,
+				options.signal,
+			);
+			token = typeof claim.token === "string" ? claim.token : undefined;
+			if (!token) await delay(1000, options.signal);
+		}
 	}
 	if (!token) return undefined;
+	let paired = token;
 	await update(options.directory, value => {
-		value.servers[options.url] = { token, label: options.label };
+		value.servers[options.url] = { token: paired, label: options.label };
 	});
 	return token;
 }
