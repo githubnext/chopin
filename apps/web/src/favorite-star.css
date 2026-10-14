@@ -1,0 +1,60 @@
+/*
+ * The favorite machine's star: filled on the favorite, an outline elsewhere. Where it sits in a row
+ * (the machine menu, the Machines table), the outline shows only while the row is hovered or has
+ * focus; a touch screen always shows it.
+ */
+
+.favorite-star {
+	display: inline-grid;
+	width: var(--control-height-compact);
+	height: var(--control-height-compact);
+	flex: none;
+	place-items: center;
+	border-radius: var(--radius-md);
+	color: var(--color-text-tertiary);
+	--color-icon: currentColor;
+}
+
+.favorite-star:hover {
+	background: var(--color-hover);
+	color: var(--color-text-secondary);
+}
+
+.favorite-star[data-favorite] {
+	color: var(--color-warning-icon);
+}
+
+/* In a row, another machine's outline waits for the row's hover or focus. */
+:is(.machine-menu-row, .machines-table tr) .favorite-star:not([data-favorite]) {
+	opacity: 0;
+}
+
+:is(.machine-menu-row, .machines-table tr):is(:hover, :focus-within)
+	.favorite-star:not([data-favorite]) {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	:is(.machine-menu-row, .machines-table tr) .favorite-star:not([data-favorite]) {
+		opacity: 1;
+	}
+}
+
+/* A touch target of 44px around the star without growing the row. */
+.favorite-star[data-touch] {
+	position: relative;
+}
+
+.favorite-star[data-touch]::after {
+	content: "";
+	position: absolute;
+	inset: min(0px, calc((var(--control-height-compact) - var(--control-target-coarse)) / 2));
+}
+
+.favorite-inline {
+	--color-icon: currentColor;
+	display: inline-block;
+	margin-inline-start: calc(var(--spacing) * 0.5);
+	vertical-align: -0.125em;
+	color: var(--color-warning-icon);
+}

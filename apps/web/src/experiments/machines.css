@@ -652,6 +652,18 @@
 	}
 }
 
+/* A phone's machine row: its favorite star, then the row that opens the machine. */
+.machines-row-item {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1);
+}
+
+.machines-row-item > .machines-row {
+	min-width: 0;
+	flex: 1;
+}
+
 .machines-rows-heading {
 	margin: 0 0 calc(var(--spacing) * 1);
 	color: var(--color-text-tertiary);

@@ -25,8 +25,10 @@ export type ChoosableMachine = {
 export type MachineChoiceState = {
 	/** The chosen machine's id; null for automatic. */
 	choice: string | null;
-	/** The machine automatic would use now, when one is connected. */
-	automatic: { id: string; label: string | null } | null;
+	/** The person's favorite machine, which Automatic prefers; null for none. */
+	favorite: string | null;
+	/** The machine automatic would use now, when one is connected, and whether it is the favorite. */
+	automatic: { id: string; label: string | null; favorite?: boolean } | null;
 	machines: ChoosableMachine[];
 };
 
@@ -89,24 +91,46 @@ export type MachineRow = {
 	/** The machine's id, or null for Automatic. */
 	id: string | null;
 	label: string;
+	/** Its second line as words, as a screen reader hears it. */
 	detail: string;
 	checked: boolean;
 	disabled: boolean;
+	/** It is the person's favorite machine; never Automatic. */
+	favorite: boolean;
+	/** Automatic's: the machine it uses now, and whether that is the favorite. */
+	uses?: { label: string; favorite: boolean };
+	/** Automatic's: why it is not using the favorite, as "build-box is offline". */
+	note?: string;
 	/** Absent for Automatic. */
 	machine?: ChoosableMachine;
 };
 
-/** The menu's rows: Automatic and what it uses now, then each machine, offline ones disabled. */
+/**
+ * The menu's rows: Automatic and what it uses now (starred when that is the favorite, else saying
+ * the favorite is offline), then each machine, offline ones disabled, the favorite starred.
+ */
 export function machineRows(state: MachineChoiceState, now: number): MachineRow[] {
 	let chosen = chosenMachine(state);
 	let using = automaticLabel(state);
+	let favorite = state.favorite
+		? state.machines.find(machine => machine.id === state.favorite)
+		: undefined;
+	let uses = using ? { label: using, favorite: !!state.automatic?.favorite } : undefined;
+	let note = favorite && !uses?.favorite && machineState(favorite) !== "connected"
+		? `${favorite.label} is offline`
+		: undefined;
+	let detail = uses
+		? `Uses ${uses.label}${uses.favorite ? " (favorite)" : ""} now${note ? ` · ${note}` : ""}`
+		: "No machine connected now";
 	return [
 		{
 			id: null,
 			label: "Automatic",
-			detail: using ? `Uses ${using} now` : "No machine connected now",
+			detail,
 			checked: !chosen,
 			disabled: false,
+			favorite: false,
+			...(uses ? { uses, note } : {}),
 		},
 		...state.machines.map(machine => ({
 			id: machine.id,
@@ -114,6 +138,7 @@ export function machineRows(state: MachineChoiceState, now: number): MachineRow[
 			detail: machineDetail(machine, now),
 			checked: chosen?.id === machine.id,
 			disabled: !machine.connected,
+			favorite: machine.id === state.favorite,
 			machine,
 		})),
 	];
@@ -139,8 +164,22 @@ export type MachineChoice = {
 	/** Why the last choice was refused. */
 	error?: string;
 	choose: (machine: string | null) => Promise<void>;
+	/** Set or clear the person's favorite machine; the document's choice stays as it is. */
+	favor: (machine: string, favorite: boolean) => Promise<void>;
 	refresh: () => void;
 };
+
+/** Set or clear the signed-in person's favorite machine; resolves with the favorite after. */
+export async function setFavorite(machine: string, favorite: boolean): Promise<string | null> {
+	let response = await fetch(`/api/connector/machines/${encodeURIComponent(machine)}/favorite`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ favorite }),
+	});
+	let value = await response.json();
+	if (!response.ok) throw new Error(value.message ?? value.error ?? "Chopin couldn’t save that");
+	return value.favorite ?? null;
+}
 
 /**
  * The person's machine for a document, read on open, on focus and every 15 seconds while
@@ -195,5 +234,23 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 			setSaving(false);
 		}
 	};
-	return { state, saving, error, choose, refresh };
+	let favor = async (machine: string, favorite: boolean) => {
+		let mine = ++generation.current;
+		setError(undefined);
+		// Starred at once; the server's list replaces it.
+		setState(current =>
+			current && {
+				...current,
+				favorite: favorite ? machine : current.favorite === machine ? null : current.favorite,
+			}
+		);
+		try {
+			await setFavorite(machine, favorite);
+		} catch (failure) {
+			setError(failure instanceof Error ? failure.message : "Chopin couldn’t save that");
+		} finally {
+			if (mine === generation.current) refresh();
+		}
+	};
+	return { state, saving, error, choose, favor, refresh };
 }

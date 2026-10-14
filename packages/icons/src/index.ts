@@ -57,6 +57,7 @@ export {
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,
+	StarIcon,
 	TableIcon,
 	TabsIcon,
 	WrenchIcon,

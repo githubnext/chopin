@@ -30,7 +30,7 @@ function machine(overrides: Partial<ChoosableMachine> = {}): ChoosableMachine {
 }
 
 function state(overrides: Partial<MachineChoiceState> = {}): MachineChoiceState {
-	return { choice: null, automatic: null, machines: [machine()], ...overrides };
+	return { choice: null, favorite: null, automatic: null, machines: [machine()], ...overrides };
 }
 
 test("the button names the chosen machine and its state, or what automatic uses now", () => {
@@ -91,4 +91,33 @@ test("the menu offers Automatic, then each machine, with offline ones disabled",
 	expect(
 		machineRows(state({ automatic: { id: "M_box", label: "build-box" } }), NOW)[0]!.detail,
 	).toBe("Uses build-box now");
+});
+
+test("Automatic says when it uses the favorite, and when the favorite is offline", () => {
+	let studio = machine({ id: "M_studio", label: "studio" });
+	let rows = machineRows(
+		state({
+			favorite: "M_box",
+			automatic: { id: "M_box", label: "build-box", favorite: true },
+			machines: [machine(), studio],
+		}),
+		NOW,
+	);
+	expect(rows[0]).toMatchObject({ uses: { label: "build-box", favorite: true }, note: undefined });
+	expect(rows[0]!.detail).toBe("Uses build-box (favorite) now");
+	// Only the favorite's row is starred.
+	expect(rows.map(row => row.favorite)).toEqual([false, true, false]);
+	let fallen = machineRows(
+		state({
+			favorite: "M_box",
+			automatic: { id: "M_studio", label: "studio", favorite: false },
+			machines: [machine({ connected: false }), studio],
+		}),
+		NOW,
+	);
+	expect(fallen[0]).toMatchObject({
+		uses: { label: "studio", favorite: false },
+		note: "build-box is offline",
+	});
+	expect(fallen[0]!.detail).toBe("Uses studio now · build-box is offline");
 });

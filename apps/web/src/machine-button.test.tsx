@@ -11,6 +11,7 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 	return {
 		state: {
 			choice: "M_box",
+			favorite: null,
 			automatic: null,
 			machines: [{
 				id: "M_box",
@@ -28,6 +29,7 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 		},
 		saving: false,
 		choose: async () => {},
+		favor: async () => {},
 		refresh: () => {},
 	};
 }

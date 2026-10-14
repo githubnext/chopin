@@ -264,6 +264,48 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
 	await offlineLook(true);
 
+	// A star in the menu sets the favorite Automatic prefers, without changing the choice.
+	await header.click();
+	let boxRow = menu.locator(".machine-menu-row").filter({
+		has: page.getByRole("menuitemradio", { name: /^build-box/ }),
+	});
+	let star = menu.getByRole("button", { name: "Favorite build-box" });
+	await expect(star).toHaveAttribute("aria-pressed", "false");
+	await boxRow.hover();
+	await star.click();
+	let starred = menu.getByRole("button", { name: "Remove build-box as favorite" });
+	await expect(starred).toHaveAttribute("aria-pressed", "true");
+	await expect(menu).toBeVisible();
+	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
+	// The favorite is offline, so Automatic says so and uses the laptop.
+	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
+		.toContainText("Uses laptop now · build-box is offline");
+	await expect(menu.getByRole("button", { name: /favorite/i })).toHaveCount(2);
+	await expect(menu.locator("[data-star][aria-pressed=true]")).toHaveCount(1);
+	await page.keyboard.press("Escape");
+	// Back online, Automatic uses the favorite.
+	await box.reconnect();
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await expect(header).toHaveAccessibleName("Machine: Automatic, uses build-box");
+	await header.click();
+	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
+		.toContainText("Uses build-box (favorite) now");
+	// The star is its own control: Right from the machine's row, Left back.
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	let focusedRow = page.locator(":focus");
+	await expect(focusedRow).toHaveAttribute("role", "menuitemradio");
+	let rowName = await focusedRow.getAttribute("aria-checked");
+	expect(rowName).toBe("false");
+	let laptopStar = menu.getByRole("button", { name: "Favorite laptop" });
+	let target = (await focusedRow.textContent())?.startsWith("build-box") ? starred : laptopStar;
+	await page.keyboard.press("ArrowRight");
+	await expect(target).toBeFocused();
+	await page.keyboard.press("ArrowLeft");
+	await expect(focusedRow).toHaveAttribute("role", "menuitemradio");
+	await shoot(page, "desktop-favorite-menu");
+	await page.keyboard.press("Escape");
+
 	// Add machine opens the Machines page's Add your computer.
 	await chat.click();
 	await menu.getByRole("menuitem", { name: "Add machine…" }).click();

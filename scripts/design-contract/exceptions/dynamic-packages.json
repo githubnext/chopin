@@ -217,6 +217,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > StarIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > LinkPlusIcon > <LineIcon>",
 				1
 			],
@@ -410,7 +417,7 @@
 				1
 			]
 		],
-		"sourceHash": "7f9aee6935f77a6940153f60fb9aaa7850a3e33f4dc1864614091c028a850618"
+		"sourceHash": "ff0dccde87b5d7d52fe7df839f4b7d55a07ac1e1de73384b6acce853dcefcd4c"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

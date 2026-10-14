@@ -2,9 +2,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Drawer } from "@base-ui/react/drawer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon } from "@chopin/icons";
+import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon, StarIcon } from "@chopin/icons";
 
 import { documentMenuKeyAction } from "./document-actions-menu";
+import { FavoriteStar } from "./favorite-star";
 import { chosenMachine, machineButtonLabel, machineRows, machineState } from "./machine-choice";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
@@ -49,13 +50,29 @@ function go(path: string) {
 	window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+/** A row's second line; Automatic's stars the favorite it uses, or says the favorite is offline. */
+function RowDetail({ row }: { row: MachineRow }) {
+	if (!row.uses) return <span className="machine-menu-detail">{row.detail}</span>;
+	return (
+		<span className="machine-menu-detail">
+			Uses {row.uses.label}
+			{row.uses.favorite && (
+				<>
+					<StarIcon aria-hidden="true" className="favorite-inline" filled size={12} />
+					<span className="sr-only">{" (favorite)"}</span>
+				</>
+			)} now{row.note ? ` · ${row.note}` : ""}
+		</span>
+	);
+}
+
 function RowContent({ row }: { row: MachineRow }) {
 	return (
 		<>
 			<MachineGlyph machine={row.machine} size={18} />
 			<span className="machine-menu-option">
 				<span className="machine-menu-title">{row.label}</span>
-				<span className="machine-menu-detail">{row.detail}</span>
+				<RowDetail row={row} />
 			</span>
 			<span className="machine-menu-check">
 				{row.checked && <CheckIcon aria-hidden="true" size={14} />}
@@ -155,6 +172,16 @@ export function MachineButton(
 			close(false);
 			return;
 		}
+		let active = document.activeElement as HTMLElement | null;
+		// Right from a machine's row reaches its star; Left goes back.
+		if (event.key === "ArrowRight") {
+			let star = active?.parentElement?.querySelector<HTMLElement>("[data-star]");
+			if (star && star !== active) {
+				event.preventDefault();
+				star.focus();
+			}
+			return;
+		}
 		let action = documentMenuKeyAction(event.key);
 		if (!action) return;
 		event.preventDefault();
@@ -164,7 +191,11 @@ export function MachineButton(
 		}
 		let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")]
 			.filter(item => item.getAttribute("aria-disabled") !== "true");
-		let current = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
+		// From a star, as from its row.
+		let row = active?.hasAttribute("data-star")
+			? active.parentElement?.querySelector<HTMLElement>("[role^=menuitem]")
+			: active;
+		let current = Math.max(0, items.indexOf(row as HTMLElement));
 		let next = action === "first"
 			? 0
 			: action === "last"
@@ -179,23 +210,46 @@ export function MachineButton(
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. Only its accessible name says why.
 	let offline = !!chosen && !chosen.connected;
-	let item = (row: MachineRow, sheet: boolean) => (
-		<button
-			aria-checked={row.checked}
-			aria-disabled={row.disabled || undefined}
-			className={`${sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}${
-				row.disabled ? " machine-offline" : ""
-			}`}
-			data-density="detailed"
-			data-disabled={row.disabled || undefined}
-			key={row.id ?? "automatic"}
-			onClick={() => pick(row)}
-			role="menuitemradio"
-			type="button"
-		>
-			<RowContent row={row} />
-		</button>
-	);
+	let item = (row: MachineRow, sheet: boolean) => {
+		let button = (
+			<button
+				aria-checked={row.checked}
+				aria-disabled={row.disabled || undefined}
+				className={`${sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}${
+					row.disabled ? " machine-offline" : ""
+				}`}
+				data-density="detailed"
+				data-disabled={row.disabled || undefined}
+				key={row.id ?? "automatic"}
+				onClick={() => pick(row)}
+				role="menuitemradio"
+				type="button"
+			>
+				<RowContent row={row} />
+			</button>
+		);
+		let id = row.id;
+		if (!id) return button;
+		// A machine's star sets or clears the favorite without changing the document's choice.
+		return (
+			<div className="machine-menu-row" key={id}>
+				{button}
+				<FavoriteStar
+					favorite={row.favorite}
+					menu
+					touch={sheet}
+					label={row.label}
+					onKeyDown={event => {
+						if (event.key !== "ArrowLeft") return;
+						event.preventDefault();
+						event.currentTarget.parentElement?.querySelector<HTMLElement>("[role^=menuitem]")
+							?.focus();
+					}}
+					onToggle={() => void choice.favor(id, !row.favorite)}
+				/>
+			</div>
+		);
+	};
 	let addItem = (sheet: boolean) => (
 		<button
 			className={sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}
@@ -304,7 +358,11 @@ function MachineSheet({ children, onClose }: { children: ReactNode; onClose: () 
 							className="machine-sheet-group"
 							onClick={event => {
 								let target = (event.target as HTMLElement).closest("button");
-								if (target && target.getAttribute("aria-disabled") !== "true") setOpen(false);
+								// A star sets the favorite; the sheet stays for the choice.
+								if (
+									target && target.getAttribute("aria-disabled") !== "true"
+									&& !target.hasAttribute("data-star")
+								) setOpen(false);
 							}}
 							role="menu"
 						>

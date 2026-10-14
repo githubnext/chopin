@@ -19,6 +19,7 @@ const base: Machine = {
 	agent: null,
 	service: false,
 	planner: false,
+	favorite: false,
 };
 
 test("a machine's state and its words: connected, last seen, or needing pairing again", () => {

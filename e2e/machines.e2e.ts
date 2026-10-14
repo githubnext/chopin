@@ -22,6 +22,15 @@ import { ROOT } from "./servers";
 import type { Page } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
+/** Set to a directory to keep the screenshots a pull request shows. */
+const SHOTS = process.env.CHOPIN_SHOTS;
+
+async function shot(page: Page, name: string) {
+	if (!SHOTS) return;
+	await mkdir(SHOTS, { recursive: true });
+	await new Promise(resolve => setTimeout(resolve, 400));
+	await page.screenshot({ path: `${SHOTS}/${name}.png` });
+}
 const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
 const KEY = /chopin_k_[A-Za-z0-9_-]{43}/;
 
@@ -406,7 +415,9 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	for (let heading of ["Machine", "Host", "Version", "Agent", "Last seen"]) {
 		await expect(table.getByRole("columnheader", { name: heading, exact: true })).toBeVisible();
 	}
-	let row = (name: string) => table.getByRole("row", { name: new RegExp(`^${name}`) });
+	// A row's name starts with its favorite star's.
+	let row = (name: string) =>
+		table.getByRole("row", { name: new RegExp(`^(Favorite |Remove )?${name}`) });
 	await expect(row("build-box")).toContainText("Service");
 	await expect(row("build-box")).toContainText("build-box.internal");
 	await expect(row("build-box")).toContainText("chopin 0.0.5");
@@ -430,6 +441,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	let menu = page.getByRole("menu", { name: "Actions for build-box" });
 	await expect(menu.getByRole("menuitem")).toHaveText([
 		"Edit machine name…",
+		"Set as favorite",
 		"Disconnect machine…",
 	]);
 	await menu.getByRole("menuitem", { name: "Edit machine name…" }).click();
@@ -456,16 +468,16 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.getByRole("searchbox", { name: "Search machines" })).toHaveCount(0);
 	await threeMachines(page);
 	let rows = page.getByRole("region", { name: /^@mia-/ });
-	await expect(rows.getByRole("button")).toHaveCount(3);
+	await expect(rows.locator(".machines-row")).toHaveCount(3);
 	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
 	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
-	await expect(rows.getByRole("button", { name: /build-box/ }))
+	await expect(rows.locator(".machines-row").filter({ hasText: "build-box" }))
 		.toContainText("build-box.internal · chopin 0.0.5 · Linux");
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
-	await expect(rows.getByRole("button")).toHaveCount(1);
+	await expect(rows.locator(".machines-row")).toHaveCount(1);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
 
-	await rows.getByRole("button", { name: /build-box/ }).click();
+	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
 	await expect(page).toHaveURL(/\/connect\?machine=/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
 	// The state shows once, in the Status row, not again under the name.
@@ -482,5 +494,78 @@ test("on a phone, machines are rows that open their own view, where they rename"
 
 	await page.getByRole("button", { name: "Machines", exact: true }).click();
 	await expect(page).toHaveURL(/\/connect$/);
-	await expect(rows.getByRole("button", { name: /Build box/ })).toBeVisible();
+	await expect(rows.locator(".machines-row").filter({ hasText: "Build box" })).toBeVisible();
+});
+
+test("a favorite machine: its star in the table and the row menu, one at a time", async ({ join: enter }) => {
+	let page = await enter(person());
+	await threeMachines(page);
+	let table = page.getByRole("table", { name: "Your machines" });
+	let row = (name: string) =>
+		table.getByRole("row", { name: new RegExp(`^(Favorite |Remove )?${name}`) });
+	let star = row("studio").getByRole("button", { name: "Favorite studio" });
+	await expect(star).toHaveAttribute("aria-pressed", "false");
+	// The outline waits for the row's hover or focus.
+	expect(await star.evaluate(item => getComputedStyle(item).opacity)).toBe("0");
+	await row("studio").hover();
+	expect(await star.evaluate(item => getComputedStyle(item).opacity)).toBe("1");
+	await star.click();
+	await expect(row("studio").getByRole("button", { name: "Remove studio as favorite" }))
+		.toHaveAttribute("aria-pressed", "true");
+	// The row menu sets another, and only one is ever the favorite.
+	await row("build-box").getByRole("button", { name: "Actions for build-box" }).click();
+	await page.getByRole("menu", { name: "Actions for build-box" })
+		.getByRole("menuitem", { name: "Set as favorite" }).click();
+	await expect(row("build-box").getByRole("button", { name: "Remove build-box as favorite" }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(row("studio").getByRole("button", { name: "Favorite studio" }))
+		.toHaveAttribute("aria-pressed", "false");
+	await expect(table.locator(".favorite-star[aria-pressed=true]")).toHaveCount(1);
+	await page.reload();
+	await expect(row("build-box").getByRole("button", { name: "Remove build-box as favorite" }))
+		.toBeAttached();
+	await row("build-box").getByRole("button", { name: "Actions for build-box" }).click();
+	await expect(
+		page.getByRole("menu", { name: "Actions for build-box" })
+			.getByRole("menuitem", { name: "Remove favorite" }),
+	).toBeVisible();
+	await page.keyboard.press("Escape");
+	await row("studio").hover();
+	await shot(page, "machines-table-favorite");
+});
+
+test("on a phone, a machine's row has its star, and its view sets the favorite", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	await threeMachines(page);
+	let rows = page.getByRole("region", { name: /^@mia-/ });
+	let star = rows.getByRole("button", { name: "Favorite studio" });
+	await expect(star).toBeVisible();
+	// A 44px target.
+	let box = (await star.boundingBox())!;
+	let reach = await page.evaluate(
+		([x, y]) => !!document.elementFromPoint(x!, y!)?.closest(".favorite-star"),
+		[
+			box.x + box.width / 2,
+			box.y + box.height / 2 + 21,
+		],
+	);
+	expect(reach).toBe(true);
+	await star.tap();
+	await expect(rows.getByRole("button", { name: "Remove studio as favorite" }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(page).toHaveURL(/\/connect$/);
+	await shot(page, "phone-machines-favorite");
+	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
+	await expect(page).toHaveURL(/\/connect\?machine=/);
+	let set = page.getByRole("button", { name: "Set as favorite" });
+	await expect(set).toHaveAttribute("aria-pressed", "false");
+	await set.click();
+	await expect(page.getByRole("button", { name: "Remove favorite" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await shot(page, "phone-machine-detail-favorite");
+	await page.getByRole("button", { name: "Machines", exact: true }).click();
+	await expect(rows.getByRole("button", { name: "Remove build-box as favorite" })).toBeVisible();
+	await expect(rows.getByRole("button", { name: "Favorite studio" })).toBeVisible();
 });

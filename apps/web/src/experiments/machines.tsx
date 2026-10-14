@@ -8,10 +8,12 @@ import {
 	EllipsisIcon,
 	PencilIcon,
 	RestartIcon,
+	StarIcon,
 } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
+import { setFavorite } from "../machine-choice";
 import { listMachines } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem, MenuSeparator } from "../menu-item";
@@ -69,7 +71,19 @@ export function useMachines() {
 	}, []);
 	let forget = (id: string) => setMachines(current => current?.filter(value => value.id !== id));
 	let retry = useCallback(() => reload.current(), []);
-	return { machines, error, recommended, forget, retry };
+	/** Set or clear the favorite: starred at once, then as the server says. */
+	let favor = async (id: string, favorite: boolean) => {
+		let mark = (chosen: string | null) =>
+			setMachines(current => current?.map(value => ({ ...value, favorite: value.id === chosen })));
+		let before = machines?.find(value => value.favorite)?.id ?? null;
+		mark(favorite ? id : before === id ? null : before);
+		try {
+			mark(await setFavorite(id, favorite));
+		} catch {
+			reload.current();
+		}
+	};
+	return { machines, error, recommended, forget, retry, favor };
 }
 
 /**
@@ -226,10 +240,12 @@ export type CopyItem = { label: string; command: string };
  * opens it, arrows, Home and End move within it, and Escape closes it.
  */
 export function MachineActions(
-	{ copies, machine, onDisconnect, onRename }: {
+	{ copies, machine, onDisconnect, onFavorite, onRename }: {
 		copies: CopyItem[];
 		machine: Machine;
 		onDisconnect: () => void;
+		/** Set or clear the machine as the favorite. */
+		onFavorite?: () => void;
 		onRename: () => void;
 	},
 ) {
@@ -342,6 +358,17 @@ export function MachineActions(
 						<PencilIcon aria-hidden="true" size={14} />
 						Edit machine name…
 					</MenuItem>
+					{onFavorite && (
+						<MenuItem
+							onClick={() => {
+								close(true);
+								onFavorite();
+							}}
+						>
+							<StarIcon aria-hidden="true" filled={machine.favorite} size={14} />
+							{machine.favorite ? "Remove favorite" : "Set as favorite"}
+						</MenuItem>
+					)}
 					{copies.map(item => {
 						let state = copied?.command === item.command ? copied : undefined;
 						return (

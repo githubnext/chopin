@@ -103,6 +103,23 @@
 	align-items: center;
 }
 
+/* A machine's row: its item, with the favorite star over the item's right end. */
+.machine-menu-row {
+	position: relative;
+}
+
+.machine-menu-row > [role="menuitemradio"] {
+	width: 100%;
+	padding-inline-end: calc(var(--control-height-compact) + var(--spacing) * 2);
+}
+
+.machine-menu-star {
+	position: absolute;
+	top: 50%;
+	right: var(--spacing);
+	translate: 0 -50%;
+}
+
 /*
  * Offline looks the same everywhere: an offline machine's menu rows, a machine button whose machine
  * is offline, and Build plan while the chosen machine is. Nothing beside them says so; their

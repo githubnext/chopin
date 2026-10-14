@@ -53,6 +53,18 @@ export function CheckIcon(props: IconProps) {
 	);
 }
 
+/** A star: outlined, or filled for the one marked, as the favorite machine is. */
+export function StarIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
+	return (
+		<LineIcon {...props}>
+			<polygon
+				fill={filled ? "currentColor" : "none"}
+				points="9 1.75 11.24 6.289 16.25 7.017 12.625 10.551 13.481 15.54 9 13.185 4.519 15.54 5.375 10.551 1.75 7.017 6.76 6.289 9 1.75"
+			/>
+		</LineIcon>
+	);
+}
+
 export function DecisionIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

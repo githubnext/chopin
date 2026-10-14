@@ -21,6 +21,8 @@ export type Machine = {
 	service: boolean;
 	/** It runs Planners for documents too. */
 	planner: boolean;
+	/** The person's favorite machine, which Automatic prefers. */
+	favorite: boolean;
 };
 
 export type MachineSummary = { paired: number; connected: number };

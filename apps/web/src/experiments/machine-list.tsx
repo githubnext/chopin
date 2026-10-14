@@ -11,6 +11,7 @@ import {
 	PlayIcon,
 	SearchIcon,
 	ServerIcon,
+	StarIcon,
 } from "@chopin/icons";
 import {
 	Badge,
@@ -22,6 +23,7 @@ import {
 	TableRow,
 } from "@chopin/visuals";
 import { ago } from "../build-model";
+import { FavoriteStar } from "../favorite-star";
 import { IconButton } from "../icon-button";
 import { updateAvailable } from "../machine-summary";
 import { motionImmediately } from "../motion-input";
@@ -303,6 +305,11 @@ function MachineTable(
 							<TableCell>
 								<span className="machines-stack">
 									<span className="machines-name-line">
+										<FavoriteStar
+											favorite={machine.favorite}
+											label={machine.label}
+											onToggle={() => void machines.favor(machine.id, !machine.favorite)}
+										/>
 										<span className="machines-name">{machine.label}</span>
 										{machine.service && (
 											<Badge
@@ -372,6 +379,7 @@ function MachineTable(
 									copies={copiesFor(machine, machines.recommended)}
 									machine={machine}
 									onDisconnect={() => onDisconnect(machine)}
+									onFavorite={() => void machines.favor(machine.id, !machine.favorite)}
 									onRename={() => onRename(machine)}
 								/>
 							</TableCell>
@@ -395,9 +403,10 @@ function page() {
  * a quiet second line, and a chevron to its own view.
  */
 function MachineRows(
-	{ list, login }: {
+	{ list, login, machines }: {
 		list: Machine[];
 		login: string | undefined;
+		machines: ReturnType<typeof useMachines>;
 	},
 ) {
 	let headingId = useId();
@@ -428,7 +437,13 @@ function MachineRows(
 							.filter(Boolean).join(" · ") || machine.repositories[0] || "Connected"
 						: statusWords(machine, now);
 					return (
-						<li key={machine.id}>
+						<li className="machines-row-item" key={machine.id}>
+							<FavoriteStar
+								favorite={machine.favorite}
+								label={machine.label}
+								onToggle={() => void machines.favor(machine.id, !machine.favorite)}
+								touch
+							/>
 							<button
 								className="machines-row"
 								onClick={() => {
@@ -505,7 +520,7 @@ export function YourMachines(
 				</span>
 			)}
 			{phone
-				? <MachineRows list={list} login={login} />
+				? <MachineRows list={list} login={login} machines={machines} />
 				: (
 					<MachineTable
 						labelledBy={headingId}
@@ -594,6 +609,17 @@ export function MachineDetail(
 					<button className="machines-row" onClick={() => rename(machine)} type="button">
 						<PencilIcon aria-hidden="true" size={14} />
 						Edit machine name…
+					</button>
+				</li>
+				<li>
+					<button
+						aria-pressed={machine.favorite}
+						className="machines-row"
+						onClick={() => void machines.favor(machine.id, !machine.favorite)}
+						type="button"
+					>
+						<StarIcon aria-hidden="true" filled={machine.favorite} size={14} />
+						{machine.favorite ? "Remove favorite" : "Set as favorite"}
 					</button>
 				</li>
 				{copiesFor(machine, machines.recommended).map(item => (

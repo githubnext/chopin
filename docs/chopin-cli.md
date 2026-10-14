@@ -217,11 +217,16 @@ you change it:
 Disconnecting a machine clears every choice of it, and clears it as your
 favorite.
 
-You can also mark one of your machines as your favorite. **Automatic** then
+You can also mark one of your machines as your favorite with the star at the
+right of its row in the machine menu, or on the **Machines** page (its star,
+or **Set as favorite** in its menu). Only one machine is your favorite, and
+starring it doesn't change the document's choice. **Automatic** then
 uses it first whenever it is connected for the document's repository and free,
 and otherwise picks as before, so Automatic may move to another machine; a
 machine you chose for a document never does. Your favorite is yours alone and
-applies to every document where you leave **Automatic** on.
+applies to every document where you leave **Automatic** on. The menu's
+Automatic row says which machine it uses, starred when that is your favorite,
+or that your favorite is offline.
 
 ### Coding agents
 
