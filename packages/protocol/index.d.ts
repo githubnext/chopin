@@ -231,6 +231,7 @@ export declare namespace Sidebar {
 export type { Chat } from "./chat";
 export type { Comment } from "./comment";
 export type { ConversationPlan } from "./conversation-plan";
+export type { DocumentDevelopment } from "./document-development";
 export type { Experiment } from "./experiment";
 export type { Job } from "./job";
 export type { Plan } from "./plan";
@@ -243,6 +244,7 @@ export type Incoming =
 	| import("./chat").Chat.Incoming
 	| import("./comment").Comment.Incoming
 	| import("./conversation-plan").ConversationPlan.Incoming
+	| import("./document-development").DocumentDevelopment.Incoming
 	| import("./implementation").Implementation.Incoming
 	| import("./job").Job.Incoming
 	| import("./plan").Plan.Incoming
@@ -256,6 +258,7 @@ export type Outgoing =
 	| import("./chat").Chat.Outgoing
 	| import("./comment").Comment.Outgoing
 	| import("./conversation-plan").ConversationPlan.Outgoing
+	| import("./document-development").DocumentDevelopment.Outgoing
 	| import("./implementation").Implementation.Outgoing
 	| import("./job").Job.Outgoing
 	| import("./plan").Plan.Outgoing

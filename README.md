@@ -191,7 +191,10 @@ even when those messages did not address the Planner. Saved member messages also
 maintain the document's title independently of conversation-derived cards. Weak
 or incidental discussion leaves the title alone; topic changes may refine a title
 someone chose. This work obeys `AGENT`, ownership and implementation locks, and
-does not require Jev. A title job can seed a goal only before body prose exists.
+does not require Jev. A title job can seed a goal only before body prose exists. With
+`CONVERSATION_DOCUMENT=on`, an isolated worker also develops provisional prose
+from ordinary discussion, preserving human edits and decisions; see
+[Document development](docs/document-development.md).
 
 The first eligible model-backed action, including title maintenance, a Planner turn
 or research request, claims the

@@ -18,11 +18,13 @@ export function NavigationFocusScope(
 		active = true,
 		children,
 		initialFocus,
+		fallbackFocus,
 		onDismiss,
 	}: {
 		active?: boolean;
 		children: ReactNode;
 		initialFocus?: RefObject<HTMLElement | null>;
+		fallbackFocus?: () => HTMLElement | null;
 		onDismiss: () => void;
 	},
 ) {
@@ -55,8 +57,14 @@ export function NavigationFocusScope(
 		return () => {
 			observer.disconnect();
 			if (previous.current?.isConnected) previous.current.focus();
+			else {
+				let fallback = fallbackFocus?.();
+				if (fallback?.isConnected && !fallback.closest('[inert], [aria-hidden="true"]')) {
+					fallback.focus({ preventScroll: true });
+				}
+			}
 		};
-	}, [active, initialFocus]);
+	}, [active, initialFocus, fallbackFocus]);
 
 	function keyDown(event: KeyboardEvent<HTMLDivElement>) {
 		if (!active) return;

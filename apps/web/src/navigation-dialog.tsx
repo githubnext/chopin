@@ -17,6 +17,7 @@ export function NavigationDialog(
 		children,
 		className = "",
 		initialFocus,
+		fallbackFocus,
 		motion,
 		onDismiss,
 		palette = false,
@@ -26,6 +27,8 @@ export function NavigationDialog(
 		/** Extra classes for the dialog itself, such as a wider size. */
 		className?: string;
 		initialFocus?: RefObject<HTMLElement | null>;
+		/** Where focus returns if the control that opened this dialog has been removed. */
+		fallbackFocus?: () => HTMLElement | null;
 		motion: NavigationDialogMotion;
 		onDismiss: () => void;
 		/** A command palette: its search field is the visible header, so the title is only named. */
@@ -51,7 +54,12 @@ export function NavigationDialog(
 				onClick={onDismiss}
 				type="button"
 			/>
-			<NavigationFocusScope active={active} initialFocus={initialFocus} onDismiss={onDismiss}>
+			<NavigationFocusScope
+				active={active}
+				fallbackFocus={fallbackFocus}
+				initialFocus={initialFocus}
+				onDismiss={onDismiss}
+			>
 				<div
 					aria-labelledby={titleId}
 					aria-modal="true"
