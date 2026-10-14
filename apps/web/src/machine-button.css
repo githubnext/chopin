@@ -1,0 +1,191 @@
+/*
+ * The machine button: which of the person's machines works on a document, beside Build plan and
+ * in the Chat composer's footer. Its menu follows Add machine's: a white panel on the raised
+ * shadow, generous rows with an icon, a medium name and one quiet line, a check on the choice.
+ */
+
+.machine-glyph {
+	position: relative;
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	color: var(--color-text-secondary);
+}
+
+.machine-glyph[data-automatic] {
+	color: var(--color-text-tertiary);
+}
+
+/* The status dot as a badge on the icon's corner, ringed in the surface behind it. */
+.machine-glyph-dot {
+	position: absolute;
+	right: calc(var(--spacing) * -1);
+	bottom: calc(var(--spacing) * -1);
+	box-sizing: content-box;
+	border-width: calc(var(--spacing) * 0.5);
+	border-style: solid;
+	border-color: var(--color-page);
+}
+
+:is(.machine-button:hover, .machine-button[aria-expanded="true"], .machine-menu-item:is(:hover:not([data-disabled]), :focus-visible), .machine-sheet-item:active:not([data-disabled]))
+	.machine-glyph-dot {
+	border-color: var(--color-hover);
+}
+
+.machine-button {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 14rem;
+	height: var(--control-height-compact);
+	flex: none;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-md);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-secondary);
+}
+
+.machine-button:hover,
+.machine-button[aria-expanded="true"] {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.machine-button[data-compact] {
+	padding-inline: calc(var(--spacing) * 1.5);
+}
+
+.machine-button-name {
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.machine-button-chevron {
+	flex: none;
+	rotate: 90deg;
+	color: var(--color-text-tertiary);
+}
+
+.machine-menu {
+	position: fixed;
+	z-index: 60;
+	width: min(20rem, calc(100vw - var(--spacing) * 4));
+	max-height: min(28rem, calc(100dvh - var(--spacing) * 4));
+	overflow-y: auto;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	transform-origin: var(--motion-origin-x, left) top;
+}
+
+.machine-menu[data-side="above"] {
+	transform-origin: var(--motion-origin-x, left) bottom;
+}
+
+.machine-menu-item {
+	align-items: center;
+}
+
+.machine-menu-item[data-disabled],
+.machine-sheet-item[data-disabled] {
+	cursor: default;
+	opacity: 0.55;
+}
+
+.machine-menu-item[data-disabled]:hover {
+	background: none;
+	color: var(--color-text-secondary);
+}
+
+.machine-menu-option {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 0.5);
+}
+
+.machine-menu-title {
+	overflow: hidden;
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--color-text-primary);
+}
+
+.machine-menu-detail {
+	overflow: hidden;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--color-text-secondary);
+}
+
+.machine-menu-check {
+	display: inline-grid;
+	width: calc(var(--spacing) * 3.5);
+	flex: none;
+	place-items: center;
+	color: var(--color-brand-ink);
+}
+
+.machine-menu-separator {
+	margin: var(--menu-separator-margin) 0;
+	height: var(--edge-width);
+	background: var(--color-edge);
+}
+
+/* Phone: the same rows on a sheet, each a 44px target or taller. */
+.machine-sheet-group {
+	display: grid;
+	overflow: hidden auto;
+	max-height: calc(100dvh * var(--sheet-large-detent));
+	border-radius: var(--radius-sheet);
+	background: var(--color-page);
+	padding-block: var(--spacing);
+	box-shadow: var(--shadow-overlay);
+}
+
+.machine-sheet-item {
+	display: flex;
+	min-height: var(--control-target-coarse);
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 4);
+	text-align: left;
+	font-size: var(--text-base);
+	-webkit-tap-highlight-color: transparent;
+}
+
+.machine-sheet-item:active:not([data-disabled]) {
+	background: var(--color-hover);
+}
+
+/* A phone's button is its icon alone, as round as the composer pill's controls. */
+.machine-button[data-phone][data-compact] {
+	position: relative;
+	width: var(--composer-pill-control);
+	height: var(--composer-pill-control);
+	justify-content: center;
+	padding: 0;
+	border-radius: var(--radius-full);
+}
+
+/* Its touch target reaches 44px around the pill's 36px control without growing the pill. */
+.machine-button[data-phone]::after {
+	content: "";
+	position: absolute;
+	inset: min(0px, calc((var(--composer-pill-control) - var(--control-target-coarse)) / 2));
+}
+
+.machine-button[data-phone]:not([data-compact]) {
+	position: relative;
+	min-height: 0;
+}

@@ -301,6 +301,12 @@ describe("first build", () => {
 		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
 		expect(buildRefusalCopy("unanswered questionnaires")).toBe("Answer the open decisions first");
 		expect(buildRefusalCopy("something internal")).toBe("The build couldn’t start. Try again");
+		// The server names the machine the person chose; the copy keeps the name.
+		expect(
+			buildRefusalCopy(
+				"build-box is offline. Start chopin connect on it, or choose another machine.",
+			),
+		).toBe("build-box is offline");
 		expect(draftRefusalCopy("No Planner is attached to this document. To attach one, …"))
 			.toBe("Connect a Planner to this document to build.");
 		expect(draftRefusalCopy("anything", "planner-not-attached"))

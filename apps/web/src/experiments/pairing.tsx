@@ -78,7 +78,11 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 	let arrived = useArrivedMachine(list);
 	let bannerId = useId();
 	let login = useLogin();
-	let [adding, setAdding] = useState(false);
+	// /connect?add, as a document's machine button's Add machine opens it, starts with the dialog.
+	let [adding, setAdding] = useState(() => new URLSearchParams(location.search).has("add"));
+	useEffect(() => {
+		if (new URLSearchParams(location.search).has("add")) history.replaceState(null, "", "/connect");
+	}, []);
 	let dialog = useTransitionPresence(adding ? true : undefined, 150, motionImmediately());
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef<string>(undefined);

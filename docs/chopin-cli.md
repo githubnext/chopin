@@ -191,16 +191,22 @@ secrets in your agent's own login instead. You can't set `PATH` or a
 
 With more than one machine connected for a repository, Chopin picks one for
 you by default: the machine that last worked on the document, else the first
-idle one. To pick it yourself, choose a machine for the document. The choice
-is yours alone and holds for that document until you change it:
+idle one. To pick it yourself, use the machine button in the document's Chat
+box or beside **Build plan**. It shows the machine and its state, such as
+**build-box** with a green dot. Both buttons show the same choice; changing
+either changes both. Its menu offers **Automatic** (with the machine it uses
+now), your machines that serve the repository (offline ones greyed out), and
+**Add machine…**. The choice is yours alone and holds for that document until
+you change it:
 
 - **Build plan**, **Build**, **Run** and investigations you start in the
   document go to the machine you chose, behind any work it is already running.
 - Rebuilds and prototypes Chopin starts for you follow the same choice, and
   still need the machine's consent to automatic work.
 - You can choose only your own machines that serve the document's repository.
-- If the machine you chose is offline, work fails with **build-box is
-  offline** (your machine's name) instead of moving to another machine. Start
+- If the machine you chose is offline, **Build plan** says **build-box is
+  offline** (your machine's name) instead of starting, and other work fails
+  with the same words rather than moving to another machine. Start
   `chopin connect` on it, or choose another one.
 - If Chopin can't read your choice (its database is briefly unavailable), work
   fails with **Can't read your machine choice right now. Try again.** It never

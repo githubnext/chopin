@@ -408,14 +408,21 @@ function capsuleBuild(page: import("@playwright/test").Page) {
 }
 
 /**
- * Build stays 12px from the faces, with the rule as far from Build as from the first face; the faces
+ * Build, and the machine button after it, stay 12px from the faces, with the rule as far from Build as from the first face; the faces
  * sit as far from the rule as from the bar's end, top and bottom.
  */
 async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 	let people = build.page().getByRole("group", { name: /^People here/ });
 	await expect(build).toBeVisible();
 	await expect(people.locator(":scope > [data-tooltip]").first()).toBeVisible();
-	let control = await build.evaluate(element => element.getBoundingClientRect().right);
+	// The machine button follows Build's controls in the bar when the viewer is a writer.
+	let control = await build.evaluate(element =>
+		Math.max(
+			element.getBoundingClientRect().right,
+			...[...element.closest("[data-document-title-bar]")!.querySelectorAll(".machine-button")]
+				.map(machine => machine.getBoundingClientRect().right),
+		)
+	);
 	let gaps = await people.evaluate(group => {
 		let rule = parseFloat(getComputedStyle(group).borderInlineStartWidth);
 		let bar = group.closest("[data-document-title-bar]")!;

@@ -30,6 +30,7 @@ import { buildBlockerSummary } from "./build-blockers";
 import "./build-plan-button.css";
 import "./build-blocker-popover.css";
 
+import type { ReactNode } from "react";
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { BuildLook, FirstBuild } from "./build-model";
 import type { Wire } from "./wire";
@@ -365,6 +366,8 @@ export function BuildPlanButton(
 		compact,
 		documentURL,
 		hot,
+		machine,
+		machineOffline,
 		onBlockerSelect,
 		onExplain,
 		onHover,
@@ -374,6 +377,10 @@ export function BuildPlanButton(
 	}: {
 		blockers?: readonly BuildBlocker[];
 		build: BuildPlan;
+		/** The machine button, beside Build plan or its capsule. */
+		machine?: ReactNode;
+		/** The machine the person chose is offline, named: Build plan says so instead of starting. */
+		machineOffline?: string;
 		canEdit: boolean;
 		/** Phone: the glyph alone; Build's headline carries the words. */
 		compact?: boolean;
@@ -394,6 +401,16 @@ export function BuildPlanButton(
 	let { look } = build;
 	let reason = useId();
 	let actionReason = useId();
+	// Build plan pressed while the chosen machine is offline says so, until the choice changes.
+	let [offlineShown, setOfflineShown] = useState<string>();
+	useEffect(() => {
+		setOfflineShown(undefined);
+	}, [machineOffline]);
+	useEffect(() => {
+		if (!offlineShown) return;
+		let timer = window.setTimeout(() => setOfflineShown(undefined), 4000);
+		return () => window.clearTimeout(timer);
+	}, [offlineShown]);
 	// Announce a change of state politely, once, not every tip or count that follows it.
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef(look.kind);
@@ -455,6 +472,7 @@ export function BuildPlanButton(
 						phone={phone}
 					/>
 				</Suspense>
+				{machine}
 				{live}
 			</span>
 		);
@@ -467,6 +485,7 @@ export function BuildPlanButton(
 				<Suspense fallback={<span className="text-sm text-text-secondary">Connect Chopin</span>}>
 					<BuildConnectionPopover documentURL={documentURL} kind="planner" phone={phone} />
 				</Suspense>
+				{machine}
 				{live}
 			</>
 		);
@@ -474,23 +493,30 @@ export function BuildPlanButton(
 	if (look.kind === "plan") {
 		if (!canEdit) return null;
 		let blocked = look.blocked;
+		let offline = blocked ? undefined : machineOffline;
 		return (
 			<>
 				<button
 					aria-label="Build plan"
-					aria-describedby={blocked ? reason : undefined}
-					aria-disabled={blocked ? true : undefined}
+					aria-describedby={blocked || offline ? reason : undefined}
+					aria-disabled={blocked || offline ? true : undefined}
 					className={phone
 						? "build-status-link"
 						: "btn btn-compact btn-primary build-plan shrink-0"}
 					data-tooltip={blocked === "Chopin isn’t running for this document"
 						? "Chopin is off"
-						: blocked}
-					data-tooltip-detail={blocked ? "" : undefined}
-					data-tooltip-verbatim={blocked ? "" : undefined}
+						: blocked ?? offline}
+					data-tooltip-detail={blocked || offline ? "" : undefined}
+					data-tooltip-verbatim={blocked || offline ? "" : undefined}
 					onClick={() => {
 						if (blocked) {
 							onExplain?.(blocked);
+							return;
+						}
+						// Nothing starts, not even the Planner's draft, on a machine that is offline.
+						if (offline) {
+							setOfflineShown(offline);
+							onExplain?.(offline);
 							return;
 						}
 						pressed.current = true;
@@ -498,9 +524,12 @@ export function BuildPlanButton(
 					}}
 					type="button"
 				>
-					Build plan
+					{/* Pressed while the chosen machine is offline, it says so for a moment instead. */}
+					{offlineShown ?? "Build plan"}
 				</button>
-				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
+				{(blocked || offline) && <span className="sr-only" id={reason}>{blocked ?? offline}</span>}
+				{machine}
+				{offlineShown && <span className="sr-only" role="alert">{offlineShown}</span>}
 				{live}
 			</>
 		);
@@ -595,6 +624,7 @@ export function BuildPlanButton(
 							{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
 						</>
 					)}
+				{machine}
 				{/* On a phone the refusal is read in Build's headline, which opens with it. */}
 				{refused && !connectAgent && (
 					<span className={compact ? "sr-only" : "build-capsule-refusal"} role="alert">

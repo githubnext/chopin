@@ -370,6 +370,20 @@
 		"sourceHash": "f6b56e35f4a84411532e598ef53c893966b496b001d3020a3f470d87bd3efd8e"
 	},
 	{
+		"file": "apps/web/src/machine-button.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > MachineButton > <div>",
+				1
+			]
+		],
+		"sourceHash": "381698f1a3e1a191ddc243f06a8c8589e3084718602f2745413878124272c46c"
+	},
+	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
 		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
 		"cases": [
