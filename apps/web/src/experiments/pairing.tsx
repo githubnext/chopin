@@ -145,16 +145,36 @@ function MachinesPage() {
 	);
 }
 
-/** After pairing, the person's machines, the new one among them and marked New. */
+/** How soon, and how many times, the list is asked again while the just-paired machine connects. */
+const FOLLOW_MS = 500;
+const FOLLOW_TRIES = 10;
+
+/**
+ * After pairing, the person's machines, the new one among them and marked New. The machine
+ * connects a moment after Connect, so the list is asked again right away until it shows that,
+ * rather than a poll later.
+ */
 function ConnectedMachines({ label }: { label: string }) {
 	let machines = useMachines();
 	let marks = useNewMachines(machines.machines);
 	let mark = marks.mark;
+	let retry = machines.retry;
+	let tries = useRef(0);
 	// Newest first, so the first of that name is the one just paired.
-	let paired = machines.machines?.find(machine => machine.label === label)?.id;
+	let machine = machines.machines?.find(value => value.label === label);
+	let paired = machine?.id;
+	let waiting = !!machines.machines && !machine?.connected;
 	useEffect(() => {
 		if (paired) mark([paired]);
 	}, [paired, mark]);
+	useEffect(() => {
+		if (!waiting || tries.current >= FOLLOW_TRIES) return;
+		let timer = window.setTimeout(() => {
+			tries.current++;
+			retry();
+		}, FOLLOW_MS);
+		return () => window.clearTimeout(timer);
+	}, [waiting, machines.machines, retry]);
 	return <YourMachines fresh={marks.marked} machines={machines} />;
 }
 
