@@ -121,7 +121,11 @@ function Expiry({ expiresAt }: { expiresAt: number }) {
 	return <span className="machines-key-expiry">{expiryLabel(expiresAt, now)}</span>;
 }
 
-/** What the agent needs on the machine, with its install and sign-in commands on request. */
+/**
+ * What the agent needs on the machine, with its install and sign-in commands on request. Where
+ * npm's global folder belongs to root, `npm install -g` stops with EACCES; the fix that needs no
+ * sudo is a global folder of the person's own.
+ */
 function Needs({ agent, shell }: { agent: CodingAgent; shell: SetupShell }) {
 	let install = useUnfold();
 	return (
@@ -139,6 +143,16 @@ function Needs({ agent, shell }: { agent: CodingAgent; shell: SetupShell }) {
 						place={shell === "powershell" ? "PowerShell" : "Terminal"}
 						text={agentCommand(agent, shell)}
 					/>
+					{shell === "sh" && (
+						<p className="machines-detail mt-2">
+							If npm stops with EACCES, don't use sudo: run{" "}
+							<code className="font-mono text-text-primary">
+								npm config set prefix ~/.npm-global
+							</code>, add <code className="font-mono text-text-primary">~/.npm-global/bin</code>
+							{" "}
+							to your PATH, then install again.
+						</p>
+					)}
 				</div>
 			</UnfoldPanel>
 		</div>

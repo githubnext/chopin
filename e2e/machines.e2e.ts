@@ -166,6 +166,8 @@ test("one copied command installs chopin and pairs the machine, with no browser 
 	await setup.getByRole("button", { name: "Show install command", exact: true }).click();
 	await expect.poll(() => setup.locator(".machines-needs pre code").innerText())
 		.toBe(agentCommand(findAgent("copilot"), "sh"));
+	// npm's EACCES on a root-owned global folder has a fix that needs no sudo.
+	await expect(setup.getByText(/^If npm stops with EACCES, don't use sudo/)).toBeVisible();
 	await setup.getByRole("button", { name: "Hide install command", exact: true }).click();
 
 	let command = (await shown(setup)).text;
