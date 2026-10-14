@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import { CONNECTOR_PROTOCOL_HEADER } from "@chopin/protocol/connector";
 import { Router } from "../http/router";
 import { GitHubError } from "../github/client";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { registerExperimentRoutes } from "../experiments/routes";
 import { registerAuthRoutes } from "./routes";
 
 import type { AuthConfig } from "./config";
@@ -440,7 +442,7 @@ describe("hosted authentication routes", () => {
 		let router = new Router();
 		let auth = registerAuthRoutes(router, { config: CONFIG, storage: new MemoryStorage(), github });
 		let held: Array<{ userId: string; accessToken: string }> = [];
-		auth.pairings.authorized = (userId, grant) => {
+		auth.pairings.authorized = (userId, _sessionId, grant) => {
 			held.push({ userId, accessToken: grant.accessToken });
 		};
 		let session = pair(
@@ -485,6 +487,90 @@ describe("hosted authentication routes", () => {
 			error: "GitHub authorized @other, but you are signed in to Chopin as @octocat.",
 		});
 		expect(held).toHaveLength(1);
+	});
+
+	it("ends GitHub's authorization of pairing keys with the sign-in that gave it", async () => {
+		let now = Date.parse("2026-08-13T12:00:00.000Z");
+		let storage = new MemoryStorage();
+		let github = new FakeGitHub();
+		let router = new Router();
+		let auth = registerAuthRoutes(router, {
+			config: { ...CONFIG, allowedOrganizations: new Set(["githubnext"]) },
+			storage,
+			github,
+			clock: () => new Date(now),
+		});
+		github.membership = { state: "active", role: "member" };
+		let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
+		registerExperimentRoutes(router, auth, {
+			lease: () => lease,
+			changed: () => {},
+			context: async () => undefined,
+		});
+		let signIn = async () =>
+			pair(
+				cookies(await callback(router)).find(value => value.startsWith("__Host-chopin_session="))!,
+			);
+		let authorize = async (cookie: string) => {
+			let start = (await router.handle(
+				new Request("https://chopin.test/auth/github/connector?key"),
+			))!;
+			let state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+			let back = new URL("https://chopin.test/auth/github/callback");
+			back.searchParams.set("code", "code");
+			back.searchParams.set("state", state);
+			let response = (await router.handle(
+				new Request(back, { headers: { cookie: `${pair(cookies(start)[0]!)}; ${cookie}` } }),
+			))!;
+			expect(response.headers.get("location")).toBe("/connect?add");
+		};
+		let mint = async (cookie: string) =>
+			(await router.handle(
+				new Request("https://chopin.test/api/connector/pairing-keys", {
+					method: "POST",
+					headers: { origin: CONFIG.origin, cookie, "content-type": "application/json" },
+					body: "{}",
+				}),
+			))!.json();
+		let redeem = async (key: string) =>
+			(await router.handle(
+				new Request("https://chopin.test/api/connector/pairings", {
+					method: "POST",
+					headers: {
+						"content-type": "application/json",
+						[CONNECTOR_PROTOCOL_HEADER]: "3",
+					},
+					body: JSON.stringify({ label: "Laptop", key }),
+				}),
+			))!.json();
+		let signOut = (cookie: string) =>
+			router.handle(
+				new Request("https://chopin.test/auth/logout", {
+					method: "POST",
+					headers: { origin: CONFIG.origin, cookie },
+				}),
+			);
+		let again = { authorize: "/auth/github/connector?key" };
+
+		// Signing out ends the authorization and the key it made: the next sign-in authorizes anew.
+		let first = await signIn();
+		await authorize(first);
+		let { key } = await mint(first);
+		expect(key).toMatch(/^chopin_k_/);
+		await signOut(first);
+		let second = await signIn();
+		expect(await mint(second)).toEqual(again);
+		expect(await redeem(key)).toEqual({ error: "pairing-key-invalid" });
+
+		// Another sign-in of the same account can't use it either.
+		await authorize(second);
+		let third = await signIn();
+		expect(await mint(third)).toEqual(again);
+
+		// Held no longer than a key minted near its end needs: fifteen minutes to mint, then gone.
+		expect((await mint(second)).key).toMatch(/^chopin_k_/);
+		now += 15 * 60_000 + 1;
+		expect(await mint(second)).toEqual(again);
 	});
 
 	it("falls back to the product root for unsafe, empty, or duplicate return paths", async () => {

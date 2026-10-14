@@ -43,12 +43,14 @@ export type HostedAuth = {
 	machines: Machines;
 	/**
 	 * Finishes a connector pairing once GitHub authorized a token pair for that machine, returning
-	 * where the browser goes next; and holds an authorization for the pairing keys a person mints.
-	 * Set by the connector routes.
+	 * where the browser goes next; holds an authorization for the pairing keys a person mints in
+	 * the browser sign-in that gave it; and drops it once that sign-in ends. Set by the connector
+	 * routes.
 	 */
 	pairings: {
 		complete?: (pairing: string, userId: string, grant: GitHubTokenGrant) => Promise<string>;
-		authorized?: (userId: string, grant: GitHubTokenGrant) => void;
+		authorized?: (userId: string, sessionId: string, grant: GitHubTokenGrant) => void;
+		ended?: (sessionId: string) => void;
 	};
 	clock: Clock;
 };
@@ -185,7 +187,9 @@ export function registerAuthRoutes(
 				refreshToken,
 			}),
 		beforeRefresh: dependencies.onCredentialsWillRotate,
+		// Signing out, expiring, or losing admission all end a sign-in here.
 		onRevoked: async id => {
+			context.pairings.ended?.(id);
 			await local?.revoked(id);
 			await dependencies.onSessionRevoked?.(id);
 		},
@@ -392,7 +396,7 @@ export function registerAuthRoutes(
 					}
 					let authorized = context.pairings.authorized;
 					if (!authorized) return json({ error: "pairing is unavailable" }, 404, clear);
-					authorized(profile.id, grant);
+					authorized(profile.id, session.session.id, grant);
 					return redirected("/connect?add", 303, [clear]);
 				}
 				if (stored.pairing) {

@@ -156,7 +156,8 @@ function json(value: unknown, status = 200) {
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
 	let keys = new PairingKeys(() => auth.clock().getTime());
-	auth.pairings.authorized = (userId, grant) => keys.authorize(userId, grant);
+	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
+	auth.pairings.ended = sessionId => keys.ended(sessionId);
 	let changed = (id: string) => {
 		void auth.storage.channels.get(id).then(
 			channel => channel && connections.wake(channel.repositoryId),
@@ -334,10 +335,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		z.object({}).strict().parse(await body(request));
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
-		if (auth.machines.durable && !keys.authorized(session.user.id)) {
+		if (auth.machines.durable && !keys.authorized(session.user.id, session.session.id)) {
 			return json({ authorize: "/auth/github/connector?key" });
 		}
-		return json(keys.mint(session.user.id));
+		return json(keys.mint(session.user.id, session.session.id));
 	});
 	/**
 	 * Pair a machine with a key: approved at once as the key's owner, with automatic work off, and

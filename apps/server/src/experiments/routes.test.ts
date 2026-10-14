@@ -116,7 +116,8 @@ async function setup(
 		machines,
 		pairings: {} as {
 			complete?: (pairing: string, userId: string, grant: never) => Promise<string>;
-			authorized?: (userId: string, grant: never) => void;
+			authorized?: (userId: string, sessionId: string, grant: never) => void;
+			ended?: (sessionId: string) => void;
 		},
 	};
 	let runtime = registerExperimentRoutes(router, auth as never, {
@@ -165,9 +166,12 @@ async function setup(
 			refreshExpiresIn: 15_897_600,
 		} as never);
 	}
-	/** GitHub authorizes the next machine a pairing key pairs, as the OAuth callback does. */
+	/**
+	 * GitHub authorizes the next machine a pairing key pairs, as the OAuth callback does, for the
+	 * person's one sign-in here.
+	 */
 	function authorizeKeys(userId: string, accessToken = "ghu_key_1") {
-		auth.pairings.authorized!(userId, {
+		auth.pairings.authorized!(userId, (userId === "bob" ? bob : alice).id, {
 			accessToken,
 			accessExpiresIn: 28_800,
 			refreshToken: accessToken.replace("ghu_", "ghr_"),

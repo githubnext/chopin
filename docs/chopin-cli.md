@@ -51,7 +51,9 @@ The key works once, for ten minutes, and only for the account that made it.
 **New key** replaces it, and the page makes a new one as the old one expires.
 `chopin` sends the key once and never saves it. If your server needs GitHub to
 authorize the machine, the page checks with GitHub before it makes the first
-key; that returns at once if you have used Chopin before.
+key; that returns at once if you have used Chopin before. Chopin holds that
+authorization for 25 minutes at most, for the browser sign-in that asked for it
+only. Signing out ends it and the key it made.
 
 The agent must be installed and signed in first. The card shows its install
 command under **Show install command**, and [Coding agents](#coding-agents)

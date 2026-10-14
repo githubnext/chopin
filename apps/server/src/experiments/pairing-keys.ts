@@ -5,15 +5,19 @@ import type { GitHubTokenGrant } from "../github/client";
 
 /** How long a pairing key works once minted. */
 export const PAIRING_KEY_MS = 10 * 60_000;
-/** GitHub's authorization of the next machine is held this long, for the keys minted meanwhile. */
-const AUTHORIZATION_MS = 60 * 60_000;
+/**
+ * GitHub's authorization of the next machine is held this long at most, so a key minted up to
+ * fifteen minutes after it still carries it for its whole life; never past the access token's own
+ * expiry.
+ */
+const AUTHORIZATION_MS = PAIRING_KEY_MS + 15 * 60_000;
 /** Keys one person may mint in any window of this length. */
 const MINT_WINDOW_MS = 10 * 60_000;
 const MINTS_PER_WINDOW = 10;
 const KEY = /^chopin_k_[A-Za-z0-9_-]{43}$/;
 
-type Key = { userId: string; expiresAt: number };
-type Held = { grant: GitHubTokenGrant; issuedAt: number };
+type Key = { userId: string; sessionId: string; expiresAt: number };
+type Held = { grant: GitHubTokenGrant; sessionId: string; issuedAt: number; until: number };
 
 function digest(key: string) {
 	return createHash("sha256").update(key).digest("base64url");
@@ -21,9 +25,10 @@ function digest(key: string) {
 
 /**
  * Single-use keys with which `chopin connect --key` pairs a machine without a browser. A key is
- * kept only as a hash, belongs to the account that minted it, lasts PAIRING_KEY_MS, and is
- * revoked by minting another. Where machines hold their own GitHub authorization, the person
- * authorizes the next machine with GitHub before minting, and the key that pairs one spends it.
+ * kept only as a hash, belongs to the account and sign-in that minted it, lasts PAIRING_KEY_MS,
+ * and is revoked by minting another or by that sign-in ending. Where machines hold their own
+ * GitHub authorization, the person authorizes the next machine with GitHub before minting; it is
+ * held for that sign-in only, and the key that pairs one spends it.
  * Everything lives in this process, as pending pairings do.
  */
 export class PairingKeys {
@@ -35,19 +40,36 @@ export class PairingKeys {
 
 	constructor(private now: () => number) {}
 
-	/** Hold GitHub's authorization of a machine for `userId`, until a key pairs one with it. */
-	authorize(userId: string, grant: GitHubTokenGrant) {
-		this.#grants.set(userId, { grant, issuedAt: this.now() });
+	/**
+	 * Hold GitHub's authorization of a machine for `userId`, given in the browser sign-in
+	 * `sessionId`, until a key pairs one with it or that sign-in ends.
+	 */
+	authorize(userId: string, sessionId: string, grant: GitHubTokenGrant) {
+		let issuedAt = this.now();
+		let until = issuedAt + Math.min(AUTHORIZATION_MS, grant.accessExpiresIn * 1000);
+		this.#grants.set(userId, { grant, sessionId, issuedAt, until });
 	}
 
-	/** Whether `userId` holds an authorization that outlasts a key minted now. */
-	authorized(userId: string) {
+	/** Whether this sign-in holds an authorization that outlasts a key minted now. */
+	authorized(userId: string, sessionId: string) {
 		let held = this.#grants.get(userId);
-		return !!held && held.issuedAt + AUTHORIZATION_MS >= this.now() + PAIRING_KEY_MS;
+		return !!held && held.sessionId === sessionId && held.until >= this.now() + PAIRING_KEY_MS;
 	}
 
-	/** A new key for `userId`, replacing the one before it. */
-	mint(userId: string) {
+	/** The sign-in `sessionId` ended: the authorization it gave and the key it minted go with it. */
+	ended(sessionId: string) {
+		for (let [userId, held] of this.#grants) {
+			if (held.sessionId === sessionId) this.#grants.delete(userId);
+		}
+		for (let [hash, key] of this.#keys) {
+			if (key.sessionId !== sessionId) continue;
+			this.#keys.delete(hash);
+			if (this.#current.get(key.userId) === hash) this.#current.delete(key.userId);
+		}
+	}
+
+	/** A new key for `userId`, minted in `sessionId`, replacing the one before it. */
+	mint(userId: string, sessionId: string) {
 		this.sweep();
 		let now = this.now();
 		let recent = (this.#mints.get(userId) ?? []).filter(time => time > now - MINT_WINDOW_MS);
@@ -58,7 +80,7 @@ export class PairingKeys {
 		let key = `chopin_k_${randomBytes(32).toString("base64url")}`;
 		let hash = digest(key);
 		let expiresAt = now + PAIRING_KEY_MS;
-		this.#keys.set(hash, { userId, expiresAt });
+		this.#keys.set(hash, { userId, sessionId, expiresAt });
 		this.#current.set(userId, hash);
 		// The lifetime too, so a browser whose clock differs from this one counts it right.
 		return { key, expiresAt, expiresIn: PAIRING_KEY_MS };
@@ -71,7 +93,7 @@ export class PairingKeys {
 	peek(key: string) {
 		let found = KEY.test(key) ? this.#keys.get(digest(key)) : undefined;
 		if (!found || found.expiresAt <= this.now()) fail("pairing-key-invalid");
-		return { userId: found.userId, grant: this.#grant(found.userId) };
+		return { userId: found.userId, grant: this.#grant(found) };
 	}
 
 	/** Spend a key: refused unless it is still live, so of two at once only one gets through. */
@@ -84,10 +106,13 @@ export class PairingKeys {
 		return { userId, grant };
 	}
 
-	/** The held authorization, its lifetimes counted from now rather than from when GitHub gave it. */
-	#grant(userId: string): GitHubTokenGrant | undefined {
-		let held = this.#grants.get(userId);
-		if (!held) return undefined;
+	/**
+	 * The authorization held by the sign-in that minted `key`, its lifetimes counted from now
+	 * rather than from when GitHub gave it.
+	 */
+	#grant(key: Key): GitHubTokenGrant | undefined {
+		let held = this.#grants.get(key.userId);
+		if (!held || held.sessionId !== key.sessionId || held.until <= this.now()) return undefined;
 		let elapsed = Math.ceil((this.now() - held.issuedAt) / 1000);
 		return {
 			...held.grant,
@@ -104,7 +129,7 @@ export class PairingKeys {
 			if (this.#current.get(key.userId) === hash) this.#current.delete(key.userId);
 		}
 		for (let [userId, held] of this.#grants) {
-			if (held.issuedAt + AUTHORIZATION_MS <= now) this.#grants.delete(userId);
+			if (held.until <= now) this.#grants.delete(userId);
 		}
 		for (let [userId, times] of this.#mints) {
 			if (times.every(time => time <= now - MINT_WINDOW_MS)) this.#mints.delete(userId);
