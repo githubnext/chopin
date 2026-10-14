@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import { askJev, type JevRequest, validateJevResponse } from "./jev";
 
 let request = {
@@ -33,12 +33,21 @@ function delayedFetch(delayMs: number, calls: { count: number }) {
 
 test("Jev accepts a response just beyond the former 20-second budget", async () => {
 	let calls = { count: 0 };
-	let result = await askJev(request, {
-		apiKey: "test-only",
-		fetch: delayedFetch(20_050, calls),
-	});
-	expect(result.answers.flag).toEqual({ type: "noul", noul: 0.9 });
-	expect(calls.count).toBe(1);
+	// Fake clocks drive the reply and Jev's own `AbortSignal.timeout` alike, so a
+	// budget at or under 20 seconds still aborts first; nobody waits 20 real seconds.
+	jest.useFakeTimers();
+	try {
+		let pending = askJev(request, {
+			apiKey: "test-only",
+			fetch: delayedFetch(20_050, calls),
+		});
+		jest.advanceTimersByTime(20_050);
+		let result = await pending;
+		expect(result.answers.flag).toEqual({ type: "noul", noul: 0.9 });
+		expect(calls.count).toBe(1);
+	} finally {
+		jest.useRealTimers();
+	}
 }, 35_000);
 
 test("Jev aborts after its configured budget without retrying", async () => {

@@ -55,10 +55,15 @@ on 8797) alongside them, then runs Chromium. The local-auth test starts its own
 application on port 8791 against the fourth database. Set `E2E_SKIP_BUILD=1`
 only when the existing client build is known to match the checkout.
 
-CI has four independent jobs: validation, browser integration, a Docker image
-build, and the `chopin` CLI binary build with its bridge smoke test (whose
-Windows binary is then started once on Windows, where `install.ps1` is also
-tested). A documentation-only change should still pass `bun run ci`.
+CI starts every job at once: format, lint and types on one runner; unit tests in
+three shards balanced by `.github/bun-test-timings.json`; the PostgreSQL contract;
+browser integration in eight shards balanced by `e2e/shard-timings.json`; the
+design and diagram suites; a Docker image build; and the `chopin` CLI binary
+build with its bridge smoke test (whose Windows binary is then started once on
+Windows, where `install.ps1` is also tested). The required checks
+`format, lint, types, tests` and `e2e` are gates over those jobs. The timings
+files only balance shards; a missing or stale entry never drops a test. A
+documentation-only change should still pass `bun run ci`.
 
 Before opening a PR or repairing CI, use the repository's
 [PR readiness skill](.agents/skills/chopin-pr-readiness/SKILL.md).

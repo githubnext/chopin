@@ -1,6 +1,8 @@
-# Separate jobs because they fail for unrelated reasons. `checks` answers in
-# about a minute; the browser and container builds run beside it so a formatting
-# mistake does not wait behind either build to be reported.
+# Jobs are split by what they wait on, so the slowest one decides the wall time
+# and nothing queues behind unrelated work. Static checks, three unit shards, the
+# PostgreSQL contract, eight browser shards, two design suites, the container and
+# the CLI all start together. Two small gates keep the required check names,
+# `format, lint, types, tests` and `e2e`, over the jobs they summarise.
 name: ci
 
 on:
@@ -24,10 +26,95 @@ env:
   # Matches the version this is developed against. Bun's lockfile format and
   # its workspace catalogs are both young enough that "latest" is a variable.
   BUN_VERSION: 1.4.2
+  # Shard counts; keep each matrix below in step with its count.
+  UNIT_SHARDS: 3
+  E2E_SHARDS: 8
 
 jobs:
-  checks:
-    name: format, lint, types, tests
+  static:
+    name: format, lint, and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # The pinned Impeccable CLI requires Node 22.18 or newer.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # Bun's package store, not node_modules: the install still links and
+      # checks every package against the lockfile; it only skips the download.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      # Refuses rather than resolving: a lockfile that does not describe
+      # package.json is a difference between what was reviewed and what ran.
+      - run: bun install --frozen-lockfile
+
+      # dprint fetches its plugins as wasm from GitHub releases on first use.
+      # Cached on the config that names them, since that is exactly what
+      # decides which ones are wanted.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/dprint
+          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
+
+      # Independent of each other, so they share one runner side by side.
+      - parallel:
+          - name: Format, lint, and enforce design tokens
+            run: bun run ci
+
+          - name: Types
+            run: bun run types
+
+  # Every unit test file runs in exactly one shard. `--timings` places files by
+  # recorded duration (a stale or missing entry changes only the balance), and
+  # `--parallel --no-isolate` runs a worker per core that, like plain `bun test`,
+  # keeps one module registry across the files it runs. Refresh the timings with
+  # `bun test --parallel --no-isolate --timings=.github/bun-test-timings.json --update-timings`.
+  unit:
+    name: unit tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      # No browser, no agent. `AGENT=off` is set by the tests that spawn a
+      # server; nothing here needs a token.
+      - run: >-
+          bun test --shard=${{ matrix.shard }}/${{ env.UNIT_SHARDS }}
+          --timings=.github/bun-test-timings.json --parallel --no-isolate
+
+  # Every durable provider passes the same behavioral contract. The ordinary
+  # unit command leaves this one skipped so it stays usable without Docker.
+  postgres:
+    name: PostgreSQL contract
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -50,54 +137,86 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      # The pinned Impeccable CLI requires Node 22.18 or newer.
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
 
-      # Refuses rather than resolving: a lockfile that does not describe
-      # package.json is a difference between what was reviewed and what ran.
-      - run: bun install --frozen-lockfile
-
-      # dprint fetches its plugins as wasm from GitHub releases on first use.
-      # Cached on the config that names them, since that is exactly what
-      # decides which ones are wanted.
       - uses: actions/cache@v6
         with:
-          path: ~/.cache/dprint
-          key: dprint-${{ runner.os }}-${{ hashFiles('dprint.json') }}
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      - name: Format, lint, and enforce design tokens
-        run: bun run ci
+      - run: bun install --frozen-lockfile
 
-      - run: bun run types
-
-      # 500 tests, no browser, no agent. `AGENT=off` is set by the tests that
-      # spawn a server; nothing here needs a token.
-      - run: bun test
-
-      # Every durable provider passes the same behavioral contract. The ordinary
-      # unit command leaves this one skipped so it stays usable without Docker.
       - run: bun run test:postgres
 
+  # The required check. It does no work of its own, so it reports as soon as the
+  # last job above does, and a failed, skipped or cancelled one fails it.
+  checks:
+    name: format, lint, types, tests
+    needs: [static, unit, postgres]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require static checks, every unit shard and PostgreSQL to pass
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          UNIT_RESULT: ${{ needs.unit.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
+        run: |
+          echo "static: $STATIC_RESULT, unit: $UNIT_RESULT, postgres: $POSTGRES_RESULT"
+          test "$STATIC_RESULT" = success
+          test "$UNIT_RESULT" = success
+          test "$POSTGRES_RESULT" = success
+
   browser-integration:
-    name: e2e (shard ${{ matrix.shard }}/4)
+    name: e2e (shard ${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/blob-report
       PLAYWRIGHT_BLOB_OUTPUT_NAME: shard-${{ matrix.shard }}.zip
     steps:
       - uses: actions/checkout@v7
 
+      # Docker needs nothing from Bun, so the databases come up while the rest
+      # installs: healthy and empty, and `bun run e2e` migrates them as usual.
+      - name: Start the four PostgreSQL databases
+        id: databases
+        background: true
+        run: |
+          docker pull --quiet mirror.gcr.io/library/postgres:17-alpine
+          docker tag mirror.gcr.io/library/postgres:17-alpine postgres:17-alpine
+          docker compose -f compose.yaml -f compose.local.yaml up -d --wait \
+            db-e2e db-e2e-fixtures db-e2e-harness db-e2e-local
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - run: bun install --frozen-lockfile
+
+      # Build on this runner, and reject development previews before the long
+      # browser suite. It carries the same child-motion toggle as scripts/e2e.ts
+      # and runs while Chromium is restored below.
+      - name: Build the client
+        id: build
+        background: true
+        run: |
+          bun run build
+          bun scripts/check-design-production.ts
+        env:
+          VITE_CHILD_MOTION_TOGGLE: "on"
 
       # Keyed on the Playwright version and nothing else. Keying on the
       # lockfile would discard a 180MB browser every time an unrelated
@@ -118,23 +237,23 @@ jobs:
       # Chromium's shared libraries, so do not make E2E depend on its apt mirror.
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
-      # Build once, and reject development previews before the long browser suite. The browser
-      # suite reuses this build, so it carries the same child-motion toggle as scripts/e2e.ts.
-      - run: bun run build
+      - name: Wait for the client build and the databases
+        wait: [build, databases]
+
+      # Each runner owns its servers and databases. Keep two workers per runner so
+      # motion assertions do not compete with more browser processes on the same
+      # machine. `e2e/shard-balance.ts` replaces Playwright's equal-count split
+      # with whole files placed by recorded duration; every file still runs once.
+      - name: Browser integration
+        run: >-
+          bun run e2e --shard=${{ matrix.shard }}/${{ env.E2E_SHARDS }} --workers=2
+          --reporter=github,blob,./e2e/shard-balance.ts
         env:
-          VITE_CHILD_MOTION_TOGGLE: "on"
-
-      - name: Verify design audit stays out of production
-        run: bun scripts/check-design-production.ts
-
-      - name: Cache PostgreSQL from the Docker Hub mirror
-        run: |
-          docker pull mirror.gcr.io/library/postgres:17-alpine
-          docker tag mirror.gcr.io/library/postgres:17-alpine postgres:17-alpine
-
-      # Each runner owns its servers and databases. Keep two workers per runner so motion
-      # assertions do not compete with more browser processes on the same machine.
-      - run: E2E_SKIP_BUILD=1 bun run e2e --shard=${{ matrix.shard }}/4 --workers=2 --reporter=github,blob
+          E2E_SKIP_BUILD: "1"
+          E2E_DATABASE_URL_0: postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable
+          E2E_DATABASE_URL_1: postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable
+          E2E_DATABASE_URL_2: postgresql://chopin:chopin@127.0.0.1:5435/chopin?sslmode=disable
+          E2E_DATABASE_URL_3: postgresql://chopin:chopin@127.0.0.1:5436/chopin?sslmode=disable
 
       - name: Save integration report and attachments
         if: ${{ !cancelled() }}
@@ -145,15 +264,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Two runners rather than three suites in a row. The suites cannot share one
+  # runner side by side: each starts its own Vite dev server over the same
+  # dependency cache.
   browser-design:
-    name: browser design and diagrams
+    name: browser ${{ matrix.suite }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [design, diagrams]
     steps:
       - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - run: bun install --frozen-lockfile
 
@@ -171,19 +303,22 @@ jobs:
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
       - name: Design behaviour (keyboard, focus, motion, and scrolling)
+        if: ${{ matrix.suite == 'design' }}
         run: bun run design:behavior
 
       - name: Development startup (optional feedback and navigation imports)
+        if: ${{ matrix.suite == 'design' }}
         run: bun node_modules/@playwright/test/cli.js test --config e2e/startup/playwright.config.ts
 
       - name: Diagram gallery (rendering and keyboard behaviour)
+        if: ${{ matrix.suite == 'diagrams' }}
         run: bun run diagrams:test
 
       - name: Save design and gallery results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: browser-design-results
+          name: browser-design-results-${{ matrix.suite }}
           path: e2e/.scratch/ci-reports/*.json
           include-hidden-files: true
           if-no-files-found: error
@@ -192,7 +327,7 @@ jobs:
       - if: ${{ !cancelled() && failure() }}
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-design-report
+          name: playwright-design-report-${{ matrix.suite }}
           path: |
             e2e/playwright-report
             e2e/test-results
@@ -215,6 +350,12 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - run: bun install --frozen-lockfile
 
       - name: Collect integration reports
@@ -228,7 +369,7 @@ jobs:
       - name: Merge integration results, retries, and traces
         if: ${{ !cancelled() && steps.blobs.outcome == 'success' }}
         run: |
-          for shard in 1 2 3 4; do
+          for shard in $(seq 1 "$E2E_SHARDS"); do
             if [ ! -f "e2e/blob-report/shard-$shard.zip" ]; then
               echo "::error::Missing integration report for shard $shard"
               exit 1
@@ -244,8 +385,9 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/download-artifact@v8
         with:
-          name: browser-design-results
+          pattern: browser-design-results-*
           path: e2e/.scratch/ci-reports
+          merge-multiple: true
 
       - name: Require every browser job to pass
         if: ${{ always() }}
@@ -295,6 +437,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - run: bun install --frozen-lockfile
 
