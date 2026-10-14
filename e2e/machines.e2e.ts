@@ -11,7 +11,7 @@ import {
 import { expect, test } from "./room";
 import { ROOT } from "./servers";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 const PAIRING = /http:\/\/[^\s]+\/connect\?pairing=[\w-]+/;
@@ -24,6 +24,24 @@ function person() {
 function machinesEntry(page: Page, name: string) {
 	return page.getByRole("complementary", { name: "Projects" })
 		.getByRole("link", { name, exact: true });
+}
+
+/**
+ * For each setup step, the space between the bottom of what it shows and the next step's top,
+ * past the steps' own spacing: 0 when nothing unseen holds a step taller than its content.
+ */
+function spaceUnderSteps(steps: Locator) {
+	return steps.evaluateAll(items =>
+		items.slice(0, -1).map((item, index) => {
+			let shown = [...item.querySelectorAll(".machines-command, p")]
+				.filter(part => part.checkVisibility({ visibilityProperty: true }));
+			let bottom = Math.max(...shown.map(part => part.getBoundingClientRect().bottom));
+			let next = items[index + 1]!;
+			return Math.round(
+				next.getBoundingClientRect().top - bottom - parseFloat(getComputedStyle(next).marginTop),
+			);
+		})
+	);
 }
 
 /** A checkout of octo-org/score and `chopin connect` running in it, from source. */
@@ -84,9 +102,8 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	// The browser's own system is chosen first; either can be picked. Each command keeps its own
 	// line breaks, each with the shell's continuation.
 	let install = steps.nth(0).locator("pre code");
-	// The agent and connect steps lay out every agent's version unseen, so only the picked one shows.
-	let agentSteps = steps.nth(1).locator("pre code").filter({ visible: true });
-	let command = steps.nth(2).locator("pre code").filter({ visible: true });
+	let agentSteps = steps.nth(1).locator("pre code");
+	let command = steps.nth(2).locator("pre code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
@@ -114,17 +131,15 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 		"Gemini CLI",
 	]);
 	await expect(picker.locator("optgroup")).toHaveCount(0);
-	let agentLabel = steps.nth(1).locator("p").filter({ visible: true });
+	let agentLabel = steps.nth(1).locator("p");
 	await expect(agentLabel).toHaveText("Install GitHub Copilot CLI and sign in");
 	await expect.poll(() => agentSteps.innerText()).toBe(
 		agentCommand(findAgent("copilot"), "powershell"),
 	);
-	let keepOpen = steps.nth(2).getByText("Keep this terminal open.", { exact: true })
-		.filter({ visible: true });
+	let keepOpen = steps.nth(2).getByText("Keep this terminal open.", { exact: true });
 	await expect(keepOpen).toHaveCount(0);
-	// The steps after the connect command stay put, whichever agent is picked.
-	let approve = async () => (await steps.nth(3).boundingBox())!.y;
-	let approveAt = await approve();
+	// Each step is as tall as what it shows, whichever agent is picked: no blank space under it.
+	expect(await spaceUnderSteps(steps)).toEqual([0, 0, 0, 0]);
 	await picker.selectOption({ label: "Atomic" });
 	await expect(agentLabel).toHaveText("Install Atomic and sign in");
 	await expect.poll(() => agentSteps.innerText()).toBe(
@@ -133,14 +148,14 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "powershell", findAgent("atomic")));
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
-	expect(await approve()).toBe(approveAt);
+	expect(await spaceUnderSteps(steps)).toEqual([0, 0, 0, 0]);
 	// Claude Code asks in the terminal, so it runs there instead of as the service, and its
 	// connect step says to keep that terminal open.
 	await picker.selectOption({ label: "Claude Code" });
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "powershell", findAgent("claude-code")));
 	await expect(keepOpen).toBeVisible();
-	expect(await approve()).toBe(approveAt);
+	expect(await spaceUnderSteps(steps)).toEqual([0, 0, 0, 0]);
 	await page.reload();
 	await expect(picker).toHaveValue("claude-code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
@@ -246,13 +261,12 @@ test("a wait past a minute links to troubleshooting, and a phone wraps each comm
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 
-	// Where commands wrap, switching agents still never moves the steps below them.
+	// Where commands wrap, each step is still only as tall as what it shows, for every agent.
 	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
-	let approve = async () => (await setup.getByRole("listitem").nth(3).boundingBox())!.y;
-	let approveAt = await approve();
-	for (let id of ["atomic", "claude-code", "codex", "gemini"]) {
+	let steps = setup.getByRole("listitem");
+	for (let id of ["copilot", "atomic", "claude-code", "codex", "gemini"]) {
 		await picker.selectOption(id);
 		await expect(picker).toHaveValue(id);
-		expect(await approve()).toBe(approveAt);
+		expect(await spaceUnderSteps(steps)).toEqual([0, 0, 0, 0]);
 	}
 });

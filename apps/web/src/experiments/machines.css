@@ -148,8 +148,7 @@
 		margin-top: calc(var(--spacing) * 5);
 	}
 
-	& > li > * + *,
-	& .machines-steady > * > * + * {
+	& > li > * + * {
 		margin-top: calc(var(--spacing) * 2);
 	}
 
@@ -164,20 +163,6 @@
 		margin-block: 0;
 		max-width: 65ch;
 		text-wrap: pretty;
-	}
-
-	/* Every agent's version of a step in one cell; only the picked one shows. */
-	& .machines-steady {
-		display: grid;
-
-		& > * {
-			grid-area: 1 / 1;
-			min-width: 0;
-		}
-	}
-
-	& .machines-steady-ghost {
-		visibility: hidden;
 	}
 }
 

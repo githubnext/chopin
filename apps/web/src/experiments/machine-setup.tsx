@@ -10,7 +10,6 @@ import {
 } from "./setup-commands";
 
 import type { ReactNode } from "react";
-import type { CodingAgent } from "./agents";
 import type { SetupShell } from "./setup-commands";
 
 /**
@@ -64,25 +63,6 @@ const SHELLS: { shell: SetupShell; label: string }[] = [
 const AGENT_KEY = "chopin:machines:agent";
 
 /**
- * Every agent's version of a step, laid in one place: the picked agent's shows, and the others,
- * unseen, hold the step at the tallest of them, so switching agents never moves what follows.
- */
-function Steady(
-	{ agent, render }: { agent: CodingAgent; render: (agent: CodingAgent) => ReactNode },
-) {
-	return (
-		<div className="machines-steady">
-			<div>{render(agent)}</div>
-			{AGENTS.filter(other => other !== agent).map(other => (
-				<div aria-hidden="true" className="machines-steady-ghost" inert key={other.id}>
-					{render(other)}
-				</div>
-			))}
-		</div>
-	);
-}
-
-/**
  * What to run on a machine to set it up with this server: install chopin, install and sign in to
  * the picked coding agent, connect a checkout, then approve the pairing in the browser. The last
  * step is `last`: on a first run, the live wait for the machine.
@@ -134,37 +114,17 @@ export function MachineSetup(
 					<Command label="install command" shell={shell} text={installCommand(shell)} />
 				</li>
 				<li>
-					<Steady
-						agent={agent}
-						render={option => (
-							<>
-								<p>Install {option.name} and sign in</p>
-								<Command
-									label="agent commands"
-									shell={shell}
-									text={agentCommand(option, shell)}
-								/>
-							</>
-						)}
-					/>
+					<p>Install {agent.name} and sign in</p>
+					<Command label="agent commands" shell={shell} text={agentCommand(agent, shell)} />
 				</li>
 				<li>
 					<p>Connect from your repository</p>
-					<Steady
-						agent={agent}
-						render={option => (
-							<>
-								<Command
-									label="connect command"
-									shell={shell}
-									text={connectCommand(location.origin, shell, option)}
-								/>
-								{!runsAsService(option) && (
-									<p className="machines-detail">Keep this terminal open.</p>
-								)}
-							</>
-						)}
+					<Command
+						label="connect command"
+						shell={shell}
+						text={connectCommand(location.origin, shell, agent)}
 					/>
+					{!runsAsService(agent) && <p className="machines-detail">Keep this terminal open.</p>}
 				</li>
 				<li>
 					<p>Open the link it prints, check the code, and approve</p>
