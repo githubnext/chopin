@@ -71,7 +71,7 @@ jobs:
           reported="$(apps/connector/dist/chopin-linux-x64 --version)"
           echo "$reported"
           case "$reported" in
-            "chopin $VERSION "*) ;;
+            "chopin $VERSION" | "chopin $VERSION "*) ;;
             *) echo "::error::Expected chopin $VERSION."; exit 1 ;;
           esac
 
