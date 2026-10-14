@@ -1,270 +1,278 @@
 {
 	"auth-lifecycle.e2e.ts": {
-		"ms": 26403,
+		"ms": 28439,
 		"tests": 2
 	},
 	"callout.e2e.ts": {
-		"ms": 13184,
+		"ms": 12769,
 		"tests": 5
 	},
 	"chat-anchoring.e2e.ts": {
-		"ms": 1628,
+		"ms": 1909,
 		"tests": 1
 	},
 	"chat-commands.e2e.ts": {
-		"ms": 2328,
+		"ms": 1791,
 		"tests": 1
 	},
 	"chat-composer.e2e.ts": {
-		"ms": 14259,
+		"ms": 14005,
 		"tests": 8
 	},
 	"chat-mentions.e2e.ts": {
-		"ms": 11912,
+		"ms": 13880,
 		"tests": 5
 	},
 	"chat-phone.e2e.ts": {
-		"ms": 15268,
+		"ms": 17951,
 		"tests": 6
 	},
 	"chat-references.e2e.ts": {
-		"ms": 12632,
+		"ms": 12780,
 		"tests": 6
 	},
 	"code.e2e.ts": {
-		"ms": 50175,
+		"ms": 58913,
 		"tests": 26
 	},
 	"collab.e2e.ts": {
-		"ms": 45087,
+		"ms": 44120,
 		"tests": 8
 	},
 	"columns.e2e.ts": {
-		"ms": 28066,
+		"ms": 26048,
 		"tests": 7
 	},
 	"comment-margins.e2e.ts": {
-		"ms": 20519,
+		"ms": 24275,
 		"tests": 10
 	},
 	"comment-motion.e2e.ts": {
-		"ms": 7303,
+		"ms": 8084,
 		"tests": 4
 	},
 	"comment-send-off.e2e.ts": {
-		"ms": 2570,
+		"ms": 2427,
 		"tests": 1
 	},
 	"comment-sheet.e2e.ts": {
-		"ms": 47014,
+		"ms": 46020,
 		"tests": 19
 	},
 	"connection.e2e.ts": {
-		"ms": 27560,
+		"ms": 28541,
 		"tests": 6
 	},
 	"connector.e2e.ts": {
-		"ms": 17853,
+		"ms": 18244,
 		"tests": 3
 	},
 	"conversation-plan-layout.e2e.ts": {
-		"ms": 5436,
+		"ms": 6152,
 		"tests": 3
 	},
 	"decision-marker.e2e.ts": {
-		"ms": 51439,
+		"ms": 50543,
 		"tests": 20
 	},
 	"decisions-empty.e2e.ts": {
-		"ms": 5502,
+		"ms": 6040,
 		"tests": 5
 	},
 	"decisions-phone.e2e.ts": {
-		"ms": 33130,
+		"ms": 32880,
 		"tests": 10
 	},
 	"demo-collaborators.e2e.ts": {
-		"ms": 42267,
+		"ms": 46579,
 		"tests": 3
 	},
 	"discarded-mobile-geometry.e2e.ts": {
-		"ms": 2263,
+		"ms": 2677,
 		"tests": 1
 	},
 	"document-activity.e2e.ts": {
-		"ms": 3987,
+		"ms": 4264,
 		"tests": 3
 	},
 	"document-creation.e2e.ts": {
-		"ms": 22484,
+		"ms": 25556,
 		"tests": 15
 	},
 	"document-entry.e2e.ts": {
-		"ms": 8574,
+		"ms": 9635,
 		"tests": 4
 	},
 	"document-navigation.e2e.ts": {
-		"ms": 80764,
+		"ms": 80708,
 		"tests": 36
 	},
 	"document-tab-stability.e2e.ts": {
-		"ms": 4072,
+		"ms": 3474,
 		"tests": 1
 	},
 	"document-title-naming.e2e.ts": {
-		"ms": 8393,
+		"ms": 8780,
 		"tests": 1
 	},
 	"document-title.e2e.ts": {
-		"ms": 34276,
+		"ms": 37824,
 		"tests": 14
 	},
 	"documents-sheet.e2e.ts": {
-		"ms": 23645,
+		"ms": 23589,
 		"tests": 6
 	},
 	"editing.e2e.ts": {
-		"ms": 45105,
+		"ms": 44798,
 		"tests": 14
 	},
 	"experiments.e2e.ts": {
-		"ms": 28941,
+		"ms": 24182,
 		"tests": 3
 	},
 	"focus-ring.e2e.ts": {
-		"ms": 10189,
+		"ms": 7839,
 		"tests": 6
 	},
 	"focus.e2e.ts": {
-		"ms": 2574,
+		"ms": 2662,
 		"tests": 2
 	},
 	"github-cards.e2e.ts": {
-		"ms": 12712,
+		"ms": 13352,
 		"tests": 3
 	},
 	"github-pills.e2e.ts": {
-		"ms": 7756,
+		"ms": 7507,
 		"tests": 3
 	},
 	"harness-children.e2e.ts": {
-		"ms": 15951,
+		"ms": 15351,
 		"tests": 3
 	},
 	"harness-comments.e2e.ts": {
-		"ms": 12714,
+		"ms": 13511,
 		"tests": 3
 	},
 	"harness-decisions-deck.e2e.ts": {
-		"ms": 26927,
+		"ms": 30091,
 		"tests": 7
 	},
 	"harness-investigation.e2e.ts": {
-		"ms": 7115,
+		"ms": 7207,
 		"tests": 3
 	},
 	"harness.e2e.ts": {
-		"ms": 24847,
+		"ms": 27461,
 		"tests": 6
 	},
 	"hosted-images.e2e.ts": {
-		"ms": 1320,
+		"ms": 1723,
 		"tests": 1
 	},
 	"hosted.e2e.ts": {
-		"ms": 26366,
+		"ms": 26057,
 		"tests": 21
 	},
 	"icon-size.e2e.ts": {
-		"ms": 3601,
+		"ms": 3634,
 		"tests": 2
 	},
 	"images-review.e2e.ts": {
-		"ms": 8617,
+		"ms": 8762,
 		"tests": 3
 	},
 	"images.e2e.ts": {
-		"ms": 24783,
+		"ms": 26453,
 		"tests": 7
 	},
 	"implementation-launcher.e2e.ts": {
-		"ms": 102013,
+		"ms": 105654,
 		"tests": 19
 	},
 	"inline-decision-deck.e2e.ts": {
-		"ms": 59418,
+		"ms": 52598,
 		"tests": 22
 	},
 	"interface-quality.e2e.ts": {
-		"ms": 19345,
+		"ms": 19645,
 		"tests": 9
 	},
 	"jobs.e2e.ts": {
-		"ms": 3476,
+		"ms": 2370,
 		"tests": 2
 	},
 	"keyboard-shortcuts.e2e.ts": {
-		"ms": 16674,
+		"ms": 19816,
 		"tests": 12
 	},
+	"machine-choice.e2e.ts": {
+		"ms": 21987,
+		"tests": 4
+	},
 	"machines.e2e.ts": {
-		"ms": 30166,
-		"tests": 5
+		"ms": 38485,
+		"tests": 7
 	},
 	"markdown-paste.e2e.ts": {
-		"ms": 4239,
+		"ms": 4233,
 		"tests": 2
 	},
 	"mcp-update.e2e.ts": {
-		"ms": 3726,
+		"ms": 3675,
 		"tests": 2
 	},
 	"navigation-focus-recovery.e2e.ts": {
-		"ms": 3592,
+		"ms": 3234,
 		"tests": 2
 	},
 	"paper-layout.e2e.ts": {
-		"ms": 14863,
+		"ms": 15520,
 		"tests": 9
 	},
 	"phone-first-load.e2e.ts": {
-		"ms": 7194,
+		"ms": 7321,
 		"tests": 4
 	},
 	"phone-read-mode.e2e.ts": {
-		"ms": 28124,
+		"ms": 27849,
 		"tests": 14
 	},
 	"phone-workspace.e2e.ts": {
-		"ms": 36841,
+		"ms": 40989,
 		"tests": 11
 	},
 	"planner-attachment.e2e.ts": {
-		"ms": 22515,
+		"ms": 22074,
 		"tests": 4
+	},
+	"planner-picker.e2e.ts": {
+		"ms": 15756,
+		"tests": 2
 	},
 	"planner-visual-acceptance.e2e.ts": {
 		"ms": 0,
 		"tests": 1
 	},
 	"pwa.e2e.ts": {
-		"ms": 3679,
+		"ms": 5105,
 		"tests": 3
 	},
 	"rendered-contrast.e2e.ts": {
-		"ms": 123,
+		"ms": 156,
 		"tests": 1
 	},
 	"research-child-motion.e2e.ts": {
-		"ms": 16569,
+		"ms": 19307,
 		"tests": 7
 	},
 	"research-child-recovery.e2e.ts": {
-		"ms": 40985,
+		"ms": 42831,
 		"tests": 7
 	},
 	"research-child-surface.e2e.ts": {
-		"ms": 57341,
+		"ms": 65334,
 		"tests": 20
 	},
 	"research-conversation.e2e.ts": {
@@ -272,131 +280,131 @@
 		"tests": 4
 	},
 	"research-workspace.e2e.ts": {
-		"ms": 15597,
+		"ms": 10676,
 		"tests": 5
 	},
 	"responsive-activity.e2e.ts": {
-		"ms": 39949,
+		"ms": 36095,
 		"tests": 10
 	},
 	"responsive-child-phone.e2e.ts": {
-		"ms": 24557,
+		"ms": 20055,
 		"tests": 8
 	},
 	"responsive-comments.e2e.ts": {
-		"ms": 38959,
+		"ms": 39409,
 		"tests": 12
 	},
 	"responsive-content.e2e.ts": {
-		"ms": 28570,
+		"ms": 35135,
 		"tests": 11
 	},
 	"responsive-decisions.e2e.ts": {
-		"ms": 4098,
+		"ms": 5354,
 		"tests": 2
 	},
 	"responsive-phone-clearance.e2e.ts": {
-		"ms": 22521,
+		"ms": 24860,
 		"tests": 8
 	},
 	"responsive-selection.e2e.ts": {
-		"ms": 13667,
+		"ms": 12257,
 		"tests": 5
 	},
 	"responsive-touch-fields.e2e.ts": {
-		"ms": 7735,
+		"ms": 10311,
 		"tests": 3
 	},
 	"responsive-workspace.e2e.ts": {
-		"ms": 59193,
+		"ms": 59999,
 		"tests": 21
 	},
 	"seecode.e2e.ts": {
-		"ms": 21987,
+		"ms": 24331,
 		"tests": 6
 	},
 	"shell.e2e.ts": {
-		"ms": 31513,
+		"ms": 32264,
 		"tests": 16
 	},
 	"sidebar-decision-counts.e2e.ts": {
-		"ms": 36116,
+		"ms": 40579,
 		"tests": 12
 	},
 	"sidecar-card-states.e2e.ts": {
-		"ms": 41045,
+		"ms": 38963,
 		"tests": 16
 	},
 	"sidecar-document-spacing.e2e.ts": {
-		"ms": 4784,
+		"ms": 3827,
 		"tests": 2
 	},
 	"sidecar-draft-reopen.e2e.ts": {
-		"ms": 3037,
+		"ms": 3953,
 		"tests": 1
 	},
 	"sidecar-evidence-absence.e2e.ts": {
-		"ms": 2123,
+		"ms": 2176,
 		"tests": 1
 	},
 	"sidecar-navigation.e2e.ts": {
-		"ms": 9930,
+		"ms": 10243,
 		"tests": 5
 	},
 	"sidecar-option-async.e2e.ts": {
-		"ms": 10779,
+		"ms": 9063,
 		"tests": 5
 	},
 	"sidecar-option-contracts.e2e.ts": {
-		"ms": 23739,
+		"ms": 28688,
 		"tests": 11
 	},
 	"sidecar.e2e.ts": {
-		"ms": 117495,
+		"ms": 110571,
 		"tests": 44
 	},
 	"smoke.e2e.ts": {
-		"ms": 29248,
+		"ms": 32564,
 		"tests": 19
 	},
 	"syntax-contrast.e2e.ts": {
-		"ms": 5082,
+		"ms": 5342,
 		"tests": 3
 	},
 	"tab-authoring.e2e.ts": {
-		"ms": 11082,
+		"ms": 12661,
 		"tests": 4
 	},
 	"table.e2e.ts": {
-		"ms": 33655,
+		"ms": 33077,
 		"tests": 21
 	},
 	"toolbar.e2e.ts": {
-		"ms": 46266,
+		"ms": 43143,
 		"tests": 22
 	},
 	"undo.e2e.ts": {
-		"ms": 11960,
+		"ms": 11797,
 		"tests": 4
 	},
 	"unfold-previews.e2e.ts": {
-		"ms": 16138,
+		"ms": 16892,
 		"tests": 6
 	},
 	"visual-handoff.e2e.ts": {
-		"ms": 3857,
+		"ms": 4423,
 		"tests": 1
 	},
 	"wide-content.e2e.ts": {
-		"ms": 7073,
+		"ms": 7585,
 		"tests": 4
 	},
 	"wireframe.e2e.ts": {
-		"ms": 7370,
+		"ms": 6816,
 		"tests": 4
 	},
 	"workspace-skeleton.e2e.ts": {
-		"ms": 10650,
+		"ms": 10172,
 		"tests": 6
 	}
 }
