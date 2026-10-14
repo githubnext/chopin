@@ -282,6 +282,17 @@ Each operating system has its own catch:
 
 ## Check on it
 
+**Machines** in Chopin lists your machines with what each connector last said
+about itself: its hostname and the address it connected from, its chopin
+release and system, the coding agent it runs, and whether it is connected (a
+green dot) or when it was last seen. Search finds a machine by any of these.
+**Edit machine name…** in a machine's menu renames it in Chopin, and
+`chopin status` shows that name. The address is shown only to you; behind a
+reverse proxy, the server's `TRUSTED_PROXIES` setting decides which address
+that is (see [Self-hosting](self-hosting.md#the-address-a-machine-connects-from)).
+
+On the machine:
+
 ```sh
 chopin status
 ```
@@ -354,7 +365,8 @@ chopin unpair
 
 This revokes the machine in Chopin and deletes its token. You can also open
 **Machines** in Chopin's sidebar, which goes to `/connect` on your server, and
-choose **Disconnect machine** from the machine's menu under **Your machines**.
+choose **Disconnect machine…** from the machine's **…** menu (on a phone, tap
+the machine).
 
 A running `chopin connect` then stops. The next `chopin connect` at a terminal
 pairs again. To remove the service as well, run `chopin service uninstall`.

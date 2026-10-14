@@ -3,6 +3,16 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { hostname, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { findAgent } from "../packages/protocol/agents";
+import {
+	CONNECTOR_AGENT_HEADER,
+	CONNECTOR_AGENT_VERSION_HEADER,
+	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLATFORM_HEADER,
+	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SERVICE_HEADER,
+	CONNECTOR_VERSION_HEADER,
+} from "../packages/protocol/connector";
+import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { compiledChopin } from "../apps/connector/src/testing/binary";
 import { assets, fakeRelease } from "../apps/connector/src/testing/release";
 import { agentCommand, setupCommand } from "../apps/web/src/experiments/setup-commands";
@@ -329,4 +339,137 @@ test("a phone wraps every command in view", async ({ join: enter }) => {
 	}
 	await dialog.getByRole("button", { name: "Close", exact: true }).click();
 	await expect(dialog).toHaveCount(0);
+});
+
+const CONNECTOR = {
+	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+	[CONNECTOR_VERSION_HEADER]: "0.0.5",
+};
+
+/**
+ * Pair a machine for the person signed in on `page` with a key, as Add a server's script would,
+ * and, given `about`, connect a checkout with what its connector says about it.
+ */
+async function pairedMachine(page: Page, label: string, about?: Record<string, string>) {
+	let origin = new URL(page.url()).origin;
+	await page.goto("/auth/github/connector?key");
+	await expect(page).toHaveURL(/\/connect\?server$/);
+	let minted = await (await page.request.post("/api/connector/pairing-keys", {
+		data: {},
+		headers: { origin },
+	})).json() as { key: string };
+	let checkout = { repository: "octo-org/score", commit: "a".repeat(40), label };
+	// As a machine would: no browser cookies, so no browser origin either.
+	let post = (path: string, body: unknown, headers: Record<string, string>) =>
+		fetch(new URL(path, origin), {
+			method: "POST",
+			headers: { "content-type": "application/json", ...CONNECTOR, ...headers },
+			body: JSON.stringify(body),
+		});
+	let paired = await (await post("/api/connector/pairings", { ...checkout, key: minted.key }, {}))
+		.json() as { token: string };
+	if (about) {
+		let opened = await post("/api/connector/connections", checkout, {
+			...about,
+			authorization: `Bearer ${paired.token}`,
+		});
+		expect(opened.status, await opened.text()).toBe(200);
+	}
+}
+
+/** Three machines: a Linux server running as the service, a Mac, and one never connected. */
+async function threeMachines(page: Page) {
+	await pairedMachine(page, "build-box", {
+		[CONNECTOR_HOST_HEADER]: "build-box.internal",
+		[CONNECTOR_PLATFORM_HEADER]: "linux arm64",
+		[CONNECTOR_SERVICE_HEADER]: "1",
+		[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
+		[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
+	});
+	await pairedMachine(page, "studio", {
+		[CONNECTOR_HOST_HEADER]: "studio.local",
+		[CONNECTOR_PLATFORM_HEADER]: "darwin arm64",
+		[CONNECTOR_AGENT_HEADER]: "Claude Code",
+		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
+	});
+	await pairedMachine(page, "old-laptop");
+	await page.goto("/connect");
+}
+
+test("the machines table: search, Tailscale's columns, a row's menu and renaming", async ({ join: enter }) => {
+	let page = await enter(person());
+	await threeMachines(page);
+	let table = page.getByRole("table", { name: "Your machines" });
+	await expect(page.getByText("3 machines", { exact: true })).toBeVisible();
+	for (let heading of ["Machine", "Address", "Version", "Agent", "Last seen"]) {
+		await expect(table.getByRole("columnheader", { name: heading, exact: true })).toBeVisible();
+	}
+	let row = (name: string) => table.getByRole("row", { name: new RegExp(`^${name}`) });
+	await expect(row("build-box")).toContainText("Service");
+	await expect(row("build-box")).toContainText("build-box.internal");
+	await expect(row("build-box")).toContainText("chopin 0.0.5");
+	await expect(row("build-box")).toContainText("Linux arm64");
+	await expect(row("build-box")).toContainText("GitHub Copilot CLI 1.0.97");
+	await expect(row("build-box")).toContainText("Connected");
+	await expect(row("build-box").getByRole("button", { name: /^Copy (127\.0\.0\.1|::1)$/ }))
+		.toBeVisible();
+	await expect(row("studio")).toContainText("macOS arm64");
+	await expect(row("old-laptop")).toContainText(/Last seen/);
+
+	// Search narrows the table, by name, repository, system or agent alike.
+	let search = page.getByRole("searchbox", { name: "Search machines" });
+	await search.fill("claude");
+	await expect(page.getByText("1 of 3 machines", { exact: true })).toBeVisible();
+	await expect(table.getByRole("row")).toHaveCount(2);
+	await search.fill("");
+
+	// The row menu renames the machine.
+	await row("build-box").getByRole("button", { name: "Actions for build-box" }).click();
+	let menu = page.getByRole("menu", { name: "Actions for build-box" });
+	await expect(menu.getByRole("menuitem")).toHaveText([
+		"Edit machine name…",
+		"Disconnect machine…",
+	]);
+	await menu.getByRole("menuitem", { name: "Edit machine name…" }).click();
+	let dialog = page.getByRole("dialog", { name: "Edit machine name for build-box" });
+	await expect(dialog).toContainText("This name is shown in Chopin and in chopin status.");
+	let field = dialog.getByRole("textbox", { name: "Machine name" });
+	await expect(field).toBeFocused();
+	await field.fill("Build box");
+	await dialog.getByRole("button", { name: "Update name", exact: true }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(row("Build box")).toContainText("build-box.internal");
+
+	// Under the table, a quiet way to add another.
+	await page.getByRole("main").getByRole("button", { name: "Add machine", exact: true }).last()
+		.click();
+	await expect(page.getByRole("menu", { name: "Add machine" })).toBeVisible();
+});
+
+test("on a phone, machines are rows that open their own view, where they rename", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	await page.goto("/connect");
+	await threeMachines(page);
+	let rows = page.getByRole("region", { name: /^@mia-/ });
+	await expect(rows.getByRole("button")).toHaveCount(3);
+	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
+	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
+	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
+	await expect(rows.getByRole("button")).toHaveCount(1);
+	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
+
+	await rows.getByRole("button", { name: /build-box/ }).click();
+	await expect(page).toHaveURL(/\/connect\?machine=/);
+	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
+	await expect(page.getByRole("main")).toContainText("build-box.internal");
+	await expect(page.getByRole("main")).toContainText("Linux arm64");
+	await page.getByRole("button", { name: "Edit machine name…" }).click();
+	let dialog = page.getByRole("dialog", { name: "Edit machine name for build-box" });
+	await dialog.getByRole("textbox", { name: "Machine name" }).fill("Build box");
+	await dialog.getByRole("button", { name: "Update name", exact: true }).click();
+	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Build box");
+
+	await page.getByRole("button", { name: "Machines", exact: true }).click();
+	await expect(page).toHaveURL(/\/connect$/);
+	await expect(rows.getByRole("button", { name: /Build box/ })).toBeVisible();
 });

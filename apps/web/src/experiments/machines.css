@@ -23,6 +23,11 @@
 		calc(var(--spacing) * 20 + env(safe-area-inset-bottom));
 }
 
+/* The table takes the width its five columns need, as Tailscale's does. */
+.machines-main:has(.machines-table) {
+	max-width: 72rem;
+}
+
 /* Where the title could meet the floating Show sidebar button, it starts below it. */
 @container machines-page (width < 56rem) {
 	.navigation-content[data-project-sidebar-trigger] .machines-main {
@@ -491,14 +496,56 @@
 	}
 }
 
-/* The table */
+/* The list: a search, the count, the table (or a phone's rows), and a quiet way to add more. */
+
+.machines-search {
+	position: relative;
+	display: block;
+
+	& input {
+		width: 100%;
+		height: calc(var(--spacing) * 8);
+		padding-inline: calc(var(--spacing) * 8) calc(var(--spacing) * 3);
+		font-size: var(--text-sm);
+	}
+}
+
+.machines-search-icon {
+	position: absolute;
+	top: 50%;
+	left: calc(var(--spacing) * 3);
+	translate: 0 -50%;
+	--color-icon: var(--color-text-tertiary);
+	pointer-events: none;
+}
+
+.machines-count {
+	align-self: flex-start;
+	border-radius: var(--radius-full);
+	background: var(--color-selected);
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2.5);
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+	line-height: var(--text-xs--line-height);
+}
 
 .machines-table {
 	background: var(--color-page);
+	font-size: var(--text-sm);
+}
+
+/* Column headings in small capitals of the tertiary ink, as Tailscale's are. */
+.machines-table .cv-table-head {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-2xs);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
 }
 
 .machines-table .cv-table-cell {
-	vertical-align: middle;
+	vertical-align: top;
 }
 
 /* A machine paired this session keeps the selected surface, beside its New badge. */
@@ -516,25 +563,57 @@
 
 .machines-name-line {
 	display: flex;
-	flex-wrap: wrap;
+	max-width: 100%;
 	align-items: center;
-	gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+	gap: calc(var(--spacing) * 2);
+	white-space: nowrap;
+
+	& .machines-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+}
+
+/* Each cell keeps to two lines: its first never wraps, so the table widens or the page scrolls. */
+.machines-table .cv-table-cell > .machines-stack > :first-child {
+	white-space: nowrap;
 }
 
 /* A hostname breaks only where it has to, never mid-word to make the column narrower. */
 .machines-name {
 	min-width: 0;
-	font-weight: 500;
+	color: var(--color-text-primary);
+	font-weight: 600;
 	overflow-wrap: break-word;
 }
 
-/* Status keeps its headline on one line, so the column never squeezes it into a stack. */
-.machines-status-column {
-	min-width: 10rem;
+.machines-secondary {
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
 }
 
-.machines-status-headline {
+.machines-truncate {
+	max-width: 22rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* The address it connected from, under a dotted line; a press copies it. */
+.machines-address {
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+	line-height: var(--text-xs--line-height);
+	text-decoration-line: underline;
+	text-decoration-style: dotted;
+	text-decoration-color: color-mix(in oklch, currentColor 45%, transparent);
+	text-underline-offset: 0.25em;
+
+	&:hover {
+		color: var(--color-text-primary);
+	}
 }
 
 .machines-version {
@@ -544,16 +623,17 @@
 	white-space: nowrap;
 }
 
-.machines-version-inline,
-.machines-status-inline {
-	display: none;
-}
-
-.machines-connected {
+/* The dot carries the state; the words stay quiet, centred on the dot's x-height. */
+.machines-status {
 	display: inline-flex;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	color: var(--color-success-ink);
+	color: var(--color-text-secondary);
+	white-space: nowrap;
+}
+
+.machines-status-column {
+	min-width: 9rem;
 }
 
 .machines-actions-column {
@@ -561,40 +641,152 @@
 	text-align: right;
 }
 
-/* A command to run, shown as itself; a press copies it. The chip is drawn inside the button. */
-.machines-copyable {
-	display: inline-flex;
-	max-width: 100%;
-	align-items: center;
-	margin-inline-start: calc(var(--spacing) * 0.5);
-	border-radius: var(--radius-sm);
-	color: var(--color-text-primary);
-	text-align: start;
-	vertical-align: middle;
+.machines-empty {
+	padding-block: calc(var(--spacing) * 6);
+	color: var(--color-text-tertiary);
+	text-align: center;
+}
 
-	&:hover .machines-copyable-chip {
-		background: var(--color-hover);
+.machines-more {
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+}
+
+.machines-add-link {
+	font: inherit;
+}
+
+/* A phone's rows: the dot before the name, a quiet second line, a chevron to the machine. */
+.machines-rows {
+	display: flex;
+	flex-direction: column;
+
+	& ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	& li + li {
+		border-top: var(--edge-width) solid var(--color-edge);
 	}
 }
 
-.machines-copyable-chip {
-	display: inline-flex;
-	min-width: 0;
-	max-width: 100%;
-	align-items: center;
-	gap: calc(var(--spacing) * 1.5);
-	border-radius: var(--radius-sm);
-	background: var(--color-inset);
-	border: var(--edge-width) solid var(--color-edge);
-	padding: 0 calc(var(--spacing) * 1.5);
+.machines-rows-heading {
+	margin: 0 0 calc(var(--spacing) * 1);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	line-height: var(--text-xs--line-height);
+}
 
-	& code {
-		overflow: hidden;
-		font-family: var(--font-mono);
+.machines-row {
+	display: flex;
+	width: 100%;
+	min-height: var(--control-target-coarse);
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	padding-block: calc(var(--spacing) * 2.5);
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	text-align: start;
+
+	&[data-tone="destructive"] {
+		color: var(--color-destructive-ink);
+	}
+}
+
+.machines-row-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 0.5);
+}
+
+.machines-row-name {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.machines-row-icon,
+.machines-row-chevron {
+	flex: none;
+	--color-icon: var(--color-text-tertiary);
+}
+
+/* A machine's own view on a phone: its facts, then its actions as full-width rows. */
+.machines-detail-view {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 6);
+	font-size: var(--text-sm);
+}
+
+.machines-facts {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
+
+	& > div {
+		display: flex;
+		flex-direction: column;
+		gap: calc(var(--spacing) * 0.5);
+		padding-block: calc(var(--spacing) * 2.5);
+	}
+
+	& > div + div {
+		border-top: var(--edge-width) solid var(--color-edge);
+	}
+
+	& dt {
+		color: var(--color-text-tertiary);
 		font-size: var(--text-xs);
 		line-height: var(--text-xs--line-height);
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	}
+
+	& dd {
+		margin: 0;
+		color: var(--color-text-primary);
+		overflow-wrap: anywhere;
+	}
+}
+
+.machines-detail-actions {
+	margin: 0;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	padding: 0 calc(var(--spacing) * 4);
+	list-style: none;
+
+	& li + li {
+		border-top: var(--edge-width) solid var(--color-edge);
+	}
+}
+
+.machines-rename-dialog {
+	display: flex;
+	width: min(100%, 30rem);
+	flex-direction: column;
+	font-size: var(--text-sm);
+}
+
+.machines-rename-field {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 1.5);
+
+	& input {
+		height: calc(var(--spacing) * 8);
+		padding-inline: calc(var(--spacing) * 3);
 	}
 }
 
@@ -798,7 +990,9 @@
 
 	& .machines-needs-toggle,
 	& .machines-switch,
-	& .machines-back {
+	& .machines-back,
+	& .machines-address,
+	& .machines-add-link {
 		position: relative;
 
 		&::after {
@@ -812,12 +1006,8 @@
 		}
 	}
 
-	/*
-	 * A copy command sits in a table cell, which a target grown past it would be clipped by on the
-	 * last row, so the button itself is 44px tall around its chip.
-	 */
-	& .machines-copyable {
-		min-height: var(--control-target-coarse);
+	& .machines-search input {
+		height: var(--control-target-coarse);
 	}
 
 	& .machines-auto-label {
@@ -840,7 +1030,6 @@
 	}
 }
 
-/* Phones keep the name and status; the version moves under the name. */
 @media (max-width: 40rem) {
 	.machines-main {
 		gap: calc(var(--spacing) * 6);
@@ -872,70 +1061,5 @@
 
 	.machines-settings {
 		padding-inline-start: 0;
-	}
-
-	.machines-version-column {
-		display: none;
-	}
-
-	.machines-version-inline {
-		display: block;
-	}
-
-	/* Status joins the stack under the name, so the table fits the phone without scrolling. */
-	.machines-status-column {
-		display: none;
-	}
-
-	.machines-status-inline {
-		display: block;
-		align-self: stretch;
-		margin-top: calc(var(--spacing) * 1);
-		font-size: var(--text-sm);
-		line-height: var(--text-sm--line-height);
-	}
-
-	.machines-status-inline .machines-detail {
-		align-self: stretch;
-	}
-
-	/* The update badge drops under the version rather than widening the name column. */
-	.machines-version-inline .machines-version {
-		flex-wrap: wrap;
-		row-gap: calc(var(--spacing) * 1);
-	}
-
-	/* The command shows what fits and copies all of it; the row's menu shows it whole. */
-	.machines-copyable {
-		display: flex;
-		width: 100%;
-		margin-inline-start: 0;
-	}
-
-	.machines-copyable-chip {
-		flex: 1;
-
-		& code {
-			width: 0;
-			flex: 1;
-		}
-	}
-
-	/* A long hostname keeps two lines; its tooltip and the Disconnect dialog name it in full. */
-	.machines-table .machines-name {
-		display: -webkit-box;
-		overflow: hidden;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 2;
-	}
-
-	.machines-approver {
-		flex-basis: 100%;
-		margin-inline-start: 0;
-	}
-
-	.machines-authorize-note {
-		flex-basis: 100%;
-		margin-inline-start: 0;
 	}
 }

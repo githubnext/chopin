@@ -2,37 +2,25 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import {
-	ArrowUpIcon,
 	CheckIcon,
 	CloseIcon,
 	CopyIcon,
 	EllipsisIcon,
+	PencilIcon,
 	RestartIcon,
-	SparkleIcon,
-	WarningIcon,
 } from "@chopin/icons";
-import {
-	Badge,
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@chopin/visuals";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
-import { ago } from "../build-model";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
-import { listMachines, updateAvailable } from "../machine-summary";
+import { listMachines } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem, MenuSeparator } from "../menu-item";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
+import { session } from "../api";
 import { experimentRequest } from "./api";
 import { listProblem } from "./pairing-problems";
-import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
 
 import type { KeyboardEvent } from "react";
 import type { Machine } from "../machine-summary";
@@ -167,6 +155,25 @@ export function MachinesProblem({ code, onRetry }: { code: string; onRetry: () =
 	);
 }
 
+/** The signed-in person's GitHub login, asked for here so the first page load needn't carry it. */
+export function useLogin() {
+	let [login, setLogin] = useState<string>();
+	useEffect(() => {
+		let current = true;
+		session().then(value => current && setLogin(value.user?.login), () => {});
+		return () => {
+			current = false;
+		};
+	}, []);
+	return login;
+}
+
+/** Move within /connect as the navigation shell does for a link, so it renders the new view. */
+export function goTo(path: string) {
+	history.pushState(null, "", path);
+	window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 /** Where the machine list will be, while its first answer is on the way. */
 export function MachinesLoading() {
 	return (
@@ -187,48 +194,8 @@ export function MachinesLoading() {
 	);
 }
 
-/** Copies `text`, then says Copied (or that it could not) for two seconds. */
-function useCopy() {
-	let [copied, setCopied] = useState<"copied" | "failed">();
-	useEffect(() => {
-		if (!copied) return;
-		let timer = window.setTimeout(() => setCopied(undefined), 2000);
-		return () => window.clearTimeout(timer);
-	}, [copied]);
-	let copy = (text: string) =>
-		navigator.clipboard.writeText(text).then(
-			() => setCopied("copied"),
-			() => setCopied("failed"),
-		);
-	return { copied, copy };
-}
-
-/**
- * A command shown as itself, which copies on a press; its name says Copy, then Copied. The chip
- * is drawn inside the button, so on touch the button can take a full 44px row of its own.
- */
-function CopyableCommand({ command }: { command: string }) {
-	let { copied, copy } = useCopy();
-	return (
-		<button
-			aria-label={copied === "copied" ? `Copied ${command}` : `Copy ${command}`}
-			className="machines-copyable"
-			data-tooltip={copied === "failed" ? "Select to copy" : undefined}
-			onClick={() => void copy(command)}
-			type="button"
-		>
-			<span className="machines-copyable-chip">
-				<code>{command}</code>
-				{copied === "copied"
-					? <CheckIcon aria-hidden="true" className="machines-copyable-done" size={14} />
-					: <CopyIcon />}
-			</span>
-		</button>
-	);
-}
-
 /** Asks before disconnecting a machine for good, which also stops the connector running on it. */
-function DisconnectMachineDialog(
+export function DisconnectMachineDialog(
 	{ machine, motion, onDisconnected, onDismiss }: {
 		machine: Machine;
 		motion: NavigationDialogMotion;
@@ -299,19 +266,20 @@ function DisconnectMachineDialog(
 }
 
 /** A row menu item that copies a command; it says Copied, then the menu closes. */
-type CopyItem = { label: string; command: string };
+export type CopyItem = { label: string; command: string };
 
 /**
- * A row's actions menu: copy the command the machine's state asks for, then Disconnect, which
- * asks first. The menu sits on the page, below its button, because the table's scrolling
+ * A row's actions menu: Edit machine name, copy the command the machine's state asks for, then
+ * Disconnect, which asks first. The menu sits on the page, below its button, because the table's scrolling
  * container would clip it. Its keys are the document actions menu's: Up or Down on the button
  * opens it, arrows, Home and End move within it, and Escape closes it.
  */
-function MachineActions(
-	{ copies, machine, onDisconnect }: {
+export function MachineActions(
+	{ copies, machine, onDisconnect, onRename }: {
 		copies: CopyItem[];
 		machine: Machine;
 		onDisconnect: () => void;
+		onRename: () => void;
 	},
 ) {
 	let id = useId();
@@ -414,6 +382,15 @@ function MachineActions(
 					ref={menu}
 					role="menu"
 				>
+					<MenuItem
+						onClick={() => {
+							setOpen(false);
+							onRename();
+						}}
+					>
+						<PencilIcon aria-hidden="true" size={14} />
+						Edit machine name…
+					</MenuItem>
 					{copies.map(item => {
 						let state = copied?.command === item.command ? copied : undefined;
 						return (
@@ -437,7 +414,7 @@ function MachineActions(
 							</MenuItem>
 						);
 					})}
-					{!!copies.length && <MenuSeparator />}
+					<MenuSeparator />
 					<MenuItem
 						onClick={() => {
 							setOpen(false);
@@ -446,214 +423,11 @@ function MachineActions(
 						tone="destructive"
 					>
 						<CloseIcon aria-hidden="true" size={14} />
-						Disconnect machine
+						Disconnect machine…
 					</MenuItem>
 				</div>,
 				document.body,
 			)}
 		</>
-	);
-}
-
-function Status({ machine, now }: { machine: Machine; now: number }) {
-	if (machine.reauthorize) {
-		return (
-			<span className="machines-stack">
-				<Badge
-					className="machines-status-headline"
-					icon={WarningIcon}
-					label="Needs pairing again"
-					size="sm"
-					tone="warning"
-				/>
-				<span className="machines-detail">
-					On it, run <CopyableCommand command={pairCommand(machine.label)} />
-				</span>
-			</span>
-		);
-	}
-	if (machine.connected) {
-		return (
-			<span className="machines-connected machines-status-headline">
-				<span aria-hidden="true" className="machines-connected-dot" />
-				Connected
-			</span>
-		);
-	}
-	return (
-		<span className="machines-status-headline text-text-secondary">
-			Last seen {ago(new Date(machine.lastSeenAt).toISOString(), now) ?? "a while ago"}
-		</span>
-	);
-}
-
-/**
- * The machine's chopin release. Unknown reads as a dash under the Version heading; on a phone,
- * where the version sits under the name without that heading, it says so in words.
- */
-function Version(
-	{ inline = false, machine, recommended }: {
-		inline?: boolean;
-		machine: Machine;
-		recommended: string | null;
-	},
-) {
-	if (!machine.version) {
-		if (inline) return <span className="text-text-tertiary">Version unknown</span>;
-		return (
-			<span className="text-text-tertiary">
-				<span aria-hidden="true">—</span>
-				<span className="sr-only">Version unknown</span>
-			</span>
-		);
-	}
-	return (
-		<span className="machines-version">
-			<span className="tabular-nums">{machine.version}</span>
-			{updateAvailable(machine.version, recommended) && (
-				<Badge icon={ArrowUpIcon} label="Update available" size="sm" tone="warning" />
-			)}
-		</span>
-	);
-}
-
-/** The person's paired machines as a table: what each runs, whether it is up, and its actions. */
-export function MachineTable(
-	{ fresh, labelledBy, machines, onForget, recommended }: {
-		/** Machines paired this session, marked New. */
-		fresh: ReadonlySet<string>;
-		labelledBy: string;
-		machines: Machine[];
-		onForget: (id: string) => void;
-		recommended: string | null;
-	},
-) {
-	let [confirming, setConfirming] = useState<Machine>();
-	let presence = useTransitionPresence(confirming, 150, motionImmediately());
-	let now = Date.now();
-	return (
-		<>
-			<Table aria-labelledby={labelledBy} className="machines-table" variant="contained">
-				<TableHeader>
-					<TableRow>
-						<TableHead>Machine</TableHead>
-						<TableHead className="machines-version-column">Version</TableHead>
-						<TableHead className="machines-status-column">Status</TableHead>
-						<TableHead className="machines-actions-column">
-							<span className="sr-only">Actions</span>
-						</TableHead>
-					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{!machines.length && (
-						<TableRow>
-							<TableCell className="machines-empty" colSpan={4}>No machines yet.</TableCell>
-						</TableRow>
-					)}
-					{machines.map(machine => {
-						let copies: CopyItem[] = [
-							...(updateAvailable(machine.version, recommended)
-								? [{ label: "Copy update command", command: UPDATE_COMMAND }]
-								: []),
-							...(machine.reauthorize
-								? [{ label: "Copy pair command", command: pairCommand(machine.label) }]
-								: []),
-						];
-						let isNew = fresh.has(machine.id);
-						return (
-							<TableRow data-new={isNew || undefined} key={machine.id}>
-								<TableCell>
-									<span className="machines-stack">
-										<span className="machines-name-line">
-											<span
-												className="machines-name"
-												data-tooltip={machine.label}
-												data-tooltip-verbatim=""
-											>
-												{machine.label}
-											</span>
-											{isNew && (
-												<Badge
-													icon={SparkleIcon}
-													label="New"
-													size="sm"
-													textSize="2xs"
-													tone="neutral"
-												/>
-											)}
-										</span>
-										{!!machine.repositories.length && (
-											<span className="machines-detail">{machine.repositories.join(", ")}</span>
-										)}
-										{machine.autoRun && (
-											<span className="machines-detail">Builds and prototypes automatically</span>
-										)}
-										<span className="machines-version-inline machines-detail">
-											<Version inline machine={machine} recommended={recommended} />
-										</span>
-										<span className="machines-status-inline">
-											<Status machine={machine} now={now} />
-										</span>
-									</span>
-								</TableCell>
-								<TableCell className="machines-version-column">
-									<Version machine={machine} recommended={recommended} />
-								</TableCell>
-								<TableCell className="machines-status-column">
-									<Status machine={machine} now={now} />
-								</TableCell>
-								<TableCell className="machines-actions-column">
-									<MachineActions
-										copies={copies}
-										machine={machine}
-										onDisconnect={() => setConfirming(machine)}
-									/>
-								</TableCell>
-							</TableRow>
-						);
-					})}
-				</TableBody>
-			</Table>
-			{presence.phase !== "closed" && (
-				<DisconnectMachineDialog
-					machine={presence.value}
-					motion={presence}
-					onDisconnected={() => {
-						onForget(presence.value.id);
-						setConfirming(undefined);
-					}}
-					onDismiss={() => setConfirming(undefined)}
-				/>
-			)}
-		</>
-	);
-}
-
-/** The person's machines under their heading, or what stopped them loading. */
-export function YourMachines(
-	{ fresh, machines }: {
-		fresh: ReadonlySet<string>;
-		machines: ReturnType<typeof useMachines>;
-	},
-) {
-	let headingId = useId();
-	let list = machines.machines;
-	if (!list) {
-		return machines.error
-			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
-			: <MachinesLoading />;
-	}
-	return (
-		<section aria-labelledby={headingId} className="machines-section">
-			<h2 className="text-base font-semibold" id={headingId}>Your machines</h2>
-			{machines.error && <MachinesProblem code={machines.error} onRetry={machines.retry} />}
-			<MachineTable
-				fresh={fresh}
-				labelledBy={headingId}
-				machines={list}
-				onForget={machines.forget}
-				recommended={machines.recommended}
-			/>
-		</section>
 	);
 }

@@ -189,7 +189,7 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		let disconnect = async () => {
 			await machines.getByRole("button", { name: `Actions for ${hostname()}`, exact: true })
 				.click();
-			await page.getByRole("menuitem", { name: "Disconnect machine", exact: true }).click();
+			await page.getByRole("menuitem", { name: "Disconnect machine…", exact: true }).click();
 		};
 		let confirm = page.getByRole("dialog", { name: `Disconnect ${hostname()}?`, exact: true });
 		await disconnect();

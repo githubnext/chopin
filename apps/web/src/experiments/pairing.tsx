@@ -6,7 +6,8 @@ import { motionImmediately } from "../motion-input";
 import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
 import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
-import { useMachines, useNewMachines, YourMachines } from "./machines";
+import { MachineDetail, statusWords, YourMachines } from "./machine-list";
+import { goTo, useLogin, useMachines, useNewMachines } from "./machines";
 import { pairingProblem } from "./pairing-problems";
 import { SETUP_GUIDE } from "./setup-commands";
 
@@ -72,6 +73,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 	let list = machines.machines;
 	let marks = useNewMachines(list);
 	let bannerId = useId();
+	let login = useLogin();
 	let [adding, setAdding] = useState(false);
 	let dialog = useTransitionPresence(adding ? true : undefined, 150, motionImmediately());
 	let [announcement, setAnnouncement] = useState("");
@@ -111,7 +113,12 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 					</div>
 				</section>
 			)}
-			<YourMachines fresh={marks.marked} machines={machines} />
+			<YourMachines
+				fresh={marks.marked}
+				login={login}
+				machines={machines}
+				onChoose={choose}
+			/>
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
 					motion={dialog}
@@ -128,7 +135,10 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
  * menu item rather than a link, moves through history the way Back does, which the shell follows.
  */
 function MachinesPage() {
-	if (new URLSearchParams(location.search).has("server")) {
+	let search = new URLSearchParams(location.search);
+	let machine = search.get("machine");
+	if (machine) return <MachinePage id={machine} />;
+	if (search.has("server")) {
 		return (
 			<MachinesFrame
 				description="Choose settings, then generate an install script."
@@ -146,11 +156,39 @@ function MachinesPage() {
 	}
 	return (
 		<MachinesHome
-			onServer={() => {
-				history.pushState(null, "", SERVER_PATH);
-				window.dispatchEvent(new PopStateEvent("popstate"));
-			}}
+			onServer={() => goTo(SERVER_PATH)}
 		/>
+	);
+}
+
+/**
+ * One machine, as a phone opens it from the list. Back returns to the list where it was: through
+ * history when the list is the page before, so its scroll is kept.
+ */
+function MachinePage({ id }: { id: string }) {
+	let machines = useMachines();
+	let login = useLogin();
+	let machine = machines.machines?.find(value => value.id === id);
+	return (
+		<MachinesFrame
+			description={machine ? statusWords(machine, Date.now()) : ""}
+			lead={
+				<button
+					className="machines-back"
+					onClick={() => {
+						if (sessionStorage.getItem("chopin:machines:scroll") !== null) history.back();
+						else goTo("/connect");
+					}}
+					type="button"
+				>
+					<ArrowLeftIcon aria-hidden="true" size={14} />
+					Machines
+				</button>
+			}
+			title={machine?.label ?? "Machine"}
+		>
+			<MachineDetail id={id} login={login} machines={machines} />
+		</MachinesFrame>
 	);
 }
 
@@ -184,7 +222,15 @@ function ConnectedMachines({ label }: { label: string }) {
 		}, FOLLOW_MS);
 		return () => window.clearTimeout(timer);
 	}, [waiting, machines.machines, retry]);
-	return <YourMachines fresh={marks.marked} machines={machines} />;
+	let login = useLogin();
+	return (
+		<YourMachines
+			fresh={marks.marked}
+			login={login}
+			machines={machines}
+			onChoose={kind => goTo(kind === "server" ? SERVER_PATH : "/connect")}
+		/>
+	);
 }
 
 /** The pairing card's shape while the pairing is on its way. */

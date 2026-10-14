@@ -23,7 +23,7 @@ export function MachinesEntry(
 			<span className="truncate">Machines</span>
 			{!!summary?.paired && (
 				<span aria-hidden="true" className="machines-entry-count">
-					{summary.connected > 0 && <span className="machines-connected-dot" />}
+					{summary.connected > 0 && <span className="status-dot" data-state="connected" />}
 					<Count appearance="quiet" typography="metadata">
 						{summary.connected}/{summary.paired}
 					</Count>

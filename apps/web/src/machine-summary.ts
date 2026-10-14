@@ -13,6 +13,16 @@ export type Machine = {
 	reauthorize: boolean;
 	/** The chopin release it runs, known only while it is connected with a release build. */
 	version: string | null;
+	/** What its newest connection said about it; null when it said nothing or isn't connected. */
+	hostname: string | null;
+	platform: { os: string; arch: string } | null;
+	agent: { name: string; version?: string } | null;
+	/** The address it connected from, as Chopin saw it. */
+	address: string | null;
+	/** The background service runs it. */
+	service: boolean;
+	/** It runs Planners for documents too. */
+	planner: boolean;
 };
 
 export type MachineSummary = { paired: number; connected: number };

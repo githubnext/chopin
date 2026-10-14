@@ -11,13 +11,13 @@ import {
 } from "@chopin/icons";
 import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
-import { session } from "../api";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem } from "../menu-item";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
+import { useLogin } from "./machines";
 import { agentCommand, guessSystem, runsAsService, setupCommand, shellFor } from "./setup-commands";
 
 import type { KeyboardEvent } from "react";
@@ -182,19 +182,6 @@ export function AgentChoice(
 	);
 }
 
-/** The signed-in person's GitHub login, asked for here so the first page load needn't carry it. */
-function useLogin() {
-	let [login, setLogin] = useState<string>();
-	useEffect(() => {
-		let current = true;
-		session().then(value => current && setLogin(value.user?.login), () => {});
-		return () => {
-			current = false;
-		};
-	}, []);
-	return login;
-}
-
 export type MachineKind = "computer" | "server";
 
 const KINDS: {
@@ -222,7 +209,13 @@ const KINDS: {
  * button, at the button's end where it fits. Its keys are the document actions menu's: Up or Down
  * on the button opens it, arrows, Home and End move within it, and Escape closes it.
  */
-export function AddMachineMenu({ onChoose }: { onChoose: (kind: MachineKind) => void }) {
+export function AddMachineMenu(
+	{ appearance = "button", onChoose }: {
+		/** `link`: the words "Add machine" in running text, as under the table. */
+		appearance?: "button" | "link";
+		onChoose: (kind: MachineKind) => void;
+	},
+) {
 	let id = useId();
 	let trigger = useRef<HTMLButtonElement>(null);
 	let menu = useRef<HTMLDivElement>(null);
@@ -301,7 +294,9 @@ export function AddMachineMenu({ onChoose }: { onChoose: (kind: MachineKind) => 
 				aria-controls={open ? id : undefined}
 				aria-expanded={open}
 				aria-haspopup="menu"
-				className="btn btn-md btn-primary machines-add shrink-0"
+				className={appearance === "link"
+					? "machines-link machines-add-link"
+					: "btn btn-md btn-primary machines-add shrink-0"}
 				onClick={() => open ? close(false) : openAt("first")}
 				onKeyDown={event => {
 					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -312,7 +307,9 @@ export function AddMachineMenu({ onChoose }: { onChoose: (kind: MachineKind) => 
 				type="button"
 			>
 				Add machine
-				<ChevronIcon aria-hidden="true" className="machines-add-chevron" size={12} />
+				{appearance === "button" && (
+					<ChevronIcon aria-hidden="true" className="machines-add-chevron" size={12} />
+				)}
 			</button>
 			{mounted && createPortal(
 				<div

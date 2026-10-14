@@ -729,11 +729,26 @@
 	margin-left: auto;
 }
 
-.machines-connected-dot {
-	width: calc(var(--spacing) * 1.5);
-	height: calc(var(--spacing) * 1.5);
+/*
+ * A machine's state as a small solid dot, the same in the sidebar, the Machines table, its phone
+ * list and a machine's own view: success when connected, tertiary ink when not, warning when it
+ * needs pairing again. Static, as Tailscale's is; the words beside it stay quiet.
+ */
+.status-dot {
+	display: inline-block;
+	flex: none;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
 	border-radius: var(--radius-full);
-	background: var(--color-success);
+	background: var(--color-text-tertiary);
+
+	&[data-state="connected"] {
+		background: var(--color-success);
+	}
+
+	&[data-state="reauthorize"] {
+		background: var(--color-warning);
+	}
 }
 
 .project-sidebar-count {
