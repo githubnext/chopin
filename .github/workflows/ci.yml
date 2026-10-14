@@ -1,6 +1,6 @@
 # Jobs are split by what they wait on, so the slowest one decides the wall time
 # and nothing queues behind unrelated work. Static checks, three unit shards, the
-# PostgreSQL contract, eight browser shards, two design suites, the container and
+# PostgreSQL contract, twelve browser shards, two design suites, the container and
 # the CLI all start together. Two small gates keep the required check names,
 # `format, lint, types, tests` and `e2e`, over the jobs they summarise.
 name: ci
@@ -28,7 +28,7 @@ env:
   BUN_VERSION: 1.4.2
   # Shard counts; keep each matrix below in step with its count.
   UNIT_SHARDS: 3
-  E2E_SHARDS: 8
+  E2E_SHARDS: 12
 
 jobs:
   static:
@@ -171,12 +171,12 @@ jobs:
           test "$POSTGRES_RESULT" = success
 
   browser-integration:
-    name: e2e (shard ${{ matrix.shard }}/8)
+    name: e2e (shard ${{ matrix.shard }}/12)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     env:
       PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/blob-report
       PLAYWRIGHT_BLOB_OUTPUT_NAME: shard-${{ matrix.shard }}.zip
@@ -350,13 +350,13 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
-
-      - run: bun install --frozen-lockfile
+      # The gate needs Playwright alone, at exactly the version that wrote the
+      # blobs, rather than the whole workspace.
+      - name: Resolve the Playwright version
+        id: playwright
+        run: |
+          version=$(bun --print 'require("./package.json").devDependencies["@playwright/test"]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Collect integration reports
         id: blobs
@@ -375,8 +375,10 @@ jobs:
               exit 1
             fi
           done
-          bun node_modules/@playwright/test/cli.js merge-reports --reporter=html,json e2e/blob-report
+          bunx -p "@playwright/test@$PLAYWRIGHT_VERSION" playwright merge-reports \
+            --reporter=html,json e2e/blob-report
         env:
+          PLAYWRIGHT_VERSION: ${{ steps.playwright.outputs.version }}
           PLAYWRIGHT_HTML_OPEN: never
           PLAYWRIGHT_HTML_OUTPUT_DIR: e2e/playwright-report/integration
           PLAYWRIGHT_JSON_OUTPUT_NAME: e2e/.scratch/ci-reports/integration.json

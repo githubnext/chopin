@@ -57,7 +57,7 @@ only when the existing client build is known to match the checkout.
 
 CI starts every job at once: format, lint and types on one runner; unit tests in
 three shards balanced by `.github/bun-test-timings.json`; the PostgreSQL contract;
-browser integration in eight shards balanced by `e2e/shard-timings.json`; the
+browser integration in twelve shards balanced by `e2e/shard-timings.json`; the
 design and diagram suites; a Docker image build; and the `chopin` CLI binary
 build with its bridge smoke test (whose Windows binary is then started once on
 Windows, where `install.ps1` is also tested). The required checks
