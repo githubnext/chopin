@@ -218,9 +218,10 @@ export function MachineSetup(
 						/>
 					)
 					: <Pending pairing={pairing} renew={renew} />}
-				<div className="machines-run-status">
-					{status}
-					{pairing.state === "ready" && (
+				{/* Without a command there is nothing to wait for yet. */}
+				{pairing.state === "ready" && (
+					<div className="machines-run-status">
+						{status}
 						<span className="machines-key">
 							<Expiry expiresAt={pairing.expiresAt} />
 							<button className="btn btn-sm btn-ghost" onClick={renew} type="button">
@@ -228,8 +229,8 @@ export function MachineSetup(
 								New key
 							</button>
 						</span>
-					)}
-				</div>
+					</div>
+				)}
 				{!runsAsService(agent) && <p className="machines-detail">Keep this terminal open.</p>}
 			</div>
 		</section>
