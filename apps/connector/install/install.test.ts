@@ -18,6 +18,19 @@ import { assets, fakeChopin, fakeRelease, sha256 } from "../src/testing/release"
 let scratch = await mkdtemp(join(tmpdir(), "chopin-install-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
+const KEY = `chopin_k_${"Ab3-_".repeat(9).slice(0, 43)}`;
+
+/** A chopin that answers --version, then records how it was run and exits with `code`. */
+function recordingChopin(code: number) {
+	return [
+		"#!/bin/sh",
+		'[ "$1" = --version ] && { echo "chopin 0.2.0 (connector protocol 1)"; exit 0; }',
+		'{ printf "%s\\n" "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@"; [ -t 0 ] && echo terminal; } > "$HOME/ran"',
+		`exit ${code}`,
+		"",
+	].join("\n");
+}
+
 // install.sh is for Linux and macOS; its shims are shell scripts that Windows cannot run.
 describe.skipIf(process.platform === "win32")("install.sh", () => {
 	let script = join(import.meta.dir, "install.sh");
@@ -325,6 +338,116 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		expect(missing.stderr).toContain("curl or wget is required");
 		expect(missing.stderr).toContain("sudo apt install curl");
 	});
+
+	/** install.sh piped into `shell -s -- …args`, as `curl … | sh -s -- connect …` runs it. */
+	function piped(
+		at: Awaited<ReturnType<typeof machine>>,
+		env: Record<string, string>,
+		shell: string,
+		...args: string[]
+	) {
+		return run(at, env, [shell, "-c", `cat '${script}' | ${shell} -s -- "$@"`, shell, ...args]);
+	}
+
+	let shells = ["sh", "dash", "bash"].filter(shell => Bun.which(shell));
+	let ran = async (at: Awaited<ReturnType<typeof machine>>) =>
+		(await Bun.file(join(at.home, "ran")).exists())
+			? (await readFile(join(at.home, "ran"), "utf8")).split("\n").slice(0, -1)
+			: undefined;
+
+	test("piped into sh with connect, runs the chopin it installed with those arguments and its exit code", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", recordingChopin(7)) });
+		let args = ["connect", "--install-service", "--", "copilot", "--acp", "it's a $HOME"];
+		for (let shell of shells) {
+			let at = await machine();
+			let result = await piped(
+				at,
+				{ ...release.env, CHOPIN_URL: "https://chopin.example", CHOPIN_PAIRING_KEY: KEY },
+				shell,
+				...args,
+			);
+			expect(result.stderr, shell).toBe("");
+			expect(result.code, shell).toBe(7);
+			expect(result.stdout).toContain(
+				`Installed chopin 0.2.0 (connector protocol 1) at ${at.chopin}`,
+			);
+			expect(await ran(at)).toEqual(["https://chopin.example", KEY, ...args]);
+			expect(result.stdout + result.stderr).not.toContain(KEY);
+		}
+	});
+
+	test("refuses any chopin command but connect and pair before downloading anything", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", recordingChopin(0)) });
+		let at = await machine();
+		for (let args of [["update"], ["service", "install"], ["0.2.0", "connect"]]) {
+			let result = await piped(at, release.env, "sh", ...args);
+			expect(result.code).toBe(1);
+			expect(result.stderr).toStartWith("chopin install: install.sh ");
+			expect(result.stderr).toContain(
+				args[0] === "0.2.0" ? "takes one version" : `not "${args[0]}"`,
+			);
+		}
+		expect(release.requests).toEqual([]);
+		expect(await Bun.file(at.chopin).exists()).toBe(false);
+	});
+
+	test("a failed install stops with its own message and never runs chopin", async () => {
+		using release = fakeRelease({
+			"0.2.0": assets("chopin-linux-x64", recordingChopin(0), sha256("something else")),
+		});
+		for (let shell of shells) {
+			let at = await machine();
+			let result = await piped(
+				at,
+				{ ...release.env, CHOPIN_PAIRING_KEY: KEY },
+				shell,
+				"connect",
+				"--",
+				"copilot",
+			);
+			expect(result.code, shell).toBe(1);
+			expect(result.stderr).toContain("Refusing to install it.");
+			expect(await ran(at)).toBeUndefined();
+			expect(result.stdout + result.stderr).not.toContain(KEY);
+		}
+	});
+
+	// A truncated download would otherwise run the lines that did arrive.
+	test("a script cut short runs none of it", async () => {
+		using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", recordingChopin(0)) });
+		let text = await readFile(script, "utf8");
+		let cut = join(scratch, "install-cut.sh");
+		await writeFile(cut, text.slice(0, text.lastIndexOf('exec "$target"')));
+		for (let shell of shells) {
+			let at = await machine();
+			let result = await run(at, release.env, [
+				shell,
+				"-c",
+				`cat '${cut}' | ${shell} -s -- connect -- copilot`,
+			]);
+			expect(result.code, shell).not.toBe(0);
+			expect(result.stdout, shell).toBe("");
+			expect(await Bun.file(at.chopin).exists()).toBe(false);
+		}
+		expect(release.requests).toEqual([]);
+	});
+
+	// script(1) gives the command a terminal, as a person's shell has.
+	test.skipIf(!Bun.which("script") || process.platform !== "linux")(
+		"piped into sh, chopin still reads from the terminal, where it asks for permission",
+		async () => {
+			using release = fakeRelease({ "0.2.0": assets("chopin-linux-x64", recordingChopin(0)) });
+			let at = await machine();
+			let result = await run(at, release.env, [
+				"script",
+				"-qec",
+				`cat '${script}' | sh -s -- connect -- claude-agent-acp`,
+				"/dev/null",
+			]);
+			expect(result.code, result.stdout).toBe(0);
+			expect((await ran(at))?.at(-1)).toBe("terminal");
+		},
+	);
 });
 
 describe("install.ps1", () => {

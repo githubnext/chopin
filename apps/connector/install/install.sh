@@ -3,6 +3,11 @@
 #
 #   curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
 #   curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh -s -- 0.2.0
+#   curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh \
+#     | CHOPIN_URL=https://chopin.example sh -s -- connect -- copilot --acp --allow-all
+#
+# Given `connect` or `pair` and its arguments, it runs that chopin command once installed, with
+# the environment it was given (CHOPIN_URL, CHOPIN_PAIRING_KEY), and exits as that command does.
 #
 # CHOPIN_VERSION              the version to install, like the argument (default: the newest release)
 # CHOPIN_VERIFY_ATTESTATION   0 skips `gh attestation verify`, which otherwise runs when gh is installed
@@ -13,6 +18,9 @@
 #
 # chopin goes to ~/.local/bin. Nothing here needs, or asks for, administrator rights.
 set -eu
+# In braces, so sh reads the whole script before it runs any of it: `curl | sh` cut short by a
+# dropped connection runs nothing rather than the lines that arrived.
+{
 
 REPOSITORY="githubnext/chopin"
 BASE_URL="${CHOPIN_RELEASE_BASE_URL:-https://github.com/$REPOSITORY/releases/download}"
@@ -22,6 +30,16 @@ fail() {
 	printf 'chopin install: %s\n' "$1" >&2
 	exit 1
 }
+
+# Read before anything is downloaded, so a command install.sh won't run installs nothing.
+subcommand=""
+case "${1:-}" in
+connect | pair) subcommand="$1" ;;
+"" | [0-9]* | v[0-9]* | cli-v*)
+	[ "$#" -le 1 ] || fail "install.sh takes one version like 0.2.0, or connect or pair and their arguments."
+	;;
+*) fail "install.sh runs only chopin connect or chopin pair once it has installed chopin, not \"$1\"." ;;
+esac
 
 # Plain http is accepted only from a server on this machine, as the tests use.
 allowed_url() {
@@ -102,7 +120,8 @@ trap 'rm -rf "$scratch"; [ -z "$staged" ] || rm -f "$staged"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-version="${1:-${CHOPIN_VERSION:-}}"
+version="${CHOPIN_VERSION:-}"
+[ -n "$subcommand" ] || version="${1:-$version}"
 if [ -z "$version" ]; then
 	download "$RELEASES_API_URL?per_page=100" "$scratch/releases.json" \
 		|| fail "could not list releases from $RELEASES_API_URL. Check your connection and any proxy (HTTPS_PROXY), then run this command again."
@@ -167,3 +186,14 @@ case ":${PATH:-}:" in
 	printf '  export PATH="$HOME/.local/bin:$PATH"\n'
 	;;
 esac
+
+[ -n "$subcommand" ] || exit 0
+# exec leaves no shell behind to run the EXIT trap, so the scratch directory goes first.
+rm -rf "$scratch"
+trap - EXIT INT TERM
+# Piped into sh, standard input is the script; chopin asks its questions on the terminal.
+if [ ! -t 0 ] && (: </dev/tty) 2>/dev/null; then
+	exec "$target" "$@" </dev/tty
+fi
+exec "$target" "$@"
+}
