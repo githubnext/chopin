@@ -96,6 +96,9 @@ export type Waiting = Wire.Waiting & {
 	/** Told how the turn went, before the queue moves on; see `Instruction`. */
 	ended?: Instruction["ended"];
 	started?: Instruction["started"];
+	prepare?: Instruction["prepare"];
+	preparedNotice?: string;
+	beforeStream?: Instruction["beforeStream"];
 	/** Login session whose Copilot entitlement owns this queued turn. */
 	sessionId?: string;
 	/** Verified member identity, retained only for a queued composer message. */
@@ -143,8 +146,20 @@ export type Ended = {
 	text?: string;
 };
 
+export type PreparedInstruction =
+	| { status: "ready"; text: string; noticeId: string }
+	| { status: "deferred" | "skipped" };
+
+const PREPARATION_SKIPPED = Symbol("instruction preparation skipped");
+
 /** What a turn other than a message needs to say about itself. */
 export type Instruction = {
+	/** Claim durable work after owner resolution and before any model execution. */
+	prepare?: () => Promise<PreparedInstruction>;
+	/** Carried through the queue; published only after preparation commits. */
+	preparedNotice?: string;
+	/** The ready path is synchronous; a proven unstarted turn may durably defer here. */
+	beforeStream?: () => true | Promise<false>;
 	/** Server-authored review of blockers; never supplies an explicit member research request. */
 	readiness?: boolean;
 	spent?: () => boolean;
@@ -996,10 +1011,11 @@ export function instruct(
 	about: Instruction = {},
 ): void | Promise<void> {
 	let { chat, config, room, server } = context;
+	if (about.prepare) about = { ...about, preparedNotice: said };
 	// A child has no Chat to explain the turn in, and its root's Planner reaches it there.
 	if (context.rootChannelId) return report(about, { status: "skipped" });
 	let proceed = (): void | Promise<void> => {
-		if (chat.closed) return;
+		if (chat.closed) return report(about, { status: "skipped" });
 		// `AGENT=off` runs the room without one. The decision that got here is
 		// still a decision and is already recorded; only the turn is impossible,
 		// and saying so beats a session failing to open.
@@ -1046,7 +1062,7 @@ export function instruct(
 
 		startRun(context, handle, text, about, context.claimantSessionId);
 	};
-	let announced = instructionNotice(context, said, about.comment);
+	let announced = about.prepare ? undefined : instructionNotice(context, said, about.comment);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 
@@ -1775,6 +1791,7 @@ async function repositorySession(
 	claimantSessionId: string | undefined,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
+	notifyOwner = true,
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
 	let retained = context.chat.retained;
 	// A background job keeps its isolated session: it never borrows or ends the retained Planner.
@@ -1791,7 +1808,7 @@ async function repositorySession(
 		context.room,
 		context.plannerNotAttached ? undefined : claimantSessionId,
 	);
-	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
+	if (notifyOwner && context.ownerAvailable) void context.ownerAvailable().catch(() => {});
 	let { chat, auth } = context;
 	let lifecycle = chat.lifecycle;
 	let ownerSessionId = ownership.ownerSessionId!;
@@ -1958,12 +1975,14 @@ async function run(
 	let { chat, plan, room, server } = context;
 	if (chat.closed) {
 		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
+		await report(about, { status: "skipped" });
 		return;
 	}
 	let thread = about?.thread;
 	// Where this turn's own messages begin, so its last word can be found again.
 	let firstEntry = chat.entries.length;
 	let failed = false;
+	let skipped = false;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -2021,9 +2040,37 @@ async function run(
 	let heldOwner = chat.owner;
 	let heldReferences = held ? new Map(chat.referenceCache) : undefined;
 	try {
-		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
+		opened = await repositorySession(
+			context,
+			claimantSessionId,
+			member?.entryId,
+			references,
+			!about?.prepare,
+		);
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error("The Planner session changed before the turn started. Try again.");
+		}
+		if (about?.prepare) {
+			let prepared = await about.prepare();
+			if (prepared.status !== "ready") {
+				skipped = true;
+				throw PREPARATION_SKIPPED;
+			}
+			if (chat.closed || turnController.signal.aborted || opened.binding.signal.aborted) {
+				throw new Error("The Planner stopped before the review could begin.");
+			}
+			text = prepared.text;
+			await noticeOnce(context, prepared.noticeId, about.preparedNotice ?? "Reviewing findings");
+			if (chat.closed || turnController.signal.aborted || opened.binding.signal.aborted) {
+				throw new Error("The Planner stopped before the review could begin.");
+			}
+			// No await on the ready path between this last scope check and stream().
+			let ready = about.beforeStream?.();
+			if (ready !== undefined && ready !== true) {
+				await ready;
+				skipped = true;
+				throw PREPARATION_SKIPPED;
+			}
 		}
 		chat.jobToolNames = jobTurn
 			? new Set(opened.session.activeTools ?? PLANNER_TOOL_NAMES)
@@ -2058,7 +2105,13 @@ async function run(
 		let result = await opened.session.stream(prompt, signal);
 		for await (let part of result.fullStream) {
 			if (turnController.signal.aborted) break;
+			if (about?.prepare && part.type === "error") {
+				throw part.error instanceof Error ? part.error : new Error("The result review failed.");
+			}
 			translate(context, part);
+		}
+		if (about?.prepare && opened.binding.signal.aborted) {
+			throw new Error("The Planner owner became unavailable during the review.");
 		}
 		if (jobTurn && chat.closed) throw new Error("The document closed.");
 		if (chat.interruption) throw new Error(chat.interruption);
@@ -2073,9 +2126,9 @@ async function run(
 				: { status: "done", output: chat.jobOutput };
 		}
 	} catch (err) {
-		console.error("[chat] turn failed:", err);
+		if (err !== PREPARATION_SKIPPED) console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
-		failed = !turnController.signal.aborted || !!chat.interruption;
+		failed = !skipped && (!turnController.signal.aborted || !!chat.interruption);
 		if (jobTurn) {
 			outcome = chat.closed
 				? { status: "failed", reason: "The document closed." }
@@ -2083,7 +2136,10 @@ async function run(
 					status: sendStarted || chat.interruption ? "failed" : "skipped",
 					reason: jobReason(err),
 				};
-		} else if (!chat.closed && (!turnController.signal.aborted || chat.interruption)) {
+		} else if (
+			!skipped && !chat.closed && (!about?.prepare || sendStarted)
+			&& (!turnController.signal.aborted || chat.interruption)
+		) {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -2199,7 +2255,7 @@ async function run(
 
 	// Before the drain, so what it records is in place before the next turn reads anything.
 	// A failed save closes the chat, and its owner still needs to hear that the turn failed.
-	if (about?.ended && (!chat.closed || persistenceError || about.readiness)) {
+	if (about?.ended && (!chat.closed || persistenceError || about.readiness || about.prepare)) {
 		// The turn is over: nothing it does can be attributed to the thread any more,
 		// and anyone joining before the drain must not read it as still working.
 		if (chat.acting === thread && chat.actingChannel === about.threadChannel) {
@@ -2209,7 +2265,13 @@ async function run(
 		let said = chat.entries.slice(firstEntry).findLast(entry => entry.author.kind === "agent");
 		let stopped = turnController.signal.aborted && !failed;
 		await report(about, {
-			status: failed || persistenceError ? "failed" : stopped ? "stopped" : "done",
+			status: failed || persistenceError
+				? "failed"
+				: skipped
+				? "skipped"
+				: stopped
+				? "stopped"
+				: "done",
 			...(said?.text.trim() ? { text: said.text } : {}),
 		});
 	}
@@ -2224,12 +2286,14 @@ async function run(
 			if (chat.handoffJob === next.job) chat.handoffJob = undefined;
 			console.error("[chat] could not save a queued turn:", err);
 			if (next.job) finishJob(next.job, { status: "failed", reason: jobReason(err) });
+			await report(next, { status: "failed" });
 			stopAfterPersistenceFailure(chat, server, room);
 			return;
 		}
 		if (chat.handoffJob === next.job) chat.handoffJob = undefined;
 		if (chat.closed) {
 			if (next.job) finishJob(next.job, { status: "failed", reason: "The document closed." });
+			await report(next, { status: "skipped" });
 			return;
 		}
 		if (next.job?.settled) {
@@ -2248,7 +2312,7 @@ async function run(
 			next.handle,
 			next.text,
 			next,
-			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
+			next.invokedBy || next.prepare ? next.sessionId : next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId
 				? { entryId: next.id, userId: next.userId, ...(next.focus ? { focus: next.focus } : {}) }
@@ -2263,7 +2327,9 @@ async function run(
 	chat.acting = undefined;
 	chat.actingChannel = undefined;
 	(jobTurn ? jobState : state)(chat, server, room);
-	if (context.ownerAvailable && !chat.closed) void context.ownerAvailable().catch(() => {});
+	if (context.ownerAvailable && !chat.closed && !about?.prepare) {
+		void context.ownerAvailable().catch(() => {});
+	}
 }
 
 function startRun(

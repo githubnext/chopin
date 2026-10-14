@@ -259,6 +259,7 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Understand persistence                     | [Storage](docs/storage.md)                                   |
 | Review the hosted agent boundary           | [Hosted agent](docs/hosted-agent.md)                         |
 | Register durable background jobs           | [Background jobs](docs/background-jobs.md)                   |
+| Follow published evidence into a document  | [Result follow-through](docs/result-followthrough.md)        |
 | Review experimental implementation handoff | [Implementation lifecycle](docs/implementation-lifecycle.md) |
 | Develop on exe.dev                         | [exe.dev development](docs/exe-dev.md)                       |
 | Test an authenticated PR preview           | [PR preview testing](docs/preview-testing.md)                |

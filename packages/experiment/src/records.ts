@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requestSchema, resultSchema, scalarSchema } from "./index";
+import type { Followthrough } from "@chopin/protocol";
 
 export const stateSchema = z.object({
 	revision: z.number().int().nonnegative(),
@@ -113,6 +114,7 @@ export type InvestigationProvenance = {
 };
 export type PublishedInvestigation = Omit<Investigation, "candidate" | "receipts"> & {
 	child?: InvestigationChild;
+	followthrough?: Followthrough.View;
 	/** The owning document is locked by a build, so its record refuses decisions and placement. */
 	locked?: boolean;
 };

@@ -53,6 +53,21 @@ export function experimentContract(name: string, factory: StorageFactory) {
 				expect(second.childId).toBe(first.childId);
 				expect(first.result).toEqual(performance);
 				expect(first.candidate).toBeUndefined();
+				let [receipt] = await storage.followthrough.forSource(
+					channelId,
+					"investigation",
+					created.id,
+				);
+				expect(receipt).toMatchObject({
+					channelId,
+					childId: first.childId,
+					kind: "investigation",
+					sourceId: created.id,
+					resultKey: "1",
+					status: "pending",
+					revision: 0,
+					attempts: 0,
+				});
 				let child = await storage.channels.get(first.childId!);
 				expect(child).toMatchObject({ parentChannelId: channelId, title: "Startup comparison" });
 				let loaded = await storage.collaboration.load(first.childId!, new Date());
@@ -68,6 +83,15 @@ export function experimentContract(name: string, factory: StorageFactory) {
 						lease,
 					),
 				).toEqual(stored!);
+				expect(
+					await storage.experiments.save(
+						{ ...stored!, revision: stored!.revision + 1, progress: "selection changed" },
+						stored!.revision,
+						lease,
+					),
+				).toBe(true);
+				expect(await storage.followthrough.forSource(channelId, "investigation", created.id))
+					.toEqual([receipt!]);
 				await storage.channels.archive({ id: first.childId!, now: new Date() });
 				await expect(storage.channels.delete(first.childId!)).rejects.toMatchObject({
 					failure: "conflict",
@@ -110,6 +134,8 @@ export function experimentContract(name: string, factory: StorageFactory) {
 				expect(completed.childId).toBeUndefined();
 				expect(await service.complete(created.id, "connection", 1)).toEqual(completed);
 				expect(await storage.channels.children(channelId, 10)).toEqual([]);
+				expect(await storage.followthrough.forSource(channelId, "investigation", created.id))
+					.toEqual([]);
 				await expect(
 					storage.experiments.publish(
 						{ ...completed, revision: completed.revision + 1 },
@@ -159,5 +185,33 @@ export function experimentContract(name: string, factory: StorageFactory) {
 				await storage.close();
 			}
 		});
+		for (let state of ["failed", "cancelled"] as const) {
+			test(`does not publish a ${state} investigation or enqueue follow-through`, async () => {
+				let storage = await openedStorage(factory);
+				try {
+					let { channelId, userId, lease } = await userAndChannel(storage);
+					let service = new Experiments(storage.experiments, () => lease);
+					let created = await service.create(channelId, userId, "Measure startup");
+					await storage.experiments.save({ ...created, revision: 1, state }, 0, lease);
+					await expect(storage.experiments.publish(
+						{
+							...created,
+							revision: 2,
+							state: "completed",
+							result: performance,
+						},
+						1,
+						{ title: "Evidence", initial: undefined as never, now: new Date() },
+						lease,
+					))
+						.rejects.toThrow("experiment result is not ready");
+					expect(await storage.followthrough.forSource(channelId, "investigation", created.id))
+						.toEqual([]);
+					expect(await storage.channels.children(channelId, 10)).toEqual([]);
+				} finally {
+					await storage.close();
+				}
+			});
+		}
 	});
 }

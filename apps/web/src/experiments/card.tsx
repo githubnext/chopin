@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { InvestigationCard, SidecarCard } from "@chopin/editor";
+import { FollowthroughStatus, InvestigationCard, SidecarCard } from "@chopin/editor";
 import type { ExperimentStore } from "./store";
 import { ItemDecisions } from "./evidence";
 import { LocalAgentNote } from "../local-agent-note";
@@ -65,7 +65,8 @@ export function InvestigationReference(
 			void store.load(id);
 		}
 	}, [store, id, revision]);
-	async function act(action: () => Promise<unknown>) {
+	async function act(action: () => Promise<unknown>, failure?: string) {
+		if (!canEdit || busy || store.mutating(id)) return;
 		setBusy(true);
 		setError("");
 		setNeedsAgent(false);
@@ -73,7 +74,8 @@ export function InvestigationReference(
 			await action();
 		} catch (error) {
 			let message = String((error as Error).message);
-			if (message === "no-workspace") setNeedsAgent(true);
+			if (failure) setError(failure);
+			else if (message === "no-workspace") setNeedsAgent(true);
 			else setError(REFUSALS[message] ?? message);
 		} finally {
 			setBusy(false);
@@ -92,12 +94,16 @@ export function InvestigationReference(
 	}
 	let stoppable = ACTIVE.has(state) && item?.input?.authorizer === userId;
 	let child = state === "completed" ? item?.child : undefined;
+	let review = child ? item?.followthrough : undefined;
+	let canApply = !review || review.status === "done"
+		|| review.status === "skipped" && review.reason === "dismissed";
+	let mutating = busy || store.mutating(id);
 	// A completed record loaded without a child has lost its document; say so plainly.
 	let orphaned = state === "completed" && !!item && item.revision >= (revision ?? 0) && !child;
 	return (
 		<InvestigationCard
 			brief={brief}
-			busy={busy}
+			busy={mutating}
 			canEdit={canEdit && (stoppable || !locked)}
 			error={error}
 			id={id}
@@ -106,20 +112,39 @@ export function InvestigationReference(
 					{current?.buildBlocker && (
 						<p className="m-0 text-sm text-text-secondary">
 							<strong>Required before building:</strong> {current.buildBlocker}
-							{state === "completed" && " · Apply the findings before building."}
+							{state === "completed" && canApply && " · Apply the findings before building."}
 						</p>
 					)}
-					{state === "completed" && current?.buildBlocker && onApply && canEdit && (
-						<div>
+					{state === "completed" && canApply && current?.buildBlocker && onApply && canEdit && (
+						<div className="plan-research-detail">
 							<button
 								className="btn btn-compact btn-outline"
-								disabled={busy || locked}
-								onClick={() => void act(onApply)}
+								disabled={mutating || locked}
+								onClick={() => {
+									if (!locked) void act(onApply);
+								}}
 								type="button"
 							>
 								Apply findings
 							</button>
 						</div>
+					)}
+					{review && (
+						<FollowthroughStatus
+							busy={mutating}
+							canEdit={canEdit}
+							onDismiss={() =>
+								void act(
+									() => store.review(id, "dismiss"),
+									"Review could not be dismissed. Try again.",
+								)}
+							onRetry={() =>
+								void act(
+									() => store.review(id, "retry"),
+									"Review could not be retried. Try again.",
+								)}
+							view={review}
+						/>
 					)}
 					{needsAgent ? <AgentHint /> : orphaned && (
 						<p className="m-0 text-sm text-text-secondary">

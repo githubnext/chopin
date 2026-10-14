@@ -24,6 +24,7 @@ import {
 import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
 import { Fold, Swap, useLast } from "./research-motion";
+import { FollowthroughStatus } from "./followthrough";
 import { widgets$ } from "../widget-options";
 import { $isInvestigationNode, $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
@@ -237,12 +238,15 @@ export type ResearchCardProps = {
 	actionError?: string;
 	busy?: boolean;
 	canEdit?: boolean;
+	canReviewResults?: boolean;
 	openButtonRef?: (button: HTMLButtonElement | null) => void;
 	request: Research.RequestView;
 	onCancel?: () => void;
 	onOpen?: (opener: HTMLElement) => void;
 	onRemove?: () => void;
 	onRetry?: () => void;
+	onRetryReview?: () => void;
+	onDismissReview?: () => void;
 };
 
 function Indicator({ stage }: { stage: Research.RequestStage }) {
@@ -357,10 +361,13 @@ export function ResearchCard(
 		actionError,
 		busy,
 		canEdit = true,
+		canReviewResults = canEdit,
 		onCancel,
 		onOpen,
 		onRemove,
 		onRetry,
+		onRetryReview,
+		onDismissReview,
 		openButtonRef,
 		request,
 	}: ResearchCardProps,
@@ -461,6 +468,15 @@ export function ResearchCard(
 					<UnfoldPanel className="plan-research-preview" unfold={preview}>
 						<ResearchPreview question={request.question} sources={request.sources} />
 					</UnfoldPanel>
+				)}
+				{ready && request.followthrough && (
+					<FollowthroughStatus
+						busy={busy}
+						canEdit={canReviewResults}
+						onDismiss={onDismissReview}
+						onRetry={onRetryReview}
+						view={request.followthrough}
+					/>
 				)}
 				<Fold open={message !== undefined}>{attention}</Fold>
 				<Fold open={!!footer}>
@@ -651,6 +667,7 @@ export function ResearchDeletionPlugin() {
 
 export type ResearchReferenceProps = {
 	canEdit?: boolean;
+	canReviewResults?: boolean;
 	id: string;
 	onRemove: () => void;
 	store: ResearchStore;
@@ -664,7 +681,9 @@ export function retainResearch(store: ResearchStore, id: string): () => void {
 	return store.retain(id);
 }
 
-export function ResearchReference({ canEdit = true, id, onRemove, store }: ResearchReferenceProps) {
+export function ResearchReference(
+	{ canEdit = true, canReviewResults = canEdit, id, onRemove, store }: ResearchReferenceProps,
+) {
 	let subscribe = useCallback(
 		(listener: () => void) => subscribeResearch(store, listener),
 		[store],
@@ -692,12 +711,15 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 		);
 	}
 
-	let action = (run: () => Promise<Research.RequestView>) => {
+	let action = (
+		run: () => Promise<Research.RequestView>,
+		failure = "Research could not be updated.",
+		allowed = canEdit,
+	) => {
+		if (!allowed || busy || mutating) return;
 		setBusy(true);
 		setActionError(undefined);
-		void run().catch(() => setActionError("Research could not be updated.")).finally(() =>
-			setBusy(false)
-		);
+		void run().catch(() => setActionError(failure)).finally(() => setBusy(false));
 	};
 	let actions = researchActions(request, canEdit);
 
@@ -706,6 +728,7 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			actionError={actionError}
 			busy={busy || mutating}
 			canEdit={canEdit}
+			canReviewResults={canReviewResults}
 			request={request}
 			onCancel={actions.cancel ? () => action(() => store.cancel(request.id)) : undefined}
 			onOpen={actions.open && request.child
@@ -714,6 +737,22 @@ export function ResearchReference({ canEdit = true, id, onRemove, store }: Resea
 			openButtonRef={button => store.opener(request.id, button)}
 			onRemove={actions.remove ? onRemove : undefined}
 			onRetry={actions.retry ? () => action(() => store.retry(request.id)) : undefined}
+			onRetryReview={canReviewResults && store.review
+				? () =>
+					action(
+						() => store.review!(request.id, "retry"),
+						"Review could not be retried. Try again.",
+						canReviewResults,
+					)
+				: undefined}
+			onDismissReview={canReviewResults && store.review
+				? () =>
+					action(
+						() => store.review!(request.id, "dismiss"),
+						"Review could not be dismissed. Try again.",
+						canReviewResults,
+					)
+				: undefined}
 		/>
 	);
 }
@@ -727,6 +766,7 @@ function InlineResearch({ id, node }: { id: string; node: ResearchNode }) {
 		? (
 			<ResearchReference
 				canEdit={options.canEdit}
+				canReviewResults={options.canReviewResults}
 				id={id}
 				onRemove={remove}
 				store={store}

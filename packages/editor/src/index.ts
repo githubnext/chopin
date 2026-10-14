@@ -100,3 +100,4 @@ export {
 } from "./widgets";
 export type { InvestigationCardProps } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
+export { FollowthroughStatus } from "./widgets/followthrough";

@@ -232,6 +232,7 @@ export type { Chat } from "./chat";
 export type { Comment } from "./comment";
 export type { ConversationPlan } from "./conversation-plan";
 export type { Experiment } from "./experiment";
+export type { Followthrough } from "./followthrough";
 export type { Job } from "./job";
 export type { Plan } from "./plan";
 export type { Question } from "./question";

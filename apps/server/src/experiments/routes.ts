@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { capabilities, ExperimentError, limits, sourceSchema } from "@chopin/experiment";
 import { publicInvestigation } from "@chopin/experiment/records";
+import { followthroughView } from "../followthrough/view";
 import type { Investigation, InvestigationProvenance } from "@chopin/experiment/records";
 import type { HostedAuth } from "../auth/routes";
 import { AdmissionDenied } from "../auth/admission";
@@ -458,9 +459,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	async function published(value: Investigation) {
 		let child = value.childId ? await auth.storage.channels.get(value.childId) : undefined;
+		let review = child && (await auth.storage.followthrough.forSource(
+			value.documentId,
+			"investigation",
+			value.id,
+		)).find(item => item.childId === child.id && item.resultKey === String(value.generation));
 		let locked = !!options.canMutate && !await options.canMutate(value.documentId);
 		return {
 			...publicInvestigation(value),
+			...(review ? { followthrough: followthroughView(review) } : {}),
 			...(locked ? { locked } : {}),
 			...(child && value.result
 				? {

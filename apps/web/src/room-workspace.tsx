@@ -1474,6 +1474,7 @@ export function RoomWorkspace(
 				questionMotion={QUESTION_MOTION}
 				questions={questions}
 				readOnly={!workspaceCanEdit || implementation.locked}
+				canReviewResults={!!workspaceCanEdit && status === "connected" && !!wire?.connected}
 				research={profile.research ? research : undefined}
 				researchLauncher={researchLauncher}
 				scrollTop={planScrollTop}

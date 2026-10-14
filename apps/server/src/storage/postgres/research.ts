@@ -1,5 +1,7 @@
 import { conflict, corrupt, missing } from "../errors";
 import { deterministicChannelId } from "../../channels/id";
+import { enqueueFollowthrough } from "./followthrough";
+import { assertResultInitial } from "../followthrough";
 import {
 	isBackgroundJobState,
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
@@ -1181,6 +1183,7 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 					throw conflict(`background job ${answerJobId} is not current completed answer work`);
 				}
 
+				assertResultInitial(input.initial);
 				let childId = deterministicChannelId(repositoryId, workspaceId);
 				let savedChannel = await this.#createChannel(
 					transaction,
@@ -1213,6 +1216,14 @@ export class PostgresResearchWorkspaceStore implements ResearchWorkspaceStore {
 				if (!savedWorkspaceRow) {
 					throw corrupt("publishing an initial research report returned no workspace");
 				}
+				await enqueueFollowthrough(transaction, {
+					channelId,
+					childId,
+					kind: "research",
+					sourceId: workspaceId,
+					resultKey: answerJobId,
+					now,
+				});
 				return {
 					workspace: workspace(savedWorkspaceRow),
 					channel: savedChannel,

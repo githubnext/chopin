@@ -44,6 +44,10 @@ complete report has been published. Failure and retry preserve the accepted
 brief. See [background jobs](background-jobs.md) for research execution and child
 publication. The existing `/research` document composer remains the manual entry.
 
+Published reports also queue [follow-through](result-followthrough.md) in the
+parent's Chat. The card shows whether the Planner is waiting, reviewing, or has
+reviewed the findings, with retry and dismissal controls for writers.
+
 While research runs, Chat also shows its current code-owned worker activity,
 such as waiting for a web-search response or waiting for the model's findings.
 A failed request exposes its safe failure explanation and **Retry research** in

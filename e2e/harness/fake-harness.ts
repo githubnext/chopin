@@ -12,6 +12,7 @@ import type {
 } from "../../apps/server/src/harness/harness-v1";
 import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
 import { nameDocument } from "./fake-heading";
+import { followContradiction, isContradictionReview } from "./fake-followthrough";
 
 type FakeHarnessSettings = {
 	credentials: (id: string) => string | undefined;
@@ -193,6 +194,23 @@ export function createFakeHarness(
 						void (async () => {
 							try {
 								await nameDocument(prompt, callTool);
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (isContradictionReview(prompt)) {
+						void (async () => {
+							try {
+								let explanation = await followContradiction(prompt, callTool);
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: explanation });
+								turn.emit({ type: "text-end", id });
 								finish();
 								settled.resolve();
 							} catch (err) {

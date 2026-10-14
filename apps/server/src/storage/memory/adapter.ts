@@ -5,6 +5,7 @@ import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { childSidecarWithoutConversation } from "../child-conversation";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
+import { MemoryFollowthroughStore } from "./followthrough";
 import { MemoryImageStore } from "./images";
 import { MemoryMachineStore } from "./machines";
 import { MemoryResearchWorkspaceStore } from "./research";
@@ -130,11 +131,23 @@ type Operation = CommitResult;
 /** A strict in-memory adapter used by domain tests, not a production fallback. */
 export class MemoryStorage implements StorageAdapter {
 	readonly driver = "memory";
+	readonly followthrough = new MemoryFollowthroughStore(
+		id => this.#channels.has(id),
+		lease => this.#assertLease(lease),
+		(channelId, childId) => {
+			let parent = this.#channels.get(channelId);
+			let child = this.#channels.get(childId);
+			return !!parent && !!child && !parent.parentChannelId && !parent.archivedAt
+				&& !child.archivedAt && child.parentChannelId === channelId
+				&& child.repositoryId === parent.repositoryId;
+		},
+	);
 	readonly experiments = new MemoryExperimentStore({
 		exists: id => this.#channels.has(id),
 		active: id => !this.#channels.get(id)?.archivedAt,
 		fence: lease => this.#assertLease(lease),
 		channel: id => this.#channels.get(id),
+		followthrough: input => this.followthrough.prepare(input),
 		createChannel: input =>
 			this.#createChannel({
 				...input,
@@ -371,6 +384,7 @@ export class MemoryStorage implements StorageAdapter {
 					}),
 			}),
 		assertLease: held => this.#assertLease(held),
+		followthrough: input => this.followthrough.prepare(input),
 	});
 	readonly research: ResearchWorkspaceStore = this.#research;
 
@@ -548,6 +562,7 @@ export class MemoryStorage implements StorageAdapter {
 		}
 
 		this.#channels.delete(id);
+		this.followthrough.deleteChannel(id);
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);

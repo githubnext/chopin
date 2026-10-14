@@ -1,5 +1,7 @@
 import { conflict, missing } from "../errors";
 import { deterministicChannelId } from "../../channels/id";
+import type { FollowthroughPublication } from "../followthrough";
+import { assertResultInitial } from "../followthrough";
 import {
 	RESEARCH_REPOSITORY_CHANNEL_LIMIT,
 	RESEARCH_REPOSITORY_CHANNEL_WORKSPACE_LIMIT,
@@ -56,6 +58,7 @@ type Options = {
 		}) => T,
 	) => T;
 	assertLease: (lease: Lease) => void;
+	followthrough: (input: FollowthroughPublication) => () => void;
 };
 
 type LinkedJob = { turnId: string; role: ResearchJobRole };
@@ -728,8 +731,18 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					);
 				}
 				let now = timestamp(input.now, "publication time");
+				assertResultInitial(input.initial);
+				let childId = deterministicChannelId(currentParent.repositoryId, found.id);
+				let publishReceipt = this.#options.followthrough({
+					channelId: input.channelId,
+					childId,
+					kind: "research",
+					sourceId: found.id,
+					resultKey: input.answerJobId,
+					now,
+				});
 				let child = access.createAvailableChannel({
-					id: deterministicChannelId(currentParent.repositoryId, found.id),
+					id: childId,
 					repositoryId: currentParent.repositoryId,
 					repositoryOwner: currentParent.repositoryOwner,
 					repositoryName: currentParent.repositoryName,
@@ -743,6 +756,7 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 					...found,
 					publishedChannelId: child.id,
 				}, now);
+				publishReceipt();
 				return { workspace: workspace(saved), channel: child, repeated: false };
 			});
 		});

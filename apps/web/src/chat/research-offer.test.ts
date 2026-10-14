@@ -4,10 +4,75 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { forwardStage, ResearchOfferCard, shouldShowResearchActionError } from "./research-offer";
 import { deferred } from "./research-offer.test-fixtures";
 import { researchBriefKey } from "./research-brief-editor";
-import type { ConversationPlan } from "@chopin/protocol";
+import type { ConversationPlan, Research } from "@chopin/protocol";
 import type { OfferLinkView } from "./research-offer";
 import type { ResearchRequestStore } from "../research-requests";
 import { researchDraftHarness } from "../../../server/src/conversation-plan/research-draft.test-fixtures";
+
+test("accepted Chat research offers expose published review status with writer-only controls", () => {
+	let offer: ConversationPlan.ResearchOffer = {
+		id: "offer",
+		needId: "need",
+		contextId: "context",
+		brief: "Compare hosting",
+		status: "accepted",
+		source: {
+			messageId: "message",
+			author: { kind: "member", handle: "ana" },
+			quote: "Compare hosting",
+			start: 0,
+			end: 15,
+		},
+	};
+	let request: Research.RequestView = {
+		id: "request",
+		channelId: "document",
+		question: "Compare hosting",
+		sources: [],
+		createdAt: "",
+		updatedAt: "",
+		state: "completed",
+		stage: "ready",
+		child: {
+			id: "child",
+			title: "Hosting evidence",
+			slug: "hosting-evidence",
+			summary: "Costs.",
+			sourceCount: 0,
+		},
+		followthrough: { id: "review", revision: 1, status: "failed", reason: "interrupted" },
+	};
+	let store = {
+		subscribe: () => () => {},
+		get: () => request,
+		retain: () => () => {},
+		mutating: () => false,
+	} as unknown as ResearchRequestStore;
+	let render = (canAct: boolean) =>
+		renderToStaticMarkup(createElement(ResearchOfferCard, {
+			offer,
+			controls: {
+				links: { [offer.id]: { status: "linked", researchRequestId: request.id } },
+				busy: new Set<string>(),
+				errors: {},
+				canAct,
+				canExecute: false,
+				canCheckLink: true,
+				store,
+				onAction() {},
+				onRetryLink() {},
+			},
+		}));
+	let writer = render(true);
+	expect(writer).toContain('aria-label="Open Hosting evidence"');
+	expect(writer).toContain("Review interrupted");
+	expect(writer).toContain(">Retry review</button>");
+	expect(writer).toContain(">Dismiss review</button>");
+	let reader = render(false);
+	expect(reader).toContain("Review interrupted");
+	expect(reader).not.toContain("Retry review");
+	expect(reader).not.toContain("Dismiss review");
+});
 
 // Exact archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2, apps/web/src/chat/research-offer.test.ts.
 test("Resume appears only for a verified unresolved link and linked work hides stale errors", () => {
@@ -29,6 +94,7 @@ test("Resume appears only for a verified unresolved link and linked work hides s
 		subscribe: () => () => {},
 		get: () => undefined,
 		retain: () => () => {},
+		mutating: () => false,
 	} as unknown as ResearchRequestStore;
 	let render = (link?: OfferLinkView, canAct = true) =>
 		renderToStaticMarkup(createElement(ResearchOfferCard, {
