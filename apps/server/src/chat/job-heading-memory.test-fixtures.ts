@@ -7,17 +7,18 @@ import { mockResult } from "../conversation-plan/interpret.test-fixtures";
 import { createConversationRuntime } from "../conversation-plan/runtime";
 import type { Room } from "../rooms";
 
-export async function headingMemory() {
+export async function headingMemory(conversationPlan = true, agent = true) {
 	let opened = await openPlan();
 	let plan = opened.plan;
 	let identity = await authenticatedMemory(opened);
 	let { context } = identity;
+	context.config.agent = agent;
 	let errors: unknown[] = [];
 	let room: Room = { id: opened.channel.id, members: new Map(), plan };
 	let runtime = createConversationRuntime({
 		config: {
-			agent: true,
-			conversationPlan: true,
+			agent,
+			conversationPlan,
 			conversationPlanModel: "offline",
 			conversationPlanTimeoutMs: 1_000,
 		},

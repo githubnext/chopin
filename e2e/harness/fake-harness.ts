@@ -10,6 +10,8 @@ import type {
 	HarnessV1Session,
 	HarnessV1StartOptions,
 } from "../../apps/server/src/harness/harness-v1";
+import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
+import { nameDocument } from "./fake-heading";
 
 type FakeHarnessSettings = {
 	credentials: (id: string) => string | undefined;
@@ -92,7 +94,12 @@ export function createFakeHarness(
 
 				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
 					let available = new Set(turn.tools.map(spec => spec.name));
-					for (let toolName of SCRIPTED_TOOLS) {
+					let prompt = promptText(turn.prompt);
+					let heading = prompt.startsWith("[Background job: heading]\n");
+					if (heading && available.size !== HEADING_TOOL_NAMES.length) {
+						throw new Error("e2e-fake heading job received tools outside its scope");
+					}
+					for (let toolName of heading ? HEADING_TOOL_NAMES : SCRIPTED_TOOLS) {
 						if (!available.has(toolName)) {
 							throw new Error(`e2e-fake harness expected host tool ${toolName}`);
 						}
@@ -118,7 +125,7 @@ export function createFakeHarness(
 
 					let callTool = (
 						toolName: string,
-						toolCallId = crypto.randomUUID(),
+						toolCallId: string = crypto.randomUUID(),
 						input: Record<string, unknown> = {},
 					): Promise<{ output: unknown; isError?: boolean }> => {
 						let outcome = Promise.withResolvers<{ output: unknown; isError?: boolean }>();
@@ -133,7 +140,6 @@ export function createFakeHarness(
 					};
 					let pause = () => new Promise<void>(resolve => setTimeout(resolve, STEP_MS));
 
-					let prompt = promptText(turn.prompt);
 					let thread = COMMENT_THREAD.exec(prompt)?.[1];
 					let focused = CHILD_FOCUS.exec(prompt)?.[1];
 					let finish = () => {
@@ -183,7 +189,20 @@ export function createFakeHarness(
 						}
 					};
 
-					if (thread && !prompt.includes(SLOW_PROMPT)) {
+					if (heading) {
+						void (async () => {
+							try {
+								await nameDocument(prompt, callTool);
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (thread && !prompt.includes(SLOW_PROMPT)) {
 						// A comment sent to Chopin: answer in the thread, unless the comment
 						// asks to be answered only in Chat so the server's backstop is exercised.
 						void (async () => {

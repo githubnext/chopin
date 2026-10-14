@@ -137,32 +137,16 @@ test("new card jobs retain their event receipt but trigger from the source chat 
 	});
 });
 
-test("unlinked purpose creates one heading intent without a thread event", () => {
+test("purpose analysis does not duplicate naming admitted directly from saved Chat", () => {
 	let analysis = {
 		messageId: "m1",
 		questionSetVersion: "conversation-plan-8",
 		modelVersion: "jev",
 		status: "unlinked",
 		eventIds: [],
-		passes: [{ stage: "triage", answers: { enough_purpose: { type: "noul", noul: 0.75 } } }],
+		passes: [{ stage: "triage", answers: { enough_purpose: { type: "noul", noul: 0.95 } } }],
 	} as ConversationPlan.AnalysisRecord;
-	expect(effectsFor([], initialState(), analysis)).toMatchObject([{
-		key: "job:heading:document",
-		kind: "job",
-		intent: { kind: "heading", target: "document", trigger: "m1" },
-	}]);
-	expect(effectsFor([], initialState(), {
-		...analysis,
-		questionSetVersion: "conversation-plan-4",
-	})).toMatchObject([{ key: "job:heading:document" }]);
-	expect(
-		effectsFor([], initialState(), { ...analysis, questionSetVersion: "conversation-plan-3" }),
-	)
-		.toEqual([]);
-	expect(effectsFor([], initialState(), {
-		...analysis,
-		passes: [{ stage: "triage", answers: { enough_purpose: { type: "noul", noul: 0.749 } } }],
-	})).toEqual([]);
+	expect(effectsFor([], initialState(), analysis)).toEqual([]);
 });
 
 test("new settle and leaning events do not target historical non-ULID options", () => {

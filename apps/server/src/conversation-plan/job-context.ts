@@ -146,7 +146,8 @@ export function createJobContexts() {
 		claim(plan: Plan, job: Job): { context: Chat.Room; claimantSessionId: string } | undefined {
 			prune(plan);
 			let byMessage = byPlan.get(plan);
-			let triggered = byMessage?.get(job.trigger);
+			let triggered = byMessage?.get(job.trigger)
+				?? (job.kind === "heading" ? [...(byMessage?.values() ?? [])].at(-1) : undefined);
 			let owner = plan.chat.owner?.sessionId;
 			if (job.kind === "prose" && !triggered) return undefined;
 			if (owner) {

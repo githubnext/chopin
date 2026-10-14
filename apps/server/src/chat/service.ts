@@ -605,6 +605,8 @@ export type Room = {
 	persist: (chat?: () => Pick<Chat, "entries" | "runs">) => Promise<void>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
 	roomMessagePublished?: () => void;
+	/** Runs only after a new member entry is durably saved and its human turn reserved. */
+	memberMessagePersisted?: (entry: Wire.Entry, claimantSessionId: string | undefined) => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
@@ -746,6 +748,7 @@ export async function invoke(
 				else settled();
 			}
 		}
+		context.memberMessagePersisted?.(entry, context.claimantSessionId);
 		return undefined;
 	};
 	let accepted = chat.sending.then(post, post);
@@ -849,6 +852,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 		announce(server, room, entry);
 		context.roomMessagePublished?.();
+		context.memberMessagePersisted?.(entry, context.claimantSessionId);
 		chat.backscroll = remember(chat.backscroll, {
 			entryId: entry.id,
 			handle,
@@ -881,6 +885,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		}
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entries[0]!.id, queued: false });
 		for (let entry of entries) announce(server, room, entry);
+		context.memberMessagePersisted?.(entries[0]!, context.claimantSessionId);
 		return;
 	}
 
@@ -948,6 +953,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		{ entryId: entry.id, userId: ws.data.principalId, ...(focus ? { focus } : {}) },
 		references,
 	);
+	context.memberMessagePersisted?.(entry, context.claimantSessionId);
 }
 
 /** Say something in the transcript without asking the agent for anything. */
@@ -1745,6 +1751,25 @@ export function consumeBootstrapBackscroll(chat: Chat): void {
 	chat.backscroll = chat.backscroll.filter(said => !said.entryId || !entries.has(said.entryId));
 }
 
+/** Readiness is a scheduling hint; the turn and live tools still revalidate ownership. */
+export async function jobReady(context: Room, claimantSessionId: string): Promise<boolean> {
+	if (!context.config.agent || context.chat.closed || Service.implementationActive(context.plan)) {
+		return false;
+	}
+	if (await context.plannerNotAttached?.()) return false;
+	try {
+		await resolveOwner(
+			context.auth,
+			context.repository,
+			context.room,
+			context.plannerNotAttached ? undefined : claimantSessionId,
+		);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function repositorySession(
 	context: Room,
 	claimantSessionId: string | undefined,
@@ -2214,7 +2239,10 @@ async function run(
 		(next.job ? jobQueued : queued)(chat, server, room);
 		let nextId = next.id;
 		let entry = next.message ? chat.entries.find(item => item.id === nextId) : undefined;
-		if (entry && !next.posted) announce(server, room, entry);
+		if (entry && !next.posted) {
+			announce(server, room, entry);
+			context.memberMessagePersisted?.(entry, next.sessionId);
+		}
 		await run(
 			{ ...context, invokedBy: next.invokedBy, draft: next.draft },
 			next.handle,

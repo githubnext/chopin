@@ -8,8 +8,8 @@ import { socket, until } from "./job.test-fixtures";
 
 installJobCleanup();
 
-async function suspendHeading() {
-	let h = await headingMemory();
+async function suspendHeading(conversationPlan = true) {
+	let h = await headingMemory(conversationPlan);
 	let entered = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
 	let restore = Room.restore;
@@ -56,6 +56,30 @@ test("closing a held actual heading tool fences late document publication and re
 		} finally {
 			await Plan.close(reopened);
 		}
+	} finally {
+		release.resolve();
+		held.mockRestore();
+		await h.close();
+	}
+});
+
+test("detaching during a held naming tool fences its write and returning does not replay it", async () => {
+	let { h, release, held } = await suspendHeading(false);
+	try {
+		h.context.plannerNotAttached = async () => "Attach the Planner";
+		await Chat.resetAgent(h.plan.chat, undefined, undefined, "The Planner detached.");
+		expect(h.plan.chat.job).toBeUndefined();
+		release.resolve();
+		await until(() => h.plan.conversationPlanJobs[0]?.status === "failed");
+		await h.jobs.idle();
+		held.mockRestore();
+		expect((await h.saved()).source.trim()).toBe("");
+		expect(h.opened.broadcasts.some(frame => frame.kind === "plan:update")).toBe(false);
+		h.context.plannerNotAttached = async () => undefined;
+		h.runtime.wake(h.plan);
+		await h.jobs.idle();
+		expect(h.driver.starts()).toBe(1);
+		expect(h.plan.conversationPlanJobs[0]?.status).toBe("failed");
 	} finally {
 		release.resolve();
 		held.mockRestore();

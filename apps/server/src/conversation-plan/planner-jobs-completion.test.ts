@@ -38,14 +38,14 @@ describe("createPlannerJobs", () => {
 		expect(h.lines).toEqual([]);
 	});
 
-	test("the heading precondition is checked while enqueue holds the document lock", async () => {
+	test("unavailable heading work stays pending until a later wake", async () => {
 		let h = harness(async () => ({ status: "done", output: "{}" }), {
-			headingAllowed: () => false,
+			ready: async () => false,
 		});
 		await h.service.enqueue({ kind: "heading", target: "document", trigger: "m1" });
 		await h.service.idle();
-		expect(h.service.jobs()).toEqual([]);
-		expect(h.commits).toEqual([]);
+		expect(h.service.jobs()).toMatchObject([{ status: "pending" }]);
+		expect(h.commits).toHaveLength(1);
 	});
 
 	test("invalid runner output becomes a bounded failure, including malformed JSON", async () => {

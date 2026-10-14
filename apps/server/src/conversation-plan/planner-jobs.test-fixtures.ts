@@ -9,7 +9,7 @@ export function harness(
 	options: {
 		failPersist?: (attempt: number) => boolean;
 		waitPersist?: (attempt: number) => Promise<void>;
-		headingAllowed?: () => boolean;
+		ready?: () => Promise<boolean>;
 		onCapacityAvailable?: () => void;
 		exclusive?: <T>(action: () => Promise<T>) => Promise<T>;
 	} = {},
@@ -66,7 +66,7 @@ export function harness(
 			}
 		},
 		onError: error => errors.push(error),
-		headingAllowed: options.headingAllowed,
+		ready: options.ready,
 		onCapacityAvailable: options.onCapacityAvailable,
 		now: () => AT,
 	});

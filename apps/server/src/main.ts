@@ -352,6 +352,8 @@ function settlePendingSpikes(channelId: string): void {
 
 /** Wake owner-bound work: background jobs and spike settlements that waited for an owner. */
 function ownerAvailable(channelId: string): Promise<void> {
+	let opened = Rooms.get(channelId)?.plan;
+	if (opened) conversationRuntime.wake(opened);
 	settlePendingSpikes(channelId);
 	void reviewCompletedInvestigations(channelId);
 	void currentDocumentTarget(channelId).then(target => {

@@ -30,7 +30,7 @@ test("unlinked messages retain purpose evidence for later effects", async () => 
 	});
 });
 
-test("an opening purpose queues a heading but no card even if Jev calls it a question", async () => {
+test("an opening purpose creates no card or duplicate naming effect even if Jev calls it a question", async () => {
 	let current = message("figma-purpose", "Okay we gotta figure out what we're doing for auth");
 	let state = initialState();
 	let calls = 0;
@@ -55,10 +55,7 @@ test("an opening purpose queues a heading but no card even if Jev calls it a que
 		messageId: current.id,
 		eventIds: [],
 	});
-	expect(effects).toMatchObject([{
-		kind: "job",
-		intent: { kind: "heading", target: "document", trigger: current.id },
-	}]);
+	expect(effects).toEqual([]);
 });
 
 test("D01's owned purpose and final question open one editor-context card", () => {

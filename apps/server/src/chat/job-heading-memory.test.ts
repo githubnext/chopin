@@ -15,7 +15,7 @@ test("saved room message runs processor through current Harness and the actual d
 	try {
 		h.onStart(async () => {
 			let stored = await h.saved();
-			expect(stored.sidecar.conversationPlanEffects).toEqual(["job:heading:document"]);
+			expect(stored.sidecar.conversationPlanEffects).toBeUndefined();
 			expect(stored.sidecar.conversationPlanPendingEffects).toBeUndefined();
 			expect(stored.sidecar.conversationPlanJobs).toMatchObject([{ status: "running" }]);
 			expect(stored.sidecar.transcript.map(entry => entry.text)).toEqual([

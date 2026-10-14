@@ -19,6 +19,12 @@ async function unsupported(): Promise<never> {
 export async function memoryJobs() {
 	let context = await openPlan();
 	let plan = context.plan;
+	// Exercise recovery of the heading effects written before direct saved-message naming.
+	plan.conversationPlanPendingEffects = [{
+		key: "job:heading:document",
+		kind: "job",
+		intent: { kind: "heading", target: "document", trigger: "purpose" },
+	}];
 	let errors: unknown[] = [];
 	let publications: ConversationPlan.Job[][] = [];
 	let jobs: ReturnType<typeof createPlannerJobs> | undefined;

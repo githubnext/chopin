@@ -96,7 +96,13 @@ export function line(
 			&& summary.added >= 0 && summary.added <= 10
 		? summary.added
 		: 0;
-	if (job.kind === "heading") return ["Chopin drafted the title and goal", "document"];
+	if (job.kind === "heading") {
+		if (summary.changed === false) return undefined;
+		return [
+			summary.goal ? "Chopin drafted the title and goal" : "Chopin updated the title",
+			"document",
+		];
+	}
 	if (job.kind === "refine") return [`Chopin refined ${named}`, job.target, named];
 	if (job.kind === "suggest" && added > 0) {
 		return [`Chopin suggested ${added} options for ${named}`, job.target, named];

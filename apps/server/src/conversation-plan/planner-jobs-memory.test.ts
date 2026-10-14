@@ -24,7 +24,7 @@ test("real processor commits a heading receipt and running job before Planner ex
 		expect(completed.conversationPlanJobs).toMatchObject([{ status: "done", attempts: 1 }]);
 		expect(completed.transcript.map(entry => entry.text)).toEqual([
 			message.text,
-			"Chopin drafted the title and goal",
+			"Chopin updated the title",
 		]);
 		expect(h.publications.map(jobs => jobs[0]?.status)).toEqual(["pending", "running", "done"]);
 		await h.reopen();

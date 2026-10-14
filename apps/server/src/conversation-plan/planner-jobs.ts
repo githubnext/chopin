@@ -73,10 +73,7 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 
 			let previous = plan.conversationPlanJobs;
 			let canonical = canonicalIntent(plan, intent);
-			let updated = intent.kind === "heading"
-					&& (previous.some(job => job.kind === "heading") || deps.headingAllowed?.() === false)
-				? previous
-				: Jobs.enqueue(previous, canonical, now());
+			let updated = Jobs.enqueue(previous, canonical, now());
 			plan.conversationPlanJobs = updated;
 			plan.conversationPlanPendingEffects = pending.filter(item => item.key !== key);
 			plan.conversationPlanEffects = [...receipts, key].slice(-MAX_EFFECTS);
@@ -111,9 +108,6 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 	}
 
 	async function run(job: Job): Promise<JobOutcome> {
-		if (job.kind === "heading" && deps.headingAllowed?.() === false) {
-			return { status: "skipped", reason: "The document already has prose." };
-		}
 		if (job.threadId) {
 			let thread = initialThread(plan, job);
 			if (!thread) {
@@ -169,9 +163,10 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 	async function drain(): Promise<void> {
 		for (;;) {
 			if (stopped) return;
-			let pending = Jobs.next(plan.conversationPlanJobs);
+			let pending = Jobs.next(plan.conversationPlanJobs, deps.eligible);
 			if (!pending) return;
-			let started = await change(jobs => Jobs.start(jobs, pending.id, now()));
+			if (deps.ready && !await deps.ready(pending)) return;
+			let started = await change(jobs => Jobs.start(jobs, pending.id, now(), deps.eligible));
 			if (stopped) return;
 			if (!started) continue;
 			let running = started.find(job => job.id === pending.id);
@@ -220,7 +215,9 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 			draining = undefined;
 			let requested = wakeRequested;
 			wakeRequested = false;
-			if (!failed && requested && !stopped && Jobs.next(plan.conversationPlanJobs)) wake();
+			if (!failed && requested && !stopped && Jobs.next(plan.conversationPlanJobs, deps.eligible)) {
+				wake();
+			}
 		});
 	}
 
@@ -233,13 +230,7 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 				return;
 			}
 			if (stopped) throw new Error("Planner job service is stopped");
-			let changed = await change(jobs => {
-				if (
-					intent.kind === "heading"
-					&& (jobs.some(job => job.kind === "heading") || deps.headingAllowed?.() === false)
-				) return jobs;
-				return Jobs.enqueue(jobs, intent, now());
-			});
+			let changed = await change(jobs => Jobs.enqueue(jobs, intent, now()));
 			if (stopped && !changed) throw new Error("Planner job service is stopped");
 			if (changed) announce(changed.find(job => job.id === Jobs.jobId(intent)));
 			wake();

@@ -29,8 +29,9 @@ turns this on or off. Operators who do not want it should use `copilot-sdk` or
 
 ## Ownership
 
-The first eligible editor to invoke the Planner or start a model-backed research
-request supplies the GitHub App user access token for that channel and, under
+The first eligible editor whose saved Chat message starts title maintenance, who
+invokes the Planner, or who starts a model-backed research request supplies the
+GitHub App user access token for that channel and, under
 the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
 and `HARNESS=atomic` the owner supplies only the GitHub token; model access
 comes from the operator's `HARNESS_AUTH` mode. Under `HARNESS=remote` the owner
@@ -46,6 +47,15 @@ current web application does not expose a reset control. Under `copilot-sdk`, a
 user without Copilot entitlement sees the provider failure on the first
 model-backed action and remains owner until one of those release conditions
 occurs.
+
+Title maintenance uses an isolated heading job after a member message is saved,
+including ordinary coworker messages. It works with `CONVERSATION_PLAN=off`
+without Jev and is disabled by `AGENT=off`. It preserves weak-context titles and
+existing body prose, and may refine a human-edited title when the topic changes.
+Missing credentials, an absent remote attachment and an implementation lock keep
+new work pending. Closing or detaching interrupts live work; reconnecting never
+replays an interrupted job. Under `remote`, title work uses only the attached owner
+and cannot claim ownership for a message sender.
 
 An MCP [`invoke_planner`](local-agent-mcp.md#hand-an-instruction-to-the-planner)
 call follows the same rules. Its instruction is posted as the caller's own

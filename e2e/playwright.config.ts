@@ -171,6 +171,7 @@ export default defineConfig({
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
+				"**/document-title-naming.e2e.ts",
 				"**/harness-comments.e2e.ts",
 				"**/harness-decisions-deck.e2e.ts",
 				"**/harness-children.e2e.ts",
@@ -203,6 +204,7 @@ export default defineConfig({
 			name: "harness",
 			testMatch: [
 				"**/harness.e2e.ts",
+				"**/document-title-naming.e2e.ts",
 				"**/harness-comments.e2e.ts",
 				"**/harness-decisions-deck.e2e.ts",
 				"**/harness-children.e2e.ts",

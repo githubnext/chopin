@@ -126,18 +126,46 @@ test("draft_heading replaces only the empty H1 template before cards", async () 
 	expect(cardKey(context)).toBe(key);
 });
 
-test("draft_heading refuses human prose and leaves the document untouched", async () => {
-	for (let source of ["Somebody wrote this.\n", "# Human heading\n\nA human goal.\n"]) {
-		let context = await opened(source);
+test("draft_heading refines human titles while preserving all existing body blocks", async () => {
+	let context = await opened(
+		`# Human title\n\nGoal: Keep our goal.\n\nBody prose.\n\n# Body heading\n\n${CARD}`,
+	);
+	headingJob(context.plan);
+	let before = room.project(context.plan.document);
+	let result = await headingTool(context).handler(INPUT, {} as never);
+	expect(JSON.parse(String(result))).toMatchObject({ ok: true, title: INPUT.title });
+	expect(room.project(context.plan.document)).toBe(
+		before.replace("# Human title", `# ${INPUT.title}`),
+	);
+	expect(JSON.parse(context.plan.chat.jobOutput!)).not.toHaveProperty("goal");
+});
+
+test("unchanged friendly or blank titles are successful no-ops", async () => {
+	for (let title of ["Friendly otter", ""]) {
+		let context = await opened(`# ${title}\n`);
 		headingJob(context.plan);
 		let before = room.project(context.plan.document);
-		let result = await headingTool(context).handler(INPUT, {} as never);
-		expect(String(result)).toBe(
-			"Error: The document already has prose. A background job only titles an empty document.",
-		);
+		let result = await headingTool(context).handler({ revision: 0, title }, {} as never);
+		expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false, revision: 0 });
 		expect(room.project(context.plan.document)).toBe(before);
 		expect(context.plan.document.seq).toBe(0);
-		expect(context.plan.chat.jobOutput).toBeUndefined();
+		expect(context.broadcasts.filter(frame => frame.kind === "plan:update")).toHaveLength(0);
+	}
+});
+
+test("title-only writes accept 50 Unicode characters and escape Markdown punctuation", async () => {
+	for (let title of ["😀".repeat(50), "# *Offline* retries [guide]"]) {
+		let context = await opened("# Before\n\nExisting body.\n");
+		headingJob(context.plan);
+		let result = await headingTool(context).handler({ revision: 0, title }, {} as never);
+		expect(JSON.parse(String(result))).toMatchObject({ ok: true, title });
+		context.plan.document.editor.getEditorState().read(() => {
+			expect(context.plan.document.editor.getEditorState().toJSON().root.children[0]).toMatchObject(
+				{
+					children: [{ text: title, format: 0 }],
+				},
+			);
+		});
 	}
 });
 
@@ -175,9 +203,8 @@ test("draft_heading rejects lengths, CR titles, blank lines, and non-paragraph g
 	try {
 		for (
 			let input of [
-				{ ...INPUT, title: "x".repeat(81) },
+				{ ...INPUT, title: "😀".repeat(51) },
 				{ ...INPUT, title: "First\rSecond" },
-				{ ...INPUT, title: "# Already a heading" },
 				{ ...INPUT, extra: "surprise" },
 				{ ...INPUT, goal: "x".repeat(401) },
 				{ ...INPUT, goal: "First\r\n\r\nSecond" },

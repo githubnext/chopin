@@ -27,8 +27,10 @@ export type PlannerJobDeps = {
 	publishMeta: (questionnaireId: string) => void;
 	/** Called under exclusive; must commit the whole plan without acquiring the lock again. */
 	activity: (text: string, questionnaireId: string, label?: string) => Promise<void>;
-	/** False when the heading job's document already has prose. */
-	headingAllowed?: () => boolean;
+	/** Feature eligibility must not let gated analysis jobs block independent naming. */
+	eligible?: (job: Job) => boolean;
+	/** Unavailable work stays pending until an actual availability change wakes it. */
+	ready?: (job: Job) => Promise<boolean>;
 	/** Wake the durable effects outbox after terminal work makes queue space available. */
 	onCapacityAvailable?: () => void;
 	onError?: (error: unknown) => void;

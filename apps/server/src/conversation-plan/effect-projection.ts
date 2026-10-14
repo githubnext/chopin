@@ -2,27 +2,15 @@ import type { ConversationPlan } from "@chopin/protocol";
 import { ULID } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 import { currentScopedProposal, targetsScopedProposal } from "./events";
-import { QUESTION_SET_VERSION } from "./question-shared";
 import { effectivePreference } from "./preference";
 import { scopedKey } from "./effect-fields";
 import type { Effect } from "./effect-types";
 // Extracted from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, effects.ts.
 
-function purposeful(analysis?: ConversationPlan.AnalysisRecord): boolean {
-	if (
-		analysis?.questionSetVersion !== QUESTION_SET_VERSION
-		&& analysis?.questionSetVersion !== "conversation-plan-8"
-		&& analysis?.questionSetVersion !== "conversation-plan-4"
-	) return false;
-	let triage = analysis.passes.find(pass => pass.stage === "triage");
-	let answer = triage?.answers.enough_purpose;
-	return answer?.type === "noul" && answer.noul >= 0.75;
-}
-
 export function effectsFor(
 	events: readonly ConversationPlan.Event[],
 	state: ConversationPlan.State,
-	analysis?: ConversationPlan.AnalysisRecord,
+	_analysis?: ConversationPlan.AnalysisRecord,
 	records?: ReadonlyMap<string, {
 		history: readonly unknown[];
 		definition?: { questions: readonly { options: readonly { id: string }[] }[] };
@@ -249,13 +237,6 @@ export function effectsFor(
 			messageId: trigger.source.messageId,
 			generation: record ? record.history.length : 0,
 			sourceMessageIds: messageIds,
-		});
-	}
-	if (purposeful(analysis)) {
-		effects.push({
-			key: "job:heading:document",
-			kind: "job",
-			intent: { kind: "heading", target: "document", trigger: analysis!.messageId },
 		});
 	}
 	return effects;

@@ -27,9 +27,9 @@ https://github.com/user-attachments/assets/9ebf0901-6255-47c3-adb3-e905e8f6cab4
 A channel combines one repository-connected document with its collaboration
 context:
 
-- **Chat** is shared by the team and the hosted agent. Ordinary messages
-  do not start an agent turn, although they can enter its bounded context;
-  `@chopin` asks Chopin to act.
+- **Chat** is shared by the team and the hosted agent. Saved messages help
+  maintain a short document title and enter the Planner's bounded context;
+  `@chopin` asks Chopin to act on the document.
 - **Document** is a multiplayer rich-text artifact backed by readable, restricted
   MDX. The current interface labels this view **Plan**. People and the agent edit
   the same document, with presence, cursors, and transient markers for recent
@@ -75,8 +75,9 @@ and tool vocabulary remain optimized for planning.
   make its Chopin channels public.
 - Pull access can view channels. Push or administration access is required to
   create or change them and to invoke the Planner.
-- The first eligible person to invoke the Planner or start a model-backed
-  research request supplies the GitHub App user token used for that channel
+- The first eligible person whose saved Chat message starts title maintenance,
+  who invokes the Planner, or who starts a model-backed research request supplies
+  the GitHub App user token used for that channel
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
   `HARNESS=pi` or `HARNESS=atomic`, model access comes from the operator's
   `HARNESS_AUTH` instead.
@@ -186,8 +187,14 @@ yes, Markdown for now                  -> channel chat transcript
 ```
 
 The recent channel chat transcript is supplied as bounded context for the next turn,
-even when those messages did not address the Planner. The first eligible
-model-backed action, either a Planner turn or research request, claims the
+even when those messages did not address the Planner. Saved member messages also
+maintain the document's title independently of conversation-derived cards. Weak
+or incidental discussion leaves the title alone; topic changes may refine a title
+someone chose. This work obeys `AGENT`, ownership and implementation locks, and
+does not require Jev. A title job can seed a goal only before body prose exists.
+
+The first eligible model-backed action, including title maintenance, a Planner turn
+or research request, claims the
 channel's Copilot usage until that owner's session ends or the server restarts.
 The current web interface has no control for transferring that ownership
 manually.

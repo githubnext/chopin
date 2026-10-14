@@ -1,4 +1,5 @@
 import { jsonSchema, tool } from "ai";
+import { MAX_TITLE_LENGTH } from "@chopin/dialect";
 import { z } from "zod";
 import { draftHeading } from "./heading-tool";
 import { jobToolContext } from "./job-tool-context";
@@ -16,16 +17,16 @@ let contextSchema = z.object({
 
 export let jobTools = {
 	draft_heading: tool({
-		description: "Background job only. Give an empty document its title and one-paragraph "
-			+ "goal, drawn from what people have said. Refused once the document has authored prose.",
-		inputSchema: jsonSchema<{ revision: number; title: string; goal: string }>({
+		description: "Background job only. Maintain a short document title from saved conversation. "
+			+ "Keep the current title when evidence is weak. An optional goal only seeds an empty body.",
+		inputSchema: jsonSchema<{ revision: number; title: string; goal?: string }>({
 			type: "object",
 			properties: {
 				revision: { type: "integer", minimum: 0 },
-				title: { type: "string", minLength: 1, maxLength: 80 },
+				title: { type: "string", maxLength: MAX_TITLE_LENGTH },
 				goal: { type: "string", minLength: 1, maxLength: 400 },
 			},
-			required: ["revision", "title", "goal"],
+			required: ["revision", "title"],
 			additionalProperties: false,
 		}),
 		contextSchema,

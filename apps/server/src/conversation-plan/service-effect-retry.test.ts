@@ -169,7 +169,7 @@ test("record rolls back the linked event when its refine intent cannot fit", asy
 	expect(setup.publications).toEqual([]);
 });
 
-test("repeated purpose while jobs are deferred keeps the first heading intent", async () => {
+test("purpose analysis leaves naming to the saved-message runtime", async () => {
 	let setup = harness(async () => ({
 		events: [],
 		analysis: {
@@ -190,9 +190,5 @@ test("repeated purpose while jobs are deferred keeps the first heading intent", 
 	processor.afterMessage();
 	await until(() => setup.durable.state.queue.length === 0 || setup.errors.length > 0);
 	expect(setup.errors).toEqual([]);
-	expect(setup.durable.pending).toMatchObject([{
-		key: "job:heading:document",
-		intent: { trigger: "purpose-1" },
-	}]);
-	expect(setup.durable.pending).toHaveLength(1);
+	expect(setup.durable.pending).toEqual([]);
 });

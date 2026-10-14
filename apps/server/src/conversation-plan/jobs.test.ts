@@ -4,6 +4,26 @@ import * as Jobs from "./jobs";
 import { AT, card } from "./jobs.test-fixtures";
 
 describe("Planner job queue", () => {
+	test("heading work keeps one latest pending trigger beside a running job", () => {
+		let heading = (trigger: string) => ({ kind: "heading" as const, target: "document", trigger });
+		let jobs = Jobs.enqueue([], heading("m1"), AT);
+		jobs = Jobs.start(jobs, jobs[0]!.id, AT);
+		let running = jobs[0];
+		jobs = Jobs.enqueue(jobs, heading("m2"), AT);
+		jobs = Jobs.enqueue(jobs, heading("m3"), AT);
+		expect(jobs.map(job => [job.trigger, job.status])).toEqual([
+			["m1", "running"],
+			["m3", "pending"],
+		]);
+		expect(jobs[0]).toBe(running);
+		expect(Jobs.enqueue(jobs, heading("m3"), AT)).toBe(jobs);
+		expect(() => Jobs.restore([...jobs, { ...jobs[1]!, id: "heading:document:m4", trigger: "m4" }]))
+			.toThrow("invalid Planner job");
+		let failed = Jobs.restore(jobs);
+		expect(Jobs.retry(failed, failed[0]!.id, AT)).toBe(failed);
+		expect(Jobs.enqueue(failed, heading("m1"), AT)).toBe(failed);
+	});
+
 	test("a trigger mints one stable pending job", () => {
 		let once = Jobs.enqueue([], card("m1"), AT);
 		expect(once).toEqual([{

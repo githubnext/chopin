@@ -2,7 +2,6 @@
 import * as Chat from "../chat/service";
 import * as Plan from "../plan/service";
 import * as Questions from "../questions/service";
-import * as Room from "../plan/room";
 import { broadcast } from "../wire";
 import { cardEffects, mirrorCard, wakeCardMirror } from "./cards";
 import { createJobContexts } from "./job-context";
@@ -33,6 +32,8 @@ type RuntimeDeps = {
 };
 
 export function createConversationRuntime(deps: RuntimeDeps) {
+	let admissions = new WeakMap<Plan.Plan, { id: string; context: Chat.Room }>();
+	let admitting = new WeakMap<Plan.Plan, Promise<void>>();
 	let processors = new WeakMap<Plan.Plan, Processor>();
 	let jobs = new WeakMap<Plan.Plan, ReturnType<typeof createPlannerJobs>>();
 	let briefs = new WeakMap<Plan.Plan, ReturnType<typeof createResearchBriefCoordinator>>();
@@ -57,9 +58,16 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		listeners.get(opened)?.();
 		listeners.delete(opened);
 		contexts.clear(opened);
+		admissions.delete(opened);
 		let mirroring = mirrors.get(opened);
 		mirrors.delete(opened);
-		let draining = Promise.all([processor?.idle(), coordinator?.idle(), brief?.idle(), mirroring])
+		let draining = Promise.all([
+			processor?.idle(),
+			coordinator?.idle(),
+			brief?.idle(),
+			mirroring,
+			admitting.get(opened),
+		])
 			.then(() => {})
 			.finally(() => {
 				if (stopping.get(opened) === draining) stopping.delete(opened);
@@ -73,10 +81,11 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 	}
 
 	function wake(opened: Plan.Plan): void {
+		admit(opened);
+		if (!deps.unavailable(opened.id)) jobs.get(opened)?.wake();
 		let processor = processors.get(opened);
 		if (!processor) return;
 		refreshBriefs(opened);
-		if (!deps.unavailable(opened.id)) jobs.get(opened)?.wake();
 		mirrors.set(opened, wakeCardMirror(opened, processor).catch(report));
 	}
 
@@ -86,7 +95,6 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		archived: boolean,
 		researchAllowed = false,
 	): Promise<void> {
-		if (!deps.config.conversationPlan) return;
 		await stop(opened);
 		// A child has no Chat, so nothing here may analyse, mirror into, or post to one.
 		if (opened.parentChannelId) return;
@@ -95,7 +103,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			room.plan === opened && !room.closing && !archived
 			&& !deps.unavailable(room.id);
 		let announcer: Chat.Announcer = { chat: opened.chat, plan: opened, server, room: room.id };
-		let processor: Processor;
+		let processor: Processor | undefined;
 		let coordinator = archived || deps.unavailable(room.id) ? undefined : createPlannerJobs({
 			plan: opened,
 			exclusive: action => Plan.exclusive(opened, action),
@@ -117,7 +125,13 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 					};
 			},
 			prompt: job => PROMPT_FOR[job.kind]?.(opened, job),
-			headingAllowed: () => Room.headingAllowed(opened.document),
+			eligible: job => job.kind === "heading" || !!deps.config.conversationPlan,
+			ready: async job => {
+				if (job.kind !== "heading") return true;
+				if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;
+				let claim = contexts.claim(opened, job);
+				return !!claim && await Chat.jobReady(claim.context, claim.claimantSessionId);
+			},
 			publishJobs: current =>
 				broadcast(server, room.id, { kind: "conversation-plan:jobs", ts: 0, jobs: current }),
 			publishMeta: id => Questions.announce(opened, server, room.id, id),
@@ -127,10 +141,11 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 					decision: { questionnaireId, kind: "activity", ...(label ? { label } : {}) },
 				});
 			},
-			onCapacityAvailable: () => processor.wake(),
+			onCapacityAvailable: () => processor?.wake(),
 			onError: report,
 		});
 		if (coordinator) jobs.set(opened, coordinator);
+		if (!deps.config.conversationPlan) return;
 		let researchJobs = researchAllowed ? deps.researchJobs?.() : undefined;
 		let briefCoordinator = researchJobs
 			? createResearchBriefCoordinator({
@@ -191,16 +206,46 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 		);
 		let recover = () => {
 			briefCoordinator?.wake();
-			processor.wake();
-			mirrors.set(opened, mirrorCard(opened, processor).catch(report));
+			processor!.wake();
+			mirrors.set(opened, mirrorCard(opened, processor!).catch(report));
 		};
 		listeners.set(opened, Questions.listen(opened, recover));
 		recover();
 	}
 
+	// One latest unsaved admission per document. A save failure cannot reject an already
+	// persisted Chat send; a later bind, message, or availability wake retries it.
+	function admit(opened: Plan.Plan): void {
+		if (admitting.has(opened)) return;
+		let coordinator = jobs.get(opened);
+		let admission = admissions.get(opened);
+		if (!coordinator || !admission) return;
+		let task = contexts.accept(
+			opened,
+			admission.id,
+			admission.context,
+			() => coordinator.enqueue({ kind: "heading", target: "document", trigger: admission.id }),
+		).then(() => {
+			if (admissions.get(opened) === admission) admissions.delete(opened);
+		}).catch(report).finally(() => {
+			admitting.delete(opened);
+			if (admissions.get(opened) !== admission) admit(opened);
+		});
+		admitting.set(opened, task);
+	}
+
 	function bind(context: Chat.Room): Chat.Room {
 		let opened = context.plan;
 		let processor = processors.get(opened);
+		if (jobs.has(opened)) {
+			contexts.remember(opened, "authenticated-context", context);
+			context.memberMessagePersisted = (entry, claimantSessionId) => {
+				if (!deps.config.agent || entry.author.kind !== "member") return;
+				admissions.set(opened, { id: entry.id, context: { ...context, claimantSessionId } });
+				admit(opened);
+			};
+			wake(opened);
+		}
 		if (processor) {
 			context.commitRoomMessage = entry =>
 				contexts.accept(opened, entry.id, context, () => processor.accept(entry));
