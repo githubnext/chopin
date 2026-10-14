@@ -1398,17 +1398,6 @@ body {
 	}
 }
 
-@keyframes chat-work-stage-in {
-	from {
-		opacity: 0;
-		transform: translateY(3px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
 .chat-composer .field {
 	border-color: var(--color-edge);
 	border-radius: var(--radius-lg);

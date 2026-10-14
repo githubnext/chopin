@@ -146,13 +146,24 @@
 }
 
 .trace-title[data-enter] {
-	animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both;
+	animation: trace-enter var(--duration-base) var(--motion-smooth-out) both;
 }
 
 .trace-line[data-status="running"] > .trace-title[data-enter] {
 	animation:
-		chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both,
+		trace-enter var(--duration-base) var(--motion-smooth-out) both,
 		trace-shimmer calc(var(--duration-base) * 10) linear infinite;
+}
+
+@keyframes trace-enter {
+	from {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 @keyframes trace-shimmer {
