@@ -29,7 +29,21 @@ export type AgentOptions = {
 	 * when it fails before one.
 	 */
 	onStart?: (failure?: AgentFailure) => void;
+	/** Called with the agent's name and version once it has answered initialize with them. */
+	onInfo?: (info: AgentInfo) => void;
 };
+
+/** A coding agent as it names itself in its ACP initialize answer. */
+export type AgentInfo = { name: string; version?: string };
+
+/** The agent's title (as people know it), else its name, and its version, when it gave them. */
+function agentInfo(answer: unknown): AgentInfo | undefined {
+	let info = (answer as { agentInfo?: { name?: unknown; title?: unknown; version?: unknown } })
+		.agentInfo;
+	let name = typeof info?.title === "string" && info.title ? info.title : info?.name;
+	if (typeof name !== "string" || !name) return undefined;
+	return { name, ...(typeof info?.version === "string" ? { version: info.version } : {}) };
+}
 
 /** How an agent that failed to start ended, and the first line of its stderr. */
 export type AgentFailure = { how: string; stderr?: string };
@@ -118,7 +132,12 @@ function initialize(connection: ReturnType<ClientApp["connect"]>) {
  */
 export async function checkAgent(
 	command: string[],
-	options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs?: number },
+	options: {
+		cwd: string;
+		env: NodeJS.ProcessEnv;
+		timeoutMs?: number;
+		onInfo?: (info: AgentInfo) => void;
+	},
 ): Promise<AgentFailure | undefined> {
 	let timeoutMs = options.timeoutMs ?? 10_000;
 	let agent = startAgent(new ClientApp(), command, options.cwd, options.env);
@@ -130,7 +149,8 @@ export async function checkAgent(
 		timeoutMs,
 	);
 	try {
-		await initialize(agent.connection);
+		let info = agentInfo(await initialize(agent.connection));
+		if (info) options.onInfo?.(info);
 		return undefined;
 	} catch (error) {
 		return await agent.failure(error);
@@ -189,6 +209,8 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		if (initialized.protocolVersion !== PROTOCOL_VERSION) {
 			throw new Error("Unsupported ACP version.");
 		}
+		let info = agentInfo(initialized);
+		if (info) options.onInfo?.(info);
 		let session = await connection.agent.request("session/new", {
 			cwd: options.cwd,
 			mcpServers: typeof options.mcpServers === "function"

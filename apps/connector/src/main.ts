@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
 import type { CodingAgent } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
+import type { AgentInfo } from "./acp";
 import { ConnectorStopped, redacted, serveWork } from "./connection";
 import { remote } from "./mcp";
 import { parseArgs } from "./args";
@@ -15,6 +16,7 @@ import {
 	pair,
 	pairingKey,
 	register,
+	reportAgent,
 	SELF,
 	unpair,
 } from "./machine";
@@ -419,7 +421,22 @@ export async function connect(
 		);
 		return;
 	}
-	let known = AGENTS.find(item => item.acp[0] === basename(command[programAt(command)] ?? ""));
+	let program = basename(command[programAt(command)] ?? "");
+	let known = AGENTS.find(item => item.acp[0] === program);
+	/** This connection's token, once it has registered, to tell Chopin about the agent later. */
+	let connectionToken: string | undefined;
+	/**
+	 * Keep the agent's name and version, as it answered ACP initialize, for the next connection to
+	 * send; told to Chopin at once when this one is connected, as at its first job.
+	 */
+	let rememberAgent = async (agent: AgentInfo, token?: string) => {
+		let before = (await readConfig(directory)).agents?.[program];
+		if (before?.name === agent.name && before.version === agent.version) return;
+		await updateConfig(directory, value => {
+			value.agents = { ...value.agents, [program]: agent };
+		}).catch(() => {});
+		if (token) await reportAgent(url, token, agent);
+	};
 	// An agent that asks permission in the terminal can't run unattended; say so before it pairs.
 	if (installing && known && known.unattended !== true) {
 		createOutput().error(
@@ -439,6 +456,7 @@ export async function connect(
 			cwd: info.root,
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
+			onInfo: agent => void rememberAgent(agent),
 		});
 		if (failed) {
 			let secrets = Object.values(env);
@@ -525,7 +543,12 @@ export async function connect(
 					// Every connection registers anew with the machine token: a connection token lasts only
 					// while the server runs, so after a restart Chopin refuses the old one for good.
 					connect: async signal => {
-						let api = await remote(url, await register(url, machine, checkout, signal), signal);
+						connectionToken = await register(url, machine, checkout, signal, {
+							service,
+							planner: plannerDocuments.length > 0,
+							agent: (await readConfig(directory)).agents?.[program],
+						});
+						let api = await remote(url, connectionToken, signal);
 						if (!announced) {
 							output.connected(info.repository);
 							// Only a connect that got this far saves its settings for service install.
@@ -543,6 +566,7 @@ export async function connect(
 					output,
 					run: (api, kind, claim) =>
 						runWork(api, kind, claim, {
+							onAgent: agent => void rememberAgent(agent, connectionToken),
 							root: info.root,
 							directory,
 							command,

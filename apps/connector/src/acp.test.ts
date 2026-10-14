@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { runAgent } from "./acp";
+import { checkAgent, runAgent } from "./acp";
 
 test.skipIf(!process.env.CHOPIN_TEST_ACP_COMMAND)(
 	"real ACP implementation smoke check",
@@ -33,6 +33,32 @@ test("a generic ACP process receives a cwd and produces protocol updates", async
 	});
 	expect(stop).toBe("end_turn");
 	expect(updates).toHaveLength(1);
+});
+
+test("the agent's name and version come from its ACP initialize answer, at a check or a run", async () => {
+	let command = [process.execPath, new URL("./testing/fake-agent.ts", import.meta.url).pathname];
+	let checked: unknown[] = [];
+	expect(
+		await checkAgent(command, {
+			cwd: process.cwd(),
+			env: process.env,
+			onInfo: info => checked.push(info),
+		}),
+	).toBeUndefined();
+	let ran: unknown[] = [];
+	await runAgent({
+		command,
+		cwd: process.cwd(),
+		prompt: "Investigate",
+		mcpServers: [],
+		signal: new AbortController().signal,
+		onUpdate: () => {},
+		permission: async () => undefined,
+		onInfo: info => ran.push(info),
+	});
+	// The title, as people know it, rather than the package name.
+	expect(checked).toEqual([{ name: "Fake Agent", version: "1.2.3" }]);
+	expect(ran).toEqual(checked);
 });
 
 test("ACP cancellation finishes the active turn through the standard protocol", async () => {

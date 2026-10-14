@@ -52,6 +52,7 @@ import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
 import { registerConnectorScript } from "./http/connector-script";
+import { peerAddress, trustedProxies } from "./http/client-address";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
@@ -1473,6 +1474,7 @@ function listen(): Server<SocketData> {
 				}
 				return upgraded(req, self, outcome.data);
 			}
+			peerAddress(req, self.requestIP(req)?.address);
 			let routed = await router.handle(req, url);
 			if (routed) return routed;
 
@@ -1968,6 +1970,7 @@ let machinePlanners = config.agent && config.harness === "remote"
 	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
 	planners: machinePlanners,
+	trustedProxies: trustedProxies(process.env.TRUSTED_PROXIES),
 	implementations: () => implementations,
 	connectorVersion: config.connectorVersion,
 	lease() {

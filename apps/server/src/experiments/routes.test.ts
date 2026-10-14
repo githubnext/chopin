@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "@chopin/experiment/fixtures";
 import {
+	CONNECTOR_AGENT_HEADER,
+	CONNECTOR_AGENT_VERSION_HEADER,
+	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
@@ -28,6 +33,9 @@ function error(value: { result: { isError?: boolean; content: Array<{ text: stri
 }
 
 /** What a current connector sends with every request; browser routes ignore it. */
+import { peerAddress, trustedProxies } from "../http/client-address";
+import type { TrustedProxies } from "../http/client-address";
+
 const CURRENT = {
 	[CONNECTOR_VERSION_HEADER]: "dev",
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
@@ -39,6 +47,7 @@ async function setup(
 		implementations?: () => ImplementationConnector | undefined;
 		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
 		durable?: boolean;
+		trustedProxies?: TrustedProxies;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -741,6 +750,77 @@ test(
 	},
 	30_000,
 );
+
+test("a connection tells the owner its machine's host, platform, agent and address", async () => {
+	let { alice, bob, router, request, pair, config } = await setup(undefined, {
+		trustedProxies: trustedProxies("172.16.0.0/12"),
+	});
+	let paired = await pair(alice.cookie);
+	let listed = async (cookie = alice.cookie) =>
+		(await (await request("/api/connector/machines", undefined, cookie)).json()).machines;
+	// An older connector says nothing about its machine.
+	expect((await listed())[0]).toMatchObject({
+		hostname: null,
+		platform: null,
+		agent: null,
+		address: null,
+		service: false,
+		planner: false,
+	});
+	let connect = new Request("https://chopin.test/api/connector/connections", {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: `Bearer ${paired.machineToken}`,
+			...CURRENT,
+			[CONNECTOR_HOST_HEADER]: "build-box.local",
+			[CONNECTOR_PLATFORM_HEADER]: "linux arm64",
+			[CONNECTOR_SERVICE_HEADER]: "1",
+			[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
+			[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
+			"x-forwarded-for": "6.6.6.6, 203.0.113.9",
+		},
+		body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
+	});
+	peerAddress(connect, "::ffff:172.18.0.2");
+	let opened = await (await router.handle(connect, new URL(connect.url)))!.json();
+	expect((await listed())[0]).toMatchObject({
+		hostname: "build-box.local",
+		platform: { os: "linux", arch: "arm64" },
+		agent: { name: "GitHub Copilot CLI", version: "1.0.97" },
+		address: "203.0.113.9",
+		service: true,
+		planner: false,
+	});
+	// The agent it learns of later, at its first job, replaces what it said.
+	let reported = await request(
+		"/api/connector/agent",
+		{ name: "GitHub Copilot CLI", version: "1.0.98" },
+		undefined,
+		opened.token,
+	);
+	expect(reported.status).toBe(200);
+	expect((await listed())[0].agent).toEqual({ name: "GitHub Copilot CLI", version: "1.0.98" });
+	expect((await request("/api/connector/agent", { name: "x" }, undefined, "nope")).status)
+		.toBe(409);
+	// A header that isn't one of these values is dropped, never echoed.
+	let odd = new Request(connect.url, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			authorization: `Bearer ${paired.machineToken}`,
+			...CURRENT,
+			[CONNECTOR_HOST_HEADER]: "<script>",
+			[CONNECTOR_PLATFORM_HEADER]: "plan9 mips",
+		},
+		body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
+	});
+	await router.handle(odd, new URL(odd.url));
+	expect(JSON.stringify(await listed())).not.toContain("<script>");
+	// Nobody else sees any of it.
+	expect(await listed(bob.cookie)).toEqual([]);
+	expect(config).toBeDefined();
+});
 
 test("an owner renames a paired machine, which chopin status then reads", async () => {
 	let { alice, bob, request, pair } = await setup();

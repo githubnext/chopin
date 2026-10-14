@@ -18,6 +18,7 @@ let app = new AgentApp()
 		"initialize",
 		() => ({
 			protocolVersion: PROTOCOL_VERSION,
+			agentInfo: { name: "fake-agent", title: "Fake Agent", version: "1.2.3" },
 			agentCapabilities: process.argv.includes("--http") ? { mcpCapabilities: { http: true } } : {},
 		}),
 	)

@@ -6,6 +6,7 @@ import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
 import { runAgent } from "./acp";
+import type { AgentInfo } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
 import type { Output } from "./output";
@@ -26,6 +27,8 @@ import {
 } from "./implementation";
 
 type Options = {
+	/** Called with the agent's name and version once it has answered ACP initialize. */
+	onAgent?: (info: AgentInfo) => void;
 	root: string;
 	directory: string;
 	command: string[];
@@ -195,6 +198,7 @@ export async function runWork(
 			path,
 		);
 		let stop = await runAgent({
+			...(options.onAgent ? { onInfo: options.onAgent } : {}),
 			command: options.command,
 			cwd: path,
 			...(claim.spike || options.env

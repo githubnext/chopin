@@ -34,6 +34,8 @@ export type ConnectSettings = {
 export type Config = {
 	connect?: ConnectSettings;
 	service?: InstalledService;
+	/** Each agent program's name and version as it last answered ACP initialize, for Chopin's list. */
+	agents?: Record<string, { name: string; version?: string }>;
 };
 
 export function configFile(directory: string) {

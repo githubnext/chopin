@@ -1,6 +1,15 @@
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
-import { CONNECTOR_UPDATE_REQUIRED } from "@chopin/protocol/connector";
+import {
+	CONNECTOR_AGENT_HEADER,
+	CONNECTOR_AGENT_VERSION_HEADER,
+	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLANNER_HEADER,
+	CONNECTOR_PLATFORM_HEADER,
+	CONNECTOR_SERVICE_HEADER,
+	CONNECTOR_UPDATE_REQUIRED,
+} from "@chopin/protocol/connector";
 import { redacted } from "./connection";
 import { CONNECTOR_HEADERS, ConnectorError, refusal } from "./mcp";
 import type { Output } from "./output";
@@ -158,11 +167,18 @@ export async function machineToken(directory: string, origin: string) {
 	return (await stored(directory)).servers[origin]?.token;
 }
 
-async function post(url: string, body: unknown, token?: string, signal?: AbortSignal) {
+async function post(
+	url: string,
+	body: unknown,
+	token?: string,
+	signal?: AbortSignal,
+	headers: Record<string, string> = {},
+) {
 	let response = await fetch(url, {
 		method: "POST",
 		headers: {
 			"content-type": "application/json",
+			...headers,
 			...CONNECTOR_HEADERS,
 			...(token ? { authorization: `Bearer ${token}` } : {}),
 		},
@@ -269,16 +285,52 @@ async function pairOnce(options: Parameters<typeof pair>[0]) {
 	return token;
 }
 
+/** What a connector tells its owner's Chopin about the machine as it connects a checkout. */
+export type About = {
+	service?: boolean;
+	planner?: boolean;
+	agent?: { name: string; version?: string };
+};
+
+/** `about` and this machine's hostname and platform, as headers; a value headers can't carry goes. */
+function aboutHeaders(about: About): Record<string, string> {
+	let headers: Record<string, string | undefined> = {
+		[CONNECTOR_HOST_HEADER]: hostname(),
+		[CONNECTOR_PLATFORM_HEADER]: `${process.platform} ${process.arch}`,
+		...(about.service ? { [CONNECTOR_SERVICE_HEADER]: "1" } : {}),
+		...(about.planner ? { [CONNECTOR_PLANNER_HEADER]: "1" } : {}),
+		[CONNECTOR_AGENT_HEADER]: about.agent?.name,
+		[CONNECTOR_AGENT_VERSION_HEADER]: about.agent?.version,
+	};
+	return Object.fromEntries(
+		Object.entries(headers).filter((entry): entry is [string, string] =>
+			!!entry[1] && /^[\x20-\x7e]+$/.test(entry[1])
+		),
+	);
+}
+
 /** Connect one checkout with the machine token; the returned token lasts while the server runs. */
 export async function register(
 	url: string,
 	token: string,
 	checkout: Checkout,
 	signal?: AbortSignal,
+	about: About = {},
 ) {
-	let value = await post(url + "/api/connector/connections", checkout, token, signal);
+	let value = await post(
+		url + "/api/connector/connections",
+		checkout,
+		token,
+		signal,
+		aboutHeaders(about),
+	);
 	if (typeof value.token !== "string") throw new Error("Missing connection token.");
 	return value.token;
+}
+
+/** Tell Chopin which agent a connection runs, learned at its first job; best-effort. */
+export async function reportAgent(url: string, token: string, agent: About["agent"] & {}) {
+	await post(url + "/api/connector/agent", agent, token).catch(() => {});
 }
 
 /** A short-lived credential for this machine's Planner backend to attach one document. */

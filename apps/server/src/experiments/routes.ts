@@ -12,7 +12,13 @@ import type { Router } from "../http/router";
 import { canonical as canonicalReport } from "../mcp/create";
 import { parse } from "@chopin/dialect";
 import {
+	CONNECTOR_AGENT_HEADER,
+	CONNECTOR_AGENT_VERSION_HEADER,
+	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLANNER_HEADER,
+	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
@@ -20,7 +26,9 @@ import { documentsPath } from "@chopin/protocol/document-url";
 import { documentUrl } from "../channels/document-url";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
-import type { Connection } from "./connections";
+import type { About, Connection } from "./connections";
+import { clientAddress, trustedProxies } from "../http/client-address";
+import type { TrustedProxies } from "../http/client-address";
 import { PairingKeys } from "./pairing-keys";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
@@ -54,7 +62,35 @@ type Options = {
 	connectorVersion?: string;
 	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
 	planners?: MachinePlanners;
+	/** Proxies whose X-Forwarded-For names the client (TRUSTED_PROXIES); none by default. */
+	trustedProxies?: TrustedProxies;
 };
+
+const OSES = new Set(["linux", "darwin", "win32"]);
+const ARCHES = new Set(["x64", "arm64"]);
+const agentSchema = z.object({
+	name: z.string().trim().min(1).max(100).regex(/^[\x20-\x7e]+$/),
+	version: z.string().trim().min(1).max(50).regex(/^[\w.+-]+$/).optional(),
+}).strict();
+
+/** What a connector says about its machine as it connects; anything unexpected is dropped. */
+function aboutMachine(request: Request, address: string | undefined): About {
+	let header = (name: string) => request.headers.get(name) ?? undefined;
+	let hostname = header(CONNECTOR_HOST_HEADER);
+	let [os, arch, extra] = (header(CONNECTOR_PLATFORM_HEADER) ?? "").split(" ");
+	let agent = agentSchema.safeParse({
+		name: header(CONNECTOR_AGENT_HEADER),
+		version: header(CONNECTOR_AGENT_VERSION_HEADER),
+	});
+	return {
+		...(hostname && /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/.test(hostname) ? { hostname } : {}),
+		...(os && arch && !extra && OSES.has(os) && ARCHES.has(arch) ? { platform: { os, arch } } : {}),
+		service: header(CONNECTOR_SERVICE_HEADER) === "1",
+		planner: header(CONNECTOR_PLANNER_HEADER) === "1",
+		...(agent.success ? { agent: agent.data } : {}),
+		...(address ? { address } : {}),
+	};
+}
 const label = z.string().trim().min(1).max(100);
 /** A name a person gives a machine: one line of at most 64 characters. */
 const machineLabel = z.string().trim().min(1).max(64).regex(/^[^\p{Cc}]+$/u);
@@ -156,8 +192,22 @@ function json(value: unknown, status = 200) {
 	});
 }
 
+/** A machine's newest connection's account of it; null where none said. */
+function described(live: Connection[]) {
+	let about = live.at(-1)?.about ?? {};
+	return {
+		hostname: about.hostname ?? null,
+		platform: about.platform ?? null,
+		agent: live.map(value => value.about?.agent).findLast(Boolean) ?? null,
+		address: about.address ?? null,
+		service: live.some(value => value.about?.service),
+		planner: live.some(value => value.about?.planner),
+	};
+}
+
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
+	let trusted = options.trustedProxies ?? trustedProxies(undefined);
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
 	auth.pairings.ended = sessionId => keys.ended(sessionId);
@@ -492,6 +542,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			},
 			label,
 			{ ...checkout, repositoryId: repository.id },
+			aboutMachine(request, clientAddress(request, trusted)),
 		);
 		await auth.machines.seen(machine);
 		connections.wake(repository.id);
@@ -501,6 +552,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			connection: { id: connection.id, source: connection.source },
 			machine: machine.id,
 		});
+	});
+	/** The coding agent a connection runs, as it answered ACP initialize at its first job. */
+	route("POST", "/api/connector/agent", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let { connection } = connections.lookup(bearer(request));
+		connection.about = { ...connection.about, agent: agentSchema.parse(await body(request)) };
+		return json({ ok: true });
 	});
 	/**
 	 * `chopin connect --planner`: a short-lived credential with which the machine's Planner backend
@@ -563,6 +621,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				lastSeenAt: machine.lastSeenAt.getTime(),
 				connected: connections.machine(machine.id).length > 0,
 				version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
+				...described(connections.machine(machine.id)),
 				reauthorize: !!machine.reauthorizeAt,
 			})),
 		});

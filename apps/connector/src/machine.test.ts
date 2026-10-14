@@ -47,7 +47,9 @@ async function checkout() {
  * takes PAIRING_KEY once.
  */
 function fakeChopin(options: { connections?: () => Response; stale?: string } = {}) {
-	let calls: Array<{ path: string; bearer: string; body: unknown }> = [];
+	let calls: Array<
+		{ path: string; bearer: string; body: unknown; about?: Record<string, string> }
+	> = [];
 	let waited = Promise.withResolvers<void>();
 	let spent = false;
 	let server = Bun.serve({
@@ -60,7 +62,12 @@ function fakeChopin(options: { connections?: () => Response; stale?: string } = 
 				let body = request.method === "POST"
 					? await request.json().catch(() => undefined)
 					: undefined;
-				calls.push({ path, bearer, body });
+				let about = Object.fromEntries(
+					[...request.headers].filter(([name]) =>
+						/^chopin-connector-(host|platform|service|planner|agent)/.test(name)
+					),
+				);
+				calls.push({ path, bearer, body, ...(Object.keys(about).length ? { about } : {}) });
 			}
 			if (path === "/api/connector/pairings") {
 				let key = (calls.at(-1)!.body as { key?: string }).key;
@@ -247,7 +254,34 @@ test("connect reuses a stored machine token without pairing again", async () => 
 		bearer: MACHINE_TOKEN,
 		body: { repository: "octo-org/score" },
 	});
+	// It says which machine it is, for its owner's list: no agent yet, as none has run here.
+	expect(chopin.calls[0]!.about).toEqual({
+		"chopin-connector-host": hostname(),
+		"chopin-connector-platform": `${process.platform} ${process.arch}`,
+	});
 	expect(chopin.calls.map(call => call.path)).toContain("tool:wait_for_work");
+});
+
+test("connect names the agent it learned of at an earlier check or job, and the service", async () => {
+	let home = await scratch("chopin-home-");
+	let root = await checkout();
+	let chopin = fakeChopin();
+	expect(await cli(["pair"], home, chopin.url).exited).toBe(0);
+	await writeFile(
+		join(home, "config.json"),
+		JSON.stringify({
+			agents: { "agent-that-never-runs": { name: "Never Runs", version: "2.0.1" } },
+		}),
+	);
+	chopin.calls.length = 0;
+	let connected = cli(["connect", root, "--", "agent-that-never-runs"], home, chopin.url);
+	await Promise.race([chopin.waited, connected.exited]);
+	connected.child.kill("SIGINT");
+	expect(await connected.exited, await connected.output).toBe(0);
+	expect(chopin.calls[0]!.about).toMatchObject({
+		"chopin-connector-agent": "Never Runs",
+		"chopin-connector-agent-version": "2.0.1",
+	});
 });
 
 test("connect pairs first when this machine has no token for the server", async () => {

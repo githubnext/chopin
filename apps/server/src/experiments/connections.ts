@@ -22,6 +22,18 @@ export type Connection = {
 	autoRun?: boolean;
 	/** The chopin release that opened it, when it said; known only while it is connected. */
 	version?: string;
+	/** What the connector said about its machine as it connected, and where it connected from. */
+	about?: About;
+};
+
+/** A connected machine as its owner sees it in Chopin; every part is optional. */
+export type About = {
+	hostname?: string;
+	platform?: { os: string; arch: string };
+	service?: boolean;
+	planner?: boolean;
+	agent?: { name: string; version?: string };
+	address?: string;
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
 export type Approval = {
@@ -116,6 +128,7 @@ export class Connections {
 		machine: { id: string; owner: string; login: string; autoRun: boolean; version?: string },
 		label: string,
 		source: Source,
+		about: About = {},
 	) {
 		this.sweep();
 		if (this.list(source.repositoryId, machine.owner).length >= 8) fail("connection-limit");
@@ -129,6 +142,7 @@ export class Connections {
 			expiresAt: this.now() + CONNECTION_MS,
 			autoRun: machine.autoRun,
 			...(machine.version ? { version: machine.version } : {}),
+			about,
 		};
 		let token = randomBytes(32).toString("base64url");
 		this.#connections.set(connection.id, connection);
