@@ -109,6 +109,24 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		it("renames an owner's live machine only", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let other = await owner(storage);
+				let input = machine(userId);
+				await storage.machines.create(input);
+				expect(await storage.machines.rename(input.id, other, "taken")).toBe(false);
+				expect(await storage.machines.rename(input.id, userId, "build box")).toBe(true);
+				expect((await storage.machines.get(input.id))?.label).toBe("build box");
+				await storage.machines.revoke(input.id, userId, new Date());
+				expect(await storage.machines.rename(input.id, userId, "after")).toBe(false);
+				expect((await storage.machines.get(input.id))?.label).toBe("build box");
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("records when a machine was last seen, and stops once it is revoked", async () => {
 			let storage = await openedStorage(factory);
 			try {

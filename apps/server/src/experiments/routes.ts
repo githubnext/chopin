@@ -56,6 +56,8 @@ type Options = {
 	planners?: MachinePlanners;
 };
 const label = z.string().trim().min(1).max(100);
+/** A name a person gives a machine: one line of at most 64 characters. */
+const machineLabel = z.string().trim().min(1).max(64).regex(/^[^\p{Cc}]+$/u);
 /**
  * `chopin pair` names a checkout only when it runs inside one. With a pairing key it pairs at
  * once, as the key's owner.
@@ -564,6 +566,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				reauthorize: !!machine.reauthorizeAt,
 			})),
 		});
+	});
+	/** The owner renames a machine: the name shown in Chopin and by `chopin status`. */
+	route("POST", "/api/connector/machines/:id/label", async (request, params) => {
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		let { label } = z.object({ label: machineLabel }).strict().parse(await body(request));
+		if (!await auth.machines.rename(params.id, session.user.id, label)) fail("not-found");
+		return json({ label });
 	});
 	route("POST", "/api/connector/machines/:id/revoke", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);

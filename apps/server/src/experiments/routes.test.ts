@@ -742,6 +742,23 @@ test(
 	30_000,
 );
 
+test("an owner renames a paired machine, which chopin status then reads", async () => {
+	let { alice, bob, request, pair } = await setup();
+	let paired = await pair(alice.cookie);
+	let rename = (label: unknown, cookie = alice.cookie) =>
+		request(`/api/connector/machines/${paired.machine}/label`, { label }, cookie);
+	expect((await rename("Build box", bob.cookie)).status).toBe(404);
+	for (let label of ["", "   ", "a".repeat(65), "tab\there", 7]) {
+		expect(await (await rename(label)).json()).toEqual({ error: "invalid-request" });
+	}
+	let renamed = await rename("  Build box  ");
+	expect(await renamed.json()).toEqual({ label: "Build box" });
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toMatchObject([{ id: paired.machine, label: "Build box" }]);
+	let status = await request("/api/connector/machine", undefined, undefined, paired.machineToken);
+	expect(await status.json()).toMatchObject({ label: "Build box" });
+});
+
 test("disconnecting a machine in the browser ends it with machine-revoked", async () => {
 	let { alice, bob, request, pair, open } = await setup();
 	let paired = await pair(alice.cookie);

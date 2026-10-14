@@ -138,6 +138,11 @@ export class Machines {
 		return this.#storage.machines.list(userId);
 	}
 
+	/** Rename the owner's live machine; false for another person's or a revoked one. */
+	rename(id: string, userId: string, label: string): Promise<boolean> {
+		return this.#storage.machines.rename(id, userId, label);
+	}
+
 	async revoke(id: string, userId: string): Promise<boolean> {
 		let revoked = await this.#storage.machines.revoke(id, userId, this.#clock());
 		if (revoked) {

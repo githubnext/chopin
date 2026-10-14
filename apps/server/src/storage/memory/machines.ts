@@ -61,6 +61,12 @@ export class MemoryMachineStore implements MachineStore {
 		found.reauthorizeAt = new Date(now);
 		return true;
 	}
+	async rename(id: string, userId: string, label: string) {
+		let found = this.#machines.get(id);
+		if (!found || found.userId !== userId || found.revokedAt) return false;
+		found.label = label;
+		return true;
+	}
 	async revoke(id: string, userId: string, now: Date) {
 		let found = this.#machines.get(id);
 		if (!found || found.userId !== userId || found.revokedAt) return false;

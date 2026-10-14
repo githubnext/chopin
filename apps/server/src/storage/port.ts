@@ -110,6 +110,8 @@ export interface MachineStore {
 	reauthorize(id: string, expectedRevision: number, now: Date): Promise<boolean>;
 	/** True only for the call that revoked the owner's live machine. */
 	revoke(id: string, userId: string, now: Date): Promise<boolean>;
+	/** Rename the owner's live machine; false for anyone else's, or a revoked one. */
+	rename(id: string, userId: string, label: string): Promise<boolean>;
 }
 
 export interface ImageStore {

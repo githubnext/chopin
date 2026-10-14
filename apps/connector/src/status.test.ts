@@ -59,6 +59,19 @@ async function machine(url?: string) {
 	return { directory, host };
 }
 
+test("status names the machine as Chopin does, after its owner renamed it there", async () => {
+	using server = chopin(() => Response.json({ id: "m1", label: "Build box", login: "ada" }));
+	let { directory, host } = await machine(server.url);
+	let report = await collectStatus({ directory, server: server.url, source: "CHOPIN_URL", host });
+	expect(report.machine).toEqual({
+		paired: true,
+		label: "Build box",
+		check: "accepted",
+		accepted: true,
+		login: "ada",
+	});
+});
+
 test("status reports a paired machine Chopin accepts, its connectors, a stale lock and the service", async () => {
 	using server = chopin(() => Response.json({ id: "m1", label: "build-box", login: "ada" }));
 	let { directory, host } = await machine(server.url);

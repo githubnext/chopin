@@ -97,6 +97,7 @@ async function check(url: string, token: string, timeoutMs: number) {
 			check: "accepted" as const,
 			accepted: true,
 			...(typeof body.login === "string" ? { login: body.login } : {}),
+			...(typeof body.label === "string" ? { label: body.label } : {}),
 		};
 	}
 	let code = typeof body.error === "string" ? body.error : `http-${response.status}`;
@@ -122,6 +123,7 @@ export async function collectStatus(options: {
 }): Promise<StatusReport> {
 	let { directory, server, host } = options;
 	let token = await machineToken(directory, server);
+	// The name Chopin has for the machine, which its owner may have changed there, else the stored one.
 	let machine: StatusReport["machine"] = token
 		? {
 			paired: true,

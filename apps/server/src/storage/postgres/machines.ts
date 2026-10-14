@@ -125,6 +125,16 @@ export class PostgresMachineStore implements MachineStore {
 			return updated.length > 0;
 		});
 	}
+	rename(id: string, userId: string, label: string) {
+		return this.run("rename machine", async () => {
+			let updated = await this.sql<{ id: string }[]>`
+				UPDATE machines SET label = ${label}
+				WHERE id = ${id} AND user_id = ${userId} AND revoked_at IS NULL
+				RETURNING id
+			`;
+			return updated.length > 0;
+		});
+	}
 	revoke(id: string, userId: string, now: Date) {
 		return this.run("revoke machine", async () => {
 			let updated = await this.sql<{ id: string }[]>`
