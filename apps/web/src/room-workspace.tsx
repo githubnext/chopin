@@ -1184,7 +1184,7 @@ export function RoomWorkspace(
 	useEffect(() => {
 		if (childOpen) setEditing(false);
 	}, [childOpen]);
-	// Reveal each requested child once; loading and canonical renames keep a later tab choice.
+	// Compact Chat covers the document; split views keep the reader's chosen destination.
 	let requestedChild =
 		presentation.type === "parent-with-child" && presentation.childState === "open"
 			? presentation.childRequestKey
@@ -1193,11 +1193,11 @@ export function RoomWorkspace(
 	useEffect(() => {
 		let previous = previousChild.current;
 		previousChild.current = requestedChild;
-		if (requestedChild === undefined) return;
+		if (mode !== "compact" || requestedChild === undefined) return;
 		if (previous !== requestedChild) {
 			latestSelectDestination.current("plan");
 		}
-	}, [requestedChild]);
+	}, [mode, requestedChild]);
 	let [childEdit, setChildEdit] = useState<{ docked: boolean; editing: boolean }>();
 	let childToggle = useRef<() => void>(undefined);
 	let reportChildEdit = useCallback(

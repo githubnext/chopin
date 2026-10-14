@@ -1200,6 +1200,18 @@ test("compact Zoom keeps an open child across root view switches without remount
 
 	// Back from another view still returns to the root, which keeps that view.
 	await tabs.getByRole("button", { name: /^Decisions/ }).click();
+	// A layout change is not a new request for the already-open child.
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await expect(parent).toHaveAttribute("data-workspace-mode", "split");
+	await expect(surface).toBeHidden();
+	await expect(rootSheet(page, room).locator('[data-document-view="decisions"]')).toBeVisible();
+	await page.setViewportSize({ width: 600, height: 844 });
+	await expect(parent).toHaveAttribute("data-workspace-mode", "compact");
+	await expect(surface).toBeHidden();
+	await expect(tabs.getByRole("button", { name: /^Decisions/ }))
+		.toHaveAttribute("aria-pressed", "true");
+	expect((await mounts.mounts()).filter(entry => entry === `mount ${child.id}`)).toHaveLength(1);
 	await stack.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}` }).click();
 	await expect(surface).toHaveCount(0);
 	await expect(rootSheet(page, room).locator('[data-document-view="decisions"]')).toBeVisible();
