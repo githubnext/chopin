@@ -22,14 +22,12 @@ export {
 	ArrowLeftIcon,
 	ArrowRightIcon,
 	ArrowUpIcon,
-	BrainSparkleIcon,
 	CheckIcon,
 	ChevronIcon,
 	CircleCloseIcon,
 	ClockIcon,
 	CloseIcon,
 	CodeIcon,
-	CodePullRequestIcon,
 	CollapseIcon,
 	ColumnsIcon,
 	DecisionIcon,
@@ -39,7 +37,6 @@ export {
 	ExpandIcon,
 	FitWidthIcon,
 	FormulaIcon,
-	GlobeSearchIcon,
 	ImageIcon,
 	InfoIcon,
 	KeyboardIcon,
@@ -52,20 +49,17 @@ export {
 	MessageIcon,
 	MessagePlusIcon,
 	MinusIcon,
-	PageIcon,
 	PauseIcon,
 	PencilIcon,
 	PlayIcon,
 	PlusIcon,
 	RestartIcon,
-	ScribbleIcon,
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,
 	StarIcon,
 	TableIcon,
 	TabsIcon,
-	TerminalIcon,
 	WrenchIcon,
 } from "./line";
 export { ListIcon } from "./list";
@@ -79,5 +73,13 @@ export {
 	ServerIcon,
 } from "./system";
 export { TextStyleIcon } from "./text-style";
+export {
+	BrainSparkleIcon,
+	CodePullRequestIcon,
+	GlobeSearchIcon,
+	PageIcon,
+	ScribbleIcon,
+	TerminalIcon,
+} from "./trace-tools";
 export { RedoIcon, UndoIcon } from "./undo";
 export { WarningIcon } from "./warning";

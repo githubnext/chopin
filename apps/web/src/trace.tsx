@@ -54,7 +54,11 @@ export function TraceIcon({ children }: { children: ReactNode }) {
 
 /** A pen line that writes itself and wipes away while work runs. */
 export function TraceScribble() {
-	return <ScribbleIcon className="trace-scribble" data-slot="trace-scribble" size={16} />;
+	return (
+		<span className="trace-scribble" data-slot="trace-scribble">
+			<ScribbleIcon size={16} />
+		</span>
+	);
 }
 
 /** `enter` plays a short rise when the title's `key` changes. */
