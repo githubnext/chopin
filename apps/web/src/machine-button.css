@@ -71,6 +71,17 @@
 	color: var(--color-text-tertiary);
 }
 
+/* A narrow window's room header keeps the document's title: the button folds to its glyph there. */
+@media (max-width: 639px) {
+	.room-header .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.room-header :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
 .machine-menu {
 	position: fixed;
 	z-index: 60;
