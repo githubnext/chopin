@@ -507,6 +507,48 @@ test("a tapped sidebar row does not open its description card", async ({ join })
 	await expect(page.locator("[data-icon-tooltip]")).toBeHidden();
 });
 
+test("an unrelated editor scroll preserves a pending sidebar description", async ({ join, page }) => {
+	let title = "Release plan";
+	let description = "Coordinates release readiness work.";
+	let listed = channel("cccccccc-0000-4000-8000-000000000000", title, description);
+	await page.route(
+		"**/api/repositories/octo-org/score/channels*",
+		route => route.fulfill({ json: { canEdit: true, channels: [listed], repository } }),
+	);
+	page = await join("ana");
+	let link = sidebar(page).getByRole("link", { name: title, exact: true });
+	await link.scrollIntoViewIfNeeded();
+	let box = (await link.boundingBox())!;
+	await page.clock.install();
+	await page.clock.pauseAt(new Date());
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	let card = page.locator("[data-icon-tooltip]");
+	await page.clock.runFor(399);
+	await expect(card).not.toHaveAttribute("data-visible");
+	// The editor announces preface layout changes with this event while the pointer stays in the rail.
+	await page.locator("[data-plan-scroll]").dispatchEvent("scroll");
+	await page.clock.runFor(1);
+	await expect(card).toHaveAttribute("data-visible", "");
+	await expect(card).toHaveText(description);
+	await expect(card).toBeVisible();
+
+	// Scrolling the trigger's own rail and the viewport still dismisses its card.
+	await link.evaluate(element => {
+		let ancestor = element.parentElement;
+		while (ancestor && getComputedStyle(ancestor).overflowY !== "auto") {
+			ancestor = ancestor.parentElement;
+		}
+		if (!ancestor) throw new Error("Missing sidebar scroller");
+		ancestor.dispatchEvent(new Event("scroll"));
+	});
+	await expect(card).not.toHaveAttribute("data-visible");
+	await page.mouse.move(0, 0);
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await expect(card).toHaveAttribute("data-visible", "");
+	await page.evaluate(() => document.dispatchEvent(new Event("scroll")));
+	await expect(card).not.toHaveAttribute("data-visible");
+});
+
 test("a long description card stays inside the window beside a bottom row", async ({ join }) => {
 	let description = Array.from({ length: 12 }, () => "Coordinates release readiness work.")
 		.join(" ");

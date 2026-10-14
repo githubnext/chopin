@@ -20,8 +20,10 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // The combined workspace loading shapes need a further 500 B allowance on Linux.
 // The sidebar's Machines entry, its loading row and its lazy chunks add 500 B raw.
 // Titled inline notices and the entry's connected-of-paired count add a further 500 B raw.
+// Early document-route code loading measures 82,050 B gzip on Linux; allow its preload wrapper
+// while retaining the raw limit and keeping the editor out of project-only navigation.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 82_000,
+	gzip: 82_128,
 	raw: 257_500,
 };
 

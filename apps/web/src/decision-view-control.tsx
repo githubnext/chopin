@@ -1,4 +1,4 @@
-import { Count } from "@chopin/editor";
+import { Count } from "@chopin/editor/count";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";

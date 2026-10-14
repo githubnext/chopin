@@ -18,9 +18,10 @@ import type { ParentFocusTarget } from "./document-workspace-host";
 import type { DocumentRouteIdentitySource } from "./document-route-swap";
 import type { WorkspacePresentation } from "./workspace-model";
 
-// Document routes load their swap and host together, so neither waits on the other.
+// Load document code alongside its route, before metadata can delay the editor download.
 let DocumentRouteSwap = lazy(() => {
 	void import("./document-workspace-host");
+	void import("./room-workspace").catch(() => {});
 	return import("./document-route-view");
 });
 // /connect, the person's machines and the pairing confirmation, loads only when visited.

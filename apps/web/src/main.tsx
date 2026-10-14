@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { usePointerCapabilities } from "@chopin/editor/pointer";
 
@@ -45,20 +45,26 @@ let content = isDesignAuditRoute(location.pathname, import.meta.env.DEV)
 	? import("./diagram-gallery/page").then(({ DiagramGalleryPage }) => <DiagramGalleryPage />)
 	: Promise.resolve(<Root />);
 
-let agentation = import.meta.env.DEV
-	? import("agentation").then(({ Agentation }) => (
-		<Agentation appName="Chopin" endpoint="http://127.0.0.1:4747" />
-	))
-	: Promise.resolve(null);
+let Feedback = import.meta.env.DEV
+	? lazy(() =>
+		import("agentation").then(({ Agentation }) => ({ default: Agentation })).catch(() => ({
+			default: () => null,
+		}))
+	)
+	: undefined;
 
-void Promise.all([content, import("./icon-tooltip"), agentation]).then(
-	([value, { IconTooltip }, feedback]) => {
+void Promise.all([content, import("./icon-tooltip")]).then(
+	([value, { IconTooltip }]) => {
 		createRoot(root).render(
 			<StrictMode>
 				<PointerCapabilities />
 				{value}
 				<IconTooltip />
-				{feedback}
+				{Feedback && (
+					<Suspense fallback={null}>
+						<Feedback appName="Chopin" endpoint="http://127.0.0.1:4747" />
+					</Suspense>
+				)}
 			</StrictMode>,
 		);
 	},

@@ -248,7 +248,11 @@ export function IconTooltip() {
 			enter(hovered ?? focused);
 		}
 
-		function scroll() {
+		function scroll(event: Event) {
+			// Another pane's layout or scroll cannot move this trigger or cancel its hover delay.
+			if (
+				event.target instanceof Element && !event.target.contains(active ?? hovered ?? focused)
+			) return;
 			hovered = null;
 			let current = keyboardFocused(document.activeElement);
 			focused = current === dismissed ? null : current;

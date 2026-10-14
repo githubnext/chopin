@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
-import { Face } from "@chopin/editor";
+import { Face } from "@chopin/editor/face";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import {
 	ArchiveIcon,

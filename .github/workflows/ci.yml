@@ -173,6 +173,9 @@ jobs:
       - name: Design behaviour (keyboard, focus, motion, and scrolling)
         run: bun run design:behavior
 
+      - name: Development startup (optional feedback and navigation imports)
+        run: bun node_modules/@playwright/test/cli.js test --config e2e/startup/playwright.config.ts
+
       - name: Diagram gallery (rendering and keyboard behaviour)
         run: bun run diagrams:test
 

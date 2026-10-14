@@ -12,7 +12,9 @@ import { motionImmediately } from "./motion-input";
 import { documentGroups } from "./documents-sheet-model";
 import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
-import { Count, Face, MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { Count } from "@chopin/editor/count";
+import { Face } from "@chopin/editor/face";
+import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor/disclosure-motion";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 

@@ -19,6 +19,10 @@
 			"types": "./src/count.tsx",
 			"default": "./src/count.tsx"
 		},
+		"./disclosure-motion": {
+			"types": "./src/disclosure-motion.tsx",
+			"default": "./src/disclosure-motion.tsx"
+		},
 		"./face": {
 			"types": "./src/face.tsx",
 			"default": "./src/face.tsx"

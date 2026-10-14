@@ -1,4 +1,4 @@
-import { Count } from "@chopin/editor";
+import { Count } from "@chopin/editor/count";
 import { MachineIcon } from "@chopin/icons";
 
 import { machinesLabel, useMachineSummary } from "./machine-summary";
