@@ -555,6 +555,135 @@ describe("install.ps1", () => {
 		60_000,
 	);
 
+	/**
+	 * install.ps1 as the Machines page's PowerShell command runs it: the key set in the session,
+	 * then the downloaded script run as a script block with `words`.
+	 */
+	async function invoked(env: Record<string, string>, words: string) {
+		let child = Bun.spawn([
+			pwsh!,
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			[
+				`$env:CHOPIN_PAIRING_KEY = '${KEY}'`,
+				`& ([scriptblock]::Create((Get-Content -Raw '${script}'))) ${words}`,
+				'"after: $LASTEXITCODE [$env:CHOPIN_PAIRING_KEY]"',
+			].join("\n"),
+		], { env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+		let output = await new Response(child.stdout).text()
+			+ await new Response(child.stderr).text();
+		await child.exited;
+		return output;
+	}
+
+	test.skipIf(!pwsh)(
+		"run as a script block, refuses any chopin command but connect and pair, and clears the key",
+		async () => {
+			using release = fakeRelease({});
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			for (let words of ["update", "service install", "0.2.0 connect"]) {
+				let output = await invoked({ ...release.env, LOCALAPPDATA: local }, words);
+				expect(output).toContain(
+					words.startsWith("0.2.0")
+						? "install.ps1 takes one version"
+						: `not "${words.split(" ")[0]}"`,
+				);
+				expect(output).toContain("after: 1 []");
+				expect(output).not.toContain(KEY);
+			}
+			expect(release.requests).toEqual([]);
+		},
+		60_000,
+	);
+
+	test.skipIf(!pwsh || process.platform === "win32")(
+		"run as a script block with connect, a failed install never runs chopin and clears the key",
+		async () => {
+			using release = fakeRelease({});
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			let output = await invoked(
+				{ ...release.env, LOCALAPPDATA: local },
+				"connect --install-service '--' copilot --acp",
+			);
+			expect(output).toContain("install.ps1 installs chopin on Windows");
+			expect(output).toContain("after: 1 []");
+			expect(output).not.toContain(KEY);
+			expect(await readdir(local)).toEqual([]);
+		},
+		60_000,
+	);
+
+	// The chopin.exe here is a compiled program that records how it was run, then exits 7.
+	test.skipIf(!pwsh || process.platform !== "win32")(
+		"run as a script block with connect, runs the chopin.exe it installed and returns its exit code",
+		async () => {
+			let build = await mkdtemp(join(scratch, "recorder-"));
+			await writeFile(
+				join(build, "recorder.ts"),
+				[
+					'import { writeFileSync } from "node:fs";',
+					'if (process.argv[2] === "--version") {',
+					'\tconsole.log("chopin 0.2.0 (connector protocol 1)");',
+					"\tprocess.exit(0);",
+					"}",
+					"let { CHOPIN_URL, CHOPIN_PAIRING_KEY } = process.env;",
+					"writeFileSync(`${process.env.LOCALAPPDATA}/ran.json`, JSON.stringify(",
+					"\t[CHOPIN_URL, CHOPIN_PAIRING_KEY, ...process.argv.slice(2)],",
+					"));",
+					"process.exit(7);",
+				].join("\n"),
+			);
+			let compiled = Bun.spawnSync([
+				process.execPath,
+				"build",
+				"--compile",
+				join(build, "recorder.ts"),
+				"--outfile",
+				join(build, "recorder.exe"),
+			], { stdout: "pipe", stderr: "pipe" });
+			expect(compiled.exitCode, compiled.stderr.toString()).toBe(0);
+			let binary = new Uint8Array(await Bun.file(join(build, "recorder.exe")).arrayBuffer());
+			using release = fakeRelease({ "0.2.0": assets("chopin-windows-x64.exe", binary) });
+			let local = await mkdtemp(join(scratch, "localappdata-"));
+			let userPath = readUserPath();
+			try {
+				let output = await invoked(
+					{
+						...release.env,
+						LOCALAPPDATA: local,
+						CHOPIN_VERIFY_ATTESTATION: "0",
+						CHOPIN_URL: "https://chopin.example",
+					},
+					"connect --install-service '--' copilot --acp --allow-all",
+				);
+				expect(output).toContain("Installed chopin 0.2.0");
+				expect(output).toContain("after: 7 []");
+				expect(output).not.toContain(KEY);
+				expect(JSON.parse(await readFile(join(local, "ran.json"), "utf8"))).toEqual([
+					"https://chopin.example",
+					KEY,
+					"connect",
+					"--install-service",
+					"--",
+					"copilot",
+					"--acp",
+					"--allow-all",
+				]);
+			} finally {
+				Bun.spawnSync([
+					pwsh!,
+					"-NoProfile",
+					"-Command",
+					`[Environment]::SetEnvironmentVariable('Path', '${
+						userPath.replaceAll("'", "''")
+					}', 'User')`,
+				]);
+			}
+		},
+		180_000,
+	);
+
 	test.skipIf(!pwsh)(
 		"refuses a version with anything but digits, letters, dots, plus and minus",
 		async () => {

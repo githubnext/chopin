@@ -2,6 +2,12 @@
 #
 #   irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex
 #   & ([scriptblock]::Create((irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1))) 0.2.0
+#   & ([scriptblock]::Create((irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1))) connect '--' copilot --acp --allow-all
+#
+# Given `connect` or `pair` and its arguments, it runs that chopin command once installed, with the
+# session's environment (CHOPIN_URL, CHOPIN_PAIRING_KEY), leaves $LASTEXITCODE as chopin's, and
+# removes CHOPIN_PAIRING_KEY from the session afterwards. PowerShell takes a bare -- as the end of
+# its own parameters and passes nothing for it, so chopin's -- goes in quotes.
 #
 # CHOPIN_VERSION              the version to install, like the argument (default: the newest release)
 # CHOPIN_VERIFY_ATTESTATION   0 skips `gh attestation verify`, which otherwise runs when gh is installed
@@ -12,8 +18,6 @@
 #
 # chopin.exe goes to %LOCALAPPDATA%\chopin\bin, which is added to your user PATH. Nothing here
 # needs administrator rights.
-param([string]$Version = $env:CHOPIN_VERSION)
-
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -46,6 +50,20 @@ function Invoke-Https([string]$Url, [string]$OutFile) {
 		Stop-Install "$Url was redirected to $Final, which is not HTTPS. Refusing to use it."
 	}
 	$Response
+}
+
+# What to do with the script's arguments: one version, or connect or pair and their arguments.
+function Read-Arguments([object[]]$Words) {
+	if ($Words.Count -and $Words[0] -cin @('connect', 'pair')) {
+		return @{ Version = $env:CHOPIN_VERSION; Command = @($Words | ForEach-Object { [string]$_ }) }
+	}
+	if ($Words.Count -and "$($Words[0])" -notmatch '^([0-9]|v[0-9]|cli-v)') {
+		Stop-Install "install.ps1 runs only chopin connect or chopin pair once it has installed chopin, not `"$($Words[0])`"."
+	}
+	if ($Words.Count -gt 1) {
+		Stop-Install 'install.ps1 takes one version like 0.2.0, or connect or pair and their arguments.'
+	}
+	@{ Version = if ($Words.Count) { [string]$Words[0] } else { $env:CHOPIN_VERSION }; Command = @() }
 }
 
 # 0.2.0 from 0.2.0, v0.2.0 or cli-v0.2.0. The match is case-sensitive, so [A-Za-z] is ASCII only,
@@ -169,16 +187,27 @@ function Install-Chopin([string]$Version) {
 	}
 }
 
-# Run with `irm ... | iex`, $LASTEXITCODE says how it went: 0 installed, 1 not. The Machines
-# page's setup command connects only on 0.
+# Run with `irm ... | iex`, $LASTEXITCODE says how it went: 0 installed, 1 not; given connect or
+# pair, it is that chopin command's.
+$Words = @($args)
 $ChopinInstalled = $false
+$Chopin = $null
 try {
-	Install-Chopin $Version
+	$Run = Read-Arguments $Words
+	Install-Chopin $Run.Version
 	$ChopinInstalled = $true
+	if ($Run.Command.Count) {
+		$Chopin = Join-Path $env:LOCALAPPDATA 'chopin\bin\chopin.exe'
+		$Command = $Run.Command
+		& $Chopin @Command
+	}
 } catch [System.OperationCanceledException] {
 	Write-Host $_.Exception.Message -ForegroundColor Red
 	# `exit` would close the window of someone who ran `irm ... | iex`; only a script file exits.
 	if ($PSCommandPath) { exit 1 }
 } finally {
-	$global:LASTEXITCODE = if ($ChopinInstalled) { 0 } else { 1 }
+	# The key was for that one chopin command, which has sent it or never will.
+	if ($Words.Count) { Remove-Item Env:CHOPIN_PAIRING_KEY -ErrorAction SilentlyContinue }
+	if (-not $Chopin) { $global:LASTEXITCODE = if ($ChopinInstalled) { 0 } else { 1 } }
 }
+if ($Chopin -and $PSCommandPath) { exit $LASTEXITCODE }
