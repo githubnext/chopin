@@ -7,6 +7,7 @@ import {
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { expect, test } from "./room";
+import { RELEASE } from "./release";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -66,7 +67,7 @@ async function connected(page: Page, label: string, headers: Record<string, stri
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
-				[CONNECTOR_VERSION_HEADER]: "0.0.5",
+				[CONNECTOR_VERSION_HEADER]: RELEASE,
 				...extra,
 			},
 			body: JSON.stringify(body),
@@ -158,7 +159,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(automatic).toBeFocused();
 	await expect(automatic).toContainText(/Uses (build-box|laptop) now/);
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toContainText("Connected · chopin 0.0.5 · Linux");
+		.toContainText(`Connected · chopin ${RELEASE} · Linux`);
 	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeVisible();
 	// Opened upward from the composer, inside the window.
 	let panel = (await menu.boundingBox())!;

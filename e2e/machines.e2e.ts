@@ -17,6 +17,7 @@ import { compiledChopin } from "../apps/connector/src/testing/binary";
 import { assets, fakeRelease } from "../apps/connector/src/testing/release";
 import { agentCommand, setupCommand } from "../apps/web/src/experiments/setup-commands";
 import { expect, test } from "./room";
+import { RELEASE } from "./release";
 import { ROOT } from "./servers";
 
 import type { Page } from "@playwright/test";
@@ -354,7 +355,7 @@ test("a phone wraps every command in view", async ({ join: enter }) => {
 
 const CONNECTOR = {
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
-	[CONNECTOR_VERSION_HEADER]: "0.0.5",
+	[CONNECTOR_VERSION_HEADER]: RELEASE,
 };
 
 /**
@@ -420,7 +421,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 		table.getByRole("row", { name: new RegExp(`^(Favorite |Remove )?${name}`) });
 	await expect(row("build-box")).toContainText("Service");
 	await expect(row("build-box")).toContainText("build-box.internal");
-	await expect(row("build-box")).toContainText("chopin 0.0.5");
+	await expect(row("build-box")).toContainText(`chopin ${RELEASE}`);
 	await expect(row("build-box")).toContainText("Linux arm64");
 	await expect(row("build-box")).toContainText("GitHub Copilot CLI 1.0.97");
 	await expect(row("build-box")).toContainText("Connected");
@@ -472,7 +473,7 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
 	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
 	await expect(rows.locator(".machines-row").filter({ hasText: "build-box" }))
-		.toContainText("build-box.internal · chopin 0.0.5 · Linux");
+		.toContainText(`build-box.internal · chopin ${RELEASE} · Linux`);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
 	await expect(rows.locator(".machines-row")).toHaveCount(1);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");

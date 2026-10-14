@@ -19,6 +19,7 @@ import {
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { createChannel, registerTestDatabase } from "./database";
 import { authenticate, expect, ready, roomPath, test } from "./room";
+import { RELEASE } from "./release";
 import { HOST, ROOT } from "./servers";
 
 import type { Browser, Page } from "@playwright/test";
@@ -154,7 +155,7 @@ async function machine(page: Page, label: string, planner: boolean) {
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
-				[CONNECTOR_VERSION_HEADER]: "0.0.5",
+				[CONNECTOR_VERSION_HEADER]: RELEASE,
 				...extra,
 			},
 			body: JSON.stringify(body),
