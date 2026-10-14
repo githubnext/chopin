@@ -76,8 +76,9 @@ export async function servePlanners(options: {
 /**
  * The Planners Chopin asks this machine to run, for documents its owner chose it for: `assign`
  * starts a backend, as `servePlanners` does, for each document new to the list and stops each
- * one no longer on it. `running` names the documents asked for, by id, for the next Planner poll.
- * A document `--planner` already runs is never started twice. `stop` stops them all.
+ * one no longer on it, saying so in chopin's output. `running` names the documents asked for, by
+ * id, for the next Planner poll. A document `--planner` already runs is never started twice.
+ * `stop` stops them all.
  */
 export function dispatchedPlanners(options: {
 	url: string;
@@ -92,7 +93,10 @@ export function dispatchedPlanners(options: {
 	env?: Record<string, string>;
 	healthyMs?: number;
 }) {
-	let running = new Map<string, { stop: AbortController; served: Promise<void> }>();
+	let running = new Map<
+		string,
+		{ url: string; own: boolean; stop: AbortController; served: Promise<void> }
+	>();
 	let own = new Set(options.documents);
 	return {
 		running: () => [...running.keys()],
@@ -102,18 +106,25 @@ export function dispatchedPlanners(options: {
 				if (wanted.has(id)) continue;
 				running.delete(id);
 				backend.stop.abort();
+				// Chopin stops asking once the document's owner chooses another machine or Automatic.
+				if (!backend.own && !options.signal.aborted) {
+					options.output.say(
+						`Stopped the Planner for ${backend.url}: the document chose another machine.`,
+					);
+				}
 			}
 			for (let [id, planner] of wanted) {
 				if (running.has(id) || options.signal.aborted) continue;
 				let stop = new AbortController();
-				let served = own.has(id) || own.has(planner.url)
+				let mine = own.has(id) || own.has(planner.url);
+				let served = mine
 					? Promise.resolve()
 					: servePlanner({
 						...options,
 						document: planner.url,
 						signal: AbortSignal.any([options.signal, stop.signal]),
 					});
-				running.set(id, { stop, served });
+				running.set(id, { url: planner.url, own: mine, stop, served });
 			}
 		},
 		async stop() {

@@ -839,6 +839,11 @@ test.skipIf(process.platform === "win32")(
 				.toBe(0);
 			let [stdout, stderr] = await output;
 			expect(`${stdout}${stderr}`).not.toContain("chopin_p_");
+			// Its own output says why the Planner stopped, once.
+			expect(stdout.split(`Stopped the Planner for ${document}`)).toHaveLength(2);
+			expect(stdout).toContain(
+				`Stopped the Planner for ${document}: the document chose another machine.`,
+			);
 		} finally {
 			connector.kill("SIGKILL");
 			await chopin.stop(true);
