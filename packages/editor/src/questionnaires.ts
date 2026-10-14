@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import { $isDecisionNode, $isQuestionnaireNode, QuestionnaireNode } from "@chopin/dialect";
 
 import { counts, relate, relations, resolve } from "./anchors";
+import { $isDocumentTitle } from "./document-title";
 import { $collectDecisionRuns } from "./deck-runs";
 import { holds, paint, pin, unpin } from "./marks";
 import { $blockPoints } from "./passage";
@@ -56,6 +57,7 @@ export function collectQuestionnaires(): QuestionnaireEntry[] {
 export function collectPlanState(): PlanQuestionnaireState {
 	let entries = collectQuestionnaires();
 	let hasPlanContent = $getRoot().getChildren().some(node => {
+		if ($isDocumentTitle(node)) return false;
 		if ($isQuestionnaireNode(node) || $isDecisionNode(node)) return false;
 		if ($isParagraphNode(node) && node.getChildrenSize() === 0) return false;
 		return true;

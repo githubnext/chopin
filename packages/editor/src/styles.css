@@ -2668,6 +2668,18 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	font-size: var(--text-2xl);
 	line-height: var(--text-2xl--line-height);
 }
+
+.plan-content [data-document-title-empty] {
+	position: relative;
+}
+
+.plan-content [data-document-title-empty]::before {
+	content: "Untitled";
+	position: absolute;
+	inset-inline-start: 0;
+	color: var(--color-text-quaternary);
+	pointer-events: none;
+}
 .plan-content h2 {
 	font-size: var(--text-xl);
 	line-height: var(--text-xl--line-height);

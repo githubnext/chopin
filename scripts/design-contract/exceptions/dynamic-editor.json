@@ -361,7 +361,7 @@
 				2
 			]
 		],
-		"sourceHash": "5acf6913551f6409559012dc4886a3d22392eb43d2c8f3835b5384e6d20039a7"
+		"sourceHash": "fb0b4c224138dcbb69209bcdbd8b6802398c65f63f1de95981927b9b76cc96c6"
 	},
 	{
 		"file": "packages/editor/src/collaboration.tsx",

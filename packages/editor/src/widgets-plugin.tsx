@@ -15,6 +15,7 @@ import { addComposerChild$, realmPlugin } from "@mdxeditor/editor";
 
 import { ChangeObserver } from "./changes-observer";
 import { CommentLayer } from "./comment-layer";
+import { DocumentTitlePlugin } from "./document-title-plugin";
 import { GitHubHoverCards } from "./github-hover";
 import { GitHubReferencesPlugin } from "./github-references";
 import { MarkdownPastePlugin } from "./markdown-paste";
@@ -72,6 +73,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 		realm.pub(addComposerChild$, CardGapPlugin);
 		realm.pub(addComposerChild$, PreviewPlugin);
 		realm.pub(addComposerChild$, CalloutPlugin);
+		realm.pub(addComposerChild$, DocumentTitlePlugin);
 		realm.pub(addComposerChild$, EnterPlugin);
 		realm.pub(addComposerChild$, TabKeyPlugin);
 		realm.pub(addComposerChild$, DecoratorSelectionPlugin);

@@ -63,7 +63,7 @@ test("undo and redo reverse my own typing", async ({ join, room, seed }) => {
 	await ana.keyboard.press(UNDO);
 	await expect(content(ana)).not.toContainText("As MDX.");
 	await expect(content(ana)).toContainText("Storage goes on disk.");
-	await written(ana, room, /^Storage goes on disk\.\s*$/);
+	await written(ana, room, /^# [^\n]+\n\nStorage goes on disk\.\s*$/);
 
 	await ana.keyboard.press(REDO);
 	await expect(content(ana)).toContainText("Storage goes on disk. As MDX.");

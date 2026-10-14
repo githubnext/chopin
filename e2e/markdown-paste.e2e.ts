@@ -64,7 +64,8 @@ test("ordinary prose, components and ⇧⌘V paste literally", async ({ join, ro
 
 	await page.keyboard.press("Enter");
 	await paste(page, '**Card** <Questionnaire id="x" />');
-	await expect(content(page).getByRole("heading")).toHaveCount(0);
+	await expect(content(page).getByRole("heading")).toHaveCount(1);
+	await expect(content(page).locator("[data-document-title]")).toHaveCount(1);
 	await expect(content(page)).toContainText('Card <Questionnaire id="x" />');
 	await written(page, room, /Not a heading/);
 	await written(page, room, /Questionnaire id="x"/);

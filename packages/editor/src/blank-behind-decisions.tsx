@@ -8,7 +8,14 @@
  */
 
 import { useEffect, useSyncExternalStore } from "react";
-import { COMMAND_PRIORITY_HIGH, KEY_BACKSPACE_COMMAND, KEY_DELETE_COMMAND } from "lexical";
+import {
+	$getSelection,
+	$isRangeSelection,
+	COMMAND_PRIORITY_HIGH,
+	KEY_BACKSPACE_COMMAND,
+	KEY_DELETE_COMMAND,
+} from "lexical";
+import { $isDocumentTitle } from "./document-title";
 
 import { useRelations } from "./questionnaires";
 import { blankBehindDecisions, writingEntries } from "./widgets/questionnaire";
@@ -59,6 +66,11 @@ export function BlankBehindDecisions(
 	useEffect(() => {
 		if (!editor || !blank) return;
 		let refuse = (event: KeyboardEvent | null) => {
+			let selection = $getSelection();
+			if ($isRangeSelection(selection)) {
+				let node = selection.anchor.getNode();
+				if ($isDocumentTitle(node) || $isDocumentTitle(node.getTopLevelElement())) return false;
+			}
 			event?.preventDefault();
 			return true;
 		};

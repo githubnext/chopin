@@ -38,6 +38,7 @@ import {
 } from "@chopin/dialect";
 
 import { listenToHistory, registerPlanHistory, rehearse, typing } from "./history";
+import { registerDocumentTitle } from "./document-title";
 
 import type { PlanHistory, Refusal } from "./history";
 import type { Binding, Provider } from "@lexical/yjs";
@@ -227,6 +228,25 @@ function appendTable(editor: LexicalEditor) {
 }
 
 describe("plan history", () => {
+	it("title clear, undo and redo converge with a fresh Yjs load", async () => {
+		let { me, peer, server } = await room("# Original title\n\nBody prose.\n", 2, 0);
+		registerDocumentTitle(me.editor);
+		registerDocumentTitle(peer.editor);
+		me.editor.update(() => {
+			let heading = $getRoot().getFirstChild();
+			if ($isElementNode(heading)) heading.clear().selectStart();
+		}, { discrete: true });
+		await settle();
+		expect(await consistent(me, peer, server)).toBe("#\n\nBody prose.\n");
+		undo(me.editor);
+		await settle();
+		expect(await consistent(me, peer, server)).toBe("# Original title\n\nBody prose.\n");
+		redo(me.editor);
+		await settle();
+		expect(await consistent(me, peer, server)).toBe("#\n\nBody prose.\n");
+		expect(me.refusals).toEqual([]);
+	});
+
 	it("undoes and redoes this person's typing", async () => {
 		let { me, peer } = await room("Start here.\n");
 

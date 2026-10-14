@@ -29,6 +29,7 @@ import { ChangeStore } from "./changes";
 import { PlanChanges } from "./changes-chip";
 import { collaborationPlugin } from "./collaboration";
 import { useConnectionNotice } from "./connection-notice";
+import { $isDocumentTitle } from "./document-title";
 import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
@@ -625,14 +626,14 @@ export function PlanEditor(
 	);
 }
 
-/** Whether the document has nothing in it yet: no blocks, or one empty paragraph. */
+/** A permanent title and empty caret paragraphs are not body prose. */
 function isEmpty(editor: LexicalEditor): boolean {
 	return editor.read(() => {
 		let root = $getRoot();
-		let first = root.getFirstChild();
-		return root.getChildrenSize() === 0
-			|| (root.getChildrenSize() === 1 && $isParagraphNode(first)
-				&& first.getTextContentSize() === 0);
+		return root.getChildren().every(node =>
+			$isDocumentTitle(node)
+			|| $isParagraphNode(node) && node.getTextContentSize() === 0
+		);
 	});
 }
 
