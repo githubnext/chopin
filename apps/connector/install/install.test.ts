@@ -402,6 +402,36 @@ describe("install.ps1", () => {
 		60_000,
 	);
 
+	// The Machines page's setup command connects only when this is 0 after `irm ... | iex`.
+	test.skipIf(!pwsh)(
+		"run with iex, a refused install leaves $LASTEXITCODE 1 without closing the window",
+		async () => {
+			using release = fakeRelease({});
+			let child = Bun.spawn([
+				pwsh!,
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				`$global:LASTEXITCODE = 0; Get-Content -Raw '${script}' | iex; "after iex: $LASTEXITCODE"`,
+			], {
+				env: {
+					...process.env,
+					...release.env,
+					CHOPIN_VERSION: "0.2.0\nevil",
+					LOCALAPPDATA: scratch,
+				},
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			let output = await new Response(child.stdout).text()
+				+ await new Response(child.stderr).text();
+			await child.exited;
+			expect(output).toContain("is not a version like 0.2.0");
+			expect(output).toContain("after iex: 1");
+		},
+		60_000,
+	);
+
 	test.skipIf(!pwsh)(
 		"refuses a version with anything but digits, letters, dots, plus and minus",
 		async () => {

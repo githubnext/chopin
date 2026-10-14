@@ -18,24 +18,37 @@ const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download"
 test("one command installs chopin, then connects with the key by chopin's installed path", () => {
 	expect(setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY)).toBe(
 		[
-			`curl -fsSL ${RELEASES}/install.sh \\`,
-			"  | sh && CHOPIN_URL=https://chopin.example \\",
+			"installer=$(mktemp) \\",
+			`  && curl -fsSL ${RELEASES}/install.sh -o "$installer" \\`,
+			'  && sh "$installer" && rm -f "$installer" \\',
+			"  && CHOPIN_URL=https://chopin.example \\",
 			`  CHOPIN_PAIRING_KEY=${KEY} \\`,
 			"  ~/.local/bin/chopin connect . \\",
 			"  --install-service \\",
 			"  -- copilot --acp --allow-all",
 		].join("\n"),
 	);
-	expect(setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY)).toBe(
+});
+
+test("PowerShell connects only once install.ps1 succeeded, with the key in that command's environment", () => {
+	let command = setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY);
+	expect(command).toBe(
 		[
 			`irm ${RELEASES}/install.ps1 | iex`,
-			'$env:CHOPIN_URL="https://chopin.example"',
-			'& "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
-			`  --key ${KEY} \``,
-			"  --install-service `",
-			"  -- copilot --acp --allow-all",
+			"if ($LASTEXITCODE -eq 0) {",
+			`  $token = '${KEY}'`,
+			'  $env:CHOPIN_URL = "https://chopin.example"',
+			"  $env:CHOPIN_PAIRING_KEY = $token",
+			"  try {",
+			'    & "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
+			"      --install-service `",
+			"      -- copilot --acp --allow-all",
+			"  } finally { Remove-Item Env:CHOPIN_PAIRING_KEY; Remove-Variable token }",
+			"}",
 		].join("\n"),
 	);
+	// Never on chopin's command line, where other programs on the machine can read it.
+	expect(command).not.toContain("--key");
 });
 
 test("the agent's --env goes on its own line, and an agent that asks permission runs in the terminal", () => {
@@ -47,9 +60,58 @@ test("the agent's --env goes on its own line, and an agent that asks permission 
 	expect(runsAsService(claude)).toBe(false);
 	expect(setupCommand("https://chopin.example", "sh", claude, KEY).split("\n").slice(-2))
 		.toEqual(["  ~/.local/bin/chopin connect . \\", "  -- claude-agent-acp"]);
-	expect(setupCommand("https://chopin.example", "powershell", claude, KEY).split("\n").slice(-2))
-		.toEqual([`  --key ${KEY} \``, "  -- claude-agent-acp"]);
+	expect(
+		setupCommand("https://chopin.example", "powershell", claude, KEY).split("\n").slice(-4, -2),
+	)
+		.toEqual([
+			'    & "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
+			"      -- claude-agent-acp",
+		]);
 });
+
+/** A curl stand-in's first lines: write to the file `-o` names, else to standard output. */
+const CURL_OUTPUT =
+	'out=/dev/stdout\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && out="$2"; shift; done\n';
+
+test.skipIf(process.platform === "win32")(
+	"the one sh command stops with the installer's own message, never running chopin, when installing fails",
+	async () => {
+		let home = await mkdtemp(join(tmpdir(), "chopin-setup-command-"));
+		try {
+			let shims = join(home, "shims");
+			await mkdir(shims);
+			let failures = {
+				// curl -f: GitHub answered with an error, so there is no installer to run.
+				download: "echo 'curl: (22) The requested URL returned error: 404' >&2\nexit 22\n",
+				// The installer ran and refused, as install.sh does when it can't fetch chopin.
+				installer:
+					`${CURL_OUTPUT}printf '%s\\n' "echo 'chopin install: could not download chopin' >&2" 'exit 1' > "$out"\n`,
+			};
+			for (let [name, body] of Object.entries(failures)) {
+				await writeFile(join(shims, "curl"), `#!/bin/sh\n${body}`);
+				await chmod(join(shims, "curl"), 0o755);
+				for (let shell of ["sh", "bash", "zsh"]) {
+					let found = Bun.which(shell);
+					if (!found) continue;
+					let command = setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY);
+					let run = Bun.spawnSync([found, "-c", command], {
+						env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
+						stderr: "pipe",
+					});
+					let said = run.stderr.toString();
+					expect(run.exitCode, `${shell} ${name}: ${said}`).not.toBe(0);
+					expect(said).toContain(
+						name === "download" ? "returned error: 404" : "chopin install: could not download",
+					);
+					expect(said).not.toContain("not found");
+					expect(said).not.toContain("No such file");
+				}
+			}
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	},
+);
 
 test.skipIf(process.platform === "win32")(
 	"sh, bash and zsh each run the one command as one: install, then chopin with the key",
@@ -63,7 +125,7 @@ test.skipIf(process.platform === "win32")(
 				`#!/bin/sh\nprintf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$HOME/ran"\n`;
 			await writeFile(
 				join(shims, "curl"),
-				`#!/bin/sh\ncat <<'EOF'\nmkdir -p "$HOME/.local/bin"\ncat > "$HOME/.local/bin/chopin" <<'END'\n${chopin}END\nchmod 755 "$HOME/.local/bin/chopin"\nEOF\n`,
+				`#!/bin/sh\n${CURL_OUTPUT}cat > "$out" <<'EOF'\nmkdir -p "$HOME/.local/bin"\ncat > "$HOME/.local/bin/chopin" <<'END'\n${chopin}END\nchmod 755 "$HOME/.local/bin/chopin"\nEOF\n`,
 			);
 			await chmod(join(shims, "curl"), 0o755);
 			for (let shell of ["sh", "bash", "zsh"]) {
@@ -94,6 +156,77 @@ test.skipIf(process.platform === "win32")(
 			await rm(home, { recursive: true, force: true });
 		}
 	},
+);
+
+const PWSH = Bun.which("pwsh");
+
+/**
+ * The PowerShell setup command pasted into pwsh, with `installer` (a PowerShell script) standing in
+ * for install.ps1 and a chopin.exe that records its environment and arguments.
+ */
+async function pasted(installer: string, env: Record<string, string> = {}) {
+	let home = await mkdtemp(join(tmpdir(), "chopin-setup-powershell-"));
+	try {
+		let script = join(home, "install.ps1");
+		await writeFile(script, installer);
+		let command = setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY)
+			.replace(`irm ${RELEASES}/install.ps1`, `Get-Content -Raw '${script}'`);
+		let run = Bun.spawnSync([
+			PWSH!,
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			`${command}\n"after: [$env:CHOPIN_PAIRING_KEY] [$token]"`,
+		], { env: { ...process.env, LOCALAPPDATA: home, ...env }, stdout: "pipe", stderr: "pipe" });
+		let ran = await readFile(join(home, "ran"), "utf8").catch(() => undefined);
+		return { output: run.stdout.toString() + run.stderr.toString(), ran };
+	} finally {
+		await rm(home, { recursive: true, force: true });
+	}
+}
+
+test.skipIf(!PWSH || process.platform === "win32")(
+	"pasted into PowerShell, the command runs chopin only after install.ps1 succeeded, and clears the key",
+	async () => {
+		// Installs a chopin.exe (a sh script here) as install.ps1 does.
+		let fake = join(await mkdtemp(join(tmpdir(), "chopin-setup-fake-")), "chopin.exe");
+		await writeFile(
+			fake,
+			`#!/bin/sh\nprintf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$LOCALAPPDATA/ran"\n`,
+		);
+		await chmod(fake, 0o755);
+		let installs = [
+			'$bin = Join-Path $env:LOCALAPPDATA "chopin/bin"',
+			"New-Item -ItemType Directory -Force $bin | Out-Null",
+			`Copy-Item '${fake}' (Join-Path $bin "chopin.exe")`,
+			"$global:LASTEXITCODE = 0",
+		].join("\n");
+		let installed = await pasted(installs);
+		expect(installed.ran?.split("\n").slice(0, -1), installed.output).toEqual([
+			"https://chopin.example",
+			KEY,
+			"connect",
+			".",
+			"--install-service",
+			"--",
+			"copilot",
+			"--acp",
+			"--allow-all",
+		]);
+		expect(installed.output).toContain("after: [] []");
+
+		// The real install.ps1 refusing (here, a version that isn't one) stops it before chopin.
+		let install = await readFile(
+			join(import.meta.dir, "../../../connector/install/install.ps1"),
+			"utf8",
+		);
+		let refused = await pasted(install, { CHOPIN_VERSION: "0.2.0\nevil" });
+		expect(refused.output).toContain("chopin install:");
+		expect(refused.ran).toBeUndefined();
+		expect(refused.output).not.toContain("chopin.exe");
+		expect(refused.output).toContain("after: [] []");
+	},
+	60_000,
 );
 
 test("every agent that can run unattended connects as the service, in either shell", () => {

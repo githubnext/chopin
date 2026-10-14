@@ -169,10 +169,16 @@ function Install-Chopin([string]$Version) {
 	}
 }
 
+# Run with `irm ... | iex`, $LASTEXITCODE says how it went: 0 installed, 1 not. The Machines
+# page's setup command connects only on 0.
+$ChopinInstalled = $false
 try {
 	Install-Chopin $Version
+	$ChopinInstalled = $true
 } catch [System.OperationCanceledException] {
 	Write-Host $_.Exception.Message -ForegroundColor Red
 	# `exit` would close the window of someone who ran `irm ... | iex`; only a script file exits.
 	if ($PSCommandPath) { exit 1 }
+} finally {
+	$global:LASTEXITCODE = if ($ChopinInstalled) { 0 } else { 1 }
 }

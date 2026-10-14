@@ -34,8 +34,10 @@ your coding agent, copy the command, and run it in a checkout on that machine.
 On Linux or macOS it looks like this:
 
 ```sh
-curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh \
-  | sh && CHOPIN_URL=https://your-chopin-instance.example \
+installer=$(mktemp) \
+  && curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh -o "$installer" \
+  && sh "$installer" && rm -f "$installer" \
+  && CHOPIN_URL=https://your-chopin-instance.example \
   CHOPIN_PAIRING_KEY=chopin_k_… \
   ~/.local/bin/chopin connect . \
   --install-service \
@@ -44,8 +46,11 @@ curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install
 
 It installs `chopin`, pairs the machine with a single-use key and installs the
 service. The machine appears on the page as it connects. Nothing opens in a
-browser, so the same command works over SSH. On Windows the command passes the
-key as `--key`.
+browser, so the same command works over SSH. If the install fails, the command
+stops with the installer's message and the key stays unused. On Windows the
+PowerShell command connects only after `install.ps1` succeeds, and sets the key
+in `CHOPIN_PAIRING_KEY` for that one command. It assigns the key to `$token`
+first, so PSReadLine 2.0.4 and later leave the line out of their history file.
 
 The key works once, for ten minutes, and only for the account that made it.
 **New key** replaces it, and the page makes a new one as the old one expires.

@@ -82,13 +82,21 @@ const INSTALLED = {
 };
 
 /**
- * The one command that sets up a machine: install chopin, then connect this checkout with a
- * single-use pairing key, running chopin by the path the installer used. Over several lines so it
- * never wraps inside an argument; each ends in the shell's continuation, so it runs as one.
+ * The one command that sets up a machine: install chopin, then, only if that worked, connect this
+ * checkout with a single-use pairing key, running chopin by the path the installer used. Over
+ * several lines so it never wraps inside an argument; it runs as one when pasted.
  *
- * sh passes the key in the environment of that one command, where other users can't read it as
- * they can a command line; PowerShell passes `--key`, since a variable set there outlasts the
- * command.
+ * sh downloads the installer to a file first, since `curl | sh` succeeds when curl fails and sh
+ * reads nothing; each step runs only if the one before it succeeded, so a failure stops with
+ * curl's or the installer's own message. The key goes in the environment of the one command,
+ * where other users can't read it as they can a command line.
+ *
+ * PowerShell connects only if install.ps1 left $LASTEXITCODE 0, and sets the key in the
+ * environment for chopin alone, removing it afterwards even on Ctrl-C. It is first assigned to
+ * `$token` because PSReadLine (2.0.4 and later) keeps a line that assigns a value to a variable
+ * named like a token or secret out of its history file. PSReadLine 2.0.0, which Windows PowerShell
+ * 5.1 ships, saves every line; the key is single-use and spent by this command, so that copy
+ * outlives its use by ten minutes at most.
  */
 export function setupCommand(
 	origin: string,
@@ -98,17 +106,24 @@ export function setupCommand(
 ): string {
 	let [connect, ...rest] = connectArguments(agent, shell);
 	if (shell === "powershell") {
-		let lines = [`& ${INSTALLED.powershell} ${connect}`, `  --key ${quote(key, shell)}`];
-		lines.push(...rest.map(line => `  ${line}`));
+		let lines = [`& ${INSTALLED.powershell} ${connect}`, ...rest.map(line => `  ${line}`)];
 		return [
 			`irm ${RELEASES}/install.ps1 | iex`,
-			`$env:CHOPIN_URL="${origin}"`,
-			...lines.map((line, index) => index < lines.length - 1 ? `${line} \`` : line),
+			"if ($LASTEXITCODE -eq 0) {",
+			`  $token = '${key.replaceAll("'", "''")}'`,
+			`  $env:CHOPIN_URL = "${origin}"`,
+			"  $env:CHOPIN_PAIRING_KEY = $token",
+			"  try {",
+			...lines.map((line, index) => `    ${line}${index < lines.length - 1 ? " `" : ""}`),
+			"  } finally { Remove-Item Env:CHOPIN_PAIRING_KEY; Remove-Variable token }",
+			"}",
 		].join("\n");
 	}
 	let lines = [
-		`curl -fsSL ${RELEASES}/install.sh`,
-		`  | sh && CHOPIN_URL=${quote(origin, shell)}`,
+		"installer=$(mktemp)",
+		`  && curl -fsSL ${RELEASES}/install.sh -o "$installer"`,
+		'  && sh "$installer" && rm -f "$installer"',
+		`  && CHOPIN_URL=${quote(origin, shell)}`,
 		`  CHOPIN_PAIRING_KEY=${quote(key, shell)}`,
 		`  ${INSTALLED.sh} ${connect}`,
 		...rest.map(line => `  ${line}`),
