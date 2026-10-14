@@ -151,6 +151,7 @@ function MachinesPage() {
 							<MachineSetup
 								headingId={firstId}
 								open={first.open}
+								paired={!!newcomer}
 								status={<Handshake machine={newcomer} />}
 								title="Add your first machine"
 							/>
@@ -163,6 +164,7 @@ function MachinesPage() {
 							<MachineSetup
 								headingId={addId}
 								open={add.open}
+								paired={!!newcomer}
 								status={<Handshake machine={newcomer} />}
 								title="Add a machine"
 							/>

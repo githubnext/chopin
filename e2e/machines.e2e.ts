@@ -179,7 +179,11 @@ test("one copied command installs chopin and pairs the machine, with no browser 
 		expect(await readFile(join(laptop.home, "systemctl.log"), "utf8"))
 			.toContain("systemctl --user enable --now chopin.service");
 
-		// The service connects; the card ticks, then folds away above the machine's new row.
+		// The service connects; the card ticks, then folds away above the machine's new row. The
+		// key is spent, so its expiry and New key go as the tick shows.
+		await expect(setup.getByText(`${hostname()} connected`, { exact: true }))
+			.toBeVisible({ timeout: 30_000 });
+		expect(await setup.locator(".machines-run-status").innerText()).toBe(`${hostname()} connected`);
 		await expect(page.getByRole("status").filter({ hasText: `${hostname()} connected` }))
 			.toHaveText(`${hostname()} connected`, { timeout: 30_000 });
 		let row = page.getByRole("table", { name: "Your machines" })

@@ -156,11 +156,13 @@ const AGENT_KEY = "chopin:machines:agent";
  * Set up a machine with one command: pick the system and the coding agent, copy the command, run
  * it in a checkout. It installs chopin and pairs with a single-use key minted while the card is
  * `open`, so the machine needs no browser. `status` follows the command: the live wait for it.
+ * Once a machine has `paired`, the key is spent, so its expiry and New key go.
  */
 export function MachineSetup(
-	{ headingId, open, status, title }: {
+	{ headingId, open, paired = false, status, title }: {
 		headingId: string;
 		open: boolean;
+		paired?: boolean;
 		status: ReactNode;
 		title: string;
 	},
@@ -222,13 +224,15 @@ export function MachineSetup(
 				{pairing.state === "ready" && (
 					<div className="machines-run-status">
 						{status}
-						<span className="machines-key">
-							<Expiry expiresAt={pairing.expiresAt} />
-							<button className="btn btn-sm btn-ghost" onClick={renew} type="button">
-								<RestartIcon aria-hidden="true" />
-								New key
-							</button>
-						</span>
+						{!paired && (
+							<span className="machines-key">
+								<Expiry expiresAt={pairing.expiresAt} />
+								<button className="btn btn-sm btn-ghost" onClick={renew} type="button">
+									<RestartIcon aria-hidden="true" />
+									New key
+								</button>
+							</span>
+						)}
 					</div>
 				)}
 				{!runsAsService(agent) && <p className="machines-detail">Keep this terminal open.</p>}
