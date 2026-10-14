@@ -101,16 +101,28 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 			.toBeVisible();
 		await expect(pairing.getByRole("link", { name: "Not my machine", exact: true }))
 			.toHaveAttribute("href", "/connect");
+		// The page names the account approving, and what automatic work would change.
+		await expect(pairing.getByText(`@${handle}`, { exact: true })).toBeVisible();
+		await expect(
+			pairing.getByRole("checkbox", {
+				name: "Let Chopin build and prototype automatically on this machine",
+			}),
+		).toHaveAccessibleDescription(/^Off: work runs here only when you press Build or Run\./);
 		await pairing.getByRole("button", { name: "Connect", exact: true }).click();
-		await expect(pairing.getByRole("status").filter({ hasText: "Connected." }))
-			.toHaveText("Connected.");
+		await expect(pairing.getByRole("status").filter({ hasText: "Connected" }))
+			.toHaveText("Connected");
+		await expect(pairing.getByText(`${hostname()} now runs work for octo-org/score.`))
+			.toBeVisible();
 		await expect.poll(machine.output).toContain("✓ Connected.");
 		await pairing.close();
 
-		// The waiting page turns into the machine's row without a reload.
+		// The waiting step ticks and says so, then the setup folds away above the machine's new row.
+		await expect(page.getByRole("status").filter({ hasText: `${hostname()} connected` }))
+			.toHaveText(`${hostname()} connected`);
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: new RegExp(hostname()) });
 		await expect(row).toContainText("Connected");
+		await expect(row).toContainText("New");
 		await expect(setup).toHaveCount(0);
 		await expect(page.getByRole("button", { name: "Add a machine", exact: true })).toBeVisible();
 
@@ -125,7 +137,8 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 
 		await page.goto("/");
 		let counted = machinesEntry(page, "Machines, 1 connected");
-		await expect(counted).toContainText("1");
+		// Connected out of paired.
+		await expect(counted).toContainText("1/1");
 		await counted.click();
 		await expect(page).toHaveURL(/\/connect$/);
 

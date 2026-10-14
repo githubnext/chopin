@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { connectCommand, installCommand } from "./setup-commands";
+import { connectCommand, installCommand, pairCommand } from "./setup-commands";
 
 test("install uses the released installer for each shell, breaking before the pipe where the shell can", () => {
 	expect(installCommand("sh")).toBe(
@@ -29,4 +29,12 @@ test("connect breaks between whole arguments, with each shell's own line continu
 			"  -- copilot --acp --allow-all",
 		].join("\n"),
 	);
+});
+
+test("pairing again keeps the machine's name, quoted only when the shell needs it", () => {
+	expect(pairCommand("build-box.local")).toBe("chopin pair --label build-box.local");
+	expect(pairCommand("Mia’s MacBook")).toBe('chopin pair --label "Mia’s MacBook"');
+	// A name either shell would expand inside quotes falls back to the hostname default.
+	expect(pairCommand('say "$HOME"')).toBe("chopin pair");
+	expect(pairCommand("")).toBe("chopin pair");
 });

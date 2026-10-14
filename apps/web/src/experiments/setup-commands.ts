@@ -12,6 +12,20 @@ export const CONNECT_ARGUMENTS = ["connect .", "--install-service", "-- copilot 
 
 export const SETUP_GUIDE = "https://github.com/githubnext/chopin/blob/main/docs/chopin-cli.md";
 
+/** Installs the release this server recommends over the machine's chopin, as `chopin help` says. */
+export const UPDATE_COMMAND = "chopin update";
+
+/**
+ * Pairs a machine again under the name it has in Chopin. Plain names go bare; others in double
+ * quotes, which sh and PowerShell read alike unless the name holds a character either expands or
+ * ends a string on. Such a name, or none, leaves `--label` out, so chopin uses the hostname.
+ */
+export function pairCommand(label: string): string {
+	if (/^[\w.-]+$/.test(label)) return `chopin pair --label ${label}`;
+	if (!label || /["$`\\!\u201C\u201D\u201E]/.test(label)) return "chopin pair";
+	return `chopin pair --label "${label}"`;
+}
+
 /**
  * The installer, piped into the shell. The sh form breaks before the pipe so the pipe stays in view
  * on a narrow screen; the continuation keeps the copied text one command.

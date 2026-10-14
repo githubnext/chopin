@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { CheckIcon, CopyIcon } from "@chopin/icons";
 import { connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
 
+import type { ReactNode } from "react";
 import type { SetupShell } from "./setup-commands";
 
 /**
- * A command to run, with a button above it that copies it, so the button never covers the command.
- * Its lines break only where the command does; a longer line scrolls.
+ * A command to run, under a bar that names where to run it and copies it, so the button never
+ * covers the command. Its lines break only where the command does; a longer line scrolls.
  */
-function Command({ label, text }: { label: string; text: string }) {
+function Command({ label, shell, text }: { label: string; shell: SetupShell; text: string }) {
 	let [copied, setCopied] = useState<"copied" | "failed">();
 	useEffect(() => {
 		if (!copied) return;
@@ -18,6 +19,9 @@ function Command({ label, text }: { label: string; text: string }) {
 	return (
 		<div className="machines-command">
 			<div className="machines-command-head">
+				<span className="machines-command-shell">
+					{shell === "powershell" ? "PowerShell" : "Terminal"}
+				</span>
 				<button
 					aria-label={copied === "copied" ? "Copied" : `Copy ${label}`}
 					className="btn btn-sm btn-ghost shrink-0"
@@ -46,9 +50,12 @@ const SHELLS: { shell: SetupShell; label: string }[] = [
 
 /**
  * What to run on a machine to set it up with this server: install chopin, then connect a checkout,
- * which pairs the machine through this browser and keeps it running as a service.
+ * which pairs the machine through this browser and keeps it running as a service. The last step
+ * is `last`: on a first run, the live wait for the machine.
  */
-export function MachineSetup({ headingId, title }: { headingId: string; title: string }) {
+export function MachineSetup(
+	{ headingId, last, title }: { headingId: string; last?: ReactNode; title: string },
+) {
 	let [shell, setShell] = useState<SetupShell>(() =>
 		navigator.userAgent.includes("Windows") ? "powershell" : "sh"
 	);
@@ -73,17 +80,21 @@ export function MachineSetup({ headingId, title }: { headingId: string; title: s
 			<ol className="machines-steps">
 				<li>
 					<p>Install chopin.</p>
-					<Command label="install command" text={installCommand(shell)} />
+					<Command label="install command" shell={shell} text={installCommand(shell)} />
 				</li>
 				<li>
 					<p>
 						In a checkout of your repository, connect with your coding agent. It prints a link: open
 						it in this browser to confirm the machine.
 					</p>
-					<Command label="connect command" text={connectCommand(location.origin, shell)} />
+					<Command
+						label="connect command"
+						shell={shell}
+						text={connectCommand(location.origin, shell)}
+					/>
 				</li>
 				<li>
-					<p>It appears below under Your machines.</p>
+					{last ?? <p>It appears below under Your machines.</p>}
 				</li>
 			</ol>
 			<p className="machines-detail">

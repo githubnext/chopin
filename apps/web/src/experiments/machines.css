@@ -41,6 +41,24 @@
 	text-wrap: balance;
 }
 
+.machines-description {
+	text-wrap: pretty;
+}
+
+/* Open, Add a machine steps down to the secondary tier and its chevron turns up. */
+.machines-add {
+	gap: calc(var(--spacing) * 1.5);
+}
+
+.machines-add-chevron {
+	rotate: 90deg;
+	transition: rotate var(--acc-expand) var(--ease-out);
+}
+
+.machines-add[aria-expanded="true"] .machines-add-chevron {
+	rotate: -90deg;
+}
+
 /* A closed setup fold takes no room, so it adds no gap of its own. */
 .machines-setup-fold {
 	padding-bottom: calc(var(--spacing) * 8);
@@ -121,10 +139,54 @@
 	& p {
 		margin-block: 0;
 		max-width: 65ch;
+		text-wrap: pretty;
 	}
 }
 
-/* A command well: a header row holding Copy, then the command, so the button never sits on it. */
+/*
+ * The last step of a first setup is live: a petrol presence pulse while it waits for the machine,
+ * then the success tick and the machine's name as it connects.
+ */
+.machines-handshake {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	color: var(--color-text-secondary);
+
+	&[data-state="connected"] {
+		color: var(--color-success-ink);
+		font-weight: 500;
+	}
+}
+
+.machines-pulse {
+	flex: none;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	margin-inline: calc(var(--spacing) * 0.5);
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+	animation: machines-pulse calc(var(--duration-base) * 8) var(--motion-move) infinite;
+}
+
+@keyframes machines-pulse {
+	0%,
+	100% {
+		opacity: var(--opacity-quiet);
+		scale: 0.8;
+	}
+
+	50% {
+		opacity: 1;
+		scale: 1;
+	}
+}
+
+.machines-handshake-check {
+	--color-icon: var(--color-success-icon);
+}
+
+/* A command well: a bar naming the shell and holding Copy, then the command. */
 .machines-command {
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-md);
@@ -132,9 +194,19 @@
 
 	& .machines-command-head {
 		display: flex;
-		justify-content: flex-end;
+		align-items: center;
+		justify-content: space-between;
+		gap: calc(var(--spacing) * 2);
 		border-bottom: var(--edge-width) solid var(--color-edge);
-		padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1);
+		padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1) calc(var(--spacing) * 0.5)
+			calc(var(--spacing) * 3);
+	}
+
+	& .machines-command-shell {
+		color: var(--color-text-tertiary);
+		font-size: var(--text-xs);
+		font-weight: 500;
+		line-height: var(--text-xs--line-height);
 	}
 
 	/*
@@ -166,6 +238,7 @@
 	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
+	text-wrap: pretty;
 }
 
 .machines-setup a,
@@ -180,17 +253,7 @@
 	}
 }
 
-.machines-waiting {
-	display: flex;
-	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	margin: 0;
-	border: var(--edge-width) dashed var(--color-control-edge);
-	border-radius: var(--radius-lg);
-	padding: calc(var(--spacing) * 5) calc(var(--spacing) * 4);
-	color: var(--color-text-secondary);
-	font-size: var(--text-sm);
-}
+/* The table */
 
 .machines-table {
 	background: var(--color-page);
@@ -200,29 +263,51 @@
 	vertical-align: middle;
 }
 
+/* A machine paired this session keeps the selected surface, beside its New badge. */
+.machines-table .cv-table-row[data-new] {
+	background: var(--color-selected);
+}
+
 .machines-stack {
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
+	align-items: flex-start;
 	gap: calc(var(--spacing) * 0.5);
+}
+
+.machines-name-line {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+}
+
+/* A hostname breaks only where it has to, never mid-word to make the column narrower. */
+.machines-name {
+	min-width: 0;
+	font-weight: 500;
+	overflow-wrap: break-word;
+}
+
+/* Status keeps its headline on one line, so the column never squeezes it into a stack. */
+.machines-status-column {
+	min-width: 10rem;
+}
+
+.machines-status-headline {
+	white-space: nowrap;
 }
 
 .machines-version {
 	display: inline-flex;
-	flex-wrap: wrap;
-	align-items: baseline;
+	align-items: center;
 	gap: calc(var(--spacing) * 2);
-}
-
-.machines-update {
-	color: var(--color-warning-ink);
-	font-size: var(--text-xs);
-	font-weight: 500;
-	line-height: var(--text-xs--line-height);
 	white-space: nowrap;
 }
 
-.machines-version-inline {
+.machines-version-inline,
+.machines-status-inline {
 	display: none;
 }
 
@@ -231,12 +316,44 @@
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
 	color: var(--color-success-ink);
-	white-space: nowrap;
 }
 
 .machines-actions-column {
 	width: 1%;
 	text-align: right;
+}
+
+/* A command to run, shown as itself; a press copies it. */
+.machines-copyable {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	margin-inline-start: calc(var(--spacing) * 0.5);
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	border: var(--edge-width) solid var(--color-edge);
+	padding: 0 calc(var(--spacing) * 1.5);
+	color: var(--color-text-primary);
+	text-align: start;
+	vertical-align: middle;
+
+	& code {
+		overflow: hidden;
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		line-height: var(--text-xs--line-height);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	&:hover {
+		background: var(--color-hover);
+	}
+}
+
+.machines-copyable-done {
+	--color-icon: var(--color-success-icon);
 }
 
 /* Placed below its button by measurement; see MachineActions. */
@@ -251,13 +368,40 @@
 	transform-origin: top right;
 }
 
+/* A copy item names its action, with the command it copies underneath. */
+.machines-menu-copy {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+
+	& code {
+		color: var(--color-text-tertiary);
+		font-family: var(--font-mono);
+		font-size: var(--text-2xs);
+		line-height: var(--text-2xs--line-height);
+		overflow-wrap: break-word;
+	}
+}
+
+.machines-dialog-copy {
+	overflow-wrap: break-word;
+}
+
+/* The pairing card */
+
 .machines-pairing-label {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	margin: 0;
+	gap: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
 	font-size: var(--text-base);
+}
+
+.machines-approver {
+	margin-inline-start: auto;
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
 }
 
 /* The code as the terminal prints it, in a well like the setup commands, so it is easy to compare. */
@@ -281,10 +425,160 @@
 	line-height: var(--text-xl--line-height);
 }
 
+/* The automatic-work choice, and what each answer means, lined up under its words. */
+.machines-auto {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 1);
+}
+
+.machines-auto-label {
+	display: flex;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 2);
+
+	& input {
+		translate: 0 calc(0.5lh - 50%);
+	}
+}
+
+.machines-auto-help {
+	max-width: 65ch;
+	padding-inline-start: calc(var(--spacing) * 6);
+}
+
 .machines-pairing-actions {
 	display: flex;
 	flex-wrap: wrap;
+	align-items: center;
 	gap: calc(var(--spacing) * 2);
+}
+
+.machines-authorize-note {
+	margin: 0 0 0 calc(var(--spacing) * 1);
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.machines-paired {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin: 0;
+	color: var(--color-success-ink);
+	font-weight: 500;
+}
+
+/* Loading: the shapes of the table and the card, in the selected tone, breathing slowly. */
+.machines-skeleton {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+}
+
+.machines-skeleton-head {
+	height: calc(var(--spacing) * 9);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+}
+
+.machines-skeleton-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 6);
+	padding: calc(var(--spacing) * 3);
+}
+
+.machines-skeleton-stack {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+}
+
+.machines-skeleton-card {
+	gap: calc(var(--spacing) * 5);
+}
+
+.machines-skeleton-bar {
+	display: block;
+	height: calc(var(--spacing) * 3);
+	border-radius: var(--radius-sm);
+	background: var(--color-selected);
+	animation: machines-skeleton calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+		alternate;
+
+	&[data-width="name"] {
+		width: min(14rem, 60%);
+	}
+
+	&[data-width="detail"] {
+		width: min(20rem, 80%);
+	}
+
+	&[data-width="status"] {
+		width: 6rem;
+	}
+
+	&[data-width="code"] {
+		width: 9rem;
+		height: calc(var(--spacing) * 10);
+		border-radius: var(--radius-md);
+	}
+
+	&[data-width="button"] {
+		width: 6rem;
+		height: calc(var(--spacing) * 8);
+		border-radius: var(--radius-md);
+	}
+}
+
+@keyframes machines-skeleton {
+	to {
+		opacity: var(--opacity-quiet);
+	}
+}
+
+/* On touch, the small controls here answer a 44px press without changing their look. */
+:root[data-plan-coarse-pointer] {
+	& .machines-setup .machines-detail a,
+	& .machines-copyable {
+		position: relative;
+
+		&::after {
+			content: "";
+			position: absolute;
+			top: 50%;
+			left: 0;
+			width: 100%;
+			height: max(100%, var(--control-target-coarse));
+			translate: 0 -50%;
+		}
+	}
+
+	& .machines-auto-label {
+		min-height: var(--control-target-coarse);
+		align-items: center;
+
+		& input {
+			translate: none;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.machines-pulse,
+	.machines-skeleton-bar {
+		animation: none;
+	}
+
+	.machines-add-chevron {
+		transition: none;
+	}
 }
 
 /* Phones keep the name and status; the version moves under the name. */
@@ -315,5 +609,58 @@
 
 	.machines-version-inline {
 		display: block;
+	}
+
+	/* Status joins the stack under the name, so the table fits the phone without scrolling. */
+	.machines-status-column {
+		display: none;
+	}
+
+	.machines-status-inline {
+		display: block;
+		align-self: stretch;
+		margin-top: calc(var(--spacing) * 1);
+		font-size: var(--text-sm);
+		line-height: var(--text-sm--line-height);
+	}
+
+	.machines-status-inline .machines-detail {
+		align-self: stretch;
+	}
+
+	/* The update badge drops under the version rather than widening the name column. */
+	.machines-version-inline .machines-version {
+		flex-wrap: wrap;
+		row-gap: calc(var(--spacing) * 1);
+	}
+
+	/* The command shows what fits and copies all of it; the row's menu shows it whole. */
+	.machines-copyable {
+		display: flex;
+		width: 100%;
+		margin-inline-start: 0;
+
+		& code {
+			width: 0;
+			flex: 1;
+		}
+	}
+
+	/* A long hostname keeps two lines; its tooltip and the Disconnect dialog name it in full. */
+	.machines-table .machines-name {
+		display: -webkit-box;
+		overflow: hidden;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
+
+	.machines-approver {
+		flex-basis: 100%;
+		margin-inline-start: 0;
+	}
+
+	.machines-authorize-note {
+		flex-basis: 100%;
+		margin-inline-start: 0;
 	}
 }

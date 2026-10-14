@@ -77,8 +77,8 @@ for (let transport of ["stdio", "http"] as const) {
 			let code = printed();
 			await expect(page.getByText(code!, { exact: true })).toBeVisible();
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await expect(page.getByRole("status").filter({ hasText: "Connected." }))
-				.toHaveText("Connected.");
+			await expect(page.getByRole("status").filter({ hasText: "Connected" }))
+				.toHaveText("Connected");
 			await page.goto(testChannelPath(room));
 			await content(page).click();
 			await page.keyboard.press("ControlOrMeta+End");
@@ -166,8 +166,8 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 			}),
 		).not.toBeChecked();
 		await page.getByRole("button", { name: "Connect", exact: true }).click();
-		await expect(page.getByRole("status").filter({ hasText: "Connected." }))
-			.toHaveText("Connected.");
+		await expect(page.getByRole("status").filter({ hasText: "Connected" }))
+			.toHaveText("Connected");
 		await expect.poll(first.output).toContain("✓ Connected.");
 		first.child.kill("SIGINT");
 		expect(await first.exited, first.output()).toBe(0);

@@ -26,3 +26,36 @@
 	flex-shrink: 0;
 	margin-inline-start: auto;
 }
+
+/*
+ * A titled notice reads top down: the icon on the title's line, the message under the title,
+ * and its actions under both, lined up with the text.
+ */
+.cv-inline-notice[data-titled] {
+	flex-wrap: wrap;
+	align-items: flex-start;
+	padding-block: calc(var(--spacing) * 3);
+
+	& .cv-inline-notice-icon {
+		translate: 0 calc(0.5lh - 50%);
+	}
+
+	& .cv-inline-notice-message {
+		flex: 1;
+		overflow-wrap: break-word;
+		text-wrap: pretty;
+	}
+
+	& .cv-inline-notice-actions {
+		display: flex;
+		flex-basis: 100%;
+		flex-wrap: wrap;
+		gap: calc(var(--spacing) * 2);
+		margin-inline-start: calc(var(--icon-size-default) + var(--spacing) * 2);
+	}
+}
+
+.cv-inline-notice-title {
+	display: block;
+	font-weight: 600;
+}

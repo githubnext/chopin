@@ -234,7 +234,9 @@ for (let width of [1280, 390]) {
 			let page = await enter(person(), { viewport: { width, height: 844 } });
 			await page.goto(await local.pairing);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await expect(page.getByRole("status")).toContainText("Connected.");
+			await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
+				"Connected",
+			);
 			await page.goto(testChannelPath(room));
 			await page.getByRole("button", { name: "Build plan", exact: true }).click();
 			await expect.poll(
@@ -300,7 +302,9 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			let page = await enter(person());
 			await page.goto(await local.pairing);
 			await page.getByRole("button", { name: "Connect", exact: true }).click();
-			await expect(page.getByRole("status")).toContainText("Connected.");
+			await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
+				"Connected",
+			);
 			await page.goto(testChannelPath(room));
 			let view = page.getByRole("region", { name: "Build", exact: true });
 			let openBuild = () =>
@@ -608,7 +612,7 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		let page = await enter(person());
 		await page.goto(await local.pairing);
 		await page.getByRole("button", { name: "Connect", exact: true }).click();
-		await expect(page.getByRole("status")).toContainText("Connected.");
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 		let capsule = page.getByRole("button", { name: /^Building · 0 of 2/ });
@@ -679,7 +683,7 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		let page = await enter(person());
 		await page.goto(await local.pairing);
 		await page.getByRole("button", { name: "Connect", exact: true }).click();
-		await expect(page.getByRole("status")).toContainText("Connected.");
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 		let built = page.getByRole("button", { name: "Built", exact: true });
