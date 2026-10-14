@@ -208,7 +208,10 @@ for (let frozen of acceptance?.cases ?? []) {
 			}
 			if (answeredControl) {
 				await page.getByRole("button", { name: /^Decisions/ }).click();
-				await page.getByRole("button", { name: /^1 resolved$/ }).click();
+				await expect(page.getByRole("button", { name: /^1 resolved$/ })).toHaveAttribute(
+					"aria-expanded",
+					"true",
+				);
 				let card = page.locator(
 					`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${
 						asked[0]!.id

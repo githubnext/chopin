@@ -44,8 +44,14 @@ test("phone: the save bar appears only with unsaved answers, and Save confirms b
 	await expect(confirmed).toContainText("In SQLite");
 	await expect(bar).not.toHaveAttribute("data-open");
 	await expect(confirmed).toHaveCount(0, { timeout: 5_000 });
-	await expect(page.getByRole("button", { name: "1 resolved" })).toBeVisible();
-	await expect(decisionsCard(page)).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "1 resolved" }))
+		.toHaveAttribute("aria-expanded", "true");
+	await expect(card).toHaveCount(1);
+	await expect(card).toBeVisible();
+	await expect(card).toContainText("Answered by @ana");
+	await expect(card.locator(".question-option[data-selected]")).toContainText("In SQLite");
+	await expect(card.getByRole("radio")).toHaveCount(0);
+	await expect(card.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 });
 
 test("phone: an unsaved answer survives leaving Decisions and can still be saved", async ({ join, seed }) => {
@@ -108,14 +114,21 @@ test("phone: the bar counts, clears and saves only this person's answers", async
 
 	await scope(hubot).getByText("Anchors", { exact: true }).click();
 	await region.getByRole("button", { name: "Save", exact: true }).click();
-	await expect(scope(hubot)).toHaveCount(0);
-	await expect(scope(octocat)).toHaveCount(0);
+	for (let page of [hubot, octocat]) {
+		await expect(page.getByRole("button", { name: "1 resolved" }))
+			.toHaveAttribute("aria-expanded", "true");
+		await expect(scope(page)).toHaveCount(1);
+		await expect(scope(page)).toBeVisible();
+		await expect(scope(page)).toContainText("Answered by @hubot");
+		await expect(scope(page).getByRole("checkbox")).toHaveCount(0);
+		await expect(scope(page).getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+	}
 	// octocat's open answer was neither saved nor cleared by hubot.
 	await expect(storage(octocat).getByRole("radio", { name: /In SQLite/ })).toBeChecked();
 	await expect(storage(hubot)).toBeVisible();
 	await expect(octocat.getByRole("region", { name: "Unsaved answers" }).getByRole("status"))
 		.toHaveText("1 unsaved answer");
-	// Someone else's decision folds away without announcing itself.
+	// Someone else's decision settles without announcing itself.
 	await expect(octocat.locator("[data-decision-confirmed] [role=status]")).toHaveCount(0);
 });
 

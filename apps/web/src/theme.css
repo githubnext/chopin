@@ -1806,8 +1806,11 @@ label.question-option:has(.question-input:not(:disabled)) {
 }
 
 .question-resolved-meta {
+	display: flex;
+	align-items: center;
+	min-height: var(--control-height-compact);
 	margin: 0.75rem 0.5rem 0;
-	font-size: var(--text-xs);
+	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
 }
 
@@ -2034,9 +2037,10 @@ button.question-add:disabled {
 	}
 }
 
-/* Resolved cards have no padded body, so their footer needs its own floor. */
+/* Keep resolved actions close to the attribution row. */
 .question-actions[data-resolved-actions] {
-	padding-block-end: calc(var(--spacing) * 2.5);
+	margin-block-start: var(--spacing);
+	padding-block-end: 0;
 }
 
 /* A decision whose prose has not been reviewed yet: a calm pulse, not a spinner. */

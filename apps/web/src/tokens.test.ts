@@ -793,12 +793,6 @@ describe("migration", () => {
 				size: "btn-icon",
 				tiers: ["btn-ghost"],
 			}],
-			["packages/editor/src/decisions.tsx", {
-				action: "resolved disclosure",
-				marker: "aria-expanded={history}",
-				size: "btn-sm",
-				tiers: ["btn-ghost"],
-			}],
 			["packages/question/src/react/question-view.tsx", {
 				action: "Keep it",
 				marker: "setConfirming(false)",

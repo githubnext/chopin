@@ -163,7 +163,10 @@ test("answered decisions with no prose leave the document blank and writable", a
 
 	// Still answered, and still counted, in Decisions.
 	await decisionsButton(page).click();
-	await page.getByRole("button", { name: "3 resolved" }).click();
+	await expect(page.getByRole("button", { name: "3 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect(page.locator('[data-document-view="decisions"]'))
 		.toContainText("Where should room state live?");
 });

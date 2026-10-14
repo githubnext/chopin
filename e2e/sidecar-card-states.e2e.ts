@@ -74,15 +74,13 @@ function cardByPrompt(page: Page, prompt: string) {
 	return questionnaire(page).filter({ hasText: prompt });
 }
 
-test("discarding an open card moves it into a collapsed, persistent resolved history", async ({ join, seed }) => {
+test("discarding an open card moves it into expanded, persistent resolved history", async ({ join, seed }) => {
 	await seed(PROSE);
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let card = questionnaire(page).filter({
 		hasText: "Where should room state live?",
 	});
-	let cardId = await card.getAttribute("data-plan-sidecar-questionnaire");
-	if (!cardId) throw new Error("questionnaire id missing");
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
 	await expect(card.getByText("Discard this decision?", { exact: true })).toBeVisible();
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
@@ -96,15 +94,13 @@ test("discarding an open card moves it into a collapsed, persistent resolved his
 
 	await page.reload();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await expect(
-		page.locator(`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${cardId}"]`),
-	)
-		.toHaveCount(0);
 	let discarded = page.getByRole("button", { name: "1 resolved" });
-	await expect(discarded).toHaveAttribute("aria-expanded", "false");
-	await discarded.click();
+	await expect(discarded).toHaveAttribute("aria-expanded", "true");
 	await expect(cardByPrompt(page, "Where should room state live?"))
 		.toContainText("Discarded by @ana");
+	await discarded.click();
+	await expect(discarded).toHaveAttribute("aria-expanded", "false");
+	await expect(cardByPrompt(page, "Where should room state live?")).not.toBeVisible();
 
 	await page.reload();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
@@ -138,7 +134,10 @@ test("discarding a decided card records the person who discarded it", async ({ j
 	await expect(discardedCard).not.toContainText("Discarded by @ana");
 	await ben.reload();
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
-	await ben.getByRole("button", { name: "1 resolved" }).click();
+	await expect(ben.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect(cardByPrompt(ben, "Where should room state live?"))
 		.toContainText("Discarded by @ben");
 });
@@ -177,7 +176,10 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 		.toHaveAttribute("data-deck-settled", "");
 	await ana.reload();
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	await ana.getByRole("button", { name: "1 resolved" }).click();
+	await expect(ana.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect(cardByPrompt(ana, "Where should room state live?"))
 		.toContainText("On disk as MDX");
 });
@@ -271,7 +273,10 @@ test("resolved cards show no actions to a read-only viewer", async ({ baseURL, b
 		await authenticate(reader, "readonly", baseURL!);
 		await reader.goto(roomPath(room));
 		await reader.getByRole("button", { name: /^Decisions/ }).click();
-		await reader.getByRole("button", { name: "1 resolved" }).click();
+		await expect(reader.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		);
 		let card = reader.locator(
 			`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${WIDGET}"]`,
 		);
@@ -299,7 +304,10 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await seed(`${PROSE}\n${LEGACY_MULTI_DECIDED_CARD}`, { questions: [record] });
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let card = page.locator(
 		`[data-document-view="decisions"] [data-plan-sidecar-questionnaire="${WIDGET}"]`,
 	);
@@ -328,7 +336,10 @@ test("a linked decision keeps a keyboard jump to its prose", async ({ join, seed
 	});
 	let page = await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let card = cardByPrompt(page, "How should we deploy?");
 	let link = card.getByRole("button", { name: "Show in document" });
 	await expect(link).toHaveCount(1);
@@ -352,7 +363,10 @@ test("a long legacy answer wraps inside a 390px decided card", async ({ join, se
 	});
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let card = cardByPrompt(page, "How should we deploy?");
 	await expect(card.locator(".question-option[data-selected]")).toContainText(answer);
 	await expectNoHorizontalOverflow(page);
@@ -389,7 +403,10 @@ test("an orphaned prose anchor retains its authoritative state and resolved card
 	});
 	await join("ana");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect.poll(() => orphaned).toBe(true);
 	await expect(cardByPrompt(page, "How should we deploy?"))
 		.toContainText("Canary");
@@ -404,8 +421,94 @@ test("a conversation decision without prose stays out of the document and claims
 	await expect(content(page).locator("[data-card-settled]")).toHaveCount(0);
 	await expect(content(page).locator("[data-plan-writing-up]")).toHaveCount(0);
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved" }).click();
+	await expect(page.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let decisions = page.locator('[data-document-view="decisions"]');
 	await expect(decisions).toContainText("Canary");
 	await expect(decisions).not.toContainText("Writing up…");
 });
+
+for (let { width, touch } of [{ width: 1280 }, { width: 390 }, { width: 390, touch: true }]) {
+	for (let reducedMotion of ["no-preference", "reduce"] as const) {
+		test(
+			`resolved footer stays aligned at ${width}px${
+				touch ? " touch" : ""
+			} with ${reducedMotion} motion`,
+			async ({ join, seed }, info) => {
+				await seed(`Anchored paragraph.\n\n${DECIDED_CARD}`, {
+					questions: [{
+						...DECIDED_RECORD,
+						prose: [{ epoch: "stale", position: "AAAA", digest: ANCHORED_DIGEST }],
+					}],
+				});
+				let page = await join("ana", {
+					viewport: { width, height: 900 },
+					hasTouch: touch,
+					isMobile: touch,
+					reducedMotion,
+				});
+				await page.getByRole("button", { name: /^Decisions/ }).click();
+				let history = page.getByRole("button", { name: "1 resolved", exact: true });
+				await expect(history).toHaveAttribute("aria-expanded", "true");
+				if (touch) {
+					await expect(history).toHaveCSS("min-height", "44px");
+				}
+				let card = cardByPrompt(page, "How should we deploy?");
+				let link = card.getByRole("button", { name: "Show in document", exact: true });
+				let reopen = card.getByRole("button", { name: "Reopen", exact: true });
+				await expect(link).toBeVisible();
+				await expect(reopen).toBeVisible();
+				let sizes = await card.evaluate(element => {
+					let attribution = element.querySelector(".question-resolved-meta > span")!;
+					let person = attribution.lastElementChild!;
+					let avatar = attribution.firstElementChild!;
+					let footer = element.querySelector(".question-actions")!;
+					let link = footer.querySelector('[data-relation="linked"]')!;
+					let label = link.querySelector("span")!;
+					let glyph = link.querySelector("svg")!;
+					let reopen = [...footer.querySelectorAll("button")].find(button =>
+						button.textContent === "Reopen"
+					)!;
+					return {
+						personSize: getComputedStyle(person).fontSize,
+						linkSize: getComputedStyle(label).fontSize,
+						actionSize: getComputedStyle(reopen).fontSize,
+						labelOffset: person.getBoundingClientRect().left - label.getBoundingClientRect().left,
+						iconOffset: avatar.getBoundingClientRect().left - glyph.getBoundingClientRect().left,
+						avatarWidth: avatar.getBoundingClientRect().width,
+						glyphWidth: glyph.getBoundingClientRect().width,
+						linkHeight: link.getBoundingClientRect().height,
+						actionHeight: reopen.getBoundingClientRect().height,
+						gap: footer.getBoundingClientRect().top - attribution.getBoundingClientRect().bottom,
+					};
+				});
+				expect(sizes.personSize).toBe(sizes.actionSize);
+				expect(sizes.linkSize).toBe(sizes.actionSize);
+				expect(Math.abs(sizes.labelOffset)).toBeLessThan(1);
+				expect(Math.abs(sizes.iconOffset)).toBeLessThan(1);
+				expect(sizes.avatarWidth).toBeCloseTo(14, 1);
+				expect(sizes.glyphWidth).toBeCloseTo(14, 1);
+				expect(sizes.linkHeight).toBeCloseTo(sizes.actionHeight, 1);
+				expect(sizes.gap).toBeLessThanOrEqual(8);
+				await expectNoHorizontalOverflow(page);
+				let image = info.outputPath("resolved-decision.png");
+				await page.locator('[data-document-view="decisions"]').screenshot({ path: image });
+				await info.attach("Resolved decision", { path: image, contentType: "image/png" });
+
+				await history.hover();
+				await page.mouse.down();
+				await expect(history).toHaveCSS("scale", reducedMotion === "reduce" ? "none" : "0.99");
+				await page.mouse.up();
+				await expect(history).toHaveAttribute("aria-expanded", "false");
+				await expect(link).not.toBeVisible();
+				await history.focus();
+				await history.press("Enter");
+				await expect(history).toHaveAttribute("aria-expanded", "true");
+				await expect(link).toBeVisible();
+				await expect(history).toBeFocused();
+			},
+		);
+	}
+}

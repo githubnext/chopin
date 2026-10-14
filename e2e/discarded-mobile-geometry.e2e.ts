@@ -23,11 +23,10 @@ test("compact Decisions keeps a discarded decision reachable in resolved history
 	await card.getByRole("button", { name: "Discard", exact: true }).click();
 
 	let discarded = page.getByRole("button", { name: "1 resolved" });
-	await expect(discarded).toHaveAttribute("aria-expanded", "false");
+	await expect(discarded).toHaveAttribute("aria-expanded", "true");
 	await expectNoHorizontalOverflow(page);
 	await discarded.scrollIntoViewIfNeeded();
 	await expectInsideViewport(discarded);
-	await discarded.click();
 	await expect(
 		questionnaire(page)
 			.getByText("Discarded by @ana — Where should room state live?", { exact: true }),

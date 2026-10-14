@@ -117,6 +117,7 @@ export function UnfoldSection({ children, className, defaultOpen, label }: Unfol
 					<Accordion.Header className="cv-unfold-section-heading">
 						<Accordion.Trigger
 							className="cv-unfold-toggle cv-unfold-section-toggle"
+							data-press="wide"
 							data-slot="unfold-toggle"
 							data-unfold-speed="accordion"
 						>

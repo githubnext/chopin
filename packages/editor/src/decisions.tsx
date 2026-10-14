@@ -2,18 +2,17 @@
  * The focused questionnaire view.
  *
  * Unanswered cards stay in document order, because the first is where a room
- * resumes its work. Resolved history starts closed: it remains available without
- * making a long-lived room open below the questions that still need an answer.
+ * resumes its work. Resolved history opens below them so a document with no
+ * outstanding questions still shows its decisions.
  */
 
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { CheckIcon, ChevronIcon, DecisionIcon } from "@chopin/icons";
-import { EmptyState } from "@chopin/visuals";
+import { CheckIcon, DecisionIcon } from "@chopin/icons";
+import { EmptyState, UnfoldSection } from "@chopin/visuals";
 
 import { decisionsDeck } from "./decision-state";
 import { Deck, revealDeckItem } from "./deck";
-import { MotionDisclosure, MotionDisclosureIcon } from "./disclosure-motion";
 import { usePhone } from "./pointer";
 import { useQuestionnaires, useRelations } from "./questionnaires";
 import { PendingAnswersContext, PendingAnswersStore, SaveBar } from "./save-bar";
@@ -74,19 +73,6 @@ function status(entry: QuestionnaireEntry, cardMeta: ReadonlyMap<string, Questio
 function waiting(entry: QuestionnaireEntry, cardMeta: ReadonlyMap<string, Question.CardMeta>) {
 	let current = status(entry, cardMeta);
 	return current === "open" || current === "reopened";
-}
-
-let HISTORY = "chopin:decisions:resolved";
-
-/** Resolved history stays closed unless the reader explicitly opened it. */
-function useHistory() {
-	let [history, setHistory] = useState(() => localStorage.getItem(HISTORY) === "true");
-
-	useEffect(() => {
-		localStorage.setItem(HISTORY, String(history));
-	}, [history]);
-
-	return [history, setHistory] as const;
 }
 
 /** How long a just-decided card holds its confirmation before it folds away. */
@@ -221,7 +207,6 @@ export function Decisions(
 		canEdit = true,
 		connected,
 		headingId,
-		motion,
 		motionImmediately,
 		onShowPlan,
 		planner,
@@ -250,8 +235,6 @@ export function Decisions(
 	let heading = useRef<HTMLHeadingElement>(null);
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
 	let revealed = useRef<number | undefined>(undefined);
-	let [history, setHistory] = useHistory();
-	let historyId = useId();
 
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it, and a pin to the pane that set it.
@@ -510,34 +493,14 @@ export function Decisions(
 
 				{resolved > 0 && (
 					<div className={`min-w-0 ${outstanding > 0 ? "mt-3" : ""}`}>
-						<button
-							aria-controls={history ? historyId : undefined}
-							aria-expanded={history}
-							className="btn btn-sm btn-ghost h-auto min-h-6 w-full flex-wrap justify-start gap-2 text-left"
-							data-press="wide"
-							onClick={() => setHistory(value => !value)}
-							type="button"
+						<UnfoldSection
+							defaultOpen
+							label={<span className="tabular-nums">{`${resolved} resolved`}</span>}
 						>
-							<MotionDisclosureIcon
-								className="editor-motion-feedback"
-								closed={<ChevronIcon size={14} />}
-								open={history}
-								opened={<ChevronIcon className="rotate-90" size={14} />}
-							/>
-							<span className="tabular-nums">{`${resolved} resolved`}</span>
-						</button>
-						<MotionDisclosure
-							className="plan-decision-history-motion"
-							id={historyId}
-							immediately={motionImmediately?.() ?? false}
-							motion={motion}
-							open={history}
-							surface="decision-history"
-						>
-							<div className="mt-2 flex flex-col gap-3">
+							<div className="flex flex-col gap-3">
 								{listed.map(question)}
 							</div>
-						</MotionDisclosure>
+						</UnfoldSection>
 					</div>
 				)}
 			</div>

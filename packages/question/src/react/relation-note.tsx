@@ -20,7 +20,7 @@ export function cardRelation(
 	return undefined;
 }
 
-const ROW = "inline-flex min-w-0 items-center gap-1.5 text-xs";
+const ROW = "inline-flex min-w-0 items-center gap-1.5 text-sm";
 
 export function RelationNote(
 	{ count = 0, onEnter, onLeave, onSelect, pending = "Linking…", question, relation }: {
@@ -39,7 +39,7 @@ export function RelationNote(
 		return (
 			<button
 				aria-label={count > 1 ? `Show in document, ${count} places` : "Show in document"}
-				className={`btn btn-sm btn-ghost -mx-1 ${ROW} text-text-secondary`}
+				className={`btn btn-sm btn-ghost -mx-2 ${ROW} text-text-secondary`}
 				data-relation="linked"
 				onBlur={event => !event.currentTarget.matches(":hover") && onLeave?.(question)}
 				onClick={() => onSelect(question)}
@@ -49,7 +49,7 @@ export function RelationNote(
 					event.currentTarget !== document.activeElement && onLeave?.(question)}
 				type="button"
 			>
-				<DocumentIcon aria-hidden="true" size={12} />
+				<DocumentIcon aria-hidden="true" size={14} />
 				<span>Show in document</span>
 				{count > 1 && (
 					<span aria-hidden="true" className="text-text-tertiary tabular-nums">{count}</span>
@@ -74,7 +74,7 @@ export function RelationNote(
 	if (relation === "orphaned") {
 		return (
 			<span className={`${ROW} px-1 text-warning-ink`} data-relation="orphaned">
-				<WarningIcon aria-hidden="true" size={12} />
+				<WarningIcon aria-hidden="true" size={14} />
 				<span>Related text was removed</span>
 			</span>
 		);
@@ -82,7 +82,7 @@ export function RelationNote(
 
 	return (
 		<span className={`${ROW} px-1 text-text-tertiary`} data-relation="empty">
-			<DocumentIcon aria-hidden="true" className="text-text-quaternary" size={12} />
+			<DocumentIcon aria-hidden="true" className="text-text-quaternary" size={14} />
 			<span>No related text</span>
 		</span>
 	);

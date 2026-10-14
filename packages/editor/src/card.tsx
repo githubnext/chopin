@@ -18,6 +18,7 @@
  * bottom of the card.
  */
 
+import { Face } from "./face";
 import { displayName } from "./display-name";
 import { isDemoHandle } from "./people";
 
@@ -105,10 +106,13 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 	let stamp = at === undefined ? "" : when(at);
 
 	return (
-		<span className="text-sm text-text-tertiary tabular-nums">
-			{verb} by{" "}
-			<span className="text-brand-ink">{isDemoHandle(by) ? displayName(by) : `@${by}`}</span>
-			{stamp && ` · ${stamp}`}
+		<span className="inline-flex items-center gap-1.5 text-sm text-text-tertiary tabular-nums">
+			<Face decorative handle={by} size={14} titled={false} />
+			<span>
+				{verb} by{" "}
+				<span className="text-brand-ink">{isDemoHandle(by) ? displayName(by) : `@${by}`}</span>
+				{stamp && ` · ${stamp}`}
+			</span>
 		</span>
 	);
 }
