@@ -1436,7 +1436,8 @@
 
 :root[data-plan-coarse-pointer]
 	:where(.document-actions-menu, .navigation-account-menu)
-	:is(button, a) {
+	:is(button, a),
+:root[data-plan-coarse-pointer] .app-menu-item {
 	min-height: var(--control-target-coarse);
 }
 

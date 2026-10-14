@@ -1557,6 +1557,7 @@ button.chat-tool-call-toggle {
 :root[data-plan-coarse-pointer] .repository-picker-search,
 :root[data-plan-coarse-pointer] .channel-create-input,
 :root[data-plan-coarse-pointer] [data-hosted] .btn,
+:root[data-plan-coarse-pointer] .navigation-modal-content .btn,
 :root[data-plan-coarse-pointer] .question-choice-row,
 :root[data-plan-coarse-pointer] .question-actions button,
 :root[data-plan-coarse-pointer] :where(button, [role="button"])[data-press="wide"] {
