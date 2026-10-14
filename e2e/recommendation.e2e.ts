@@ -190,7 +190,11 @@ test(
 		await expect(panel).toBeVisible({ timeout: 40_000 });
 		await panel.getByRole("button", { name: "Why this step", exact: true }).click();
 		await panel.getByRole("button", { name: "Can stay open", exact: true }).click();
-		await expect(panel).toContainText("Broader onboarding can stay open.");
+		await expect(panel.getByText("Repository evidence identifies the existing creation action.", {
+			exact: true,
+		})).toBeVisible();
+		await expect(panel.getByText("Broader onboarding can stay open.", { exact: true }))
+			.toBeVisible();
 		let blocker = page.getByRole("button", { name: "1 decision left. Show blockers", exact: true });
 		await expect(blocker).toBeVisible();
 		await expect(page.getByRole("button", { name: "Build plan", exact: true })).toHaveCount(0);
@@ -199,7 +203,7 @@ test(
 		expect(snapshot.buildReady).toBe(false);
 		expect(snapshot.blockers).toContain("unanswered questionnaires");
 		let screenshot = info.outputPath("next-useful-build-desktop.png");
-		await page.screenshot({ path: screenshot });
+		await page.screenshot({ path: screenshot, animations: "disabled" });
 		await info.attach("Advisory next step with unchanged Build blocker", {
 			path: screenshot,
 			contentType: "image/png",
@@ -309,7 +313,7 @@ test(
 		let key = (await readAdvice(phone, room)).state;
 		expect(key).toBe("ready");
 		let screenshot = info.outputPath("next-useful-build-phone.png");
-		await phone.screenshot({ path: screenshot });
+		await phone.screenshot({ path: screenshot, animations: "disabled" });
 		await info.attach("Phone next-step advice", { path: screenshot, contentType: "image/png" });
 	},
 );
@@ -351,7 +355,9 @@ test("archiving published research without opening the child invalidates parent 
 	let before = await readAdvice(page, room);
 	if (before.state !== "ready") throw new Error("Expected current advice");
 	expect(before.evidence.some(item => item.kind === "research")).toBe(true);
-	let archived = await page.request.post(`/api/channels/${child.id}/archive`);
+	let archived = await page.request.post(`/api/channels/${child.id}/archive`, {
+		headers: { origin: baseURL! },
+	});
 	expect(archived.ok()).toBe(true);
 	await expect(panel).toHaveCount(0, { timeout: 2_000 });
 	await expect(panel).toBeVisible({ timeout: 40_000 });
