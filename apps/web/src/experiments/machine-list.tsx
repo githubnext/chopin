@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { usePhone } from "@chopin/editor/pointer";
+import { usePhoneWidth } from "@chopin/editor/pointer";
 import {
 	ArrowUpIcon,
 	ChevronIcon,
@@ -472,7 +472,7 @@ function MachineRows(
 
 /**
  * The person's machines: a search, how many there are, then the table on a desktop or the list on
- * a phone, and a quiet way to add another. With none yet, nothing: the page's banner offers the
+ * a phone or a window as narrow as one, and a quiet way to add another. With none yet, nothing: the page's banner offers the
  * first. The table asks again every few seconds, so a machine appears as it connects.
  */
 export function YourMachines(
@@ -483,7 +483,7 @@ export function YourMachines(
 	},
 ) {
 	let headingId = useId();
-	let phone = usePhone();
+	let phone = usePhoneWidth();
 	let [query, setQuery] = useState("");
 	let { dialogs, rename, disconnect } = useMachineDialogs(machines);
 	let all = machines.machines;

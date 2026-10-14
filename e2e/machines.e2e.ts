@@ -580,3 +580,38 @@ test("on a phone, a machine's row has its star, and its view sets the favorite",
 	await expect(rows.getByRole("button", { name: "Remove build-box as favorite" })).toBeVisible();
 	await expect(rows.getByRole("button", { name: "Favorite studio" })).toBeVisible();
 });
+
+test("a narrow window without touch lists machines as a phone does, not as a table", async ({ join: enter }) => {
+	let page = await enter(person(), { viewport: { width: 390, height: 844 } });
+	await page.goto("/connect");
+	await threeMachines(page);
+	let rows = page.getByRole("region", { name: /^@mia-/ });
+	let table = page.getByRole("table", { name: "Your machines" });
+	await expect(rows.locator(".machines-row")).toHaveCount(3);
+	await expect(table).toHaveCount(0);
+	await expect(page.getByRole("searchbox", { name: "Search machines" }))
+		.toHaveAttribute("placeholder", "Search");
+	// Nothing on the page scrolls sideways.
+	let sideways = () =>
+		page.evaluate(() =>
+			[...document.querySelectorAll<HTMLElement>("main, main *")].filter(item =>
+				item.scrollWidth > item.clientWidth + 1
+				&& ["auto", "scroll"].includes(getComputedStyle(item).overflowX)
+			).length
+		);
+	expect(await sideways()).toBe(0);
+	await shot(page, "narrow-machines-list");
+	// A row opens the machine's own view there too.
+	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
+	await expect(page).toHaveURL(/\/connect\?machine=/);
+	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
+	await page.getByRole("button", { name: "Machines", exact: true }).click();
+	await expect(page).toHaveURL(/\/connect$/);
+
+	// Wider than a phone, the table returns.
+	await page.setViewportSize({ width: 1024, height: 844 });
+	await expect(table).toBeVisible();
+	await expect(rows.locator(".machines-row")).toHaveCount(0);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(rows.locator(".machines-row")).toHaveCount(3);
+});

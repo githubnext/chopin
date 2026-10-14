@@ -2,8 +2,10 @@ import { useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 
 export const COARSE_POINTER_QUERY = "(any-pointer: coarse)";
 export const PRIMARY_COARSE_POINTER_QUERY = "(pointer: coarse)";
+/** A phone's width in portrait, the phone class's width breakpoint. */
+export const PHONE_WIDTH_QUERY = "(max-width: 600px)";
 /** A phone is narrow in portrait or short in landscape. */
-export const PHONE_SIZE_QUERY = "(max-width: 600px), (max-height: 500px)";
+export const PHONE_SIZE_QUERY = `${PHONE_WIDTH_QUERY}, (max-height: 500px)`;
 
 type Media = (query: string) => Pick<MediaQueryList, "matches">;
 
@@ -17,6 +19,14 @@ export function hasCoarsePointer(media: Media = matchMedia): boolean {
  */
 export function isPhone(media: Media = matchMedia): boolean {
 	return media(PRIMARY_COARSE_POINTER_QUERY).matches && media(PHONE_SIZE_QUERY).matches;
+}
+
+/**
+ * A phone, or a window as narrow as a phone's whatever its pointer: for a layout that only fits a
+ * phone's width, such as a table that would otherwise scroll sideways.
+ */
+export function isPhoneWidth(media: Media = matchMedia): boolean {
+	return isPhone(media) || media(PHONE_WIDTH_QUERY).matches;
 }
 
 function subscribePhone(notify: () => void): () => void {
@@ -36,6 +46,11 @@ function currentPhone(): boolean {
 
 export function usePhone(): boolean {
 	return useSyncExternalStore(subscribePhone, currentPhone, () => false);
+}
+
+/** `isPhoneWidth`, following the window as it resizes. */
+export function usePhoneWidth(): boolean {
+	return useSyncExternalStore(subscribePhone, () => isPhoneWidth(), () => false);
 }
 
 /** Mirrors browser pointer capability into CSS so JS and touch sizing agree. */
