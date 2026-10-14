@@ -129,6 +129,8 @@ export type CreateMachine = Omit<StoredMachine, "reauthorizeAt" | "revokedAt">;
  * their live connection last used for the document, else the first idle one.
  */
 export type MachineChoice = { channelId: string; userId: string; machineId: string };
+/** The one machine a person prefers when a document is on Automatic. */
+export type MachineFavorite = { userId: string; machineId: string };
 
 export type ChannelDescription = {
 	value: string;

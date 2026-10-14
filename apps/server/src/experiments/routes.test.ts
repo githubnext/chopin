@@ -1692,3 +1692,111 @@ test("a machine choice that cannot be read refuses the document's work, never an
 	expect((await request(runPath, {}, alice.cookie)).status).toBe(200);
 	expect((await runtime.service.store.get(id))?.connectionId).toBe(onA.connection.id);
 });
+
+test("Automatic prefers the person's favorite machine where it serves the document, never over a choice", async () => {
+	let { alice, bob, documentId, request, pair, open, tool, runtime } = await setup();
+	let laptop = await pair(alice.cookie);
+	let desk = await pair(alice.cookie);
+	let path = `/api/documents/${documentId}/machine`;
+	let favor = (machine: string, favorite: boolean, cookie = alice.cookie) =>
+		request(`/api/connector/machines/${machine}/favorite`, { favorite }, cookie);
+	let run = async () => {
+		let id = crypto.randomUUID();
+		await request(
+			`/api/documents/${documentId}/experiments`,
+			{ id, brief: "Measure" },
+			alice.cookie,
+		);
+		let response = await request(
+			`/api/documents/${documentId}/experiments/${id}/run`,
+			{},
+			alice.cookie,
+		);
+		return { status: response.status, body: await response.json(), id };
+	};
+	let ranOn = async (value: { id: string }) =>
+		(await runtime.service.store.get(value.id))?.connectionId;
+	// The laptop last worked on the document, which Automatic would use without a favorite.
+	expect((await request(path, { machine: laptop.machine }, alice.cookie)).status).toBe(200);
+	expect(await ranOn(await run())).toBe(laptop.connection.id);
+	expect((await request(path, { machine: null }, alice.cookie)).status).toBe(200);
+	expect((await (await request(path, undefined, alice.cookie)).json()).automatic)
+		.toMatchObject({ id: laptop.machine, favorite: false });
+
+	// Only the owner favors their own machine.
+	expect((await favor(desk.machine, true, bob.cookie)).status).toBe(404);
+	let favored = await favor(desk.machine, true);
+	expect(favored.status).toBe(200);
+	expect(await favored.json()).toEqual({ favorite: desk.machine });
+	let shown = await (await request(path, undefined, alice.cookie)).json();
+	expect(shown.favorite).toBe(desk.machine);
+	expect(shown.automatic).toMatchObject({ id: desk.machine, favorite: true });
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(
+		listed.machines.map((item: { id: string; favorite: boolean }) => [item.id, item.favorite]),
+	).toEqual(expect.arrayContaining([[desk.machine, true], [laptop.machine, false]]));
+	// The favorite beats the machine last used for the document.
+	expect(await ranOn(await run())).toBe(desk.connection.id);
+
+	// An offline favorite: Automatic falls back to today's rule.
+	await tool(desk.token, "disconnect_workspace", {});
+	expect(await ranOn(await run())).toBe(laptop.connection.id);
+	expect((await (await request(path, undefined, alice.cookie)).json()).automatic)
+		.toMatchObject({ id: laptop.machine, favorite: false });
+
+	// A favorite that serves another repository is ignored here.
+	let elsewhere = await pair(alice.cookie, "org/other");
+	expect((await favor(elsewhere.machine, true)).status).toBe(200);
+	expect(await ranOn(await run())).toBe(laptop.connection.id);
+
+	// A choice for the document beats the favorite, and an offline choice never falls back to it.
+	let back = await (await open(desk.machineToken)).json();
+	expect((await favor(desk.machine, true)).status).toBe(200);
+	expect(await ranOn(await run())).toBe(back.connection.id);
+	expect((await request(path, { machine: laptop.machine }, alice.cookie)).status).toBe(200);
+	expect(await ranOn(await run())).toBe(laptop.connection.id);
+	await tool(laptop.token, "disconnect_workspace", {});
+	let refused = await run();
+	expect(refused.status).toBe(409);
+	expect(refused.body.error).toBe("machine-offline");
+
+	// Clearing it, or revoking the machine, leaves no favorite.
+	expect(await (await favor(desk.machine, false)).json()).toEqual({ favorite: null });
+	expect((await favor(desk.machine, true)).status).toBe(200);
+	await request(`/api/connector/machines/${desk.machine}/revoke`, {}, alice.cookie);
+	expect((await (await request(path, undefined, alice.cookie)).json()).favorite).toBeNull();
+	expect((await favor(desk.machine, true)).status).toBe(404);
+});
+
+test("a favorite that cannot be read refuses the work rather than guess", async () => {
+	let first = await setup();
+	let desk = await first.pair(first.alice.cookie);
+	await first.request(
+		`/api/connector/machines/${desk.machine}/favorite`,
+		{ favorite: true },
+		first.alice.cookie,
+	);
+	let machines = first.storage.machines;
+	let read = machines.favorites.bind(machines);
+	let fault = { locked: true };
+	machines.favorites = async () => {
+		if (fault.locked) throw new Error("canceling statement due to statement timeout");
+		return read();
+	};
+	let restarted = await setup({ storage: first.storage, lease: first.lease });
+	let laptop = await restarted.pair(restarted.alice.cookie);
+	let path = `/api/documents/${first.documentId}/machine`;
+	let shown = await restarted.request(path, undefined, restarted.alice.cookie);
+	expect(shown.status).toBe(503);
+	expect((await shown.json()).error).toBe("machine-choice-unavailable");
+	expect(
+		(await restarted.request(
+			`/api/connector/machines/${laptop.machine}/favorite`,
+			{ favorite: true },
+			restarted.alice.cookie,
+		)).status,
+	).toBe(503);
+	fault.locked = false;
+	expect((await (await restarted.request(path, undefined, restarted.alice.cookie)).json()).favorite)
+		.toBe(desk.machine);
+});

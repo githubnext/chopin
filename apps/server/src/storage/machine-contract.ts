@@ -242,6 +242,37 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		it("keeps one favorite machine per person, only their own, until cleared or revoked", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let first = machine(userId);
+				let second = machine(userId);
+				await storage.machines.create(first);
+				await storage.machines.create(second);
+				let mine = async () =>
+					(await storage.machines.favorites()).filter(value => value.userId === userId);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				await storage.machines.favor({ userId, machineId: first.id }, now);
+				await storage.machines.favor({ userId, machineId: second.id }, now);
+				expect(await mine()).toEqual([{ userId, machineId: second.id }]);
+				await storage.machines.favor({ userId }, now);
+				expect(await mine()).toEqual([]);
+				// Someone else's machine is never anyone's favorite.
+				let other = id("machine-stranger");
+				await storage.users.put({ id: other, login: "other", avatarUrl: "", now });
+				await expect(storage.machines.favor({ userId: other, machineId: first.id }, now))
+					.rejects.toBeInstanceOf(StorageError);
+				await storage.machines.favor({ userId, machineId: first.id }, now);
+				await storage.machines.revoke(first.id, userId, now);
+				expect(await mine()).toEqual([]);
+				await expect(storage.machines.favor({ userId, machineId: first.id }, now))
+					.rejects.toBeInstanceOf(StorageError);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("remembers each repository a machine connects, once", async () => {
 			let storage = await openedStorage(factory);
 			try {

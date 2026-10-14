@@ -225,7 +225,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		reading ??= (async () => {
 			for (let attempt = 1;; attempt++) {
 				try {
-					connections.restore(await auth.storage.machines.choices());
+					connections.restore(
+						await auth.storage.machines.choices(),
+						await auth.storage.machines.favorites(),
+					);
 					return;
 				} catch (error) {
 					if (attempt >= CHOICE_READS) {
@@ -666,10 +669,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let machines = await auth.machines.list(session.user.id);
+		// The star shows only once the favorite is known; the list itself never waits on it.
+		await readChoices().catch(() => {});
+		let favorite = connections.choicesRead ? connections.favorite(session.user.id) : undefined;
 		return json({
 			machines: machines.map(machine => ({
 				id: machine.id,
 				label: machine.label,
+				favorite: machine.id === favorite,
 				repositories: [
 					...new Set([
 						...machine.repositories.map(value => value.repository),
@@ -693,6 +700,30 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { label } = z.object({ label: machineLabel }).strict().parse(await body(request));
 		if (!await auth.machines.rename(params.id, session.user.id, label)) fail("not-found");
 		return json({ label });
+	});
+	/**
+	 * The owner sets one of their machines as their favorite, which Automatic prefers, or clears
+	 * it. Only one machine is a person's favorite.
+	 */
+	route("POST", "/api/connector/machines/:id/favorite", async (request, params) => {
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		let { favorite } = z.object({ favorite: z.boolean() }).strict().parse(await body(request));
+		let userId = session.user.id;
+		// Replacing the favorite needs the stored one known first.
+		await readChoices();
+		if (!(await auth.machines.list(userId)).some(machine => machine.id === params.id)) {
+			fail("not-found");
+		}
+		if (favorite || connections.favorite(userId) === params.id) {
+			let machineId = favorite ? params.id : undefined;
+			await auth.storage.machines.favor(
+				{ userId, ...(machineId ? { machineId } : {}) },
+				auth.clock(),
+			);
+			connections.favor(userId, machineId);
+		}
+		return json({ favorite: connections.favorite(userId) ?? null });
 	});
 	route("POST", "/api/connector/machines/:id/revoke", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);
@@ -724,9 +755,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		automatic ??= live[0];
 		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
+		let favorite = connections.favorite(userId);
 		return {
 			choice: chosen ?? null,
-			automatic: automatic ? { id: automatic.machineId, label: label(automatic.machineId) } : null,
+			/** The caller's favorite machine, which Automatic prefers where it serves the repository. */
+			favorite: favorite ?? null,
+			automatic: automatic
+				? {
+					id: automatic.machineId,
+					label: label(automatic.machineId),
+					favorite: automatic.machineId === favorite,
+				}
+				: null,
 			machines: serving.map(machine => {
 				let live = connections.machine(machine.id);
 				return {

@@ -38,6 +38,7 @@ import type {
 	LinkResearchTurnJobResult,
 	MachineChoice,
 	MachineCredentials,
+	MachineFavorite,
 	MachineRepository,
 	PauseBackgroundJob,
 	PublishChannelDescription,
@@ -121,6 +122,13 @@ export interface MachineStore {
 	/** Set one person's machine for one document, or without `machineId` go back to automatic. */
 	choose(
 		choice: Omit<MachineChoice, "machineId"> & { machineId?: string },
+		now: Date,
+	): Promise<void>;
+	/** Every person's favorite unrevoked machine. Revoking a machine forgets it as a favorite. */
+	favorites(): Promise<MachineFavorite[]>;
+	/** Set a person's favorite to one of their own machines, or without `machineId` clear it. */
+	favor(
+		favorite: Omit<MachineFavorite, "machineId"> & { machineId?: string },
 		now: Date,
 	): Promise<void>;
 }

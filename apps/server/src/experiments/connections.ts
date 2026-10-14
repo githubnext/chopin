@@ -84,6 +84,8 @@ export class Connections {
 	#used = new Map<string, string>();
 	/** Each person's machine for a document, keyed by document and person; none is automatic. */
 	#choices = new Map<string, string>();
+	/** Each person's favorite machine, which Automatic prefers, by person. */
+	#favorites = new Map<string, string>();
 	/** False from unread() until restore(): the stored choices could not be read yet. */
 	#choicesRead = true;
 	#locks = new Map<string, Promise<unknown>>();
@@ -245,9 +247,10 @@ export class Connections {
 		this.#used.set(documentId, connectionId);
 	}
 	/**
-	 * Live connections for a repository that may take `owner`'s work on `documentId`, the one last
-	 * used for the document first. A chosen machine's connections only, so an offline choice
-	 * leaves none rather than falling back to another machine.
+	 * Live connections for a repository that may take `owner`'s work on `documentId`. A chosen
+	 * machine's connections only, so an offline choice leaves none rather than falling back to
+	 * another machine. Automatic offers all of them: the owner's favorite machine first, then the
+	 * one last used for the document.
 	 */
 	candidates(
 		repositoryId: string,
@@ -259,8 +262,12 @@ export class Connections {
 		// Until the stored choices are read, nobody knows which machine may take the work.
 		if (!this.#choicesRead && chosen !== null) return [];
 		let last = this.#used.get(documentId);
+		let favorite = chosen ? undefined : this.#favorites.get(owner);
 		return this.list(repositoryId, owner).filter(value => !chosen || value.machineId === chosen)
-			.sort((a, b) => Number(b.id === last) - Number(a.id === last));
+			.sort((a, b) =>
+				Number(b.machineId === favorite) - Number(a.machineId === favorite)
+				|| Number(b.id === last) - Number(a.id === last)
+			);
 	}
 	/** Whether a connection may take its owner's work on `documentId`, as candidates() decides. */
 	allows(documentId: string, connection: Connection) {
@@ -279,10 +286,23 @@ export class Connections {
 	unread() {
 		this.#choicesRead = false;
 	}
-	/** The stored choices, read; work may be routed again. */
-	restore(choices: { channelId: string; userId: string; machineId: string }[]) {
+	/** The stored choices and favorites, read; work may be routed again. */
+	restore(
+		choices: { channelId: string; userId: string; machineId: string }[],
+		favorites: { userId: string; machineId: string }[] = [],
+	) {
 		for (let value of choices) this.choose(value.channelId, value.userId, value.machineId);
+		for (let value of favorites) this.favor(value.userId, value.machineId);
 		this.#choicesRead = true;
+	}
+	/** The machine `owner` prefers when a document is on Automatic, if any. */
+	favorite(owner: string) {
+		return this.#favorites.get(owner);
+	}
+	/** Remember a stored favorite; without a machine, the person has none. */
+	favor(owner: string, machineId?: string) {
+		if (machineId) this.#favorites.set(owner, machineId);
+		else this.#favorites.delete(owner);
 	}
 	/** The machine `owner` chose for `documentId`, or undefined for automatic. */
 	chosen(documentId: string, owner: string) {
@@ -301,9 +321,10 @@ export class Connections {
 			return { documentId, owner };
 		});
 	}
-	/** A revoked machine is nobody's choice any more. */
+	/** A revoked machine is nobody's choice, or favorite, any more. */
 	unchoose(machineId: string) {
 		for (let [key, value] of this.#choices) if (value === machineId) this.#choices.delete(key);
+		for (let [key, value] of this.#favorites) if (value === machineId) this.#favorites.delete(key);
 	}
 	runToken(
 		connectionId: string,

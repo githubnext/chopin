@@ -1,6 +1,12 @@
 import { conflict, missing } from "../errors";
 
-import type { CreateMachine, MachineChoice, MachineRepository, StoredMachine } from "../model";
+import type {
+	CreateMachine,
+	MachineChoice,
+	MachineFavorite,
+	MachineRepository,
+	StoredMachine,
+} from "../model";
 import type { MachineStore } from "../port";
 
 function copy(value: StoredMachine): StoredMachine {
@@ -16,6 +22,8 @@ export class MemoryMachineStore implements MachineStore {
 	#tokens = new Map<string, string>();
 	/** Keyed by document and person. */
 	#choices = new Map<string, MachineChoice>();
+	/** Each person's favorite machine, by person. */
+	#favorites = new Map<string, string>();
 	constructor(
 		private userExists: (id: string) => boolean,
 		private channelExists: (id: string) => boolean = () => true,
@@ -78,6 +86,7 @@ export class MemoryMachineStore implements MachineStore {
 		delete found.credentials;
 		found.revokedAt = new Date(now);
 		for (let [key, choice] of this.#choices) if (choice.machineId === id) this.#choices.delete(key);
+		if (this.#favorites.get(userId) === id) this.#favorites.delete(userId);
 		return true;
 	}
 	async serve(id: string, repository: MachineRepository) {
@@ -109,5 +118,19 @@ export class MemoryMachineStore implements MachineStore {
 			userId: choice.userId,
 			machineId: choice.machineId,
 		});
+	}
+	async favorites() {
+		return [...this.#favorites].map(([userId, machineId]) => ({ userId, machineId }));
+	}
+	async favor(favorite: Omit<MachineFavorite, "machineId"> & { machineId?: string }) {
+		if (!favorite.machineId) {
+			this.#favorites.delete(favorite.userId);
+			return;
+		}
+		let found = this.#machines.get(favorite.machineId);
+		if (!found || found.revokedAt || found.userId !== favorite.userId) {
+			throw missing(`machine ${favorite.machineId} is not the person's`);
+		}
+		this.#favorites.set(favorite.userId, favorite.machineId);
 	}
 }

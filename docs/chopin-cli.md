@@ -207,7 +207,14 @@ is yours alone and holds for that document until you change it:
   falls back to another machine; once the choice can be read, it applies again.
 - Choosing **Automatic** goes back to Chopin's pick.
 
-Disconnecting a machine clears every choice of it.
+Disconnecting a machine clears every choice of it, and clears it as your
+favorite.
+
+You can also mark one of your machines as your favorite. **Automatic** then
+uses it first whenever it is connected for the document's repository and free,
+and otherwise picks as before, so Automatic may move to another machine; a
+machine you chose for a document never does. Your favorite is yours alone and
+applies to every document where you leave **Automatic** on.
 
 ### Coding agents
 

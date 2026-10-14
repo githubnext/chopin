@@ -4,6 +4,7 @@ import type {
 	CreateMachine,
 	MachineChoice,
 	MachineCredentials,
+	MachineFavorite,
 	MachineRepository,
 	StoredMachine,
 } from "../model";
@@ -150,7 +151,10 @@ export class PostgresMachineStore implements MachineStore {
 					WHERE id = ${id} AND user_id = ${userId} AND revoked_at IS NULL
 					RETURNING id
 				`;
-				if (updated.length) await transaction`DELETE FROM machine_choices WHERE machine_id = ${id}`;
+				if (updated.length) {
+					await transaction`DELETE FROM machine_choices WHERE machine_id = ${id}`;
+					await transaction`DELETE FROM machine_favorites WHERE machine_id = ${id}`;
+				}
 				return updated.length > 0;
 			}));
 	}
@@ -195,6 +199,34 @@ export class PostgresMachineStore implements MachineStore {
 				RETURNING machine_id AS "machineId"
 			`;
 			if (!inserted.length) throw missing(`machine ${choice.machineId} is not the person's`);
+		});
+	}
+	favorites() {
+		return this.run("list favorite machines", async () => {
+			let rows = await this.sql<MachineFavorite[]>`
+				SELECT f.user_id AS "userId", f.machine_id AS "machineId"
+				FROM machine_favorites f JOIN machines m ON m.id = f.machine_id
+				WHERE m.revoked_at IS NULL
+			`;
+			return rows.map(row => ({ ...row }));
+		});
+	}
+	favor(favorite: Omit<MachineFavorite, "machineId"> & { machineId?: string }, now: Date) {
+		return this.run("choose a favorite machine", async () => {
+			if (!favorite.machineId) {
+				await this.sql`DELETE FROM machine_favorites WHERE user_id = ${favorite.userId}`;
+				return;
+			}
+			// Only the person's own unrevoked machine; anything else is missing.
+			let inserted = await this.sql<{ machineId: string }[]>`
+				INSERT INTO machine_favorites (user_id, machine_id, chosen_at)
+				SELECT ${favorite.userId}, id, ${now} FROM machines
+				WHERE id = ${favorite.machineId} AND user_id = ${favorite.userId} AND revoked_at IS NULL
+				ON CONFLICT (user_id)
+				DO UPDATE SET machine_id = EXCLUDED.machine_id, chosen_at = EXCLUDED.chosen_at
+				RETURNING machine_id AS "machineId"
+			`;
+			if (!inserted.length) throw missing(`machine ${favorite.machineId} is not the person's`);
 		});
 	}
 }
