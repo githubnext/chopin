@@ -104,6 +104,71 @@ async function connect(
 let refused = (status: number, body: Record<string, unknown>) => () =>
 	Response.json(body, { status });
 
+/** The entry script npm's shims for claude-agent-acp run. */
+const ENTRY = "node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js";
+
+/**
+ * The shims `npm install -g` writes for a package's program (by cmd-shim), with the node next to
+ * them used first: a .cmd and a .ps1 on Windows, and an extensionless sh script beside them.
+ */
+const SHIM = {
+	cmd: [
+		"@ECHO off",
+		"GOTO start",
+		":find_dp0",
+		"SET dp0=%~dp0",
+		"EXIT /b",
+		":start",
+		"SETLOCAL",
+		"CALL :find_dp0",
+		"",
+		'IF EXIST "%dp0%\\node.exe" (',
+		'  SET "_prog=%dp0%\\node.exe"',
+		") ELSE (",
+		'  SET "_prog=node"',
+		"  SET PATHEXT=%PATHEXT:;.JS;=;%",
+		")",
+		"",
+		`endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\${
+			ENTRY.replaceAll("/", "\\")
+		}" %*`,
+		"",
+	].join("\r\n"),
+	ps1: [
+		"#!/usr/bin/env pwsh",
+		"$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent",
+		"",
+		'$exe=""',
+		'if ($PSVersionTable.PSVersion -lt "6.0" -or $IsWindows) {',
+		'  $exe=".exe"',
+		"}",
+		"$ret=0",
+		'if (Test-Path "$basedir/node$exe") {',
+		`  & "$basedir/node$exe"  "$basedir/${ENTRY}" $args`,
+		"  $ret=$LASTEXITCODE",
+		"} else {",
+		`  & "node$exe"  "$basedir/${ENTRY}" $args`,
+		"  $ret=$LASTEXITCODE",
+		"}",
+		"exit $ret",
+		"",
+	].join("\n"),
+	sh: [
+		"#!/bin/sh",
+		`basedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")`,
+		"",
+		'if [ -x "$basedir/node" ]; then',
+		`  exec "$basedir/node"  "$basedir/${ENTRY}" "$@"`,
+		"else ",
+		`  exec node  "$basedir/${ENTRY}" "$@"`,
+		"fi",
+		"",
+	].join("\n"),
+};
+
+/** A node that says it is `version`. */
+let node = (version: string) => `#!/bin/sh\necho v${version}\n`;
+
 const CASES: Array<{
 	name: string;
 	run: () => ReturnType<typeof connect>;
@@ -141,6 +206,41 @@ const CASES: Array<{
 			"https://nodejs.org",
 			"Then run this command again.",
 		],
+	},
+	{
+		name: "npm's Windows .cmd shim runs the agent on the older node beside it",
+		run: async () => {
+			let path = await programs({ node: node("22.12.0") });
+			let npm = await programs({ "claude-agent-acp.cmd": SHIM.cmd, "node.exe": node("20.11.1") });
+			return connect({
+				args: root => [root, "--", join(npm.split(delimiter)[0]!, "claude-agent-acp.cmd")],
+				path,
+			});
+		},
+		says: [
+			"Claude Code needs Node.js 22 or newer; this machine has 20.11.1",
+			"npm install -g @agentclientprotocol/claude-agent-acp",
+		],
+	},
+	{
+		name: "npm's PowerShell shim runs the agent on an older node from PATH",
+		run: async () => {
+			let npm = await programs({ "claude-agent-acp.ps1": SHIM.ps1, node: node("20.11.1") });
+			return connect({
+				args: root => [root, "--", join(npm.split(delimiter)[0]!, "claude-agent-acp.ps1")],
+				path: npm,
+			});
+		},
+		says: ["Claude Code needs Node.js 22 or newer; this machine has 20.11.1"],
+	},
+	{
+		name: "npm's sh shim runs the agent on an older node from PATH",
+		run: async () =>
+			connect({
+				args: root => [root, "--", "claude-agent-acp"],
+				path: await programs({ "claude-agent-acp": SHIM.sh, node: node("20.11.1") }),
+			}),
+		says: ["Claude Code needs Node.js 22 or newer; this machine has 20.11.1"],
 	},
 	{
 		name: "not inside a git checkout",
@@ -209,6 +309,21 @@ for (let { name, run, says } of CASES) {
 		expect(result.output).not.toContain(KEY);
 	}, 30_000);
 }
+
+test("a compiled or non-Node agent isn't held to a Node.js version", async () => {
+	for (
+		let program of [
+			"\x7fELF\x02\x01\x01\0\0\0node_modules/x/index.js node",
+			'@ECHO off\r\n"%~dp0\\claude-agent-acp.exe" %*\r\n',
+		]
+	) {
+		let result = await connect({
+			args: root => [root, "--", "claude-agent-acp"],
+			path: await programs({ "claude-agent-acp": program, node: node("18.20.0") }),
+		});
+		expect(result.output).not.toContain("needs Node.js");
+	}
+}, 60_000);
 
 test("a machine paired already says how to pair it for the key's account instead", async () => {
 	let result = await connect({ paired: true });

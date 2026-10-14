@@ -1,6 +1,6 @@
 import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:fs";
 import { hostname } from "node:os";
-import { basename, isAbsolute, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
 import type { CodingAgent } from "@chopin/protocol/agents";
@@ -218,7 +218,7 @@ function requireProgram(command: string[], base: string) {
 	let found = /[\\/]/.test(word)
 		? (existsSync(resolve(base, word)) ? resolve(base, word) : null)
 		: which(word);
-	let name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+	let name = basename(word).replace(/\.(exe|cmd|bat|ps1)$/i, "");
 	let agent = AGENTS.find(item => item.acp[0] === name);
 	if (found) {
 		if (agent) requireNode(agent, found);
@@ -248,11 +248,14 @@ function requireProgram(command: string[], base: string) {
 }
 
 /**
- * Refuse an agent whose program runs on Node.js (its `#!` line names node) when the node on PATH
- * is older than the agent needs, which otherwise fails later with an unreadable stack trace.
+ * Refuse an agent whose program runs on Node.js when that Node.js is older than the agent needs,
+ * which otherwise fails later with an unreadable stack trace. A program runs on Node.js when its
+ * `#!` line names node, or when it is one of the shims `npm install -g` writes (a .cmd and a .ps1
+ * on Windows, a sh script elsewhere), which start node with the package's script and prefer a
+ * node beside them to the one on PATH. Compiled and other programs are left alone.
  */
 function requireNode(agent: CodingAgent, program: string) {
-	let head = Buffer.alloc(200);
+	let head = Buffer.alloc(4096);
 	try {
 		let file = openSync(program, "r");
 		try {
@@ -263,8 +266,19 @@ function requireNode(agent: CodingAgent, program: string) {
 	} catch {
 		return;
 	}
-	if (!/^#!.*\bnode\b/.test(head.toString("latin1").split("\n")[0]!)) return;
-	let node = which("node");
+	if (head.includes(0)) return;
+	let text = head.toString("latin1");
+	let node: string | null;
+	if (/^#!.*\bnode\b/.test(text.split("\n")[0]!)) {
+		node = which("node");
+	} else if (
+		/\bnode(\.exe|\$exe)?\b/i.test(text) && /node_modules[\\/][^"'\s]+\.[cm]?js\b/.test(text)
+	) {
+		node = ["node.exe", "node"].map(name => join(dirname(program), name)).find(existsSync)
+			?? which("node");
+	} else {
+		return;
+	}
 	let version = node
 		? Bun.spawnSync([node, "--version"], { stdout: "pipe" }).stdout.toString().trim()
 		: "";
