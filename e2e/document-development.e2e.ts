@@ -118,10 +118,10 @@ test(
 		await ana.keyboard.insertText(HUMAN_NOTE);
 		await written(ana, room, OBSERVATION + HUMAN_NOTE);
 		await expect.poll(() => frames.states.at(-1)?.protected).toBe(1);
-		await ana.keyboard.press("Meta+z");
+		await ana.keyboard.press("ControlOrMeta+z");
 		await expect(content(ana).getByText(OBSERVATION, { exact: true })).toBeVisible();
 		await expect.poll(() => frames.states.at(-1)?.protected).toBe(1);
-		await ana.keyboard.press("Meta+Shift+z");
+		await ana.keyboard.press("ControlOrMeta+Shift+z");
 		await written(ana, room, OBSERVATION + HUMAN_NOTE);
 		await ana.reload();
 		await ready(ana);

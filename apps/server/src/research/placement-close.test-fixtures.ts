@@ -45,8 +45,9 @@ let { closeRoom, withDocumentLock } = new Function(
 	"documentBackend",
 	"server",
 	"buildReadiness",
+	"documentDevelopment",
 	transpiled + "\nreturn {closeRoom,withDocumentLock};",
-)(new Map(), Rooms, Plan, runtime, () => opened.backend, opened.server, undefined);
+)(new Map(), Rooms, Plan, runtime, () => opened.backend, opened.server, undefined, undefined);
 let { research, jobs } = researchStorage({ opened, plan } as Parameters<typeof researchStorage>[0]);
 let entered = Promise.withResolvers<void>();
 let release = Promise.withResolvers<void>();
