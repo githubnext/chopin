@@ -1,4 +1,4 @@
-import { expect, ready, test, written } from "./room";
+import { authenticate, expect, ready, roomPath, test, written } from "./room";
 import type { Page } from "@playwright/test";
 
 const QUESTION = "How should onboarding work?";
@@ -9,6 +9,7 @@ const ANSWER =
 
 async function decisions(page: Page) {
 	await page.getByRole("navigation", { name: "Workspace view" })
+		.or(page.getByRole("group", { name: "Document view", exact: true }))
 		.getByRole("button", { name: /^Decisions/ }).click();
 	return page.locator('[data-document-view="decisions"]:visible');
 }
@@ -77,37 +78,54 @@ test(
 		await expect(second).toContainText("Use contextual hints after the first decision.");
 		await second.getByRole("button", { name: "Discard", exact: true }).click();
 		await second.getByRole("button", { name: "Discard decision", exact: true }).click();
-		await expect(first).toContainText("Discarded");
+		await expect(
+			ana.locator('[data-document-view="decisions"] article')
+				.filter({ hasText: QUESTION }),
+		).toContainText("Discarded by @ben");
 	},
 );
 
-test("phone creation and working answers remain usable with the shared save bar", async ({ join }) => {
-	let page = await join("ana", {
-		hasTouch: true,
-		isMobile: true,
-		viewport: { width: 390, height: 844 },
-	});
-	await create(page);
-	let decision = card(page);
-	await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
-	let pending = page.getByRole("region", { name: "Unsaved answers" });
-	await expect(pending).toBeVisible();
-	await pending.getByRole("button", { name: "Clear", exact: true }).click();
-	await expect(decision.getByRole("textbox", { name: "Working answer" })).toHaveValue("");
-	await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
-	await pending.getByRole("button", { name: "Record decision", exact: true }).click();
-	await expect(decision).toContainText("Decided by @ana");
-	let overflowing = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-	expect(overflowing).toBe(false);
-});
+test(
+	"phone creation and working answers remain usable with the shared save bar",
+	async ({ join }, info) => {
+		let page = await join("ana", {
+			hasTouch: true,
+			isMobile: true,
+			viewport: { width: 390, height: 844 },
+		});
+		await create(page);
+		let decision = card(page);
+		await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
+		let pending = page.getByRole("region", { name: "Unsaved answers" });
+		await expect(pending).toBeVisible();
+		await pending.getByRole("button", { name: "Record decision", exact: true }).click({
+			trial: true,
+		});
+		await page.screenshot({ path: info.outputPath("phone-decision.png"), animations: "disabled" });
+		await pending.getByRole("button", { name: "Clear", exact: true }).click();
+		await expect(decision.getByRole("textbox", { name: "Working answer" })).toHaveValue("");
+		await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
+		await pending.getByRole("button", { name: "Record decision", exact: true }).click();
+		await expect(decision).toContainText("Decided by @ana");
+		let overflowing = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+		expect(overflowing).toBe(false);
+	},
+);
 
-test("readers see an open decision but cannot create or record one", async ({ join }) => {
+test("readers see an open decision but cannot create or record one", async ({ join, browser, baseURL, room }) => {
 	let ana = await join("ana");
 	await create(ana);
-	let reader = await join("readonly");
-	let view = await decisions(reader);
-	await expect(view.getByRole("button", { name: "New decision", exact: true })).toHaveCount(0);
-	await expect(card(reader).getByRole("textbox", { name: "Working answer" })).toBeDisabled();
-	await expect(card(reader).getByRole("button", { name: "Record decision", exact: true }))
-		.toHaveCount(0);
+	let context = await browser.newContext({ baseURL });
+	try {
+		let reader = await context.newPage();
+		await authenticate(reader, "readonly", baseURL!);
+		await reader.goto(roomPath(room));
+		let view = await decisions(reader);
+		await expect(view.getByRole("button", { name: "New decision", exact: true })).toHaveCount(0);
+		await expect(card(reader).getByRole("textbox", { name: "Working answer" })).toBeDisabled();
+		await expect(card(reader).getByRole("button", { name: "Record decision", exact: true }))
+			.toHaveCount(0);
+	} finally {
+		await context.close();
+	}
 });

@@ -2074,8 +2074,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 		opacity var(--save-bar-open-dur) var(--motion-smooth-out);
 }
 
-/* A text field has the keyboard up; the bar would only crowd it. */
-:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-field:focus)
+/* The option composer has its own confirm; written answers still need the shared bar. */
+:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-adding .question-field:focus)
 	.decision-save-bar[data-open] {
 	opacity: 0;
 	pointer-events: none;
@@ -2204,7 +2204,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 @media (prefers-reduced-motion: reduce) {
 	:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar,
 	:is(.plan-decisions, .decision-save-host)[data-phone] .decision-save-bar[data-open],
-	:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-field:focus)
+	:is(.plan-decisions, .decision-save-host)[data-phone]:has(.question-adding .question-field:focus)
 		.decision-save-bar[data-open] {
 		transform: none;
 		transition: opacity var(--duration-fast) var(--ease-out);
