@@ -103,10 +103,18 @@
 	align-items: center;
 }
 
+/*
+ * Offline looks the same everywhere: an offline machine's menu rows, a machine button whose machine
+ * is offline, and Build plan while the chosen machine is. Nothing beside them says so; their
+ * accessible names and descriptions do, and the menu rows' second line.
+ */
+.machine-offline {
+	opacity: 0.55;
+}
+
 .machine-menu-item[data-disabled],
 .machine-sheet-item[data-disabled] {
 	cursor: default;
-	opacity: 0.55;
 }
 
 .machine-menu-item[data-disabled]:hover {

@@ -28,6 +28,8 @@ import { BuildBlockerGlyph } from "./build-blocker-glyph";
 import { buildBlockerSummary } from "./build-blockers";
 
 import "./build-plan-button.css";
+// Its offline look, .machine-offline, is the machine button's.
+import "./machine-button.css";
 import "./build-blocker-popover.css";
 
 import type { ReactNode } from "react";
@@ -379,7 +381,10 @@ export function BuildPlanButton(
 		build: BuildPlan;
 		/** The machine button, beside Build plan or its capsule. */
 		machine?: ReactNode;
-		/** The machine the person chose is offline, named: Build plan says so instead of starting. */
+		/**
+		 * The machine the person chose is offline, named: Build plan is dimmed and starts nothing, and
+		 * this is its accessible description.
+		 */
 		machineOffline?: string;
 		canEdit: boolean;
 		/** Phone: the glyph alone; Build's headline carries the words. */
@@ -401,16 +406,6 @@ export function BuildPlanButton(
 	let { look } = build;
 	let reason = useId();
 	let actionReason = useId();
-	// Build plan pressed while the chosen machine is offline says so, until the choice changes.
-	let [offlineShown, setOfflineShown] = useState<string>();
-	useEffect(() => {
-		setOfflineShown(undefined);
-	}, [machineOffline]);
-	useEffect(() => {
-		if (!offlineShown) return;
-		let timer = window.setTimeout(() => setOfflineShown(undefined), 4000);
-		return () => window.clearTimeout(timer);
-	}, [offlineShown]);
 	// Announce a change of state politely, once, not every tip or count that follows it.
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef(look.kind);
@@ -493,6 +488,8 @@ export function BuildPlanButton(
 	if (look.kind === "plan") {
 		if (!canEdit) return null;
 		let blocked = look.blocked;
+		// The chosen machine is offline: dimmed as the machine button beside it is, still focusable,
+		// with the reason only in its accessible description. Pressing it does nothing.
 		let offline = blocked ? undefined : machineOffline;
 		return (
 			<>
@@ -500,36 +497,30 @@ export function BuildPlanButton(
 					aria-label="Build plan"
 					aria-describedby={blocked || offline ? reason : undefined}
 					aria-disabled={blocked || offline ? true : undefined}
-					className={phone
-						? "build-status-link"
-						: "btn btn-compact btn-primary build-plan shrink-0"}
+					className={`${
+						phone ? "build-status-link" : "btn btn-compact btn-primary build-plan shrink-0"
+					}${offline ? " machine-offline" : ""}`}
 					data-tooltip={blocked === "Chopin isn’t running for this document"
 						? "Chopin is off"
-						: blocked ?? offline}
-					data-tooltip-detail={blocked || offline ? "" : undefined}
-					data-tooltip-verbatim={blocked || offline ? "" : undefined}
+						: blocked}
+					data-tooltip-detail={blocked ? "" : undefined}
+					data-tooltip-verbatim={blocked ? "" : undefined}
 					onClick={() => {
 						if (blocked) {
 							onExplain?.(blocked);
 							return;
 						}
 						// Nothing starts, not even the Planner's draft, on a machine that is offline.
-						if (offline) {
-							setOfflineShown(offline);
-							onExplain?.(offline);
-							return;
-						}
+						if (offline) return;
 						pressed.current = true;
 						build.press();
 					}}
 					type="button"
 				>
-					{/* Pressed while the chosen machine is offline, it says so for a moment instead. */}
-					{offlineShown ?? "Build plan"}
+					Build plan
 				</button>
 				{(blocked || offline) && <span className="sr-only" id={reason}>{blocked ?? offline}</span>}
 				{machine}
-				{offlineShown && <span className="sr-only" role="alert">{offlineShown}</span>}
 				{live}
 			</>
 		);

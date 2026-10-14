@@ -176,11 +176,16 @@ export function MachineButton(
 	};
 	let name = chosen?.label ?? "Automatic";
 	let label = machineButtonLabel(state);
+	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
+	// machine can be chosen. Only its accessible name says why.
+	let offline = !!chosen && !chosen.connected;
 	let item = (row: MachineRow, sheet: boolean) => (
 		<button
 			aria-checked={row.checked}
 			aria-disabled={row.disabled || undefined}
-			className={sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}
+			className={`${sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}${
+				row.disabled ? " machine-offline" : ""
+			}`}
 			data-density="detailed"
 			data-disabled={row.disabled || undefined}
 			key={row.id ?? "automatic"}
@@ -217,10 +222,10 @@ export function MachineButton(
 				aria-expanded={open}
 				aria-haspopup="menu"
 				aria-label={label}
-				className="machine-button"
+				className={offline ? "machine-button machine-offline" : "machine-button"}
 				data-compact={compact || undefined}
 				data-phone={phone || undefined}
-				data-tooltip={compact ? label.replace(/^Machine: /, "") : undefined}
+				data-tooltip={compact ? chosen?.label ?? label.replace(/^Machine: /, "") : undefined}
 				data-tooltip-verbatim={compact ? "" : undefined}
 				onClick={() => open ? close(false) : openAt("first")}
 				onKeyDown={event => {

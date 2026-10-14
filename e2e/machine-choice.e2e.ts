@@ -73,15 +73,22 @@ async function connected(page: Page, label: string, headers: Record<string, stri
 		});
 	let paired = await (await post("/api/connector/pairings", { ...checkout, key: minted.key }))
 		.json() as { token: string };
-	let opened = await post("/api/connector/connections", checkout, {
-		[CONNECTOR_PLATFORM_HEADER]: "linux x64",
-		...headers,
-		authorization: `Bearer ${paired.token}`,
-	});
-	expect(opened.status, await opened.clone().text()).toBe(200);
-	let { token } = await opened.json() as { token: string };
+	let open = async () => {
+		let opened = await post("/api/connector/connections", checkout, {
+			[CONNECTOR_PLATFORM_HEADER]: "linux x64",
+			...headers,
+			authorization: `Bearer ${paired.token}`,
+		});
+		expect(opened.status, await opened.clone().text()).toBe(200);
+		return (await opened.json() as { token: string }).token;
+	};
+	let token = await open();
 	await page.goto(back);
 	return {
+		/** Connect the checkout again with the same machine, as chopin connect does after Ctrl-C. */
+		reconnect: async () => {
+			token = await open();
+		},
 		/** Disconnect the checkout, as Ctrl-C in chopin connect does. */
 		disconnect: () =>
 			post("/connector/mcp", {
@@ -188,18 +195,49 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await page.reload();
 	await expect(chat).toHaveAccessibleName("Machine: build-box, connected");
 
-	// An offline choice stops Build plan, which names it, rather than using the laptop.
+	// An offline choice stops Build plan rather than using the laptop. Offline looks the same in
+	// all three places, dimmed as the menu's offline row is, and is never written beside them.
 	await box.disconnect();
 	await page.reload();
 	await expect(header).toHaveAccessibleName("Machine: build-box, offline");
+	await expect(chat).toHaveAccessibleName("Machine: build-box, offline");
 	let build = page.getByRole("button", { name: "Build plan", exact: true });
-	await expect(build).toHaveAttribute("aria-disabled", "true");
-	await expect(build).toHaveAccessibleDescription("build-box is offline");
-	// Inert, but a press still says why rather than starting anything.
 	let plan = page.locator(".build-plan");
+	let dimmed = (target: Locator) => target.evaluate(item => getComputedStyle(item).opacity);
+	let offlineLook = async (enabled: boolean) => {
+		for (let target of [plan, header, chat]) {
+			if (enabled) await expect(target).not.toHaveClass(/\bmachine-offline\b/);
+			else await expect(target).toHaveClass(/\bmachine-offline\b/);
+		}
+		if (enabled) await expect(build).not.toHaveAttribute("aria-disabled", "true");
+		else await expect(build).toHaveAttribute("aria-disabled", "true");
+	};
+	await offlineLook(false);
+	await expect(build).toHaveAccessibleDescription("build-box is offline");
+	await expect(build).not.toHaveAttribute("disabled");
+	await expect(build).not.toHaveAttribute("data-tooltip");
+	await expect(plan).toHaveText("Build plan");
+	for (let target of [header, chat]) expect(await target.innerText()).not.toMatch(/offline/i);
+	let look = await dimmed(plan);
+	expect(await dimmed(header)).toBe(look);
+	expect(await dimmed(chat)).toBe(look);
+	// Still focusable, so the keyboard and a screen reader find it and its reason.
+	await build.focus();
+	await expect(build).toBeFocused();
+	// Pressing it starts nothing and says nothing.
+	let posted: string[] = [];
+	let record = (request: import("@playwright/test").Request) => {
+		let path = new URL(request.url()).pathname;
+		if (request.method() === "POST" && /implementation|build/.test(path)) posted.push(path);
+	};
+	page.on("request", record);
 	await plan.click({ force: true });
-	await expect(plan).toHaveText("build-box is offline");
-	await expect(page.getByRole("alert").filter({ hasText: "build-box is offline" })).toBeAttached();
+	await page.keyboard.press("Enter");
+	await page.waitForTimeout(500);
+	page.off("request", record);
+	expect(posted).toEqual([]);
+	await expect(plan).toHaveText("Build plan");
+	await expect(page.getByRole("alert").filter({ hasText: /offline/i })).toHaveCount(0);
 	await crop(page, [plan, header], "desktop-build-offline");
 	await crop(page, chat, "desktop-chat-offline");
 	await shoot(page, "desktop-offline");
@@ -207,10 +245,24 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	let offline = menu.getByRole("menuitemradio", { name: /^build-box/ });
 	await expect(offline).toHaveAttribute("aria-disabled", "true");
 	await expect(offline).toContainText("Offline");
+	// The menu's offline row is the same dimmed look.
+	await expect(offline).toHaveClass(/\bmachine-offline\b/);
+	expect(await dimmed(offline)).toBe(look);
 	await shoot(page, "desktop-offline-menu");
+	await page.keyboard.press("Escape");
+
+	// The machine reconnecting enables Build plan again, as choosing Automatic does.
+	await box.reconnect();
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
+	await offlineLook(true);
+	await box.disconnect();
+	await page.reload();
+	await offlineLook(false);
+	await header.click();
 	await menu.getByRole("menuitemradio", { name: /^Automatic/ }).click();
 	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
-	await expect(build).not.toHaveAttribute("aria-disabled", "true");
+	await offlineLook(true);
 
 	// Add machine opens the Machines page's Add your computer.
 	await chat.click();
@@ -262,10 +314,16 @@ test("on a phone the machine button is a 44px icon in the composer, opening a sh
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: "Chat", exact: true }).tap();
 	await expect(button).toHaveAccessibleName("Machine: build-box, offline");
+	// Dimmed as the sheet's offline row is, and still a button that opens the sheet.
+	await expect(button).toHaveClass(/\bmachine-offline\b/);
+	await expect(button).not.toHaveAttribute("aria-disabled", "true");
 	await page.waitForTimeout(800);
 	await crop(page, button, "phone-chat-offline");
+	await shoot(page, "phone-chat-offline-full");
 	await button.tap();
 	await expect(sheet.getByRole("menuitemradio", { name: /^build-box/ }))
 		.toHaveAttribute("aria-disabled", "true");
+	await expect(sheet.getByRole("menuitemradio", { name: /^build-box/ }))
+		.toHaveClass(/\bmachine-offline\b/);
 	await shoot(page, "phone-sheet-offline");
 });

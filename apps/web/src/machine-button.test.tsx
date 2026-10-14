@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { BuildPlanButton } from "./build-plan-button";
 import { MachineButton, MachineGlyph } from "./machine-button";
 
 import type { MachineChoice } from "./machine-choice";
@@ -61,4 +62,39 @@ test("a service runs on the server icon, a computer on the monitor, Automatic wi
 	expect(server).not.toBe(computer);
 	expect(automatic).toContain("data-automatic");
 	expect(automatic).not.toContain("status-dot");
+});
+
+test("offline looks the same everywhere: the machine button and Build plan dimmed, never worded", () => {
+	let connected = renderToStaticMarkup(
+		createElement(MachineButton, { choice: choice(true, true) }),
+	);
+	expect(connected).not.toContain("machine-offline");
+	for (let compact of [false, true]) {
+		let button = renderToStaticMarkup(
+			createElement(MachineButton, { choice: choice(true, false), compact }),
+		);
+		// Still a button that opens the menu, dimmed; the state is only in its accessible name.
+		expect(button).toContain('class="machine-button machine-offline"');
+		expect(button).not.toContain("disabled");
+		expect(button.replace(/<[^>]*>/g, "")).not.toMatch(/offline/i);
+		expect(button).not.toMatch(/data-tooltip="[^"]*offline/i);
+	}
+	let build = { look: { kind: "plan" }, press: () => {} } as never;
+	let plan = renderToStaticMarkup(
+		createElement(BuildPlanButton, {
+			build,
+			canEdit: true,
+			machineOffline: "build-box is offline",
+			onHover: () => {},
+			onOpen: () => {},
+		}),
+	);
+	expect(plan).toContain('aria-disabled="true"');
+	expect(plan).not.toContain(" disabled=");
+	expect(plan).toMatch(/class="[^"]*\bbuild-plan\b[^"]*\bmachine-offline\b/);
+	expect(plan).toContain(">Build plan</button>");
+	expect(plan).not.toContain("data-tooltip");
+	// The reason is its accessible description, not text beside it.
+	let described = /aria-describedby="([^"]+)"/.exec(plan)![1];
+	expect(plan).toContain(`<span class="sr-only" id="${described}">build-box is offline</span>`);
 });

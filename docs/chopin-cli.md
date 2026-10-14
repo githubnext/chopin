@@ -204,10 +204,11 @@ you change it:
 - Rebuilds and prototypes Chopin starts for you follow the same choice, and
   still need the machine's consent to automatic work.
 - You can choose only your own machines that serve the document's repository.
-- If the machine you chose is offline, **Build plan** says **build-box is
-  offline** (your machine's name) instead of starting, and other work fails
-  with the same words rather than moving to another machine. Start
-  `chopin connect` on it, or choose another one.
+- If the machine you chose is offline, its machine buttons and **Build plan**
+  are greyed out, as offline machines are in the menu, and **Build plan**
+  starts nothing; a screen reader hears **build-box is offline** (your
+  machine's name). Other work fails with those words rather than moving to
+  another machine. Start `chopin connect` on it, or choose another one.
 - If Chopin can't read your choice (its database is briefly unavailable), work
   fails with **Can't read your machine choice right now. Try again.** It never
   falls back to another machine; once the choice can be read, it applies again.

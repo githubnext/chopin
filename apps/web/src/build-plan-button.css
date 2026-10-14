@@ -2,8 +2,12 @@
 
 .build-plan[aria-disabled="true"] {
 	cursor: default;
-	opacity: 0.4;
 	box-shadow: none;
+}
+
+/* An offline machine dims it as machine-button.css's .machine-offline does instead. */
+.build-plan[aria-disabled="true"]:not(.machine-offline) {
+	opacity: 0.4;
 }
 
 .build-capsule-row {
