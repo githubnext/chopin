@@ -14,7 +14,7 @@ import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
 import { setFavorite } from "../machine-choice";
-import { listMachines } from "../machine-summary";
+import { machines as liveMachines, useLiveMachines } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem, MenuSeparator } from "../menu-item";
 import { motionImmediately } from "../motion-input";
@@ -28,59 +28,33 @@ import type { KeyboardEvent } from "react";
 import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 
-/** How often /connect asks again, so a machine that pairs shows up without a reload. */
-const POLL_MS = 3000;
-
 /**
  * The signed-in person's machines, asked for again every few seconds while the page is in view.
  * `machines` is undefined until the first answer; `error` is the server's code for the last
- * failed answer, which the page turns into words.
+ * failed answer, which the page turns into words. The sidebar's count shares the same list.
  */
 export function useMachines() {
-	let [machines, setMachines] = useState<Machine[]>();
-	let [error, setError] = useState("");
+	let { machines, error } = useLiveMachines(true);
 	let [recommended, setRecommended] = useState<string | null>(null);
-	let reload = useRef<() => void>(() => {});
 	useEffect(() => {
 		let abort = new AbortController();
-		let timer: number | undefined;
-		let load = async () => {
-			window.clearTimeout(timer);
-			if (document.visibilityState !== "hidden") {
-				try {
-					setMachines(await listMachines(abort.signal));
-					setError("");
-				} catch (error) {
-					if (abort.signal.aborted) return;
-					setError(error instanceof Error ? error.message : "unavailable");
-				}
-			}
-			if (!abort.signal.aborted) timer = window.setTimeout(load, POLL_MS);
-		};
-		reload.current = () => void load();
-		void load();
-		document.addEventListener("visibilitychange", load);
 		fetch("/api/connector/version", { signal: abort.signal })
 			.then(response => response.ok ? response.json() : undefined)
 			.then(value => setRecommended(value?.version ?? null), () => {});
-		return () => {
-			abort.abort();
-			window.clearTimeout(timer);
-			document.removeEventListener("visibilitychange", load);
-		};
+		return () => abort.abort();
 	}, []);
-	let forget = (id: string) => setMachines(current => current?.filter(value => value.id !== id));
-	let retry = useCallback(() => reload.current(), []);
+	let forget = (id: string) => liveMachines.update(list => list.filter(value => value.id !== id));
+	let retry = useCallback(() => void liveMachines.load(), []);
 	/** Set or clear the favorite: starred at once, then as the server says. */
 	let favor = async (id: string, favorite: boolean) => {
 		let mark = (chosen: string | null) =>
-			setMachines(current => current?.map(value => ({ ...value, favorite: value.id === chosen })));
+			liveMachines.update(list => list.map(value => ({ ...value, favorite: value.id === chosen })));
 		let before = machines?.find(value => value.favorite)?.id ?? null;
 		mark(favorite ? id : before === id ? null : before);
 		try {
 			mark(await setFavorite(id, favorite));
 		} catch {
-			reload.current();
+			void liveMachines.load();
 		}
 	};
 	return { machines, error, recommended, forget, retry, favor };

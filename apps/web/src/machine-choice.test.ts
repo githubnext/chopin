@@ -7,9 +7,11 @@ import {
 	machineRows,
 	offlineChoice,
 	plannerButton,
+	presence,
 } from "./machine-choice";
 
 import type { ChoosableMachine, MachineChoiceState } from "./machine-choice";
+import type { Machine } from "./machine-summary";
 
 const NOW = Date.UTC(2026, 9, 14, 12);
 
@@ -165,4 +167,16 @@ test("Chat's machine button says who runs the Planner", () => {
 		machineRows(state({ ...base, planner: { state: "none", login: null, machine: null } }), NOW)[2]!
 			.disabled,
 	).toBe(false);
+});
+
+test("the choice is read again when a machine goes offline, comes back or needs pairing again", () => {
+	let box = { id: "m1", connected: true, reauthorize: false } as Machine;
+	let laptop = { id: "m2", connected: false, reauthorize: false } as Machine;
+	expect(presence(undefined)).toBeUndefined();
+	expect(presence([box, laptop])).toBe(presence([laptop, box]));
+	expect(presence([box, laptop])).not.toBe(presence([{ ...box, connected: false }, laptop]));
+	expect(presence([box])).not.toBe(presence([{ ...box, reauthorize: true }]));
+	expect(presence([box])).not.toBe(presence([box, laptop]));
+	// What changes nothing a document shows doesn't read it again.
+	expect(presence([box])).toBe(presence([{ ...box, label: "renamed", lastSeenAt: 5 }]));
 });

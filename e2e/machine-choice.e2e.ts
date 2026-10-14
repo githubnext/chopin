@@ -477,3 +477,57 @@ test("a phone's machine sheet keeps a long machine name inside its rows", async 
 	await expect(sheet).toBeHidden();
 	await expect(button).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
 });
+
+test("a chosen machine going offline and coming back shows within seconds, without a reload", async ({ seed, join: enter }) => {
+	await seed("# Live machines\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
+	let page = await enter(person(), DESKTOP);
+	let box = await connected(page, "build-box");
+	let laptop = await connected(page, "laptop");
+	await page.reload();
+	let header = page.locator(".machine-button:not(.composer-machine .machine-button)").first();
+	let chat = composer(page).getByRole("button", { name: /^Machine: / });
+	let build = page.getByRole("button", { name: "Build plan", exact: true });
+	let plan = page.locator(".build-plan");
+	let entry = page.getByRole("complementary", { name: "Projects" })
+		.getByRole("link", { name: /^Machines/ });
+	await header.click();
+	await page.getByRole("menu", { name: "Machine for this document" })
+		.getByRole("menuitemradio", { name: /^build-box/ }).click();
+	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
+	await expect(build).not.toHaveAttribute("aria-disabled", "true");
+	await expect(entry).toHaveAccessibleName("Machines, 2 connected");
+	await expect(entry).toContainText("2/2");
+	await crop(page, [plan, header], "live-before");
+	await shoot(page, "live-before-full");
+
+	// The machine stops. Nothing reloads the page or refocuses its window, and within five seconds
+	// Build plan greys, both machine buttons dim, and the sidebar counts one connected.
+	let live = { timeout: 5_000 };
+	await box.disconnect();
+	await expect(build).toHaveAttribute("aria-disabled", "true", live);
+	await expect(build).toHaveAccessibleDescription("build-box is offline");
+	for (let target of [plan, header, chat]) await expect(target).toHaveClass(/\bmachine-offline\b/);
+	await expect(header).toHaveAccessibleName("Machine: build-box, offline");
+	await expect(entry).toHaveAccessibleName("Machines, 2 paired, 1 connected", live);
+	await expect(entry).toContainText("1/2");
+	await crop(page, [plan, header], "live-offline");
+	await shoot(page, "live-offline-full");
+
+	// It comes back, and so does Build plan.
+	await box.reconnect();
+	await expect(build).not.toHaveAttribute("aria-disabled", "true", live);
+	for (let target of [plan, header, chat]) {
+		await expect(target).not.toHaveClass(/\bmachine-offline\b/);
+	}
+	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
+	await expect(entry).toHaveAccessibleName("Machines, 2 connected", live);
+
+	// On the Machines page, the sidebar's count follows the table.
+	await entry.click();
+	await expect(page).toHaveURL(/\/connect$/);
+	let rows = page.getByRole("table", { name: "Your machines" });
+	await expect(rows.getByRole("row", { name: /laptop/ })).toContainText("Connected");
+	await laptop.disconnect();
+	await expect(rows.getByRole("row", { name: /laptop/ })).not.toContainText("Connected", live);
+	await expect(entry).toHaveAccessibleName("Machines, 2 paired, 1 connected", live);
+});

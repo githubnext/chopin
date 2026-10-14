@@ -208,7 +208,9 @@ you change it:
 - You can choose only your own machines that serve the document's repository.
 - If the machine you chose is offline, its machine buttons and **Build plan**
   are greyed out, as offline machines are in the menu, and **Build plan**
-  starts nothing; a screen reader hears **build-box is offline** (your
+  starts nothing. They change within a few seconds of the machine going
+  offline or coming back, as does the Machines count in the sidebar, without a
+  reload; a screen reader hears **build-box is offline** (your
   machine's name). Other work fails with those words rather than moving to
   another machine. Start `chopin connect` on it, or choose another one.
 - If Chopin can't read your choice (its database is briefly unavailable), work

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ago } from "./build-model";
+import { machines as liveMachines } from "./machine-summary";
+
+import type { Machine } from "./machine-summary";
 
 /** One of the person's machines serving a document's repository, as the server lists it. */
 export type ChoosableMachine = {
@@ -217,6 +220,12 @@ async function answer(response: Response): Promise<MachineChoiceState> {
 /** How often the choice is read again while the document is open, so states stay current. */
 const REFRESH_MS = 15_000;
 
+/** What of the person's machines a document's choice depends on: which are paired and online. */
+export function presence(list: readonly Machine[] | undefined): string | undefined {
+	return list?.map(machine => `${machine.id}:${machine.connected}:${machine.reauthorize}`)
+		.sort().join(" ");
+}
+
 export type MachineChoice = {
 	state?: MachineChoiceState;
 	/** A choice is being saved. */
@@ -243,7 +252,9 @@ export async function setFavorite(machine: string, favorite: boolean): Promise<s
 
 /**
  * The person's machine for a document, read on open, on focus and every 15 seconds while
- * visible. One instance serves every machine button of the document, so they always agree.
+ * visible, and again as soon as the page's live machine list, asked every few seconds while the
+ * document is open, sees a machine go offline, come back or need pairing again. One instance
+ * serves every machine button of the document, so they always agree.
  */
 export function useMachineChoice(room: string, enabled: boolean): MachineChoice {
 	let [state, setState] = useState<MachineChoiceState>();
@@ -272,6 +283,23 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 			document.removeEventListener("visibilitychange", refresh);
 		};
 	}, [refresh]);
+	// A machine going offline or coming back changes what the buttons and Build plan show.
+	useEffect(() => {
+		if (!enabled) return;
+		let seen = presence(liveMachines.snapshot().machines);
+		let unwatch = liveMachines.watch(() => {
+			let now = presence(liveMachines.snapshot().machines);
+			if (now === undefined || now === seen) return;
+			let changed = seen !== undefined;
+			seen = now;
+			if (changed) refresh();
+		});
+		let stop = liveMachines.poll();
+		return () => {
+			stop();
+			unwatch();
+		};
+	}, [enabled, refresh]);
 	let choose = async (machine: string | null) => {
 		let mine = ++generation.current;
 		setSaving(true);
