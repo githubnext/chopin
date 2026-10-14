@@ -1,14 +1,13 @@
 import { StarIcon } from "@chopin/icons";
 
-import "./favorite-star.css";
-
 import type { KeyboardEvent } from "react";
 
 /**
  * The favorite machine's star, a toggle of its own: filled on the person's favorite, which
  * Automatic prefers, and an outline that sets it on any other machine. Its name says what pressing
  * it does. In the machine menu it sits over its row's right end; on a touch screen its target
- * reaches 44px.
+ * reaches 44px. Its stylesheet loads with the app (main.tsx), as it is shared by the room and the
+ * Machines page.
  */
 export function FavoriteStar(
 	{ label, favorite, onToggle, menu = false, touch = false, onKeyDown }: {

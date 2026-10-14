@@ -22,6 +22,9 @@ import "./phone-skeleton.css";
 import "./icon-tooltip.css";
 import "./local-login.css";
 import "./chat/run-card.css";
+// The favorite star is shared by the room's machine menu and the Machines page; loaded here, it
+// adds no stylesheet to a shared chunk the first page would preload.
+import "./favorite-star.css";
 
 let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

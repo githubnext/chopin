@@ -5,7 +5,11 @@
 	box-shadow: none;
 }
 
-/* An offline machine dims it as machine-button.css's .machine-offline does instead. */
+/*
+ * An offline machine dims it as machine-button.css's .machine-offline does instead; that sheet comes
+ * with the machine button, which every room showing Build plan renders, so it is not imported here
+ * (importing it would add a stylesheet to the initial page's preload list).
+ */
 .build-plan[aria-disabled="true"]:not(.machine-offline) {
 	opacity: 0.4;
 }

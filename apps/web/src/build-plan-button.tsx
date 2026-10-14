@@ -28,8 +28,6 @@ import { BuildBlockerGlyph } from "./build-blocker-glyph";
 import { buildBlockerSummary } from "./build-blockers";
 
 import "./build-plan-button.css";
-// Its offline look, .machine-offline, is the machine button's.
-import "./machine-button.css";
 import "./build-blocker-popover.css";
 
 import type { ReactNode } from "react";
