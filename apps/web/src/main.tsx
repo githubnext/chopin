@@ -67,13 +67,14 @@ if (import.meta.env.DEV) {
 		}))
 	);
 	void Promise.all([content, import("./icon-tooltip")]).then(
-		([value, tooltips]) => mount(
-			value,
-			tooltips,
-			<Suspense fallback={null}>
-				<Feedback appName="Chopin" endpoint="http://127.0.0.1:4747" />
-			</Suspense>,
-		),
+		([value, tooltips]) =>
+			mount(
+				value,
+				tooltips,
+				<Suspense fallback={null}>
+					<Feedback appName="Chopin" endpoint="http://127.0.0.1:4747" />
+				</Suspense>,
+			),
 	);
 } else {
 	void import("./icon-tooltip").then(tooltips => mount(<Root />, tooltips));

@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import { plate, test } from "./fixture";
 
+test.use({ visualReview: true });
+
 test("named blockers use one row hover surface and no arrow tooltip", async ({ page }) => {
 	let trigger = plate(page, "build-blockers").getByRole("button", {
 		name: "1 decision left. Show blockers",
