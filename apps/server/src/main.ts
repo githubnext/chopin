@@ -38,6 +38,7 @@ import { serverInstruction as runServerInstruction } from "./chat/server-instruc
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
+import { createEditingUnlocked } from "./plan/editing-unlocked";
 import { researchBriefDefinition } from "./jobs/research-brief";
 import {
 	greetJoinedPlan,
@@ -279,19 +280,14 @@ function documentBackend(): Service.Backend {
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
-		onEditingUnlocked: id => {
-			void withDocumentLock(id, async () => {
-				let opened = Rooms.get(id)?.plan;
-				if (opened) await Service.exclusive(opened, () => Service.activateTitles(opened));
-			}).catch(err => console.error("chopin: could not initialize unlocked document title -", err));
-			if (config.liveBuild) {
-				void relinkDecisions(id).catch(err =>
-					console.error("chopin: could not re-link decisions after a build -", err)
-				);
-			}
-			// Spike callouts the lock deferred land now.
-			void spikeScout?.refresh(id);
-		},
+		onEditingUnlocked: createEditingUnlocked({
+			withDocumentLock,
+			opened: id => Rooms.get(id)?.plan,
+			wake: opened => conversationRuntime.wake(opened),
+			relink: config.liveBuild ? relinkDecisions : undefined,
+			refreshSpikes: id => spikeScout?.refresh(id),
+			onError: (message, err) => console.error(message, err),
+		}),
 	};
 }
 

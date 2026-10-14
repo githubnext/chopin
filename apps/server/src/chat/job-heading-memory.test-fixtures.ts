@@ -7,10 +7,14 @@ import { mockResult } from "../conversation-plan/interpret.test-fixtures";
 import { createConversationRuntime } from "../conversation-plan/runtime";
 import type { Room } from "../rooms";
 
-export async function headingMemory(conversationPlan = true, agent = true) {
+export async function headingMemory(
+	conversationPlan = true,
+	agent = true,
+	call?: { name: string; input: Record<string, unknown> },
+) {
 	let opened = await openPlan();
 	let plan = opened.plan;
-	let identity = await authenticatedMemory(opened);
+	let identity = await authenticatedMemory(opened, "heading", call);
 	let { context } = identity;
 	context.config.agent = agent;
 	let errors: unknown[] = [];

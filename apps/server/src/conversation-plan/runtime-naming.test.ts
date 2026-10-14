@@ -6,6 +6,9 @@ import { installJobCleanup, member, socket, until } from "../chat/job.test-fixtu
 import * as Jobs from "./jobs";
 import { jobStream } from "../chat/job-stream.test-fixtures";
 import { ActiveOwnerBindings } from "../agent/active-owner";
+import { createEditingUnlocked } from "../plan/editing-unlocked";
+import { announceImplementation } from "../tasks/notifications";
+import { reportBuild, restoreBuilds } from "../tasks/builds";
 
 installJobCleanup();
 
@@ -153,23 +156,53 @@ test("model-off saved messages leave the authored title and analysis untouched",
 	}
 });
 
-test("an implementation lock retains pending naming until the document is available", async () => {
-	let h = await headingMemory(false);
+test("the production build-release callback activates titles and resumes naming with live features off", async () => {
+	let call = { name: "draft_heading", input: { revision: 0, title: "Authentication" } };
+	let h = await headingMemory(false, true, call);
 	try {
-		h.plan.claiming = true;
+		h.plan.persistence.documentTitles = true;
+		h.plan.persistence.liveBuild = false;
+		h.plan.persistence.onEditingUnlocked = createEditingUnlocked({
+			withDocumentLock: async (_id, action) => action(),
+			opened: id => id === h.plan.id ? h.plan : undefined,
+			wake: h.runtime.wake,
+			refreshSpikes: () => undefined,
+			onError: (_message, error) => h.errors.push(error),
+		});
+		h.onStart(async () => {
+			expect(h.plan.document.titleKey).toBeDefined();
+			expect(Plan.source(h.plan)).toMatch(/^# /);
+			call.input.revision = h.plan.revision;
+		});
+		h.plan.builds = restoreBuilds([{
+			id: crypto.randomUUID(),
+			user: "test",
+			connectionId: "test",
+			repositoryId: h.opened.channel.repositoryId,
+			checkout: { repository: "owner/repository", commit: "a".repeat(40) },
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+			createdAt: new Date().toISOString(),
+			expiresAt: Date.now() + 60_000,
+			state: "running",
+		}]);
+		announceImplementation(h.plan);
 		await Chat.send(h.context, socket(), { ...member("Authentication approach"), to: "room" });
 		await until(() => h.plan.conversationPlanJobs.length === 1);
+		// Finish admission and its readiness drain before releasing the build.
+		await Plan.exclusive(h.plan, async () => {});
 		await h.jobs.idle();
 		expect(h.plan.conversationPlanJobs[0]?.status).toBe("pending");
 		expect(h.driver.starts()).toBe(0);
-		h.plan.claiming = false;
-		h.runtime.wake(h.plan);
+		await reportBuild(h.plan, "test", "test", h.plan.builds[0]!.id, { state: "stopped" });
 		await until(() => !!h.plan.chat.jobOutput);
 		h.driver.finish();
 		await h.jobs.idle();
 		expect(h.plan.conversationPlanJobs[0]?.status).toBe("done");
+		expect(Plan.source(h.plan)).toBe("# Authentication\n");
+		expect(h.errors).toEqual([]);
 	} finally {
-		h.plan.claiming = false;
 		await h.close();
 	}
 });
