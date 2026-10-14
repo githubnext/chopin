@@ -1,0 +1,182 @@
+.trace {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+}
+
+.trace-scroll {
+	max-height: 192px;
+	padding: 2px;
+	margin: -2px;
+	overflow-y: auto;
+}
+
+.trace-line {
+	display: flex;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	transition: color var(--duration-fast) var(--motion-smooth-out);
+}
+
+:is(a, button):hover > .trace-line {
+	color: var(--color-text-primary);
+}
+
+.trace-line[data-status="error"],
+:is(a, button):hover > .trace-line[data-status="error"] {
+	color: var(--color-destructive-ink);
+}
+
+.trace-line[data-status="pending"] {
+	opacity: 0.6;
+}
+
+.trace-icon {
+	display: flex;
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+	flex: none;
+	align-items: center;
+	justify-content: center;
+}
+
+.trace-icon svg {
+	pointer-events: none;
+}
+
+.trace-title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.trace-title[data-wrap] {
+	overflow: visible;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.trace-description {
+	flex: none;
+	color: var(--color-text-quaternary);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.trace-description[data-tone="destructive"],
+.trace-line[data-status="error"] .trace-description {
+	color: var(--color-destructive-ink);
+}
+
+.trace-collapsible {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	flex-direction: column;
+}
+
+.trace-collapsible-trigger {
+	display: flex;
+	width: fit-content;
+	max-width: 100%;
+	min-width: 0;
+	align-items: center;
+	gap: var(--spacing);
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--color-text-tertiary);
+	text-align: left;
+	cursor: pointer;
+}
+
+.trace-collapsible-trigger:hover {
+	color: var(--color-text-primary);
+}
+
+.trace-collapsible-trigger:has([data-status="error"]) {
+	color: var(--color-destructive-ink);
+}
+
+.trace-chevron[data-state="open"] {
+	transform: rotate(90deg);
+}
+
+:root[data-motion-input="pointer"] .trace-chevron {
+	transition: transform var(--duration-fast) var(--motion-smooth-out);
+}
+
+.trace-collapsible-content {
+	min-width: 0;
+}
+
+.trace-collapsible-content-inner {
+	min-width: 0;
+	margin: calc(var(--spacing) * 2) 0 var(--spacing) calc(var(--spacing) * 2 - 1px);
+	padding: 0 var(--spacing) 0 calc(var(--spacing) * 4);
+	border-left: 1px solid var(--color-edge);
+	color: var(--color-text-tertiary);
+	overflow-wrap: anywhere;
+}
+
+/* A running title sweeps a lighter band across its glyphs. */
+.trace-line[data-status="running"] > .trace-title {
+	background: linear-gradient(
+		90deg,
+		var(--color-text-tertiary) 0%,
+		var(--color-text-tertiary) 35%,
+		var(--color-text-primary) 50%,
+		var(--color-text-tertiary) 65%,
+		var(--color-text-tertiary) 100%
+	);
+	background-size: 250% 100%;
+	background-clip: text;
+	color: transparent;
+	animation: trace-shimmer calc(var(--duration-base) * 10) linear infinite;
+}
+
+.trace-title[data-enter] {
+	animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both;
+}
+
+.trace-line[data-status="running"] > .trace-title[data-enter] {
+	animation:
+		chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both,
+		trace-shimmer calc(var(--duration-base) * 10) linear infinite;
+}
+
+@keyframes trace-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.trace-line[data-status="running"] > .trace-title {
+		background: none;
+		color: inherit;
+	}
+
+	.trace-line[data-status="running"] > .trace-title,
+	.trace-line[data-status="running"] > .trace-title[data-enter],
+	.trace-title[data-enter] {
+		animation: none;
+	}
+
+	.trace-chevron {
+		transition: none;
+	}
+}

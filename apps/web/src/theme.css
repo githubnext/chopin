@@ -1321,67 +1321,19 @@ body {
 	margin-block: 2px 4px;
 }
 
-.chat-work-toggle,
-.chat-work-static {
+.chat-work-row {
 	display: flex;
-	min-height: 30px;
-	max-width: 100%;
-	align-items: center;
-	gap: 7px;
-	padding: 3px 0;
-	border: 0;
-	background: transparent;
-	color: var(--color-text-tertiary);
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-	text-align: left;
-}
-
-.chat-work-toggle {
-	cursor: pointer;
-}
-
-.chat-work-toggle:focus-visible,
-.chat-tool-call-toggle:focus-visible {
-	outline: 2px solid var(--color-brand);
-	outline-offset: 2px;
-	border-radius: var(--radius-sm);
-}
-
-.chat-work-headline {
 	min-width: 0;
-	color: var(--color-text-secondary);
-	font-weight: 500;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.chat-work-headline-motion {
-	display: inline-block;
-	animation: chat-work-stage-in var(--duration-base) var(--motion-smooth-out) both;
-}
-
-.chat-work-meta {
-	flex: none;
-	color: var(--color-text-quaternary);
-	font-size: var(--text-xs);
-	white-space: nowrap;
-}
-
-.chat-work-chevron {
-	flex: none;
-	color: var(--color-text-quaternary);
+	min-height: 30px;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
 }
 
 .chat-work-lattice {
 	display: grid;
-	flex: none;
 	grid-template-columns: repeat(3, 3px);
 	gap: 3px;
 	place-content: center;
-	width: 18px;
-	height: 18px;
 }
 
 .chat-work-lattice > span {
@@ -1408,39 +1360,9 @@ body {
 	animation-delay: var(--duration-linger);
 }
 
-.chat-tool-list {
-	max-height: 192px;
-	margin: 2px 0 2px 8px;
-	padding: 1px 6px 1px 11px;
-	border-left: 1px solid var(--color-edge);
-	color: var(--color-text-tertiary);
-	font-size: var(--text-xs);
-	list-style: none;
-	overflow-y: auto;
-}
-
-.chat-tool-call-toggle {
-	display: flex;
-	width: 100%;
-	min-height: 28px;
-	align-items: center;
-	gap: 8px;
-	padding: 3px 2px;
-	border: 0;
-	background: transparent;
-	color: var(--color-text-tertiary);
-	font-size: var(--text-xs);
-	text-align: left;
-}
-
-button.chat-tool-call-toggle {
-	cursor: pointer;
-}
-
 .chat-tool-call-details {
 	display: grid;
-	gap: 7px;
-	margin: 0 0 7px 20px;
+	gap: calc(var(--spacing) * 2);
 }
 
 .chat-tool-data-label {
@@ -2208,7 +2130,6 @@ button.question-add:disabled {
 
 @media (prefers-reduced-motion: reduce) {
 	.chat-work-lattice > span,
-	.chat-work-headline-motion,
 	.chat-source-tint {
 		animation: none;
 	}

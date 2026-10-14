@@ -231,6 +231,20 @@ function append(result: Group[], message: Message): void {
 	});
 }
 
+export type ToolKind = "ask" | "read" | "write" | "other";
+
+export function toolKind(name: string): ToolKind {
+	if (name === "ask") return "ask";
+	if (/(^|[_/.-])(read|get|list|search|grep|find|query|fetch|inspect)(?=$|[_/.-])/i.test(name)) {
+		return "read";
+	}
+	if (
+		/(^|[_/.-])(edit|write|create|update|delete|anchor|link|apply|append|move|remove)(?=$|[_/.-])/i
+			.test(name)
+	) return "write";
+	return "other";
+}
+
 export function workPhase(
 	tools: Chat.Activity[],
 	streaming: boolean,
@@ -240,18 +254,10 @@ export function workPhase(
 	if (!active) return undefined;
 	let running = tools.findLast(tool => tool.status === "running");
 	if (running) {
-		if (running.name === "ask") return "Waiting for an answer";
-		if (
-			/(^|[_/.-])(read|get|list|search|grep|find|query|fetch|inspect)(?=$|[_/.-])/i.test(
-				running.name,
-			)
-		) return "Gathering context";
-		if (
-			/(^|[_/.-])(edit|write|create|update|delete|anchor|link|apply|append|move|remove)(?=$|[_/.-])/i
-				.test(
-					running.name,
-				)
-		) return "Making changes";
+		let kind = toolKind(running.name);
+		if (kind === "ask") return "Waiting for an answer";
+		if (kind === "read") return "Gathering context";
+		if (kind === "write") return "Making changes";
 		return "Working through the request";
 	}
 	if (streaming) return "Writing a response";

@@ -1,18 +1,26 @@
-import { useId, useState, useSyncExternalStore } from "react";
-import { ChevronIcon, DecisionIcon } from "@chopin/icons";
-import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor";
+import { useSyncExternalStore } from "react";
+import { DecisionIcon, MagnifierIcon, PencilIcon, WrenchIcon } from "@chopin/icons";
 
 import {
 	duration,
 	summarize,
 	toolCopy,
+	toolKind,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
 	workPhase,
 } from "./model";
-import { motionContract } from "../motion-contract";
-import { motionImmediately } from "../motion-input";
+import {
+	Trace,
+	TraceCollapsible,
+	TraceCollapsibleContent,
+	TraceCollapsibleTrigger,
+	TraceDescription,
+	TraceIcon,
+	TraceLine,
+	TraceTitle,
+} from "../trace";
 
 import { cardStatus } from "@chopin/dialect";
 import type { Questionnaire } from "@chopin/dialect";
@@ -33,62 +41,53 @@ function isOpen(value: Questionnaire): boolean {
 	}
 }
 
+const TOOL_ICONS = {
+	ask: DecisionIcon,
+	other: WrenchIcon,
+	read: MagnifierIcon,
+	write: PencilIcon,
+} as const;
+
 function ToolCall(
 	{ active, disconnected, tool }: { active: boolean; disconnected: boolean; tool: Chat.Activity },
 ) {
-	let [open, setOpen] = useState(false);
-	let contentId = useId();
 	let hasDetails = tool.args !== undefined || tool.result !== undefined || tool.error !== undefined;
 	let status = tool.status === "running"
 		? disconnected ? "Last seen running" : active ? "Running" : "Interrupted"
 		: tool.status === "failed"
 		? "Failed"
 		: "Done";
-	let row = (
-		<>
-			{hasDetails && (
-				<ChevronIcon
-					aria-hidden="true"
-					className={open ? "icon-first-line rotate-90" : "icon-first-line"}
-					size={14}
-				/>
-			)}
-			<span className="min-w-0 flex-1 break-words font-mono text-text-secondary">
-				{toolCopy(tool.name)}
-			</span>
-			<span className={tool.status === "failed" ? "text-destructive-ink" : ""}>
-				{status}
-			</span>
-			{tool.took !== undefined && <span className="tabular-nums">{duration(tool.took)}</span>}
-		</>
-	);
-
-	return (
-		<li
-			className="chat-tool-call"
-			data-tool-status={active || disconnected ? tool.status : status.toLowerCase()}
+	let Icon = TOOL_ICONS[toolKind(tool.name)];
+	let line = (
+		<TraceLine
+			status={status === "Running"
+				? "running"
+				: status === "Failed"
+				? "error"
+				: tool.status === "running"
+				? "pending"
+				: undefined}
 		>
-			{hasDetails
-				? (
-					<button
-						aria-controls={contentId}
-						aria-expanded={open}
-						className="chat-tool-call-toggle"
-						onClick={() => setOpen(value => !value)}
-						type="button"
-					>
-						{row}
-					</button>
-				)
-				: <div className="chat-tool-call-toggle">{row}</div>}
-			{hasDetails && (
-				<MotionDisclosure
-					id={contentId}
-					immediately={motionImmediately()}
-					motion={motionContract("collapse")}
-					open={open}
-					surface="tool-call"
-				>
+			<TraceIcon>
+				<Icon size={14} />
+			</TraceIcon>
+			<TraceTitle wrap>{toolCopy(tool.name)}</TraceTitle>
+			{status === "Running" || status === "Done"
+				? <span className="sr-only">{status}</span>
+				: <TraceDescription>{status}</TraceDescription>}
+			{tool.took !== undefined && <TraceDescription>{duration(tool.took)}</TraceDescription>}
+		</TraceLine>
+	);
+	let toolStatus = active || disconnected ? tool.status : status.toLowerCase();
+
+	if (!hasDetails) {
+		return <div data-tool-status={toolStatus} role="listitem">{line}</div>;
+	}
+	return (
+		<div data-tool-status={toolStatus} role="listitem">
+			<TraceCollapsible>
+				<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+				<TraceCollapsibleContent surface="tool-call">
 					<div className="chat-tool-call-details">
 						{tool.args !== undefined && (
 							<div>
@@ -102,27 +101,29 @@ function ToolCall(
 								{tool.error
 									? (
 										<pre>
-											<span className="block font-semibold text-destructive-ink">
-												{tool.error.kind ?? tool.error.code}
-											</span>
-											{tool.result}
+									<span className="block font-semibold text-destructive-ink">
+										{tool.error.kind ?? tool.error.code}
+									</span>
+									{tool.result}
 										</pre>
 									)
 									: <pre>{tool.result}</pre>}
 							</div>
 						)}
 					</div>
-				</MotionDisclosure>
-			)}
-		</li>
+				</TraceCollapsibleContent>
+			</TraceCollapsible>
+		</div>
 	);
 }
 
 function Lattice() {
 	return (
-		<span aria-hidden="true" className="chat-work-lattice">
-			{Array.from({ length: 9 }, (_, index) => <span key={index} />)}
-		</span>
+		<TraceIcon>
+			<span className="chat-work-lattice">
+				{Array.from({ length: 9 }, (_, index) => <span key={index} />)}
+			</span>
+		</TraceIcon>
 	);
 }
 
@@ -136,8 +137,6 @@ export function WorkProgress(
 		tools: Chat.Activity[];
 	},
 ) {
-	let [open, setOpen] = useState(false);
-	let contentId = useId();
 	let values = useSyncExternalStore(
 		decisions?.questions.subscribe ?? noQuestions,
 		decisions?.questions.snapshot ?? emptyQuestions,
@@ -162,7 +161,7 @@ export function WorkProgress(
 		: disconnected && !tools.length
 		? "Connection lost"
 		: `Work details · ${summary.count} ${summary.count === 1 ? "action" : "actions"}`;
-	let details = active ? "Details" : disconnected && tools.length
+	let details = active ? undefined : disconnected && tools.length
 		? "Connection lost"
 		: summary.toolTime > 0
 		? `${duration(summary.toolTime)} tool time`
@@ -173,16 +172,40 @@ export function WorkProgress(
 		? `${summary.interrupted} interrupted`
 		: undefined;
 	let count = active && summary.finished > 0 ? `${summary.finished} finished` : undefined;
-	let row = (
-		<>
-			{waiting ? <DecisionIcon aria-hidden="true" size={14} /> : active && <Lattice />}
-			<span className="chat-work-headline">
-				<span className="chat-work-headline-motion" key={headline}>{headline}</span>
-			</span>
-			{count && <span className="chat-work-meta tabular-nums">{count}</span>}
-			{status && <span className="chat-work-meta text-destructive-ink tabular-nums">{status}</span>}
-			{details && <span className="chat-work-meta tabular-nums">{details}</span>}
-		</>
+	let line = (
+		<TraceLine
+			status={active && !waiting
+				? "running"
+				: !active && summary.failures > 0
+				? "error"
+				: undefined}
+		>
+			{waiting
+				? (
+					<TraceIcon>
+						<DecisionIcon size={14} />
+					</TraceIcon>
+				)
+				: active && <Lattice />}
+			<TraceTitle enter key={headline}>{headline}</TraceTitle>
+			{count && <TraceDescription>{count}</TraceDescription>}
+			{status && (
+				<TraceDescription tone={summary.failures > 0 ? "destructive" : undefined}>
+					{status}
+				</TraceDescription>
+			)}
+			{details && <TraceDescription>{details}</TraceDescription>}
+		</TraceLine>
+	);
+	let open = decisions && first && (
+		<button
+			aria-label="Open decision"
+			className="btn btn-sm btn-ghost shrink-0"
+			onClick={() => decisions.onOpenCard(first)}
+			type="button"
+		>
+			Open
+		</button>
 	);
 
 	return (
@@ -192,54 +215,28 @@ export function WorkProgress(
 			data-work-active={active}
 			data-work-disconnected={disconnected}
 		>
-			<div className="flex min-w-0 items-center gap-2">
-				{tools.length > 0
-					? (
-						<button
-							aria-controls={contentId}
-							aria-expanded={open}
-							className="chat-work-toggle"
-							onClick={() => setOpen(value => !value)}
-							type="button"
-						>
-							{row}
-							<MotionDisclosureIcon
-								className="motion-feedback chat-work-chevron"
-								closed={<ChevronIcon aria-hidden="true" size={14} />}
-								open={open}
-								opened={<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />}
-							/>
-						</button>
-					)
-					: <div className="chat-work-static">{row}</div>}
-				{decisions && first && (
-					<button
-						aria-label="Open decision"
-						className="btn btn-sm btn-ghost shrink-0"
-						onClick={() => decisions.onOpenCard(first)}
-						type="button"
-					>
-						Open
-					</button>
+			{tools.length > 0
+				? (
+					<TraceCollapsible>
+						<div className="chat-work-row">
+							<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+							{open}
+						</div>
+						<TraceCollapsibleContent surface="chat-tools">
+							<Trace label="Tool calls" list scroll>
+								{tools.map(tool => (
+									<ToolCall active={active} disconnected={disconnected} key={tool.id} tool={tool} />
+								))}
+							</Trace>
+						</TraceCollapsibleContent>
+					</TraceCollapsible>
+				)
+				: (
+					<div className="chat-work-row">
+						{line}
+						{open}
+					</div>
 				)}
-			</div>
-			{tools.length > 0 && (
-				<div id={contentId}>
-					<MotionDisclosure
-						id={`${contentId}-motion`}
-						immediately={motionImmediately()}
-						motion={motionContract("collapse")}
-						open={open}
-						surface="chat-tools"
-					>
-						<ul aria-label="Tool calls" className="chat-tool-list">
-							{tools.map(tool => (
-								<ToolCall active={active} disconnected={disconnected} key={tool.id} tool={tool} />
-							))}
-						</ul>
-					</MotionDisclosure>
-				</div>
-			)}
 		</div>
 	);
 }

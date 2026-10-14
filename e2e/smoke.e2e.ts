@@ -1056,9 +1056,9 @@ test(
 		await expect(chat.locator(`[id="${controlled}"]`)).toHaveCount(1);
 		await run.click();
 		let toolLog = chat.locator('[data-motion-disclosure="chat-tools"]');
-		let icon = run.locator("[data-feedback-icon]");
+		let icon = run.locator('[data-slot="trace-icon"][data-state]');
 		await expect(run).toHaveAttribute("aria-controls", controlled!);
-		await expect(icon).toHaveAttribute("data-feedback-icon", "open");
+		await expect(icon).toHaveAttribute("data-state", "open");
 		await expect(chat.getByText("Read file", { exact: true })).toBeVisible();
 		await expect(chat.getByText("Run tests", { exact: true })).toBeVisible();
 		let failed = chat.getByRole("listitem").filter({ hasText: "Run tests" });
@@ -1072,7 +1072,7 @@ test(
 		await expect(toolLog).toHaveCount(1);
 		await expect(toolLog).not.toHaveAttribute("aria-hidden", "true");
 		await expect(toolLog).not.toHaveAttribute("inert", "");
-		await expect(icon).toHaveAttribute("data-feedback-icon", "open");
+		await expect(icon).toHaveAttribute("data-state", "open");
 
 		await expect(chat.locator("[data-chat-system]")).toContainText("Sam joined");
 

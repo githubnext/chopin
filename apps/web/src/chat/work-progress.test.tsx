@@ -19,7 +19,7 @@ test("active work exposes a stage and keeps tool details collapsed", () => {
 
 	expect(markup).toContain("Gathering context");
 	expect(markup).toContain('aria-expanded="false"');
-	expect(markup).toContain("Details");
+	expect(markup).toContain('data-status="running"');
 	expect(markup).not.toContain("&lt;unsafe&gt;");
 });
 
@@ -85,5 +85,18 @@ test("an active ask preserves the static decision wait while keeping tool detail
 	expect(markup).toContain("Waiting on your decision");
 	expect(markup).toContain("data-tool-waiting");
 	expect(markup).not.toContain("chat-work-lattice");
-	expect(markup).toContain("Details");
+	expect(markup).not.toContain('data-status="running"');
+	expect(markup).toContain('aria-expanded="false"');
+});
+
+test("finished work with a failure reads as an error trace", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: false,
+		responseSeen: true,
+		streaming: false,
+		tools: [{ id: "one", name: "edit_plan", status: "failed", took: 12 }],
+	}));
+
+	expect(markup).toContain('data-status="error"');
+	expect(markup).toContain('data-slot="trace-collapsible-trigger"');
 });
