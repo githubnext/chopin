@@ -15,6 +15,11 @@ export interface CodingAgent {
 	install: string[][];
 	/** Signs in once on this machine; `afterward` says what to do in a session the command opens. */
 	signIn: { command: string[]; afterward?: string };
+	/**
+	 * The oldest Node.js its packages run on, as `major` or `major.minor`, from their `engines` and
+	 * checked by `bun run verify:agents`.
+	 */
+	node: string;
 	/** The ACP command `chopin connect` starts, after `--`. */
 	acp: string[];
 	/** `--env KEY=VALUE` variables the agent needs under Chopin. */
@@ -31,6 +36,7 @@ export interface CodingAgent {
 export const AGENTS: readonly CodingAgent[] = [
 	{
 		id: "copilot",
+		node: "22",
 		name: "GitHub Copilot CLI",
 		install: [["npm", "install", "-g", "@github/copilot"]],
 		signIn: { command: ["copilot", "login"] },
@@ -42,6 +48,7 @@ export const AGENTS: readonly CodingAgent[] = [
 	},
 	{
 		id: "atomic",
+		node: "22.19",
 		name: "Atomic",
 		install: [["npm", "install", "-g", "@bastani/atomic", "@bastani/atomic-acp"]],
 		signIn: { command: ["atomic"], afterward: "sign in with /login, then quit" },
@@ -54,6 +61,7 @@ export const AGENTS: readonly CodingAgent[] = [
 	},
 	{
 		id: "claude-code",
+		node: "22",
 		name: "Claude Code",
 		install: [["npm", "install", "-g", "@agentclientprotocol/claude-agent-acp"]],
 		// `--cli` opens the Claude Code the adapter bundles; ANTHROPIC_API_KEY works instead.
@@ -69,6 +77,7 @@ export const AGENTS: readonly CodingAgent[] = [
 	},
 	{
 		id: "codex",
+		node: "20",
 		name: "OpenAI Codex",
 		// The adapter bundles its own Codex; the CLI is for signing in.
 		install: [["npm", "install", "-g", "@openai/codex", "@agentclientprotocol/codex-acp"]],
@@ -81,6 +90,7 @@ export const AGENTS: readonly CodingAgent[] = [
 	},
 	{
 		id: "gemini",
+		node: "20",
 		name: "Gemini CLI",
 		install: [["npm", "install", "-g", "@google/gemini-cli"]],
 		signIn: { command: ["gemini"], afterward: "sign in, then quit" },
@@ -93,6 +103,21 @@ export const AGENTS: readonly CodingAgent[] = [
 ];
 
 export const DEFAULT_AGENT = AGENTS[0]!;
+
+/** The major version of a Node.js version like `22.19` or `v22.19.0`. */
+export function nodeMajor(version: string): number {
+	return Number(version.replace(/^v/, "").split(".")[0]);
+}
+
+/** Whether Node.js `version` (as `node --version` prints it) is older than `minimum`. */
+export function nodeOlder(version: string, minimum: string): boolean {
+	let have = version.replace(/^v/, "").split(".").map(Number);
+	let need = minimum.split(".").map(Number);
+	for (let index = 0; index < need.length; index++) {
+		if ((have[index] ?? 0) !== need[index]) return (have[index] ?? 0) < need[index]!;
+	}
+	return false;
+}
 
 /** The agent with this id, or the default for an id no longer offered. */
 export function findAgent(id: string | null | undefined): CodingAgent {

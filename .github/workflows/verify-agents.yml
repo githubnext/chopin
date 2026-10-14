@@ -1,0 +1,27 @@
+# Installs each coding agent the Machines page offers from npm, in a fresh node container at its
+# minimum Node.js and one major below, and checks its programs, sign-in command and ACP
+# initialize. It reaches npm, so it runs weekly and on demand rather than on every push.
+name: verify agents
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.4.2
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun run verify:agents --below

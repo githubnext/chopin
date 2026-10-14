@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AGENTS, DEFAULT_AGENT, findAgent } from "./agents";
+import { AGENTS, DEFAULT_AGENT, findAgent, nodeMajor, nodeOlder } from "./agents";
 
 test("every agent names itself, how to install it, sign in and start it, and where its docs are", () => {
 	let ids = AGENTS.map(agent => agent.id);
@@ -36,4 +36,14 @@ test("the agents run globally installed binaries, not npx", () => {
 		expect(agent.acp[0]).not.toBe("npx");
 		for (let command of agent.install) expect(command[0]).not.toBe("npx");
 	}
+});
+
+test("a Node.js version is older than an agent's minimum only below it", () => {
+	expect(nodeOlder("v22.18.0", "22.19")).toBe(true);
+	expect(nodeOlder("v22.19.0", "22.19")).toBe(false);
+	expect(nodeOlder("v23.0.0", "22.19")).toBe(false);
+	expect(nodeOlder("v21.7.3", "22")).toBe(true);
+	expect(nodeOlder("v20.0.0", "20")).toBe(false);
+	expect(nodeMajor("22.19")).toBe(22);
+	for (let agent of AGENTS) expect(agent.node).toMatch(/^\d+(\.\d+)?$/);
 });

@@ -161,7 +161,8 @@ test("one copied command installs chopin and pairs the machine, with no browser 
 	await expect(setup.getByText("Keep this terminal open.", { exact: true })).toHaveCount(0);
 
 	// What the agent needs reads as one line; its install command shows on request.
-	await expect(setup.getByText("Needs GitHub Copilot CLI, signed in.")).toBeVisible();
+	await expect(setup.getByText("Needs GitHub Copilot CLI, signed in, and Node.js 22 or newer."))
+		.toBeVisible();
 	await setup.getByRole("button", { name: "Show install command", exact: true }).click();
 	await expect.poll(() => setup.locator(".machines-needs pre code").innerText())
 		.toBe(agentCommand(findAgent("copilot"), "sh"));

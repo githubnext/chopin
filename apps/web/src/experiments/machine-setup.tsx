@@ -127,7 +127,7 @@ function Needs({ agent, shell }: { agent: CodingAgent; shell: SetupShell }) {
 	return (
 		<div className="machines-needs">
 			<p>
-				Needs {agent.name}, signed in.{" "}
+				Needs {agent.name}, signed in, and Node.js {agent.node} or newer.{" "}
 				<UnfoldToggle className="machines-needs-toggle" unfold={install}>
 					{install.open ? "Hide install command" : "Show install command"}
 				</UnfoldToggle>
