@@ -363,6 +363,7 @@ Each message says what to run next. The first line of each:
 | `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                      |
 | `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                |
 | `Chopin refused the pairing key`                    | Copy a new command from **Machines** → **Add a machine**, then run it.                                     |
+| `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then copy a new command.            |
 | `The account that made the key can't push to …`     | Ask an owner for write access, then run the command again.                                                 |
 | `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                         |
 | `… didn't answer ACP initialize`                    | Sign in to the agent with the command the message names, then run the command again.                       |

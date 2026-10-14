@@ -571,6 +571,14 @@ describe("hosted authentication routes", () => {
 		expect((await mint(second)).key).toMatch(/^chopin_k_/);
 		now += 15 * 60_000 + 1;
 		expect(await mint(second)).toEqual(again);
+
+		// An account that leaves the allowed organizations can't spend a key it minted before.
+		await authorize(second);
+		let minted = await mint(second);
+		github.membership = undefined;
+		now += 31_000;
+		expect(await redeem(minted.key)).toEqual({ error: "pairing-account-forbidden" });
+		expect(await redeem(minted.key)).toEqual({ error: "pairing-key-invalid" });
 	});
 
 	it("falls back to the product root for unsafe, empty, or duplicate return paths", async () => {

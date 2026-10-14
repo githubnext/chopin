@@ -170,6 +170,14 @@ const CASES: Array<{
 		says: ["Chopin refused the pairing key", "Machines → Add a machine"],
 	},
 	{
+		name: "the key's account is no longer allowed on this Chopin",
+		run: () => connect({ pairing: refused(403, { error: "pairing-account-forbidden" }) }),
+		says: [
+			"The account that made the pairing key isn't allowed to use this Chopin",
+			"Machines → Add a machine",
+		],
+	},
+	{
 		name: "the key's account can't push to the checkout",
 		run: () => connect({ pairing: refused(403, { error: "repository-forbidden" }) }),
 		says: ["can't push to octo-org/score", "run this command again"],
@@ -231,6 +239,7 @@ test("the setup guide's troubleshooting table names each of these messages", asy
 			"isn't a github.com repository",
 			"Can't reach Chopin at",
 			"Chopin refused the pairing key",
+			"isn't allowed to use this Chopin",
 			"can't push to",
 			"speaks connector protocol",
 			"didn't answer ACP initialize",

@@ -3,6 +3,7 @@ import { capabilities, ExperimentError, limits, sourceSchema } from "@chopin/exp
 import { publicInvestigation } from "@chopin/experiment/records";
 import type { Investigation, InvestigationProvenance } from "@chopin/experiment/records";
 import type { HostedAuth } from "../auth/routes";
+import { AdmissionDenied } from "../auth/admission";
 import { MachineError } from "../auth/machines";
 import type { GitHubTokenGrant } from "../github/client";
 import type { StoredMachine } from "../storage/model";
@@ -343,13 +344,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * Pair a machine with a key: approved at once as the key's owner, with automatic work off, and
 	 * a checkout only one the owner can push to, all as approving in the browser would. The key is
-	 * spent only once those checks pass.
+	 * spent only once those checks pass, or at once if its owner is no longer admitted here.
 	 */
 	async function keyed(key: string, input: z.infer<typeof pairingSchema>) {
 		let { userId, grant } = keys.peek(key);
 		let caller: Caller;
 		if (auth.machines.durable) {
 			if (!grant) fail("pairing-key-invalid");
+			// The allowed users and organizations, as now rather than as when the key was minted.
+			if (!await admitted(userId, grant.accessToken)) {
+				keys.take(key);
+				fail("pairing-account-forbidden");
+			}
 			caller = { userId, use: operation => operation(grant.accessToken) };
 		} else {
 			let session = await auth.sessions.forUser(userId);
@@ -375,6 +381,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			...(spent.grant && auth.machines.durable ? { grant: spent.grant } : {}),
 		});
 		return { token };
+	}
+	async function admitted(userId: string, token: string) {
+		try {
+			return (await auth.admission.user(token)).id === userId;
+		} catch (error) {
+			if (error instanceof AdmissionDenied) return false;
+			throw error;
+		}
 	}
 	/** Where the pairing page sends the person once the machine is paired. */
 	function landing(input: { repository?: string }) {

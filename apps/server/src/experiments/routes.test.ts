@@ -71,7 +71,13 @@ async function setup(
 	let bob = await sessions.issue("bob", grant);
 	/** The GitHub tokens repository checks were made with, most recent last. */
 	let checked: string[] = [];
+	/** Whose GitHub token each is, for the admission check a pairing key gets when it is used. */
+	let owners = new Map<string, string>();
 	let github = {
+		user: async (token: string) => {
+			let id = owners.get(token) ?? "alice";
+			return { id, login: id, avatarUrl: "" };
+		},
 		repositoryAccess: async (token: string, owner: string, name: string) => {
 			checked.push(token);
 			let push = name !== "readonly";
@@ -171,6 +177,7 @@ async function setup(
 	 * person's one sign-in here.
 	 */
 	function authorizeKeys(userId: string, accessToken = "ghu_key_1") {
+		owners.set(accessToken, userId);
 		auth.pairings.authorized!(userId, (userId === "bob" ? bob : alice).id, {
 			accessToken,
 			accessExpiresIn: 28_800,

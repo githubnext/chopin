@@ -20,6 +20,9 @@ const MESSAGES: Record<string, string> = {
 		+ `Run \`${SELF} pair\` to authorize it again.`,
 	"pairing-key-invalid": "Chopin refused the pairing key: it was used, replaced by a newer one, "
 		+ "or expired. Copy a new command from Machines → Add a machine in Chopin, then run it again.",
+	"pairing-account-forbidden": "The account that made the pairing key isn't allowed to use this "
+		+ "Chopin any more. Ask whoever runs it to let your GitHub account or organization in, then "
+		+ "copy a new command from Machines → Add a machine.",
 };
 
 const PAIRING_KEY = /^chopin_k_[A-Za-z0-9_-]{43}$/;
