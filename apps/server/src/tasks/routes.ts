@@ -24,6 +24,8 @@ type Options = {
 	liveBuild?: boolean;
 	/** Throws `machine-offline` naming the machine the person chose, else `no-workspace`. */
 	refuseOffline?: (owner: string, documentId: string) => Promise<never>;
+	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
+	machineChoices?: () => Promise<void>;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -64,8 +66,15 @@ async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
 	}
 }
 
-/** The machine the person chose for the document is offline; the message names it. */
-class MachineOffline extends Error {}
+/**
+ * The person's machine choice refuses the work: the machine they chose is offline (409), or their
+ * choice cannot be read right now (503). The message says which.
+ */
+class MachineRefused extends Error {
+	constructor(readonly code: string, message: string, readonly status: number) {
+		super(message);
+	}
+}
 
 /** A browser build runs on the clicker's own connection for the document's repository. */
 export function registerImplementationRoutes(router: Router, auth: HostedAuth, options: Options) {
@@ -87,8 +96,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		try {
 			return await handler(request, url, params);
 		} catch (error) {
-			if (error instanceof MachineOffline) {
-				return json({ error: "machine-offline", message: error.message }, 409);
+			if (error instanceof MachineRefused) {
+				return json({ error: error.code, message: error.message }, error.status);
 			}
 			if (error instanceof GitHubError) return json({ error: error.message }, error.status);
 			if (error instanceof AdmissionDenied) return json({ error: error.message }, 403);
@@ -149,15 +158,19 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 	}
 	/**
 	 * Refuse a Build that nothing can take: `machine-offline` naming the machine the person chose
-	 * for the document, never silently another, or else `no-workspace`.
+	 * for the document, never silently another, `machine-choice-unavailable` while that choice
+	 * cannot be read, or else `no-workspace`.
 	 */
 	async function unavailable(owner: string, repositoryId: string, id: string): Promise<void> {
-		if (options.connections.candidates(repositoryId, owner, id).length) return;
 		try {
+			await options.machineChoices?.();
+			if (options.connections.candidates(repositoryId, owner, id).length) return;
 			await options.refuseOffline?.(owner, id);
 		} catch (error) {
-			if (error instanceof Error && "code" in error && error.code === "machine-offline") {
-				throw new MachineOffline(error.message);
+			let code = (error as { code?: unknown } | undefined)?.code;
+			if (code === "machine-offline" || code === "machine-choice-unavailable") {
+				let message = (error as Error).message;
+				throw new MachineRefused(code, message, code === "machine-offline" ? 409 : 503);
 			}
 		}
 		throw new GitHubError("no-workspace", 409);

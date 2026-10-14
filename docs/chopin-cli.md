@@ -202,6 +202,9 @@ is yours alone and holds for that document until you change it:
 - If the machine you chose is offline, work fails with **build-box is
   offline** (your machine's name) instead of moving to another machine. Start
   `chopin connect` on it, or choose another one.
+- If Chopin can't read your choice (its database is briefly unavailable), work
+  fails with **Can't read your machine choice right now. Try again.** It never
+  falls back to another machine; once the choice can be read, it applies again.
 - Choosing **Automatic** goes back to Chopin's pick.
 
 Disconnecting a machine clears every choice of it.

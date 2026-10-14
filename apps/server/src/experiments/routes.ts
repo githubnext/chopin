@@ -69,6 +69,12 @@ export function offlineMessage(label = "The machine you chose") {
 	return `${label} is offline. Start chopin connect on it, or choose another machine.`;
 }
 
+/** What a person is told while their machine choices cannot be read; their work is refused. */
+export const CHOICE_UNAVAILABLE = "Can't read your machine choice right now. Try again.";
+/** Reads of the stored machine choices one request makes before refusing, and their spacing. */
+const CHOICE_READS = 3;
+const CHOICE_RETRY_MS = 100;
+
 const OSES = new Set(["linux", "darwin", "win32"]);
 const ARCHES = new Set(["x64", "arm64"]);
 const agentSchema = z.object({
@@ -208,12 +214,34 @@ function described(live: Connection[]) {
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
-	/** Stored machine choices, read once; every connection waits for them before taking work. */
-	let choicesLoaded = auth.storage.machines.choices().then(list => {
-		for (let value of list) connections.choose(value.channelId, value.userId, value.machineId);
-	}).catch(error => {
-		console.error("chopin: could not read machine choices -", error);
-	});
+	/**
+	 * The stored machine choices, read before any work is routed. A read that fails is retried a
+	 * few times, then refuses the work with `machine-choice-unavailable`; it is never taken to mean
+	 * nobody chose a machine. The next request, connection or sweep reads again.
+	 */
+	let reading: Promise<void> | undefined;
+	function readChoices(): Promise<void> {
+		if (connections.choicesRead) return Promise.resolve();
+		reading ??= (async () => {
+			for (let attempt = 1;; attempt++) {
+				try {
+					connections.restore(await auth.storage.machines.choices());
+					return;
+				} catch (error) {
+					if (attempt >= CHOICE_READS) {
+						console.error("chopin: could not read machine choices -", error);
+						fail("machine-choice-unavailable", CHOICE_UNAVAILABLE);
+					}
+					await Bun.sleep(CHOICE_RETRY_MS * attempt);
+				}
+			}
+		})().finally(() => {
+			reading = undefined;
+		});
+		return reading;
+	}
+	connections.unread();
+	void readChoices().catch(() => {});
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
 	auth.pairings.ended = sessionId => keys.ended(sessionId);
@@ -293,6 +321,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * connection is busy the work queues behind the first.
 	 */
 	async function choose(owner: string, repositoryId: string, documentId: string) {
+		await readChoices();
 		let live = connections.candidates(repositoryId, owner, documentId);
 		if (!live.length) await refuseOffline(owner, documentId);
 		for (let connection of live) if (!await busy(connection)) return connection;
@@ -300,9 +329,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * Nothing can take the work: `machine-offline`, naming the machine, when the person chose one,
-	 * else `no-workspace`. A chosen machine is never silently replaced by another.
+	 * else `no-workspace`; `machine-choice-unavailable` while their choice cannot be read. A chosen
+	 * machine is never silently replaced by another.
 	 */
 	async function refuseOffline(owner: string, documentId: string): Promise<never> {
+		await readChoices();
 		let chosen = connections.chosen(documentId, owner);
 		if (!chosen) fail("no-workspace");
 		fail("machine-offline", offlineMessage((await auth.storage.machines.get(chosen))?.label));
@@ -371,6 +402,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					},
 					code === "authentication-required"
 						|| code.startsWith("machine-") && code !== "machine-offline"
+							&& code !== "machine-choice-unavailable"
 						? 401
 						: code.includes("forbidden") || code === "pairing-key-invalid"
 						? 403
@@ -378,7 +410,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						? 404
 						: code === "pairing-key-rate-limited"
 						? 429
-						: code === "unavailable"
+						: code === "unavailable" || code === "machine-choice-unavailable"
 						? 503
 						: 409,
 				);
@@ -570,7 +602,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				...(input.branch ? { branch: input.branch } : {}),
 			});
 		}
-		await choicesLoaded;
+		// A connection is a good moment to read choices that could not be read before; its work
+		// waits for them either way.
+		await readChoices().catch(() => {});
 		connections.wake(repository.id);
 		options.connected?.(repository.id, machine.userId);
 		return json({
@@ -673,7 +707,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * for automatic), and the machine automatic would use now. Only ever the caller's own.
 	 */
 	async function machineChoice(userId: string, documentId: string, repositoryId: string) {
-		await choicesLoaded;
+		await readChoices();
 		let serving = (await auth.machines.list(userId)).filter(machine =>
 			machine.repositories.some(value => value.repositoryId === repositoryId)
 			|| connections.machine(machine.id).some(value => value.source.repositoryId === repositoryId)
@@ -730,6 +764,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			await body(request),
 		);
 		let userId = session.user.id;
+		// Choosing replaces a stored choice, so the stored ones must be known first.
+		await readChoices();
 		if (machine !== null) {
 			let current = await machineChoice(userId, channel.id, channel.repositoryId);
 			if (!current.machines.some(value => value.id === machine)) {
@@ -1287,6 +1323,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	async function sweep() {
 		connections.sweep();
+		// Automatic work (rebuilds, prototypes) resumes once the stored choices can be read.
+		await readChoices().catch(() => {});
 		keys.sweep();
 		await service.recover();
 		await options.implementations?.()?.sweep();
@@ -1316,5 +1354,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		}
 	}
-	return { service, connections, access, mutationAllowed, route, body, json, sweep, refuseOffline };
+	return {
+		service,
+		connections,
+		access,
+		mutationAllowed,
+		route,
+		body,
+		json,
+		sweep,
+		refuseOffline,
+		machineChoices: readChoices,
+	};
 }

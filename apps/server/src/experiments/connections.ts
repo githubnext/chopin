@@ -84,6 +84,8 @@ export class Connections {
 	#used = new Map<string, string>();
 	/** Each person's machine for a document, keyed by document and person; none is automatic. */
 	#choices = new Map<string, string>();
+	/** False from unread() until restore(): the stored choices could not be read yet. */
+	#choicesRead = true;
 	#locks = new Map<string, Promise<unknown>>();
 	/** What each machine's newest connection said about it, kept once it disconnects. */
 	#about = new Map<string, About>();
@@ -254,14 +256,33 @@ export class Connections {
 		/** Null asks what automatic would pick, whatever the person chose. */
 		chosen: string | null | undefined = this.chosen(documentId, owner),
 	) {
+		// Until the stored choices are read, nobody knows which machine may take the work.
+		if (!this.#choicesRead && chosen !== null) return [];
 		let last = this.#used.get(documentId);
 		return this.list(repositoryId, owner).filter(value => !chosen || value.machineId === chosen)
 			.sort((a, b) => Number(b.id === last) - Number(a.id === last));
 	}
 	/** Whether a connection may take its owner's work on `documentId`, as candidates() decides. */
 	allows(documentId: string, connection: Connection) {
+		if (!this.#choicesRead) return false;
 		let chosen = this.chosen(documentId, connection.owner);
 		return chosen === undefined || connection.machineId === chosen;
+	}
+	/**
+	 * Whether the stored choices have been read. Until they are, no connection takes anyone's
+	 * work: a choice that cannot be read is never taken for automatic.
+	 */
+	get choicesRead() {
+		return this.#choicesRead;
+	}
+	/** The stored choices are not read yet; work waits for restore(). */
+	unread() {
+		this.#choicesRead = false;
+	}
+	/** The stored choices, read; work may be routed again. */
+	restore(choices: { channelId: string; userId: string; machineId: string }[]) {
+		for (let value of choices) this.choose(value.channelId, value.userId, value.machineId);
+		this.#choicesRead = true;
 	}
 	/** The machine `owner` chose for `documentId`, or undefined for automatic. */
 	chosen(documentId: string, owner: string) {

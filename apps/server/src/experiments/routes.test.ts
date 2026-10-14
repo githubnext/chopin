@@ -1634,3 +1634,61 @@ test("a person chooses which of their machines runs a document's work, and back 
 		laptop.machine,
 	);
 });
+
+test("a machine choice that cannot be read refuses the document's work, never another machine", async () => {
+	let first = await setup();
+	let a = await first.pair(first.alice.cookie);
+	let b = await first.pair(first.alice.cookie);
+	let documentId = first.documentId;
+	let path = `/api/documents/${documentId}/machine`;
+	expect((await first.request(path, { machine: a.machine }, first.alice.cookie)).status).toBe(200);
+	// The server restarts while machine_choices is locked: every read times out (PostgreSQL 57014).
+	let machines = first.storage.machines;
+	let read = machines.choices.bind(machines);
+	let fault = { locked: true, reads: 0 };
+	machines.choices = async () => {
+		fault.reads++;
+		if (fault.locked) throw new Error("canceling statement due to statement timeout");
+		return read();
+	};
+	let restarted = await setup({ storage: first.storage, lease: first.lease });
+	let { alice, request, runtime } = restarted;
+	// Only machine B is connected; machine A, the one chosen, is offline.
+	let onB = await (await restarted.open(b.machineToken)).json();
+	let unreadable = {
+		error: "machine-choice-unavailable",
+		message: "Can't read your machine choice right now. Try again.",
+	};
+	let shown = await request(path, undefined, alice.cookie);
+	expect(shown.status).toBe(503);
+	expect(await shown.json()).toEqual(unreadable);
+	// Choosing needs the stored choices too.
+	expect((await request(path, { machine: b.machine }, alice.cookie)).status).toBe(503);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	let runPath = `/api/documents/${documentId}/experiments/${id}/run`;
+	let before = fault.reads;
+	let refused = await request(runPath, {}, alice.cookie);
+	expect(refused.status).toBe(503);
+	expect(await refused.json()).toEqual(unreadable);
+	// A short, bounded retry for the request, not a stall.
+	expect(fault.reads - before).toBeGreaterThan(1);
+	expect(fault.reads - before).toBeLessThanOrEqual(3);
+	// Nothing reached machine B, and automatic work (rebuilds, prototypes) does not pick it.
+	expect((await runtime.service.store.get(id))?.connectionId).toBeUndefined();
+	let connection = runtime.connections.get(onB.connection.id)!;
+	expect(runtime.connections.allows(documentId, connection)).toBe(false);
+	expect(runtime.connections.candidates("repo", "alice", documentId)).toEqual([]);
+
+	// Once the choices can be read again, machine A applies: offline, so B still gets nothing.
+	fault.locked = false;
+	let recovered = await (await request(path, undefined, alice.cookie)).json();
+	expect(recovered.choice).toBe(a.machine);
+	let offline = await request(runPath, {}, alice.cookie);
+	expect(offline.status).toBe(409);
+	expect((await offline.json()).error).toBe("machine-offline");
+	expect(runtime.connections.allows(documentId, connection)).toBe(false);
+	let onA = await (await restarted.open(a.machineToken)).json();
+	expect((await request(runPath, {}, alice.cookie)).status).toBe(200);
+	expect((await runtime.service.store.get(id))?.connectionId).toBe(onA.connection.id);
+});

@@ -91,9 +91,23 @@ async function prepare(plan: Plan.Plan) {
 }
 
 async function setup(
-	options: { liveBuild?: boolean; assess?: (id: string, revision: number) => void } = {},
+	options: {
+		liveBuild?: boolean;
+		assess?: (id: string, revision: number) => void;
+		/** While set, reading the stored machine choices fails, as a locked table does. */
+		unreadable?: { locked: boolean };
+	} = {},
 ) {
 	let context = await openPlan("# Launcher plan\n");
+	let unreadable = options.unreadable;
+	if (unreadable) {
+		let machines = context.storage.machines;
+		let read = machines.choices.bind(machines);
+		machines.choices = async () => {
+			if (unreadable.locked) throw new Error("canceling statement due to statement timeout");
+			return read();
+		};
+	}
 	let github = {
 		async user(token: string) {
 			return { id: token === "other" ? "U_other" : "U_test", login: "test", avatarUrl: "" };
@@ -166,6 +180,7 @@ async function setup(
 		liveBuild: options.liveBuild ?? false,
 		connections: experiments.connections,
 		refuseOffline: experiments.refuseOffline,
+		machineChoices: experiments.machineChoices,
 		busy: async connectionId =>
 			(await experiments.service.store.active()).some(item =>
 				item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
@@ -1741,6 +1756,39 @@ test("an automatic rebuild follows the builder's machine choice", async () => {
 		expect((await queueRebuild(context.plan, connections, { automatic: true })).kind).toBe(
 			"queued",
 		);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("Build is refused while the person's machine choice cannot be read, then uses it", async () => {
+	let unreadable = { locked: false };
+	let context = await setup({ unreadable });
+	try {
+		let first = await paired(context);
+		let chosen = await paired(context);
+		await context.call(`/api/connector/machines/${chosen.machine}/label`, { label: "build-box" });
+		let path = `/api/documents/${context.plan.id}/machine`;
+		expect((await context.call(path, { machine: chosen.machine })).status).toBe(200);
+		await tool(context, chosen.token, "disconnect_workspace");
+		// The server restarts and machine_choices cannot be read; only the other machine is online.
+		unreadable.locked = true;
+		context.experiments.connections.unread();
+		let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+		let refused = await context.call(context.path, review);
+		expect(refused.status).toBe(503);
+		expect(await refused.json()).toEqual({
+			error: "machine-choice-unavailable",
+			message: "Can't read your machine choice right now. Try again.",
+		});
+		expect(context.plan.builds).toEqual([]);
+		expect(context.experiments.connections.allows(context.plan.id, first.connection)).toBe(false);
+		// Readable again, the choice applies: build-box is offline, so the first machine gets nothing.
+		unreadable.locked = false;
+		let offline = await context.call(context.path, review);
+		expect(offline.status).toBe(409);
+		expect((await offline.json()).error).toBe("machine-offline");
+		expect(context.plan.builds).toEqual([]);
 	} finally {
 		await Plan.close(context.plan);
 	}
