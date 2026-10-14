@@ -2,7 +2,12 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENTS } from "./agents";
-import { agentArguments } from "./setup-commands";
+import {
+	agentArguments,
+	SETUP_GUIDE,
+	SETUP_GUIDE_AGENTS,
+	SETUP_GUIDE_TROUBLESHOOTING,
+} from "./setup-commands";
 
 import type { CodingAgent } from "./agents";
 
@@ -63,4 +68,21 @@ test("the setup guide's agent table matches the agent list", async () => {
 
 test("the README's agent table matches the agent list", async () => {
 	expect(await documented("README.md")).toBe(readmeTable());
+});
+
+/** The anchors GitHub gives a Markdown file's headings: lower case, punctuation gone, dashes. */
+async function anchors(path: string): Promise<string[]> {
+	let text = await readFile(join(ROOT, path), "utf8");
+	return [...text.matchAll(/^#{1,6} (.+)$/gm)].map(([, heading]) =>
+		heading!.trim().toLowerCase().replace(/[^\w\- ]/g, "").replaceAll(" ", "-")
+	);
+}
+
+test("the setup guide sections the Machines page links to are headings in the guide", async () => {
+	let headings = await anchors("docs/chopin-cli.md");
+	for (let link of [SETUP_GUIDE_AGENTS, SETUP_GUIDE_TROUBLESHOOTING]) {
+		let [page, anchor] = link.split("#");
+		expect(page).toBe(SETUP_GUIDE);
+		expect(headings).toContain(anchor!);
+	}
 });

@@ -83,9 +83,9 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect(steps).toHaveCount(5);
 	// The browser's own system is chosen first; either can be picked. Each command keeps its own
 	// line breaks, each with the shell's continuation.
-	let install = steps.nth(0).locator("code");
-	let agentSteps = steps.nth(1).locator("code");
-	let command = steps.nth(2).locator("code");
+	let install = steps.nth(0).locator("pre code");
+	let agentSteps = steps.nth(1).locator("pre code");
+	let command = steps.nth(2).locator("pre code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
@@ -95,20 +95,39 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 	// The connect step says it installs the background service, and the next that it takes over.
-	await expect(steps.nth(2).locator("p")).toHaveText(
+	await expect(steps.nth(2).locator("p").first()).toHaveText(
 		"In a checkout of your repository, run this. It pairs the machine and installs a background service, so it keeps running after you close the terminal or SSH.",
 	);
 	await expect(steps.nth(3).locator("p")).toHaveText(
 		"Open the link it prints, check that the code matches, and choose Connect. GitHub may ask you to authorize the machine first. Then the service takes over; chopin status shows it.",
 	);
+	await expect(steps.nth(3).locator("code")).toHaveText("chopin status");
 
 	// GitHub Copilot CLI is picked first. Picking another coding agent changes only its install and
 	// connect steps, and says what to know about it; the pick outlasts a reload.
 	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
 	await expect(picker).toHaveValue("copilot");
+	await expect(picker).toHaveAccessibleDescription("Tested with Chopin.");
+	// The list puts the agents Chopin has been tried with first.
+	expect(
+		await picker.locator("optgroup").evaluateAll(groups =>
+			groups.map(group => [
+				group.getAttribute("label"),
+				[...group.querySelectorAll("option")].map(option => option.textContent),
+			])
+		),
+	).toEqual([
+		["Tested with Chopin", ["GitHub Copilot CLI", "Atomic"]],
+		["Not yet tested", ["Claude Code", "OpenAI Codex", "Gemini CLI"]],
+	]);
 	await expect(steps.nth(1)).toContainText("Install GitHub Copilot CLI and sign in.");
 	await expect.poll(() => agentSteps.innerText()).toBe(
 		agentCommand(findAgent("copilot"), "powershell"),
+	);
+	// Under the connect command, what its approval flag lets the agent do, and why.
+	let approval = steps.nth(2).locator(".machines-detail");
+	await expect(approval).toHaveText(
+		"--allow-all lets GitHub Copilot CLI use its tools without asking, because nobody can answer a prompt in the background.",
 	);
 	await picker.selectOption({ label: "Atomic" });
 	await expect(steps.nth(1)).toContainText("Install Atomic and sign in.");
@@ -118,14 +137,20 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "powershell", findAgent("atomic")));
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
-	// Claude Code asks in the terminal, so it runs there instead of as the service: one note says
-	// why, and the steps don't mention the service.
-	await picker.selectOption({ label: "Claude Code" });
-	await expect(picker).toHaveAccessibleDescription(
-		"Not yet tested with Chopin. Claude Code asks for permission in the terminal, so it runs there instead of as a service. Keep that terminal open.",
+	await expect(approval).toHaveText(
+		"Atomic doesn't ask before it uses its tools, so nothing waits on a prompt in the background.",
 	);
-	await expect(steps.nth(2).locator("p"))
+	// Claude Code asks in the terminal, so it runs there instead of as the service: the connect
+	// step says to leave that terminal open, and the steps don't mention the service.
+	await picker.selectOption({ label: "Claude Code" });
+	await expect(picker).toHaveAccessibleDescription("Not yet tested with Chopin.");
+	await expect(steps.nth(2).locator("p").first())
 		.toHaveText("In a checkout of your repository, connect this machine.");
+	await expect(steps.nth(2).locator("p").last()).toHaveText(
+		"Leave this terminal open: Claude Code asks for permission here, so closing it disconnects the machine. Coding agents in the setup guide has the setting that lets it run as a service.",
+	);
+	await expect(steps.nth(2).getByRole("link", { name: "Coding agents", exact: true }))
+		.toHaveAttribute("href", /docs\/chopin-cli\.md#coding-agents$/);
 	await expect(steps.nth(3)).not.toContainText("service");
 	await page.reload();
 	await expect(picker).toHaveValue("claude-code");
@@ -133,7 +158,7 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "sh", findAgent("claude-code")));
 	await picker.selectOption({ label: "GitHub Copilot CLI" });
-	await expect(picker).not.toHaveAttribute("aria-describedby");
+	await expect(picker).toHaveAccessibleDescription("Tested with Chopin.");
 
 	let machine = await connector(baseURL!);
 	try {

@@ -106,15 +106,16 @@
 		font-weight: 500;
 	}
 
+	/* The compact control height, level with the system toggle beside it. */
 	& select {
 		min-width: 0;
-		height: calc(var(--spacing) * 7);
+		height: var(--control-height-compact);
 		padding-inline: calc(var(--spacing) * 2);
 		font-size: var(--text-sm);
 	}
 }
 
-/* What to know about the picked agent before running its commands: quiet, under the picker. */
+/* Whether Chopin has been tried with the picked agent: quiet, under the picker, one line for each. */
 .machines-agent-note {
 	display: flex;
 	flex-basis: 100%;
@@ -175,10 +176,16 @@
 		font-weight: 500;
 	}
 
-	& p {
+	/* Low specificity, so the spacing between a step's parts still reaches a paragraph. */
+	& :where(p) {
 		margin-block: 0;
 		max-width: 65ch;
 		text-wrap: pretty;
+	}
+
+	/* A note on a command runs as wide as its well. */
+	& .machines-command + .machines-detail {
+		max-width: none;
 	}
 }
 
@@ -259,12 +266,19 @@
 		white-space: pre;
 	}
 
+	/* Room for the tallest command of its kind, where the well asks for it. */
 	& code {
+		display: block;
+		min-height: calc(var(--machines-command-rows, 0) * 1lh);
 		color: var(--color-text-primary);
 		font-family: var(--font-mono);
 		font-size: var(--text-xs);
 		line-height: var(--text-xs--line-height);
 		user-select: all;
+	}
+
+	& .machines-command-line {
+		display: block;
 	}
 
 	& .btn {
@@ -278,6 +292,12 @@
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 	text-wrap: pretty;
+}
+
+/* A command or flag named in a sentence, at the sentence's size. */
+.machines-steps p code {
+	color: var(--color-text-primary);
+	font-family: var(--font-mono);
 }
 
 .machines-setup a,
@@ -611,6 +631,23 @@
 		& input {
 			translate: none;
 		}
+	}
+}
+
+/*
+ * On a phone a command wraps instead of scrolling, as code in a document does. Each of its lines
+ * hangs, so a wrapped part sits deeper than the two-space continuation lines and never reads as a
+ * line of its own. What Copy takes is unchanged.
+ */
+:root[data-phone] .machines-command {
+	& pre {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	& .machines-command-line {
+		padding-inline-start: 4ch;
+		text-indent: -4ch;
 	}
 }
 
