@@ -166,15 +166,17 @@ export function processStart(
 /**
  * Hold a checkout for this process. The lock names the process, when it started, the checkout
  * and the chopin that holds it, so `chopin status` can list the connectors running for a state
- * directory; `service` marks the one the installed service runs, and `planners` names the
- * documents whose Planner backends it runs. The lock holds no credential.
+ * directory; `service` marks the one the installed service runs, `planners` names the
+ * documents whose Planner backends it runs, and `plannerCommand` says it has a Planner command, so
+ * it can run the Planner of a document that chooses this machine. The lock holds no credential.
  */
 export async function lockWorkspace(
 	root: string,
 	directory: string,
-	{ service = false, planners = [], probe = processStart() }: {
+	{ service = false, planners = [], plannerCommand = false, probe = processStart() }: {
 		service?: boolean;
 		planners?: string[];
+		plannerCommand?: boolean;
 		probe?: StartProbe;
 	} = {},
 ) {
@@ -207,11 +209,13 @@ export async function lockWorkspace(
 		started: Date.now(),
 		...(service ? { service } : {}),
 		...(planners.length ? { planners } : {}),
+		...(plannerCommand ? { plannerCommand } : {}),
 	}));
 	return async () => {
 		await file.close();
 		await rm(path, { force: true });
 		await rm(path.replace(/\.lock$/, ".failures.json"), { force: true });
+		await rm(path.replace(/\.lock$/, ".chosen.json"), { force: true });
 	};
 }
 
@@ -269,6 +273,28 @@ export function startFailures(directory: string, root: string) {
 
 export type StartFailures = ReturnType<typeof startFailures>;
 
+/**
+ * The documents whose Planners a connector runs because they chose this machine in Chopin, by URL,
+ * kept for `chopin status` in a file beside the checkout's lock. `record` replaces the list.
+ */
+export function chosenPlanners(directory: string, root: string) {
+	let path = join(directory, `${lockId(root)}.chosen.json`);
+	// A connector that crashed may have left its list behind.
+	let writing = rm(path, { force: true }).catch(() => {});
+	return {
+		record(documents: string[]) {
+			writing = writing.then(() =>
+				documents.length
+					? writeFile(path, JSON.stringify(documents), { mode: 0o600 })
+					: rm(path, { force: true })
+			).catch(() => {});
+			return writing;
+		},
+	};
+}
+
+export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
+
 /** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
 function gone(pid: number) {
 	try {
@@ -320,6 +346,10 @@ export type RunningConnector = {
 	service: boolean;
 	/** The documents whose Planner backends it runs, when it runs any. */
 	planners?: string[];
+	/** It has a Planner command, so it can run the Planner of a document that chooses this machine. */
+	plannerCommand?: boolean;
+	/** The documents whose Planners it runs because they chose this machine in Chopin, by URL. */
+	chosen?: string[];
 	/** The chopin version and protocol it runs, absent from a lock written before they were. */
 	version?: string;
 	protocol?: number;
@@ -353,6 +383,11 @@ export async function connectors(
 				.then(text => JSON.parse(text) as StartFailure[])
 				.catch(() => undefined)
 			: undefined;
+		let chosen: unknown = running
+			? await readFile(join(directory, name.replace(/\.lock$/, ".chosen.json")), "utf8")
+				.then(text => JSON.parse(text))
+				.catch(() => undefined)
+			: undefined;
 		found.push({
 			pid: pid as number,
 			root,
@@ -361,6 +396,11 @@ export async function connectors(
 			...(Array.isArray(planners) && planners.length
 					&& planners.every(document => typeof document === "string")
 				? { planners: planners as string[] }
+				: {}),
+			...(held.plannerCommand === true ? { plannerCommand: true } : {}),
+			...(Array.isArray(chosen) && chosen.length
+					&& chosen.every(document => typeof document === "string")
+				? { chosen: chosen as string[] }
 				: {}),
 			...(typeof version === "string" ? { version } : {}),
 			...(typeof protocol === "number" ? { protocol } : {}),

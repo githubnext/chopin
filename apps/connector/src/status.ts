@@ -52,6 +52,10 @@ export type StatusReport = {
 		started?: string;
 		/** The documents whose Planner backends it runs, as its lock records them. */
 		planners?: string[];
+		/** It has a Planner command, so it can run the Planner of a document that chooses this machine. */
+		canRunPlanners?: true;
+		/** The documents, by URL, whose Planners it runs because they chose this machine in Chopin. */
+		chosenPlanners?: string[];
 		/**
 		 * The latest failure to start of its agent and of each Planner backend, while it runs:
 		 * `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`,
@@ -154,6 +158,8 @@ export async function collectStatus(options: {
 			...(item.version ? { version: item.version } : {}),
 			...(item.started ? { started: new Date(item.started).toISOString() } : {}),
 			...(item.planners ? { planners: item.planners } : {}),
+			...(item.plannerCommand ? { canRunPlanners: true as const } : {}),
+			...(item.chosen ? { chosenPlanners: item.chosen } : {}),
 			...(item.failures
 				? {
 					failures: item.failures.map(({ at, retryAt, ...failure }) => ({
@@ -189,6 +195,8 @@ function more(value: string) {
 function describe(settings: ConnectSettings) {
 	let planners = settings.planners.length
 		? ` and Planners for ${settings.planners.join(", ")}`
+		: settings.plannerCommand?.length
+		? " and the Planners of documents that choose this machine"
 		: "";
 	return `${settings.checkout} with ${
 		settings.command.join(" ")
@@ -231,9 +239,18 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					item.version ? `, chopin ${item.version}` : ""
 				}${item.service ? ", the service" : ""})`,
 				...(agent ? [`  Agent${failing(agent, now)}`] : []),
+				...(item.canRunPlanners
+					? ["  Can run Planners for documents that choose this machine"]
+					: []),
 				...(item.planners ?? []).map(document => {
 					let failure = planner(document);
 					return `  Planner for ${document}${failure ? failing(failure, now) : ""}`;
+				}),
+				...(item.chosenPlanners ?? []).map(document => {
+					let failure = planner(document);
+					return `  Planner for ${document} (chosen in Chopin)${
+						failure ? failing(failure, now) : ""
+					}`;
 				}),
 			]
 			: [

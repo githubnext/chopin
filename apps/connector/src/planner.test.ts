@@ -753,6 +753,7 @@ test.skipIf(process.platform === "win32")(
 						document: { id: "D_1", url: document },
 					});
 				}
+				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
 				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
 				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
 					capabilities: { tools: {} },
@@ -791,6 +792,17 @@ test.skipIf(process.platform === "win32")(
 		let log = join(directory, "launches.jsonl");
 		await writeFile(script, STAYING_BACKEND);
 		let root = await checkout();
+		let state = await mkdtemp(join(scratch, "state-"));
+		let host: ServiceHost = {
+			platform: "linux",
+			home: directory,
+			user: "ada",
+			uid: 501,
+			env: {},
+			run: async () => ({ code: 1, stdout: "", stderr: "" }),
+		};
+		let status = () =>
+			collectStatus({ directory: state, server: origin, source: "config", host, timeoutMs: 500 });
 		let connector = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
@@ -805,7 +817,7 @@ test.skipIf(process.platform === "win32")(
 			env: {
 				...process.env,
 				CHOPIN_URL: origin,
-				CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+				CHOPIN_CONNECTOR_STATE_DIR: state,
 			},
 			stdout: "pipe",
 			stderr: "pipe",
@@ -822,6 +834,20 @@ test.skipIf(process.platform === "win32")(
 			let [launched] = await entries(log);
 			await until(async () => polls.length >= 2, 5_000);
 			expect(polls.slice(0, 2)).toEqual([[], ["D_1"]]);
+			// chopin status lists it beside any --planner one, and says the machine can run Planners.
+			await until(async () => !!(await status()).connectors[0]?.chosenPlanners, 5_000);
+			let report = await status();
+			expect(report.connectors[0]).toMatchObject({
+				running: true,
+				canRunPlanners: true,
+				chosenPlanners: [document],
+			});
+			expect(report.connectors[0]!.planners).toBeUndefined();
+			let text = formatStatus(report);
+			expect(text).toContain(
+				"              Can run Planners for documents that choose this machine",
+			);
+			expect(text).toContain(`              Planner for ${document} (chosen in Chopin)`);
 
 			release.resolve();
 			await until(async () => (await entries(log)).some(entry => entry.stopped), 10_000);
@@ -830,6 +856,8 @@ test.skipIf(process.platform === "win32")(
 			}]);
 			await until(async () => polls.length >= 3, 5_000);
 			expect(polls[2]).toEqual([]);
+			await until(async () => !(await status()).connectors[0]?.chosenPlanners, 5_000);
+			expect(formatStatus(await status()).join("\n")).not.toContain("(chosen in Chopin)");
 			// Not started again once Chopin stopped asking.
 			await Bun.sleep(1_500);
 			expect((await entries(log)).filter(entry => entry.pid)).toHaveLength(1);

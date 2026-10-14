@@ -44,7 +44,14 @@ import {
 import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { VERSION } from "./version";
-import { connectors, lockWorkspace, startFailures, stateDirectory, workspace } from "./workspace";
+import {
+	chosenPlanners,
+	connectors,
+	lockWorkspace,
+	startFailures,
+	stateDirectory,
+	workspace,
+} from "./workspace";
 
 const DEFAULT_URL = "https://chopin.githubnext.com";
 
@@ -476,8 +483,13 @@ export async function connect(
 			);
 		}
 	}
-	let release = await lockWorkspace(info.root, directory, { service, planners: plannerDocuments });
+	let release = await lockWorkspace(info.root, directory, {
+		service,
+		planners: plannerDocuments,
+		plannerCommand: plannerCommand.length > 0,
+	});
 	let failures = startFailures(directory, info.root);
+	let chosen = chosenPlanners(directory, info.root);
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -540,7 +552,9 @@ export async function connect(
 			};
 			let planning = servePlanners(backends);
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.
-			let dispatched = plannerCommand.length ? dispatchedPlanners(backends) : undefined;
+			let dispatched = plannerCommand.length
+				? dispatchedPlanners({ ...backends, chosen })
+				: undefined;
 			try {
 				await serveWork({
 					// Every connection registers anew with the machine token: a connection token lasts only

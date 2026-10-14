@@ -368,6 +368,17 @@ Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
 A Planner that Chopin refused for good, such as one for a deleted document,
 shows `stopped:` and the reason instead of `failing`.
 
+A connector started with `--planner-command` says it can run Planners, and
+lists each Planner it runs because a document chose this machine in Chopin
+beside the `--planner` ones (`canRunPlanners` and `chosenPlanners` in
+`--json`):
+
+```text
+Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.6)
+              Can run Planners for documents that choose this machine
+              Planner for https://your-chopin-instance.example/octo-org/score/plan (chosen in Chopin)
+```
+
 `chopin status` asks Chopin whether it still accepts this machine. It never
 pairs, connects or changes anything.
 

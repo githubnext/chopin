@@ -5,7 +5,7 @@ import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
-import type { StartFailures } from "./workspace";
+import type { ChosenPlanners, StartFailures } from "./workspace";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -78,7 +78,7 @@ export async function servePlanners(options: {
  * starts a backend, as `servePlanners` does, for each document new to the list and stops each
  * one no longer on it, saying so in chopin's output. `running` names the documents asked for, by
  * id, for the next Planner poll. A document `--planner` already runs is never started twice.
- * `stop` stops them all.
+ * `chosen` keeps the documents it started, for `chopin status`. `stop` stops them all.
  */
 export function dispatchedPlanners(options: {
 	url: string;
@@ -90,6 +90,7 @@ export function dispatchedPlanners(options: {
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
+	chosen?: ChosenPlanners;
 	env?: Record<string, string>;
 	healthyMs?: number;
 }) {
@@ -126,11 +127,15 @@ export function dispatchedPlanners(options: {
 					});
 				running.set(id, { url: planner.url, own: mine, stop, served });
 			}
+			void options.chosen?.record(
+				[...running.values()].filter(backend => !backend.own).map(backend => backend.url),
+			);
 		},
 		async stop() {
 			for (let backend of running.values()) backend.stop.abort();
 			await Promise.all([...running.values()].map(backend => backend.served));
 			running.clear();
+			await options.chosen?.record([]);
 		},
 	};
 }
