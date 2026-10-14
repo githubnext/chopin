@@ -22,7 +22,7 @@ export type Connection = {
 	autoRun?: boolean;
 	/** The chopin release that opened it, when it said; known only while it is connected. */
 	version?: string;
-	/** What the connector said about its machine as it connected, and where it connected from. */
+	/** What the connector said about its machine as it connected. */
 	about?: About;
 };
 
@@ -33,7 +33,6 @@ export type About = {
 	service?: boolean;
 	planner?: boolean;
 	agent?: { name: string; version?: string };
-	address?: string;
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
 export type Approval = {

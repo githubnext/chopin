@@ -27,8 +27,6 @@ import { documentUrl } from "../channels/document-url";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
 import type { About, Connection } from "./connections";
-import { clientAddress, trustedProxies } from "../http/client-address";
-import type { TrustedProxies } from "../http/client-address";
 import { PairingKeys } from "./pairing-keys";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
@@ -62,8 +60,6 @@ type Options = {
 	connectorVersion?: string;
 	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
 	planners?: MachinePlanners;
-	/** Proxies whose X-Forwarded-For names the client (TRUSTED_PROXIES); none by default. */
-	trustedProxies?: TrustedProxies;
 };
 
 const OSES = new Set(["linux", "darwin", "win32"]);
@@ -74,7 +70,7 @@ const agentSchema = z.object({
 }).strict();
 
 /** What a connector says about its machine as it connects; anything unexpected is dropped. */
-function aboutMachine(request: Request, address: string | undefined): About {
+function aboutMachine(request: Request): About {
 	let header = (name: string) => request.headers.get(name) ?? undefined;
 	let hostname = header(CONNECTOR_HOST_HEADER);
 	let [os, arch, extra] = (header(CONNECTOR_PLATFORM_HEADER) ?? "").split(" ");
@@ -88,7 +84,6 @@ function aboutMachine(request: Request, address: string | undefined): About {
 		service: header(CONNECTOR_SERVICE_HEADER) === "1",
 		planner: header(CONNECTOR_PLANNER_HEADER) === "1",
 		...(agent.success ? { agent: agent.data } : {}),
-		...(address ? { address } : {}),
 	};
 }
 const label = z.string().trim().min(1).max(100);
@@ -199,7 +194,6 @@ function described(live: Connection[]) {
 		hostname: about.hostname ?? null,
 		platform: about.platform ?? null,
 		agent: live.map(value => value.about?.agent).findLast(Boolean) ?? null,
-		address: about.address ?? null,
 		service: live.some(value => value.about?.service),
 		planner: live.some(value => value.about?.planner),
 	};
@@ -207,7 +201,6 @@ function described(live: Connection[]) {
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
-	let trusted = options.trustedProxies ?? trustedProxies(undefined);
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
 	auth.pairings.ended = sessionId => keys.ended(sessionId);
@@ -542,7 +535,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			},
 			label,
 			{ ...checkout, repositoryId: repository.id },
-			aboutMachine(request, clientAddress(request, trusted)),
+			aboutMachine(request),
 		);
 		await auth.machines.seen(machine);
 		connections.wake(repository.id);

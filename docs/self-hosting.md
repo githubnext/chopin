@@ -374,33 +374,6 @@ the image.
 | `JEV_TIMEOUT_MS`               | `30000`                 | Per-request interpretation timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `JEV_API_KEY`                  | required when enabled   | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on` or `PLANNER_VISUALS=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `CONNECTOR_VERSION`            | the bundled connector's | The `chopin` release this server recommends: `chopin update` installs it by default, and a refused connector is told to run `chopin update <version>` with it. Defaults to the version in `apps/connector/package.json`. A `cli-v` or `v` prefix is dropped; anything but a version like `0.2.0` fails startup.                                                                                                                                                                                                                                                                                                                                          |
-| `TRUSTED_PROXIES`              | unset                   | Comma-separated IPs or CIDRs (IPv4 or IPv6) of the reverse proxies in front of Chopin. Only a request whose socket peer is one of them has its `X-Forwarded-For` read, right to left, to the first address that isn't; malformed entries are ignored. Unset, the socket's address is the client's. See [The address a machine connects from](#the-address-a-machine-connects-from).                                                                                                                                                                                                                                                                      |
-
-### The address a machine connects from
-
-The Machines page shows each machine's owner the public address it connected
-from, and nobody else. Chopin reads it from the connection's socket. Behind a
-reverse proxy that socket is the proxy's, so set `TRUSTED_PROXIES` to the
-proxy's addresses: Chopin then takes the client from `X-Forwarded-For`, read
-from the right past every trusted hop, and ignores what a client wrote to the
-left of it. A request from any other peer has its `X-Forwarded-For` ignored.
-
-For Caddy in front of the Chopin container on a Docker bridge network:
-
-```caddyfile
-chopin.example.com {
-	reverse_proxy chopin:8787
-}
-```
-
-```sh
-TRUSTED_PROXIES=172.16.0.0/12
-```
-
-Caddy puts the address it saw last in `X-Forwarded-For` (on its own, it
-discards what a client sent there), and Docker's bridge networks are in
-`172.16.0.0/12` by default; use the subnet `docker network inspect` shows if
-yours differs.
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.

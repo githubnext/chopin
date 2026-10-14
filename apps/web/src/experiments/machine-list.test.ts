@@ -17,7 +17,6 @@ const base: Machine = {
 	hostname: null,
 	platform: null,
 	agent: null,
-	address: null,
 	service: false,
 	planner: false,
 };
@@ -38,16 +37,15 @@ test("platforms read as people name them", () => {
 	expect(platformName(null)).toBeUndefined();
 });
 
-test("search finds a machine by name, owner, repository, version, host, address, agent or system", () => {
+test("search finds a machine by name, owner, repository, version, host, agent or system", () => {
 	let machine: Machine = {
 		...base,
 		version: "0.0.5",
 		hostname: "build-box.local",
-		address: "203.0.113.9",
 		platform: { os: "darwin", arch: "arm64" },
 		agent: { name: "GitHub Copilot CLI", version: "1.0.97" },
 	};
-	for (let query of ["BUILD", "ada", "site", "0.0.5", ".local", "203.0", "copilot", "macos", ""]) {
+	for (let query of ["BUILD", "ada", "site", "0.0.5", ".local", "copilot", "macos", ""]) {
 		expect(machineMatches(machine, query, "ada"), query).toBe(true);
 	}
 	expect(machineMatches(machine, "windows", "ada")).toBe(false);

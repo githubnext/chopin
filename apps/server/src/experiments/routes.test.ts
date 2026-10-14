@@ -33,9 +33,6 @@ function error(value: { result: { isError?: boolean; content: Array<{ text: stri
 }
 
 /** What a current connector sends with every request; browser routes ignore it. */
-import { peerAddress, trustedProxies } from "../http/client-address";
-import type { TrustedProxies } from "../http/client-address";
-
 const CURRENT = {
 	[CONNECTOR_VERSION_HEADER]: "dev",
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
@@ -47,7 +44,6 @@ async function setup(
 		implementations?: () => ImplementationConnector | undefined;
 		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
 		durable?: boolean;
-		trustedProxies?: TrustedProxies;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -751,10 +747,8 @@ test(
 	30_000,
 );
 
-test("a connection tells the owner its machine's host, platform, agent and address", async () => {
-	let { alice, bob, router, request, pair, config } = await setup(undefined, {
-		trustedProxies: trustedProxies("172.16.0.0/12"),
-	});
+test("a connection tells the owner its machine's host, platform and agent", async () => {
+	let { alice, bob, router, request, pair, config } = await setup();
 	let paired = await pair(alice.cookie);
 	let listed = async (cookie = alice.cookie) =>
 		(await (await request("/api/connector/machines", undefined, cookie)).json()).machines;
@@ -763,7 +757,6 @@ test("a connection tells the owner its machine's host, platform, agent and addre
 		hostname: null,
 		platform: null,
 		agent: null,
-		address: null,
 		service: false,
 		planner: false,
 	});
@@ -778,20 +771,19 @@ test("a connection tells the owner its machine's host, platform, agent and addre
 			[CONNECTOR_SERVICE_HEADER]: "1",
 			[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
 			[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
-			"x-forwarded-for": "6.6.6.6, 203.0.113.9",
 		},
 		body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
 	});
-	peerAddress(connect, "::ffff:172.18.0.2");
 	let opened = await (await router.handle(connect, new URL(connect.url)))!.json();
 	expect((await listed())[0]).toMatchObject({
 		hostname: "build-box.local",
 		platform: { os: "linux", arch: "arm64" },
 		agent: { name: "GitHub Copilot CLI", version: "1.0.97" },
-		address: "203.0.113.9",
 		service: true,
 		planner: false,
 	});
+	// Where it connected from is neither kept nor listed.
+	expect((await listed())[0]).not.toHaveProperty("address");
 	// The agent it learns of later, at its first job, replaces what it said.
 	let reported = await request(
 		"/api/connector/agent",

@@ -78,7 +78,6 @@ export function machineMatches(machine: Machine, query: string, login: string | 
 		...machine.repositories,
 		machine.version,
 		machine.hostname,
-		machine.address,
 		agentName(machine.agent),
 		platformName(machine.platform),
 	].some(value => value?.toLowerCase().includes(words));
@@ -103,27 +102,6 @@ function Status({ machine, now }: { machine: Machine; now: number }) {
 			<StatusDot state={machineState(machine)} />
 			{statusWords(machine, now)}
 		</span>
-	);
-}
-
-/** An address shown as itself, under a dotted line, which a press copies. */
-function CopyableAddress({ address }: { address: string }) {
-	let [copied, setCopied] = useState(false);
-	useEffect(() => {
-		if (!copied) return;
-		let timer = window.setTimeout(() => setCopied(false), 1500);
-		return () => window.clearTimeout(timer);
-	}, [copied]);
-	return (
-		<button
-			aria-label={copied ? `Copied ${address}` : `Copy ${address}`}
-			className="machines-address"
-			data-tooltip={copied ? "Copied" : "Copy"}
-			onClick={() => navigator.clipboard.writeText(address).then(() => setCopied(true), () => {})}
-			type="button"
-		>
-			{address}
-		</button>
 	);
 }
 
@@ -286,7 +264,7 @@ function useMachineDialogs(machines: ReturnType<typeof useMachines>, onDisconnec
 	return { dialogs, rename: setRenaming, disconnect: setConfirming };
 }
 
-/** The desktop table, as Tailscale's: machine, address, version, agent, last seen, and actions. */
+/** The desktop table, as Tailscale's: machine, host, version, agent, last seen, and actions. */
 function MachineTable(
 	{ labelledBy, list, login, machines, onRename, onDisconnect }: {
 		labelledBy: string;
@@ -303,7 +281,7 @@ function MachineTable(
 			<TableHeader>
 				<TableRow>
 					<TableHead>Machine</TableHead>
-					<TableHead>Address</TableHead>
+					<TableHead>Host</TableHead>
 					<TableHead>Version</TableHead>
 					<TableHead>Agent</TableHead>
 					<TableHead className="machines-status-column">Last seen</TableHead>
@@ -355,7 +333,6 @@ function MachineTable(
 									{machine.hostname
 										? <span>{machine.hostname}</span>
 										: <Dash label="Hostname unknown" />}
-									{machine.address && <CopyableAddress address={machine.address} />}
 								</span>
 							</TableCell>
 							<TableCell>
@@ -444,7 +421,7 @@ function MachineRows(
 					let state = machineState(machine);
 					let detail = state === "connected"
 						? [
-							machine.address,
+							machine.hostname,
 							machine.version && `chopin ${machine.version}`,
 							OS[machine.platform?.os ?? ""],
 						]
@@ -577,7 +554,6 @@ export function MachineDetail(
 		["Status", <Status key="status" machine={machine} now={now} />],
 		["Owner", login ? `${login}@github` : undefined],
 		["Hostname", machine.hostname],
-		["Address", machine.address],
 		["System", platformName(machine.platform)],
 		[
 			"Version",

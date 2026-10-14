@@ -283,13 +283,11 @@ Each operating system has its own catch:
 ## Check on it
 
 **Machines** in Chopin lists your machines with what each connector last said
-about itself: its hostname and the address it connected from, its chopin
-release and system, the coding agent it runs, and whether it is connected (a
-green dot) or when it was last seen. Search finds a machine by any of these.
-**Edit machine name…** in a machine's menu renames it in Chopin, and
-`chopin status` shows that name. The address is shown only to you; behind a
-reverse proxy, the server's `TRUSTED_PROXIES` setting decides which address
-that is (see [Self-hosting](self-hosting.md#the-address-a-machine-connects-from)).
+about itself: its hostname, its chopin release and system, the coding agent it
+runs, and whether it is connected (a green dot) or when it was last seen.
+Search finds a machine by any of these. **Edit machine name…** in a machine's
+menu renames it in Chopin, and `chopin status` shows that name. Only you see
+your machines.
 
 On the machine:
 

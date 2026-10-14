@@ -595,22 +595,6 @@
 	white-space: nowrap;
 }
 
-/* The address it connected from, under a dotted line; a press copies it. */
-.machines-address {
-	color: var(--color-text-secondary);
-	font-size: var(--text-xs);
-	font-variant-numeric: tabular-nums;
-	line-height: var(--text-xs--line-height);
-	text-decoration-line: underline;
-	text-decoration-style: dotted;
-	text-decoration-color: color-mix(in oklch, currentColor 45%, transparent);
-	text-underline-offset: 0.25em;
-
-	&:hover {
-		color: var(--color-text-primary);
-	}
-}
-
 .machines-version {
 	display: inline-flex;
 	align-items: center;
@@ -986,7 +970,6 @@
 	& .machines-needs-toggle,
 	& .machines-switch,
 	& .machines-back,
-	& .machines-address,
 	& .machines-add-link {
 		position: relative;
 

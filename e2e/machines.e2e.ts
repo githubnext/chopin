@@ -403,7 +403,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await threeMachines(page);
 	let table = page.getByRole("table", { name: "Your machines" });
 	await expect(page.getByText("3 machines", { exact: true })).toBeVisible();
-	for (let heading of ["Machine", "Address", "Version", "Agent", "Last seen"]) {
+	for (let heading of ["Machine", "Host", "Version", "Agent", "Last seen"]) {
 		await expect(table.getByRole("columnheader", { name: heading, exact: true })).toBeVisible();
 	}
 	let row = (name: string) => table.getByRole("row", { name: new RegExp(`^${name}`) });
@@ -413,8 +413,8 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(row("build-box")).toContainText("Linux arm64");
 	await expect(row("build-box")).toContainText("GitHub Copilot CLI 1.0.97");
 	await expect(row("build-box")).toContainText("Connected");
-	await expect(row("build-box").getByRole("button", { name: /^Copy (127\.0\.0\.1|::1)$/ }))
-		.toBeVisible();
+	// Where a machine connected from is not shown.
+	await expect(row("build-box").getByRole("button", { name: /^Copy / })).toHaveCount(0);
 	await expect(row("studio")).toContainText("macOS arm64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
 
@@ -459,6 +459,8 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(rows.getByRole("button")).toHaveCount(3);
 	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
 	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
+	await expect(rows.getByRole("button", { name: /build-box/ }))
+		.toContainText("build-box.internal · chopin 0.0.5 · Linux");
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
 	await expect(rows.getByRole("button")).toHaveCount(1);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
@@ -471,6 +473,7 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.getByRole("main").getByText("Connected", { exact: true })).toHaveCount(1);
 	await expect(page.getByRole("main")).toContainText("build-box.internal");
 	await expect(page.getByRole("main")).toContainText("Linux arm64");
+	await expect(page.getByRole("main")).not.toContainText("Address");
 	await page.getByRole("button", { name: "Edit machine name…" }).click();
 	let dialog = page.getByRole("dialog", { name: "Edit machine name for build-box" });
 	await dialog.getByRole("textbox", { name: "Machine name" }).fill("Build box");

@@ -17,8 +17,6 @@ export type Machine = {
 	hostname: string | null;
 	platform: { os: string; arch: string } | null;
 	agent: { name: string; version?: string } | null;
-	/** The address it connected from, as Chopin saw it. */
-	address: string | null;
 	/** The background service runs it. */
 	service: boolean;
 	/** It runs Planners for documents too. */
