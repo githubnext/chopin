@@ -36,6 +36,7 @@ export interface CodingAgent {
 export const AGENTS: readonly CodingAgent[] = [
 	{
 		id: "copilot",
+		// verify:agents runs it on Node.js 20 too, but GitHub documents 22 as the minimum.
 		node: "22",
 		name: "GitHub Copilot CLI",
 		install: [["npm", "install", "-g", "@github/copilot"]],
