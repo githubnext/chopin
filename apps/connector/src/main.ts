@@ -29,7 +29,7 @@ import {
 } from "./service";
 import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
-import { CONNECTOR_PROTOCOL, VERSION } from "./version";
+import { VERSION } from "./version";
 import { connectors, lockWorkspace, startFailures, stateDirectory, workspace } from "./workspace";
 
 const DEFAULT_URL = "https://chopin.githubnext.com";
@@ -565,7 +565,7 @@ const HELP = [
 	"      Replace this chopin with a verified release: by default the one your Chopin instance",
 	"      recommends, or else the newest. An older release needs --allow-downgrade; --yes skips",
 	"      the question asked on a terminal. A running service on this chopin restarts.",
-	"  version    Print the CLI version and the connector protocol it speaks.",
+	"  version    Print the CLI version.",
 	"  help       Show this help.",
 	"",
 	"--base-dir (or CHOPIN_HOME) is where the machine token, locks and worktrees live",
@@ -597,7 +597,7 @@ if (import.meta.main) {
 		else if (mode === "pair") await pairCommand(args);
 		else if (mode === "unpair") await unpairCommand(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
-			console.log(`chopin ${VERSION} (connector protocol ${CONNECTOR_PROTOCOL})`);
+			console.log(`chopin ${VERSION}`);
 		} else if (mode === "help" || mode === "--help" || mode === "-h") console.log(HELP);
 		else throw new Error(mode ? `Unknown command: ${mode}\n\n${HELP}` : HELP);
 	} catch (error) {
