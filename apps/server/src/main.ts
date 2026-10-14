@@ -32,6 +32,7 @@ import type { ExperimentRuntime } from "./experiments/routes";
 import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
+import * as Initiative from "./chat/initiative";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
@@ -489,6 +490,8 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	});
 	try {
 		let opened = await opening;
+		opened.chat.initiativeEnabled = config.agent && !!config.conversationInitiative
+			&& !opened.parentChannelId;
 		conversationRuntime.wake(opened);
 		return opened;
 	} finally {
@@ -521,6 +524,25 @@ function conversation(
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
+		initiativePresent: (sessionId, actor) => {
+			return Rooms.get(room.id) === room && room.plan === opened && !room.closing
+				&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id)
+				&& [...room.members.values()].some(member =>
+					!member.data.closed && member.data.canEdit && member.data.sessionId === sessionId
+					&& Initiative.actor(member) === actor
+				);
+		},
+		initiativeAuthorize: async (sessionId, actor) => {
+			let member = [...room.members.values()].find(member =>
+				!member.data.closed && member.data.sessionId === sessionId
+				&& Initiative.actor(member) === actor
+			);
+			if (!member || await refreshAccess(member, true) !== "allowed") return false;
+			return !member.data.closed && member.data.canEdit
+				&& room.members.get(member.data.client) === member
+				&& Rooms.get(room.id) === room && room.plan === opened && !room.closing
+				&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id);
+		},
 		plannerNotAttached: plannerAttachments
 			? async () => {
 				if (await plannerAttachments!.confirmed(room.id)) return undefined;
@@ -958,6 +980,22 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 		case "plan:close":
 			if (room.plan) Service.departed(room.plan, ws);
+			return;
+
+		case "chat:typing": {
+			if (!room.plan || room.plan.parentChannelId || typeof frame.active !== "boolean") return;
+			if (archivingChannels.has(room.id) || room.closing || ws.data.closed) return;
+			Initiative.initiative(chat(room, ws))?.typing(
+				ws.data.client,
+				Initiative.actor(ws),
+				frame.active,
+			);
+			return;
+		}
+
+		case "chat:participation":
+			if (!await plannerWritable(room, ws, frame.rid)) return;
+			await Initiative.setParticipation(chat(room, ws), ws, frame);
 			return;
 
 		case "chat:send":
@@ -1510,6 +1548,8 @@ function closeRoomSocket(ws: Socket): void {
 	ws.unsubscribe(topic(ws.data.room));
 	if (!room) return;
 	if (room.plan) {
+		room.plan.chat.initiative?.depart(ws.data.client);
+		if (!room.members.size) room.plan.chat.initiative?.cancel();
 		Service.departed(room.plan, ws);
 		Questions.away(room.plan, ws);
 		conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);
@@ -2054,6 +2094,7 @@ async function credentialsWillRotate(sessionId: string, revision: number): Promi
 }
 
 async function channelOwnerReset(channelId: string): Promise<void> {
+	Rooms.get(channelId)?.plan?.chat.initiative?.cancel();
 	let jobs = jobRunner?.channelOwnerReset(channelId);
 	ownerBindings?.revokeChannel(channelId);
 	plannerAttachments?.ownerReset(channelId);

@@ -54,6 +54,10 @@ export type Config = {
 	webResearch: boolean;
 	/** Explicitly enables the conversation-derived cards prototype. */
 	conversationPlan?: boolean;
+	/** Opt-in automatic conversational Planner turns, independent of conversation cards. */
+	conversationInitiative?: boolean;
+	conversationInitiativeModel?: string;
+	conversationInitiativeSilenceMs?: number;
 	conversationPlanModel?: string;
 	conversationPlanTimeoutMs?: number;
 	/** Explicitly enables Jev-routed foreground visual authoring. */
@@ -178,6 +182,16 @@ export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
+	let conversationInitiative = process.env.CONVERSATION_INITIATIVE === "on" && agent;
+	let conversationInitiativeModel = process.env.CONVERSATION_INITIATIVE_MODEL || "jev-1.13.0";
+	if (conversationInitiative && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationInitiativeModel)) {
+		throw new Error("CONVERSATION_INITIATIVE_MODEL must be a valid model alias");
+	}
+	let conversationInitiativeSilenceMs = milliseconds(
+		"CONVERSATION_INITIATIVE_SILENCE_MS",
+		15_000,
+		60_000,
+	);
 	let plannerVisuals = process.env.PLANNER_VISUALS === "on" && agent;
 	let liveBuild = process.env.LIVE_BUILD === "on";
 	let liveSpikes = process.env.LIVE_SPIKES === "on";
@@ -191,6 +205,9 @@ export function load(): Config {
 		|| conversationPlanTimeoutMs < 100 || conversationPlanTimeoutMs > 60_000
 	) {
 		throw new Error("JEV_TIMEOUT_MS must be an integer between 100 and 60000 milliseconds");
+	}
+	if (conversationInitiative && !process.env.JEV_API_KEY) {
+		throw new Error("JEV_API_KEY is required when CONVERSATION_INITIATIVE=on");
 	}
 	if (conversationPlan && !process.env.JEV_API_KEY) {
 		throw new Error("JEV_API_KEY is required when CONVERSATION_PLAN=on");
@@ -245,6 +262,9 @@ export function load(): Config {
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		conversationPlan,
+		conversationInitiative,
+		conversationInitiativeModel,
+		conversationInitiativeSilenceMs,
 		conversationPlanModel,
 		conversationPlanTimeoutMs,
 		plannerVisuals,
@@ -295,6 +315,7 @@ export function describe(config: Config): string {
 		config.conversationPlan
 			? `conversation plan: ${config.conversationPlanModel}`
 			: "conversation plan: off",
+		config.conversationInitiative ? "conversation initiative: on" : "conversation initiative: off",
 		config.plannerVisuals
 			? `Planner visuals: ${config.conversationPlanModel}`
 			: "Planner visuals: off",

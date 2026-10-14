@@ -7,9 +7,9 @@
  * Chat does not, and silencing somebody because a colleague prompted
  * first is a poor way to run a room with two people in it.
  *
- * Messages that do not address it are ordinary conversation. They are carried
- * into the next turn as context rather than starting one, so people can decide
- * something between themselves and the agent turns up already knowing.
+ * Ordinary conversation enters bounded context for the next turn. The optional
+ * initiative scheduler can also propose a turn after saved human contributions
+ * become quiet; explicit Planner messages continue to start immediately.
  *
  * Every message reaching the model is prefixed with its author's handle. The
  * agent is planning with a group, and "Alice prefers X, but Bob raised Y" is
@@ -45,6 +45,8 @@ export type { Announcer, NoticeInput } from "./notices";
 import { isChannelId } from "../channels/id";
 import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
+import { contributed } from "./initiative";
+import type { InitiativeSchedule } from "./initiative-schedule";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -86,6 +88,7 @@ const LINGER_MS = 5_000;
  * shape stays exactly `Wire.Waiting`.
  */
 export type Waiting = Wire.Waiting & {
+	signal?: AbortSignal;
 	readiness?: boolean;
 	delivery?: Delivery;
 	spent?: () => boolean;
@@ -145,6 +148,8 @@ export type Ended = {
 
 /** What a turn other than a message needs to say about itself. */
 export type Instruction = {
+	/** Cancels only this server-authored turn when its initiating context becomes stale. */
+	signal?: AbortSignal;
 	/** Server-authored review of blockers; never supplies an explicit member research request. */
 	readiness?: boolean;
 	spent?: () => boolean;
@@ -231,6 +236,9 @@ export function workingFor(chat: Chat | undefined, thread: string, channel?: str
 }
 
 export type Chat = {
+	initiative?: InitiativeSchedule<import("./initiative").Source>;
+	initiativePaused?: boolean;
+	initiativeEnabled?: boolean;
 	readiness?: boolean;
 	job?: ConversationPlan.Job;
 	jobOutput?: string;
@@ -330,9 +338,10 @@ export function create(): Chat {
  * leaving it set would show a spinner nothing will ever stop. Runs still live
  * then have no session now, so they come back stopped.
  */
-export function restore(entries: Wire.Entry[], runs?: Wire.Run[]): Chat {
+export function restore(entries: Wire.Entry[], runs?: Wire.Run[], initiativePaused = false): Chat {
 	let restoredRuns = restoreRuns(runs);
 	return {
+		initiativePaused,
 		...(restoredRuns ? { runs: restoredRuns } : {}),
 		entries: entries.map(entry => {
 			let { streaming: _streaming, ...rest } = entry;
@@ -577,6 +586,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
 		queued: visible(chat),
+		participation: { enabled: !!chat.initiativeEnabled, paused: !!chat.initiativePaused },
 	});
 }
 
@@ -602,7 +612,9 @@ export type Room = {
 	 */
 	plannerNotAttached?: () => Promise<string | undefined>;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
-	persist: (chat?: () => Pick<Chat, "entries" | "runs">) => Promise<void>;
+	persist: (chat?: () => Pick<Chat, "entries" | "runs" | "initiativePaused">) => Promise<void>;
+	initiativePresent?: (sessionId: string, actor: string) => boolean;
+	initiativeAuthorize?: (sessionId: string, actor: string) => Promise<boolean>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
 	roomMessagePublished?: () => void;
 	/** Runs only after a new member entry is durably saved and its human turn reserved. */
@@ -748,6 +760,7 @@ export async function invoke(
 				else settled();
 			}
 		}
+		chat.initiative?.cancel();
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
 		return undefined;
 	};
@@ -859,6 +872,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text,
 			...(references?.length ? { references } : {}),
 		});
+		contributed(context, ws, entry, suppliedFocus !== undefined);
 		return;
 	}
 	if (!context.config.agent) {
@@ -893,6 +907,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	if (unattached) return fail(ws, msg.rid, unattached, "planner-not-attached");
 	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 
+	chat.initiative?.cancel();
 	if (chat.busy) {
 		if (chat.waiting.length >= MAX_QUEUE) {
 			say(chat, server, room, {
@@ -999,7 +1014,9 @@ export function instruct(
 	// A child has no Chat to explain the turn in, and its root's Planner reaches it there.
 	if (context.rootChannelId) return report(about, { status: "skipped" });
 	let proceed = (): void | Promise<void> => {
-		if (chat.closed) return;
+		if (chat.closed || about.spent?.() || about.signal?.aborted) {
+			return report(about, { status: "skipped" });
+		}
 		// `AGENT=off` runs the room without one. The decision that got here is
 		// still a decision and is already recorded; only the turn is impossible,
 		// and saying so beats a session failing to open.
@@ -1046,6 +1063,7 @@ export function instruct(
 
 		startRun(context, handle, text, about, context.claimantSessionId);
 	};
+	if (about.spent?.() || about.signal?.aborted) return report(about, { status: "skipped" });
 	let announced = instructionNotice(context, said, about.comment);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
@@ -1239,6 +1257,7 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	let turn = chat.busy && !chat.turnController?.signal.aborted
 		? chat.turnController
 		: undefined;
+	chat.initiative?.cancel();
 	let session = chat.retained?.session ?? chat.agent;
 	let runs = session?.runs?.();
 	let live = (runs?.active.length ?? 0) > 0;
@@ -2016,12 +2035,16 @@ async function run(
 
 	let opened: { session: PlannerSession; binding: ActiveOwnerBinding } | undefined;
 	let turnController = new AbortController();
+	let invalidate = () => turnController.abort();
+	if (about?.signal?.aborted) invalidate();
+	else about?.signal?.addEventListener("abort", invalidate, { once: true });
 	chat.turnController = turnController;
 	let held = jobTurn ? chat.retained : undefined;
 	let heldOwner = chat.owner;
 	let heldReferences = held ? new Map(chat.referenceCache) : undefined;
 	try {
 		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
+		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error("The Planner session changed before the turn started. Try again.");
 		}
@@ -2093,6 +2116,7 @@ async function run(
 		}
 		chat.interruption = undefined;
 	} finally {
+		about?.signal?.removeEventListener("abort", invalidate);
 		releaseJobAbort?.();
 		chat.activeRequest = undefined;
 		chat.readiness = undefined;
@@ -2199,7 +2223,7 @@ async function run(
 
 	// Before the drain, so what it records is in place before the next turn reads anything.
 	// A failed save closes the chat, and its owner still needs to hear that the turn failed.
-	if (about?.ended && (!chat.closed || persistenceError || about.readiness)) {
+	if (about?.ended && (!chat.closed || persistenceError || about.readiness || about.signal)) {
 		// The turn is over: nothing it does can be attributed to the thread any more,
 		// and anyone joining before the drain must not read it as still working.
 		if (chat.acting === thread && chat.actingChannel === about.threadChannel) {
@@ -2620,6 +2644,7 @@ export async function resetAgent(
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
 	chat.closed = true;
+	chat.initiative?.close();
 	chat.job = undefined;
 	chat.jobOutput = undefined;
 	chat.lifecycle++;

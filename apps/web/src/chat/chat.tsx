@@ -20,7 +20,6 @@ import {
 	usePopoverDismissal,
 } from "@chopin/editor";
 import { usePhone } from "@chopin/editor/pointer";
-import { MENTION } from "@chopin/protocol/address";
 import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
@@ -28,6 +27,8 @@ import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { ModeSwitch } from "./mode-switch";
 import { PlannerAttachment } from "./planner-attachment";
+import { Participation } from "./participation";
+import { TypingReporter } from "./typing";
 import "./composer.css";
 
 import { CommandPicker } from "./command-picker";
@@ -62,7 +63,6 @@ import {
 	addressedOutsideReferences,
 	addressesPlanner,
 	boundedChatError,
-	chatSendPayload,
 	insertReference,
 	MAX_REFERENCES,
 	PLANNER_UNAVAILABLE_NOTICE,
@@ -70,6 +70,7 @@ import {
 	reconcileReferenceDrafts,
 	referenceTrigger,
 	referenceTriggerKey,
+	restoreDraftSubmission,
 	reviseComposerDraft,
 	withNoticesAfter,
 } from "./references";
@@ -164,7 +165,11 @@ function keepDraft(room: string, handle: string, draft: ComposerDraft): void {
 		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room, handle));
 		sessionStorage.setItem(
 			draftKey(room, handle),
-			JSON.stringify({ text: draft.text, references: draft.references }),
+			JSON.stringify({
+				text: draft.text,
+				references: draft.references,
+				submission: draft.submission,
+			}),
 		);
 	} catch {
 		// Private windows and blocked storage: the draft is lost as it was before.
@@ -186,7 +191,9 @@ function restoreDraft(room: string, handle: string): ComposerDraft {
 				)
 			? saved.references
 			: [];
-		return { text: saved.text, references };
+		let draft = { text: saved.text, references };
+		let submission = restoreDraftSubmission(draft, saved.submission);
+		return submission ? { ...draft, submission } : draft;
 	} catch {
 		return empty;
 	}
@@ -233,6 +240,13 @@ export function Chat(
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
+	let [participation, setParticipation] = useState<{
+		room: string;
+		wire: Socket;
+		state: Wire.Participation | undefined;
+	}>();
+	let [participationKey, setParticipationKey] = useState(0);
+	let typing = useRef<TypingReporter | undefined>(undefined);
 	let counts = runCounts(runs);
 	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room, handle));
 	let [submitting, setSubmitting] = useState(false);
@@ -248,7 +262,9 @@ export function Chat(
 	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
-	let [mode, setMode] = useState(false);
+	let [mode, setMode] = useState(() =>
+		draft.submission?.to === "planner" && !addressedOutsideReferences(draft.text, draft.references)
+	);
 	let phone = usePhone();
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
@@ -274,6 +290,11 @@ export function Chat(
 	if (!connected) synchronized.current = undefined;
 	let transcriptReady = connected && synchronized.current === wire;
 	let composerReady = transcriptReady && !readonly && !archived;
+	let participationState = transcriptReady && participation?.room === room
+			&& participation.wire === wire
+		? participation.state
+		: undefined;
+	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
 	let connectionNotice = useConnectionNotice(!connected);
@@ -284,7 +305,8 @@ export function Chat(
 		: wire?.status === "connecting"
 		? "Connecting…"
 		: "Reconnecting…";
-	let effectiveMode = agent && (mode || addressedOutsideReferences(draft.text, draft.references));
+	let effectiveMode = agent && (mode || draft.submission?.to === "planner"
+		|| addressedOutsideReferences(draft.text, draft.references));
 	let workingTurn = transcriptReady ? turn : undefined;
 	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
 		? {
@@ -379,6 +401,8 @@ export function Chat(
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				setRuns(frame.runs);
+				setParticipation({ room, wire, state: frame.participation });
+				setParticipationKey(current => current + 1);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
 				activity.current?.({ type: "working", busy: frame.busy, history: true });
@@ -408,12 +432,28 @@ export function Chat(
 				setRuns(frame.runs);
 			}),
 			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
+			wire.on<Wire.ParticipationState>("chat:participation", frame => {
+				if (!loaded || synchronized.current !== wire) return;
+				setParticipation({ room, wire, state: { enabled: frame.enabled, paused: frame.paused } });
+			}),
 		];
 
 		return () => {
 			for (let unsubscribe of off) unsubscribe();
 		};
-	}, [wire]);
+	}, [wire, room]);
+
+	useEffect(() => {
+		if (!wire || !typingEnabled) return;
+		let reporter = new TypingReporter(active => {
+			if (wire.connected) wire.send("chat:typing", { active });
+		});
+		typing.current = reporter;
+		return () => {
+			reporter.stop();
+			if (typing.current === reporter) typing.current = undefined;
+		};
+	}, [wire, room, typingEnabled, participationKey]);
 
 	useLayoutEffect(() => {
 		if (pendingCaret.current === undefined) return;
@@ -467,6 +507,7 @@ export function Chat(
 
 	let submit = () => {
 		if (submission.current || !draftable) return;
+		typing.current?.stop();
 		let current = draftRef.current;
 		if (draftCommand(current.text)) {
 			// `#` references stay in the brief as their visible titles.
@@ -480,27 +521,19 @@ export function Chat(
 			if (connectionNotice === "none") setHeld(true);
 			return;
 		}
-		let submitted = prepareDraftSubmission(current);
-		let prefix = effectiveMode && !addressedOutsideReferences(submitted.text, submitted.references)
-			? `${MENTION} `
-			: "";
-		let payload = chatSendPayload(
-			prefix + submitted.text,
-			submitted.references.map(reference => ({
-				...reference,
-				start: reference.start + prefix.length,
-				end: reference.end + prefix.length,
-			})),
-			agent,
-			submitted.requestId,
+		let submitted = prepareDraftSubmission(current, undefined, {
+			planner: agent,
+			mode: effectiveMode,
 			referencesEnabled,
 			focus,
-		);
-		if (!payload) return;
+		});
+		if (!submitted) return;
+		let payload = submitted.submission;
 		let token = {};
 		submission.current = token;
 		draftRef.current = submitted;
 		setDraft(submitted);
+		keepDraft(room, handle, submitted);
 		setSubmitting(true);
 		setSendError(undefined);
 
@@ -873,6 +906,7 @@ export function Chat(
 									]}
 									onChange={event => {
 										let next = event.currentTarget.value;
+										if (next !== draftRef.current.text) typing.current?.change();
 										setDraft(current =>
 											reviseComposerDraft(
 												current,
@@ -889,6 +923,7 @@ export function Chat(
 											end: event.currentTarget.selectionEnd,
 										});
 									}}
+									onBlur={() => typing.current?.stop()}
 									onKeyDown={event => {
 										let composing = event.nativeEvent.isComposing || event.keyCode === 229;
 										let commandAction = commandOpen
@@ -1098,6 +1133,14 @@ export function Chat(
 							</>
 						)}
 				</div>
+				{agent && wire && participationState?.enabled && (
+					<Participation
+						key={`${room}:${participationKey}`}
+						state={participationState}
+						wire={wire}
+						disabled={!composerReady}
+					/>
+				)}
 				<PlannerAttachment planner={planner} />
 			</div>
 		</div>

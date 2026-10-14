@@ -313,9 +313,10 @@ type Sidecar = {
 	conversationPlanPendingEffects?: Effect[];
 	pendingCardActions?: PendingCardAction[];
 	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
+	initiativePaused?: boolean;
 };
 
-type ChatView = Pick<Chat.Chat, "entries" | "runs">;
+type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused">;
 
 function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 	return {
@@ -350,6 +351,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 			: {}),
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
 		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
+		...((chat.initiativePaused ?? plan.chat.initiativePaused) ? { initiativePaused: true } : {}),
 	};
 }
 
@@ -538,6 +540,7 @@ function restoredState(
 	}
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
+	if (Object.hasOwn(item, "initiativePaused")) expected.push("initiativePaused");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -553,6 +556,7 @@ function restoredState(
 		|| !Array.isArray(item.openQuestions)
 		|| !Array.isArray(item.threads)
 		|| !Array.isArray(item.transcript)
+		|| (Object.hasOwn(item, "initiativePaused") && typeof item.initiativePaused !== "boolean")
 	) throw new Error("hosted channel has an invalid sidecar");
 	let execution = Object.hasOwn(item, "execution")
 		? restoreRun(item.execution, graph, item.revision)
@@ -726,6 +730,7 @@ function restoredState(
 		...(outbox.pending.length ? { conversationPlanPendingEffects: outbox.pending } : {}),
 		...(pendingCardActions.length ? { pendingCardActions } : {}),
 		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
+		...(item.initiativePaused === true ? { initiativePaused: true } : {}),
 	};
 }
 
@@ -1448,7 +1453,7 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
-		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns),
+		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns, sidecar.initiativePaused),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
 		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],
 		conversationPlanJobs: sidecar.conversationPlanJobs ?? [],

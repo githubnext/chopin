@@ -17,9 +17,19 @@ export declare namespace Chat {
 		| Request<Resume>
 		| Request<PauseRun>
 		| Request<ResumeRun>
-		| Request<Unqueue>;
+		| Request<Unqueue>
+		| Request<SetParticipation>
+		| Request<Typing>;
 
-	export type Outgoing = History | Message | Delta | Tool | State | Queue | Sent;
+	export type Outgoing =
+		| History
+		| Message
+		| Delta
+		| Tool
+		| State
+		| Queue
+		| Sent
+		| ParticipationState;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
 	export type Author =
@@ -179,6 +189,14 @@ export declare namespace Chat {
 
 	export type Runs = Run[];
 
+	/** Shared automatic participation; direct Planner messages still work while paused. */
+	export type Participation = { enabled: boolean; paused: boolean };
+	export type ParticipationState = KIND<"chat:participation"> & Participation;
+	export type SetParticipation = KIND<"chat:participation"> & { paused: boolean };
+
+	/** Ephemeral composer activity, with no draft content. */
+	export type Typing = KIND<"chat:typing"> & { active: boolean };
+
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {
 		entries: Entry[];
@@ -186,6 +204,7 @@ export declare namespace Chat {
 		turn?: Turn;
 		runs?: Runs;
 		queued: Waiting[];
+		participation?: Participation;
 	};
 
 	/** A new entry, or a finished one replacing its streaming self. */

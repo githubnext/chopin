@@ -49,17 +49,62 @@ export type ReferenceRenderModel = {
 export type ComposerDraft = {
 	text: string;
 	references: ReferenceDraft[];
-	requestId?: string;
+	/** One request identity owns its complete prepared wire payload, including absent focus. */
+	submission?: ChatSendPayload;
 };
 
 export function prepareDraftSubmission(
 	draft: ComposerDraft,
 	allocate: () => string = () => crypto.randomUUID(),
-): ComposerDraft & { requestId: string } {
-	return draft.requestId ? draft as ComposerDraft & { requestId: string } : {
-		...draft,
-		requestId: allocate(),
-	};
+	context: { planner?: boolean; mode?: boolean; referencesEnabled?: boolean; focus?: string } = {},
+): (ComposerDraft & { submission: ChatSendPayload }) | undefined {
+	if (draft.submission) return draft as ComposerDraft & { submission: ChatSendPayload };
+	let prefix = context.planner !== false && context.mode
+			&& !addressedOutsideReferences(draft.text, draft.references)
+		? `${MENTION} `
+		: "";
+	let submission = chatSendPayload(
+		prefix + draft.text,
+		draft.references.map(reference => ({
+			...reference,
+			start: reference.start + prefix.length,
+			end: reference.end + prefix.length,
+		})),
+		context.planner !== false,
+		allocate(),
+		context.referencesEnabled !== false,
+		context.focus,
+	);
+	return submission ? { ...draft, submission } : undefined;
+}
+
+/** Rebuild a stored payload from its visible draft, accepting only an identical projection. */
+export function restoreDraftSubmission(
+	draft: ComposerDraft,
+	value: unknown,
+): ChatSendPayload | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return;
+	let saved = value as Partial<ChatSendPayload>;
+	let uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+	if (
+		typeof saved.requestId !== "string" || !uuid.test(saved.requestId)
+		|| typeof saved.text !== "string" || !["room", "planner"].includes(saved.to ?? "")
+		|| (saved.focus !== undefined && (typeof saved.focus !== "string" || !uuid.test(saved.focus)))
+	) return;
+	let prepared = prepareDraftSubmission(
+		{ text: draft.text, references: draft.references },
+		() => saved.requestId!,
+		{
+			planner: saved.to === "planner" || saved.focus !== undefined,
+			mode: saved.text !== draft.text.trim(),
+			referencesEnabled: saved.references !== undefined,
+			focus: saved.focus,
+		},
+	)?.submission;
+	return prepared?.text === saved.text && prepared.to === saved.to && prepared.focus === saved.focus
+			&& JSON.stringify(prepared.references) === JSON.stringify(saved.references)
+		? prepared
+		: undefined;
 }
 
 function sameReference(left: ReferenceDraft, right: ReferenceDraft): boolean {
@@ -324,7 +369,7 @@ export function chatSendPayload(
 		text: value,
 		to,
 		...(requests.length > 0 ? { references: requests } : {}),
-		...(to === "planner" && focus ? { focus } : {}),
+		...(plannerEnabled && focus ? { focus } : {}),
 	};
 }
 

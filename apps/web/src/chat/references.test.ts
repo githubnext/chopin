@@ -14,6 +14,7 @@ import {
 	prepareDraftSubmission,
 	reconcileReferenceDrafts,
 	referenceTrigger,
+	restoreDraftSubmission,
 	reviseComposerDraft,
 	selectedReplacement,
 	withNoticesAfter,
@@ -329,29 +330,121 @@ describe("chat send payloads", () => {
 });
 
 describe("acknowledged composer drafts", () => {
+	test("keeps the complete Planner-mode payload and reference projection after reload", () => {
+		let draft = { text: "Compare #Plan", references: [documentDraft("Compare #Plan", "#Plan")] };
+		let first = prepareDraftSubmission(draft, () => REQUEST_ID, {
+			mode: true,
+			planner: true,
+			focus: "40cfa671-750b-4ca8-a1d7-024457de5a2a",
+		})!;
+		let restored = JSON.parse(JSON.stringify(first));
+		restored.submission = restoreDraftSubmission(
+			{ text: restored.text, references: restored.references },
+			restored.submission,
+		);
+		let retry = prepareDraftSubmission(restored, () => crypto.randomUUID(), {
+			mode: false,
+			planner: true,
+		})!;
+		expect(retry.submission).toEqual({
+			requestId: REQUEST_ID,
+			text: "@chopin Compare #Plan",
+			to: "planner",
+			focus: "40cfa671-750b-4ca8-a1d7-024457de5a2a",
+			references: [{ kind: "document", channelId: "channel-one", start: 16, end: 21 }],
+		});
+		expect(restoreDraftSubmission(draft, { ...first.submission, text: "Other text" }))
+			.toBeUndefined();
+		expect(restoreDraftSubmission(draft, { ...first.submission, to: "room" })).toBeUndefined();
+		expect(restoreDraftSubmission(draft, { ...first.submission, requestId: "not-a-uuid" }))
+			.toBeUndefined();
+		expect(restoreDraftSubmission(draft, {
+			...first.submission,
+			references: [{ kind: "document", channelId: "channel-two", start: 16, end: 21 }],
+		})).toBeUndefined();
+	});
+
+	test("keeps the initial child focus when retrying from the root after persistence", () => {
+		let child = "40cfa671-750b-4ca8-a1d7-024457de5a2a";
+		let first = prepareDraftSubmission(
+			{ text: "Compare formats", references: [] },
+			() => REQUEST_ID,
+			{ focus: child },
+		)!;
+		let persisted = JSON.parse(JSON.stringify(first));
+		persisted.submission = restoreDraftSubmission(
+			{ text: persisted.text, references: persisted.references },
+			persisted.submission,
+		);
+		let retry = prepareDraftSubmission(persisted, () => crypto.randomUUID())!;
+		expect(retry.submission.requestId).toBe(REQUEST_ID);
+		expect(retry.submission.focus).toBe(child);
+	});
+
+	test("keeps explicit absence of focus when retrying from a child after persistence", () => {
+		let first = prepareDraftSubmission(
+			{ text: "Compare formats", references: [] },
+			() => REQUEST_ID,
+			undefined,
+		)!;
+		let persisted = JSON.parse(JSON.stringify(first));
+		persisted.submission = restoreDraftSubmission(
+			{ text: persisted.text, references: persisted.references },
+			persisted.submission,
+		);
+		let retry = prepareDraftSubmission(
+			persisted,
+			() => crypto.randomUUID(),
+			{ focus: "40cfa671-750b-4ca8-a1d7-024457de5a2a" },
+		)!;
+		expect(retry.submission.requestId).toBe(REQUEST_ID);
+		expect(retry.submission.focus).toBeUndefined();
+	});
+
+	test("drops the submission snapshot on a real text or reference edit", () => {
+		let first = prepareDraftSubmission(
+			{ text: "Compare formats", references: [] },
+			() => REQUEST_ID,
+			{ focus: "40cfa671-750b-4ca8-a1d7-024457de5a2a" },
+		)!;
+		let text = reviseComposerDraft(first, "Compare formats!", first.references);
+		expect(text.submission).toBeUndefined();
+		let reference = reviseComposerDraft(first, first.text, [{
+			kind: "document",
+			channelId: "other",
+			start: 0,
+			end: 7,
+			token: "Compare",
+		}]);
+		expect(reference.submission).toBeUndefined();
+		let next = prepareDraftSubmission(text, () => "694a9c19-0e1b-4c66-94f9-523317d76325")!;
+		expect(next.submission.focus).toBeUndefined();
+	});
+
 	test("keeps one UUID through retries and resets after semantic edits", () => {
 		let draft = { text: "Send this", references: [] };
-		let first = prepareDraftSubmission(draft, () => REQUEST_ID);
-		let retry = prepareDraftSubmission(first, () => crypto.randomUUID());
+		let first = prepareDraftSubmission(draft, () => REQUEST_ID)!;
+		let retry = prepareDraftSubmission(first, () => crypto.randomUUID())!;
 		expect(retry).toBe(first);
-		expect(retry.requestId).toBe(REQUEST_ID);
+		expect(retry.submission.requestId).toBe(REQUEST_ID);
 
 		let edited = reviseComposerDraft(first, `${first.text}!`, first.references);
-		let next = prepareDraftSubmission(edited, () => "694a9c19-0e1b-4c66-94f9-523317d76325");
-		expect(next.requestId).not.toBe(first.requestId);
+		let next = prepareDraftSubmission(edited, () => "694a9c19-0e1b-4c66-94f9-523317d76325")!;
+		expect(next.submission.requestId).not.toBe(first.submission.requestId);
 		let semanticEdit = reviseComposerDraft(
 			first,
 			first.text,
 			[documentDraft("#Plan", "#Plan")],
 		);
 		expect(
-			prepareDraftSubmission(semanticEdit, () => "ab6eb3f4-5682-46b6-b47c-09f3707a6b62")
-				.requestId,
-		).not.toBe(first.requestId);
+			prepareDraftSubmission(semanticEdit, () => "ab6eb3f4-5682-46b6-b47c-09f3707a6b62")!
+				.submission.requestId,
+		).not.toBe(first.submission.requestId);
 		expect(reviseComposerDraft(first, first.text, [...first.references])).toBe(first);
-		expect(prepareDraftSubmission({ text: "Generated", references: [] }).requestId).toMatch(
-			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-		);
+		expect(prepareDraftSubmission({ text: "Generated", references: [] })!.submission.requestId)
+			.toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+			);
 	});
 
 	test("clears only the exact submitted draft", () => {
@@ -380,7 +473,7 @@ describe("acknowledged composer drafts", () => {
 describe("focus", () => {
 	let CHILD = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
 
-	test("attaches the open child only to a Planner message", () => {
+	test("preserves the open child for ordinary and explicit Planner messages", () => {
 		expect(chatSendPayload("@chopin tighten it", [], true, REQUEST_ID, true, CHILD)).toEqual({
 			requestId: REQUEST_ID,
 			text: "@chopin tighten it",
@@ -391,6 +484,7 @@ describe("focus", () => {
 			requestId: REQUEST_ID,
 			text: "tighten it",
 			to: "room",
+			focus: CHILD,
 		});
 		expect(chatSendPayload("@chopin tighten it", [], false, REQUEST_ID, true, CHILD)?.focus)
 			.toBeUndefined();

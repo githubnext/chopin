@@ -1,0 +1,435 @@
+import { expect, spyOn, test } from "bun:test";
+import * as Chat from "./service";
+import { contributed, participation, setParticipation } from "./initiative";
+import { flush, installInitiativeCleanup, message, pause } from "./initiative.test-fixtures";
+import { until } from "./job.test-fixtures";
+
+let setup = installInitiativeCleanup();
+
+test("a saved ordinary message reaches the judge once after persistence and backscroll", async () => {
+	let h = await setup.harness();
+	let committed = Promise.withResolvers<void>();
+	let entered = Promise.withResolvers<void>();
+	let source = message();
+	h.context.persist = async () => {
+		entered.resolve();
+		await committed.promise;
+	};
+	let saving = Chat.send(h.context, h.ws, source);
+	await entered.promise;
+	await h.clock.advance(10_000);
+	expect(h.judge).not.toHaveBeenCalled();
+	expect(h.chat.backscroll).toEqual([]);
+	expect(h.replies).toEqual([]);
+	committed.resolve();
+	await saving;
+	expect(h.chat.backscroll[0]?.entryId).toBe(source.requestId);
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	expect(h.judge.mock.calls[0]?.[0]).toMatchObject({
+		sourceId: source.requestId,
+		messages: [{ id: source.requestId, author: "member", handle: "ana", text: source.text }],
+	});
+	await Chat.send(h.context, h.ws, { ...source, rid: "delivery-retry" });
+	await h.clock.advance(10_000);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	expect(h.chat.entries.filter(entry => entry.id === source.requestId)).toHaveLength(1);
+});
+
+test("a failed ordinary save creates no initiative opportunity", async () => {
+	let h = await setup.harness();
+	h.context.persist = async () => {
+		throw new Error("save failed");
+	};
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(10_000);
+	expect(h.judge).not.toHaveBeenCalled();
+	expect(h.chat.entries).toEqual([]);
+	expect(h.chat.backscroll).toEqual([]);
+	expect(h.replies.at(-1)?.kind).toBe("session:error");
+});
+
+test.each(["pending", "active"] as const)(
+	"an ordinary child-focused message cancels %s root initiative without replacing it",
+	async phase => {
+		let h = await setup.harness();
+		h.judge.mockResolvedValue("clarify");
+		await Chat.send(h.context, h.ws, message("An unresolved root question"));
+		if (phase === "active") {
+			await h.clock.advance(1500);
+			await until(() => h.prompts.length === 1);
+		}
+		let typing = spyOn(h.chat.initiative!, "typing");
+		try {
+			h.chat.initiative!.typing("ana-tab", "U_ana", true);
+			let child = {
+				...message("A note about the open child"),
+				focus: "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b",
+			};
+			await Chat.send(h.context, h.ws, child);
+			await until(() => !h.chat.busy);
+			expect(h.chat.entries.find(entry => entry.id === child.requestId)).toMatchObject({
+				author: { kind: "member", handle: "ana" },
+				text: child.text,
+			});
+			expect(h.chat.backscroll.find(entry => entry.entryId === child.requestId)).toMatchObject({
+				handle: "ana",
+				text: child.text,
+			});
+			expect(h.replies.at(-1)).toMatchObject({
+				kind: "chat:send",
+				id: child.requestId,
+				queued: false,
+			});
+			expect(typing).toHaveBeenCalledWith("ana-tab", "U_ana", false);
+			await h.clock.advance(12_000);
+			expect(h.judge).toHaveBeenCalledTimes(phase === "active" ? 1 : 0);
+			expect(h.prompts).toHaveLength(phase === "active" ? 1 : 0);
+			expect(h.aborts()).toBe(phase === "active" ? 1 : 0);
+			expect(h.chat.waiting).toEqual([]);
+		} finally {
+			typing.mockRestore();
+		}
+	},
+);
+
+test("a committed move starts an ordinary Planner turn and never repeats without new input", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValue("clarify");
+	let source = message();
+	await Chat.send(h.context, h.ws, source);
+	await h.clock.advance(1500);
+	await until(() => h.prompts.length === 1);
+	expect(h.prompts[0]).toContain(source.requestId);
+	expect(h.prompts[0]).toContain("one useful next move");
+	expect(h.chat.entries.some(entry =>
+		entry.author.kind === "system"
+		&& entry.text === "Chopin is joining the conversation."
+	)).toBe(true);
+	expect(h.chat.job).toBeUndefined();
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
+	await h.clock.advance(30_000);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	expect(h.prompts).toHaveLength(1);
+});
+
+test.each(["permission", "owner", "unattached", "implementation", "departed"] as const)(
+	"a %s denial stays quiet",
+	async denial => {
+		let h = await setup.harness();
+		h.judge.mockResolvedValue("clarify");
+		if (denial === "permission") h.context.initiativeAuthorize = async () => false;
+		if (denial === "owner") h.setOwnerAvailable(false);
+		if (denial === "unattached") h.context.plannerNotAttached = async () => "not attached";
+		if (denial === "implementation") h.context.plan.claiming = true;
+		if (denial === "departed") h.context.initiativePresent = () => false;
+		await Chat.send(h.context, h.ws, message());
+		await h.clock.advance(1500);
+		expect(h.judge).not.toHaveBeenCalled();
+		expect(h.prompts).toEqual([]);
+	},
+);
+
+test("permission is checked again after a judgment completes", async () => {
+	let h = await setup.harness();
+	let result = Promise.withResolvers<"clarify">();
+	h.judge.mockImplementation(() => result.promise);
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	h.context.initiativeAuthorize = async () => false;
+	result.resolve("clarify");
+	await flush();
+	expect(h.prompts).toEqual([]);
+	expect(h.chat.entries.every(entry => entry.author.kind === "member")).toBe(true);
+});
+
+test.each(["document", "transcript"] as const)(
+	"a changed %s invalidates the judgment before dispatch",
+	async target => {
+		let h = await setup.harness();
+		let result = Promise.withResolvers<"clarify">();
+		h.judge.mockImplementationOnce(() => result.promise);
+		await Chat.send(h.context, h.ws, message());
+		await h.clock.advance(1500);
+		if (target === "document") h.context.plan.revision = (h.context.plan.revision ?? 0) + 1;
+		else {
+			h.chat.entries.push({
+				id: "changed",
+				author: { kind: "agent" },
+				text: "Answered.",
+				ts: 1,
+			});
+		}
+		result.resolve("clarify");
+		await flush();
+		expect(h.prompts).toEqual([]);
+		expect(h.chat.waiting).toEqual([]);
+	},
+);
+
+test("a new saved source cancels a stale judgment before its instruction can queue", async () => {
+	let h = await setup.harness();
+	let result = Promise.withResolvers<"clarify">();
+	h.judge.mockImplementationOnce(() => result.promise);
+	await Chat.send(h.context, h.ws, message("Old question"));
+	await h.clock.advance(1500);
+	let stale = h.judge.mock.calls[0]?.[1]?.signal;
+	await Chat.send(h.context, h.ws, message("New direction"));
+	expect(stale?.aborted).toBe(true);
+	result.resolve("clarify");
+	await flush();
+	expect(h.chat.waiting).toEqual([]);
+	expect(h.prompts).toEqual([]);
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(2);
+});
+
+test("new ordinary input aborts an active initiative and explicit instructions remain possible", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValueOnce("clarify");
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(1500);
+	await until(() => h.prompts.length === 1);
+	await Chat.send(h.context, h.ws, message("A new constraint"));
+	await until(() => !h.chat.busy);
+	expect(h.aborts()).toBe(1);
+	await Chat.send(h.context, h.ws, message("Please help with the next step", "planner"));
+	await until(() => h.prompts.length === 2);
+	expect(h.prompts[1]).toContain("Please help with the next step");
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
+});
+
+test("manual stop records the active initiative interruption once", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValueOnce("clarify");
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(1500);
+	await until(() => h.prompts.length === 1);
+	await Chat.abort(h.context, h.ws);
+	await until(() => !h.chat.busy);
+	expect(h.aborts()).toBe(1);
+	expect(h.chat.entries.filter(entry =>
+		entry.author.kind === "system"
+		&& entry.text === "@ana stopped the turn."
+	)).toHaveLength(1);
+	expect(h.frames.filter(frame =>
+		frame.kind === "chat:message"
+		&& (frame.entry as { text?: string } | undefined)?.text === "@ana stopped the turn."
+	))
+		.toHaveLength(1);
+});
+
+test("a newer message being saved prevents an older judgment from dispatching", async () => {
+	let h = await setup.harness();
+	let result = Promise.withResolvers<"clarify">();
+	h.judge.mockImplementationOnce(() => result.promise);
+	await Chat.send(h.context, h.ws, message("Old source"));
+	await h.clock.advance(1500);
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	h.context.persist = async () => {
+		entered.resolve();
+		await release.promise;
+	};
+	let newer = Chat.send(h.context, h.ws, message("New source still committing"));
+	await entered.promise;
+	result.resolve("clarify");
+	await flush();
+	expect(h.prompts).toEqual([]);
+	expect(h.chat.waiting).toEqual([]);
+	release.resolve();
+	await newer;
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(2);
+	expect(h.prompts).toEqual([]);
+});
+
+test("a stale queued initiative instruction leaves the active explicit turn intact", async () => {
+	let h = await setup.harness();
+	await Chat.send(h.context, h.ws, message("Explicit current turn", "planner"));
+	await until(() => h.prompts.length === 1);
+	let controller = new AbortController();
+	let outcomes: Chat.Ended[] = [];
+	await Chat.instruct(h.context, "Chopin", "Stale initiative", "Joining", {
+		signal: controller.signal,
+		ended: outcome => {
+			outcomes.push(outcome);
+		},
+	});
+	expect(h.chat.waiting).toHaveLength(1);
+	controller.abort();
+	expect(h.aborts()).toBe(0);
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
+	expect(h.prompts).toHaveLength(1);
+	expect(h.chat.waiting).toEqual([]);
+	expect(outcomes).toHaveLength(1);
+});
+
+test("stale input while a Planner session opens cannot reach the stream", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValueOnce("clarify");
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let open = h.context.openPlannerSession!;
+	h.context.openPlannerSession = async (...args) => {
+		entered.resolve();
+		await release.promise;
+		return open(...args);
+	};
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(1500);
+	await entered.promise;
+	await Chat.send(h.context, h.ws, message("Changed before session opening"));
+	release.resolve();
+	await until(() => !h.chat.busy);
+	expect(h.prompts).toEqual([]);
+	expect(h.chat.waiting).toEqual([]);
+});
+
+test("a document changed while a Planner session opens cannot reach the stream", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValueOnce("clarify");
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let open = h.context.openPlannerSession!;
+	h.context.openPlannerSession = async (...args) => {
+		entered.resolve();
+		await release.promise;
+		return open(...args);
+	};
+	try {
+		await Chat.send(h.context, h.ws, message());
+		await h.clock.advance(1500);
+		await entered.promise;
+		h.context.plan.revision = (h.context.plan.revision ?? 0) + 1;
+		release.resolve();
+		await until(() => !h.chat.busy);
+		expect(h.prompts).toEqual([]);
+		expect(h.chat.waiting).toEqual([]);
+	} finally {
+		release.resolve();
+	}
+});
+
+test.each(["document", "agent answer"] as const)(
+	"a changed %s during the initiative notice save prevents its turn",
+	async target => {
+		let h = await setup.harness();
+		h.judge.mockResolvedValueOnce("clarify");
+		await Chat.send(h.context, h.ws, message());
+		let entered = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		h.context.persist = async () => {
+			entered.resolve();
+			await release.promise;
+		};
+		try {
+			await h.clock.advance(1500);
+			await entered.promise;
+			expect(h.chat.entries.at(-1)?.author.kind).toBe("system");
+			if (target === "document") h.context.plan.revision = (h.context.plan.revision ?? 0) + 1;
+			else {
+				h.chat.entries.push({
+					id: "new-answer",
+					author: { kind: "agent" },
+					text: "That question is answered.",
+					ts: 1,
+				});
+			}
+			release.resolve();
+			await h.chat.sending;
+			await flush();
+			await h.clock.advance(10_000);
+			expect(h.prompts).toEqual([]);
+			expect(h.chat.waiting).toEqual([]);
+			expect(h.chat.busy).toBe(false);
+			expect(h.judge).toHaveBeenCalledTimes(1);
+		} finally {
+			release.resolve();
+		}
+	},
+);
+
+test("shared pause persists before acknowledgement and broadcast", async () => {
+	let h = await setup.harness();
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let candidate: boolean | undefined;
+	h.context.persist = async value => {
+		candidate = value?.().initiativePaused;
+		entered.resolve();
+		await release.promise;
+	};
+	let changing = setParticipation(h.context, h.ws, pause(true));
+	await entered.promise;
+	expect(candidate).toBe(true);
+	expect(participation(h.context).paused).toBe(false);
+	expect(h.replies).toEqual([]);
+	expect(h.frames).toEqual([]);
+	release.resolve();
+	await changing;
+	expect(participation(h.context).paused).toBe(true);
+	expect(h.replies.at(-1)).toMatchObject({
+		kind: "chat:participation",
+		enabled: true,
+		paused: true,
+	});
+	expect(h.frames.at(-1)).toMatchObject({
+		kind: "chat:participation",
+		enabled: true,
+		paused: true,
+	});
+});
+
+test("a failed pause leaves the previous participation and opportunity intact", async () => {
+	let h = await setup.harness();
+	await Chat.send(h.context, h.ws, message());
+	h.context.persist = async () => {
+		throw new Error("save failed");
+	};
+	await setParticipation(h.context, h.ws, pause(true));
+	expect(participation(h.context).paused).toBe(false);
+	expect(h.replies.at(-1)?.kind).toBe("session:error");
+	expect(h.frames.some(frame => frame.kind === "chat:participation")).toBe(false);
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+});
+
+test("paused participation still accepts explicit messages and resume requires fresh input", async () => {
+	let h = await setup.harness();
+	await Chat.send(h.context, h.ws, message("Old source"));
+	await setParticipation(h.context, h.ws, pause(true));
+	await h.clock.advance(10_000);
+	expect(h.judge).not.toHaveBeenCalled();
+	await Chat.send(h.context, h.ws, message("Explicit while paused", "planner"));
+	await until(() => h.prompts.length === 1);
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
+	await setParticipation(h.context, h.ws, pause(false));
+	await h.clock.advance(10_000);
+	expect(h.judge).not.toHaveBeenCalled();
+	await Chat.send(h.context, h.ws, message("Fresh source"));
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+});
+
+test("contribution identities distinguish principals rather than tabs", async () => {
+	let h = await setup.harness();
+	let saved = {
+		id: "saved",
+		author: { kind: "member" as const, handle: "ana" },
+		text: "Context",
+		ts: 0,
+	};
+	h.chat.entries.push(saved);
+	contributed(h.context, h.ws, saved);
+	let scheduler = h.chat.initiative!;
+	scheduler.typing("another-tab", "U_ana", true);
+	scheduler.typing("another-tab", "U_ana", false);
+	await h.clock.advance(1500);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+});
