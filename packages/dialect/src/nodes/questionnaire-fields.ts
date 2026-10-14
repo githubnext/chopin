@@ -19,6 +19,7 @@ export type Question = {
 	prompt: string;
 	description?: string;
 	multiple: boolean;
+	response?: "text";
 	options: Option[];
 	/** Projection of the resolved answer, when there is one. */
 	answer?: string;
@@ -80,6 +81,19 @@ export function parse(value: unknown): Questionnaire {
 	}
 	let questions = Array.isArray(raw.questions) ? raw.questions : [];
 	for (let question of questions) {
+		if (question && typeof question === "object" && Object.hasOwn(question, "response")) {
+			if (question.response !== "text" || question.multiple !== false) {
+				throw new Error("invalid questionnaire text response");
+			}
+			if (question.choices?.length || question.previous?.choices.length) {
+				throw new Error("text questionnaire cannot contain answer choices");
+			}
+			if (
+				Object.hasOwn(question, "answer")
+				&& (typeof question.answer !== "string" || !question.answer.trim()
+					|| question.answer.length > limits.MAX_CUSTOM_ANSWER)
+			) throw new Error("invalid questionnaire written answer");
+		}
 		if (!question || typeof question !== "object" || !Object.hasOwn(question, "previous")) {
 			continue;
 		}

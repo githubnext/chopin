@@ -208,14 +208,25 @@ class Validator {
 
 	#questionChoices(node: Jsx, path: string): void {
 		let elements = children(node).filter(isJsx);
+		let written = stringAttribute(node, "response") === "text";
+		if (written && stringAttribute(node, "multiple") !== "false") {
+			this.add("text-question-multiple", "A written response cannot be multiple", path, node);
+		}
 		let options = new Set(
 			elements.filter(item => item.name === "Option")
 				.map(item => stringAttribute(item, "id")),
 		);
 		for (let answer of elements.filter(item => item.name === "Answer")) {
+			let value = stringAttribute(answer, "value");
+			if (written && (!value?.trim() || value.length > limits.MAX_CUSTOM_ANSWER)) {
+				this.add("invalid-text-answer", "A written answer requires bounded prose", path, answer);
+			}
 			let raw = stringAttribute(answer, "choices");
 			if (raw === undefined) continue;
 			let chosen = raw.trim().split(/\s+/).filter(Boolean);
+			if (written) {
+				this.add("text-answer-choices", "A written answer cannot select options", path, answer);
+			}
 			if (chosen.length > limits.MAX_OPTIONS) {
 				this.add(
 					"too-many-answer-choices",
@@ -257,6 +268,14 @@ class Validator {
 			}
 			if (raw === undefined) continue;
 			let chosen = raw.trim().split(/\s+/).filter(Boolean);
+			if (written) {
+				this.add(
+					"text-previous-choices",
+					"A previous written answer cannot select options",
+					path,
+					item,
+				);
+			}
 			if (chosen.length > limits.MAX_OPTIONS) {
 				this.add(
 					"too-many-previous-choices",
@@ -435,7 +454,9 @@ class Validator {
 				let freeTextQuestion = spec.name === "Question" && parent?.name === "Questionnaire"
 					&& !stringAttribute(parent, "thread")
 					&& [undefined, "expired"].includes(stringAttribute(parent, "status"));
-				if (found === 0 && !pendingQuestion && !freeTextQuestion) {
+				let writtenQuestion = spec.name === "Question"
+					&& stringAttribute(node, "response") === "text";
+				if (found === 0 && !pendingQuestion && !freeTextQuestion && !writtenQuestion) {
 					this.add(
 						"missing-children",
 						`\`${spec.name}\` requires at least one ${allowed.join(" or ")}`,

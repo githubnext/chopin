@@ -12,7 +12,7 @@ export function projectSuggestion(
 	suppressed = false,
 ): SuggestionProjection {
 	if (
-		!suggestion || suppressed || question.multiple
+		!suggestion || suppressed || question.multiple || question.response === "text"
 		|| !question.options.some(option => option.id === suggestion.optionId)
 	) return { draft };
 

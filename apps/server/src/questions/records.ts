@@ -33,13 +33,18 @@ export function normalizeRecord(raw: unknown): Record {
 	if (Object.hasOwn(value, "at")) unix(value.at);
 	if (
 		Object.hasOwn(value, "origin") && value.origin !== "planner"
-		&& value.origin !== "conversation"
+		&& value.origin !== "conversation" && value.origin !== "human"
 	) invalid();
 	if (Object.hasOwn(value, "threadId")) text(value.threadId, dialectLimits.MAX_ID);
 	if (Object.hasOwn(value, "owner")) text(value.owner);
 	if (Object.hasOwn(value, "decidedAt")) unix(value.decidedAt);
 	if (Object.hasOwn(value, "choices")) choices(value.choices, known);
 	if (Object.hasOwn(value, "answers")) answers(value.answers, known);
+	if (value.status === "answered") {
+		for (let [id, question] of known.questions) {
+			if (question.response === "text" && !Object.hasOwn(object(value.answers), id)) invalid();
+		}
+	}
 	if (Object.hasOwn(value, "history")) history(value.history, known);
 	if (Object.hasOwn(value, "prose")) prose(value.prose);
 	if (Object.hasOwn(value, "optionOrigins")) {

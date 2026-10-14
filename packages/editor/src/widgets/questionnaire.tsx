@@ -63,6 +63,7 @@ function definition(value: Questionnaire) {
 			id: question.id,
 			header: question.header,
 			question: question.prompt,
+			...(question.response === undefined ? {} : { response: question.response }),
 			...(question.description === undefined ? {} : { description: question.description }),
 			multiple: question.multiple,
 			options: question.options.map(option => ({
@@ -510,7 +511,11 @@ function Decided(
 		<Provenance
 			at={meta ? meta.decidedAt : value.at}
 			by={resolver}
-			verb={discarded ? "Discarded" : "Answered"}
+			verb={discarded
+				? "Discarded"
+				: value.questions.some(question => question.response === "text")
+				? "Decided"
+				: "Answered"}
 		/>
 	);
 	// The document hides a decision without prose, so its write-up's progress and Retry live

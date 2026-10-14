@@ -1,6 +1,7 @@
 import { derive } from "../answer";
 import { crdt } from "../draft";
 import { decision, identified } from "../schema";
+import { textSplice } from "./text-splice";
 import type { Definition, Drafts } from "../index";
 import type { AddOptionResult, Collaborator } from "./question-view";
 import type { Snapshot, Transport, Unsubscribe } from "./questionnaire-types";
@@ -167,11 +168,11 @@ export class QuestionnaireController {
 			}
 			if (patch.custom !== undefined) {
 				let value = doc.api.str([question, "custom"]);
-				let text = patch.custom as string;
+				let edit = textSplice(value.view(), patch.custom as string);
 				// json-joy 17 binary-encodes a zero-length delete so that the receiver decodes
 				// garbage that swallows the following insert, and it throws on an empty insert.
-				if (value.length() > 0) value.del(0, value.length());
-				if (text) value.ins(0, text);
+				if (edit?.remove) value.del(edit.start, edit.remove);
+				if (edit?.insert) value.ins(edit.start, edit.insert);
 			}
 		});
 	};

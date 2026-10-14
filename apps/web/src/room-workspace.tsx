@@ -1797,6 +1797,7 @@ export function RoomWorkspace(
 					)}
 					decisions={
 						<Decisions
+							key={room}
 							additional={
 								<EvidenceDecisions
 									store={experiments}
