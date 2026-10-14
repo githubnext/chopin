@@ -32,6 +32,9 @@ export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork
 
 export default defineConfig({
 	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
+	optimizeDeps: {
+		esbuildOptions: { minifyWhitespace: true, minifySyntax: true },
+	},
 
 	resolve: {
 		// Only what this app resolves itself. Lexical and Yjs belong to the
