@@ -85,6 +85,11 @@ disposable session receives its owner's token when created and has no
 client-level service token or logged-in-user fallback. That detail is specific to
 the Copilot SDK adapter, not a property every harness in `HARNESS` shares.
 
+The two pull-request tool names and input schemas are available when a Planner
+session opens. GitHub MCP discovery runs on the first pull-request tool call,
+using the owner's current credential. An unavailable server or missing required
+tool fails that call; document-only turns do not wait for discovery.
+
 That isolated Planner has no:
 
 - checkout, shell, or host filesystem;

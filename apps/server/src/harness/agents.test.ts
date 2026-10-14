@@ -17,6 +17,8 @@ import type { ActiveOwnerBinding } from "../agent/active-owner";
 it("opens a host-only Planner turn with bound toolsContext, then destroys its sandbox", async () => {
 	let toolsSeen: string[] = [];
 	let resultSeen: unknown;
+	let discoveries = 0;
+	let conversions = 0;
 	let destroyed = { session: 0, sandbox: 0 };
 	let fake: HarnessV1 = {
 		specificationVersion: "harness-v1",
@@ -102,17 +104,26 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 		instructions: "Only Chopin tools",
 	}, {
 		agent: createPlannerAgent(fake) as never,
-		githubTools: async () => ({
-			ok: true,
-			value: {
-				list_pull_requests: tool({
-					inputSchema: z.object({}),
-					contextSchema: z.object({ repository: z.object({ id: z.string() }) }),
-					execute: async (_input, { context }) => context.repository.id,
-				}),
-				pull_request_read: tool({ inputSchema: z.object({}), execute: async () => "unused" }),
-			},
-		}),
+		githubTools: async () => {
+			discoveries++;
+			return {
+				ok: true,
+				value: {
+					list_pull_requests: tool({
+						inputSchema: z.object({}),
+						contextSchema: z.object({ repository: z.object({ id: z.string() }) }),
+						execute: async (_input, { context }) => ({
+							content: [{ type: "text" as const, text: context.repository.id }],
+						}),
+						toModelOutput: ({ output }) => {
+							conversions++;
+							return { type: "content" as const, value: output.content };
+						},
+					}),
+					pull_request_read: tool({ inputSchema: z.object({}), execute: async () => "unused" }),
+				},
+			};
+		},
 		createSandbox: async () =>
 			({
 				defaultWorkingDirectory: "/tmp",
@@ -127,6 +138,7 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 	});
 	expect(opened.ok).toBe(true);
 	if (!opened.ok) return;
+	expect(discoveries).toBe(0);
 	try {
 		let result = await opened.value.stream("read the repository", owner.signal);
 		let parts = [];
@@ -134,7 +146,11 @@ it("opens a host-only Planner turn with bound toolsContext, then destroys its sa
 		expect(parts.some(part => part.type === "tool-result")).toBe(true);
 		expect(parts.some(part => part.type === "text-delta" && part.text === "This repository only."))
 			.toBe(true);
-		expect(resultSeen).toMatchObject({ output: "R_channel" });
+		expect(resultSeen).toMatchObject({
+			output: { content: [{ type: "text", text: "R_channel" }] },
+		});
+		expect(discoveries).toBe(1);
+		expect(conversions).toBe(1);
 		expect(toolsSeen).toEqual(PLANNER_TOOL_NAMES);
 	} finally {
 		await opened.value.destroy();

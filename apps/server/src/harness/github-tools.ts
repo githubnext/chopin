@@ -315,3 +315,81 @@ export async function githubTools(
 		if (openings.get(key) === opening) openings.delete(key);
 	}
 }
+
+function waitForDiscovery<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+	if (signal.aborted) return Promise.reject(signal.reason);
+	return new Promise((resolve, reject) => {
+		let abort = () => reject(signal.reason);
+		signal.addEventListener("abort", abort, { once: true });
+		pending.then(
+			value => {
+				signal.removeEventListener("abort", abort);
+				resolve(value);
+			},
+			cause => {
+				signal.removeEventListener("abort", abort);
+				reject(cause);
+			},
+		);
+		if (signal.aborted) abort();
+	});
+}
+
+/** Advertises the same local PR tools while deferring remote discovery until a call needs one. */
+export function lazyGithubTools(
+	owner: ActiveOwnerBinding,
+	load: typeof githubTools = githubTools,
+): ToolSet {
+	let lazy: ToolSet = {};
+	for (let [name, schema] of Object.entries(GITHUB_TOOL_SCHEMAS)) {
+		// MCP supplies one converter per tool; the harness may clone its output before conversion.
+		let converter: Tool["toModelOutput"];
+		lazy[name] = tool({
+			description: GITHUB_TOOL_DESCRIPTIONS[name as keyof typeof GITHUB_TOOL_SCHEMAS],
+			inputSchema: schema.inputSchema,
+			contextSchema: RepositoryContextSchema,
+			toModelOutput: args => {
+				if (converter) return converter(args);
+				return typeof args.output === "string"
+					? { type: "text", value: args.output }
+					: { type: "json", value: args.output };
+			},
+			execute: async (input, options) => {
+				let abortSignal = options.abortSignal
+					? AbortSignal.any([owner.signal, options.abortSignal])
+					: owner.signal;
+				let assertCurrent = () => {
+					abortSignal.throwIfAborted();
+					if (owner.expiresAt.getTime() <= Date.now() || owner.currentToken() !== owner.token) {
+						throw new Error("GitHub authorization expired");
+					}
+				};
+				assertCurrent();
+				let loaded: Awaited<ReturnType<typeof githubTools>>;
+				try {
+					loaded = await waitForDiscovery(load(owner), abortSignal);
+				} catch (cause) {
+					assertCurrent();
+					throw new Error("GitHub tools unavailable", { cause });
+				}
+				assertCurrent();
+				if (!loaded.ok) {
+					if (loaded.error.kind === "MissingTool") throw new MissingToolError(loaded.error.name);
+					throw new Error("GitHub tools unavailable", { cause: loaded.error.cause });
+				}
+				let required = requireTools(loaded.value, Object.keys(GITHUB_TOOL_SCHEMAS));
+				if (!required.ok) throw new MissingToolError(required.error.name);
+				for (let [requiredName, remote] of Object.entries(required.value)) {
+					if (!remote.execute) throw new MissingToolError(requiredName);
+				}
+				if (!await owner.revalidate()) throw new Error("GitHub authorization expired");
+				assertCurrent();
+				let remote = required.value[name]!;
+				let output = await remote.execute!(input, { ...options, abortSignal });
+				converter = remote.toModelOutput;
+				return output;
+			},
+		}) as Tool;
+	}
+	return lazy;
+}

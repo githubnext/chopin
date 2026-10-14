@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { tool } from "ai";
 import { z } from "zod";
 
-import { bindRepository, GITHUB_TOOL_SCHEMAS, githubTools } from "./github-tools";
+import { bindRepository, GITHUB_TOOL_SCHEMAS, githubTools, lazyGithubTools } from "./github-tools";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { HostedRepository } from "../agent/repository";
@@ -609,5 +609,208 @@ describe("githubTools", () => {
 		await githubTools(fakeOwner({ ownerSessionId: "session-a" }), { createClient });
 		await githubTools(fakeOwner({ ownerSessionId: "session-b" }), { createClient });
 		expect(created).toBe(2);
+	});
+});
+
+describe("lazyGithubTools", () => {
+	test("waits for first discovery and preserves repository context and model-output conversion", async () => {
+		let release!: (result: Awaited<ReturnType<typeof githubTools>>) => void;
+		let discovery = new Promise<Awaited<ReturnType<typeof githubTools>>>(resolve =>
+			release = resolve
+		);
+		let calls: unknown[] = [];
+		let converted: unknown[] = [];
+		let owner = fakeOwner();
+		let load = () => discovery;
+		let tools = lazyGithubTools(owner, load);
+		let options = {
+			toolCallId: "call-1",
+			messages: [],
+			context: { repository: repository({ owner: "real", name: "repo" }) },
+		};
+		let pending = tools.list_pull_requests!.execute!({ state: "open" }, options);
+		expect(calls).toEqual([]);
+		release({
+			ok: true,
+			value: {
+				list_pull_requests: tool({
+					inputSchema: GITHUB_TOOL_SCHEMAS.list_pull_requests.inputSchema,
+					execute: async (input, callOptions) => {
+						calls.push({ input, context: callOptions.context });
+						return { content: [{ type: "text", text: "one PR" }] };
+					},
+					toModelOutput: args => {
+						converted.push(args);
+						return { type: "text", value: "converted PR" };
+					},
+				}),
+				pull_request_read: remoteTool("pull_request_read"),
+			},
+		});
+		let output = await pending;
+		expect(calls).toEqual([{
+			input: { state: "open" },
+			context: { repository: repository({ owner: "real", name: "repo" }) },
+		}]);
+		expect(
+			await tools.list_pull_requests!.toModelOutput!({
+				toolCallId: "call-1",
+				input: { state: "open" },
+				output,
+			}),
+		).toEqual({ type: "text", value: "converted PR" });
+		expect(converted).toEqual([{ toolCallId: "call-1", input: { state: "open" }, output }]);
+	});
+
+	test("refuses an aborted call after discovery without invoking the remote tool", async () => {
+		let release!: (result: Awaited<ReturnType<typeof githubTools>>) => void;
+		let discovery = new Promise<Awaited<ReturnType<typeof githubTools>>>(resolve =>
+			release = resolve
+		);
+		let controller = new AbortController();
+		let executed = 0;
+		let tools = lazyGithubTools(fakeOwner(), () => discovery);
+		let pending = tools.pull_request_read!.execute!({ method: "get", pullNumber: 1 }, {
+			toolCallId: "call-2",
+			messages: [],
+			context: { repository: repository() },
+			abortSignal: controller.signal,
+		});
+		controller.abort(new Error("turn stopped"));
+		release({
+			ok: true,
+			value: {
+				list_pull_requests: remoteTool("list_pull_requests"),
+				pull_request_read: tool({
+					inputSchema: GITHUB_TOOL_SCHEMAS.pull_request_read.inputSchema,
+					execute: async () => {
+						executed++;
+						return "unexpected";
+					},
+				}),
+			},
+		});
+		await expect(pending).rejects.toThrow("turn stopped");
+		expect(executed).toBe(0);
+	});
+
+	test("an aborted PR call stops waiting for unresolved discovery", async () => {
+		let release!: (result: Awaited<ReturnType<typeof githubTools>>) => void;
+		let discovery = new Promise<Awaited<ReturnType<typeof githubTools>>>(resolve =>
+			release = resolve
+		);
+		let controller = new AbortController();
+		let tools = lazyGithubTools(fakeOwner(), () => discovery);
+		let pending = tools.list_pull_requests!.execute!({}, {
+			toolCallId: "aborted-while-loading",
+			messages: [],
+			context: { repository: repository() },
+			abortSignal: controller.signal,
+		});
+		controller.abort(new Error("turn stopped"));
+		try {
+			await expect(Promise.race([
+				pending,
+				new Promise((_, reject) => setTimeout(() => reject(new Error("still waiting")), 100)),
+			])).rejects.toThrow("turn stopped");
+		} finally {
+			release({ ok: true, value: {} });
+		}
+	});
+
+	test("fails a missing remote tool clearly and retries discovery on the next call", async () => {
+		let attempts = 0;
+		let tools = lazyGithubTools(fakeOwner(), async () => {
+			attempts++;
+			return attempts === 1
+				? { ok: false, error: { kind: "MissingTool", name: "pull_request_read" } }
+				: {
+					ok: true,
+					value: {
+						list_pull_requests: remoteTool("list_pull_requests"),
+						pull_request_read: remoteTool("pull_request_read"),
+					},
+				};
+		});
+		let options = {
+			toolCallId: "retry",
+			messages: [],
+			context: { repository: repository() },
+		};
+		await expect(tools.list_pull_requests!.execute!({}, options))
+			.rejects.toThrow("GitHub tool pull_request_read is unavailable");
+		expect(await tools.list_pull_requests!.execute!({}, options))
+			.toEqual({ name: "list_pull_requests", remote: true });
+		expect(attempts).toBe(2);
+	});
+
+	test("an offline discovery fails only the PR call", async () => {
+		let tools = lazyGithubTools(fakeOwner(), async () => ({
+			ok: false,
+			error: { kind: "Unavailable", cause: new Error("offline") },
+		}));
+		await expect(tools.pull_request_read!.execute!(
+			{ method: "get", pullNumber: 1 },
+			{ toolCallId: "offline", messages: [], context: { repository: repository() } },
+		)).rejects.toThrow("GitHub tools unavailable");
+	});
+
+	test("refuses a changed owner credential after discovery", async () => {
+		let release!: (result: Awaited<ReturnType<typeof githubTools>>) => void;
+		let discovery = new Promise<Awaited<ReturnType<typeof githubTools>>>(resolve =>
+			release = resolve
+		);
+		let token = "gh-owner-token";
+		let owner = fakeOwner({ currentToken: () => token });
+		let executed = 0;
+		let tools = lazyGithubTools(owner, () => discovery);
+		let pending = tools.list_pull_requests!.execute!({}, {
+			toolCallId: "stale",
+			messages: [],
+			context: { repository: repository() },
+		});
+		token = "rotated-token";
+		release({
+			ok: true,
+			value: {
+				list_pull_requests: tool({
+					inputSchema: GITHUB_TOOL_SCHEMAS.list_pull_requests.inputSchema,
+					execute: async () => {
+						executed++;
+						return "unexpected";
+					},
+				}),
+				pull_request_read: remoteTool("pull_request_read"),
+			},
+		});
+		await expect(pending).rejects.toThrow("GitHub authorization expired");
+		expect(executed).toBe(0);
+	});
+
+	test("passes owner revocation into a running remote call", async () => {
+		let controller = new AbortController();
+		let owner = fakeOwner({ signal: controller.signal });
+		let remoteSignal: AbortSignal | undefined;
+		let tools = lazyGithubTools(owner, async () => ({
+			ok: true,
+			value: {
+				list_pull_requests: tool({
+					inputSchema: GITHUB_TOOL_SCHEMAS.list_pull_requests.inputSchema,
+					execute: async (_input, options) => {
+						remoteSignal = options.abortSignal;
+						return "ok";
+					},
+				}),
+				pull_request_read: remoteTool("pull_request_read"),
+			},
+		}));
+		await tools.list_pull_requests!.execute!({}, {
+			toolCallId: "revoked",
+			messages: [],
+			context: { repository: repository() },
+		});
+		expect(remoteSignal?.aborted).toBe(false);
+		controller.abort(new Error("credential-rotated"));
+		expect(remoteSignal?.aborted).toBe(true);
 	});
 });
