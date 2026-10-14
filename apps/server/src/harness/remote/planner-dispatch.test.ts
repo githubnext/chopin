@@ -140,8 +140,8 @@ async function dispatchServer() {
 			let text = result.content[0].text as string;
 			return result.isError ? { error: text } : JSON.parse(text);
 		}
-		/** The backend the connector starts: a credential for the document, then a link that attaches. */
-		async function backend() {
+		/** The Planner credential the connector asks for before it starts a backend. */
+		async function credential() {
 			let issued = await send("/api/connector/planner", {
 				bearer: token,
 				headers: {
@@ -150,8 +150,12 @@ async function dispatchServer() {
 				},
 				body: { document: channel.id },
 			});
-			let { token: credential } = await issued.json();
-			let raw = await rawLink(server.url, credential);
+			expect(issued.status).toBe(200);
+			return (await issued.json()).token as string;
+		}
+		/** The backend the connector starts: a credential for the document, then a link that attaches. */
+		async function backend() {
+			let raw = await rawLink(server.url, await credential());
 			raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
 			return raw;
 		}
@@ -169,7 +173,7 @@ async function dispatchServer() {
 					params: { name: "disconnect_workspace", arguments: {} },
 				},
 			});
-		return { id: machine.id, token, poll, backend, disconnect };
+		return { id: machine.id, token, poll, credential, backend, disconnect };
 	}
 	let path = `/api/documents/${channel.id}/machine`;
 	let choose = async (login: string, machine: string | null) => {
@@ -180,6 +184,20 @@ async function dispatchServer() {
 	let choice = async (login: string) => (await send(path, { login })).json();
 	let url = expect.stringContaining(`https://chopin.test/`);
 	return { ...linked, machines, planners, server, send, machine, choose, choice, url };
+}
+
+/** The status a Planner link's upgrade gets with `credential`: 101 when it opens. */
+async function upgrade(url: string, credential: string) {
+	let response = await fetch(`${url}/planner-link`, {
+		headers: {
+			connection: "Upgrade",
+			upgrade: "websocket",
+			"sec-websocket-version": "13",
+			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+			authorization: `Bearer ${credential}`,
+		},
+	});
+	return response.status;
 }
 
 describe("choosing a machine for a document", () => {
@@ -253,6 +271,42 @@ describe("choosing a machine for a document", () => {
 			planners: [{ id: channel.id, url }],
 		});
 		expect((await choice("member")).planner.state).toBe("starting");
+	});
+
+	it("withdraws a machine's credential once it is no longer asked, so it never attaches after Automatic", async () => {
+		let { machine, choose, channel, server, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let rivals = await machine("rival", "U_rival", "rival-box");
+		await choose("member", laptop.id);
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		// The laptop's backend has its credential, and has yet to attach when the rival's does.
+		let credential = await laptop.credential();
+		let held = await rivals.backend();
+		await held.next("attached");
+		// So the laptop is no longer asked to run it; then its owner chooses Automatic.
+		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		await choose("member", null);
+		held.send({ type: "detach" });
+		for (let deadline = Date.now() + 4_000; server.attachments.holder(channel.id);) {
+			expect(Date.now()).toBeLessThan(deadline);
+			await Bun.sleep(50);
+		}
+		// With the document free, the laptop's old credential still opens no link.
+		expect(await upgrade(server.url, credential)).toBe(401);
+		expect(server.attachments.attached(channel.id)).toBe(false);
+	});
+
+	it("withdraws the credential a machine got for the document when its owner chooses another, asked or not", async () => {
+		let { machine, choose, server } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		// A credential got before the laptop's connector was ever asked to run the Planner.
+		let credential = await laptop.credential();
+		await choose("member", null);
+		expect(await upgrade(server.url, credential)).toBe(401);
 	});
 
 	it("never asks a machine without a Planner command or an older connector", async () => {

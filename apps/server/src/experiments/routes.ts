@@ -356,7 +356,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * The documents whose Planner each paired machine was told to run, by machine id, each with its
-	 * repository. Forgotten with a restart, which also releases every Planner.
+	 * repository. A document leaves only once the machine's credentials for it are withdrawn, so a
+	 * backend it was told to stop cannot attach later. Forgotten with a restart, which also forgets
+	 * every credential and releases every Planner.
 	 */
 	let dispatched = new Map<string, Map<string, string>>();
 	/**
@@ -387,8 +389,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			documents.push({ id: channel.id, url });
 		}
 		let told = new Map(dispatched.get(connection.machineId));
+		let wanted = new Set(documents.map(document => document.id));
 		for (let [documentId, repositoryId] of told) {
-			if (repositoryId === connection.source.repositoryId) told.delete(documentId);
+			if (repositoryId !== connection.source.repositoryId || wanted.has(documentId)) continue;
+			// No longer asked, as another account now holds it: a credential it got stops working.
+			options.planners?.withdraw(connection.machineId, documentId);
+			told.delete(documentId);
 		}
 		for (let document of documents) told.set(document.id, connection.source.repositoryId);
 		if (told.size) dispatched.set(connection.machineId, told);
@@ -397,21 +403,24 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * Stop the Planner backends `machineId` was told to run, except where `keep` says otherwise:
-	 * its attached link is refused with `message` and closed, and its credentials withdrawn. Its
-	 * connector, asked again, no longer runs them either.
+	 * its credentials are withdrawn, then its attached link is refused with `message` and closed.
+	 * Its connector, asked again, no longer runs them either. The credentials for `documentId` are
+	 * withdrawn even when nothing tracks the machine for it any more.
 	 */
 	async function stopPlanners(
 		machineId: string,
 		message: (label: string) => string,
 		keep: (documentId: string, repositoryId: string) => boolean = () => false,
+		documentId?: string,
 	) {
+		if (documentId) options.planners?.withdraw(machineId, documentId);
 		let told = dispatched.get(machineId);
 		if (!told) return;
 		let label = (await auth.storage.machines.get(machineId))?.label ?? "The machine";
 		for (let [documentId, repositoryId] of told) {
 			if (keep(documentId, repositoryId)) continue;
-			told.delete(documentId);
 			options.planners?.withdraw(machineId, documentId);
+			told.delete(documentId);
 			await options.attachments?.()?.stopMachine(documentId, machineId, message(label));
 		}
 		if (!told.size) dispatched.delete(machineId);
@@ -960,6 +969,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						machine ? "another machine" : "Automatic"
 					} for this document, so ${label} stopped running its Planner.`,
 				documentId => documentId !== channel.id,
+				channel.id,
 			);
 		}
 		connections.wake(channel.repositoryId);

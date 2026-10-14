@@ -399,7 +399,10 @@ Chopin asks it to start that document's Planner, as long as the Planner is
 free or already yours; it never takes over a Planner another account holds.
 The backend gets its credential just as with `--planner`. Choosing another
 machine or **Automatic**, disconnecting or revoking the machine, or losing push
-access to the repository stops it. Older `chopin` releases are never asked.
+access to the repository stops it. Whenever Chopin stops asking the machine,
+another account taking the Planner first included, the credentials it got for
+that document stop working, so a backend that had yet to attach never does.
+Older `chopin` releases are never asked.
 This needs a server that speaks connector protocol 4.
 
 ## Update
