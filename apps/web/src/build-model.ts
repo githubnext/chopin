@@ -730,17 +730,19 @@ export function buildLabel(look: BuildLook): string {
 		case "plan":
 			return "Build plan";
 		case "tasks":
-			return "Breaking into tasks…";
+			return "Preparing tasks";
 		case "building":
 			return `Building · ${look.done} of ${look.total}`;
 		case "stopped":
 			return "Build stopped";
 		case "agent":
-			return "Start your local agent";
+			return "Agent offline";
 		case "built":
 			return "Built";
 		case "stale":
-			return look.blocked ?? `${plural(look.changes, "change", "changes")} to build`;
+			return look.blocked
+				? look.blocked.includes("accepted comments") ? "Comments pending" : "Waiting to build"
+				: `${plural(look.changes, "change", "changes")} ready`;
 		case "rebuilding":
 			return "Building changes…";
 		case "failed":

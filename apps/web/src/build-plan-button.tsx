@@ -353,10 +353,9 @@ function handOff(from: HTMLElement) {
 }
 
 /**
- * The header's build slot, beside the people here. Before the first build it is
- * Build plan, always present and inert with its reason until it can run. After
- * the press the same slot becomes a quiet capsule that names the build's state
- * and opens Build. It never hides, including while Build is open.
+ * The header's build slot, beside the people here. Named blockers replace Build
+ * plan with a capsule; missing connections offer setup. After the press the
+ * same slot names the build's state and opens Build, including while Build is open.
  */
 export function BuildPlanButton(
 	{
@@ -499,7 +498,7 @@ export function BuildPlanButton(
 					}}
 					type="button"
 				>
-					{blocked?.startsWith("Waiting on ") ? blocked : "Build plan"}
+					Build plan
 				</button>
 				{blocked && <span className="sr-only" id={reason}>{blocked}</span>}
 				{live}

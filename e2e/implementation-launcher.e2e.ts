@@ -501,87 +501,112 @@ test("a #task link opens Build on that task, and rows toggle from the keyboard",
 		.toBe(0);
 });
 
-test("Build without a running local agent says how to start one", async ({ seed, join: enter }) => {
-	await seed("# Offline build\n\nNo local agent is connected.\n", { graph: preparedGraph() });
-	let page = await enter(person());
-	await page.getByRole("button", { name: "Build plan", exact: true }).click();
-	let capsule = page.getByRole("button", { name: /^Start your local agent/ });
-	await expect(capsule).toHaveAccessibleDescription(
-		"Your local agent isn’t connected. Open Build for the command that starts it.",
-	);
-	await expect(page.getByRole("button", { name: /^Build stopped/ })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
-	await capsule.click();
-	let view = buildView(page);
-	let note = view.getByText(
-		"Your local agent isn’t connected. Run this in your project folder, then press Retry again.",
-		{ exact: true },
-	);
-	await expect(note).toBeVisible();
-	await expect(view.locator("code")).toContainText(
-		"/connector.js -o ~/.chopin/connector.js && CHOPIN_URL=",
-	);
-	await view.getByRole("button", { name: "Copy", exact: true }).click();
-	await expect(view.getByRole("button", { name: /^(Copied|Select to copy)$/ })).toBeVisible();
-	await expect(view.getByRole("link", { name: "Trouble connecting?", exact: true }))
-		.toHaveAttribute("href", /docs\/local-experiments\.md#trouble-connecting$/);
-	await expect(view.getByRole("alert")).toHaveCount(0);
-});
+test(
+	"Build without a running local agent says how to start one",
+	async ({ seed, join: enter }) => {
+		await seed("# Offline build\n\nNo local agent is connected.\n", { graph: preparedGraph() });
+		let page = await enter(person());
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+		let capsule = page.getByRole("button", { name: "Agent offline", exact: true });
+		await expect(capsule).toHaveAccessibleDescription(
+			"Your local agent isn’t connected. Open Build for the command that starts it.",
+		);
+		await expect(page.getByRole("button", { name: /^Build stopped/ })).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Connect agent", exact: true })).toBeVisible();
+		await page.getByRole("button", { name: "Connect agent", exact: true }).click();
+		let popup = page.getByRole("dialog", { name: "Connect agent", exact: true });
+		await expect(popup.getByRole("button", { name: "Copy command", exact: true })).toBeEnabled();
+		let screenshot = test.info().outputPath("agent-connection-header.png");
+		await page.screenshot({ path: screenshot });
+		await test.info().attach("agent-connection-header", {
+			path: screenshot,
+			contentType: "image/png",
+		});
+		await page.keyboard.press("Escape");
+		await capsule.click();
+		let view = buildView(page);
+		let note = view.getByText(
+			"Your local agent isn’t connected. Run this in your project folder, then press Retry again.",
+			{ exact: true },
+		);
+		await expect(note).toBeVisible();
+		await expect(view.locator("code")).toContainText(
+			"/connector.js -o ~/.chopin/connector.js && CHOPIN_URL=",
+		);
+		await view.getByRole("button", { name: "Copy", exact: true }).click();
+		await expect(view.getByRole("button", { name: /^(Copied|Select to copy)$/ })).toBeVisible();
+		await expect(view.getByRole("link", { name: "Trouble connecting?", exact: true }))
+			.toHaveAttribute("href", /docs\/local-experiments\.md#trouble-connecting$/);
+		await expect(view.getByRole("alert")).toHaveCount(0);
+	},
+);
 
-test("Build plan waits for unanswered decisions and says so", async ({ seed, join: enter }) => {
-	let widget = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
-	let question = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
-	let option = "01K0N4W3B7P27CBAEC7A8C8WEA";
-	let definition = {
-		questions: [{
-			id: question,
-			header: "Rollout",
-			question: "How should we deploy?",
-			multiple: false,
-			options: [{ id: option, label: "Canary", description: "" }],
-		}],
-	};
-	await seed(
-		`# Blocked build\n\nA decision is open.\n\n<Questionnaire id="${widget}" by="ana">
+test(
+	"Build plan waits for unanswered decisions and says so",
+	async ({ seed, join: enter }) => {
+		let widget = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
+		let question = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
+		let option = "01K0N4W3B7P27CBAEC7A8C8WEA";
+		let definition = {
+			questions: [{
+				id: question,
+				header: "Rollout",
+				question: "How should we deploy?",
+				multiple: false,
+				options: [{ id: option, label: "Canary", description: "" }],
+			}],
+		};
+		await seed(
+			`# Blocked build\n\nA decision is open.\n\n<Questionnaire id="${widget}" by="ana">
 <Question id="${question}" header="Rollout" prompt="How should we deploy?" multiple="false">
 <Option id="${option}" label="Canary" />
 </Question>
 </Questionnaire>\n`,
-		{
-			revision: 1,
-			graph: preparedGraph(),
-			questions: [{
-				id: widget,
-				definition,
-				status: "open",
-				origin: "planner",
-				history: [],
-				optionOrigins: {},
-				editors: [],
-			}],
-			openQuestions: [{
-				definition,
-				id: widget,
-				model: storedQuestion(definition),
-				revision: 0,
-				widget,
-			}],
-		},
-	);
-	let page = await enter("ana");
-	let plan = page.getByRole("button", { name: "Build plan", exact: true });
-	await expect(plan).toHaveAttribute("aria-disabled", "true");
-	await expect(plan).toHaveAccessibleDescription("Waiting on 1 decision");
-	await expect(plan).toContainText("Waiting on 1 decision");
-	await plan.click({ force: true });
-	await expect(page.locator(`article[data-plan-sidecar-questionnaire="${widget}"]`).first())
-		.toBeFocused();
-	await expect(page.getByRole("button", { name: /^Breaking into tasks/ })).toHaveCount(0);
-	await expect(
-		page.getByRole("group", { name: "Document view" })
-			.getByRole("button", { name: "Build", exact: true }),
-	).toBeDisabled();
-});
+			{
+				revision: 1,
+				graph: preparedGraph(),
+				questions: [{
+					id: widget,
+					definition,
+					status: "open",
+					origin: "planner",
+					history: [],
+					optionOrigins: {},
+					editors: [],
+				}],
+				openQuestions: [{
+					definition,
+					id: widget,
+					model: storedQuestion(definition),
+					revision: 0,
+					widget,
+				}],
+			},
+		);
+		let page = await enter("ana");
+		let plan = page.getByRole("button", { name: "1 decision left. Show blockers", exact: true });
+		await expect(plan).toBeVisible();
+		await expect(page.getByRole("button", { name: "Build plan", exact: true })).toHaveCount(0);
+		await plan.click();
+		let popup = page.getByRole("dialog", { name: "Build blockers", exact: true });
+		let item = popup.getByRole("button", { name: "Review: How should we deploy?", exact: true });
+		await expect(item).toBeVisible();
+		let screenshot = test.info().outputPath("decision-blocker-header.png");
+		await page.screenshot({ path: screenshot });
+		await test.info().attach("decision-blocker-header", {
+			path: screenshot,
+			contentType: "image/png",
+		});
+		await item.click();
+		await expect(page.locator(`article[data-plan-sidecar-questionnaire="${widget}"]`).first())
+			.toBeFocused();
+		await expect(page.getByRole("button", { name: "Preparing tasks", exact: true })).toHaveCount(0);
+		await expect(
+			page.getByRole("group", { name: "Document view" })
+				.getByRole("button", { name: "Build", exact: true }),
+		).toBeDisabled();
+	},
+);
 
 test("a child document has no Build view", async ({ seed, join: enter, room, baseURL }) => {
 	await seed("# Parent\n\nThe parent can be built.\n", { graph: preparedGraph() });
@@ -698,7 +723,7 @@ test("edits after a build read as changes to build, and Build sends them to the 
 		await content(page).getByText("Validate the local agent connection.").click();
 		await page.keyboard.press("End");
 		await page.keyboard.type(" Then report back.");
-		let stale = page.getByRole("button", { name: "1 change to build", exact: true });
+		let stale = page.getByRole("button", { name: "1 change ready", exact: true });
 		await expect(stale).toBeVisible();
 		await expect(stale).toHaveAccessibleDescription("Edits since the last build");
 		await expectClearOfPeople(capsuleBuild(page));

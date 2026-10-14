@@ -746,7 +746,7 @@ describe("build status", () => {
 			tip: "Your local agent isn’t connected. Open Build for the command that starts it.",
 			retry: true,
 		});
-		expect(buildLabel(noAgent)).toBe("Start your local agent");
+		expect(buildLabel(noAgent)).toBe("Agent offline");
 		expect(buildTabReady(snapshot(), noAgent)).toBe(true);
 		expect(retryAction(noAgent)).toBe("Retry");
 		expect(retryAction(failed)).toBe("Retry");
@@ -765,9 +765,9 @@ describe("build status", () => {
 		let stale = live({ outOfSync: true, changes: 3, rebuild: rebuild("stopped") });
 		let manual = look(stale);
 		expect(manual).toMatchObject({ kind: "stale", changes: 3, live: false, build: true });
-		expect(buildLabel(manual)).toBe("3 changes to build");
+		expect(buildLabel(manual)).toBe("3 changes ready");
 		expect(manual).toMatchObject({ tip: "Edits since the last build" });
-		expect(buildLabel(look(live({ outOfSync: true, changes: 1 })))).toBe("1 change to build");
+		expect(buildLabel(look(live({ outOfSync: true, changes: 1 })))).toBe("1 change ready");
 		expect(look(stale, { canEdit: false })).toMatchObject({ build: false });
 		// Under LIVE_BUILD the edits build themselves, so there is nothing to press.
 		expect(look(stale, { live: true })).toMatchObject({
@@ -811,7 +811,7 @@ describe("build status", () => {
 			build: false,
 			tip: "Waiting on 2 decisions and 1 investigation",
 		});
-		expect(buildLabel(result)).toBe("Waiting on 2 decisions and 1 investigation");
+		expect(buildLabel(result)).toBe("Waiting to build");
 	});
 
 	it("says building runs on your agent only to someone who can build", () => {

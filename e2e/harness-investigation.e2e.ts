@@ -37,13 +37,28 @@ test("Build names its required investigation and opens its card", async ({ join,
 	let chat = page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 	await chatInput(chat).fill("@chopin INVESTIGATE-ANCHOR REQUIRED measure cold start");
 	await chat.getByRole("button", { name: "Send message" }).click();
-	let build = page.getByRole("button", { name: "Build plan", exact: true });
-	await expect(build).toHaveAccessibleDescription("Waiting on 1 investigation");
-	await expect(build).toContainText("Waiting on 1 investigation");
+	let build = page.getByRole("button", {
+		name: "1 investigation left. Show blockers",
+		exact: true,
+	});
+	await expect(build).toBeVisible();
 	let card = page.getByRole("article", { name: "Investigation", exact: true });
 	await expect(card).toContainText("Required before building");
 	await expect(card).toContainText("Choose the cache approach from measured cold start times.");
-	await build.click({ force: true });
+	await build.click();
+	let popup = page.getByRole("dialog", { name: "Build blockers", exact: true });
+	let item = popup.getByRole("button", {
+		name: "Open: Measure cold start time on a local checkout.",
+		exact: true,
+	});
+	await expect(item).toBeVisible();
+	let screenshot = test.info().outputPath("required-investigation-header.png");
+	await page.screenshot({ path: screenshot });
+	await test.info().attach("required-investigation-header", {
+		path: screenshot,
+		contentType: "image/png",
+	});
+	await item.click();
 	await expect(card).toBeFocused();
 	await expect(card).toBeInViewport();
 	await expect(card.getByRole("button", { name: "Run", exact: true })).toBeEnabled();

@@ -49,6 +49,8 @@
 }
 .build-connection-field input {
 	width: 100%;
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+	font-size: var(--text-xs);
 	font-weight: var(--font-weight-normal);
 }
 .build-connection-actions,

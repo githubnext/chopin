@@ -1,4 +1,4 @@
-import { DEFAULT_AGENT } from "./experiments/agents";
+import { DEFAULT_AGENT } from "@chopin/protocol/agents";
 import { agentArguments, quote } from "./experiments/setup-commands";
 
 /** The terminal alternative to attaching a Planner directly in its client. */
