@@ -288,12 +288,12 @@ test.describe("automatic result review with the existing scripted Planner", () =
 				path: screenshot,
 				contentType: "image/png",
 			});
-			await link.click();
-			await expect(page).toHaveURL(url => url.pathname === result.child.path);
+			let [evidencePage] = await Promise.all([page.waitForEvent("popup"), link.click()]);
+			await expect(evidencePage).toHaveURL(url => url.pathname === result.child.path);
 			await expect(
-				page.getByRole("region", { name: `Child document: ${result.title}`, exact: true }),
+				evidencePage.getByRole("region", { name: `Child document: ${result.title}`, exact: true }),
 			).toBeVisible();
-			await page.goBack();
+			await evidencePage.close();
 			await page.reload();
 			await expect(resultCard(page, result)).toContainText("Findings reviewed");
 			await expect(chat.getByRole("link", { name: "Read startup evidence", exact: true }))
