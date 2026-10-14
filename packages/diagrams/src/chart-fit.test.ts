@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { barChartLoadingHeight } from "./chart-frame.mjs";
 import { axisLabels, bands, FITTED_TEXT, thinLabels } from "./core/render/charts/fit.mjs";
 import { DIAGRAM_FIXTURES } from "./fixtures";
 import { renderDiagram } from "./render";
@@ -67,6 +68,25 @@ test("upright bars give way to labelled rows when labels outgrow their bands", (
 	if (!short.ok || !long.ok) throw new Error("bar did not render");
 	expect(short.body).toContain("sc-grow-y");
 	expect(long.body).toContain("sc-grow-x");
+});
+
+test("bar loading frame matches fitted and native chart heights", () => {
+	for (let count of [2, 12, 40]) {
+		for (let label of [(index: number) => String(index), (index: number) => `Workload ${index}`]) {
+			let data: Array<[string, number]> = Array.from({ length: count }, (_, index) => [
+				label(index),
+				160 + index,
+			]);
+			for (let width of [324, 450, 700, 850]) {
+				let chart = renderDiagram({ type: "bar", data, unit: "ms" }, {
+					availableWidth: width,
+				});
+				if (!chart.ok) throw new Error("bar did not render");
+				expect(barChartLoadingHeight(data, "ms", width) - 40)
+					.toBeCloseTo(chart.viewBox[3], 4);
+			}
+		}
+	}
 });
 
 test("a chart that fits keeps its authored layout", () => {

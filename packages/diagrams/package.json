@@ -19,6 +19,10 @@
 			"types": "./src/diagram.tsx",
 			"default": "./src/diagram.tsx"
 		},
+		"./chart-frame": {
+			"types": "./src/chart-frame.d.mts",
+			"default": "./src/chart-frame.mjs"
+		},
 		"./wireframe": {
 			"types": "./src/wireframe/index.ts",
 			"default": "./src/wireframe/index.ts"

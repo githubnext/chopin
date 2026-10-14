@@ -1,11 +1,101 @@
-import { useMemo } from "react";
-import { Diagram } from "@chopin/diagrams/react";
+import { Component, lazy, Suspense, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { ErrorInfo, ReactNode } from "react";
+import { barChartLoadingHeight, lineChartLoadingHeight } from "@chopin/diagrams/chart-frame";
+import type { DiagramProps } from "@chopin/diagrams/react";
 import "@chopin/diagrams/styles.css";
 import { initialState, selectedRows } from "./index";
 import type { Result, Scalar, View, ViewState } from "./index";
 
 function text(value: Scalar | undefined) {
 	return value === null || value === undefined ? "—" : String(value);
+}
+
+const DeferredDiagram = lazy(() =>
+	import("@chopin/diagrams/react").then(({ Diagram }) => ({ default: Diagram }))
+);
+
+type BarData = ReadonlyArray<readonly [string, number]>;
+
+function ChartPlaceholder(
+	{ barData, unit, failed }: { barData?: BarData; unit: string; failed?: boolean },
+) {
+	let ref = useRef<HTMLDivElement>(null);
+	let [width, setWidth] = useState(0);
+	useLayoutEffect(() => {
+		let element = ref.current;
+		if (!element) return;
+		let measure = () => setWidth(element.clientWidth);
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+	// This package is outside the web Tailwind scan; reserve inline dimensions.
+	let height = barData && width > 0
+		? barChartLoadingHeight(barData, unit, width)
+		: lineChartLoadingHeight;
+	return (
+		<div
+			ref={ref}
+			role={failed ? undefined : "status"}
+			className="flex flex-col items-center justify-center gap-2 text-sm text-text-secondary"
+			style={{ minHeight: height }}
+		>
+			{failed
+				? (
+					<>
+						<p role="alert" className="m-0">Chart could not load.</p>
+						<button
+							type="button"
+							className="btn btn-sm btn-outline"
+							onClick={() => location.reload()}
+						>
+							Reload page
+						</button>
+					</>
+				)
+				: "Loading chart…"}
+		</div>
+	);
+}
+
+class ChartBoundary extends Component<
+	{ children: ReactNode; barData?: BarData; unit: string },
+	{ failed: boolean }
+> {
+	override state = { failed: false };
+
+	static getDerivedStateFromError(): { failed: boolean } {
+		return { failed: true };
+	}
+
+	override componentDidCatch(error: Error, info: ErrorInfo): void {
+		console.error("[experiment] could not render chart:", error, info.componentStack);
+	}
+
+	override render(): ReactNode {
+		if (this.state.failed) {
+			return <ChartPlaceholder barData={this.props.barData} unit={this.props.unit} failed />;
+		}
+		return this.props.children;
+	}
+}
+
+function Chart(
+	{ spec, title, barData, unit }: Pick<DiagramProps, "spec" | "title"> & {
+		barData?: BarData;
+		unit: string;
+	},
+) {
+	return (
+		<ChartBoundary barData={barData} unit={unit}>
+			<Suspense
+				fallback={<ChartPlaceholder barData={barData} unit={unit} />}
+			>
+				<DeferredDiagram spec={spec} title={title} />
+			</Suspense>
+		</ChartBoundary>
+	);
 }
 
 export function ExperimentView(
@@ -24,6 +114,10 @@ export function ExperimentView(
 		0,
 		40,
 	);
+	let barData: Array<[string, number]> = plotted.map(row => [
+		text(row.values[view.categoryColumn!]),
+		row.values[view.valueColumn!] as number,
+	]);
 	let spec = view.kind === "line-chart"
 		? {
 			type: "line",
@@ -39,9 +133,7 @@ export function ExperimentView(
 			type: "bar",
 			title: view.title,
 			unit,
-			data: plotted.map(
-				row => [text(row.values[view.categoryColumn!]), row.values[view.valueColumn!]],
-			),
+			data: barData,
 		};
 	return (
 		<section aria-label={view.title} className="flex min-w-0 flex-col gap-3">
@@ -78,7 +170,12 @@ export function ExperimentView(
 				})}
 			</div>
 			{(view.kind === "bar-chart" || view.kind === "line-chart") && plotted.length > 0 && (
-				<Diagram spec={spec} title={view.title} />
+				<Chart
+					spec={spec}
+					title={view.title}
+					barData={view.kind === "bar-chart" ? barData : undefined}
+					unit={unit}
+				/>
 			)}
 			{rows.length > 40 && (view.kind === "bar-chart" || view.kind === "line-chart") && (
 				<p className="text-xs text-text-secondary">

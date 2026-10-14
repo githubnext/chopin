@@ -6,6 +6,9 @@ import { content, expect, test } from "./room";
 
 import type { Page } from "@playwright/test";
 
+const CHART_MODULE = /\/assets\/diagram-[^/]+\.js$/;
+const RENDER_MODULE = /\/assets\/render-[^/]+\.js$/;
+
 /** What the current connector sends with each request. */
 const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL) };
 
@@ -16,6 +19,16 @@ function person() {
 
 const PASSAGE = "Compare measured startup time.";
 const FOLLOW_UP = "Then check memory use.";
+
+test("a plain document does not request the chart renderer", async ({ join, page, seed }) => {
+	await seed("# Plain document\n\nThere is no chart here.\n");
+	let charts: string[] = [];
+	page.on("request", request => {
+		if (CHART_MODULE.test(new URL(request.url()).pathname)) charts.push(request.url());
+	});
+	await join(person());
+	expect(charts).toEqual([]);
+});
 
 /** The investigation card whose brief this is. */
 function card(page: Page, brief: string) {
@@ -151,20 +164,99 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	}
 	await expect.poll(async () => (await tool("wait_for_experiment", {})).id).toBe(experiment.id);
 	let claim = await tool("claim_experiment", { id: experiment.id });
-	await tool("submit_experiment_result", { result: performance }, claim.runToken);
+	let result = structuredClone(performance);
+	result.datasets[0]!.rows.push(...Array.from({ length: 9 }, (_, index) => ({
+		key: `workload-${index + 1}`,
+		values: {
+			approach: `Workload ${index + 1}`,
+			workload: "large",
+			milliseconds: 160 + index,
+		},
+	})));
+	await tool("submit_experiment_result", { result }, claim.runToken);
 	await tool("complete_experiment", { id: experiment.id, generation: claim.generation });
 	// The result is published as a child document; the inline card only links to it.
 	let ready = card(page, "Startup comparison");
 	await expect(ready).toHaveAttribute("data-investigation-ready", "");
 	await expect(ready).toContainText("Caching reduced median startup time");
 	await expect(ready.getByRole("table")).toHaveCount(0);
+	let releaseChart!: () => void;
+	let heldChart = new Promise<void>(resolve => {
+		releaseChart = resolve;
+	});
+	await page.route(CHART_MODULE, async route => {
+		await heldChart;
+		await route.continue();
+	});
 	let child = await openChild(page, room);
-	let peerChild = await openChild(peer, room);
+	await expect(child.getByText("Loading chart…", { exact: true })).toBeVisible();
 	let table = child.getByRole("table", { name: "Median startup time", exact: true });
 	await expect(table).toContainText("183");
+	let loadingHeight = await child.getByText("Loading chart…", { exact: true })
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	await child.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("small"),
+	);
+	await expect(table).not.toContainText("410");
+	await child.getByRole("button", { name: "Select Cached", exact: true }).click();
+	await expect(child.getByRole("button", { name: "Select Cached", exact: true })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await child.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption("all");
+	releaseChart();
+	await expect(child.locator('svg[data-sc-type="bar"]')).toBeVisible();
+	let renderedHeight = await child.locator("figure.ch-diagram").first()
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	expect(Math.abs(renderedHeight - loadingHeight)).toBeLessThan(40);
+	await child.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("small"),
+	);
+	await page.unroute(CHART_MODULE);
+	let releasePeerChart!: () => void;
+	let heldPeerChart = new Promise<void>(resolve => {
+		releasePeerChart = resolve;
+	});
+	await peer.route(CHART_MODULE, async route => {
+		await heldPeerChart;
+		await route.continue();
+	});
+	let peerChild = await openChild(peer, room);
 	await peerChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
 		JSON.stringify("small"),
 	);
+	let peerTable = peerChild.getByRole("table", { name: "Median startup time", exact: true });
+	await expect(peerChild.getByText("Loading chart…", { exact: true })).toBeVisible();
+	let peerLoadingHeight = await peerChild.getByText("Loading chart…", { exact: true })
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	releasePeerChart();
+	await expect(peerChild.locator('svg[data-sc-type="bar"]')).toBeVisible();
+	let peerRenderedHeight = await peerChild.locator("figure.ch-diagram").first()
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	expect(Math.abs(peerRenderedHeight - peerLoadingHeight)).toBeLessThan(40);
+	await expect(peerTable).toContainText("183");
+	await peer.unroute(CHART_MODULE);
+	let narrow = await join("narrow", { viewport: { width: 620, height: 900 } });
+	let releaseNarrowChart!: () => void;
+	let heldNarrowChart = new Promise<void>(resolve => {
+		releaseNarrowChart = resolve;
+	});
+	await narrow.route(CHART_MODULE, async route => {
+		await heldNarrowChart;
+		await route.continue();
+	});
+	let narrowChild = await openChild(narrow, room);
+	let narrowTable = narrowChild.getByRole("table", { name: "Median startup time", exact: true });
+	await expect(narrowChild.getByText("Loading chart…", { exact: true })).toBeVisible();
+	let narrowLoadingHeight = await narrowChild.getByText("Loading chart…", { exact: true })
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	releaseNarrowChart();
+	await expect(narrowChild.locator('svg[data-sc-type="bar"]')).toBeVisible();
+	let narrowRenderedHeight = await narrowChild.locator("figure.ch-diagram").first()
+		.evaluate(element => (element as HTMLElement).offsetHeight);
+	expect(Math.abs(narrowRenderedHeight - narrowLoadingHeight)).toBeLessThan(40);
+	await expect(narrowTable).toContainText("183");
+	await narrow.unroute(CHART_MODULE);
 	await expect(child.getByRole("combobox", { name: "Filter Workload", exact: true })).toHaveValue(
 		JSON.stringify("small"),
 	);
@@ -190,6 +282,32 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		JSON.stringify("large"),
 	);
 	await expect(table).toContainText("410");
+	let failed = await join("casey");
+	let renderAttempts = 0;
+	await failed.route(RENDER_MODULE, route => {
+		renderAttempts++;
+		return renderAttempts === 1 ? route.abort("failed") : route.continue();
+	});
+	await failed.reload();
+	let failedChild = await openChild(failed, room);
+	await expect(failedChild.getByRole("alert").filter({ hasText: "Chart could not load." }))
+		.toBeVisible();
+	await expect(failedChild.getByRole("table", { name: "Median startup time", exact: true }))
+		.toContainText("410");
+	await failedChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("small"),
+	);
+	await failedChild.getByRole("button", { name: "Select Cached", exact: true }).click();
+	await failedChild.getByRole("button", { name: "Reload page", exact: true }).click();
+	await expect(failedChild.locator('svg[data-sc-type="bar"]')).toBeVisible();
+	await expect(failedChild.getByRole("combobox", { name: "Filter Workload", exact: true }))
+		.toHaveValue(JSON.stringify("small"));
+	await expect(failedChild.getByRole("button", { name: "Select Cached", exact: true }))
+		.toHaveAttribute("aria-pressed", "true");
+	expect(renderAttempts).toBe(2);
+	await failedChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
+		JSON.stringify("large"),
+	);
 	await page.goto(testChannelPath(room));
 	let second = await investigate(page, room, "Check memory use", FOLLOW_UP);
 	let queued = card(page, "Check memory use");
