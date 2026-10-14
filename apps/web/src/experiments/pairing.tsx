@@ -56,15 +56,16 @@ function MachinesFrame(
 }
 
 /**
- * The person's machines, and what to run to add one. With none paired yet, setup leads and its
- * last step waits for the machine; when the machine connects that step ticks, holds a moment, and
- * the setup folds away above the machine's new row.
+ * The person's machines, and what to run to add one. With none paired yet, setup leads; either
+ * way its status waits for the machine, and when it connects that status ticks, holds a moment,
+ * and the setup folds away above the machine's new row.
  */
 function MachinesPage() {
 	let machines = useMachines();
 	let list = machines.machines;
 	let marks = useNewMachines(list);
 	let add = useUnfold();
+	let setAddOpen = add.setOpen;
 	let first = useUnfold(true, "card");
 	let setFirstOpen = first.setOpen;
 	let addId = useId();
@@ -72,27 +73,50 @@ function MachinesPage() {
 	let [firstRun, setFirstRun] = useState(false);
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef<string>(undefined);
+	// Back from authorizing pairing keys with GitHub, Add a machine opens again where it was.
+	let [reopen, setReopen] = useState(() => new URLSearchParams(location.search).has("add"));
+	useEffect(() => {
+		if (reopen) history.replaceState(history.state, "", "/connect");
+	}, [reopen]);
 	let empty = list?.length === 0;
 	useEffect(() => {
 		if (!empty) return;
 		setFirstRun(true);
 		setFirstOpen(true);
 	}, [empty, setFirstOpen]);
-	// The newest machine is the one that ended the wait.
-	let newcomer = firstRun ? list?.[0] : undefined;
+	useEffect(() => {
+		if (!reopen || !list) return;
+		setReopen(false);
+		if (list.length) setAddOpen(true);
+	}, [reopen, list, setAddOpen]);
+	// The machines there were as Add a machine opened; one that wasn't is the one it waits for.
+	let [before, setBefore] = useState<ReadonlySet<string>>();
+	let hasList = !!list;
+	useEffect(() => {
+		if (!add.open) setBefore(undefined);
+		else if (hasList) {
+			setBefore(current => current ?? new Set(list?.map(machine => machine.id)));
+		}
+	}, [add.open, hasList, list]);
+	let newcomer = firstRun
+		? list?.[0]
+		: before && list?.find(machine => !before.has(machine.id));
 	let landed = newcomer?.connected ? newcomer : undefined;
 	useEffect(() => {
 		if (!landed) return;
 		announced.current = landed.id;
 		setAnnouncement(`${landed.label} connected`);
-		let fold = window.setTimeout(() => setFirstOpen(false), HOLD_MS);
+		let fold = window.setTimeout(() => {
+			setFirstOpen(false);
+			setAddOpen(false);
+		}, HOLD_MS);
 		let done = window.setTimeout(() => setFirstRun(false), HOLD_MS + FOLD_MS);
 		return () => {
 			window.clearTimeout(fold);
 			window.clearTimeout(done);
 		};
-	}, [landed?.id, landed?.label, setFirstOpen]);
-	// Later machines, paired while setup is folded open again, are announced as they arrive.
+	}, [landed?.id, landed?.label, setFirstOpen, setAddOpen]);
+	// Other machines that turn up while the page is open are announced as they arrive.
 	let arrived = marks.arrived;
 	useEffect(() => {
 		if (!arrived || firstRun || announced.current === arrived.id) return;
@@ -126,7 +150,8 @@ function MachinesPage() {
 						<div className="machines-setup-fold">
 							<MachineSetup
 								headingId={firstId}
-								last={<Handshake machine={newcomer} />}
+								open={first.open}
+								status={<Handshake machine={newcomer} />}
 								title="Add your first machine"
 							/>
 						</div>
@@ -135,7 +160,12 @@ function MachinesPage() {
 				{!firstRun && !!list?.length && (
 					<UnfoldPanel unfold={add}>
 						<div className="machines-setup-fold">
-							<MachineSetup headingId={addId} title="Add a machine" />
+							<MachineSetup
+								headingId={addId}
+								open={add.open}
+								status={<Handshake machine={newcomer} />}
+								title="Add a machine"
+							/>
 						</div>
 					</UnfoldPanel>
 				)}

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { listProblem, pairingProblem } from "./pairing-problems";
+import { keyProblem, listProblem, pairingProblem } from "./pairing-problems";
 
 const PAIRING_CODES = [
 	"pairing-expired",
@@ -55,4 +55,22 @@ test("a machine list that fails to load says Chopin keeps trying, in plain words
 	}
 	expect(listProblem("unavailable").title).toBe("Couldn't load your machines");
 	expect(listProblem("authentication-required").title).toBe("Sign in to see your machines");
+});
+
+test("a pairing key that can't be made says why and what to do, never the code", () => {
+	expect(keyProblem("pairing-key-rate-limited")).toEqual({
+		title: "Too many keys at once",
+		body: "You made several keys in the last few minutes. Wait a few minutes, then try again.",
+		retry: true,
+	});
+	expect(keyProblem("authentication-required")).toEqual({
+		title: "Sign in to add a machine",
+		body: "Your Chopin session has ended. Reload the page to sign in again.",
+		retry: false,
+	});
+	expect(keyProblem("unavailable")).toEqual({
+		title: "Couldn't make a key",
+		body: "Chopin didn't answer. Check your connection, then try again.",
+		retry: true,
+	});
 });

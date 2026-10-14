@@ -866,6 +866,7 @@ test("a pairing key minted in the browser pairs a machine once, at once, with au
 	expect(minted.key).toMatch(/^chopin_k_[A-Za-z0-9_-]{43}$/);
 	expect(minted.expiresAt).toBeGreaterThanOrEqual(before + 10 * 60_000);
 	expect(minted.expiresAt).toBeLessThanOrEqual(Date.now() + 10 * 60_000);
+	expect(minted.expiresIn).toBe(10 * 60_000);
 
 	let paired = await request("/api/connector/pairings", { ...CHECKOUT, key: minted.key });
 	expect(paired.status).toBe(200);

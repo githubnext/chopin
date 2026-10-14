@@ -60,7 +60,8 @@ export class PairingKeys {
 		let expiresAt = now + PAIRING_KEY_MS;
 		this.#keys.set(hash, { userId, expiresAt });
 		this.#current.set(userId, hash);
-		return { key, expiresAt };
+		// The lifetime too, so a browser whose clock differs from this one counts it right.
+		return { key, expiresAt, expiresIn: PAIRING_KEY_MS };
 	}
 
 	/**

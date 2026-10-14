@@ -87,3 +87,26 @@ export function listProblem(code: string): Problem {
 		retry: true,
 	};
 }
+
+/** A single-use pairing key for the setup command could not be made. */
+export function keyProblem(code: string): Problem {
+	if (code === "pairing-key-rate-limited") {
+		return {
+			title: "Too many keys at once",
+			body: "You made several keys in the last few minutes. Wait a few minutes, then try again.",
+			retry: true,
+		};
+	}
+	if (code === "authentication-required") {
+		return {
+			title: "Sign in to add a machine",
+			body: "Your Chopin session has ended. Reload the page to sign in again.",
+			retry: false,
+		};
+	}
+	return {
+		title: "Couldn't make a key",
+		body: "Chopin didn't answer. Check your connection, then try again.",
+		retry: true,
+	};
+}

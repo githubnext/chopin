@@ -1,6 +1,4 @@
-/** What /connect asks a person to run to set up a machine. Change the commands here only. */
-
-import { DEFAULT_AGENT } from "@chopin/protocol/agents";
+/** The commands the Machines page shows to set up a machine. Change them here only. */
 
 import type { CodingAgent } from "@chopin/protocol/agents";
 
@@ -77,30 +75,43 @@ export function pairCommand(label: string): string {
 	return `chopin pair --label "${label}"`;
 }
 
-/**
- * The installer, piped into the shell. The sh form breaks before the pipe so the pipe stays in view
- * on a narrow screen; the continuation keeps the copied text one command.
- */
-export function installCommand(shell: SetupShell): string {
-	return shell === "powershell"
-		? `irm ${RELEASES}/install.ps1 | iex`
-		: `curl -fsSL ${RELEASES}/install.sh \\\n  | sh`;
-}
+/** Where install.sh and install.ps1 put chopin, so the command runs it before PATH has it. */
+const INSTALLED = {
+	sh: "~/.local/bin/chopin",
+	powershell: '"$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe"',
+};
 
 /**
- * The connect command over several lines, so it never wraps inside an argument. Each line but the
- * last ends in the shell's continuation, so the copied text runs as one command.
+ * The one command that sets up a machine: install chopin, then connect this checkout with a
+ * single-use pairing key, running chopin by the path the installer used. Over several lines so it
+ * never wraps inside an argument; each ends in the shell's continuation, so it runs as one.
+ *
+ * sh passes the key in the environment of that one command, where other users can't read it as
+ * they can a command line; PowerShell passes `--key`, since a variable set there outlasts the
+ * command.
  */
-export function connectCommand(
+export function setupCommand(
 	origin: string,
 	shell: SetupShell,
-	agent: CodingAgent = DEFAULT_AGENT,
+	agent: CodingAgent,
+	key: string,
 ): string {
-	let [first, ...rest] = connectArguments(agent, shell);
-	let continuation = shell === "powershell" ? " `" : " \\";
-	let lines = [`chopin ${first}`, ...rest.map(line => `  ${line}`)];
-	let command = lines.map((line, index) => index < lines.length - 1 ? line + continuation : line);
-	return shell === "powershell"
-		? [`$env:CHOPIN_URL="${origin}"`, ...command].join("\n")
-		: [`CHOPIN_URL=${origin} ${command[0]}`, ...command.slice(1)].join("\n");
+	let [connect, ...rest] = connectArguments(agent, shell);
+	if (shell === "powershell") {
+		let lines = [`& ${INSTALLED.powershell} ${connect}`, `  --key ${quote(key, shell)}`];
+		lines.push(...rest.map(line => `  ${line}`));
+		return [
+			`irm ${RELEASES}/install.ps1 | iex`,
+			`$env:CHOPIN_URL="${origin}"`,
+			...lines.map((line, index) => index < lines.length - 1 ? `${line} \`` : line),
+		].join("\n");
+	}
+	let lines = [
+		`curl -fsSL ${RELEASES}/install.sh`,
+		`  | sh && CHOPIN_URL=${quote(origin, shell)}`,
+		`  CHOPIN_PAIRING_KEY=${quote(key, shell)}`,
+		`  ${INSTALLED.sh} ${connect}`,
+		...rest.map(line => `  ${line}`),
+	];
+	return lines.map((line, index) => index < lines.length - 1 ? `${line} \\` : line).join("\n");
 }

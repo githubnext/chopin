@@ -85,7 +85,24 @@
 	font-size: var(--text-sm);
 }
 
-/* The coding agent and the system the commands are for, one row above the steps. */
+/* The title, with the setup guide quietly at its end. */
+.machines-setup-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 4);
+
+	& h2 {
+		margin: 0;
+	}
+}
+
+.machines-setup .machines-docs {
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+/* The system the command is for and the coding agent it starts, one row above it. */
 .machines-setup-choices {
 	display: flex;
 	flex-wrap: wrap;
@@ -134,42 +151,71 @@
 	}
 }
 
-/* A real ordered list: each number sits in the gutter, on the first line of its step. */
-.machines-steps {
-	margin: 0;
-	padding-left: calc(var(--spacing) * 5);
-	list-style: decimal;
-
-	& > li {
-		padding-left: calc(var(--spacing) * 1);
-	}
-
-	& > li + li {
-		margin-top: calc(var(--spacing) * 5);
-	}
-
-	& > li > * + * {
-		margin-top: calc(var(--spacing) * 2);
-	}
-
-	& > li::marker {
-		color: var(--color-text-tertiary);
-		font-variant-numeric: tabular-nums;
-		font-weight: 500;
-	}
-
-	/* Low specificity, so the spacing between a step's parts still reaches a paragraph. */
-	& :where(p) {
-		margin-block: 0;
-		max-width: 65ch;
+/* What the agent needs, in one line; its install commands unfold under it on request. */
+.machines-needs {
+	& p {
+		margin: 0;
+		color: var(--color-text-secondary);
 		text-wrap: pretty;
+	}
+
+	& .machines-needs-toggle {
+		color: var(--color-brand-ink);
+		font-weight: 500;
+		vertical-align: baseline;
+
+		&:hover {
+			color: var(--color-brand-hover);
+		}
+	}
+
+	& .machines-needs-command {
+		padding-top: calc(var(--spacing) * 2);
+	}
+}
+
+/* The command, then what is happening with it: the wait for the machine and the key's time. */
+.machines-run {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2.5);
+}
+
+.machines-run-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 1) calc(var(--spacing) * 4);
+	min-height: var(--control-height-compact);
+
+	& > p {
+		margin: 0;
+	}
+}
+
+.machines-key {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1);
+	margin-inline-start: auto;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+
+	& .machines-key-expiry {
+		font-variant-numeric: tabular-nums;
+	}
+
+	& .btn {
+		gap: calc(var(--spacing) * 1);
+		color: var(--color-text-secondary);
 	}
 }
 
 /*
- * The last step of a first setup is live: a petrol presence pulse while it waits for the machine,
- * then the success tick and the machine's name as it connects. The words carry the baseline, so
- * the step's number stays on their line whichever mark sits beside them.
+ * The wait for the machine: a petrol presence pulse while it waits, then the success tick and the
+ * machine's name as it connects. The words carry the baseline whichever mark sits beside them.
  */
 .machines-handshake {
 	display: flex;
@@ -214,11 +260,31 @@
 	--color-icon: var(--color-success-icon);
 }
 
-/* A command well: a bar naming the shell and holding Copy, then the command. */
+/* A command well: a bar naming where to run it and holding Copy, then the command. */
 .machines-command {
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-md);
 	background: var(--color-inset);
+
+	/* The setup command's place before its key is there: as tall as the command will be. */
+	& .machines-command-pending {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+		min-height: calc(var(--spacing) * 32);
+		padding: calc(var(--spacing) * 4);
+
+		& p {
+			margin: 0;
+			color: var(--color-text-secondary);
+		}
+	}
+
+	&[aria-busy] .machines-command-pending p {
+		animation: machines-skeleton calc(var(--duration-base) * 8) var(--motion-move) infinite
+			alternate;
+	}
 
 	& .machines-command-head {
 		display: flex;
@@ -591,7 +657,8 @@
 		height: var(--control-target-coarse);
 	}
 
-	& .machines-setup .machines-detail a {
+	& .machines-setup .machines-docs,
+	& .machines-needs-toggle {
 		position: relative;
 
 		&::after {
@@ -642,7 +709,8 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.machines-pulse,
-	.machines-skeleton-bar {
+	.machines-skeleton-bar,
+	.machines-command[aria-busy] .machines-command-pending p {
 		animation: none;
 	}
 

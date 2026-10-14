@@ -1,83 +1,100 @@
 import { expect, test } from "bun:test";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
 	connectArguments,
-	connectCommand,
-	installCommand,
 	pairCommand,
 	quote,
 	runsAsService,
+	setupCommand,
 } from "./setup-commands";
 
-test("install uses the released installer for each shell, breaking before the pipe where the shell can", () => {
-	expect(installCommand("sh")).toBe(
-		[
-			"curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh \\",
-			"  | sh",
-		].join("\n"),
-	);
-	expect(installCommand("powershell")).toBe(
-		"irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1 | iex",
-	);
-});
+const KEY = `chopin_k_${"Ab3-_".repeat(9).slice(0, 43)}`;
+const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
 
-test("connect breaks between whole arguments, with each shell's own line continuation", () => {
-	expect(connectCommand("https://chopin.example", "sh")).toBe(
+test("one command installs chopin, then connects with the key by chopin's installed path", () => {
+	expect(setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY)).toBe(
 		[
-			"CHOPIN_URL=https://chopin.example chopin connect . \\",
+			`curl -fsSL ${RELEASES}/install.sh \\`,
+			"  | sh && CHOPIN_URL=https://chopin.example \\",
+			`  CHOPIN_PAIRING_KEY=${KEY} \\`,
+			"  ~/.local/bin/chopin connect . \\",
 			"  --install-service \\",
 			"  -- copilot --acp --allow-all",
 		].join("\n"),
 	);
-	expect(connectCommand("https://chopin.example", "powershell")).toBe(
+	expect(setupCommand("https://chopin.example", "powershell", findAgent("copilot"), KEY)).toBe(
 		[
+			`irm ${RELEASES}/install.ps1 | iex`,
 			'$env:CHOPIN_URL="https://chopin.example"',
-			"chopin connect . `",
+			'& "$env:LOCALAPPDATA\\chopin\\bin\\chopin.exe" connect . `',
+			`  --key ${KEY} \``,
 			"  --install-service `",
 			"  -- copilot --acp --allow-all",
 		].join("\n"),
 	);
 });
 
-test("connect passes the agent's --env on its own line, before the agent's command", () => {
-	let atomic = findAgent("atomic");
-	expect(connectCommand("https://chopin.example", "sh", atomic)).toBe(
-		[
-			"CHOPIN_URL=https://chopin.example chopin connect . \\",
-			"  --install-service \\",
-			"  --env ATOMIC_ACP_HEADLESS=1 \\",
-			"  -- atomic-acp",
-		].join("\n"),
-	);
-	expect(connectCommand("https://chopin.example", "powershell", atomic)).toBe(
-		[
-			'$env:CHOPIN_URL="https://chopin.example"',
-			"chopin connect . `",
-			"  --install-service `",
-			"  --env ATOMIC_ACP_HEADLESS=1 `",
-			"  -- atomic-acp",
-		].join("\n"),
-	);
-});
-
-test("an agent that asks for permission connects without the service, so a person can answer", () => {
+test("the agent's --env goes on its own line, and an agent that asks permission runs in the terminal", () => {
+	expect(
+		setupCommand("https://chopin.example", "sh", findAgent("atomic"), KEY).split("\n").slice(-3),
+	)
+		.toEqual(["  --install-service \\", "  --env ATOMIC_ACP_HEADLESS=1 \\", "  -- atomic-acp"]);
 	let claude = findAgent("claude-code");
 	expect(runsAsService(claude)).toBe(false);
-	expect(connectCommand("https://chopin.example", "sh", claude)).toBe(
-		[
-			"CHOPIN_URL=https://chopin.example chopin connect . \\",
-			"  -- claude-agent-acp",
-		].join("\n"),
-	);
-	expect(connectCommand("https://chopin.example", "powershell", claude)).toBe(
-		[
-			'$env:CHOPIN_URL="https://chopin.example"',
-			"chopin connect . `",
-			"  -- claude-agent-acp",
-		].join("\n"),
-	);
+	expect(setupCommand("https://chopin.example", "sh", claude, KEY).split("\n").slice(-2))
+		.toEqual(["  ~/.local/bin/chopin connect . \\", "  -- claude-agent-acp"]);
+	expect(setupCommand("https://chopin.example", "powershell", claude, KEY).split("\n").slice(-2))
+		.toEqual([`  --key ${KEY} \``, "  -- claude-agent-acp"]);
 });
+
+test.skipIf(process.platform === "win32")(
+	"sh, bash and zsh each run the one command as one: install, then chopin with the key",
+	async () => {
+		let home = await mkdtemp(join(tmpdir(), "chopin-setup-command-"));
+		try {
+			let shims = join(home, "shims");
+			await mkdir(shims);
+			// curl hands sh an installer that puts a chopin in ~/.local/bin, as install.sh does.
+			let chopin =
+				`#!/bin/sh\nprintf '%s\\n' "$CHOPIN_URL" "$CHOPIN_PAIRING_KEY" "$@" > "$HOME/ran"\n`;
+			await writeFile(
+				join(shims, "curl"),
+				`#!/bin/sh\ncat <<'EOF'\nmkdir -p "$HOME/.local/bin"\ncat > "$HOME/.local/bin/chopin" <<'END'\n${chopin}END\nchmod 755 "$HOME/.local/bin/chopin"\nEOF\n`,
+			);
+			await chmod(join(shims, "curl"), 0o755);
+			for (let shell of ["sh", "bash", "zsh"]) {
+				let found = Bun.which(shell);
+				if (!found) continue;
+				for (let agent of AGENTS) {
+					await rm(join(home, ".local"), { recursive: true, force: true });
+					let command = setupCommand("https://chopin.example", "sh", agent, KEY);
+					let run = Bun.spawnSync([found, "-c", command], {
+						env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
+						stderr: "pipe",
+					});
+					expect(run.stderr.toString(), `${shell} ${agent.id}`).toBe("");
+					expect(run.exitCode).toBe(0);
+					expect((await readFile(join(home, "ran"), "utf8")).split("\n").slice(0, -1)).toEqual([
+						"https://chopin.example",
+						KEY,
+						"connect",
+						".",
+						...runsAsService(agent) ? ["--install-service"] : [],
+						...agent.env.flatMap(variable => ["--env", variable]),
+						"--",
+						...agent.acp,
+					]);
+				}
+			}
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	},
+);
 
 test("every agent that can run unattended connects as the service, in either shell", () => {
 	for (let agent of AGENTS) {
