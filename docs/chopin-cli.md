@@ -68,8 +68,9 @@ the command puts chopin's `--` in quotes.
 
 ### Server or VM
 
-**Add machine** → **Server or VM** opens **Add a server**. Choose the agent,
-whether it runs in the background (on unless the agent asks permission in the
+**Add machine** → **Server or VM** opens **Add a server**. Name the machine if
+you like (without a name Chopin uses its hostname), choose the agent, whether it
+runs in the background (on unless the agent asks permission in the
 terminal), and whether Chopin may build and prototype on it automatically (off
 unless you turn it on; see [Connect a checkout](#connect-a-checkout)). Then
 press **Generate install script**. The command carries a single-use key:
@@ -79,7 +80,8 @@ curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install
   CHOPIN_URL=https://your-chopin-instance.example CHOPIN_PAIRING_KEY=chopin_k_… sh -s -- connect --install-service -- copilot --acp --allow-all
 ```
 
-It pairs at once, with no browser, so it works over SSH and in scripts. The key
+A name adds `--name <name>` after `connect`. It pairs at once, with no browser,
+so it works over SSH and in scripts. The key
 never goes on a command line: sh passes it in the environment of the one
 installer, and in PowerShell the first line sets it in the session and
 install.ps1 removes it once chopin has run. That line assigns the key to
@@ -452,18 +454,19 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 ## Commands
 
-| Command                                                     | What it does                                                                              |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
-| `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                |
-| `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
-| `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log. |
-| `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                |
-| `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                        |
-| `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.               |
-| `chopin service uninstall`                                  | Removes the service. The pairing, settings and past runs stay.                            |
-| `chopin update [version] [--allow-downgrade] [--yes]`       | Installs the release your server asks for, or the one you name.                           |
-| `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                     |
+| Command                                                     | What it does                                                                                                      |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.                                    |
+| `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
+| `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
+| `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                        |
+| `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log.                         |
+| `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                        |
+| `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                                                |
+| `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.                                       |
+| `chopin service uninstall`                                  | Removes the service. The pairing, settings and past runs stay.                                                    |
+| `chopin update [version] [--allow-downgrade] [--yes]`       | Installs the release your server asks for, or the one you name.                                                   |
+| `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                                             |
 
 Every command takes `--base-dir <dir>`, or `CHOPIN_HOME`, to keep its files
 somewhere other than the default folder.

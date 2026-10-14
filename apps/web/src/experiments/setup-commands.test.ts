@@ -61,6 +61,21 @@ test("one PowerShell command: the key in the session only, on a line PSReadLine 
 		.toEndWith("connect '--' claude-agent-acp");
 });
 
+test("a machine name goes to chopin connect as --name, quoted for the shell", () => {
+	let copilot = findAgent("copilot");
+	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY, name: "build-box" }).split("\n")[1])
+		.toBe(
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --name build-box --install-service -- copilot --acp --allow-all`,
+		);
+	expect(setupCommand(ORIGIN, "sh", copilot, { name: "Jo's box" }).split("\n")[1])
+		.toContain("connect --name 'Jo'\\''s box' --install-service");
+	expect(setupCommand(ORIGIN, "powershell", copilot, { name: "Jo's box" }).split("\n")[1])
+		.toEndWith("connect --name 'Jo''s box' --install-service '--' copilot --acp --allow-all");
+	// A blank name leaves it out, so chopin uses the hostname.
+	expect(setupCommand(ORIGIN, "sh", copilot, { name: "  " }))
+		.toBe(setupCommand(ORIGIN, "sh", copilot));
+});
+
 test("the system is guessed from the browser", () => {
 	expect(guessSystem("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe("windows");
 	expect(guessSystem("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")).toBe("macos");
@@ -98,7 +113,8 @@ test.skipIf(process.platform === "win32")(
 				for (let agent of AGENTS) {
 					for (let key of [undefined, KEY]) {
 						await rm(join(home, "ran"), { force: true });
-						let command = setupCommand(ORIGIN, "sh", agent, { key });
+						let name = key ? `Jo's "build" box $HOME` : undefined;
+						let command = setupCommand(ORIGIN, "sh", agent, { key, name });
 						let run = Bun.spawnSync([found, "-c", command], {
 							env: { HOME: home, PATH: `${shims}:/usr/bin:/bin` },
 							stderr: "pipe",
@@ -109,6 +125,7 @@ test.skipIf(process.platform === "win32")(
 							ORIGIN,
 							key ?? "",
 							"connect",
+							...name ? ["--name", name] : [],
 							...runsAsService(agent) ? ["--install-service"] : [],
 							...agent.env.flatMap(variable => ["--env", variable]),
 							"--",

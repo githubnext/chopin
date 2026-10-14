@@ -253,6 +253,29 @@
 	}
 }
 
+/* The machine's name: a label and a field on one line, as the agent's picker is. */
+.machines-name {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+
+	& label {
+		flex: none;
+		color: var(--color-text-secondary);
+		font-weight: 500;
+	}
+
+	& input {
+		width: 100%;
+		min-width: 0;
+		max-width: 20rem;
+		height: var(--control-height-compact);
+		padding-inline: calc(var(--spacing) * 2);
+		font-size: var(--text-sm);
+	}
+}
+
 /* What the agent needs, in one line; its install commands unfold under it on request. */
 .machines-needs {
 	& p {
@@ -975,7 +998,8 @@
 /* On touch, the small controls here answer a 44px press without changing their look. */
 :root[data-plan-coarse-pointer] {
 	/* A select opens a full list, so it takes the 44px height itself. */
-	& .machines-agent select {
+	& .machines-agent select,
+	& .machines-name input {
 		height: var(--control-target-coarse);
 	}
 

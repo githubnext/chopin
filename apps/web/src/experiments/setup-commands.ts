@@ -37,7 +37,8 @@ export function runsAsService(agent: CodingAgent): boolean {
 }
 
 /**
- * `connect` and its arguments, as the installer is given them: as the background service if
+ * `connect` and its arguments, as the installer is given them: the machine's `name` in Chopin if
+ * one is given (blank leaves chopin to use the hostname), as the background service if
  * `background`, the agent's variables, then the agent it starts. PowerShell takes a bare -- as the
  * end of a script block's own parameters and passes nothing for it, so there it goes in quotes.
  */
@@ -45,9 +46,12 @@ export function connectArguments(
 	agent: CodingAgent,
 	shell: SetupShell,
 	background = runsAsService(agent),
+	name?: string,
 ): string {
+	let label = name?.trim();
 	return [
 		"connect",
+		...(label ? [`--name ${quote(label, shell)}`] : []),
 		...(background ? ["--install-service"] : []),
 		...agent.env.map(variable => `--env ${quote(variable, shell)}`),
 		shell === "powershell" ? "'--'" : "--",
@@ -119,9 +123,9 @@ export function setupCommand(
 	origin: string,
 	shell: SetupShell,
 	agent: CodingAgent,
-	{ key, background }: { key?: string; background?: boolean } = {},
+	{ key, background, name }: { key?: string; background?: boolean; name?: string } = {},
 ): string {
-	let connect = connectArguments(agent, shell, background);
+	let connect = connectArguments(agent, shell, background, name);
 	if (shell === "powershell") {
 		return [
 			[

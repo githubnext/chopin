@@ -268,6 +268,11 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await expect(background).toHaveAttribute("aria-checked", "true");
 	await automatic.click();
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
+	// The machine's name is optional; the field says the hostname stands in without one.
+	let name = page.getByRole("textbox", { name: "Machine name", exact: true });
+	await expect(name).toHaveValue("");
+	await expect(name).toHaveAttribute("placeholder", "hostname");
+	await name.fill("ci-runner");
 	await page.getByRole("button", { name: "Linux", exact: true }).click();
 
 	// GitHub authorizes the next machine and comes straight back, and the page makes the key.
@@ -287,10 +292,15 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await expect.poll(async () => (await shown()).key).not.toBe(first);
 	let { text: command, key } = await shown();
 	let origin = new URL(baseURL!).origin;
-	expect(command).toBe(setupCommand(origin, "sh", findAgent("copilot"), { key: key! }));
+	expect(command).toBe(
+		setupCommand(origin, "sh", findAgent("copilot"), { key: key!, name: "ci-runner" }),
+	);
+	expect(command).toContain(" connect --name ci-runner --install-service ");
 	await page.getByRole("button", { name: "Windows", exact: true }).click();
 	await expect.poll(async () => (await shown()).text)
-		.toBe(setupCommand(origin, "powershell", findAgent("copilot"), { key: key! }));
+		.toBe(
+			setupCommand(origin, "powershell", findAgent("copilot"), { key: key!, name: "ci-runner" }),
+		);
 	await page.getByRole("button", { name: "Linux", exact: true }).click();
 	// The key stays out of the address and the browser's storage.
 	expect(page.url()).not.toContain(key!);
@@ -311,13 +321,13 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		await expect.poll(
 			() =>
 				page.evaluate(async () => (await (await fetch("/api/connector/machines")).json()).machines),
-		).toMatchObject([{ label: hostname(), autoRun: true }]);
+		).toMatchObject([{ label: "ci-runner", hostname: hostname(), autoRun: true }]);
 
 		// Back on Machines, the machine is in the table.
 		await page.getByRole("link", { name: "Back to Machines", exact: true }).click();
 		await expect(page).toHaveURL(/\/connect$/);
 		let row = page.getByRole("table", { name: "Your machines" })
-			.getByRole("row", { name: new RegExp(hostname()) });
+			.getByRole("row", { name: /ci-runner/ });
 		await expect(row).toContainText("Connected", { timeout: 30_000 });
 		await expect(row).not.toContainText("New");
 

@@ -445,6 +445,50 @@ test("connect on a machine already paired leaves the pairing key unspent", async
 	expect(chopin.calls.map(call => call.path)).not.toContain("/api/connector/pairings");
 });
 
+test("connect --name names the machine it pairs, as pair --label does", async () => {
+	let home = await scratch("chopin-home-");
+	let root = await checkout();
+	let chopin = fakeChopin();
+	let connected = cli(
+		["connect", root, "--name", "build box", "--key", PAIRING_KEY, "--", "agent-that-never-runs"],
+		home,
+		chopin.url,
+	);
+	await Promise.race([chopin.waited, connected.exited]);
+	connected.child.kill("SIGINT");
+	expect(await connected.exited, await connected.output).toBe(0);
+	expect(chopin.calls[0]).toMatchObject({
+		path: "/api/connector/pairings",
+		body: { label: "build box", key: PAIRING_KEY },
+	});
+	expect(JSON.parse(await readFile(machineFile(home), "utf8")).servers[chopin.url].label)
+		.toBe("build box");
+	expect(await connected.output).not.toContain("--name wasn't used");
+});
+
+test("connect --name on a machine already paired keeps its name and says where to rename it", async () => {
+	let home = await scratch("chopin-home-");
+	let root = await checkout();
+	let chopin = fakeChopin();
+	expect(await cli(["pair", "--label", "old-name"], home, chopin.url).exited).toBe(0);
+	chopin.calls.length = 0;
+	let connected = cli(
+		["connect", root, "--name", "new-name", "--", "agent-that-never-runs"],
+		home,
+		chopin.url,
+	);
+	await Promise.race([chopin.waited, connected.exited]);
+	connected.child.kill("SIGINT");
+	expect(await connected.exited, await connected.output).toBe(0);
+	let output = await connected.output;
+	expect(output).toContain("This machine is already paired with");
+	expect(output).toContain("so --name wasn't used");
+	expect(output).toContain("Machines page");
+	expect(chopin.calls.map(call => call.path)).not.toContain("/api/connector/pairings");
+	expect(JSON.parse(await readFile(machineFile(home), "utf8")).servers[chopin.url].label)
+		.toBe("old-name");
+});
+
 test("a key given to connect with an agent that isn't installed is never sent, so it still works", async () => {
 	let home = await scratch("chopin-home-");
 	let root = await checkout();

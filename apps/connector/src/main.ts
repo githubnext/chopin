@@ -337,7 +337,7 @@ export async function connect(
 ) {
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check"],
-		options: ["planner-command", "key"],
+		options: ["planner-command", "key", "name"],
 		lists: ["planner", "env"],
 	});
 	let service = parsed.flags.has("service");
@@ -347,6 +347,7 @@ export async function connect(
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
+			|| parsed.options.has("name")
 			|| parsed.flags.has("install-service") || parsed.flags.has("skip-check"))
 	) {
 		throw new Error(
@@ -356,6 +357,8 @@ export async function connect(
 	if (service && !saved) throw new Error(CONNECT_FIRST);
 	// Read once and cleared from the environment, so neither the agent nor the service sees it.
 	let key = pairingKey(parsed.options.get("key"));
+	/** The machine's name in Chopin, used only if this connect pairs it. */
+	let name = parsed.options.get("name");
 	let installing = parsed.flags.has("install-service");
 	let executable = injected.executable ?? installedChopin();
 	if (installing && !executable) throw new ServiceError(NOT_INSTALLED);
@@ -539,10 +542,16 @@ export async function connect(
 						+ `it for the account that made the key, run \`${SELF} unpair\`, then this command again.`,
 				);
 			}
+			if (stored && name !== undefined) {
+				output.say(
+					`This machine is already paired with ${url}, so --name wasn't used. To rename it, use `
+						+ "Edit machine name in its menu on Chopin's Machines page.",
+				);
+			}
 			let machine = stored
 				?? await pair({
 					url,
-					label: hostname(),
+					label: name || hostname(),
 					directory,
 					output,
 					signal: abort.signal,
@@ -552,6 +561,7 @@ export async function connect(
 			if (!machine) return;
 			// A key pairs once; pairing again after a revocation goes by the browser.
 			key = undefined;
+			name = undefined;
 			let announced = false;
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
@@ -751,6 +761,7 @@ async function serviceCommand(args: string[]) {
 
 const USAGE =
 	`Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] [--key <pairing key>] `
+	+ "[--name <label>] "
 	+ "[--planner <document URL>]... [--planner-command <command>] [--env KEY=VALUE]... "
 	+ "[--install-service [--skip-check]] -- agent [ACP arguments]";
 
@@ -765,10 +776,12 @@ const HELP = [
 	"      machine, with no browser; without one you approve the pairing in a browser.",
 	"  unpair",
 	"      Revoke this machine's token in Chopin and delete it here.",
-	"  connect [checkout] [--key <pairing key>] -- <agent> [ACP arguments]",
+	"  connect [checkout] [--key <pairing key>] [--name <label>] -- <agent> [ACP arguments]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
 	"      Pairs this machine first if it isn't paired yet, with --key or CHOPIN_PAIRING_KEY as",
-	"      pair does. Once connected, saves what it runs for service install (never the key). A",
+	"      pair does. --name <label> names it in Chopin as it pairs (default: the hostname); a",
+	"      machine paired already keeps its name, which its menu on the Machines page changes.",
+	"      Once connected, saves what it runs for service install (never the key). A",
 	"      program this shell finds only through a version manager's per-shell directory is saved",
 	"      by its stable path.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
