@@ -9,7 +9,7 @@ import { agentCommand, setupCommand } from "../apps/web/src/experiments/setup-co
 import { expect, test } from "./room";
 import { ROOT } from "./servers";
 
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
@@ -23,12 +23,6 @@ function person() {
 function machinesEntry(page: Page, name: string) {
 	return page.getByRole("complementary", { name: "Projects" })
 		.getByRole("link", { name, exact: true });
-}
-
-/** The setup command as the card shows it, and the key in it. */
-async function shown(setup: Locator) {
-	let text = await setup.locator(".machines-run pre code").innerText();
-	return { text, key: text.match(KEY)?.[0] };
 }
 
 /**
@@ -118,98 +112,199 @@ async function machine() {
 	};
 }
 
-test("one copied command installs chopin and pairs the machine, with no browser step", async ({ baseURL, join: enter }) => {
+/** The menu Add machine opens, on the page header or the empty page's banner. */
+async function addMachine(page: Page, kind: "Your computer" | "Server or VM", banner = false) {
+	let scope = banner
+		? page.getByRole("region", { name: "Add your first machine", exact: true })
+		: page.getByRole("main");
+	await scope.getByRole("button", { name: "Add machine", exact: true }).first().click();
+	let menu = page.getByRole("menu", { name: "Add machine", exact: true });
+	await menu.getByRole("menuitem", { name: new RegExp(`^${kind}`) }).click();
+}
+
+/** Every request the page makes for a pairing key, to show none is made unasked. */
+function keyRequests(page: Page) {
+	let made: string[] = [];
+	page.on("request", request => {
+		if (new URL(request.url()).pathname === "/api/connector/pairing-keys") made.push(request.url());
+	});
+	return made;
+}
+
+const PAIRING_LINK = /http:\/\/[^\s]+\/connect\?pairing=[\w-]+/;
+
+test("your computer: one copied command installs chopin, prints a link, and pairs once approved here", async ({ baseURL, join: enter }) => {
 	test.setTimeout(240_000);
-	let page = await enter(person());
+	let handle = person();
+	let page = await enter(handle);
+	let minted = keyRequests(page);
 	let entry = machinesEntry(page, "Machines, none connected");
 	await entry.click();
 	await expect(page).toHaveURL(/\/connect$/);
-
-	// The card has GitHub authorize the next machine, which returns at once, then mints a key.
-	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
-	await expect(setup.getByRole("button", { name: "Copy setup command", exact: true }))
-		.toBeVisible();
-	await expect(page).toHaveURL(/\/connect$/);
 	await expect(entry).toHaveAttribute("aria-current", "page");
-	await expect(setup.getByRole("link", { name: "Docs", exact: true }))
+	await expect(page.getByRole("link", { name: "Learn more", exact: true }))
 		.toHaveAttribute("href", /docs\/chopin-cli\.md$/);
-	await expect(setup.getByText(/^Expires in 10 min$/)).toBeVisible();
-	await expect(setup.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
-	// The key stays out of the address and the browser's storage.
-	let { key } = await shown(setup);
-	expect(key).toBeTruthy();
-	expect(page.url()).not.toContain(key!);
-	let stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-	expect(stored).not.toContain(key!);
+	// With no machine yet, a banner offers the same menu above the empty table.
+	await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
+		.toBeVisible();
+	await expect(page.getByRole("table", { name: "Your machines" })).toContainText(
+		"No machines yet.",
+	);
 
-	// One command per system and agent, built around the same key.
+	await addMachine(page, "Your computer", true);
+	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
+	await expect(dialog).toContainText(`connect as @${handle}.`);
 	let origin = new URL(baseURL!).origin;
-	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
-	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
+	let command = () => dialog.locator(".machines-run pre code").innerText();
+	await dialog.getByRole("button", { name: "Linux", exact: true }).click();
+	let picker = dialog.getByRole("combobox", { name: "Coding agent", exact: true });
 	await expect(picker).toHaveValue("copilot");
-	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "sh", findAgent("copilot"), { key: key! }));
-	await setup.getByRole("button", { name: "Windows", exact: true }).click();
-	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "powershell", findAgent("copilot"), { key: key! }));
+	await expect.poll(command).toBe(setupCommand(origin, "sh", findAgent("copilot")));
+	await dialog.getByRole("button", { name: "Windows", exact: true }).click();
+	await expect.poll(command).toBe(setupCommand(origin, "powershell", findAgent("copilot")));
 	await picker.selectOption({ label: "Claude Code" });
-	await expect(setup.getByText("Keep this terminal open.", { exact: true })).toBeVisible();
-	await expect.poll(async () => (await shown(setup)).text)
-		.toBe(setupCommand(origin, "powershell", findAgent("claude-code"), { key: key! }));
+	await expect(dialog.getByText(/Keep the terminal open\./)).toBeVisible();
+	await expect.poll(command).toBe(setupCommand(origin, "powershell", findAgent("claude-code")));
 	await picker.selectOption({ label: "GitHub Copilot CLI" });
-	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
-	await expect(setup.getByText("Keep this terminal open.", { exact: true })).toHaveCount(0);
+	await dialog.getByRole("button", { name: "macOS", exact: true }).click();
+	await expect.poll(command).toBe(setupCommand(origin, "sh", findAgent("copilot")));
 
 	// What the agent needs reads as one line; its install command shows on request.
-	await expect(setup.getByText("Needs GitHub Copilot CLI, signed in, and Node.js 22 or newer."))
+	await expect(dialog.getByText("Needs GitHub Copilot CLI, signed in, and Node.js 22 or newer."))
 		.toBeVisible();
-	await setup.getByRole("button", { name: "Show install command", exact: true }).click();
-	await expect.poll(() => setup.locator(".machines-needs pre code").innerText())
+	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();
+	await expect.poll(() => dialog.locator(".machines-needs pre code").innerText())
 		.toBe(agentCommand(findAgent("copilot"), "sh"));
-	// npm's EACCES on a root-owned global folder has a fix that needs no sudo.
-	await expect(setup.getByText(/^If npm stops with EACCES, don't use sudo/)).toBeVisible();
-	await setup.getByRole("button", { name: "Hide install command", exact: true }).click();
+	await expect(dialog.getByText(/^If npm stops with EACCES, don't use sudo/)).toBeVisible();
+	await dialog.getByRole("button", { name: "Hide install command", exact: true }).click();
+	await expect(dialog.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 
-	let command = (await shown(setup)).text;
 	let laptop = await machine();
 	try {
-		// Pasted on the machine as it is, with nothing opened in a browser.
-		expect(await laptop.run(command), laptop.output()).toBe(0);
-		expect(laptop.output()).not.toContain(key!);
-		expect(laptop.output()).not.toContain("/connect?pairing=");
+		// Pasted on the machine as it is: it installs chopin, which prints a link and a code.
+		let exited = laptop.run(await command());
+		await expect.poll(() => laptop.output().match(PAIRING_LINK)?.[0], { timeout: 60_000 })
+			.toBeTruthy();
+		let code = laptop.output().match(/Check the page shows:\s+([A-Z2-9]{4}-[A-Z2-9]{4})/)?.[1];
+		expect(code).toBeTruthy();
+		let approval = await page.context().newPage();
+		await approval.goto(laptop.output().match(PAIRING_LINK)![0]);
+		await expect(approval.getByText(code!, { exact: true })).toBeVisible();
+		await approval.getByRole("button", { name: "Connect", exact: true }).click();
+		await expect(approval.getByRole("status").filter({ hasText: "Connected" }))
+			.toHaveText("Connected");
+		await approval.close();
+
+		// Approved, it connects, then installs the service and leaves it running.
+		expect(await exited, laptop.output()).toBe(0);
 		expect(laptop.output()).toContain("Installed the chopin service");
 		expect(await readFile(join(laptop.home, "systemctl.log"), "utf8"))
 			.toContain("systemctl --user enable --now chopin.service");
 
-		// The service connects; the card ticks, then folds away above the machine's new row. The
-		// key is spent, so its expiry and New key go as the tick shows.
-		await expect(setup.getByText(`${hostname()} connected`, { exact: true }))
+		// The dialog ticks, then closes onto the machine's new row.
+		await expect(dialog.getByText(`${hostname()} connected`, { exact: true }))
 			.toBeVisible({ timeout: 30_000 });
-		expect(await setup.locator(".machines-run-status").innerText()).toBe(`${hostname()} connected`);
-		await expect(page.getByRole("status").filter({ hasText: `${hostname()} connected` }))
-			.toHaveText(`${hostname()} connected`, { timeout: 30_000 });
+		await expect(dialog).toHaveCount(0);
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: new RegExp(hostname()) });
 		await expect(row).toContainText("Connected");
 		await expect(row).toContainText("New");
-		await expect(setup).toHaveCount(0);
-
-		// The key worked once: on a machine not yet paired, the same command is refused.
-		await rm(join(laptop.home, ".local/state"), { recursive: true, force: true });
-		expect(await laptop.run(command)).toBe(1);
-		expect(laptop.output()).toContain("Chopin refused the pairing key");
-
-		// Adding another machine makes a new key.
-		await page.getByRole("button", { name: "Add a machine", exact: true }).click();
-		let again = page.getByRole("region", { name: "Add a machine", exact: true });
-		let copy = again.getByRole("button", { name: "Copy setup command", exact: true });
-		let github = again.getByRole("button", { name: "Continue with GitHub", exact: true });
-		await expect(copy.or(github)).toBeVisible();
-		if (await github.isVisible()) await github.click();
-		await expect(copy).toBeVisible();
-		expect((await shown(again)).key).not.toBe(key);
+		await expect(page.getByRole("region", { name: "Add your first machine" })).toHaveCount(0);
+		// No key was made on the way.
+		expect(minted).toEqual([]);
 	} finally {
 		await laptop.stop();
+	}
+});
+
+test("server or VM: a generated script pairs with its single-use key, automatic work as chosen", async ({ baseURL, join: enter }) => {
+	test.setTimeout(240_000);
+	let page = await enter(person());
+	let minted = keyRequests(page);
+	await page.goto("/connect");
+	await addMachine(page, "Server or VM");
+	await expect(page).toHaveURL(/\/connect\/server$/);
+	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a server");
+	await expect(page.getByText("Choose settings, then generate an install script.")).toBeVisible();
+	// Opening the page makes no key; Generate does.
+	expect(minted).toEqual([]);
+	let background = page.getByRole("switch", { name: "Run in the background", exact: true });
+	let automatic = page.getByRole("switch", {
+		name: "Build and prototype automatically",
+		exact: true,
+	});
+	await expect(background).toHaveAttribute("aria-checked", "true");
+	await expect(automatic).toHaveAttribute("aria-checked", "false");
+	// An agent that asks permission in the terminal runs there.
+	let picker = page.getByRole("combobox", { name: "Coding agent", exact: true });
+	await picker.selectOption({ label: "Claude Code" });
+	await expect(background).toBeDisabled();
+	await expect(background).toHaveAttribute("aria-checked", "false");
+	await expect(page.getByText(/^Claude Code asks for permission in the terminal/)).toBeVisible();
+	await picker.selectOption({ label: "GitHub Copilot CLI" });
+	await expect(background).toHaveAttribute("aria-checked", "true");
+	await automatic.click();
+	await expect(automatic).toHaveAttribute("aria-checked", "true");
+	await page.getByRole("button", { name: "Linux", exact: true }).click();
+
+	// GitHub authorizes the next machine and comes straight back, and the page makes the key.
+	await page.getByRole("button", { name: "Generate install script", exact: true }).click();
+	let copy = page.getByRole("button", { name: "Copy install script", exact: true });
+	await expect(copy).toBeVisible({ timeout: 30_000 });
+	await expect(page).toHaveURL(/\/connect\/server$/);
+	await expect(automatic).toHaveAttribute("aria-checked", "true");
+	await expect(page.getByText(/^Single use · expires in 10 min$/)).toBeVisible();
+	let shown = async () => {
+		let text = await page.locator(".machines-run pre code").innerText();
+		return { text, key: text.match(KEY)?.[0] };
+	};
+	let first = (await shown()).key;
+	expect(first).toBeTruthy();
+	await page.getByRole("button", { name: "Re-generate install script", exact: true }).click();
+	await expect.poll(async () => (await shown()).key).not.toBe(first);
+	let { text: command, key } = await shown();
+	let origin = new URL(baseURL!).origin;
+	expect(command).toBe(setupCommand(origin, "sh", findAgent("copilot"), { key: key! }));
+	await page.getByRole("button", { name: "Windows", exact: true }).click();
+	await expect.poll(async () => (await shown()).text)
+		.toBe(setupCommand(origin, "powershell", findAgent("copilot"), { key: key! }));
+	await page.getByRole("button", { name: "Linux", exact: true }).click();
+	// The key stays out of the address and the browser's storage.
+	expect(page.url()).not.toContain(key!);
+	let stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+	expect(stored).not.toContain(key!);
+	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+
+	let server = await machine();
+	try {
+		// Pasted on the machine as it is: it pairs at once, with nothing opened in a browser.
+		expect(await server.run(command), server.output()).toBe(0);
+		expect(server.output()).not.toContain(key!);
+		expect(server.output()).not.toContain("/connect?pairing=");
+		expect(server.output()).toContain("Installed the chopin service");
+
+		await expect(page.getByText(`${hostname()} connected`, { exact: true }))
+			.toBeVisible({ timeout: 30_000 });
+		await expect(page.getByRole("button", { name: "Re-generate install script" })).toHaveCount(0);
+		let listed = await page.evaluate(async () =>
+			(await (await fetch("/api/connector/machines")).json()).machines
+		);
+		expect(listed).toMatchObject([{ label: hostname(), autoRun: true }]);
+
+		// The key worked once: on a machine not yet paired, the same command is refused.
+		await rm(join(server.home, ".local/state"), { recursive: true, force: true });
+		expect(await server.run(command)).toBe(1);
+		expect(server.output()).toContain("Chopin refused the pairing key");
+
+		await page.getByRole("link", { name: "Back to Machines", exact: true }).last().click();
+		await expect(page).toHaveURL(/\/connect$/);
+		await expect(
+			page.getByRole("table", { name: "Your machines" }).getByRole("row", {
+				name: new RegExp(hostname()),
+			}),
+		).toContainText("Connected");
+	} finally {
+		await server.stop();
 	}
 });
 
@@ -217,27 +312,28 @@ test("a wait past a minute links to troubleshooting, and a phone wraps the comma
 	let page = await enter(person(), PHONE);
 	await page.clock.install();
 	await page.goto("/connect");
-	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
-	await expect(setup.getByRole("button", { name: "Copy setup command", exact: true }))
+	await addMachine(page, "Your computer", true);
+	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
+	await expect(dialog.getByRole("button", { name: "Copy setup command", exact: true }))
 		.toBeVisible();
-	let help = setup.getByRole("link", { name: "Troubleshooting", exact: true });
-	await expect(setup.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+	let help = dialog.getByRole("link", { name: "Troubleshooting", exact: true });
+	await expect(dialog.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 	await page.clock.fastForward(30_000);
 	await expect(help).toHaveCount(0);
 	await page.clock.fastForward(31_000);
 	await expect(help).toHaveAttribute("href", /docs\/chopin-cli\.md#troubleshooting$/);
 
 	// No command scrolls sideways; each wraps inside its well and still reads as what Copy takes.
-	await setup.getByRole("button", { name: "Show install command", exact: true }).click();
-	for (let id of ["copilot", "atomic", "claude-code", "codex", "gemini"]) {
-		await setup.getByRole("combobox", { name: "Coding agent", exact: true }).selectOption(id);
-		for (let well of await setup.locator(".machines-command pre").all()) {
-			expect(await well.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBe(0);
+	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();
+	for (let system of ["Linux", "Windows"]) {
+		await dialog.getByRole("button", { name: system, exact: true }).click();
+		for (let id of ["copilot", "atomic", "claude-code", "codex", "gemini"]) {
+			await dialog.getByRole("combobox", { name: "Coding agent", exact: true }).selectOption(id);
+			for (let well of await dialog.locator(".machines-command pre").all()) {
+				expect(await well.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBe(0);
+			}
 		}
 	}
-
-	// Past ten minutes the key is replaced by itself while the page is in view.
-	let { key } = await shown(setup);
-	await page.clock.fastForward(10 * 60_000);
-	await expect.poll(async () => (await shown(setup)).key).not.toBe(key);
+	await dialog.getByRole("button", { name: "Close", exact: true }).click();
+	await expect(dialog).toHaveCount(0);
 });

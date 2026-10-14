@@ -1,6 +1,9 @@
 import { createPortal } from "react-dom";
 import { useId, useRef } from "react";
 
+import { CloseIcon } from "@chopin/icons";
+
+import { IconButton } from "./icon-button";
 import { NavigationFocusScope } from "./navigation-focus";
 
 import type { ReactNode, RefObject } from "react";
@@ -15,6 +18,8 @@ export type NavigationDialogMotion = Pick<
 export function NavigationDialog(
 	{
 		children,
+		className = "",
+		closeButton = false,
 		initialFocus,
 		motion,
 		onDismiss,
@@ -22,6 +27,10 @@ export function NavigationDialog(
 		title,
 	}: {
 		children: ReactNode;
+		/** Extra classes for the dialog itself, such as a wider size. */
+		className?: string;
+		/** A close button at the end of the title, for a dialog that has no Cancel. */
+		closeButton?: boolean;
 		initialFocus?: RefObject<HTMLElement | null>;
 		motion: NavigationDialogMotion;
 		onDismiss: () => void;
@@ -52,17 +61,30 @@ export function NavigationDialog(
 				<div
 					aria-labelledby={titleId}
 					aria-modal="true"
-					className={`navigation-modal-content${palette ? " navigation-palette" : ""}`}
+					className={`navigation-modal-content${palette ? " navigation-palette" : ""}${
+						className ? ` ${className}` : ""
+					}`}
 					ref={dialog}
 					role="dialog"
 					tabIndex={-1}
 				>
-					<h2
-						className={palette ? "sr-only" : "text-base font-semibold text-text-primary"}
-						id={titleId}
-					>
-						{title}
-					</h2>
+					{closeButton
+						? (
+							<div className="navigation-modal-head">
+								<h2 className="text-base font-semibold text-text-primary" id={titleId}>{title}</h2>
+								<IconButton aria-label="Close" data-tooltip="Close" onClick={onDismiss}>
+									<CloseIcon aria-hidden="true" />
+								</IconButton>
+							</div>
+						)
+						: (
+							<h2
+								className={palette ? "sr-only" : "text-base font-semibold text-text-primary"}
+								id={titleId}
+							>
+								{title}
+							</h2>
+						)}
 					{children}
 				</div>
 			</NavigationFocusScope>

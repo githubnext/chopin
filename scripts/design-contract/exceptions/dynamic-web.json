@@ -129,7 +129,7 @@
 				1
 			]
 		],
-		"sourceHash": "6e5087a58792e855ded31f6cc1ed22bae76682d3702d2744404bc4321f26448f"
+		"sourceHash": "0021b21e89257d9a961015150862c9587d106933dd7f611363565cbd896e15eb"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -280,7 +280,7 @@
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
-		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. The optional className is a caller's static size class, scanned at its call site. Review the producer when changing this boundary.",
 		"cases": [
 			[
 				"dynamic",
@@ -288,9 +288,16 @@
 				"motion.className",
 				"class > NavigationDialog > <div>",
 				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > NavigationDialog > <div>",
+				1
 			]
 		],
-		"sourceHash": "43604e407a85bfda98028185d27d2e6be744f490402c7b275b6dfa806a385612"
+		"sourceHash": "cff2bcd7497fe4c325b37125b8b7f59ce723e53b528566f45e590bd57b3fbe5e"
 	},
 	{
 		"file": "apps/web/src/repository-picker.tsx",
@@ -363,6 +370,20 @@
 		"sourceHash": "f6b56e35f4a84411532e598ef53c893966b496b001d3020a3f470d87bd3efd8e"
 	},
 	{
+		"file": "apps/web/src/experiments/machine-setup.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > AddMachineMenu > <div>",
+				1
+			]
+		],
+		"sourceHash": "a1f581a5d667fdfe3604d4af0e23109418921c615911dfe079023d972d30875f"
+	},
+	{
 		"file": "apps/web/src/experiments/machines.tsx",
 		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
 		"cases": [
@@ -374,6 +395,6 @@
 				1
 			]
 		],
-		"sourceHash": "88ca7936de817f26b647a1fb0e1acd7d6554d150bfa5e0923c367ff07618364e"
+		"sourceHash": "58788911dc3270caae68e3b482ba810dcbbbdf28799a1f45ed4f5a880254085e"
 	}
 ]

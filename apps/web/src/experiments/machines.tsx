@@ -524,6 +524,11 @@ export function MachineTable(
 					</TableRow>
 				</TableHeader>
 				<TableBody>
+					{!machines.length && (
+						<TableRow>
+							<TableCell className="machines-empty" colSpan={4}>No machines yet.</TableCell>
+						</TableRow>
+					)}
 					{machines.map(machine => {
 						let copies: CopyItem[] = [
 							...(updateAvailable(machine.version, recommended)
@@ -617,20 +622,17 @@ export function YourMachines(
 			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
 			: <MachinesLoading />;
 	}
-	if (!list.length && !machines.error) return null;
 	return (
 		<section aria-labelledby={headingId} className="machines-section">
 			<h2 className="text-base font-semibold" id={headingId}>Your machines</h2>
 			{machines.error && <MachinesProblem code={machines.error} onRetry={machines.retry} />}
-			{!!list.length && (
-				<MachineTable
-					fresh={fresh}
-					labelledBy={headingId}
-					machines={list}
-					onForget={machines.forget}
-					recommended={machines.recommended}
-				/>
-			)}
+			<MachineTable
+				fresh={fresh}
+				labelledBy={headingId}
+				machines={list}
+				onForget={machines.forget}
+				recommended={machines.recommended}
+			/>
 		</section>
 	);
 }

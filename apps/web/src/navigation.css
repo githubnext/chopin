@@ -1060,6 +1060,15 @@
 	transition-duration: var(--modal-close-dur);
 }
 
+/* A title with its close button at the end, the button's ghost edge aligned with the padding. */
+.navigation-modal-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 3);
+	margin: calc(var(--spacing) * -1) calc(var(--spacing) * -1.5) 0 0;
+}
+
 .navigation-modal-backdrop {
 	position: absolute;
 	inset: 0;
@@ -1348,6 +1357,14 @@
 	--item-padding-block: var(--menu-item-padding-block-compact);
 	--item-padding-inline: var(--menu-item-padding-inline-compact);
 	--item-gap: var(--menu-item-gap-compact);
+}
+
+/* A title with a line of description under it, its icon level with the title. */
+.app-menu-item[data-density="detailed"] {
+	--item-padding-block: calc(var(--spacing) * 2.5);
+	--item-padding-inline: calc(var(--spacing) * 3);
+	--item-gap: calc(var(--spacing) * 3);
+	align-items: flex-start;
 }
 
 .app-menu-item:is(:hover:not(:disabled), :focus-visible) {

@@ -3,7 +3,8 @@ import type { KeyboardEventHandler, MouseEventHandler, ReactNode, Ref } from "re
 type MenuItemProps =
 	& {
 		children: ReactNode;
-		density?: "compact" | "normal";
+		/** `detailed`: a title with a line of description under it, beside its icon. */
+		density?: "compact" | "normal" | "detailed";
 		onClick?: MouseEventHandler<HTMLElement>;
 		onKeyDown?: KeyboardEventHandler<HTMLElement>;
 		tone?: "normal" | "destructive";

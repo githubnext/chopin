@@ -81,6 +81,11 @@ export function pairCommand(label: string): string {
 	return `chopin pair --label "${label}"`;
 }
 
+/** A PowerShell string that expands nothing. */
+function literal(value: string) {
+	return `'${value.replaceAll("'", "''")}'`;
+}
+
 export type SetupSystem = "linux" | "macos" | "windows";
 
 /** The system this browser runs on, as the likeliest one to set up; phones get Linux. */
@@ -118,7 +123,6 @@ export function setupCommand(
 ): string {
 	let connect = connectArguments(agent, shell, background);
 	if (shell === "powershell") {
-		let literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
 		return [
 			[
 				`$env:CHOPIN_URL = ${literal(origin)}`,

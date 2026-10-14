@@ -40,6 +40,18 @@ export function MachineIcon(props: IconProps) {
 	);
 }
 
+/** Two stacked units, for a server or virtual machine that runs on its own. */
+export function ServerIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="5" rx="1.5" width="14.5" x="1.75" y="2.75" />
+			<rect height="5" rx="1.5" width="14.5" x="1.75" y="10.25" />
+			<circle cx="5" cy="5.25" fill="currentColor" r=".75" stroke="none" />
+			<circle cx="5" cy="12.75" fill="currentColor" r=".75" stroke="none" />
+		</LineIcon>
+	);
+}
+
 export function SearchIcon(props: IconProps) {
 	return (
 		<LineIcon viewBox="0 0 15 15" {...props}>

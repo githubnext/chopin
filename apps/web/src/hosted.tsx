@@ -75,7 +75,7 @@ function decoded(value: string): string | undefined {
 
 export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
-	if (/^\/connect\/?$/.test(pathname)) return { page: "machines" };
+	if (/^\/connect(\/server)?\/?$/.test(pathname)) return { page: "machines" };
 	let child = parseChildDocumentPath(pathname);
 	if (child) return { page: "child", ...child };
 	let document = parseDocumentPath(pathname);
@@ -299,7 +299,7 @@ export function HostedApp(
 		case "machines":
 			workspace = (
 				<Suspense fallback={<Loading />}>
-					<MachinesPage />
+					<MachinesPage login={user.login} />
 				</Suspense>
 			);
 			break;

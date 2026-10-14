@@ -30,6 +30,13 @@
 	}
 }
 
+/* Back to Machines, when there is one, then the title and its action. */
+.machines-heading {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 4);
+}
+
 .machines-title {
 	display: flex;
 	align-items: flex-start;
@@ -45,7 +52,7 @@
 	text-wrap: pretty;
 }
 
-/* Open, Add a machine steps down to the secondary tier and its chevron turns up. */
+/* Add machine's chevron points down to its menu, and up while the menu is open. */
 .machines-add {
 	gap: calc(var(--spacing) * 1.5);
 }
@@ -59,9 +66,94 @@
 	rotate: -90deg;
 }
 
-/* A closed setup fold takes no room, so it adds no gap of its own. */
-.machines-setup-fold {
-	padding-bottom: calc(var(--spacing) * 8);
+/* The two kinds of machine: each an icon, its name, and a line on when to choose it. */
+.machines-add-menu {
+	position: fixed;
+	z-index: 60;
+	width: min(22rem, calc(100vw - var(--spacing) * 4));
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	transform-origin: var(--motion-origin-x, right) top;
+}
+
+.machines-add-icon {
+	margin-top: calc((var(--text-sm--line-height) * 1em - 18px) / 2);
+}
+
+.machines-add-option {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 0.5);
+}
+
+.machines-add-title {
+	color: var(--color-text-primary);
+	font-weight: 500;
+}
+
+.machines-add-detail {
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	text-wrap: pretty;
+}
+
+.machines-link,
+.machines-back {
+	color: var(--color-brand-ink);
+	text-decoration-line: underline;
+	text-decoration-color: color-mix(in oklch, var(--color-brand-ink) 35%, transparent);
+	text-underline-offset: 0.2em;
+
+	&:hover {
+		text-decoration-color: currentColor;
+	}
+}
+
+.machines-back {
+	display: inline-flex;
+	align-self: flex-start;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	text-decoration-line: none;
+
+	&:hover {
+		text-decoration-line: underline;
+	}
+}
+
+/* With no machine yet, the first step sits above the empty table, with the same menu. */
+.machines-banner {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	background: var(--color-brand-wash);
+	padding: calc(var(--spacing) * 8) calc(var(--spacing) * 8);
+
+	& h2 {
+		margin: 0;
+	}
+}
+
+.machines-banner-copy {
+	max-width: 46ch;
+	margin: 0 0 calc(var(--spacing) * 2);
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	text-wrap: pretty;
+}
+
+.machines-empty {
+	padding-block: calc(var(--spacing) * 6);
+	color: var(--color-text-tertiary);
+	text-align: center;
 }
 
 .machines-section {
@@ -70,8 +162,8 @@
 	gap: calc(var(--spacing) * 3);
 }
 
-/* Setup and the pairing confirmation sit on the page surface, raised off the ground. */
-.machines-setup,
+/* The pairing confirmation and the server's steps sit on the page surface, raised off the ground. */
+.machines-steps,
 .machines-card {
 	display: flex;
 	flex-direction: column;
@@ -85,30 +177,47 @@
 	font-size: var(--text-sm);
 }
 
-/* The title, with the setup guide quietly at its end. */
-.machines-setup-head {
+/* Add your computer: its lead, the system, the agent, then the command and the wait. */
+.machines-computer-dialog {
 	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
+	width: min(100%, 46rem);
+	max-height: calc(100dvh - var(--spacing) * 8);
+	flex-direction: column;
+	overflow-y: auto;
+	font-size: var(--text-sm);
+}
+
+.machines-dialog-body {
+	display: flex;
+	flex-direction: column;
 	gap: calc(var(--spacing) * 4);
-
-	& h2 {
-		margin: 0;
-	}
+	margin-top: calc(var(--spacing) * 3);
 }
 
-.machines-setup .machines-docs {
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
+.machines-dialog-lead,
+.machines-run-lead {
+	margin: 0;
+	color: var(--color-text-secondary);
+	text-wrap: pretty;
 }
 
-/* The system the command is for and the coding agent it starts, one row above it. */
-.machines-setup-choices {
+.machines-dialog-agent {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+}
+
+/* Linux, macOS, Windows: the one pressed takes petrol, as a choice made. */
+.machines-systems {
 	display: flex;
 	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--spacing) * 2) calc(var(--spacing) * 4);
+	gap: calc(var(--spacing) * 2);
+
+	& .btn[aria-pressed="true"] {
+		background: var(--color-brand-wash);
+		color: var(--color-brand-ink);
+		outline-color: var(--color-brand);
+	}
 }
 
 .machines-agent {
@@ -129,25 +238,6 @@
 		height: var(--control-height-compact);
 		padding-inline: calc(var(--spacing) * 2);
 		font-size: var(--text-sm);
-	}
-}
-
-.machines-shells {
-	display: flex;
-	gap: calc(var(--spacing) * 1.5);
-}
-
-.machines-shells .btn {
-	color: var(--color-text-tertiary);
-
-	&:hover {
-		background: var(--color-hover);
-	}
-
-	&[aria-pressed="true"] {
-		background: var(--color-ground);
-		color: var(--color-text-primary);
-		font-weight: 500;
 	}
 }
 
@@ -194,22 +284,133 @@
 	}
 }
 
-.machines-key {
-	display: inline-flex;
+/* Re-generate, then the key's terms beside it. */
+.machines-key,
+.machines-generate {
+	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: calc(var(--spacing) * 1);
-	margin-inline-start: auto;
+	gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+
+	& p {
+		margin: 0;
+	}
+}
+
+.machines-key-expiry {
 	color: var(--color-text-tertiary);
 	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
 	line-height: var(--text-xs--line-height);
+}
 
-	& .machines-key-expiry {
+/* Add a server: numbered steps, each a heading and its settings. */
+.machines-steps {
+	gap: calc(var(--spacing) * 10);
+	margin: 0;
+	list-style: none;
+	counter-reset: machines-step;
+}
+
+.machines-step {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 4);
+	counter-increment: machines-step;
+}
+
+.machines-step-title {
+	margin: 0;
+	color: var(--color-text-primary);
+	font-size: var(--text-lg);
+	font-weight: 600;
+	line-height: var(--text-lg--line-height);
+
+	&::before {
+		content: counter(machines-step) ".";
+		display: inline-block;
+		min-width: 1.5em;
 		font-variant-numeric: tabular-nums;
 	}
+}
 
-	& .btn {
-		gap: calc(var(--spacing) * 1);
-		color: var(--color-text-secondary);
+/* Each setting under the step's heading, ruled off from the one before. */
+.machines-settings {
+	display: flex;
+	flex-direction: column;
+	padding-inline-start: 1.5em;
+	font-size: var(--text-lg);
+}
+
+.machines-setting {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 1.5);
+	padding-block: calc(var(--spacing) * 4);
+	font-size: var(--text-sm);
+
+	& + & {
+		border-top: var(--edge-width) solid var(--color-edge);
+	}
+
+	&:first-child {
+		padding-top: 0;
+		gap: calc(var(--spacing) * 2);
+	}
+}
+
+.machines-setting-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 4);
+}
+
+.machines-setting-title {
+	margin: 0;
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.machines-setting-detail {
+	max-width: 65ch;
+	margin: 0;
+	color: var(--color-text-secondary);
+	text-wrap: pretty;
+}
+
+/* On and off: the thumb slides to the end on petrol. */
+.machines-switch {
+	position: relative;
+	flex: none;
+	width: calc(var(--spacing) * 9);
+	height: calc(var(--spacing) * 5);
+	border-radius: var(--radius-full);
+	background: var(--color-control-boundary);
+	transition: background-color var(--duration-base) var(--ease-out);
+
+	&[aria-checked="true"] {
+		background: var(--color-brand);
+	}
+
+	&:disabled {
+		opacity: var(--opacity-quiet);
+	}
+}
+
+.machines-switch-thumb {
+	position: absolute;
+	top: calc(var(--spacing) * 0.5);
+	left: calc(var(--spacing) * 0.5);
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+	border-radius: var(--radius-full);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	transition: translate var(--duration-base) var(--ease-out);
+
+	[aria-checked="true"] > & {
+		translate: calc(var(--spacing) * 4) 0;
 	}
 }
 
@@ -304,14 +505,15 @@
 	}
 
 	/*
-	 * Lines break only where the command does; a line too long for the box scrolls instead, on the
-	 * theme's own scrollbar.
+	 * A line too long for the box wraps at a space, as Tailscale's command does, or anywhere in a
+	 * word longer than the box. Each line hangs, so a wrapped part sits deeper than the two-space
+	 * continuation line and never reads as a line of its own. What Copy takes is unchanged.
 	 */
 	& pre {
 		margin: 0;
-		overflow-x: auto;
 		padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
-		white-space: pre;
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
 	}
 
 	& code {
@@ -325,6 +527,12 @@
 
 	& .machines-command-line {
 		display: block;
+		padding-inline-start: 4ch;
+		text-indent: -4ch;
+	}
+
+	& .machines-command-flag {
+		white-space: nowrap;
 	}
 
 	& .btn {
@@ -340,7 +548,6 @@
 	text-wrap: pretty;
 }
 
-.machines-setup a,
 .machines-detail a {
 	color: var(--color-brand-ink);
 	text-decoration-line: underline;
@@ -657,8 +864,9 @@
 		height: var(--control-target-coarse);
 	}
 
-	& .machines-setup .machines-docs,
-	& .machines-needs-toggle {
+	& .machines-needs-toggle,
+	& .machines-switch,
+	& .machines-back {
 		position: relative;
 
 		&::after {
@@ -690,23 +898,6 @@
 	}
 }
 
-/*
- * On a phone a command wraps instead of scrolling, as code in a document does. Each of its lines
- * hangs, so a wrapped part sits deeper than the two-space continuation lines and never reads as a
- * line of its own. What Copy takes is unchanged.
- */
-:root[data-phone] .machines-command {
-	& pre {
-		white-space: pre-wrap;
-		overflow-wrap: anywhere;
-	}
-
-	& .machines-command-line {
-		padding-inline-start: 4ch;
-		text-indent: -4ch;
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.machines-pulse,
 	.machines-skeleton-bar,
@@ -721,10 +912,6 @@
 
 /* Phones keep the name and status; the version moves under the name. */
 @media (max-width: 40rem) {
-	.machines-setup-fold {
-		padding-bottom: calc(var(--spacing) * 6);
-	}
-
 	.machines-main {
 		gap: calc(var(--spacing) * 6);
 		padding-inline: calc(var(--spacing) * 4);
@@ -736,23 +923,25 @@
 		align-items: stretch;
 	}
 
-	.machines-setup,
+	.machines-steps,
 	.machines-card {
 		padding: calc(var(--spacing) * 4);
 	}
 
-	/* The picker and the system toggle stack, each the full width of the card. */
-	.machines-setup-choices {
-		flex-direction: column;
-		align-items: stretch;
+	.machines-banner {
+		padding: calc(var(--spacing) * 6) calc(var(--spacing) * 4);
 	}
 
 	.machines-agent select {
 		flex: 1;
 	}
 
-	.machines-shells .btn {
+	.machines-systems .btn {
 		flex: 1;
+	}
+
+	.machines-settings {
+		padding-inline-start: 0;
 	}
 
 	.machines-version-column {

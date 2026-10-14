@@ -469,7 +469,7 @@ describe("hosted authentication routes", () => {
 
 		let response = await authorize(session);
 		expect(response.status).toBe(303);
-		expect(response.headers.get("location")).toBe("/connect?add");
+		expect(response.headers.get("location")).toBe("/connect/server");
 		expect(held).toEqual([{ userId: "U_octocat", accessToken: "ghu_route_secret" }]);
 		expect(cookies(response).some(value => value.includes("chopin_session="))).toBe(false);
 
@@ -522,7 +522,7 @@ describe("hosted authentication routes", () => {
 			let response = (await router.handle(
 				new Request(back, { headers: { cookie: `${pair(cookies(start)[0]!)}; ${cookie}` } }),
 			))!;
-			expect(response.headers.get("location")).toBe("/connect?add");
+			expect(response.headers.get("location")).toBe("/connect/server");
 		};
 		let mint = async (cookie: string) =>
 			(await router.handle(

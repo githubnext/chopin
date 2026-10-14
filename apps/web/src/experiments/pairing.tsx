@@ -1,13 +1,17 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { CheckIcon, ChevronIcon, MachineIcon, RestartIcon } from "@chopin/icons";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { ArrowLeftIcon, CheckIcon, MachineIcon, RestartIcon } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
-import { UnfoldPanel, useUnfold } from "@chopin/visuals/unfold";
+import { motionImmediately } from "../motion-input";
+import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
-import { MachineSetup } from "./machine-setup";
+import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
 import { Handshake, useMachines, useNewMachines, YourMachines } from "./machines";
 import { pairingProblem } from "./pairing-problems";
+import { SETUP_GUIDE } from "./setup-commands";
 
 import type { ReactNode } from "react";
+import type { MachineKind } from "./machine-setup";
 
 import "./machines.css";
 
@@ -22,32 +26,34 @@ type Pairing = {
 	connected?: string;
 };
 
-/** How long a first machine's tick holds before the setup folds away. */
+/** How long a machine's tick holds before the dialog closes onto its row. */
 const HOLD_MS = 1600;
-/** The fold itself, at the card pace (`--duration-linger`), with a frame to spare. */
-const FOLD_MS = 700;
 
 /**
  * The frame every /connect view shares inside the navigation: the page title and its action, on
- * the ground, scrolling on its own.
+ * the ground, scrolling on its own. `lead` sits above the title, as Back does.
  */
 function MachinesFrame(
-	{ action, children, description, title }: {
+	{ action, children, description, lead, title }: {
 		action?: ReactNode;
 		children: ReactNode;
-		description: string;
+		description: ReactNode;
+		lead?: ReactNode;
 		title: string;
 	},
 ) {
 	return (
 		<div className="machines-page" data-hosted="">
 			<main className="machines-main">
-				<div className="machines-title">
-					<div className="min-w-0">
-						<h1 className="text-xl font-semibold">{title}</h1>
-						<p className="machines-description mt-1 text-sm text-text-secondary">{description}</p>
+				<div className="machines-heading">
+					{lead}
+					<div className="machines-title">
+						<div className="min-w-0">
+							<h1 className="text-xl font-semibold">{title}</h1>
+							<p className="machines-description mt-1 text-sm text-text-secondary">{description}</p>
+						</div>
+						{action}
 					</div>
-					{action}
 				</div>
 				{children}
 			</main>
@@ -55,126 +61,125 @@ function MachinesFrame(
 	);
 }
 
+/** Where /connect/server goes: the page for adding a server with a key. */
+const SERVER_PATH = "/connect/server";
+
 /**
- * The person's machines, and what to run to add one. With none paired yet, setup leads; either
- * way its status waits for the machine, and when it connects that status ticks, holds a moment,
- * and the setup folds away above the machine's new row.
+ * The person's machines, under Add machine: Your computer opens a dialog with the command to run,
+ * whose status waits for the machine; when it connects the status ticks, holds a moment, and the
+ * dialog closes onto the machine's new row. Server or VM goes to its own page. With no machine
+ * yet, a banner above the empty table offers the same menu.
  */
-function MachinesPage() {
+function MachinesHome({ login, onServer }: { login: string; onServer: () => void }) {
 	let machines = useMachines();
 	let list = machines.machines;
 	let marks = useNewMachines(list);
-	let add = useUnfold();
-	let setAddOpen = add.setOpen;
-	let first = useUnfold(true, "card");
-	let setFirstOpen = first.setOpen;
-	let addId = useId();
-	let firstId = useId();
-	let [firstRun, setFirstRun] = useState(false);
+	let bannerId = useId();
+	let [adding, setAdding] = useState(false);
+	let dialog = useTransitionPresence(adding ? true : undefined, 150, motionImmediately());
 	let [announcement, setAnnouncement] = useState("");
 	let announced = useRef<string>(undefined);
-	// Back from authorizing pairing keys with GitHub, Add a machine opens again where it was.
-	let [reopen, setReopen] = useState(() => new URLSearchParams(location.search).has("add"));
-	useEffect(() => {
-		if (reopen) history.replaceState(history.state, "", "/connect");
-	}, [reopen]);
-	let empty = list?.length === 0;
-	useEffect(() => {
-		if (!empty) return;
-		setFirstRun(true);
-		setFirstOpen(true);
-	}, [empty, setFirstOpen]);
-	useEffect(() => {
-		if (!reopen || !list) return;
-		setReopen(false);
-		if (list.length) setAddOpen(true);
-	}, [reopen, list, setAddOpen]);
-	// The machines there were as Add a machine opened; one that wasn't is the one it waits for.
+	// The machines there were as the dialog opened; one that wasn't is the one it waits for.
 	let [before, setBefore] = useState<ReadonlySet<string>>();
 	let hasList = !!list;
 	useEffect(() => {
-		if (!add.open) setBefore(undefined);
-		else if (hasList) {
-			setBefore(current => current ?? new Set(list?.map(machine => machine.id)));
-		}
-	}, [add.open, hasList, list]);
-	let newcomer = firstRun
-		? list?.[0]
-		: before && list?.find(machine => !before.has(machine.id));
+		if (!adding) setBefore(undefined);
+		else if (hasList) setBefore(current => current ?? new Set(list?.map(machine => machine.id)));
+	}, [adding, hasList, list]);
+	let newcomer = before && list?.find(machine => !before.has(machine.id));
 	let landed = newcomer?.connected ? newcomer : undefined;
 	useEffect(() => {
 		if (!landed) return;
 		announced.current = landed.id;
 		setAnnouncement(`${landed.label} connected`);
-		let fold = window.setTimeout(() => {
-			setFirstOpen(false);
-			setAddOpen(false);
-		}, HOLD_MS);
-		let done = window.setTimeout(() => setFirstRun(false), HOLD_MS + FOLD_MS);
-		return () => {
-			window.clearTimeout(fold);
-			window.clearTimeout(done);
-		};
-	}, [landed?.id, landed?.label, setFirstOpen, setAddOpen]);
+		let close = window.setTimeout(() => setAdding(false), HOLD_MS);
+		return () => window.clearTimeout(close);
+	}, [landed?.id, landed?.label]);
 	// Other machines that turn up while the page is open are announced as they arrive.
 	let arrived = marks.arrived;
 	useEffect(() => {
-		if (!arrived || firstRun || announced.current === arrived.id) return;
+		if (!arrived || adding || announced.current === arrived.id) return;
 		announced.current = arrived.id;
 		setAnnouncement(`${arrived.label} ${arrived.connected ? "connected" : "paired"}`);
-	}, [arrived, firstRun]);
+	}, [arrived, adding]);
+	let choose = (kind: MachineKind) => kind === "computer" ? setAdding(true) : onServer();
 	return (
 		<MachinesFrame
-			action={!firstRun && !!list?.length && (
-				<button
-					aria-controls={add.id}
-					aria-expanded={add.open}
-					className={`btn btn-md machines-add shrink-0 ${
-						add.open ? "btn-secondary" : "btn-primary"
-					}`}
-					onClick={add.toggle}
-					ref={add.trigger.ref}
-					type="button"
-				>
-					Add a machine
-					<ChevronIcon aria-hidden="true" className="machines-add-chevron" size={12} />
-				</button>
-			)}
-			description="Machines run builds, investigations and Planners for your documents, with your own coding agent."
+			action={<AddMachineMenu onChoose={choose} />}
+			description={
+				<>
+					Machines run builds, investigations and Planners for your documents, with your own coding
+					agent.{" "}
+					<a className="machines-link" href={SETUP_GUIDE} rel="noreferrer" target="_blank">
+						Learn more
+					</a>
+				</>
+			}
 			title="Machines"
 		>
 			<p className="sr-only" role="status">{announcement}</p>
-			<div>
-				{firstRun && (
-					<UnfoldPanel unfold={first}>
-						<div className="machines-setup-fold">
-							<MachineSetup
-								headingId={firstId}
-								open={first.open}
-								paired={!!newcomer}
-								status={<Handshake machine={newcomer} />}
-								title="Add your first machine"
-							/>
-						</div>
-					</UnfoldPanel>
-				)}
-				{!firstRun && !!list?.length && (
-					<UnfoldPanel unfold={add}>
-						<div className="machines-setup-fold">
-							<MachineSetup
-								headingId={addId}
-								open={add.open}
-								paired={!!newcomer}
-								status={<Handshake machine={newcomer} />}
-								title="Add a machine"
-							/>
-						</div>
-					</UnfoldPanel>
-				)}
-				<YourMachines fresh={marks.marked} machines={machines} />
-			</div>
+			{list?.length === 0 && (
+				<section aria-labelledby={bannerId} className="machines-banner">
+					<h2 className="text-base font-semibold" id={bannerId}>Add your first machine</h2>
+					<p className="machines-banner-copy">
+						Chopin does its work on your machines. Add the computer you use, or a server that stays
+						connected.
+					</p>
+					<div>
+						<AddMachineMenu onChoose={choose} />
+					</div>
+				</section>
+			)}
+			<YourMachines fresh={marks.marked} machines={machines} />
+			{dialog.phase !== "closed" && (
+				<AddComputerDialog
+					login={login}
+					motion={dialog}
+					onDismiss={() => setAdding(false)}
+					status={<Handshake machine={newcomer} />}
+				/>
+			)}
 		</MachinesFrame>
 	);
+}
+
+/** /connect and /connect/server, switched in place, with Back and Forward between them. */
+function MachinesPage({ login }: { login: string }) {
+	let [server, setServer] = useState(() => location.pathname.replace(/\/$/, "") === SERVER_PATH);
+	useEffect(() => {
+		let changed = () => setServer(location.pathname.replace(/\/$/, "") === SERVER_PATH);
+		window.addEventListener("popstate", changed);
+		return () => window.removeEventListener("popstate", changed);
+	}, []);
+	let go = (path: string) => {
+		history.pushState(null, "", path);
+		setServer(path === SERVER_PATH);
+		document.querySelector(".machines-page")?.scrollTo({ top: 0 });
+	};
+	if (server) {
+		return (
+			<MachinesFrame
+				description="Choose settings, then generate an install script."
+				lead={
+					<a
+						className="machines-back"
+						href="/connect"
+						onClick={event => {
+							event.preventDefault();
+							go("/connect");
+						}}
+					>
+						<ArrowLeftIcon aria-hidden="true" size={14} />
+						Back to Machines
+					</a>
+				}
+				title="Add a server"
+			>
+				<AddServerPage onBack={() => go("/connect")} />
+			</MachinesFrame>
+		);
+	}
+	return <MachinesHome login={login} onServer={() => go(SERVER_PATH)} />;
 }
 
 /** How soon, and how many times, the list is asked again while the just-paired machine connects. */
@@ -225,7 +230,7 @@ function PairingLoading() {
 	);
 }
 
-export default function PairingPage() {
+export default function PairingPage({ login }: { login: string }) {
 	let id = new URLSearchParams(location.search).get("pairing");
 	let [pairing, setPairing] = useState<Pairing>();
 	let [loadError, setLoadError] = useState("");
@@ -275,7 +280,7 @@ export default function PairingPage() {
 			setBusy(false);
 		}
 	}
-	if (!id) return <MachinesPage />;
+	if (!id) return <MachinesPage login={login} />;
 	let repository = pairing?.input.repository;
 	let label = pairing?.input.label;
 	let problem = loadError
