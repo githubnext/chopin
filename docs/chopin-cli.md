@@ -35,7 +35,8 @@ On Linux or macOS it looks like this:
 
 ```sh
 installer=$(mktemp) \
-  && curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh -o "$installer" \
+  && curl -fsSL -o "$installer" \
+  https://github.com/githubnext/chopin/releases/latest/download/install.sh \
   && sh "$installer" && rm -f "$installer" \
   && CHOPIN_URL=https://your-chopin-instance.example \
   CHOPIN_PAIRING_KEY=chopin_k_… \

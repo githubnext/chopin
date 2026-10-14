@@ -19,7 +19,8 @@ test("one command installs chopin, then connects with the key by chopin's instal
 	expect(setupCommand("https://chopin.example", "sh", findAgent("copilot"), KEY)).toBe(
 		[
 			"installer=$(mktemp) \\",
-			`  && curl -fsSL ${RELEASES}/install.sh -o "$installer" \\`,
+			'  && curl -fsSL -o "$installer" \\',
+			`  ${RELEASES}/install.sh \\`,
 			'  && sh "$installer" && rm -f "$installer" \\',
 			"  && CHOPIN_URL=https://chopin.example \\",
 			`  CHOPIN_PAIRING_KEY=${KEY} \\`,

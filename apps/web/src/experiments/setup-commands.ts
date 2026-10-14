@@ -121,7 +121,8 @@ export function setupCommand(
 	}
 	let lines = [
 		"installer=$(mktemp)",
-		`  && curl -fsSL ${RELEASES}/install.sh -o "$installer"`,
+		'  && curl -fsSL -o "$installer"',
+		`  ${RELEASES}/install.sh`,
 		'  && sh "$installer" && rm -f "$installer"',
 		`  && CHOPIN_URL=${quote(origin, shell)}`,
 		`  CHOPIN_PAIRING_KEY=${quote(key, shell)}`,
