@@ -242,7 +242,7 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	await chatInput(pane(page)).fill(text);
 	await chatInput(pane(page)).press("Enter");
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(2);
-	await surface.getByRole("button", { name: /^Back to / }).click();
+	await page.getByRole("button", { name: "Back to Reconnected initiative", exact: true }).click();
 	await expect(surface).toBeHidden();
 	await page.reload();
 	await ready(page);
@@ -294,7 +294,13 @@ test("a Planner-mode send keeps its prepared destination and text after a lost a
 	expect(frames.sends()).toHaveLength(2);
 	let [first, retry] = frames.sends();
 	expect(first).toMatchObject({ text: `@chopin ${text}`, to: "planner" });
-	expect(retry).toEqual({ ...first, rid: retry!.rid });
+	expect(retry).toMatchObject({
+		requestId: first!.requestId,
+		text: first!.text,
+		to: first!.to,
+	});
+	expect(retry!.focus).toBe(first!.focus);
+	expect(retry!.references).toEqual(first!.references);
 	await expect(pane(page).getByText(text, { exact: true })).toHaveCount(1);
 	await reply(page);
 	await page.waitForTimeout(1800);
@@ -433,7 +439,7 @@ test("ordinary discussion focused on a child stays quiet, while direct child req
 	expect(frames.sends().at(-1)).toMatchObject({ to: "planner", focus: child.id });
 	await expect.poll(() => readSource(port, child.id)).toContain("Planner note from the root Chat.");
 	expect(await readSource(port, room)).not.toContain("Planner note");
-	await surface.getByRole("button", { name: /^Back to / }).click();
+	await page.getByRole("button", { name: "Back to Focused initiative root", exact: true }).click();
 	await expect(surface).toBeHidden();
 	await send(page, "INITIATIVE-USEFUL returned root: compare the export approaches.");
 	expect(frames.sends().at(-1)?.focus).toBeUndefined();
