@@ -1,3 +1,4 @@
+import { withDocumentTitle } from "../packages/dialect/src/index";
 import { countChildChannels, readSource, seedChildChannel } from "./database";
 import {
 	markResearchPublished,
@@ -298,7 +299,7 @@ async function startInlineResearch(page: Page, question: string) {
 test(
 	"research drafts and lifecycle cards share the prose column and scroll in document flow",
 	async ({ baseURL, join, page, room, seed }, testInfo) => {
-		await seed(PARENT_SOURCE);
+		await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 		let research = await scriptResearch(page, room, port(baseURL!));
 		let opened = await join("ana");
 		await opened.setViewportSize({ width: 1500, height: 895 });
@@ -378,7 +379,7 @@ test(
 );
 
 test("a submitted /research card stays in the document through reload", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let databasePort = port(baseURL!);
 	let research = await scriptResearch(page, room, databasePort);
 	let resets = 0;
@@ -404,7 +405,7 @@ test("a submitted /research card stays in the document through reload", async ({
 
 test("inline research publishes one ordinary child and opens it", async ({ baseURL, join, page, room, seed }) => {
 	test.slow();
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let databasePort = port(baseURL!);
 	let research = await scriptResearch(page, room, databasePort, { planner: true });
 	let catalogueReads = 0;
@@ -503,7 +504,7 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 });
 
 test("failed research retries by identity while cancelled research never publishes", async ({ baseURL, join, page, room, seed }) => {
-	await seed("# Recovery parent\n");
+	await seed(`# Test ${room.slice(0, 8)}\n`);
 	let databasePort = port(baseURL!);
 	let research = await scriptResearch(page, room, databasePort);
 	let opened = await join("ana");
@@ -607,7 +608,7 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 		researchReportSource(report, sources),
 	);
 	let notice = `Research is ready. [Open the research document](${child.path}).`;
-	await seed(`# Parent document\n\n<Research id="${workspaceId}" />\n`, {
+	await seed(`# Test ${room.slice(0, 8)}\n\n<Research id="${workspaceId}" />\n`, {
 		transcript: [{
 			id: originMessageId,
 			author: { kind: "member", handle: "ana" },
@@ -704,7 +705,7 @@ test("a failed research card and its Chat notice survive reconnect once", async 
 	);
 	await updateResearchJobState(databasePort, room, jobId, "failed");
 	let notice = "Research could not be completed. You can retry it from the research card.";
-	await seed(`# Parent document\n\n<Research id="${workspaceId}" />\n`, {
+	await seed(`# Test ${room.slice(0, 8)}\n\n<Research id="${workspaceId}" />\n`, {
 		transcript: [{
 			id: originMessageId,
 			author: { kind: "member", handle: "ana" },

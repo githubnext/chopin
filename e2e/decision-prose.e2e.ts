@@ -206,6 +206,15 @@ test("Backspace after a hidden decided card moves into its prose without deletin
 	await expect(following).toHaveText("Following detail.");
 	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
 	await page.keyboard.press("Backspace");
+	await expect.poll(() =>
+		content(page).evaluate(() => {
+			let selection = getSelection();
+			return {
+				text: selection?.anchorNode?.textContent,
+				offset: selection?.anchorOffset,
+			};
+		})
+	).toEqual({ text: `We decided: ${OPTION}`, offset: `We decided: ${OPTION}`.length });
 	await page.keyboard.type(" Updated.");
 
 	await expect(proseBlock(page)).toContainText(`We decided: ${OPTION} Updated.`);

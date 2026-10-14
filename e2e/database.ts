@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { SQL } from "bun";
+import { withDocumentTitle } from "../packages/dialect/src/index";
 import { storedDocument, storedLegacyCallout } from "../apps/server/src/testing/plan";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
@@ -120,7 +121,7 @@ export async function seedChildChannel(
 			`;
 		});
 	});
-	await seedChannel(port, id, source, state);
+	await seedChannel(port, id, withDocumentTitle(source, title), state);
 	let parentPath = await sql(port, async database => {
 		let [parent] = await database<{ owner: string; repository: string; slug: string }[]>`
 			SELECT c.repository_owner AS owner, c.repository_name AS repository, s.slug

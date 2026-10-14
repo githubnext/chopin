@@ -495,5 +495,19 @@
 			]
 		],
 		"sourceHash": "dc998b993e2f8ca0980fc0424b635126eb34027828dee1f926d86892d543065e"
+	},
+	{
+		"file": "packages/editor/src/blank-behind-decisions.tsx",
+		"reason": "The derived body placeholder stays outside contenteditable; its top, left and width are measured from the first body paragraph relative to the editor host, so title wrapping and resize preserve alignment. No design values or document content enter this object.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"position",
+				"unresolved style > BlankBehindDecisions > <div>",
+				1
+			]
+		],
+		"sourceHash": "7be7c4960d4f135d6966504efdedeb1ffbb1b18bad0ffbd26d64084843d3a0b2"
 	}
 ]

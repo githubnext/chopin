@@ -1330,7 +1330,8 @@ test("the orphaned comments popover shows its whole card beneath the pill", asyn
 	await page.keyboard.press("Backspace");
 
 	// A selection's formatting toolbar would sit over the card it opens.
-	await content(page).locator("p").first().selectText();
+	await content(page).getByText("A second block remains after the marked passage.", { exact: true })
+		.selectText();
 	let toolbar = page.getByRole("toolbar", { name: "Text formatting" });
 	await expect(toolbar).toBeVisible();
 

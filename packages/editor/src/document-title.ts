@@ -241,7 +241,13 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 			}
 			textKeys = heading.getAllTextNodes().map(n => n.getKey());
 		}),
-		editor.registerUpdateListener(({ editorState }) => editorState.read(decorate)),
+		editor.registerUpdateListener(({ editorState, tags }) =>
+			editorState.read(() => {
+				// Yjs skips transforms when it applies remote updates, including title replacement.
+				if (tags.has(COLLABORATION_TAG) || tags.has(HISTORIC_TAG)) adopt();
+				decorate();
+			})
+		),
 		typeof document === "undefined"
 			? () => {}
 			: editor.registerRootListener(() => editor.getEditorState().read(decorate)),
@@ -294,6 +300,15 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 			return true;
 		}, COMMAND_PRIORITY_CRITICAL),
 	);
+	// Import can contain only the title. Prepare a local writing line after authoritative sync.
+	if (canEdit) {
+		editor.update(() => {
+			let heading = title();
+			if (heading && $getRoot().getChildrenSize() === 1) {
+				heading.insertAfter($createParagraphNode());
+			}
+		});
+	}
 	return () => {
 		off();
 		decorated?.removeAttribute("data-document-title");

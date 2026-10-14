@@ -285,7 +285,7 @@ test("the room header renames the current document and the sidebar creates one i
 	await expect(header.getByRole("button", { name: /^Rename / })).toBeFocused();
 
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
-	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+(?:-\d+)?$/);
 	await expect(headerDocument(page)).toHaveAccessibleName(/^Document: [a-z]+-[a-z]+$/);
 	// A new document opens with its generated name selected, ready to be replaced.
 	await expect(title).toBeFocused();
@@ -605,7 +605,7 @@ test("a stale catalogue response cannot remove a newly created document", async 
 	await captured.promise;
 	let projects = sidebar(page);
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
-	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+(?:-\d+)?$/);
 	let created = projects.locator('a[aria-current="page"]');
 	await expect(created).toBeVisible();
 	let createdTitle = (await created.textContent())!.trim();
@@ -645,7 +645,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	expect(originalPath).toBeTruthy();
 
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
-	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+(?:-\d+)?$/);
 	let created = projects.locator('a[aria-current="page"]');
 	let createdTitle = (await created.textContent())!.trim();
 	let createdPath = await created.getAttribute("href");
@@ -1199,7 +1199,7 @@ test("sidebar creation failures remain retryable", async ({ join, page }) => {
 	await expect(page.getByRole("alert")).toBeVisible();
 	await expect(create).toBeEnabled();
 	await create.click();
-	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+$/);
+	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+(?:-\d+)?$/);
 });
 
 test("archiving a sidebar row by keyboard moves focus to a neighbouring row", async ({ baseURL, join }) => {

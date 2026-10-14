@@ -138,3 +138,75 @@ test("canonical title changes preserve a pending child request and both editor m
 	await expect(parent).toHaveAttribute("data-mount-token", "parent-preserved");
 	expect(reads).toBe(2);
 });
+
+test("a parent rename while its child closes publishes the parent as the visited document", async ({ baseURL, page, room, seed }) => {
+	await seed("# Parent document\n\nParent passage.\n");
+	let child = await seedChildChannel(
+		Number(new URL(baseURL!).port),
+		room,
+		crypto.randomUUID(),
+		"Child document",
+		"# Child document\n\nChild passage.\n",
+	);
+	let visits: string[] = [];
+	page.on("request", request => {
+		if (request.method() !== "PATCH" || new URL(request.url()).pathname !== "/api/navigation") {
+			return;
+		}
+		let body = request.postDataJSON() as { documentId?: string };
+		if (body.documentId) visits.push(body.documentId);
+	});
+	await authenticate(page, "ana", baseURL!);
+	await page.goto(child.path);
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await expect(page.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
+	// Catch the close at its commit, before the pointer action's waiting can outlast the motion.
+	await page.evaluate(() => {
+		let observer = new MutationObserver(() => {
+			let host = document.querySelector('[data-child-presentation="closing"]');
+			let animations = host?.getAnimations({ subtree: true }) ?? [];
+			if (!animations.length) return;
+			for (let animation of animations) animation.pause();
+			observer.disconnect();
+		});
+		observer.observe(document.body, {
+			attributes: true,
+			attributeFilter: ["data-child-presentation"],
+			subtree: true,
+		});
+	});
+	await page.getByRole("button", { name: "Back to Parent document", exact: true }).click();
+	await expect(page.locator('[data-child-presentation="closing"]')).toHaveCount(1);
+	await expect.poll(() => visits.at(-1)).toBe(room);
+	visits.length = 0;
+	let renamed = `Renamed parent ${room.slice(0, 8)}`;
+	let response = await page.context().request.patch(`/api/channels/${room}`, {
+		headers: { origin: new URL(baseURL!).origin },
+		data: { title: renamed },
+	});
+	expect(response.ok()).toBe(true);
+	let detail = await response.json() as { channel: { slug: string } };
+	await expect(page).toHaveURL(url =>
+		url.pathname === `/documents/octo-org/score/${detail.channel.slug}`
+	);
+	await expect(parent.getByRole("group", { name: `Document: ${renamed}`, exact: true }))
+		.toBeVisible();
+	expect(visits.every(id => id === room)).toBe(true);
+	await expect(page.locator('[data-child-presentation="closing"]')).toHaveCount(1);
+	await page.evaluate(() => {
+		for (
+			let animation of document.querySelector('[data-child-presentation="closing"]')!
+				.getAnimations({ subtree: true })
+		) animation.play();
+	});
+	await expect(page.locator(".anchored-child-card")).toHaveCount(0);
+	expect(visits.every(id => id === room)).toBe(true);
+	await expect.poll(async () => {
+		let navigation = await page.context().request.get("/api/navigation");
+		return (await navigation.json() as { lastDocumentId?: string }).lastDocumentId;
+	}).toBe(room);
+	await expect(
+		page.getByRole("complementary", { name: "Projects" })
+			.locator('[aria-current="page"]'),
+	).toHaveAccessibleName(renamed);
+});

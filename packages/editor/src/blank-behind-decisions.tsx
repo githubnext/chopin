@@ -1,13 +1,11 @@
 /**
- * The empty-document placeholder, for a document whose only blocks are decisions it hides.
- *
- * A decided card without prose keeps its projection node but draws nothing, and
- * Lexical shows no placeholder beside a decorator node. This marks the editable
- * root instead, and the stylesheet draws the same words in its first empty
- * paragraph, where a click puts the caret.
+ * The writing prompt below a protected title when no body prose is visible.
+ * The derived overlay stays outside Lexical and follows the first body paragraph,
+ * including a document whose only remaining body blocks are hidden decisions.
  */
 
-import { useEffect, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
 	$getSelection,
 	$isRangeSelection,
@@ -49,22 +47,67 @@ export function BlankBehindDecisions(
 		cardMeta?.snapshot ?? noCards,
 	);
 	useRelations(questions);
-	let blank = !content
-		&& blankBehindDecisions(entries, cards, writingEntries(entries, cards, questions, planner));
+	let hidden = blankBehindDecisions(
+		entries,
+		cards,
+		writingEntries(entries, cards, questions, planner),
+	);
+	let blank = !content && (entries.length === 0 || hidden);
+	let [target, setTarget] = useState<HTMLElement>();
+	let [position, setPosition] = useState<{ top: number; left: number; width: number }>();
+	useEffect(() => {
+		let root = editor?.getRootElement();
+		let host = root?.parentElement;
+		if (!root || !host || !blank) return;
+		setTarget(host);
+		let place = () => {
+			let body = root.querySelector<HTMLElement>(":scope > p");
+			if (!body || !root.querySelector("[data-document-title]")) {
+				setPosition(undefined);
+				return;
+			}
+			let box = body.getBoundingClientRect();
+			let parent = host.getBoundingClientRect();
+			let next = {
+				top: box.top - parent.top + host.scrollTop,
+				left: box.left - parent.left + host.scrollLeft,
+				width: box.width,
+			};
+			if (![next.top, next.left, next.width].every(Number.isFinite)) {
+				setPosition(undefined);
+				return;
+			}
+			setPosition(previous =>
+				previous?.top === next.top && previous.left === next.left
+					&& previous.width === next.width
+					? previous
+					: next
+			);
+		};
+		let resize = new ResizeObserver(place);
+		resize.observe(root);
+		let mutation = new MutationObserver(place);
+		mutation.observe(root, { attributes: true, childList: true, subtree: true });
+		place();
+		return () => {
+			resize.disconnect();
+			mutation.disconnect();
+			setTarget(undefined);
+			setPosition(undefined);
+		};
+	}, [blank, editor]);
 	useEffect(() => {
 		let root = editor?.getRootElement();
 		if (!root || !blank) return;
 		root.setAttribute("data-plan-blank", "");
-		root.style.setProperty("--plan-blank-placeholder", JSON.stringify(placeholder));
 		return () => {
 			root.removeAttribute("data-plan-blank");
-			root.style.removeProperty("--plan-blank-placeholder");
 		};
-	}, [blank, editor, placeholder]);
+	}, [blank, editor]);
 	// Nothing visible to delete: Lexical would remove the caret's empty line and leave a block
 	// cursor beside a decision the reader cannot see.
 	useEffect(() => {
-		if (!editor || !blank) return;
+		if (!editor || content || !hidden) return;
 		let refuse = (event: KeyboardEvent | null) => {
 			let selection = $getSelection();
 			if ($isRangeSelection(selection)) {
@@ -80,6 +123,13 @@ export function BlankBehindDecisions(
 			offBackspace();
 			offDelete();
 		};
-	}, [blank, editor]);
-	return null;
+	}, [content, editor, hidden]);
+	return blank && target && position
+		? createPortal(
+			<div aria-hidden="true" className="plan-content plan-body-placeholder" style={position}>
+				{placeholder}
+			</div>,
+			target,
+		)
+		: null;
 }

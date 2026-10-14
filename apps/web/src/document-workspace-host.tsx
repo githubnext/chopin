@@ -452,10 +452,10 @@ export default function DocumentWorkspaceHost(
 		let canonicalKey = documentRouteIdentity(canonicalRoute);
 		requestAliases.current.set(canonicalKey, loadKey);
 		onCanonicalPath(layerKey, routeKey, pathname);
-		if (route.page === "document" || updated.child) {
+		if (canonicalKey !== routeKey && (route.page === "document" || updated.child)) {
 			onReady(layerKey, {
 				canonicalPath: pathname,
-				channel: (updated.child ?? updated.parent).channel,
+				channel: route.page === "child" ? updated.child!.channel : updated.parent.channel,
 				requestKey: canonicalKey,
 				routeKey: canonicalKey,
 			});

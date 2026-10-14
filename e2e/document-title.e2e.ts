@@ -36,27 +36,31 @@ async function paste(page: Page, text: string, html?: string) {
 	}, { text, html });
 }
 
-test("clearing the title leaves its placeholder and ordinary body H1 intact", async ({ join, seed, room }) => {
-	await seed("# Original title\n\nBody prose.\n\n# Ordinary body heading\n");
-	let page = await join("ana");
-	await selectTitle(page);
-	await page.keyboard.press("Backspace");
-	await expect(title(page)).toHaveText("");
-	await expect(title(page)).toHaveAttribute("data-document-title", "");
-	await expect(title(page)).toHaveAttribute("data-document-title-empty", "");
-	await expect(page.getByRole("group", { name: "Document: Untitled", exact: true })).toBeVisible();
-	await expect(
-		page.getByRole("complementary", { name: "Projects" })
-			.locator('[aria-current="page"]'),
-	).toHaveAccessibleName("Untitled");
-	await expect(content(page).getByRole("heading", { name: "Ordinary body heading", exact: true }))
-		.toBeVisible();
-	await written(page, room, /^#\n\nBody prose\.\n\n# Ordinary body heading\n$/);
-	await page.screenshot({ path: "/private/tmp/chopin-title-placeholder.png" });
-	await page.reload();
-	await ready(page);
-	await expect(title(page)).toHaveText("");
-});
+test(
+	"clearing the title leaves its placeholder and ordinary body H1 intact",
+	async ({ join, seed, room }, info) => {
+		await seed("# Original title\n\nBody prose.\n\n# Ordinary body heading\n");
+		let page = await join("ana");
+		await selectTitle(page);
+		await page.keyboard.press("Backspace");
+		await expect(title(page)).toHaveText("");
+		await expect(title(page)).toHaveAttribute("data-document-title", "");
+		await expect(title(page)).toHaveAttribute("data-document-title-empty", "");
+		await expect(page.getByRole("group", { name: "Document: Untitled", exact: true }))
+			.toBeVisible();
+		await expect(
+			page.getByRole("complementary", { name: "Projects" })
+				.locator('[aria-current="page"]'),
+		).toHaveAccessibleName("Untitled");
+		await expect(content(page).getByRole("heading", { name: "Ordinary body heading", exact: true }))
+			.toBeVisible();
+		await written(page, room, /^#\n\nBody prose\.\n\n# Ordinary body heading\n$/);
+		await page.screenshot({ path: info.outputPath("title-placeholder.png") });
+		await page.reload();
+		await ready(page);
+		await expect(title(page)).toHaveText("");
+	},
+);
 
 test("Enter anywhere in the title preserves it and enters body prose", async ({ join, seed, room }) => {
 	await seed("# Original title\n\nBody prose.\n");
@@ -90,41 +94,45 @@ test("typing and rich paste bound titles by Unicode characters", async ({ join, 
 	await expect(title(page)).toHaveText("New name");
 });
 
-test("title undo and peer editing converge without resets and retain historical URLs", async ({ join, seed, room, page }) => {
-	await seed("# Original title\n\nBody prose.\n");
-	let resets = 0;
-	page.on("websocket", socket =>
-		socket.on("framereceived", ({ payload }) => {
-			if (typeof payload === "string" && payload.includes('"kind":"plan:reset"')) resets++;
-		}));
-	let ana = await join("ana");
-	let original = ana.url();
-	let bo = await join("bo");
-	await selectTitle(ana);
-	await ana.keyboard.press("Backspace");
-	await expect(title(bo)).toHaveText("");
-	await ana.keyboard.press("ControlOrMeta+z");
-	await expect(title(ana)).toHaveText("Original title");
-	await expect(title(bo)).toHaveText("Original title");
-	await ana.keyboard.press("ControlOrMeta+Shift+z");
-	await expect(title(bo)).toHaveText("");
-	await selectTitle(bo);
-	await bo.keyboard.type("Peer name");
-	await expect(title(ana)).toHaveText("Peer name");
-	await written(ana, room, /^# Peer name\n/);
-	await expect(ana).toHaveURL(/peer-name/);
-	await expect(ana.getByRole("group", { name: "Document: Peer name", exact: true })).toBeVisible();
-	await expect(
-		ana.getByRole("complementary", { name: "Projects" })
-			.locator('[aria-current="page"]'),
-	).toHaveAccessibleName("Peer name");
-	await ana.screenshot({ path: "/private/tmp/chopin-document-title.png" });
-	await ana.goto(original);
-	await ready(ana);
-	await expect(title(ana)).toHaveText("Peer name");
-	await expect(ana).toHaveURL(/peer-name/);
-	expect(resets).toBe(0);
-});
+test(
+	"title undo and peer editing converge without resets and retain historical URLs",
+	async ({ join, seed, room, page }, info) => {
+		await seed("# Original title\n\nBody prose.\n");
+		let resets = 0;
+		page.on("websocket", socket =>
+			socket.on("framereceived", ({ payload }) => {
+				if (typeof payload === "string" && payload.includes('"kind":"plan:reset"')) resets++;
+			}));
+		let ana = await join("ana");
+		let original = ana.url();
+		let bo = await join("bo");
+		await selectTitle(ana);
+		await ana.keyboard.press("Backspace");
+		await expect(title(bo)).toHaveText("");
+		await ana.keyboard.press("ControlOrMeta+z");
+		await expect(title(ana)).toHaveText("Original title");
+		await expect(title(bo)).toHaveText("Original title");
+		await ana.keyboard.press("ControlOrMeta+Shift+z");
+		await expect(title(bo)).toHaveText("");
+		await selectTitle(bo);
+		await bo.keyboard.type("Peer name");
+		await expect(title(ana)).toHaveText("Peer name");
+		await written(ana, room, /^# Peer name\n/);
+		await expect(ana).toHaveURL(/peer-name/);
+		await expect(ana.getByRole("group", { name: "Document: Peer name", exact: true }))
+			.toBeVisible();
+		await expect(
+			ana.getByRole("complementary", { name: "Projects" })
+				.locator('[aria-current="page"]'),
+		).toHaveAccessibleName("Peer name");
+		await ana.screenshot({ path: info.outputPath("document-title.png") });
+		await ana.goto(original);
+		await ready(ana);
+		await expect(title(ana)).toHaveText("Peer name");
+		await expect(ana).toHaveURL(/peer-name/);
+		expect(resets).toBe(0);
+	},
+);
 
 test("a phone keeps the semantic title while editing it", async ({ join, seed }) => {
 	await seed("# Phone title\n\nBody prose.\n");
@@ -247,4 +255,81 @@ test("manual rename accepts 50 Unicode characters and projects the authored titl
 	await field.press("Enter");
 	await expect(title(page)).toHaveText("😀".repeat(50));
 	await written(page, room, `# ${"😀".repeat(50)}\n\nBody prose.\n`);
+});
+
+for (let entry of ["header", "sidebar"] as const) {
+	test(`clearing a manual title through the ${entry} persists Untitled without changing body prose`, async ({ join, seed, room }) => {
+		await seed("# Original title\n\nBody prose.\n\n# Ordinary body heading\n");
+		let page = await join("ana");
+		let original = page.url();
+		if (entry === "header") {
+			await page.getByRole("group", { name: "Document: Original title", exact: true })
+				.getByRole("button", { name: "Rename Original title", exact: true }).click();
+		} else {
+			await page.getByRole("complementary", { name: "Projects" })
+				.locator('[aria-current="page"]').hover();
+			await page.getByRole("complementary", { name: "Projects" })
+				.getByRole("button", { name: "Actions for Original title", exact: true }).click();
+			await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+		}
+		let field = page.getByRole("textbox", { name: "Document title", exact: true });
+		await field.fill("");
+		if (entry === "header") await field.press("Enter");
+		else await content(page).locator("p").first().click();
+		await expect(field).toHaveCount(0);
+		await expect(title(page)).toHaveText("");
+		await expect(title(page)).toHaveAttribute("data-document-title-empty", "");
+		await expect(page.getByRole("group", { name: "Document: Untitled", exact: true }))
+			.toBeVisible();
+		await expect(
+			page.getByRole("complementary", { name: "Projects" })
+				.locator('[aria-current="page"]'),
+		).toHaveAccessibleName("Untitled");
+		await expect(page).toHaveURL(/\/untitled(?:-[a-z0-9]+)?$/);
+		await written(page, room, /^#\n\nBody prose\.\n\n# Ordinary body heading\n$/);
+		await page.reload();
+		await ready(page);
+		await expect(title(page)).toHaveText("");
+		await expect(content(page)).toContainText("Body prose.");
+		await expect(content(page).getByRole("heading", { name: "Ordinary body heading", exact: true }))
+			.toBeVisible();
+		await expect(page.getByRole("group", { name: "Document: Untitled", exact: true }))
+			.toBeVisible();
+		await page.goto(original);
+		await ready(page);
+		await expect(page).toHaveURL(/\/untitled(?:-[a-z0-9]+)?$/);
+		await expect(title(page)).toHaveText("");
+	});
+}
+
+test("an empty body's writing prompt follows a wrapping title and window resize", async ({ join, room, seed }) => {
+	let name = "A deliberately longer title across a narrow canvas";
+	await seed(`# ${name}\n`);
+	let page = await join("ana");
+	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	let body = content(page).locator(":scope > p").first();
+	let aligned = async () => {
+		await expect(prompt).toBeVisible();
+		await expect.poll(async () => {
+			let [writing, hint, heading] = await Promise.all([
+				body.boundingBox(),
+				prompt.boundingBox(),
+				title(page).boundingBox(),
+			]);
+			return !!writing && !!hint && !!heading
+				&& Math.abs(writing.x - hint.x) <= 1 && Math.abs(writing.y - hint.y) <= 1
+				&& hint.y >= heading.y + heading.height;
+		}).toBe(true);
+	};
+	await aligned();
+	await page.setViewportSize({ width: 390, height: 844 });
+	await edit(page);
+	await aligned();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await aligned();
+	await body.click();
+	await page.keyboard.type("First body prose.");
+	await expect(prompt).toHaveCount(0);
+	await expect(title(page)).toHaveText(name);
+	await written(page, room, `# ${name}\n\nFirst body prose.\n`);
 });

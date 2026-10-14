@@ -1,3 +1,4 @@
+import { normalizeDocumentTitle, withDocumentTitle } from "../packages/dialect/src/index";
 import { chatInput } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { installPointerMedia } from "./pointer-media";
@@ -78,7 +79,7 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 		"https://example.com/**",
 		route => route.fulfill({ contentType: "text/html", body: "<title>Authored source</title>" }),
 	);
-	await seed(LINKED_PARENT_SOURCE);
+	await seed(withDocumentTitle(LINKED_PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let child = await seedChildChannel(
 		port(baseURL!),
 		room,
@@ -147,7 +148,7 @@ async function captureChatSends(page: Page) {
 }
 
 test("a Lift child keeps the parent title bar as its stack and nested geometry", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Chrome source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -215,7 +216,7 @@ test("a Lift child keeps the parent title bar as its stack and nested geometry",
 
 test("the root's Chat stays live while a child is open, across every close path", async ({ baseURL, join, page, room, seed }) => {
 	test.slow();
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Isolated source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -309,7 +310,7 @@ test("the root's Chat stays live while a child is open, across every close path"
 });
 
 test("Escape in root Chat stays in Chat while a child is open", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Chat escape source ${room.slice(0, 8)}`;
 	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -336,7 +337,7 @@ test("Escape in root Chat stays in Chat while a child is open", async ({ baseURL
 });
 
 test("Tab from an open child never reaches covered root content, and root Chat stays reachable", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Tab source ${room.slice(0, 8)}`;
 	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -366,7 +367,7 @@ test("Tab from an open child never reaches covered root content, and root Chat s
 });
 
 test("Lift keeps the child for the surface toggle and presence, returns for the title bar and the child's close", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Lift source ${room.slice(0, 8)}`;
 	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -433,7 +434,7 @@ test("Lift keeps the child for the surface toggle and presence, returns for the 
 });
 
 test("an in-app child preserves and restores its mounted parent", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Source review ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -520,7 +521,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 });
 
 test("an in-app child opens and submits its own comment composer", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Commentable child ${room.slice(0, 8)}`;
 	let passage = "This ordinary child has its own editable document, Decisions, and Chat.";
 	await seedChildChannel(
@@ -551,7 +552,7 @@ test("an in-app child opens and submits its own comment composer", async ({ base
 });
 
 test("a delayed sibling route removes the previous editable child immediately", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First source ${room.slice(0, 8)}`;
 	let secondTitle = `Second source ${room.slice(0, 8)}`;
 	let first = await seedChildChannel(
@@ -682,7 +683,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 });
 
 test("a direct child keeps direct-entry history when opening a sibling", async ({ baseURL, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `Direct first ${room.slice(0, 8)}`;
 	let secondTitle = `Direct second ${room.slice(0, 8)}`;
 	let first = await seedChildChannel(
@@ -721,7 +722,7 @@ test("a direct child keeps direct-entry history when opening a sibling", async (
 });
 
 test("a recovered child id enters the canonical anchored child workspace", async ({ baseURL, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Recovered source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -760,7 +761,7 @@ test("a recovered child id enters the canonical anchored child workspace", async
 });
 
 test("a channel link opens one parent room that a child opens and closes over", async ({ baseURL, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Channel link child ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -796,7 +797,7 @@ test("a channel link opens one parent room that a child opens and closes over", 
 });
 
 test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Unreliable source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -845,8 +846,10 @@ test("a child load failure preserves its mounted parent through back and retry",
 });
 
 test("a direct compact child fills the canvas and reduces motion to a crossfade", async ({ baseURL, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
-	let childTitle = `A substantially longer source review title ${room.slice(0, 8)}`;
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
+	let childTitle = normalizeDocumentTitle(
+		`A substantially longer source review title ${room.slice(0, 8)}`,
+	);
 	let child = await seedChildChannel(
 		port(baseURL!),
 		room,
@@ -919,7 +922,7 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 });
 
 test("Escape in a child editor dismisses the innermost thing before the sheet", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let title = `Escape source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -955,7 +958,7 @@ test("Escape in a child editor dismisses the innermost thing before the sheet", 
 });
 
 test("split Zoom renames the child from the title bar and keeps the caret on its title", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Zoom rename ${room.slice(0, 8)}`;
 	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -984,7 +987,7 @@ test("split Zoom renames the child from the title bar and keeps the caret on its
 });
 
 test("split Zoom off Document makes the child a crumb back to it, not a rename", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Zoom off Document ${room.slice(0, 8)}`;
 	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -1008,7 +1011,7 @@ test("split Zoom off Document makes the child a crumb back to it, not a rename",
 });
 
 test("compact Zoom keeps an open child across root view switches without remounting it", async ({ baseURL, join, page, room, seed }) => {
-	await seed(PARENT_SOURCE);
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Zoomed source ${room.slice(0, 8)}`;
 	let long = `${CHILD_SOURCE}\n${
 		Array.from({ length: 30 }, (_, i) => `Child passage ${i + 1}.`).join("\n\n")

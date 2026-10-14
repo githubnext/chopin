@@ -47,26 +47,46 @@ type DocumentRouteLayer = DocumentRouteSwapState<
 	DocumentRouteResolution
 >["current"];
 
-function keyedDocumentRoute(
+export function keyedDocumentRoute(
 	route: DocumentRoute,
 	immediately: boolean,
-	alias?: DocumentRouteIdentity,
+	aliases: ReadonlyMap<DocumentRouteIdentity, DocumentRouteIdentity>,
 ): DocumentRouteRequest {
 	let routeKey = documentRouteIdentity(route);
-	let key = alias ?? (route.page === "child"
+	let parentKey = route.page === "child"
 		? documentRouteIdentity({
 			owner: route.owner,
 			page: "document",
 			repository: route.repository,
 			slug: route.parentSlug,
 		})
-		: documentRouteIdentity(route));
+		: routeKey;
+	let key = aliases.get(routeKey) ?? aliases.get(parentKey) ?? parentKey;
 	return {
 		immediately,
 		key,
 		routeKey,
 		source: route,
 	};
+}
+
+export function aliasDocumentRoute(
+	aliases: Map<DocumentRouteIdentity, DocumentRouteIdentity>,
+	route: DocumentRoute,
+	key: DocumentRouteIdentity,
+): void {
+	aliases.set(documentRouteIdentity(route), key);
+	if (route.page === "child") {
+		aliases.set(
+			documentRouteIdentity({
+				owner: route.owner,
+				page: "document",
+				repository: route.repository,
+				slug: route.parentSlug,
+			}),
+			key,
+		);
+	}
 }
 
 export default function DocumentRouteSwap(
@@ -93,8 +113,7 @@ export default function DocumentRouteSwap(
 	},
 ) {
 	let aliases = useRef(new Map<DocumentRouteIdentity, DocumentRouteIdentity>());
-	let routeKey = documentRouteIdentity(route);
-	let requested = keyedDocumentRoute(route, motionImmediately(), aliases.current.get(routeKey));
+	let requested = keyedDocumentRoute(route, motionImmediately(), aliases.current);
 	let [state, dispatch] = useReducer(
 		transitionDocumentRoute<DocumentRouteRequest, DocumentRouteResolution>,
 		{ current: requested },
@@ -114,7 +133,13 @@ export default function DocumentRouteSwap(
 		key: DocumentRouteIdentity,
 		resolution?: DocumentRouteResolution,
 	) => {
-		if (resolution) aliases.current.set(resolution.routeKey, key);
+		if (resolution) {
+			aliases.current.set(resolution.routeKey, key);
+			let canonicalRoute = hostedRoute(resolution.canonicalPath);
+			if (canonicalRoute.page === "document" || canonicalRoute.page === "child") {
+				aliasDocumentRoute(aliases.current, canonicalRoute, key);
+			}
+		}
 		dispatch({ key, resolution, type: "ready" });
 		if (requestedRoute.current.key === key) {
 			onDocumentRouteSettled(requestedRoute.current.routeKey);
@@ -132,7 +157,7 @@ export default function DocumentRouteSwap(
 		if (key !== authority.key || metadataRouteKey !== authority.routeKey) return;
 		let canonicalRoute = hostedRoute(pathname);
 		if (canonicalRoute.page === "document" || canonicalRoute.page === "child") {
-			aliases.current.set(documentRouteIdentity(canonicalRoute), key);
+			aliasDocumentRoute(aliases.current, canonicalRoute, key);
 		}
 		onCanonicalPath(pathname);
 	}, [onCanonicalPath]);

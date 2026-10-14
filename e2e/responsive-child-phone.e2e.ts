@@ -4,6 +4,7 @@
  * decisions save from the phone's bar. Desktop children and viewers are unchanged.
  */
 
+import { withDocumentTitle } from "../packages/dialect/src/index";
 import { seedChildChannel } from "./database";
 import { authenticate, content, expect, openIsolatedRoom, test } from "./room";
 import { installVisualViewport, setVisualViewport } from "./visual-viewport";
@@ -34,7 +35,7 @@ async function openChild(
 		room,
 		crypto.randomUUID(),
 		title,
-		source,
+		withDocumentTitle(source, title),
 	);
 	let context = await browser.newContext({ ...options, baseURL });
 	await before?.(context);
@@ -114,7 +115,7 @@ function parentText(page: Page) {
 }
 
 test("a child opens for reading on a phone and the tab bar's pencil edits it", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let { context, page, surface } = await openChild(browser, baseURL!, room, "ana", PHONE);
 	try {
 		await expect(childText(surface)).toHaveAttribute("contenteditable", "false");
@@ -160,7 +161,7 @@ test("a child opens for reading on a phone and the tab bar's pencil edits it", a
 });
 
 test("a child takes the phone's top bar: Back, its own title and actions, and its parent", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let { context, page, surface } = await openChild(browser, baseURL!, room, "ana", PHONE);
 	try {
 		let parent = `Test ${room.slice(0, 8)}`;
@@ -217,7 +218,7 @@ test("a child takes the phone's top bar: Back, its own title and actions, and it
 });
 
 test("a child's formatting docks above the keyboard in the parent's bar", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let { context, page, surface } = await openChild(
 		browser,
 		baseURL!,
@@ -259,7 +260,7 @@ test("a child's formatting docks above the keyboard in the parent's bar", async 
 });
 
 test("a child's decisions save from the phone's bar", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let { context, page, surface } = await openChild(browser, baseURL!, room, "ana", PHONE);
 	try {
 		let card = surface.locator("article[data-plan-sidecar-questionnaire]")
@@ -296,7 +297,7 @@ test("a child's decisions save from the phone's bar", async ({ baseURL, browser,
 });
 
 test("a child keeps no reading mode for viewers on a phone or anyone on desktop", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let viewer = await openChild(browser, baseURL!, room, "readonly", PHONE);
 	try {
 		await expect(childText(viewer.surface)).toHaveAttribute("contenteditable", "false");
@@ -325,14 +326,14 @@ test("a child keeps no reading mode for viewers on a phone or anyone on desktop"
 });
 
 test("opening a child ends the parent's editing; the child opens for reading", async ({ baseURL, join, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let title = `Child ${crypto.randomUUID().slice(0, 8)}`;
 	await seedChildChannel(
 		Number(new URL(baseURL!).port),
 		room,
 		crypto.randomUUID(),
 		title,
-		CHILD_SOURCE,
+		withDocumentTitle(CHILD_SOURCE, title),
 	);
 	let page = await join("ana", PHONE);
 	await pencil(page).tap();
@@ -359,7 +360,7 @@ test("the formatting dock keeps the caret's block clear in a root document", asy
 });
 
 test("the formatting dock keeps the caret's block clear in a child document", async ({ baseURL, browser, room, seed }) => {
-	await seed("# Parent\n\nThe parent stays put beneath its child.\n");
+	await seed(`# Test ${room.slice(0, 8)}\n\nThe parent stays put beneath its child.\n`);
 	let { context, page, surface } = await openChild(
 		browser,
 		baseURL!,

@@ -2313,6 +2313,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	display: none;
 }
 
+.plan .plan-content:has(.plan-research-draft-host) ~ .plan-body-placeholder {
+	display: none;
+}
+
 /* Settled lines read as a tight list; the line's own paragraph margin is dropped. */
 .plan .plan-content :is([data-plan-questionnaire], [data-plan-decision]):has([data-card-settled]) {
 	margin-block: 0.5rem;
@@ -2338,10 +2342,12 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	position: relative;
 }
 
-.plan .plan-content[data-plan-blank] > p:first-of-type::before {
-	content: var(--plan-blank-placeholder, none);
+.plan div.plan-content.plan-body-placeholder {
 	position: absolute;
-	inset-inline-start: 0;
+	inset-inline: auto;
+	margin: 0;
+	max-width: none;
+	padding: 0;
 	color: var(--color-text-quaternary);
 	pointer-events: none;
 }

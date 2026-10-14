@@ -8,8 +8,10 @@ import {
 	$getSelection,
 	$isElementNode,
 	$isNodeSelection,
+	$isParagraphNode,
 	$isRangeSelection,
 	$isRootNode,
+	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_HIGH,
 	DELETE_CHARACTER_COMMAND,
 	DELETE_LINE_COMMAND,
@@ -74,10 +76,17 @@ function browserBoundary(editor: LexicalEditor): LexicalNode | null {
 
 function moveIntoProse(card: LexicalNode, questions: QuestionnaireStore | undefined): void {
 	if (!$isQuestionnaireNode(card)) return;
+	let key = questions?.proseKey(card.getId());
+	if (!key) return;
 	let previous = card.getPreviousSibling();
-	if (previous && previous.getKey() === questions?.proseKey(card.getId())) {
-		previous.selectEnd();
+	// Shared empty caret paragraphs are absent from canonical MDX and may separate the prose.
+	while (
+		$isParagraphNode(previous) && previous.getChildrenSize() === 0
+		&& previous.getKey() !== key
+	) {
+		previous = previous.getPreviousSibling();
 	}
+	if ($isParagraphNode(previous) && previous.getKey() === key) previous.selectEnd();
 }
 
 function protect(
@@ -111,7 +120,8 @@ export function registerDecisionDeletion(
 				event.preventDefault();
 				return true;
 			},
-			COMMAND_PRIORITY_HIGH,
+			// Preserve the exact prose target before generic hidden-decorator deletion merges blocks.
+			COMMAND_PRIORITY_CRITICAL,
 		),
 		editor.registerCommand(
 			DELETE_CHARACTER_COMMAND,

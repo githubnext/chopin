@@ -298,6 +298,8 @@ test("a discarded first block does not create a prose gap before the first parag
 	let page = await join("ana");
 	let editor = content(page);
 	let host = editor.locator(`[data-plan-questionnaire="${WIDGET}"]`);
+	let heading = editor.getByRole("heading", { level: 1 }).first();
+	let originalTitle = (await heading.textContent())!;
 	await expect(host).toBeHidden();
 	let order = await editor.evaluate((root, widgetId) => {
 		let hidden = root.querySelector(`[data-plan-questionnaire="${widgetId}"]`);
@@ -305,7 +307,8 @@ test("a discarded first block does not create a prose gap before the first parag
 			paragraph => paragraph.textContent === "Only visible paragraph.",
 		);
 		return Boolean(
-			hidden && visible
+			root.firstElementChild?.tagName === "H1" && hidden && visible
+				&& root.firstElementChild.compareDocumentPosition(hidden) & Node.DOCUMENT_POSITION_FOLLOWING
 				&& hidden.compareDocumentPosition(visible) & Node.DOCUMENT_POSITION_FOLLOWING,
 		);
 	}, WIDGET);
@@ -318,17 +321,25 @@ test("a discarded first block does not create a prose gap before the first parag
 	let afterArrow = await editor.evaluate(root =>
 		[...root.querySelectorAll("p")].map(paragraph => paragraph.textContent)
 	);
+	await expect.poll(() =>
+		editor.evaluate(() => {
+			let node = getSelection()?.anchorNode;
+			return node?.parentElement?.closest("h1")?.textContent;
+		})
+	).toBe(originalTitle);
 	await page.keyboard.type("X");
+	await expect(heading).toHaveText(`${originalTitle}X`);
 	let afterTyping = await editor.evaluate(root =>
 		[...root.querySelectorAll("p")].map(paragraph => paragraph.textContent)
 	);
 	await page.keyboard.press("Backspace");
+	await expect(heading).toHaveText(originalTitle);
 	let restored = await editor.evaluate(root =>
 		[...root.querySelectorAll("p")].map(paragraph => paragraph.textContent)
 	);
 	if (
 		JSON.stringify(afterArrow) !== JSON.stringify(original)
-		|| !afterTyping.includes("XOnly visible paragraph.")
+		|| JSON.stringify(afterTyping) !== JSON.stringify(original)
 		|| JSON.stringify(restored) !== JSON.stringify(original)
 	) {
 		throw new Error(`Discarded leading block traversal: ${

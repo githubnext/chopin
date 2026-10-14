@@ -90,12 +90,11 @@ export function DocumentRename(
 	async function save(value: string) {
 		let next = normalizeDocumentTitle(value);
 		if (busy.current || cancelled.current) return;
-		if (inline && (!next || next === channel.title)) {
+		if (inline && next === channel.title) {
 			cancelled.current = true;
 			onCancel();
 			return;
 		}
-		if (!next) return;
 		busy.current = true;
 		setSaving(true);
 		onSavingChange?.(true);
@@ -167,7 +166,6 @@ export function DocumentRename(
 				}}
 				onKeyDown={keyDown}
 				ref={input}
-				required
 				value={title}
 			/>
 			{error !== undefined && (
@@ -186,7 +184,7 @@ export function DocumentRename(
 				</button>
 				<button
 					className="btn btn-md btn-primary"
-					disabled={!title.trim() || saving}
+					disabled={saving}
 					type="submit"
 				>
 					{saving ? "Saving..." : "Save"}

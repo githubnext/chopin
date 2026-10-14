@@ -4,7 +4,7 @@ import {
 	markResearchPublished,
 	seedCompletedResearchWorkspace,
 } from "./research-recovery-database";
-import { expect, test } from "./room";
+import { content, expect, test } from "./room";
 import { researchReportSource } from "../apps/server/src/research/publication";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
@@ -250,7 +250,7 @@ test("using the preview leaves the editor selection alone", async ({ baseURL, jo
 			};
 		});
 
-	await page.getByText("Parent document", { exact: true }).click();
+	await content(page).getByRole("heading", { name: "Parent document", exact: true }).click();
 	await page.keyboard.press("End");
 	let before = await snapshot();
 	expect(before.anchor).toContain("Parent document");

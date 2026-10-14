@@ -335,3 +335,54 @@ for (let command of ["delete", "replace"] as const) {
 		]);
 	});
 }
+
+for (let name of ["", "Remote title"]) {
+	test(`a remote ${name ? "named" : "empty"} title replacement is adopted even when transforms are skipped`, () => {
+		let { editor } = fixture();
+		let key = "";
+		editor.update(() => {
+			let heading = $createHeadingNode("h1").append($createTextNode(name));
+			key = heading.getKey();
+			$getRoot().getFirstChild()!.replace(heading);
+		}, { discrete: true, skipTransforms: true, tag: COLLABORATION_TAG });
+		editor.update(() => {
+			let body = $getRoot().getLastChild();
+			if (!$isElementNode(body)) throw new Error("missing body");
+			body.selectStart();
+			expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+		}, { discrete: true });
+		expect(tree(editor)[0]).toEqual({ key, type: "heading", tag: "h1", text: name });
+		expect(tree(editor)[1]?.text).toBe("Body");
+		editor.update(() => {
+			let heading = $getRoot().getFirstChild();
+			if (!$isElementNode(heading)) throw new Error("missing title");
+			heading.selectEnd();
+			expect(editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, " edited")).toBe(true);
+		}, { discrete: true });
+		expect(tree(editor)[0]?.text).toBe(`${name} edited`);
+	});
+}
+
+for (let editable of [true, false]) {
+	test(`a title-only import ${editable ? "prepares" : "does not rewrite"} an empty body caret when ${editable ? "editable" : "read-only"}`, () => {
+		let { editor, key } = fixture("Title", false);
+		editor.update(() => $getRoot().getLastChild()!.remove(), { discrete: true });
+		registerDocumentTitle(editor, editable);
+		editor.update(() => {}, { discrete: true });
+		expect(tree(editor)[0]).toEqual({ key, type: "heading", tag: "h1", text: "Title" });
+		expect(tree(editor).map(node => node.type)).toEqual(
+			editable ? ["heading", "paragraph"] : ["heading"],
+		);
+		if (!editable) return;
+		editor.update(() => {
+			let body = $getRoot().getLastChild();
+			if (!$isElementNode(body)) throw new Error("missing caret paragraph");
+			body.selectStart();
+			expect(editor.dispatchCommand(DELETE_CHARACTER_COMMAND, true)).toBe(true);
+			let selection = $getSelection();
+			if (!$isRangeSelection(selection)) throw new Error("missing body caret");
+			selection.insertText("First body prose.");
+		}, { discrete: true });
+		expect(tree(editor).map(node => node.text)).toEqual(["Title", "First body prose."]);
+	});
+}

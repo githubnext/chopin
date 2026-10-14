@@ -303,6 +303,7 @@ async function draftFlow(page: Page) {
 		while (previous && previous.getBoundingClientRect().height === 0) {
 			previous = previous.previousElementSibling;
 		}
+		if (previous?.hasAttribute("data-document-title")) previous = null;
 		let next = host.nextElementSibling;
 		while (next && next.getBoundingClientRect().height === 0) next = next.nextElementSibling;
 		return {

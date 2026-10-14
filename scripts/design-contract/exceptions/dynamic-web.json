@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "535ce0cd8921e3613b4aa4cc7b6cb85e474d73e5dbd2060af1c1d83a402e6dc3"
+		"sourceHash": "73d43558552ac6d750cbeae6b6050a97debec51ad643dd606dfa5ad08feef9f0"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -73,7 +73,7 @@
 				1
 			]
 		],
-		"sourceHash": "22c1f4d5c5375fc14cf2def26bb1809175c1adb00099342e666e02c54e2c762e"
+		"sourceHash": "7116df5ad4fc3d55f905cdc426c4eb8de3a7c9fb9903f75a1bf4657b351704ac"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
