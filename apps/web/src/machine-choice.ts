@@ -106,8 +106,8 @@ export type MachineRow = {
 };
 
 /**
- * The menu's rows: Automatic and what it uses now (starred when that is the favorite, else saying
- * the favorite is offline), then each machine, offline ones disabled, the favorite starred.
+ * The menu's rows: Automatic and what it uses now (saying when the favorite is offline), then each
+ * machine, offline ones disabled, the favorite's row alone starred.
  */
 export function machineRows(state: MachineChoiceState, now: number): MachineRow[] {
 	let chosen = chosenMachine(state);
@@ -120,7 +120,7 @@ export function machineRows(state: MachineChoiceState, now: number): MachineRow[
 		? `${favorite.label} is offline`
 		: undefined;
 	let detail = uses
-		? `Uses ${uses.label}${uses.favorite ? " (favorite)" : ""} now${note ? ` · ${note}` : ""}`
+		? `Uses ${uses.label} now${note ? ` · ${note}` : ""}`
 		: "No machine connected now";
 	return [
 		{

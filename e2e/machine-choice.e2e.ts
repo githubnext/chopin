@@ -288,8 +288,9 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
 	await expect(header).toHaveAccessibleName("Machine: Automatic, uses build-box");
 	await header.click();
+	// Starred on its own row only; Automatic's line just names it.
 	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
-		.toContainText("Uses build-box (favorite) now");
+		.toContainText("Uses build-box now");
 	// The star is its own control: Right from the machine's row, Left back.
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.press("ArrowDown");

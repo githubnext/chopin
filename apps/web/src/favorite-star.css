@@ -50,11 +50,3 @@
 	position: absolute;
 	inset: min(0px, calc((var(--control-height-compact) - var(--control-target-coarse)) / 2));
 }
-
-.favorite-inline {
-	--color-icon: currentColor;
-	display: inline-block;
-	margin-inline-start: calc(var(--spacing) * 0.5);
-	vertical-align: -0.125em;
-	color: var(--color-warning-icon);
-}

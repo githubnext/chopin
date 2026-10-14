@@ -93,7 +93,7 @@ test("the menu offers Automatic, then each machine, with offline ones disabled",
 	).toBe("Uses build-box now");
 });
 
-test("Automatic says when it uses the favorite, and when the favorite is offline", () => {
+test("Automatic names the machine it uses, saying when the favorite is offline; only the favorite's row is starred", () => {
 	let studio = machine({ id: "M_studio", label: "studio" });
 	let rows = machineRows(
 		state({
@@ -104,7 +104,8 @@ test("Automatic says when it uses the favorite, and when the favorite is offline
 		NOW,
 	);
 	expect(rows[0]).toMatchObject({ uses: { label: "build-box", favorite: true }, note: undefined });
-	expect(rows[0]!.detail).toBe("Uses build-box (favorite) now");
+	// The star is the favorite's row's alone; Automatic's line only names the machine.
+	expect(rows[0]!.detail).toBe("Uses build-box now");
 	// Only the favorite's row is starred.
 	expect(rows.map(row => row.favorite)).toEqual([false, true, false]);
 	let fallen = machineRows(

@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Drawer } from "@base-ui/react/drawer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon, StarIcon } from "@chopin/icons";
+import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon } from "@chopin/icons";
 
 import { documentMenuKeyAction } from "./document-actions-menu";
 import { FavoriteStar } from "./favorite-star";
@@ -50,29 +50,13 @@ function go(path: string) {
 	window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-/** A row's second line; Automatic's stars the favorite it uses, or says the favorite is offline. */
-function RowDetail({ row }: { row: MachineRow }) {
-	if (!row.uses) return <span className="machine-menu-detail">{row.detail}</span>;
-	return (
-		<span className="machine-menu-detail">
-			Uses {row.uses.label}
-			{row.uses.favorite && (
-				<>
-					<StarIcon aria-hidden="true" className="favorite-inline" filled size={12} />
-					<span className="sr-only">{" (favorite)"}</span>
-				</>
-			)} now{row.note ? ` · ${row.note}` : ""}
-		</span>
-	);
-}
-
 function RowContent({ row }: { row: MachineRow }) {
 	return (
 		<>
 			<MachineGlyph machine={row.machine} size={18} />
 			<span className="machine-menu-option">
 				<span className="machine-menu-title">{row.label}</span>
-				<RowDetail row={row} />
+				<span className="machine-menu-detail">{row.detail}</span>
 			</span>
 			<span className="machine-menu-check">
 				{row.checked && <CheckIcon aria-hidden="true" size={14} />}
