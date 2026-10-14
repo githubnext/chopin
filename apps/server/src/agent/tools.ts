@@ -433,10 +433,48 @@ export const documentTools = {
 			}),
 	}),
 
+	open_decision: tool({
+		contextSchema: ownerContext,
+		description: "Capture a named human decision before alternatives or an answer are known. "
+			+ "Creates an open card with a shared working answer and returns immediately. "
+			+ "Use for choices such as how onboarding should work, not factual questions the "
+			+ "repository or research can settle. A recommendation is not agreement: only a "
+			+ "person pressing Record decision resolves this card. Reuse the same key when "
+			+ "retrying the same capture. Do not use ask for the same decision as well.",
+		inputSchema: jsonSchema({
+			type: "object",
+			properties: {
+				revision: { type: "integer", minimum: 0 },
+				key: {
+					type: "string",
+					pattern: "^[A-Za-z0-9_-]{8,64}$",
+					description: "Stable request key for this decision, such as onboarding-approach.",
+				},
+				question: { type: "string", minLength: 1, maxLength: 100 },
+				description: { type: "string", maxLength: 300 },
+			},
+			required: ["revision", "key", "question"],
+			additionalProperties: false,
+		}),
+		metadata: { skipPermission: true },
+		execute: (raw, { context: { room: context } }) =>
+			answer("open_decision", async () => {
+				let { revision, ...input } = Arguments.openDecision(raw);
+				let id = await Questions.capture(context.plan, context.server, context.id, input, {
+					revision,
+				});
+				context.anchors();
+				let status = Questions.meta(context.plan, context.plan.records.get(id)!).status;
+				return { id, status };
+			}),
+	}),
+
 	ask: tool({
 		contextSchema: ownerContext,
-		description: "Ask the people in the room one or more multiple-choice questions and wait for "
-			+ "their shared answer. Every question also accepts free text. Batch related "
+		description: "Ask the people in the room one or more decisions and wait for "
+			+ "their shared answer. Use response: text for a written answer with optional candidate "
+			+ "approaches; omit response for existing multiple-choice questions. Use open_decision "
+			+ "to capture a decision without waiting. Batch related "
 			+ "questions into one call. The questionnaire is recorded in the plan and the "
 			+ "answer is attributed to whoever gave it. If current_plan is present after "
 			+ "an answer, it has read_plan's revision, source, and blocks; edit from that "
@@ -471,9 +509,10 @@ export const documentTools = {
 								maxLength: 140,
 								description: "Optional supporting context shown only in the full decision card.",
 							},
+							response: { type: "string", enum: ["text"] },
 							options: {
 								type: "array",
-								minItems: 1,
+								minItems: 0,
 								maxItems: 20,
 								items: {
 									type: "object",

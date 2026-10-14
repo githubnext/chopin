@@ -36,6 +36,6 @@ export function unix(value: unknown): number {
 }
 
 export type Known = {
-	questions: Map<string, { multiple: boolean; verbatim: boolean }>;
+	questions: Map<string, { multiple: boolean; verbatim: boolean; response?: "text" }>;
 	options: Map<string, string>;
 };

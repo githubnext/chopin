@@ -271,6 +271,7 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Understand the system                      | [Architecture](docs/architecture.md)                         |
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |
 | Understand persistence                     | [Storage](docs/storage.md)                                   |
+| Capture and record open decisions          | [Decisions](docs/decisions.md)                               |
 | Review the hosted agent boundary           | [Hosted agent](docs/hosted-agent.md)                         |
 | Register durable background jobs           | [Background jobs](docs/background-jobs.md)                   |
 | Review experimental implementation handoff | [Implementation lifecycle](docs/implementation-lifecycle.md) |

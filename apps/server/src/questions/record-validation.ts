@@ -13,7 +13,7 @@ export function options(definition: unknown, pending: boolean): Known {
 			&& !source.questions.every(question => object(question).verbatim === true)
 	) invalid();
 	let ids = new Map<string, string>();
-	let questions = new Map<string, { multiple: boolean; verbatim: boolean }>();
+	let questions: Known["questions"] = new Map();
 	for (let candidate of source.questions) {
 		let question = object(candidate);
 		let id = text(question.id);
@@ -21,13 +21,21 @@ export function options(definition: unknown, pending: boolean): Known {
 		// Host dialogs keep their raw text and counts, so only the Planner's questions are bounded.
 		let verbatim = question.verbatim === true;
 		if (
+			Object.hasOwn(question, "response")
+			&& (question.response !== "text" || verbatim || question.multiple !== false)
+		) invalid();
+		if (
 			typeof question.multiple !== "boolean"
 			|| !Array.isArray(question.options)
-			|| question.options.length === 0 && !verbatim
+			|| question.options.length === 0 && !verbatim && question.response !== "text"
 				&& !(pending && source.questions.length === 1 && question.multiple === false)
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) invalid();
-		questions.set(id, { multiple: question.multiple as boolean, verbatim });
+		questions.set(id, {
+			multiple: question.multiple as boolean,
+			verbatim,
+			...(question.response === "text" ? { response: "text" } : {}),
+		});
 		for (let candidate of question.options) {
 			let option = object(candidate);
 			let optionId = text(option.id);
@@ -46,6 +54,7 @@ export function choices(value: unknown, known: Known): string[] {
 		if (typeof id !== "string" || !known.options.has(id) || found.has(id)) invalid();
 		found.add(id);
 		let question = known.options.get(id)!;
+		if (known.questions.get(question)!.response === "text") invalid();
 		let count = (counts.get(question) ?? 0) + 1;
 		if (count > (known.questions.get(question)!.multiple ? limits.MAX_OPTIONS : 1)) invalid();
 		counts.set(question, count);

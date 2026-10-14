@@ -1189,6 +1189,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			});
 			return;
 
+		case "question:create":
+			if (room.plan) await Questions.createDecision(room.plan, server, room.id, ws, frame);
+			return;
+
 		case "question:open":
 			if (room.plan) Questions.open(room.plan, ws, frame);
 			return;

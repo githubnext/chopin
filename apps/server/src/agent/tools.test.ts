@@ -87,6 +87,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"create_research_workspace",
 		"assess_visual",
 		"edit_plan",
+		"open_decision",
 		"ask",
 		"read_implementation_graph",
 		"edit_implementation_graph",

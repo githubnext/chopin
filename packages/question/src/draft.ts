@@ -40,7 +40,11 @@ export function create(definition: Definition): Model {
 
 		questions[question.id] = crdt.schema.obj({
 			mode: crdt.schema.val(
-				crdt.schema.con<Mode>(question.verbatim && !question.options.length ? "custom" : "choices"),
+				crdt.schema.con<Mode>(
+					question.response === "text" || question.verbatim && !question.options.length
+						? "custom"
+						: "choices",
+				),
 			),
 			choice: crdt.schema.val(crdt.schema.con<string | null>(null)),
 			options: crdt.schema.obj(options),
@@ -145,6 +149,10 @@ export function read(model: Model, definition: Definition): Drafts {
 			}
 			options[option.id] = selected;
 		}
+		if (
+			question.response === "text"
+			&& (mode !== "custom" || choice !== null || Object.values(options).some(Boolean))
+		) reject(`${question.id} requires a written answer`);
 
 		let custom = node.get("custom");
 		if (!(custom instanceof crdt.StrNode)) reject(`${question.id}.custom must be a CRDT string`);
@@ -162,6 +170,7 @@ export function read(model: Model, definition: Definition): Drafts {
 /** Whether a question has enough of an answer to submit. */
 export function answered(question: Item, draft: Draft | undefined): boolean {
 	if (!draft) return false;
+	if (question.response === "text") return draft.mode === "custom" && !!draft.custom.trim();
 	if (draft.mode === "custom") return question.verbatim || !!draft.custom.trim();
 	if (question.multiple) return question.options.some(option => draft.options[option.id]);
 	return question.options.some(option => option.id === draft.choice);

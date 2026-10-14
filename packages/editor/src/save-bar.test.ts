@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { decidedBy, newlyDecided } from "./decisions";
 import {
@@ -6,6 +8,7 @@ import {
 	incompleteLabel,
 	newlyFailed,
 	PendingAnswersStore,
+	SaveBar,
 	summarize,
 	unsavedLabel,
 } from "./save-bar";
@@ -28,6 +31,7 @@ test("the bar saves only complete cards that are not already saving", () => {
 		failed: [],
 		failedAnswers: 0,
 		incomplete: ["b"],
+		confirmation: false,
 	});
 });
 
@@ -41,6 +45,38 @@ test("a failed card is reported once it stops saving", () => {
 	expect(summary.failedAnswers).toBe(2);
 	expect(newlyFailed(new Set(), cards)).toEqual(["a"]);
 	expect(newlyFailed(new Set(["a"]), cards)).toEqual([]);
+});
+
+function barMarkup(cards: PendingAnswers[]) {
+	let store = new PendingAnswersStore();
+	for (let [index, card] of cards.entries()) store.set(String(index), card);
+	return renderToStaticMarkup(createElement(SaveBar, {
+		store,
+		onFailed() {},
+		onIncomplete() {},
+	}));
+}
+
+test("the phone names human confirmation for written decisions and mixed batches", () => {
+	expect(barMarkup([pending({ confirmation: "decision" })])).toContain(">Record decision<");
+	expect(barMarkup([pending({ confirmation: "decision" }), pending()])).toContain(
+		">Record decisions<",
+	);
+	expect(barMarkup([pending(), pending()])).toContain(">Save<");
+	expect(barMarkup([
+		pending({ confirmation: "decision", complete: false }),
+		pending(),
+	])).toContain(">Save<");
+});
+
+test("written-answer retry and progress keep the confirmation action explicit", () => {
+	expect(barMarkup([pending({ confirmation: "decision", error: "Review the shared answer." })]))
+		.toContain(">Record decision<");
+	expect(barMarkup([pending({ confirmation: "decision", submitting: true })]))
+		.toContain(">Recording…<");
+	expect(barMarkup([pending({ error: "Review the choice." })])).toContain(">Try again<");
+	expect(barMarkup([pending({ submitting: true })])).toContain(">Saving…<");
+	expect(barMarkup([pending({ confirmation: "decision", complete: false })])).toContain(">Show<");
 });
 
 test("the bar's words read naturally", () => {

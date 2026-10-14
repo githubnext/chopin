@@ -18,6 +18,7 @@ type KIND<K extends string> = Frame & { kind: K };
  */
 export declare namespace Question {
 	export type Incoming =
+		| Request<Create.Ask>
 		| Request<Open.Ask>
 		| Request<Edit.Ask>
 		| Request<Submit.Ask>
@@ -32,6 +33,7 @@ export declare namespace Question {
 		| Asked
 		| Meta
 		| Metas
+		| Create.Reply
 		| Open.Reply
 		| Edit.Reply
 		| Changed
@@ -56,6 +58,8 @@ export declare namespace Question {
 		question: string;
 		/** Supporting context, shown only in the full decision card. */
 		description?: string;
+		/** Written resolution; options hold candidate approaches rather than answer choices. */
+		response?: "text";
 		options: Option[];
 		multiple: boolean;
 		/** Host dialogs preserve raw text, including an explicitly submitted empty answer. */
@@ -85,7 +89,7 @@ export declare namespace Question {
 
 	export type CardMeta = {
 		status: CardStatus;
-		origin: "planner" | "conversation";
+		origin: "planner" | "conversation" | "human";
 		thread?: string;
 		owner?: string;
 		decidedAt?: number;
@@ -172,6 +176,21 @@ export declare namespace Question {
 	export type Sync = KIND<"question:sync"> & {
 		open: Array<{ id: string; definition: Definition; widget?: string }>;
 	};
+
+	export namespace Create {
+		export type Ask = KIND<"question:create"> & {
+			key: string;
+			question: string;
+			description?: string;
+		};
+
+		export type Reply =
+			& KIND<"question:create">
+			& (
+				| { ok: true; id: string }
+				| { ok: false; reason: "invalid" | "implementation"; message: string }
+			);
+	}
 
 	export namespace Open {
 		export type Ask = KIND<"question:open"> & { id: string };

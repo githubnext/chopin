@@ -104,9 +104,17 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 			"options",
 			"multiple",
 			...(Object.hasOwn(raw, "description") ? ["description"] : []),
+			...(Object.hasOwn(raw, "response") ? ["response"] : []),
 		], `Question ${index + 1}`);
 
-		if (!Array.isArray(raw.options) || (!verbatim && raw.options.length === 0)) {
+		if (Object.hasOwn(raw, "response") && raw.response !== "text") {
+			fail(`Question ${index + 1} response must be text`);
+		}
+		let written = raw.response === "text";
+		if (written && (verbatim || raw.multiple !== false)) {
+			fail(`Question ${index + 1} text response cannot be multiple or verbatim`);
+		}
+		if (!Array.isArray(raw.options) || (!verbatim && !written && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
 		}
 		if (!verbatim && raw.options.length > limits.MAX_OPTIONS) {
@@ -170,6 +178,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 				: {}),
 			options,
 			multiple: raw.multiple,
+			...(written ? { response: "text" as const } : {}),
 			...(verbatim ? { verbatim: true as const } : {}),
 		};
 	});
@@ -208,10 +217,15 @@ export function identified(raw: unknown): Definition {
 				"options",
 				"multiple",
 				...(Object.hasOwn(question, "description") ? ["description"] : []),
+				...(Object.hasOwn(question, "response") ? ["response"] : []),
 				...(verbatim ? ["verbatim"] : []),
 			],
 			`Question ${index + 1}`,
 		);
+		if (
+			Object.hasOwn(question, "response")
+			&& (question.response !== "text" || verbatim || question.multiple !== false)
+		) fail(`Question ${index + 1} has invalid text response`);
 		storedText(question.id, `Question ${index + 1} id`, limits.MAX_CALL_ID);
 		let id = question.id as string;
 		if (questionIds.has(id)) fail("Questionnaire has duplicate question IDs");
@@ -230,7 +244,7 @@ export function identified(raw: unknown): Definition {
 		if (
 			typeof question.multiple !== "boolean"
 			|| !Array.isArray(question.options)
-			|| question.options.length === 0 && !verbatim
+			|| question.options.length === 0 && !verbatim && question.response !== "text"
 				&& (source.questions.length !== 1 || question.multiple)
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) {

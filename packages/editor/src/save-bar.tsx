@@ -60,6 +60,8 @@ export type SaveBarSummary = {
 	failedAnswers: number;
 	/** Cards with some questions still unanswered. */
 	incomplete: string[];
+	/** At least one submitted card needs explicitly named human confirmation. */
+	confirmation: boolean;
 };
 
 export function summarize(cards: Iterable<[string, PendingAnswers]>): SaveBarSummary {
@@ -70,9 +72,11 @@ export function summarize(cards: Iterable<[string, PendingAnswers]>): SaveBarSum
 		failed: [],
 		failedAnswers: 0,
 		incomplete: [],
+		confirmation: false,
 	};
 	for (let [id, card] of cards) {
 		summary.answered += card.answered;
+		if (card.complete && card.confirmation === "decision") summary.confirmation = true;
 		if (card.submitting) {
 			summary.submitting = true;
 			continue;
@@ -129,8 +133,15 @@ export function SaveBar(
 	// The bar leaves with the words it arrived with rather than emptying first.
 	let shown = useRef(summary);
 	if (open) shown.current = summary;
-	let { answered, failed, failedAnswers, incomplete, saveable, submitting } = shown.current;
+	let { answered, confirmation, failed, failedAnswers, incomplete, saveable, submitting } =
+		shown.current;
 	let waiting = saveable === 0 && incomplete.length > 0 && !submitting;
+	let action = confirmation
+		? saveable === 1 ? "Record decision" : "Record decisions"
+		: failed.length > 0
+		? "Try again"
+		: "Save";
+	if (submitting) action = confirmation ? "Recording…" : "Saving…";
 
 	useEffect(() => {
 		let failedNow = newlyFailed(reported.current, cards);
@@ -197,7 +208,7 @@ export function SaveBar(
 						}}
 						type="button"
 					>
-						{submitting ? "Saving…" : failed.length > 0 ? "Try again" : "Save"}
+						{action}
 					</button>
 				)}
 		</div>
