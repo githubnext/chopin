@@ -212,7 +212,19 @@ curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install
 CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
 ```
 
-To set up a machine you reach over SSH, see
+For another coding agent, install it, sign in, and put its **Connect with**
+arguments in place of `-- copilot --acp --allow-all`:
+
+| Agent                                                                                               | Install                                                       | Connect with                                              | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `-- copilot --acp --allow-all`                            | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
+| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `-- claude-agent-acp`                                     | No                 |
+| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `-- gemini --acp --yolo`                                  | No                 |
+
+The **Machines** page, at `/connect` on your server, gives these steps with your
+server filled in. To set up a machine you reach over SSH, see
 [Set up a remote machine](docs/chopin-cli.md#set-up-a-remote-machine). See
 [Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
 background service and every command.

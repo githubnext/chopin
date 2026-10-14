@@ -20,13 +20,17 @@ To run Chopin's work on a build box or cloud VM you reach over SSH:
    curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
    ```
 
-3. Sign in to your coding agent there, as you would on your laptop.
+3. Install your coding agent there and sign in to it. [Coding agents](#coding-agents)
+   lists the commands.
 4. From a checkout, connect and install the service in one go:
 
    ```sh
    cd ~/src/score
    CHOPIN_URL=https://your-chopin-instance.example chopin connect . --install-service -- copilot --acp --allow-all
    ```
+
+   For another agent, put its **Connect with** arguments in place of
+   `-- copilot --acp --allow-all`.
 
 5. The terminal prints a link and a code. Open the link in the browser on your
    own computer, sign in, check that the code matches and choose **Connect**.
@@ -35,6 +39,9 @@ To run Chopin's work on a build box or cloud VM you reach over SSH:
    check on it.
 7. The machine shows under **Machines** in Chopin's sidebar, or at `/connect`
    on your server.
+
+The **Machines** page, at `/connect` on your server, shows these steps with
+your server's address filled in and a menu of coding agents.
 
 Run it as the service, as above, if it should outlive your SSH session. A
 `chopin connect` you start over SSH can stop when the session ends, even under
@@ -67,9 +74,9 @@ chopin --version
 
 ## Connect a checkout
 
-Sign in to your coding agent as you normally would. Then, from your project
-folder, run `chopin connect` with your server in `CHOPIN_URL` and the agent's
-ACP command after `--`:
+Install your coding agent and sign in to it, as [Coding agents](#coding-agents)
+shows. Then, from your project folder, run `chopin connect` with your server in
+`CHOPIN_URL` and the agent's ACP command after `--`:
 
 ```sh
 cd ~/src/score
@@ -118,6 +125,36 @@ chopin connect . --env SOME_FLAG=1 -- copilot --acp --allow-all
 `chopin` saves these values in `config.json`, which only you can read. Keep
 secrets in your agent's own login instead. You can't set `PATH` or a
 `CHOPIN_` variable this way.
+
+### Coding agents
+
+The Machines page offers these agents. **Connect with** is what follows
+`chopin connect .`:
+
+| Agent                                                                                               | Install                                                       | Sign in                                                  | Connect with                                              | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `copilot login`                                          | `-- copilot --acp --allow-all`                            | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `atomic`, sign in with /login, then quit                 | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
+| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `claude-agent-acp --cli`, sign in with /login, then quit | `-- claude-agent-acp`                                     | No                 |
+| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `codex login`                                            | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `gemini`, sign in, then quit                             | `-- gemini --acp --yolo`                                  | No                 |
+
+Install the agent globally, as the table does, not through `npx`, so the
+service finds the same program each time. Each **Connect with** approves the agent's tools
+without asking, because the service can't answer a permission prompt:
+`--allow-all` for Copilot CLI, `--yolo` for Gemini CLI, and
+`INITIAL_AGENT_MODE=agent-full-access` for Codex. Atomic doesn't ask, and
+`ATOMIC_ACP_HEADLESS=1` ends its questions at once instead of waiting for an
+answer.
+
+Claude Code asks for permission in the terminal, so connect it without
+`--install-service` and keep `chopin connect` open. To run it as the service,
+set `"defaultMode": "bypassPermissions"` under `"permissions"` in
+`~/.claude/settings.json` first.
+
+In PowerShell, quote a package name that starts with `@`, for example
+`npm install -g '@github/copilot'`. PowerShell would read the bare name as a
+variable.
 
 If you installed your agent with a version manager such as fnm, your shell may
 find it in a folder that only lasts as long as the shell. `chopin connect`
