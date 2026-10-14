@@ -1,5 +1,7 @@
 /** Browser coverage for evidence attached to a chat-derived decision card. */
 
+import { openDecisionDocument } from "./decision-deck-fixtures";
+
 import { expect, test } from "./room";
 import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
@@ -29,6 +31,7 @@ async function discuss(ana: Page, bo: Page, room: string) {
 	await sendChat(bo, CONSTRAINT);
 	await sendChat(ana, "I support the small pilot.");
 	await sendChat(bo, "I object: a small pilot will exclude keyboard-only users.");
+	for (let page of [ana, bo]) await openDecisionDocument(page);
 	await expect(card(ana)).toBeVisible();
 	return reason;
 }
@@ -43,7 +46,7 @@ async function openEvidence(page: Page): Promise<Locator> {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs();
+	await resetPlannerJobs({ suggest: true });
 });
 
 test.afterEach(async () => {
@@ -197,6 +200,7 @@ test("an open panel updates to the room's current stance", async ({ join, room }
 	await sendChat(ana, QUESTION);
 	await sendChat(bo, OPTION);
 	await sendChat(ana, "I support the small pilot.");
+	await openDecisionDocument(ana);
 	let panel = await openEvidence(ana);
 	await expect(panel).toContainText("Supported by ana");
 
@@ -230,6 +234,13 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 			revision: "$revision",
 			id: "$target",
 			title: "Should we run a limited pilot?",
+		},
+	}]);
+	await scriptJob("suggest", [{
+		tool: "refine_decision",
+		args: {
+			revision: "$revision",
+			id: "$target",
 			add_options: [
 				{
 					label: sourceQuote,
@@ -244,6 +255,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 		},
 	}]);
 	await sendChat(ana, QUESTION);
+	await openDecisionDocument(ana);
 	let refined = ana.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]')
 		.filter({
 			has: ana.getByRole("heading", { name: "Should we run a limited pilot?", exact: true }),
@@ -288,7 +300,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 test("a long panel clamps to a short viewport and keeps its own scrollable evidence reachable", async ({ join, room }) => {
 	let rationale = "This option keeps the pilot concrete while collecting useful delivery evidence. "
 		.repeat(3).trim();
-	await scriptJob("refine", [{
+	await scriptJob("suggest", [{
 		tool: "refine_decision",
 		args: {
 			revision: "$revision",
@@ -302,6 +314,7 @@ test("a long panel clamps to a short viewport and keeps its own scrollable evide
 	let ana = await join("ana", { viewport: { width: 800, height: 360 } });
 	await openJevWire(ana, room);
 	await sendChat(ana, QUESTION);
+	await openDecisionDocument(ana);
 	await expect(card(ana).getByRole("radio", { name: "Pilot cohort 5", exact: true })).toBeVisible();
 	let panel = await openEvidence(ana);
 	let box = await panel.boundingBox();
@@ -352,6 +365,7 @@ test("empty, remote-closed, and hidden-document cards do not retain evidence por
 	await openJevWire(bo, room);
 	await sendChat(ana, QUESTION);
 	await sendChat(bo, OPTION);
+	await openDecisionDocument(ana);
 	await expect(card(ana)).toBeVisible();
 	await card(ana).hover();
 	await ana.waitForTimeout(600);

@@ -47,11 +47,16 @@ export async function memoryProcessor() {
 	let sink: EffectCommands = {
 		target: () => ({ kind: "unlinked" }),
 		insertCard: async () => {
-			calls.push("insert");
-			return "01K0N4W3B7P27CBAEC7A8C8WEA";
+			throw new Error("card creation must wait for generation");
 		},
 		link: async () => {
-			calls.push("link");
+			throw new Error("card linking must wait for generation");
+		},
+		enqueueJob: async (intent, key) => {
+			expect(intent).toMatchObject({ kind: "refine", threadId: "thread-a" });
+			expect(intent.target).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+			expect(key).toBe("insert:thread-a");
+			calls.push("prepare");
 		},
 		addOption: async () => {
 			calls.push("option");

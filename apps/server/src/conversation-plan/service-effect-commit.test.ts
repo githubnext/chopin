@@ -35,8 +35,18 @@ test("analysis persists an insert intent before delivery and a new processor dra
 	let calls: string[] = [];
 	resumed.setEffects({
 		target: () => ({ kind: "unlinked" }),
-		insertCard: async () => (calls.push("insert"), "Q"),
-		link: async () => void calls.push("link"),
+		insertCard: async () => {
+			throw new Error("card creation must wait for generation");
+		},
+		link: async () => {
+			throw new Error("card linking must wait for generation");
+		},
+		enqueueJob: async (intent, key) => {
+			expect(intent).toMatchObject({ kind: "refine", threadId: "thread-a", trigger: "open:one" });
+			expect(intent.target).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+			expect(key).toBe("insert:thread-a");
+			calls.push("prepare");
+		},
 		addOption: async () => {},
 		suggest: async () => {},
 		prompt: async () => {},
@@ -44,7 +54,8 @@ test("analysis persists an insert intent before delivery and a new processor dra
 	});
 	resumed.wake();
 	await until(() => restored.durable.receipts.includes("insert:thread-a"));
-	expect(calls).toEqual(["insert", "link"]);
+	expect(calls).toEqual(["prepare"]);
+	expect(restored.plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
 	expect(restored.durable.pending).toEqual([]);
 });
 

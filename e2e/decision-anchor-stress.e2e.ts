@@ -1,5 +1,7 @@
 /** Stress the durable prose link while nearby document text changes. */
 
+import { openDecisionDocument } from "./decision-deck-fixtures";
+
 import { content, expect, test, written } from "./room";
 import { openJevWire, sendChat, wireFrames } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
@@ -34,6 +36,14 @@ function commentDecision(page: Page) {
 	return page.locator("[data-plan-comment-card]").filter({ hasText: "Keep this choice recorded." });
 }
 
+async function expectAcceptedQuote(page: Page) {
+	let accepted = commentDecision(page);
+	let disclosure = accepted.getByRole("button", { name: /^Accepted ·/ });
+	if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
+	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+	await expect(accepted).toContainText(MARKED_PROSE);
+}
+
 function port(page: Page): number {
 	return Number(new URL(page.url()).port);
 }
@@ -48,6 +58,7 @@ async function decide(page: Page, room: string) {
 	await sendChat(page, OPTION);
 	let card = page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]')
 		.filter({ has: page.getByRole("heading", { name: QUESTION, exact: true }) });
+	await openDecisionDocument(page);
 	await expect(card).toBeVisible();
 	await card.getByText(OPTION, { exact: true }).click();
 	await card.getByRole("button", { name: "Save", exact: true }).click();
@@ -117,7 +128,7 @@ async function expectResolvedDecision(page: Page, room: string) {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs();
+	await resetPlannerJobs({ suggest: true });
 });
 
 test.afterEach(async () => {
@@ -164,8 +175,8 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 	let other = await join("ben");
 	await expect(content(editor)).toContainText(MARKED_PROSE);
 	await expect(content(other)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(editor)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(other)).toContainText(MARKED_PROSE);
+	await expectAcceptedQuote(editor);
+	await expectAcceptedQuote(other);
 	await written(editor, room, "<Decision");
 
 	let openReply = waitForPlanOpen();
@@ -211,8 +222,8 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 	expect(appFrames.some(frame => frame.kind === "plan:reset")).toBe(true);
 	await expect(content(editor)).toContainText(MARKED_PROSE);
 	await expect(content(other)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(editor)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(other)).toContainText(MARKED_PROSE);
+	await expectAcceptedQuote(editor);
+	await expectAcceptedQuote(other);
 	await expect.poll(() => readSource(port(editor), room)).toMatch(
 		new RegExp(`<Decision[^>]*id="${decisionId}"`),
 	);
@@ -221,7 +232,7 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 	await editor.reload();
 	await expect(content(editor)).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
 	await expect(content(editor)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(editor)).toContainText(MARKED_PROSE);
+	await expectAcceptedQuote(editor);
 	await openJevWire(editor, room);
 	let synced = (await wireFrames(editor)).findLast(frame => frame.kind === "comment:sync") as {
 		threads?: Array<{ id: string; status: string; quote?: string }>;
@@ -232,7 +243,7 @@ test("a custom browser update cannot remove an accepted Decision projection", as
 		quote: MARKED_PROSE,
 	}));
 	await expect(content(other)).toContainText(MARKED_PROSE);
-	await expect(commentDecision(other)).toContainText(MARKED_PROSE);
+	await expectAcceptedQuote(other);
 });
 
 test(
@@ -264,9 +275,10 @@ test(
 		widget = expectLinked(await latestDocumentSnapshot(editor, room), widget);
 
 		// Shift the associated paragraph down by inserting context above it.
-		let leading = content(editor).locator(":scope > p").first();
-		await expect(leading).toBeEmpty();
-		await leading.click();
+		await prose(editor).click();
+		await editor.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
+		await editor.keyboard.press("Enter");
+		await editor.keyboard.press("ArrowUp");
 		await editor.keyboard.type("Earlier context.");
 		let context = content(editor).locator("p").filter({ hasText: "Earlier context." });
 		await expect(context).toHaveText("Earlier context.");

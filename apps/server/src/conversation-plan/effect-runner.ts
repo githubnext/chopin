@@ -1,3 +1,4 @@
+import { ulid } from "@chopin/dialect";
 import type { Effect, EffectDeps } from "./effect-types";
 // Extracted from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, effects.ts.
 
@@ -25,13 +26,14 @@ export async function runEffects(deps: EffectDeps, effects: readonly Effect[]): 
 					completed++;
 					continue;
 				}
-				let card = await deps.insertCard({
+				if (!deps.enqueueJob) continue;
+				await deps.enqueueJob({
+					kind: "refine",
+					target: ulid(),
 					threadId: effect.threadId,
-					header: effect.header,
-					question: effect.question,
-					options: effect.options,
-				});
-				await deps.link(effect.threadId, card);
+					trigger: effect.trigger,
+				}, effect.key);
+				blocked.add(effect.threadId);
 			} else if (effect.kind === "job") {
 				if (effect.intent.kind === "prose" && !effect.threadId) {
 					throw new Error("prose job effect has no linked thread");

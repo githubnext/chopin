@@ -9,9 +9,15 @@ type Call = { tool: string; args: Record<string, unknown> };
 /** Test-process-to-server script directory, used only by the conversation-plan project. */
 export const PLANNER_JOBS_DIR = join(ROOT, "e2e", "test-results", "planner-jobs");
 
-export async function resetPlannerJobs(): Promise<void> {
+export async function resetPlannerJobs(options: { suggest?: boolean } = {}): Promise<void> {
 	await rm(PLANNER_JOBS_DIR, { recursive: true, force: true });
 	await mkdir(PLANNER_JOBS_DIR, { recursive: true });
+	if (options.suggest) {
+		await scriptJob("suggest", [{
+			tool: "refine_decision",
+			args: { revision: "$revision", id: "$target" },
+		}]);
+	}
 }
 
 export async function scriptJob(kind: Kind, calls: Call[], options: { hold?: boolean } = {}) {

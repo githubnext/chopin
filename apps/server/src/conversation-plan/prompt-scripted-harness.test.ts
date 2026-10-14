@@ -242,3 +242,95 @@ test("an admitted observer failure surfaces on the model stream and blocks depen
 	expect(String(errors[0]!.error)).toContain("observer failed");
 	expect(h.driver.calls.map(call => call.toolName)).toEqual(["read_plan"]);
 });
+
+const INITIAL = REFINE + "\n[Initial decision card]";
+
+test.each(["Which approach?", "x".repeat(100)])(
+	"a missing initial-card script supplies the exact bounded question through a model tool call %#",
+	async question => {
+		await using h = await contract();
+		await rm(join(h.dir, "refine.json"));
+		let turn = await h.run(INITIAL.replace("Which approach?", question));
+		let read = await h.next();
+		expect(read.toolName).toBe("read_plan");
+		await turn.submitToolResult({ toolCallId: read.toolCallId, output: '{"revision":8}' });
+		let call = await h.next();
+		expect(call.toolName).toBe("refine_decision");
+		expect(JSON.parse(call.input)).toEqual({ revision: 8, id: "card-a", title: question });
+		await turn.submitToolResult({ toolCallId: call.toolCallId, output: "{}" });
+		await turn.done;
+		expect(h.parts.filter(part => part.type === "error")).toEqual([]);
+	},
+);
+
+test("the default initial-card answer still waits for its explicit hold gate", async () => {
+	await using h = await contract();
+	await rm(join(h.dir, "refine.json"));
+	await writeFile(join(h.dir, "refine.hold"), "hold");
+	let turn = await h.run(INITIAL);
+	await h.driver.entered;
+	expect(h.driver.calls).toEqual([]);
+	await writeFile(join(h.dir, "refine.release"), "release");
+	let read = await h.next();
+	await turn.submitToolResult({ toolCallId: read.toolCallId, output: '{"revision":9}' });
+	let call = await h.next();
+	expect(JSON.parse(call.input).title).toBe("Which approach?");
+	await turn.submitToolResult({ toolCallId: call.toolCallId, output: "{}" });
+	await turn.done;
+});
+
+test("an explicit initial-card script can keep generation unsuccessful", async () => {
+	await using h = await contract([{
+		tool: "refine_decision",
+		args: {
+			revision: "$revision",
+			id: "$target",
+			title: "x".repeat(101),
+		},
+	}]);
+	let turn = await h.run(INITIAL);
+	let read = await h.next();
+	await turn.submitToolResult({ toolCallId: read.toolCallId, output: '{"revision":10}' });
+	let call = await h.next();
+	expect(JSON.parse(call.input).title).toHaveLength(101);
+	await turn.submitToolResult({
+		toolCallId: call.toolCallId,
+		output: "Error: title exceeds 100 characters",
+		isError: true,
+	});
+	await turn.done;
+	expect(h.driver.calls.map(call => call.toolName)).toEqual(["read_plan", "refine_decision"]);
+});
+
+test("an explicit empty initial-card script never receives a default answer", async () => {
+	await using h = await contract([]);
+	let turn = await h.run(INITIAL);
+	await turn.done;
+	expect(h.driver.calls).toEqual([]);
+});
+
+test.each([
+	[REFINE, "ENOENT"],
+	[INITIAL.replace("Which approach?", "x".repeat(101)), "explicit concise title"],
+])(
+	"missing scripts have no generic fallback for existing cards or long questions %#",
+	async (prompt, error) => {
+		await using h = await contract();
+		await rm(join(h.dir, "refine.json"));
+		let turn = await h.run(prompt);
+		await turn.done;
+		expect(h.driver.calls).toEqual([]);
+		let failures = h.parts.filter(part => part.type === "error");
+		expect(failures).toHaveLength(1);
+		expect(String(failures[0]!.error)).toContain(error);
+	},
+);
+
+test("a malformed explicit initial-card script is never replaced by the default", async () => {
+	await using h = await contract();
+	await writeFile(join(h.dir, "refine.json"), "invalid JSON");
+	let turn = await h.run(INITIAL);
+	await turn.done;
+	expect(h.driver.calls).toEqual([]);
+	expect(h.parts.filter(part => part.type === "error")).toHaveLength(1);
+});

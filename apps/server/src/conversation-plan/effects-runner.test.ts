@@ -139,14 +139,16 @@ test("a pending suggestion waits for a link and targets the linked card exactly 
 	expect(delivered).toHaveLength(1);
 });
 
-test("failed insert retains its key; retry links and receipts it", async () => {
+test("failed initial job enqueue retains its key; retry queues and receipts it", async () => {
 	let attempts = 0;
 	let state = sink({
 		target: () => ({ kind: "unlinked" }),
-		insertCard: async () => {
+		enqueueJob: async (intent, key) => {
 			if (attempts++ === 0) throw new Error("storage unavailable");
-			state.calls.push("insert");
-			return "Q";
+			expect(intent).toMatchObject({ kind: "refine", threadId: "t1", trigger: "open-1" });
+			expect(intent.target).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+			expect(key).toBe("insert:t1");
+			state.calls.push("prepare");
 		},
 	});
 	let insert: Effect = {
@@ -161,7 +163,7 @@ test("failed insert retains its key; retry links and receipts it", async () => {
 	expect(await runEffects(state.deps, [insert])).toBe(0);
 	expect([...state.receipts]).toEqual([]);
 	expect(await runEffects(state.deps, [insert])).toBe(1);
-	expect(state.calls).toEqual(["insert", "link"]);
+	expect(state.calls).toEqual(["prepare"]);
 	expect([...state.receipts]).toEqual(["insert:t1"]);
 });
 
@@ -181,11 +183,15 @@ test("closed inserts are terminal without creating a card", async () => {
 	expect([...state.receipts]).toEqual(["insert:t1"]);
 });
 
-test("a lost insert receipt recognizes the already-linked card on retry", async () => {
+test("a lost enqueue receipt recognizes the card after explicit generation and link", async () => {
 	let linked = false;
 	let failReceipt = true;
 	let state = sink({
 		target: () => linked ? { kind: "open", id: "Q" } : { kind: "unlinked" },
+		enqueueJob: async intent => {
+			expect(intent).toMatchObject({ kind: "refine", threadId: "t1", trigger: "open-1" });
+			state.calls.push("prepare");
+		},
 		link: async () => {
 			linked = true;
 			state.calls.push("link");
@@ -208,8 +214,11 @@ test("a lost insert receipt recognizes the already-linked card on retry", async 
 		trigger: "open-1",
 	};
 	expect(await runEffects(state.deps, [insert])).toBe(0);
-	expect(state.calls).toEqual(["insert", "link"]);
+	expect(state.calls).toEqual(["prepare"]);
+	expect(linked).toBe(false);
+	// The generation adapter completes independently before the outbox retries.
+	await state.deps.link("t1", "Q");
 	expect(await runEffects(state.deps, [insert])).toBe(1);
-	expect(state.calls).toEqual(["insert", "link"]);
+	expect(state.calls).toEqual(["prepare", "link"]);
 	expect([...state.receipts]).toEqual(["insert:t1"]);
 });

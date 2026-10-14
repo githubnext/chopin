@@ -1,4 +1,8 @@
-export function scriptContext(prompt: unknown) {
+export function scriptContext(prompt: unknown): {
+	kind: "heading" | "refine" | "suggest" | "prose";
+	target: string;
+	initialQuestion?: string;
+} {
 	let text: unknown = prompt;
 	if (prompt && typeof prompt === "object" && "role" in prompt && prompt.role === "user") {
 		let content = "content" in prompt ? prompt.content : undefined;
@@ -29,7 +33,10 @@ export function scriptContext(prompt: unknown) {
 			: /^Decision card ([^\s:]{1,200}): "[^\r\n]*"$/.exec(cards[0]!))?.[1]
 		: undefined;
 	if (!target) throw new Error("scripted Planner requires one exact decision card target");
-	return { kind, target };
+	let initialQuestion = kind === "refine" && lines.includes("[Initial decision card]")
+		? /^Decision card [^\s:]{1,200}: "([^\r\n]*)"$/.exec(cards[0]!)?.[1]
+		: undefined;
+	return { kind, target, ...(initialQuestion === undefined ? {} : { initialQuestion }) };
 }
 
 export function readRevision(result: { output: unknown; isError?: boolean }): number {

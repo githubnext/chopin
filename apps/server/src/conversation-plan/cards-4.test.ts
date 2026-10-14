@@ -45,6 +45,18 @@ test("a full card is terminal and does not block a later quoted option", async (
 	);
 	let first = ulid();
 	let second = ulid();
+	for (
+		let [threadId, optionId, label] of [
+			["full-thread", first, "Too many"],
+			["open-thread", second, "GitHub Apps"],
+		]
+	) {
+		context.plan.conversationPlan.threads.find(item => item.id === threadId)!.contributions.push({
+			...thread().contributions[0]!,
+			id: optionId!,
+			text: label!,
+		});
+	}
 	let completed = await runEffects({
 		...commands,
 		applied: key => accepted.has(key),
@@ -95,7 +107,15 @@ test("a full card is terminal and does not block a later quoted option", async (
 		.rejects.toThrow("implementation is active");
 	context.plan.execution = undefined;
 	expect(Store.reserveEdit(context.plan.questions, open)).toBe(true);
-	await expect(commands.addOption(open, { optionId: ulid(), label: "Busy" }))
+	let busy = ulid();
+	context.plan.conversationPlan.threads.find(item => item.id === "open-thread")!.contributions.push(
+		{
+			...thread().contributions[0]!,
+			id: busy,
+			text: "Busy",
+		},
+	);
+	await expect(commands.addOption(open, { optionId: busy, label: "Busy" }))
 		.rejects.toThrow("temporarily unavailable");
 	Store.releaseEdit(context.plan.questions, open);
 });

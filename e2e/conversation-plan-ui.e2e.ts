@@ -1,4 +1,6 @@
-import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
+import { openDecisionDocument } from "./decision-deck-fixtures";
+import { resetPlannerJobs } from "./planner-jobs";
+import { openJevWire, sendChat, wireRequest, wireState } from "./jev-wire";
 import { authenticate, content, expect, roomPath, test } from "./room";
 import { seedChildChannel } from "./database";
 
@@ -24,6 +26,10 @@ async function expectOpenCardReadOnly(card: ReturnType<typeof decisionCard>) {
 	let add = card.getByRole("button", { name: "Add an option", exact: true });
 	await expect(add).toHaveCount(0);
 }
+
+test.beforeEach(async () => {
+	await resetPlannerJobs({ suggest: true });
+});
 
 test("Chat analysis diagnostics float without moving a bottom message", async ({ join, room }) => {
 	let page = await join("ana");
@@ -214,7 +220,7 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 	await expect(page.getByText("Unlinked", { exact: true })).toHaveCount(0);
 });
 
-test("mounted parent and child transcripts keep their own source ranges", async ({ baseURL, join, room }) => {
+test("a parent source highlight survives a child panel without creating child Chat", async ({ baseURL, join, room }) => {
 	let childTitle = `Highlighted child ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		Number(new URL(baseURL!).port),
@@ -226,7 +232,9 @@ test("mounted parent and child transcripts keep their own source ranges", async 
 	let page = await join("ana");
 	await openJevWire(page, room);
 	let parentMessageId = await sendChat(page, "Should we ship a small pilot?");
-	let parentState = await waitForEvent(page, "thread.opened");
+	await waitForEvent(page, "thread.opened");
+	await waitForEvent(page, "card.linked");
+	await openDecisionDocument(page);
 	await page.clock.install();
 	await page.clock.pauseAt(Date.now() + 100);
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
@@ -246,15 +254,19 @@ test("mounted parent and child transcripts keep their own source ranges", async 
 	}).click();
 	let childWorkspace = page.locator(`[data-workspace-room="${child.id}"]`);
 	await expect(childWorkspace).toBeVisible();
+	await expect(childWorkspace.getByRole("complementary", { name: "Chat", exact: true }))
+		.toHaveCount(0);
 	await openJevWire(page, child.id);
-	let childMessageId = await sendChat(page, "Should we ship a small pilot?");
-	let childState = await waitForEvent(page, "thread.opened");
-	expect(childState.threads[0]?.id).not.toBe(parentState.threads[0]?.id);
-	await childWorkspace.getByRole("button", { name: "Show source in chat" }).click();
-	await expect.poll(highlightedRooms).toEqual([room, child.id]);
+	let denied = await wireRequest(page, {
+		kind: "chat:send",
+		requestId: crypto.randomUUID(),
+		text: "Should we ship a small pilot?",
+		to: "room",
+	});
+	expect(denied.kind).toBe("session:error");
+	expect(denied.message).toMatch(/child|chat/i);
+	await expect.poll(highlightedRooms).toEqual([room]);
 	await expect(parent.locator(`[data-chat-message-id="${parentMessageId}"]`))
-		.toHaveAttribute("data-source-exact", "true");
-	await expect(childWorkspace.locator(`[data-chat-message-id="${childMessageId}"]`))
 		.toHaveAttribute("data-source-exact", "true");
 	await page.getByRole("button", { name: `Close ${childTitle}` }).click();
 	await page.clock.runFor(500);
@@ -296,6 +308,8 @@ test("a proposal to settle pre-selects the option until a person saves", async (
 	await waitForEvent(ana, "thread.opened");
 	await sendChat(bo, "Start with a small pilot.");
 	await waitForEvent(ana, "option.added");
+	await waitForEvent(ana, "card.linked");
+	await openDecisionDocument(ana);
 	let card = decisionCard(ana);
 	let option = card.getByRole("radio", { name: "Start with a small pilot." });
 	await expect(option).not.toBeChecked();
@@ -323,6 +337,8 @@ test("a human choice overrides an advisory chat suggestion", async ({ join, room
 	await waitForEvent(ana, "thread.opened");
 	await sendChat(bo, "Start with a small pilot.");
 	await waitForEvent(ana, "option.added");
+	await waitForEvent(ana, "card.linked");
+	await openDecisionDocument(ana);
 	let card = decisionCard(ana);
 	await sendChat(bo, "Let's just go with a small pilot.");
 	await waitForEvent(ana, "settle.suggested");
@@ -355,6 +371,8 @@ test("typing an option before a suggestion keeps the composer intent until Escap
 	await waitForEvent(ana, "thread.opened");
 	await sendChat(bo, "Start with a small pilot.");
 	await waitForEvent(ana, "option.added");
+	await waitForEvent(ana, "card.linked");
+	await openDecisionDocument(ana);
 	let card = decisionCard(ana);
 	let option = card.getByRole("radio", { name: "Start with a small pilot." });
 	await card.getByRole("button", { name: "Add an option", exact: true }).click();
@@ -382,27 +400,25 @@ test("an added option stays the adder's choice when chat later suggests it", asy
 	await waitForEvent(ana, "thread.opened");
 	await sendChat(bo, "Start with a small pilot.");
 	await waitForEvent(ana, "option.added");
+	await waitForEvent(ana, "card.linked");
+	await openDecisionDocument(ana);
 	let card = decisionCard(ana);
 	await card.getByRole("button", { name: "Add an option", exact: true }).click();
 	await card.getByRole("textbox", { name: "New option" }).fill("Ship to everyone");
 	await ana.keyboard.press("Enter");
 	await expect(card.getByRole("radio", { name: "Ship to everyone" })).toBeVisible();
 
-	await sendChat(bo, "Let's just go with Ship to everyone.");
-	await waitForEvent(ana, "settle.suggested");
-	await expect.poll(async () => {
-		let meta = (await wireFrames(ana)).findLast(frame => frame.kind === "question:meta")?.meta as
-			| { suggested?: { optionId: string } }
-			| undefined;
-		return meta?.suggested?.optionId;
-	}).toEqual(expect.any(String));
-	let meta = (await wireFrames(ana)).findLast(frame => frame.kind === "question:meta")?.meta as {
-		suggested: { optionId: string };
-	};
-	let label = (await wireState(ana))!.threads[0]!.contributions
-		.find(item => item.id === meta.suggested.optionId)?.text;
-	expect(label).toBeTruthy();
-	await expect(card.getByRole("radio", { name: label! })).toBeChecked();
+	let humanChoice = card.getByRole("radio", { name: "Ship to everyone", exact: true });
+	await expect(humanChoice).toBeChecked();
+	let optionId = await humanChoice.getAttribute("value");
+	let suggestionSource = await sendChat(bo, "Let's just go with Ship to everyone.");
+	let suggested = await waitForEvent(ana, "settle.suggested");
+	expect(suggested.threads[0]?.pendingSettle?.optionId).toBe(optionId);
+	expect(suggested.events.find(event => event.type === "settle.suggested")).toMatchObject({
+		optionId,
+		source: { messageId: suggestionSource, quote: "Let's just go with Ship to everyone." },
+	});
+	await expect(humanChoice).toBeChecked();
 	await expect(card.getByRole("radio", { name: "Start with a small pilot." })).not.toBeChecked();
 	await expect(card.getByText("from chat", { exact: true })).toHaveCount(0);
 });
@@ -429,6 +445,9 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 	let details = analysis.getByText("Model answers and run details");
 	await expect(details).toBeFocused();
 	await details.press("Tab");
+	let researchDetails = analysis.getByRole("button", { name: "Research judgments", exact: true });
+	await expect(researchDetails).toBeFocused();
+	await researchDetails.press("Tab");
 	await expect(retry).toBeFocused();
 	await retry.press("Enter");
 	await waitForEvent(page, "thread.opened");
@@ -501,11 +520,14 @@ test("read-only and archived readers keep cards and diagnostics with disabled co
 	await openJevWire(writer, room);
 	let messageId = await sendChat(writer, "Should we ship a small pilot?");
 	await waitForEvent(writer, "thread.opened");
+	await waitForEvent(writer, "card.linked");
+	await openDecisionDocument(writer);
 	let readonlyContext = await browser.newContext({ baseURL });
 	try {
 		let reader = await readonlyContext.newPage();
 		await authenticate(reader, "readonly", baseURL!);
 		await reader.goto(roomPath(room));
+		await openDecisionDocument(reader);
 		await expect(content(reader)).toHaveAttribute("contenteditable", "false");
 		await expect(decisionCard(reader)).toBeVisible();
 		await expectOpenCardReadOnly(decisionCard(reader));
@@ -528,6 +550,7 @@ test("read-only and archived readers keep cards and diagnostics with disabled co
 	expect(archived.status()).toBe(200);
 	await expectOpenCardReadOnly(decisionCard(writer));
 	await writer.reload();
+	await openDecisionDocument(writer);
 	await expect(content(writer)).toHaveAttribute("contenteditable", "false");
 	await expect(decisionCard(writer)).toBeVisible();
 	await expectOpenCardReadOnly(decisionCard(writer));

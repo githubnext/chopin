@@ -35,7 +35,31 @@ export function currentProse(plan: PlannerJobDeps["plan"], job: Job): boolean {
 	return !!record && proseIntent(record)?.trigger === job.trigger;
 }
 
+/** Initial creation may run before a card exists, but never for a closed or relinked thread. */
+export function initialThread(plan: PlannerJobDeps["plan"], job: Pick<Job, "threadId" | "target">) {
+	return plan.conversationPlan.threads.find(thread =>
+		thread.id === job.threadId
+		&& !["decided", "discarded"].includes(thread.status)
+		&& (!thread.questionnaireId || thread.questionnaireId === job.target)
+	);
+}
+
 export function canonicalIntent(plan: PlannerJobDeps["plan"], intent: JobIntent): JobIntent {
+	if (intent.threadId) {
+		let thread = initialThread(plan, intent);
+		let source = thread?.questionSources[0];
+		let event = plan.conversationPlan.events.find(item => item.id === intent.trigger);
+		if (!source || event?.type !== "thread.opened" || event.threadId !== intent.threadId) {
+			throw new Error("Initial decision job has no matching source message");
+		}
+		let existing = plan.conversationPlanJobs.find(job => job.threadId === intent.threadId);
+		let card = [...plan.records.values()].find(record => record.threadId === intent.threadId);
+		return {
+			...intent,
+			target: existing?.target ?? card?.id ?? intent.target,
+			trigger: source.messageId,
+		};
+	}
 	if (intent.kind !== "refine" && intent.kind !== "suggest") return intent;
 	let event = plan.conversationPlan.events.find(item => item.id === intent.trigger);
 	if (!event) return intent;

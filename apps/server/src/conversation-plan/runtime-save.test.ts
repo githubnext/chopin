@@ -8,6 +8,8 @@ import { createConversationRuntime } from "./runtime";
 import { interpretMessage } from "./interpret";
 import { mockResult } from "./interpret.test-fixtures";
 import { until } from "./service.test-fixtures";
+import { refineDecision } from "../agent/refine-tool";
+import * as Jobs from "./jobs";
 import type { Room } from "../rooms";
 import type { Socket } from "../wire";
 
@@ -81,9 +83,42 @@ test("a live conversation suggests a linked human option, and human Save commits
 			ts: 0,
 		});
 		await until(() =>
-			!!plan.conversationPlan.threads[0]?.questionnaireId
+			plan.conversationPlanJobs.some(job => job.threadId && job.status === "failed")
 			&& plan.conversationPlanPendingEffects.length === 0
 		);
+		await runtime.jobs(plan)!.idle();
+		let initial = plan.conversationPlanJobs.find(job => !!job.threadId)!;
+		let generating = { ...initial, status: "running" as const };
+		plan.conversationPlanJobs = plan.conversationPlanJobs.map(job =>
+			job.id === initial.id ? generating : job
+		);
+		plan.chat.job = generating;
+		try {
+			let result = await refineDecision(
+				{
+					plan,
+					server: opened.server,
+					room: plan.id,
+					exclusive: action => Plan.exclusive(plan, action),
+					anchors() {},
+					changes() {},
+				},
+				generating,
+				plan.chat.turn,
+				{
+					revision: plan.revision,
+					id: generating.target,
+					title: "Which authentication system should we use?",
+				},
+			);
+			plan.conversationPlanJobs = Jobs.settle(plan.conversationPlanJobs, generating.id, {
+				status: "done",
+				output: JSON.stringify(result.output),
+			}, new Date().toISOString());
+			await Plan.persist(plan);
+		} finally {
+			plan.chat.job = undefined;
+		}
 		let thread = plan.conversationPlan.threads[0]!;
 		let id = thread.questionnaireId!;
 		await Questions.addOption(plan, opened.server, plan.id, socket, {

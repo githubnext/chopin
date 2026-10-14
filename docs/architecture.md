@@ -443,6 +443,18 @@ child. See [Research offers from Chat](conversation-research.md).
 
 ### Decision records
 
+Chat-derived decision cards wait for an initial Planner `refine` job to supply a
+question of at most 100 characters and optional context of at most 300 characters.
+The job reserves the card ID and consumes the insertion intent in one durable
+commit. Until generation succeeds there is no card, shared answer draft, or
+question projection; the source message retains the job status and Retry action.
+Creation commits the record, draft, projection, conversation link, and one
+follow-up option-suggestion intent together. It uses current discussion options
+and preserves exact human source quotes. The suggestion job can append justified
+options without changing the generated question or placement.
+Interrupted or failed generation retries the same identity, and legacy stored
+questions retain their original wording.
+
 Question answers and accepted comment threads belong to durable records outside
 the document. Their `<Questionnaire>` and `<Decision>` nodes are readable MDX
 projections. Domain operations and Planner block tools update or protect the

@@ -1,5 +1,6 @@
 /** Pure transitions for the durable Planner job queue. */
 
+import { ULID } from "@chopin/dialect";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { JobIntent } from "./effects";
 
@@ -52,6 +53,8 @@ export function enqueue(jobs: Job[], intent: JobIntent, at: string): Job[] {
 		|| !bounded(intent.trigger, MAX_TRIGGER)
 		|| (intent.kind === "heading") !== (intent.target === "document")
 		|| !isoTime(at)
+		|| intent.threadId !== undefined && (intent.kind !== "refine"
+				|| !bounded(intent.threadId, 200) || !ULID.test(intent.target))
 	) invalid();
 	let id = jobId(intent);
 	if (jobs.some(job => job.id === id)) return jobs;
@@ -147,7 +150,7 @@ export function restore(value: unknown): Job[] {
 		let required = ["id", "kind", "target", "trigger", "status", "attempts", "at"];
 		if (
 			required.some(key => !Object.hasOwn(job, key))
-			|| Object.keys(job).some(key => ![...required, "reason", "output"].includes(key))
+			|| Object.keys(job).some(key => ![...required, "reason", "output", "threadId"].includes(key))
 			|| !KINDS.has(job.kind as string)
 			|| !STATUSES.has(job.status as string)
 			|| !bounded(job.target, MAX_TARGET)
@@ -155,6 +158,8 @@ export function restore(value: unknown): Job[] {
 			|| !bounded(job.trigger, MAX_TRIGGER)
 			|| !bounded(job.id, 420)
 			|| job.id !== `${job.kind}:${job.target}:${job.trigger}`
+			|| Object.hasOwn(job, "threadId") && (job.kind !== "refine"
+					|| !bounded(job.threadId, 200) || !ULID.test(job.target as string))
 			|| ids.has(job.id)
 			|| !Number.isSafeInteger(job.attempts) || (job.attempts as number) < 0
 			|| !isoTime(job.at)

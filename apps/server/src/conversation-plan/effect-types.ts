@@ -4,6 +4,7 @@ import type { ConversationPlan } from "@chopin/protocol";
 export type JobIntent = {
 	kind: "heading" | "refine" | "suggest" | "prose";
 	target: string;
+	threadId?: string;
 	trigger: string;
 };
 

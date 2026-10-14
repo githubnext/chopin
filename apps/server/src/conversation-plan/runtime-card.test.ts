@@ -10,7 +10,7 @@ import type { Room } from "../rooms";
 import type { Socket } from "../wire";
 
 // Offline synthetic model answers exercise the production interpreter and card consumers.
-test("runtime saves a room message, projects a durable decision card, and reopens without duplicating it", async () => {
+test("runtime preserves a failed initial card job and retries its identity while Planner is off", async () => {
 	let opened = await openPlan();
 	let plan = opened.plan;
 	let room: Room = { id: plan.id, plan, members: new Map() };
@@ -58,24 +58,36 @@ test("runtime saves a room message, projects a durable decision card, and reopen
 			ts: 0,
 		});
 		await until(() =>
-			plan.conversationPlan.threads[0]?.questionnaireId !== undefined
+			plan.conversationPlanJobs.some(job => job.threadId && job.status === "failed")
 			&& plan.conversationPlanPendingEffects.length === 0
 		);
 		await runtime.jobs(plan)?.idle();
 		let thread = plan.conversationPlan.threads[0]!;
-		let card = plan.records.get(thread.questionnaireId!)!;
-		expect(card.origin).toBe("conversation");
-		expect(card.threadId).toBe(thread.id);
-		expect(card.status).toBe("open");
-		expect(Plan.source(plan)).toContain(thread.questionnaireId!);
+		let job = plan.conversationPlanJobs.find(job => job.threadId === thread.id)!;
+		expect(thread.questionnaireId).toBeUndefined();
+		expect(plan.records.size).toBe(0);
+		expect(Plan.source(plan)).not.toContain("<Questionnaire");
+		expect(job).toMatchObject({
+			kind: "refine",
+			status: "failed",
+			reason: "The Planner is off (AGENT=off).",
+		});
+		expect(await runtime.jobs(plan)!.retry(job.id)).toBe(true);
+		await runtime.jobs(plan)!.idle();
+		expect(plan.conversationPlanJobs.find(item => item.id === job.id))
+			.toMatchObject({ target: job.target, status: "failed", attempts: 2 });
+		expect(plan.records.size).toBe(0);
 		let loaded = (await opened.storage.collaboration.load(plan.id, opened.now))!;
 		let sidecar = (loaded.sidecar ?? loaded.snapshot!.sidecar) as unknown as {
 			transcript: typeof plan.chat.entries;
 			conversationPlan: typeof plan.conversationPlan;
 			conversationPlanEffects: string[];
+			conversationPlanJobs: typeof plan.conversationPlanJobs;
 		};
 		expect(sidecar.transcript[0]?.text).toBe("Which authentication system should we use?");
-		expect(sidecar.conversationPlan.threads[0]?.questionnaireId).toBe(card.id);
+		expect(sidecar.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
+		expect(sidecar.conversationPlanJobs.find(item => item.id === job.id))
+			.toMatchObject({ target: job.target, status: "failed", attempts: 2 });
 		expect(sidecar.conversationPlanEffects).toContain(`insert:${thread.id}`);
 		expect(sidecar.conversationPlan.analysis[0]?.status).toBe("applied");
 		stopped = runtime.stop(plan);
@@ -85,8 +97,10 @@ test("runtime saves a room message, projects a durable decision card, and reopen
 		room.plan = plan;
 		await runtime.attach(room, plan, false);
 		await Bun.sleep(10);
-		expect(plan.records.size).toBe(1);
-		expect(plan.conversationPlan.threads[0]?.questionnaireId).toBe(card.id);
+		expect(plan.records.size).toBe(0);
+		expect(plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
+		expect(plan.conversationPlanJobs.find(item => item.id === job.id))
+			.toMatchObject({ target: job.target, status: "failed", attempts: 2 });
 		expect(plan.conversationPlanPendingEffects).toEqual([]);
 		expect(errors).toEqual([]);
 	} finally {

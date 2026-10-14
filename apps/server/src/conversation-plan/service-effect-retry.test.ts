@@ -43,19 +43,11 @@ test("failed pre-link option stays ahead of the linked refine job", async () => 
 				? { kind: "open", id: thread.questionnaireId }
 				: { kind: "unlinked" };
 		},
-		insertCard: async () => (calls.push("insert"), "Q"),
-		link: async (_id, questionnaireId) => {
-			calls.push("link");
-			await processor.record(state => ({
-				id: "card:Q:linked",
-				type: "card.linked",
-				threadId: "thread-a",
-				observedThreadVersion: state.threads[0].version,
-				origin: "classifier",
-				actor: { kind: "classifier" },
-				at: 1001,
-				questionnaireId,
-			}));
+		insertCard: async () => {
+			throw new Error("card creation must wait for generation");
+		},
+		link: async () => {
+			throw new Error("card linking must wait for generation");
 		},
 		addOption: async () => {
 			calls.push("option");
@@ -63,15 +55,31 @@ test("failed pre-link option stays ahead of the linked refine job", async () => 
 		},
 		suggest: async () => {},
 		prompt: async () => {},
-		enqueueJob: async () => void calls.push("refine"),
+		enqueueJob: async intent => void calls.push(intent.threadId ? "prepare" : "refine"),
 		report: error => setup.errors.push(error),
 	});
+	await until(() => setup.durable.receipts.includes("insert:thread-a"));
+	expect(calls).toEqual(["prepare"]);
+	expect(setup.plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
+	// Successful generation links the prepared card before follow-on option effects can run.
+	await processor.record(state => ({
+		id: "card:Q:linked",
+		type: "card.linked",
+		threadId: "thread-a",
+		observedThreadVersion: state.threads[0].version,
+		origin: "classifier",
+		actor: { kind: "classifier" },
+		at: 1001,
+		questionnaireId: "Q",
+	}));
+	calls.push("link");
+	processor.wake();
 	await until(() => setup.errors.length > 0);
 	await Bun.sleep(10);
 	let failures = setup.errors.length;
 	await Bun.sleep(10);
 	expect(setup.errors).toHaveLength(failures);
-	expect(calls.slice(0, 2)).toEqual(["insert", "link"]);
+	expect(calls.slice(0, 2)).toEqual(["prepare", "link"]);
 	expect(calls.slice(2).every(call => call === "option")).toBe(true);
 	expect(calls).not.toContain("refine");
 	expect(setup.durable.pending.map(item => item.key)).toEqual([
@@ -86,7 +94,7 @@ test("failed pre-link option stays ahead of the linked refine job", async () => 
 	expect(calls.at(-1)).toBe("refine");
 });
 
-test("legacy unlinked recovery inserts an empty card when old option IDs are unusable", async () => {
+test("legacy unlinked recovery queues generation with no unusable old option IDs", async () => {
 	let setup = harness();
 	let source = entry("seed", "Which auth system?");
 	setup.plan.chat.entries.push(source);
@@ -109,8 +117,18 @@ test("legacy unlinked recovery inserts an empty card when old option IDs are unu
 	let seen: Array<{ options: Array<{ id: string; label: string }> }> = [];
 	processor.setEffects({
 		target: () => ({ kind: "unlinked" }),
-		insertCard: async input => (seen.push({ options: input.options }), "Q"),
-		link: async () => {},
+		insertCard: async () => {
+			throw new Error("card creation must wait for generation");
+		},
+		link: async () => {
+			throw new Error("card linking must wait for generation");
+		},
+		enqueueJob: async (intent, key) => {
+			expect(intent).toMatchObject({ kind: "refine", threadId: "thread-a", trigger: "open:seed" });
+			let effect = setup.plan.conversationPlanPendingEffects.find(item => item.key === key);
+			if (effect?.kind !== "insert-card") throw new Error("missing initial generation intent");
+			seen.push({ options: effect.options });
+		},
 		addOption: async () => {},
 		suggest: async () => {},
 		prompt: async () => {},
@@ -118,6 +136,7 @@ test("legacy unlinked recovery inserts an empty card when old option IDs are unu
 	});
 	await until(() => setup.durable.receipts.includes("insert:thread-a"));
 	expect(seen).toEqual([{ options: [] }]);
+	expect(setup.plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
 	expect(setup.durable.pending).toEqual([]);
 });
 

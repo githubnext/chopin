@@ -9,6 +9,7 @@ export type Input = {
 	revision: number;
 	id: string;
 	title?: string;
+	description?: string;
 	add_options: Option[];
 	place_after?: Address;
 };
@@ -21,7 +22,7 @@ export function input(raw: unknown): Input {
 	if (
 		!Object.hasOwn(value, "revision") || !Object.hasOwn(value, "id")
 		|| Object.keys(value).some(key =>
-			!["revision", "id", "title", "add_options", "place_after"].includes(key)
+			!["revision", "id", "title", "description", "add_options", "place_after"].includes(key)
 		)
 	) throw new Error("refine_decision arguments are invalid");
 	if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) {
@@ -33,6 +34,13 @@ export function input(raw: unknown): Input {
 		title = typeof value.title === "string" ? value.title.trim() : "";
 		if (!title || title.length > 100 || /[\r\n\u2028\u2029]/.test(value.title as string)) {
 			throw new Error("title must be 1–100 characters on one line.");
+		}
+	}
+	let description: string | undefined;
+	if (Object.hasOwn(value, "description")) {
+		description = typeof value.description === "string" ? value.description.trim() : "";
+		if (!description || description.length > 300) {
+			throw new Error("description must be 1–300 characters.");
 		}
 	}
 	let add_options: Option[] = [];
@@ -90,6 +98,7 @@ export function input(raw: unknown): Input {
 		revision: value.revision as number,
 		id: value.id,
 		...(title ? { title } : {}),
+		...(description ? { description } : {}),
 		add_options,
 		...(place_after ? { place_after } : {}),
 	};

@@ -638,7 +638,15 @@ function restoredState(
 			if (
 				origin.origin === "chat" && origin.source
 				&& !conversationPlan.events.some(event =>
-					event.type === "option.added" && event.threadId === record.threadId
+					event.type === "option.added"
+					&& (event.threadId === record.threadId || conversationPlan.threads.some(thread =>
+						thread.id === record.threadId && thread.contributions.some(contribution =>
+							contribution.kind === "option" && contribution.id === optionId
+							&& contribution.sources.some(source =>
+								isDeepStrictEqual(source, origin.source)
+							)
+						)
+					))
 					&& event.contribution.id === optionId
 					&& isDeepStrictEqual(event.source, origin.source)
 				)

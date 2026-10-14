@@ -8,6 +8,7 @@ import { atomicOptionQuote, grouped, sameApproach } from "../questions/option-ma
 import { validateSource } from "../conversation-plan/sources";
 import { extractQuotes } from "../conversation-plan/quotes";
 import { input, type Option } from "./refine-fields";
+import { createInitialCard } from "./initial-card";
 import { placeCard } from "./refine-placement";
 import type { Context } from "./card-tool-context";
 import type { ConversationPlan } from "@chopin/protocol";
@@ -41,6 +42,10 @@ export async function refineDecision(
 		}
 		if (args.revision !== plan.revision) throw new Error("stale; read_plan again");
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
+		if (job.threadId) return createInitialCard(context, job, args, ensureActive);
+		if (args.description !== undefined) {
+			throw new Error("description is only set during initial card generation.");
+		}
 		let record = plan.records.get(args.id);
 		let live = Store.get(plan.questions, args.id);
 		if (

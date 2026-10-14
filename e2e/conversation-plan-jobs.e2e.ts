@@ -1,5 +1,5 @@
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
-import { openJevWire, sendChat, wireFrames, wireRequest } from "./jev-wire";
+import { openJevWire, sendChat, wireFrames, wireRequest, wireState } from "./jev-wire";
 import { releasePlannerJob, resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Page } from "@playwright/test";
@@ -7,10 +7,9 @@ import type { Page } from "@playwright/test";
 const QUESTION = "Should we ship a small pilot?";
 const REFINED = "Should we run a limited pilot?";
 const EXISTING_OPTION = "Start with a small pilot.";
-const OPTION = "Pilot with one team";
 
 function card(page: Page, question = QUESTION) {
-	return page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]')
+	return page.getByRole("article", { name: "Decision", exact: true })
 		.filter({ has: page.getByRole("heading", { name: question, exact: true }) });
 }
 
@@ -24,11 +23,6 @@ function inspection(page: Page, messageId: string) {
 
 function jobs(page: Page) {
 	return page.getByRole("group", { name: "Planner jobs" });
-}
-
-async function waitForCard(page: Page) {
-	await expect(card(page)).toBeVisible();
-	return card(page);
 }
 
 async function waitForRefine(page: Page, messageId: string, status: string) {
@@ -104,20 +98,20 @@ async function refineScript(options: { hold?: boolean; target?: string } = {}) {
 			revision: "$revision",
 			id: options.target ?? "$target",
 			title: REFINED,
-			add_options: [{ label: OPTION, rationale: "It keeps the pilot small and concrete." }],
+			description: "A limited pilot lets the team learn before a wider release.",
 		},
 	}], { hold: options.hold });
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs();
+	await resetPlannerJobs({ suggest: true });
 });
 
 test.afterEach(async () => {
 	await resetPlannerJobs();
 });
 
-test("both collaborators see a held refining card before the completed job writes its activity", async ({ join, room }) => {
+test("both collaborators wait for a short generated question and retain options added during preparation", async ({ join, room }) => {
 	await refineScript({ hold: true });
 	let ana = await join("ana");
 	let bo = await join("bo");
@@ -128,52 +122,54 @@ test("both collaborators see a held refining card before the completed job write
 		messageId = await sendChat(ana, QUESTION);
 
 		for (let page of [ana, bo]) {
-			let decision = await waitForCard(page);
-			let status = decision.getByRole("status");
-			await expect(status).toBeVisible();
-			await expect(status).toHaveText("Chopin is refining…");
-			await expect(decision.locator('[data-refining="true"]')).toHaveCount(1);
+			await waitForRefine(page, messageId, "running");
+			await expect(page.getByRole("article", { name: "Decision", exact: true })).toHaveCount(0);
 		}
-		await waitForRefine(ana, messageId, "running");
-		await waitForRefine(bo, messageId, "running");
+		await jobs(ana).scrollIntoViewIfNeeded();
+		await ana.screenshot({ path: test.info().outputPath("initial-decision-pending.png") });
 		await sendChat(ana, EXISTING_OPTION);
-		let existing = card(ana).getByRole("radio", { name: EXISTING_OPTION, exact: true });
-		await card(ana).getByText(EXISTING_OPTION, { exact: true }).click();
-		await expect(existing).toBeChecked();
-		await expect(card(bo).getByRole("radio", { name: EXISTING_OPTION, exact: true }))
-			.toBeChecked();
-
+		await expect(card(ana)).toHaveCount(0);
 		await releaseHeldRefine(ana, messageId);
 		for (let page of [ana, bo]) {
 			let decision = card(page, REFINED);
 			await expect(decision).toBeVisible();
 			await expect(decision.getByRole("radio", { name: EXISTING_OPTION, exact: true }))
-				.toBeChecked();
-			await expect(decision.getByRole("radio", { name: OPTION, exact: true })).toBeVisible();
+				.toBeVisible();
+			await expect(
+				decision.getByText("A limited pilot lets the team learn before a wider release."),
+			).toBeVisible();
 			await expect(decision.getByText("Chopin is refining…", { exact: true })).toHaveCount(0);
 			await expect(page.getByText(`Chopin refined ${REFINED}`, { exact: true })).toBeVisible();
 		}
 		await waitForRefine(ana, messageId, "done");
 		await waitForRefine(bo, messageId, "done");
+		await inspection(ana, messageId).press("Enter");
+		await expect(inspection(ana, messageId)).toHaveAttribute("aria-expanded", "false");
+		await ana.screenshot({ path: test.info().outputPath("initial-decision-ready.png") });
 	} finally {
 		if (messageId) await releaseHeldRefine(ana, messageId);
 	}
 });
 
-test("an unscripted refine failure remains inspectable while its card accepts a selection", async ({ join, room }) => {
+test("invalid generated wording leaves a retryable job beside the exact source message", async ({ join, room }) => {
+	await scriptJob("refine", [{
+		tool: "refine_decision",
+		args: {
+			revision: "$revision",
+			id: "$target",
+			title: "x".repeat(101),
+		},
+	}]);
 	let page = await join("ana");
 	await openJevWire(page, room);
 	let messageId = await sendChat(page, QUESTION);
-	let decision = await waitForCard(page);
-	await sendChat(page, EXISTING_OPTION);
-	await expect(decision.getByRole("radio", { name: EXISTING_OPTION, exact: true }))
-		.toBeVisible();
-	await decision.getByText(EXISTING_OPTION, { exact: true }).click();
-	await expect(decision.getByRole("radio", { name: EXISTING_OPTION, exact: true }))
-		.toBeChecked();
-
 	await waitForRefine(page, messageId, "failed");
-	await expect(jobs(page)).toContainText(/ENOENT.*refine\.json/);
+	await expect(page.getByRole("article", { name: "Decision", exact: true })).toHaveCount(0);
+	await expect(message(page, messageId)).toContainText(QUESTION);
+	await expect(jobs(page).getByRole("button", { name: "Retry refine job", exact: true }))
+		.toBeVisible();
+	await jobs(page).scrollIntoViewIfNeeded();
+	await page.screenshot({ path: test.info().outputPath("initial-decision-retry.png") });
 });
 
 test("failed jobs survive reload, keep diagnostics in place, and retry with the corrected script", async ({ join, room }) => {
@@ -181,9 +177,12 @@ test("failed jobs survive reload, keep diagnostics in place, and retry with the 
 	let page = await join("ana");
 	await openJevWire(page, room);
 	let messageId = await sendChat(page, QUESTION);
-	await waitForCard(page);
+	await expect(card(page)).toHaveCount(0);
 	let chatMessage = message(page, messageId);
 	let transcript = chatMessage.locator("xpath=ancestor::*[@data-focus-boundary][1]");
+	await waitForRefine(page, messageId, "failed");
+	await inspection(page, messageId).press("Enter");
+	await expect(inspection(page, messageId)).toHaveAttribute("aria-expanded", "false");
 	let before = await chatMessage.boundingBox();
 	let scrollTop = await transcript.evaluate(element => element.scrollTop);
 	await waitForRefine(page, messageId, "failed");
@@ -214,7 +213,7 @@ test("an archived held job becomes interrupted and retries only after the docume
 	let messageId: string | undefined;
 	try {
 		messageId = await sendChat(page, QUESTION);
-		await waitForCard(page);
+		await expect(card(page)).toHaveCount(0);
 		await waitForRefine(page, messageId, "running");
 
 		await headerAction(page, "Archive");
@@ -243,7 +242,7 @@ test("read-only collaborators cannot retry a failed Planner job", async ({ baseU
 	let writer = await join("ana");
 	await openJevWire(writer, room);
 	let messageId = await sendChat(writer, QUESTION);
-	await waitForCard(writer);
+	await expect(card(writer)).toHaveCount(0);
 	await waitForRefine(writer, messageId, "failed");
 
 	let context = await browser.newContext({ baseURL });
@@ -267,5 +266,64 @@ test("read-only collaborators cannot retry a failed Planner job", async ({ baseU
 		});
 	} finally {
 		await context.close();
+	}
+});
+
+test("initial preparation keeps the short title and human options while Planner suggestions append", async ({ join, room }) => {
+	await refineScript({ hold: true });
+	await scriptJob("suggest", [{
+		tool: "refine_decision",
+		args: {
+			revision: "$revision",
+			id: "$target",
+			add_options: [{
+				label: "Pilot with two teams",
+				rationale: "A small pilot can compare onboarding in two team settings.",
+			}],
+		},
+	}], { hold: true });
+	let ana = await join("ana");
+	let bo = await join("bo");
+	await openJevWire(ana, room);
+	await openJevWire(bo, room);
+	let sourceId = await sendChat(ana, QUESTION);
+	try {
+		await waitForRefine(ana, sourceId, "running");
+		await expect(card(ana, REFINED)).toHaveCount(0);
+		await releaseHeldRefine(ana, sourceId);
+		await expect(card(ana, REFINED)).toBeVisible();
+		await expect(card(ana, REFINED).getByRole("radio")).toHaveCount(0);
+		await expect.poll(async () => {
+			let frame = (await wireFrames(ana)).findLast(item =>
+				item.kind === "conversation-plan:jobs" || item.kind === "conversation-plan:snapshot"
+			);
+			return (frame?.jobs as Array<{ kind: string; status: string }> | undefined)
+				?.find(job => job.kind === "suggest")?.status;
+		}).toBe("running");
+		await sendChat(bo, EXISTING_OPTION);
+		await expect(card(ana, REFINED).getByRole("radio", { name: EXISTING_OPTION, exact: true }))
+			.toBeVisible();
+		await releasePlannerJob("suggest");
+		for (let page of [ana, bo]) {
+			let decision = card(page, REFINED);
+			await expect(decision.getByRole("radio", { name: "Pilot with two teams", exact: true }))
+				.toBeVisible();
+			await expect(decision.getByRole("radio", { name: EXISTING_OPTION, exact: true }))
+				.toBeVisible();
+			await expect(decision.getByRole("heading", { name: REFINED, exact: true })).toBeVisible();
+			await expect(
+				decision.getByText("A limited pilot lets the team learn before a wider release."),
+			)
+				.toBeVisible();
+		}
+		let state = (await wireState(ana))!;
+		expect(state.threads[0]?.questionSources[0]).toMatchObject({
+			messageId: sourceId,
+			quote: QUESTION,
+		});
+		expect(state.events.filter(event => event.type === "card.linked")).toHaveLength(1);
+	} finally {
+		await releasePlannerJob("refine");
+		await releasePlannerJob("suggest");
 	}
 });

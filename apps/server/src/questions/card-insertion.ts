@@ -10,6 +10,7 @@ import { validateSource } from "../conversation-plan/sources";
 import { broadcast } from "../wire";
 import type { Server } from "bun";
 import type { ConversationPlan } from "@chopin/protocol";
+import type { Effect } from "../conversation-plan/effects";
 
 import * as Service from "../plan/service";
 import type { Plan } from "../plan/service";
@@ -23,33 +24,67 @@ export async function insertConversationCard(
 	server: Server<SocketData>,
 	roomId: string,
 	input: {
+		id?: string;
 		threadId: string;
 		header: string;
 		question: string;
+		description?: string;
 		options: Array<{ id: string; label: string; source?: ConversationPlan.SourceRef }>;
+	},
+	publication?: {
+		conversationPlan: ConversationPlan.State;
+		conversationPlanPendingEffects: Effect[];
+		placeAfter?: { index: number; digest: string };
+		beforePublish: () => void;
 	},
 ): Promise<string> {
 	let found = [...plan.records.values()].find(record => record.threadId === input.threadId);
 	if (found) return found.id;
-	return Service.exclusive(plan, async () => {
+	let insert = async () => {
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
 		let existing = [...plan.records.values()].find(record => record.threadId === input.threadId);
 		if (existing) return existing.id;
-		let id = ulid();
+		let id = input.id ?? ulid();
+		if (!ULID.test(id)) Question.reject("Conversation card ID is invalid");
+		if (plan.records.has(id)) Question.reject("Conversation card ID is already in use");
+		if (
+			!input.question.trim() || input.question.length > Question.limits.MAX_NEW_QUESTION
+			|| /[\r\n\u2028\u2029]/.test(input.question)
+		) {
+			Question.reject("Conversation question must be 1–100 characters on one line");
+		}
 		let questionId = ulid();
 		let options = input.options.slice(0, Question.limits.MAX_DECISION_OPTIONS).map(option => {
 			if (!ULID.test(option.id)) Question.reject("Conversation option ID is invalid");
 			if (option.source) {
+				let contribution = plan.conversationPlan.threads.find(thread =>
+					thread.id === input.threadId
+				)
+					?.contributions.find(item => item.id === option.id && item.kind === "option");
+				let original = plan.conversationPlan.events.find(event =>
+					event.type === "option.added"
+					&& event.contribution.id === option.id && isDeepStrictEqual(event.source, option.source)
+				);
+				let correction = plan.conversationPlan.events.findLast(event =>
+					event.type === "card.corrected"
+					&& event.origin === "human" && event.change.kind === "edit"
+					&& event.change.field === "contribution" && event.change.contributionId === option.id
+				);
+				let label = correction?.type === "card.corrected" && correction.change.kind === "edit"
+					? correction.change.text
+					: original?.type === "option.added"
+					? original.contribution.text
+					: undefined;
 				if (
-					option.source.role !== "option"
-					|| !plan.conversationPlan.events.some(event =>
-						event.type === "option.added" && event.threadId === input.threadId
-						&& event.contribution.id === option.id
-						&& event.contribution.text.trim().slice(0, Question.limits.MAX_LABEL)
-							=== option.label.trim()
-						&& isDeepStrictEqual(event.source, option.source)
-					)
-				) Question.reject("Conversation option source is invalid");
+					option.source.role !== "option" || !original
+					|| label?.trim().slice(0, Question.limits.MAX_LABEL) !== option.label.trim()
+					|| contribution
+						&& (contribution.text.trim().slice(0, Question.limits.MAX_LABEL) !== option.label.trim()
+							|| !contribution.sources.some(source => isDeepStrictEqual(source, option.source)))
+					|| !contribution && original.threadId !== input.threadId
+				) {
+					Question.reject("Conversation option source is invalid");
+				}
 				let entry = plan.chat.entries.find(item => item.id === option.source?.messageId);
 				if (!entry) Question.reject("Conversation option source is missing");
 				validateSource(option.source, entry);
@@ -64,7 +99,8 @@ export async function insertConversationCard(
 			questions: [{
 				id: questionId,
 				header: input.header.slice(0, Question.limits.MAX_HEADER),
-				question: input.question.slice(0, Question.limits.MAX_QUESTION),
+				question: input.question,
+				...(input.description !== undefined ? { description: input.description } : {}),
 				multiple: false,
 				options,
 			}],
@@ -97,6 +133,7 @@ export async function insertConversationCard(
 				editors: [],
 			});
 			let mutation = room.insertQuestionnaires(stagedDocument, [{
+				...(publication?.placeAfter ? { at: publication.placeAfter } : {}),
 				value: {
 					id,
 					thread: input.threadId,
@@ -105,17 +142,27 @@ export async function insertConversationCard(
 						id: questionId,
 						header: single.questions[0].header,
 						prompt: single.questions[0].question,
+						...(single.questions[0].description
+							? { description: single.questions[0].description }
+							: {}),
 						multiple: false,
 						options: options.map(option => ({ id: option.id, label: option.label })),
 					}],
 				},
 			}]);
 			if (!mutation) throw new Error("conversation card could not be inserted");
+			publication?.beforePublish();
 			await Service.publishStaged(plan, server, roomId, {
 				...plan,
 				document: stagedDocument,
 				questions: stagedQuestions,
 				records,
+				...(publication
+					? {
+						conversationPlan: publication.conversationPlan,
+						conversationPlanPendingEffects: publication.conversationPlanPendingEffects,
+					}
+					: {}),
 			}, mutation);
 		} finally {
 			stagedDocument.doc.destroy();
@@ -127,7 +174,15 @@ export async function insertConversationCard(
 			definition: single,
 			widget: id,
 		});
+		if (publication) {
+			broadcast(server, roomId, {
+				kind: "conversation-plan:changed",
+				ts: 0,
+				state: plan.conversationPlan,
+			});
+		}
 		announce(plan, server, roomId, id);
 		return id;
-	});
+	};
+	return publication ? insert() : Service.exclusive(plan, insert);
 }

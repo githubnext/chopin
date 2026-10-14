@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import * as Plan from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { applyInference, initialState } from "./domain";
@@ -6,7 +6,7 @@ import { createConversationRuntime } from "./runtime";
 import { until } from "./service.test-fixtures";
 import type { Room } from "../rooms";
 
-/** Two replay-valid openings exercise real card consumers, with the first card commit held. */
+/** Two replay-valid openings exercise real card consumers, with the first initial-job commit held. */
 async function heldInsert() {
 	let opened = await openPlan();
 	let plan = opened.plan;
@@ -46,7 +46,7 @@ async function heldInsert() {
 		header: "Decision",
 		question: thread.question,
 		options: [],
-		trigger: `m${index + 1}`,
+		trigger: `open${index + 1}`,
 	}));
 	await Plan.persist(plan);
 	let entered = false;
@@ -57,8 +57,9 @@ async function heldInsert() {
 	let gate = new Promise<void>(resolve => release = resolve);
 	let commit = opened.storage.collaboration.commit;
 	opened.storage.collaboration.commit = async input => {
-		let questions = (input.sidecar as { questions?: unknown[] } | undefined)?.questions;
-		if (!entered && questions?.length === 1) {
+		let jobs = (input.sidecar as { conversationPlanJobs?: unknown[] } | undefined)
+			?.conversationPlanJobs;
+		if (!entered && jobs?.length === 1) {
 			entered = true;
 			await gate;
 		}
@@ -71,6 +72,11 @@ async function heldInsert() {
 		return publish(...args);
 	};
 	let errors: unknown[] = [];
+	let effectErrors: unknown[] = [];
+	let logging = spyOn(console, "error").mockImplementation((label, error) => {
+		expect(label).toBe("[conversation-plan] card effect failed:");
+		effectErrors.push(error);
+	});
 	let runtime = createConversationRuntime({
 		config: { agent: false, conversationPlan: true },
 		server: () => opened.server,
@@ -85,12 +91,14 @@ async function heldInsert() {
 		runtime,
 		release,
 		errors,
+		effectErrors,
+		restoreLogging: () => logging.mockRestore(),
 		closed: () => closed = true,
 		late: () => ({ commits: commitsAfterClose, publications: publicationsAfterClose }),
 	};
 }
 
-test("runtime stop drains a held real card insertion before document close", async () => {
+test("runtime stop drains a held initial job enqueue before document close", async () => {
 	let fixture = await heldInsert();
 	let stopped = false;
 	let stopping = fixture.runtime.stop(fixture.plan).then(() => stopped = true);
@@ -102,12 +110,22 @@ test("runtime stop drains a held real card insertion before document close", asy
 		await Plan.close(fixture.plan);
 		fixture.closed();
 		await Bun.sleep(10);
-		expect(fixture.plan.records.size).toBe(2);
+		expect(fixture.plan.records.size).toBe(0);
+		expect(fixture.plan.conversationPlanJobs).toHaveLength(1);
+		expect(fixture.plan.conversationPlanJobs[0]?.threadId).toBe("t1");
+		expect(fixture.plan.conversationPlanPendingEffects).toMatchObject([{
+			key: "insert:t2",
+			threadId: "t2",
+			trigger: "open2",
+		}]);
+		expect(fixture.effectErrors.map(String)).toEqual(["Error: Planner job service is stopped"]);
+		expect(fixture.errors).toEqual([]);
 		expect(fixture.late()).toEqual({ commits: 0, publications: 0 });
 		let restored = await Plan.open(fixture.channel.id, fixture.backend, fixture.server);
 		try {
-			expect(restored.records.size).toBe(2);
-			expect(restored.conversationPlanPendingEffects).toHaveLength(2);
+			expect(restored.records.size).toBe(0);
+			expect(restored.conversationPlanJobs).toHaveLength(1);
+			expect(restored.conversationPlanPendingEffects).toMatchObject([{ key: "insert:t2" }]);
 		} finally {
 			await Plan.close(restored);
 		}
@@ -115,6 +133,7 @@ test("runtime stop drains a held real card insertion before document close", asy
 		fixture.release();
 		await stopping;
 		if (!fixture.plan.persistence.closing) await Plan.close(fixture.plan);
+		fixture.restoreLogging();
 	}
 });
 
@@ -131,17 +150,22 @@ test("replacement attachment waits for the old real effect drain and recovers wi
 		await attaching;
 		expect(fixture.runtime.processor(fixture.plan)).not.toBe(previous);
 		await until(() => fixture.plan.conversationPlanPendingEffects.length === 0);
-		expect(fixture.plan.records.size).toBe(2);
-		expect(fixture.plan.conversationPlan.threads.every(thread => !!thread.questionnaireId)).toBe(
+		expect(fixture.plan.records.size).toBe(0);
+		expect(fixture.plan.conversationPlanJobs).toHaveLength(2);
+		expect(new Set(fixture.plan.conversationPlanJobs.map(job => job.threadId)))
+			.toEqual(new Set(["t1", "t2"]));
+		expect(fixture.effectErrors.map(String)).toEqual(["Error: Planner job service is stopped"]);
+		expect(fixture.plan.conversationPlan.threads.every(thread => !thread.questionnaireId)).toBe(
 			true,
 		);
-		expect(fixture.broadcasts.filter(frame => frame.kind === "question:asked")).toHaveLength(2);
+		expect(fixture.broadcasts.filter(frame => frame.kind === "question:asked")).toHaveLength(0);
 		expect(fixture.errors).toEqual([]);
 	} finally {
 		fixture.release();
 		await attaching;
 		await fixture.runtime.stop(fixture.plan);
 		await Plan.close(fixture.plan);
+		fixture.restoreLogging();
 	}
 });
 
@@ -167,14 +191,19 @@ test("overlapping stops and replacement attachment share the held real effect dr
 		await Promise.all([firstSettled, secondSettled, attaching]);
 		expect(fixture.runtime.processor(fixture.plan)).not.toBe(previous);
 		await until(() => fixture.plan.conversationPlanPendingEffects.length === 0);
-		expect(fixture.plan.records.size).toBe(2);
-		expect(fixture.broadcasts.filter(frame => frame.kind === "question:asked")).toHaveLength(2);
+		expect(fixture.plan.records.size).toBe(0);
+		expect(fixture.plan.conversationPlanJobs).toHaveLength(2);
+		expect(new Set(fixture.plan.conversationPlanJobs.map(job => job.threadId)))
+			.toEqual(new Set(["t1", "t2"]));
+		expect(fixture.effectErrors.map(String)).toEqual(["Error: Planner job service is stopped"]);
+		expect(fixture.broadcasts.filter(frame => frame.kind === "question:asked")).toHaveLength(0);
 		expect(fixture.errors).toEqual([]);
 	} finally {
 		fixture.release();
 		await Promise.all([firstSettled, secondSettled, attaching]);
 		await fixture.runtime.stop(fixture.plan);
 		await Plan.close(fixture.plan);
+		fixture.restoreLogging();
 	}
 });
 

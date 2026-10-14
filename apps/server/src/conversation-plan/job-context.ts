@@ -55,7 +55,7 @@ export function createJobContexts() {
 					for (let id of effect.sourceMessageIds ?? []) needed.add(id);
 				}
 				if (effect.kind === "insert-card") {
-					// Linking the card creates a refine job from the original question source.
+					// Initial title generation uses the original question source.
 					let thread = work.conversationPlan?.threads.find(item => item.id === effect.threadId);
 					let source = thread?.questionSources[0];
 					if (source) needed.add(source.messageId);

@@ -34,6 +34,8 @@ export declare namespace ConversationPlan {
 		kind: JobKind;
 		/** Questionnaire id, or "document" for a heading job. */
 		target: string;
+		/** Initial card generation; target reserves the future questionnaire ID. */
+		threadId?: string;
 		/** Chat message or decision that caused this job. */
 		trigger: string;
 		status: "pending" | "running" | "done" | "failed" | "skipped";

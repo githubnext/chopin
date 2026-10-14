@@ -48,7 +48,7 @@ test("real memory completion failure preserves pending work and a reopened proce
 		expect(resumed.conversationPlan.queue).toEqual([]);
 		expect(resumed.conversationPlan.analysis[0]?.status).toBe("applied");
 		expect(resumed.conversationPlanEffects).toEqual(["insert:thread-a"]);
-		expect(setup.calls).toEqual(["insert", "link"]);
+		expect(setup.calls).toEqual(["prepare"]);
 		expect(setup.fatals).toHaveLength(1);
 	} finally {
 		await setup.close();
@@ -65,7 +65,7 @@ test("real memory receipt failure retains the effect key for callback replay aft
 		setup.failNextCommit();
 		processor.setEffects(setup.sink);
 		await until(() => setup.errors.length === 1);
-		expect(setup.calls).toEqual(["insert", "link"]);
+		expect(setup.calls).toEqual(["prepare"]);
 		expect(setup.plan.conversationPlanPendingEffects).toMatchObject([{ key: "insert:thread-a" }]);
 		expect(setup.plan.conversationPlanEffects).toEqual([]);
 		let rejected = await setup.saved();
@@ -77,7 +77,7 @@ test("real memory receipt failure retains the effect key for callback replay aft
 		processor = setup.start();
 		processor.setEffects(setup.sink);
 		await until(() => setup.plan.conversationPlanEffects.includes("insert:thread-a"));
-		expect(setup.calls).toEqual(["insert", "link", "insert", "link"]);
+		expect(setup.calls).toEqual(["prepare", "prepare"]);
 		let delivered = await setup.saved();
 		expect(delivered.conversationPlanPendingEffects).toBeUndefined();
 		expect(delivered.conversationPlanEffects).toEqual(["insert:thread-a"]);

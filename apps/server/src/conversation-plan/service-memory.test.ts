@@ -34,13 +34,17 @@ test("real memory storage commits transcript and queue, then resumes analysis an
 		let delivered = await setup.saved();
 		expect(delivered.conversationPlanPendingEffects).toBeUndefined();
 		expect(delivered.conversationPlanEffects).toEqual(["insert:thread-a"]);
-		expect(setup.calls).toEqual(["insert", "link"]);
+		expect(setup.calls).toEqual(["prepare"]);
+		expect(setup.plan.records.size).toBe(0);
+		expect(setup.plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
 		await setup.reopen();
 		processor = setup.start();
 		processor.setEffects(setup.sink);
 		await Bun.sleep(10);
 		expect(setup.plan.conversationPlanEffects).toEqual(["insert:thread-a"]);
-		expect(setup.calls).toEqual(["insert", "link"]);
+		expect(setup.calls).toEqual(["prepare"]);
+		expect(setup.plan.records.size).toBe(0);
+		expect(setup.plan.conversationPlan.threads[0]?.questionnaireId).toBeUndefined();
 		expect(setup.errors).toEqual([]);
 	} finally {
 		await setup.close();

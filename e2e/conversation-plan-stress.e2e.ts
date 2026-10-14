@@ -1,3 +1,5 @@
+import { bringForward, openDecisionDocument } from "./decision-deck-fixtures";
+import { resetPlannerJobs } from "./planner-jobs";
 import { SQL } from "bun";
 
 import { openJevWire, sendChat, wireState } from "./jev-wire";
@@ -49,6 +51,7 @@ async function readonlyReader(browser: Browser, baseURL: string, room: string) {
 		let page = await context.newPage();
 		await authenticate(page, "readonly", baseURL);
 		await page.goto(roomPath(room));
+		await openDecisionDocument(page);
 		await expect(page.getByRole("textbox", { name: "editable markdown" }))
 			.toHaveAttribute("contenteditable", "false");
 		return { context, page };
@@ -59,6 +62,7 @@ async function readonlyReader(browser: Browser, baseURL: string, room: string) {
 }
 
 async function addOption(page: Page, question: string, option: string) {
+	await openDecisionDocument(page);
 	let target = card(page, question);
 	await target.getByRole("button", { name: "Add an option", exact: true }).click();
 	await target.getByRole("textbox", { name: "New option" }).fill(option);
@@ -88,6 +92,10 @@ async function persistedConversation(port: number, room: string) {
 	}
 }
 
+test.beforeEach(async () => {
+	await resetPlannerJobs({ suggest: true });
+});
+
 test("three members carry two sourced questions through a suggested and a human choice", async ({ join, room, baseURL }) => {
 	let ana = await join("ana");
 	let bo = await join("bo");
@@ -96,6 +104,7 @@ test("three members carry two sourced questions through a suggested and a human 
 
 	let questionId = await sendChat(ana, PILOT_QUESTION);
 	await stateWith(cam, "card.linked");
+	for (let page of [ana, bo, cam]) await openDecisionDocument(page);
 	let optionId = await sendChat(bo, PILOT_OPTION);
 	await stateWith(ana, "option.added");
 	let reasonId = await sendChat(cam, "A small pilot would catch setup problems early.");
@@ -146,13 +155,17 @@ test("three members carry two sourced questions through a suggested and a human 
 		quote: ACCESS_QUESTION,
 		author: { kind: "member", handle: "ana" },
 	});
+	await stateWith(cam, "card.linked", 2);
 	for (let page of [ana, bo, cam]) {
-		await expect(card(page, PILOT_QUESTION)).toBeVisible();
-		await expect(card(page, ACCESS_QUESTION)).toBeVisible();
-		await expect(prompt(page)).toContainText(`Suggested: ${suggestedOption.text}`);
+		for (let question of [PILOT_QUESTION, ACCESS_QUESTION]) {
+			await bringForward(page, question, "plan");
+			await expect(card(page, question)).toBeVisible();
+		}
+		await expect(prompt(page)).toContainText(`Selected: ${humanChoice}`);
 	}
 	await ana.screenshot({ path: "e2e/test-results/conversation-stress-before.png", fullPage: true });
 
+	await bringForward(cam, PILOT_QUESTION, "plan");
 	await card(cam, PILOT_QUESTION).getByText(humanChoice, { exact: true }).click();
 	await expect(prompt(ana)).toContainText(`Selected: ${humanChoice}`);
 	await prompt(ana).getByRole("button", { name: "Save decision" }).click();
@@ -207,6 +220,7 @@ test("a chat burst preserves a new question and a reason on the existing card", 
 	for (let page of [ana, bo, cam]) await openJevWire(page, room);
 	await sendChat(ana, PILOT_QUESTION);
 	await stateWith(ana, "card.linked");
+	for (let page of [ana, bo, cam]) await openDecisionDocument(page);
 	await sendChat(bo, PILOT_OPTION);
 	await stateWith(ana, "option.added");
 	await sendChat(bo, "Let's just go with a small pilot.");
@@ -233,9 +247,12 @@ test("a chat burst preserves a new question and a reason on the existing card", 
 		),
 	).toBeTruthy();
 	expect(state.threads[1]!.questionSources[0]?.messageId).toBe(mixedId);
+	await stateWith(bo, "card.linked", 2);
 	for (let page of [ana, bo, cam]) {
-		await expect(card(page, PILOT_QUESTION)).toHaveCount(1);
-		await expect(card(page, ACCESS_QUESTION)).toHaveCount(1);
+		for (let question of [PILOT_QUESTION, ACCESS_QUESTION]) {
+			await bringForward(page, question, "plan");
+			await expect(card(page, question)).toHaveCount(1);
+		}
 	}
 });
 
@@ -247,6 +264,7 @@ test("a direct alternatives question keeps both sourced options and allows anoth
 	await stateWith(ana, "thread.opened");
 	let withOptions = await stateWith(ana, "option.added", 2);
 	await stateWith(ana, "card.linked");
+	await openDecisionDocument(ana);
 	let files = withOptions.threads[0]!;
 	expect(files.question).toBe(FILES_QUESTION);
 	expect(files.questionSources[0]).toMatchObject({
@@ -275,7 +293,9 @@ test("a direct alternatives question keeps both sourced options and allows anoth
 		PILOT_QUESTION,
 	]);
 	expect(withSecondQuestion.events.some(event => event.type === "decision.recorded")).toBe(false);
+	await bringForward(ana, FILES_QUESTION, "plan");
 	await expect(filesCard).toHaveCount(1);
+	await bringForward(ana, PILOT_QUESTION, "plan");
 	await expect(card(ana, PILOT_QUESTION)).toHaveCount(1);
 });
 
@@ -286,6 +306,7 @@ test("a direct recommendation adds and suggests a sourced choice until a member 
 
 	await sendChat(ana, EMAIL_QUESTION);
 	await stateWith(ana, "card.linked");
+	for (let page of [ana, bo]) await openDecisionDocument(page);
 	let emailCard = card(ana, EMAIL_QUESTION);
 	await expect(emailCard).toBeVisible();
 	await expect(emailCard.getByRole("radio")).toHaveCount(0);

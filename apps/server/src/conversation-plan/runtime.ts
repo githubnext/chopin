@@ -103,13 +103,16 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			runner: async (job, prompt, signal) => {
 				if (!active()) return { status: "skipped", reason: "The document is unavailable." };
 				if (!deps.config.agent) {
-					return { status: "skipped", reason: "The Planner is off (AGENT=off)." };
+					return {
+						status: job.threadId ? "failed" : "skipped",
+						reason: "The Planner is off (AGENT=off).",
+					};
 				}
 				let claim = contexts.claim(opened, job);
 				return claim
 					? Chat.job(claim.context, job, prompt, claim.claimantSessionId, signal)
 					: {
-						status: "skipped",
+						status: job.threadId ? "failed" : "skipped",
 						reason: "No signed-in member is available to supply the Planner credential.",
 					};
 			},

@@ -24,7 +24,9 @@ export function createCardTargets(
 				&& proseIntent(record)?.trigger === trigger;
 		},
 		target: threadId => {
-			let id = plan.conversationPlan.threads.find(item => item.id === threadId)?.questionnaireId;
+			let thread = plan.conversationPlan.threads.find(item => item.id === threadId);
+			if (!thread || ["decided", "discarded"].includes(thread.status)) return { kind: "closed" };
+			let id = thread.questionnaireId;
 			if (!id) return { kind: "unlinked" };
 			let record = plan.records.get(id);
 			if (!record) return { kind: "unlinked" };
@@ -56,36 +58,44 @@ export function createCardTargets(
 				};
 			});
 		},
-		addOption: async (id, input) => {
-			if (Service.implementationActive(plan)) throw new Error("implementation is active");
-			let record = plan.records.get(id);
-			if (!record) throw new Error("card is missing");
-			let existing = record.definition.questions[0]?.options.find(option =>
-				option.id === input.optionId
-			);
-			if (existing) {
-				// A later title refinement may have changed this option's label.
-				if (record.optionOrigins[input.optionId]?.origin === "chat") return;
-				console.error("[conversation-plan] option ID belongs to another origin:", input.optionId);
-				return;
-			}
-			let result = await Questions.addServerOption(plan, server, roomId, id, {
-				...input,
-				origin: "chat",
-			});
-			if (!result.ok) {
+		addOption: (id, input) =>
+			Service.exclusive(plan, async () => {
 				if (Service.implementationActive(plan)) throw new Error("implementation is active");
-				// A card still closed after Save or Discard supersedes the undelivered addition.
-				if (!Questions.isOpenStatus(plan.records.get(id)?.status ?? "cancelled")) return;
+				let record = plan.records.get(id);
+				if (!record) throw new Error("card is missing");
+				let thread = plan.conversationPlan.threads.find(item => item.id === record.threadId);
 				if (
-					plan.conversationPlan.events.some(event =>
-						event.id === input.trigger && event.origin === "human"
-						&& event.type === "option.added"
+					thread
+					&& !thread.contributions.some(item =>
+						item.kind === "option" && item.id === input.optionId
 					)
-				) throw new Error(`Could not add the accepted excerpt option: ${result.reason}`);
-				if (result.reason === "closed") throw new Error("card is temporarily unavailable");
-				console.error("[conversation-plan] could not represent a quoted option:", result);
-			}
-		},
+				) return;
+				let existing = record.definition.questions[0]?.options.find(option =>
+					option.id === input.optionId
+				);
+				if (existing) {
+					// A later title refinement may have changed this option's label.
+					if (record.optionOrigins[input.optionId]?.origin === "chat") return;
+					console.error("[conversation-plan] option ID belongs to another origin:", input.optionId);
+					return;
+				}
+				let result = await Questions.addServerOption(plan, server, roomId, id, {
+					...input,
+					origin: "chat",
+				}, true);
+				if (!result.ok) {
+					if (Service.implementationActive(plan)) throw new Error("implementation is active");
+					// A card still closed after Save or Discard supersedes the undelivered addition.
+					if (!Questions.isOpenStatus(plan.records.get(id)?.status ?? "cancelled")) return;
+					if (
+						plan.conversationPlan.events.some(event =>
+							event.id === input.trigger && event.origin === "human"
+							&& event.type === "option.added"
+						)
+					) throw new Error(`Could not add the accepted excerpt option: ${result.reason}`);
+					if (result.reason === "closed") throw new Error("card is temporarily unavailable");
+					console.error("[conversation-plan] could not represent a quoted option:", result);
+				}
+			}),
 	};
 }

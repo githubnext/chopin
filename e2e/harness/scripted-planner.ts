@@ -112,8 +112,32 @@ export function createPromptScriptedHarness(
 					let driving = (async () => {
 						try {
 							if (finished) return;
-							let { kind, target } = scriptContext(options.prompt);
-							let script = await readScript(dir, kind);
+							let { kind, target, initialQuestion } = scriptContext(options.prompt);
+							let script;
+							try {
+								script = await readScript(dir, kind);
+							} catch (error) {
+								if (
+									(error as NodeJS.ErrnoException).code !== "ENOENT"
+									|| initialQuestion === undefined
+								) throw error;
+								if (!initialQuestion.trim() || initialQuestion.length > 100) {
+									throw new Error(
+										"Script an explicit concise title for this initial decision card.",
+										{ cause: error },
+									);
+								}
+								// Ordinary browser fixtures need a valid model answer before a card exists.
+								// Explicit scripts, including failure and empty scripts, always take precedence.
+								script = [{
+									tool: "refine_decision",
+									args: {
+										revision: "$revision",
+										id: "$target",
+										title: initialQuestion,
+									},
+								}];
+							}
 							if (!current()) return finish();
 							entered.resolve();
 							let gate = await held(dir, kind, stop.signal);

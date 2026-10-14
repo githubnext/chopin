@@ -54,8 +54,12 @@ export function sink(overrides: Partial<EffectDeps> = {}) {
 		applied: key => receipts.has(key),
 		markApplied: async key => void receipts.add(key),
 		target: () => ({ kind: "open", id: "Q" }),
-		insertCard: async () => (calls.push("insert"), "Q"),
-		link: async () => void calls.push("link"),
+		insertCard: async () => {
+			throw new Error("card creation must wait for generation");
+		},
+		link: async () => {
+			throw new Error("card linking must wait for generation");
+		},
 		addOption: async () => void calls.push("option"),
 		suggest: async () => void calls.push("suggest"),
 		prompt: async () => void calls.push("prompt"),

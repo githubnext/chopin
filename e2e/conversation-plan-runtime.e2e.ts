@@ -1,3 +1,4 @@
+import { resetPlannerJobs } from "./planner-jobs";
 import { createChannel } from "./database";
 import { releaseJev, resetJevControl } from "./jev-control";
 import { RESTART_URL, startJevProcess, stopJevProcess } from "./jev-process";
@@ -37,6 +38,10 @@ function expectSource(
 		source: { messageId, author: { kind: "member", handle }, quote },
 	});
 }
+
+test.beforeEach(async () => {
+	await resetPlannerJobs({ suggest: true });
+});
 
 test("two members share sourced threads and decide on the card", async ({ join, room }) => {
 	let ana = await join("ana");
@@ -255,6 +260,8 @@ test("failure retries once; refresh and restricted sockets preserve state", asyn
 	let readonly = await readonlyContext.newPage();
 	await authenticate(readonly, "readonly", baseURL!);
 	await readonly.goto(roomPath(room));
+	await readonly.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 	await expect(content(readonly)).toHaveAttribute("contenteditable", "false");
 	await openJevWire(readonly, room);
 	expect((await wireState(readonly))!.events).toEqual(stable.events);
@@ -398,7 +405,15 @@ test("pending inference resumes after an actual server process restart", async (
 		let completed = await stateWith(reopened, "thread.opened");
 		expect(completed.analysis.find(item => item.messageId === messageId)?.status).toBe("applied");
 		expect(completed.events.filter(event => event.type === "thread.opened")).toHaveLength(1);
-		expect(completed.events.filter(event => event.type === "card.linked")).toHaveLength(1);
+		expect(completed.events.filter(event => event.type === "card.linked")).toHaveLength(0);
+		expect(completed.threads[0]?.questionnaireId).toBeUndefined();
+		await expect.poll(async () => {
+			let frame = (await wireFrames(reopened)).findLast(item =>
+				item.kind === "conversation-plan:jobs" || item.kind === "conversation-plan:snapshot"
+			);
+			return (frame?.jobs as ConversationPlan.Job[] | undefined)?.find(job => !!job.threadId)
+				?.status;
+		}).toBe("failed");
 	} finally {
 		await replacement?.close();
 		await context.close();

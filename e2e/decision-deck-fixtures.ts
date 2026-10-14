@@ -90,16 +90,20 @@ ${choices.map(choice => `<Option id="${choice.id}" label="${choice.label}" />`).
 }
 
 /** The desktop Decisions deck slot holding a decision, on top or waiting behind. */
-export function deckSlot(page: Page, prompt: string) {
-	return page.locator('[data-document-view="decisions"] [data-deck-slot]').filter({
+export function deckSlot(page: Page, prompt: string, view: "decisions" | "plan" = "decisions") {
+	return page.locator(`[data-document-view="${view}"] [data-deck-slot]`).filter({
 		hasText: prompt,
 	});
 }
 
-/** Page through the desktop Decisions deck until a decision is on top and answerable. */
-export async function bringForward(page: Page, prompt: string) {
-	let slot = deckSlot(page, prompt);
-	let deck = page.locator('[data-document-view="decisions"] [data-deck]');
+/** Page through a decision deck until a decision is on top and answerable. */
+export async function bringForward(
+	page: Page,
+	prompt: string,
+	view: "decisions" | "plan" = "decisions",
+) {
+	let slot = deckSlot(page, prompt, view);
+	let deck = page.locator(`[data-document-view="${view}"] [data-deck]`);
 	let next = deck.getByRole("button", { name: "Next decision" });
 	let previous = deck.getByRole("button", { name: "Previous decision" });
 	// The deck stops at its ends, so turn back once the last card is reached.
@@ -109,4 +113,14 @@ export async function bringForward(page: Page, prompt: string) {
 		}
 		await expect(slot).toHaveAttribute("data-deck-top", "", { timeout: 1_000 });
 	}).toPass();
+}
+
+/** Wait for a prepared card, then open Document for tests that exercise its inline projection. */
+export async function openDecisionDocument(page: Page) {
+	await expect(
+		page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]').first(),
+	)
+		.toBeAttached();
+	await page.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 }

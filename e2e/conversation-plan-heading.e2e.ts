@@ -2,8 +2,12 @@ import { content, expect, ready, test } from "./room";
 import { openJevWire, sendChat, wireFrames } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 
-test.beforeEach(resetPlannerJobs);
-test.afterEach(resetPlannerJobs);
+test.beforeEach(async () => {
+	await resetPlannerJobs({ suggest: true });
+});
+test.afterEach(async () => {
+	await resetPlannerJobs();
+});
 
 test("a successful heading job preserves its decision card for both collaborators and reload", async ({ join, room }) => {
 	await scriptJob("heading", [{
@@ -26,6 +30,10 @@ test("a successful heading job preserves its decision card for both collaborator
 			?.find(job => job.kind === "heading")?.status;
 	}).toBe("done");
 	for (let page of [ana, bo]) {
+		await expect(page.getByRole("heading", { name: "Should we ship a small pilot?", exact: true }))
+			.toBeVisible();
+		await page.getByRole("group", { name: "Document view" })
+			.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 		await expect(content(page).getByRole("heading", { name: "Pilot release", exact: true }))
 			.toBeVisible();
 		await expect(content(page)).toContainText("Evaluate a small pilot before a wider release.");
@@ -34,6 +42,8 @@ test("a successful heading job preserves its decision card for both collaborator
 	}
 	await bo.reload();
 	await ready(bo);
+	await bo.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 	await expect(content(bo).getByRole("heading", { name: "Pilot release", exact: true }))
 		.toBeVisible();
 	await expect(content(bo).getByRole("heading", { name: "Pilot release", exact: true }))

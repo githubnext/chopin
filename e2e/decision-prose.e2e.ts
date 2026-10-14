@@ -1,5 +1,7 @@
 /** Browser coverage for chat decisions that become anchored document prose. */
 
+import { openDecisionDocument } from "./decision-deck-fixtures";
+
 import { content, expect, ready, test } from "./room";
 import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
 import { releasePlannerJob, resetPlannerJobs, scriptJob } from "./planner-jobs";
@@ -63,7 +65,7 @@ async function decide(page: Page, room: string, option = OPTION) {
 	await openJevWire(page, room);
 	let source = await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
-	await page.getByRole("button", { name: "Document", exact: true }).click();
+	await openDecisionDocument(page);
 	let decision = card(page);
 	await expect(decision).toBeVisible();
 	await decision.getByText(option, { exact: true }).click();
@@ -82,7 +84,7 @@ async function openPopover(page: Page): Promise<Locator> {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs();
+	await resetPlannerJobs({ suggest: true });
 });
 
 test.afterEach(async () => {
