@@ -19,10 +19,6 @@ test("every agent names itself, how to install it, sign in and start it, and whe
 			expect(variable).toMatch(/^[A-Za-z_][A-Za-z0-9_]*=[\w.-]+$/);
 			expect(variable).not.toMatch(/^(PATH|CHOPIN_)/);
 		}
-		// What lets it run under the service is in the command it runs.
-		if (agent.autoApprove) {
-			expect([...agent.acp, ...agent.env]).toContain(agent.autoApprove);
-		}
 		if (agent.unattended !== true) expect(agent.unattended.setting).not.toBe("");
 	}
 });

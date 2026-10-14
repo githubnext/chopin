@@ -635,12 +635,12 @@ export function YourMachines(
 	);
 }
 
-/** How long step 5 waits before it says what to try when the machine hasn't turned up. */
+/** How long step 5 waits before it links to troubleshooting when the machine hasn't turned up. */
 const SLOW_HANDSHAKE_MS = 60_000;
 
 /**
  * Step 5 of the first setup: waiting for the machine, then the machine, connected. A wait past a
- * minute adds where to look.
+ * minute adds a link to troubleshooting.
  */
 export function Handshake({ machine }: { machine?: Machine }): ReactNode {
 	let waiting = !machine?.connected;
@@ -670,10 +670,9 @@ export function Handshake({ machine }: { machine?: Machine }): ReactNode {
 			</p>
 			{slow && (
 				<p className="machines-detail">
-					Not seeing it? Run <code>chopin status</code> on the machine, or see{" "}
 					<a href={SETUP_GUIDE_TROUBLESHOOTING} rel="noreferrer" target="_blank">
 						Troubleshooting
-					</a>.
+					</a>
 				</p>
 			)}
 		</>

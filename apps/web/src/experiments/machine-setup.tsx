@@ -1,28 +1,24 @@
 import { useEffect, useId, useState } from "react";
-import { CheckIcon, CopyIcon, InfoIcon } from "@chopin/icons";
+import { CheckIcon, CopyIcon } from "@chopin/icons";
 import { AGENTS, findAgent } from "./agents";
 import {
 	agentCommand,
 	connectCommand,
 	installCommand,
 	runsAsService,
-	SETUP_GUIDE_AGENTS,
-	SETUP_GUIDE_TROUBLESHOOTING,
+	SETUP_GUIDE,
 } from "./setup-commands";
 
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { CodingAgent } from "./agents";
 import type { SetupShell } from "./setup-commands";
 
 /**
  * A command to run, under a bar that names where to run it and copies it, so the button never
  * covers the command. Each line is its own block: on a desktop a longer line scrolls; on a phone
- * it wraps under a hanging indent, so every word stays in view. Copy takes `text` as it is. `rows`
- * keeps room for that many lines, so a shorter command doesn't pull up what follows.
+ * it wraps under a hanging indent, so every word stays in view. Copy takes `text` as it is.
  */
-function Command(
-	{ label, rows, shell, text }: { label: string; rows?: number; shell: SetupShell; text: string },
-) {
+function Command({ label, shell, text }: { label: string; shell: SetupShell; text: string }) {
 	let [copied, setCopied] = useState<"copied" | "failed">();
 	useEffect(() => {
 		if (!copied) return;
@@ -49,7 +45,7 @@ function Command(
 					{copied === "copied" ? "Copied" : copied === "failed" ? "Select to copy" : "Copy"}
 				</button>
 			</div>
-			<pre style={rows ? { "--machines-command-rows": rows } as CSSProperties : undefined}>
+			<pre>
 				<code>
 					{text.split("\n").map((line, index) => (
 						<span className="machines-command-line" key={index}>{line}</span>
@@ -67,46 +63,29 @@ const SHELLS: { shell: SetupShell; label: string }[] = [
 
 const AGENT_KEY = "chopin:machines:agent";
 
-/** The picker's groups: what Chopin has been tried with first. */
-const AGENT_GROUPS = [
-	{ label: "Tested with Chopin", agents: AGENTS.filter(agent => agent.testedWithChopin) },
-	{ label: "Not yet tested", agents: AGENTS.filter(agent => !agent.testedWithChopin) },
-];
-
 /**
- * Under the connect command: why the agent can run with nobody watching, or, for one that asks
- * for permission, that its terminal has to stay open and where the setting to change that is.
+ * Every agent's version of a step, laid in one place: the picked agent's shows, and the others,
+ * unseen, hold the step at the tallest of them, so switching agents never moves what follows.
  */
-function approvalNote(agent: CodingAgent): ReactNode {
-	if (!runsAsService(agent)) {
-		return (
-			<p>
-				Leave this terminal open: {agent.name}{" "}
-				asks for permission here, so closing it disconnects the machine.{" "}
-				<a href={SETUP_GUIDE_AGENTS} rel="noreferrer" target="_blank">Coding agents</a>{" "}
-				in the setup guide has the setting that lets it run as a service.
-			</p>
-		);
-	}
+function Steady(
+	{ agent, render }: { agent: CodingAgent; render: (agent: CodingAgent) => ReactNode },
+) {
 	return (
-		<p className="machines-detail">
-			{agent.autoApprove
-				? (
-					<>
-						<code>{agent.autoApprove}</code> lets {agent.name}{" "}
-						use its tools without asking, because nobody can answer a prompt in the background.
-					</>
-				)
-				: `${agent.name} doesn't ask before it uses its tools, so nothing waits on a prompt in the background.`}
-		</p>
+		<div className="machines-steady">
+			<div>{render(agent)}</div>
+			{AGENTS.filter(other => other !== agent).map(other => (
+				<div aria-hidden="true" className="machines-steady-ghost" inert key={other.id}>
+					{render(other)}
+				</div>
+			))}
+		</div>
 	);
 }
 
 /**
  * What to run on a machine to set it up with this server: install chopin, install and sign in to
- * the picked coding agent, then connect a checkout, which pairs the machine through this browser
- * and installs the background service, unless the agent must ask in the terminal. The last step
- * is `last`: on a first run, the live wait for the machine.
+ * the picked coding agent, connect a checkout, then approve the pairing in the browser. The last
+ * step is `last`: on a first run, the live wait for the machine.
  */
 export function MachineSetup(
 	{ headingId, last, title }: { headingId: string; last?: ReactNode; title: string },
@@ -116,12 +95,6 @@ export function MachineSetup(
 	);
 	let [agent, setAgent] = useState(() => findAgent(localStorage.getItem(AGENT_KEY)));
 	let pickerId = useId();
-	let noteId = useId();
-	let service = runsAsService(agent);
-	// The tallest connect command for this shell, whichever agent is picked.
-	let connectRows = Math.max(
-		...AGENTS.map(option => connectCommand(location.origin, shell, option).split("\n").length),
-	);
 	return (
 		<section aria-labelledby={headingId} className="machines-setup">
 			<h2 className="text-base font-semibold" id={headingId}>{title}</h2>
@@ -129,7 +102,6 @@ export function MachineSetup(
 				<div className="machines-agent">
 					<label htmlFor={pickerId}>Coding agent</label>
 					<select
-						aria-describedby={noteId}
 						className="field"
 						id={pickerId}
 						onChange={event => {
@@ -139,13 +111,7 @@ export function MachineSetup(
 						}}
 						value={agent.id}
 					>
-						{AGENT_GROUPS.map(group => (
-							<optgroup key={group.label} label={group.label}>
-								{group.agents.map(option => (
-									<option key={option.id} value={option.id}>{option.name}</option>
-								))}
-							</optgroup>
-						))}
+						{AGENTS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
 					</select>
 				</div>
 				<div aria-label="Operating system" className="machines-shells" role="group">
@@ -161,59 +127,54 @@ export function MachineSetup(
 						</button>
 					))}
 				</div>
-				{/* One line for every agent, so switching never moves the steps below. */}
-				<p className="machines-agent-note" id={noteId}>
-					{agent.testedWithChopin
-						? <CheckIcon aria-hidden="true" size={14} />
-						: <InfoIcon aria-hidden="true" size={14} />}
-					<span>
-						{agent.testedWithChopin ? "Tested with Chopin." : "Not yet tested with Chopin."}
-					</span>
-				</p>
 			</div>
 			<ol className="machines-steps">
 				<li>
-					<p>Install chopin.</p>
+					<p>Install chopin</p>
 					<Command label="install command" shell={shell} text={installCommand(shell)} />
 				</li>
 				<li>
-					<p>Install {agent.name} and sign in.</p>
-					<Command label="agent commands" shell={shell} text={agentCommand(agent, shell)} />
-				</li>
-				<li>
-					<p>
-						{service
-							? "In a checkout of your repository, run this. It pairs the machine and installs a background service, so it keeps running after you close the terminal or SSH."
-							: "In a checkout of your repository, connect this machine."}
-					</p>
-					<Command
-						label="connect command"
-						rows={connectRows}
-						shell={shell}
-						text={connectCommand(location.origin, shell, agent)}
-					/>
-					{approvalNote(agent)}
-				</li>
-				<li>
-					<p>
-						Open the link it prints, check that the code matches, and choose Connect. GitHub may ask
-						you to authorize the machine first.
-						{service && (
+					<Steady
+						agent={agent}
+						render={option => (
 							<>
-								{" "}Then the service takes over; <code>chopin status</code> shows it.
+								<p>Install {option.name} and sign in</p>
+								<Command
+									label="agent commands"
+									shell={shell}
+									text={agentCommand(option, shell)}
+								/>
 							</>
 						)}
-					</p>
+					/>
 				</li>
 				<li>
-					{last ?? <p>It appears below under Your machines.</p>}
+					<p>Connect from your repository</p>
+					<Steady
+						agent={agent}
+						render={option => (
+							<>
+								<Command
+									label="connect command"
+									shell={shell}
+									text={connectCommand(location.origin, shell, option)}
+								/>
+								{!runsAsService(option) && (
+									<p className="machines-detail">Keep this terminal open.</p>
+								)}
+							</>
+						)}
+					/>
+				</li>
+				<li>
+					<p>Open the link it prints, check the code, and approve</p>
+				</li>
+				<li>
+					{last ?? <p>It appears below</p>}
 				</li>
 			</ol>
 			<p className="machines-detail">
-				If a step doesn't work, see{" "}
-				<a href={SETUP_GUIDE_TROUBLESHOOTING} rel="noreferrer" target="_blank">Troubleshooting</a>
-				{" "}
-				in the setup guide.
+				<a href={SETUP_GUIDE} rel="noreferrer" target="_blank">Setup guide</a>
 			</p>
 		</section>
 	);

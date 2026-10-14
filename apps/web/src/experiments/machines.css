@@ -115,24 +115,6 @@
 	}
 }
 
-/* Whether Chopin has been tried with the picked agent: quiet, under the picker, one line for each. */
-.machines-agent-note {
-	display: flex;
-	flex-basis: 100%;
-	gap: calc(var(--spacing) * 1.5);
-	margin: 0;
-	color: var(--color-text-tertiary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	text-wrap: pretty;
-
-	& svg {
-		--color-icon: var(--color-text-tertiary);
-		flex: none;
-		margin-top: calc(var(--spacing) * 0.25);
-	}
-}
-
 .machines-shells {
 	display: flex;
 	gap: calc(var(--spacing) * 1.5);
@@ -166,7 +148,8 @@
 		margin-top: calc(var(--spacing) * 5);
 	}
 
-	& > li > * + * {
+	& > li > * + *,
+	& .machines-steady > * > * + * {
 		margin-top: calc(var(--spacing) * 2);
 	}
 
@@ -183,9 +166,18 @@
 		text-wrap: pretty;
 	}
 
-	/* A note on a command runs as wide as its well. */
-	& .machines-command + .machines-detail {
-		max-width: none;
+	/* Every agent's version of a step in one cell; only the picked one shows. */
+	& .machines-steady {
+		display: grid;
+
+		& > * {
+			grid-area: 1 / 1;
+			min-width: 0;
+		}
+	}
+
+	& .machines-steady-ghost {
+		visibility: hidden;
 	}
 }
 
@@ -271,10 +263,8 @@
 		white-space: pre;
 	}
 
-	/* Room for the tallest command of its kind, where the well asks for it. */
 	& code {
 		display: block;
-		min-height: calc(var(--machines-command-rows, 0) * 1lh);
 		color: var(--color-text-primary);
 		font-family: var(--font-mono);
 		font-size: var(--text-xs);
@@ -297,12 +287,6 @@
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 	text-wrap: pretty;
-}
-
-/* A command or flag named in a sentence, at the sentence's size. */
-.machines-steps p code {
-	color: var(--color-text-primary);
-	font-family: var(--font-mono);
 }
 
 .machines-setup a,
@@ -622,8 +606,7 @@
 		height: var(--control-target-coarse);
 	}
 
-	& .machines-setup .machines-detail a,
-	& .machines-steps p a {
+	& .machines-setup .machines-detail a {
 		position: relative;
 
 		&::after {

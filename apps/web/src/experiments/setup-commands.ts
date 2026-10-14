@@ -61,8 +61,6 @@ export function agentCommand(agent: CodingAgent, shell: SetupShell): string {
 }
 
 export const SETUP_GUIDE = "https://github.com/githubnext/chopin/blob/main/docs/chopin-cli.md";
-/** The guide's agent table and notes, with the setting that lets Claude Code run as a service. */
-export const SETUP_GUIDE_AGENTS = `${SETUP_GUIDE}#coding-agents`;
 export const SETUP_GUIDE_TROUBLESHOOTING = `${SETUP_GUIDE}#troubleshooting`;
 
 /** Installs the release this server recommends over the machine's chopin, as `chopin help` says. */

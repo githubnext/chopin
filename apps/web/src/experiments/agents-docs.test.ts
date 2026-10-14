@@ -2,12 +2,7 @@ import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENTS } from "./agents";
-import {
-	agentArguments,
-	SETUP_GUIDE,
-	SETUP_GUIDE_AGENTS,
-	SETUP_GUIDE_TROUBLESHOOTING,
-} from "./setup-commands";
+import { agentArguments, SETUP_GUIDE, SETUP_GUIDE_TROUBLESHOOTING } from "./setup-commands";
 
 import type { CodingAgent } from "./agents";
 
@@ -78,11 +73,8 @@ async function anchors(path: string): Promise<string[]> {
 	);
 }
 
-test("the setup guide sections the Machines page links to are headings in the guide", async () => {
-	let headings = await anchors("docs/chopin-cli.md");
-	for (let link of [SETUP_GUIDE_AGENTS, SETUP_GUIDE_TROUBLESHOOTING]) {
-		let [page, anchor] = link.split("#");
-		expect(page).toBe(SETUP_GUIDE);
-		expect(headings).toContain(anchor!);
-	}
+test("the setup guide section the Machines page links to is a heading in the guide", async () => {
+	let [page, anchor] = SETUP_GUIDE_TROUBLESHOOTING.split("#");
+	expect(page).toBe(SETUP_GUIDE);
+	expect(await anchors("docs/chopin-cli.md")).toContain(anchor!);
 });

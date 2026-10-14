@@ -18,8 +18,6 @@ export interface CodingAgent {
 	acp: string[];
 	/** `--env KEY=VALUE` variables the agent needs under Chopin. */
 	env: string[];
-	/** The flag or variable, as written in `acp` or `env`, that approves its tools without asking. */
-	autoApprove?: string;
 	/**
 	 * Whether it can run under the background service, where nobody can answer a permission prompt;
 	 * if not, the setting that makes it approve its own tools.
@@ -37,7 +35,6 @@ export const AGENTS: readonly CodingAgent[] = [
 		signIn: { command: ["copilot", "login"] },
 		acp: ["copilot", "--acp", "--allow-all"],
 		env: [],
-		autoApprove: "--allow-all",
 		unattended: true,
 		docs: "https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server",
 		testedWithChopin: true,
@@ -77,7 +74,6 @@ export const AGENTS: readonly CodingAgent[] = [
 		signIn: { command: ["codex", "login"] },
 		acp: ["codex-acp"],
 		env: ["INITIAL_AGENT_MODE=agent-full-access"],
-		autoApprove: "INITIAL_AGENT_MODE=agent-full-access",
 		unattended: true,
 		docs: "https://github.com/agentclientprotocol/codex-acp",
 		testedWithChopin: false,
@@ -89,7 +85,6 @@ export const AGENTS: readonly CodingAgent[] = [
 		signIn: { command: ["gemini"], afterward: "sign in, then quit" },
 		acp: ["gemini", "--acp", "--yolo"],
 		env: [],
-		autoApprove: "--yolo",
 		unattended: true,
 		docs: "https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md",
 		testedWithChopin: false,

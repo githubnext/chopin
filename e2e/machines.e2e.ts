@@ -84,8 +84,9 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	// The browser's own system is chosen first; either can be picked. Each command keeps its own
 	// line breaks, each with the shell's continuation.
 	let install = steps.nth(0).locator("pre code");
-	let agentSteps = steps.nth(1).locator("pre code");
-	let command = steps.nth(2).locator("pre code");
+	// The agent and connect steps lay out every agent's version unseen, so only the picked one shows.
+	let agentSteps = steps.nth(1).locator("pre code").filter({ visible: true });
+	let command = steps.nth(2).locator("pre code").filter({ visible: true });
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "sh"));
@@ -94,71 +95,59 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
-	// The connect step says it installs the background service, and the next that it takes over.
-	await expect(steps.nth(2).locator("p").first()).toHaveText(
-		"In a checkout of your repository, run this. It pairs the machine and installs a background service, so it keeps running after you close the terminal or SSH.",
-	);
-	await expect(steps.nth(3).locator("p")).toHaveText(
-		"Open the link it prints, check that the code matches, and choose Connect. GitHub may ask you to authorize the machine first. Then the service takes over; chopin status shows it.",
-	);
-	await expect(steps.nth(3).locator("code")).toHaveText("chopin status");
+	// Each step is a short label over its command.
+	await expect(steps.nth(0).locator("p")).toHaveText("Install chopin");
+	await expect(steps.nth(2).locator("p").first()).toHaveText("Connect from your repository");
+	await expect(steps.nth(3)).toHaveText("Open the link it prints, check the code, and approve");
+	await expect(setup.getByRole("link", { name: "Setup guide", exact: true }))
+		.toHaveAttribute("href", /docs\/chopin-cli\.md$/);
 
-	// GitHub Copilot CLI is picked first. Picking another coding agent changes only its install and
-	// connect steps, and says what to know about it; the pick outlasts a reload.
+	// GitHub Copilot CLI is picked first, in one flat list. Picking another coding agent changes
+	// only its install and connect steps; the pick outlasts a reload.
 	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
 	await expect(picker).toHaveValue("copilot");
-	await expect(picker).toHaveAccessibleDescription("Tested with Chopin.");
-	// The list puts the agents Chopin has been tried with first.
-	expect(
-		await picker.locator("optgroup").evaluateAll(groups =>
-			groups.map(group => [
-				group.getAttribute("label"),
-				[...group.querySelectorAll("option")].map(option => option.textContent),
-			])
-		),
-	).toEqual([
-		["Tested with Chopin", ["GitHub Copilot CLI", "Atomic"]],
-		["Not yet tested", ["Claude Code", "OpenAI Codex", "Gemini CLI"]],
+	expect(await picker.locator("option").allTextContents()).toEqual([
+		"GitHub Copilot CLI",
+		"Atomic",
+		"Claude Code",
+		"OpenAI Codex",
+		"Gemini CLI",
 	]);
-	await expect(steps.nth(1)).toContainText("Install GitHub Copilot CLI and sign in.");
+	await expect(picker.locator("optgroup")).toHaveCount(0);
+	let agentLabel = steps.nth(1).locator("p").filter({ visible: true });
+	await expect(agentLabel).toHaveText("Install GitHub Copilot CLI and sign in");
 	await expect.poll(() => agentSteps.innerText()).toBe(
 		agentCommand(findAgent("copilot"), "powershell"),
 	);
-	// Under the connect command, what its approval flag lets the agent do, and why.
-	let approval = steps.nth(2).locator(".machines-detail");
-	await expect(approval).toHaveText(
-		"--allow-all lets GitHub Copilot CLI use its tools without asking, because nobody can answer a prompt in the background.",
-	);
+	let keepOpen = steps.nth(2).getByText("Keep this terminal open.", { exact: true })
+		.filter({ visible: true });
+	await expect(keepOpen).toHaveCount(0);
+	// The steps after the connect command stay put, whichever agent is picked.
+	let approve = async () => (await steps.nth(3).boundingBox())!.y;
+	let approveAt = await approve();
 	await picker.selectOption({ label: "Atomic" });
-	await expect(steps.nth(1)).toContainText("Install Atomic and sign in.");
+	await expect(agentLabel).toHaveText("Install Atomic and sign in");
 	await expect.poll(() => agentSteps.innerText()).toBe(
 		agentCommand(findAgent("atomic"), "powershell"),
 	);
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "powershell", findAgent("atomic")));
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
-	await expect(approval).toHaveText(
-		"Atomic doesn't ask before it uses its tools, so nothing waits on a prompt in the background.",
-	);
-	// Claude Code asks in the terminal, so it runs there instead of as the service: the connect
-	// step says to leave that terminal open, and the steps don't mention the service.
+	expect(await approve()).toBe(approveAt);
+	// Claude Code asks in the terminal, so it runs there instead of as the service, and its
+	// connect step says to keep that terminal open.
 	await picker.selectOption({ label: "Claude Code" });
-	await expect(picker).toHaveAccessibleDescription("Not yet tested with Chopin.");
-	await expect(steps.nth(2).locator("p").first())
-		.toHaveText("In a checkout of your repository, connect this machine.");
-	await expect(steps.nth(2).locator("p").last()).toHaveText(
-		"Leave this terminal open: Claude Code asks for permission here, so closing it disconnects the machine. Coding agents in the setup guide has the setting that lets it run as a service.",
-	);
-	await expect(steps.nth(2).getByRole("link", { name: "Coding agents", exact: true }))
-		.toHaveAttribute("href", /docs\/chopin-cli\.md#coding-agents$/);
-	await expect(steps.nth(3)).not.toContainText("service");
+	await expect.poll(() => command.innerText())
+		.toBe(connectCommand(origin, "powershell", findAgent("claude-code")));
+	await expect(keepOpen).toBeVisible();
+	expect(await approve()).toBe(approveAt);
 	await page.reload();
 	await expect(picker).toHaveValue("claude-code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "sh", findAgent("claude-code")));
 	await picker.selectOption({ label: "GitHub Copilot CLI" });
-	await expect(picker).toHaveAccessibleDescription("Tested with Chopin.");
+	await expect(keepOpen).toHaveCount(0);
 
 	let machine = await connector(baseURL!);
 	try {
@@ -237,21 +226,17 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	}
 });
 
-test("a wait past a minute says where to look, and a phone wraps each command in view", async ({ join: enter }) => {
+test("a wait past a minute links to troubleshooting, and a phone wraps each command in view", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	await page.clock.install();
 	await page.goto("/connect");
 	let setup = page.getByRole("region", { name: "Add your first machine", exact: true });
-	let help = setup.getByText("Not seeing it?");
+	let help = setup.getByRole("link", { name: "Troubleshooting", exact: true });
 	await expect(setup.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
 	await page.clock.fastForward(30_000);
 	await expect(help).toHaveCount(0);
 	await page.clock.fastForward(31_000);
-	await expect(help).toHaveText(
-		"Not seeing it? Run chopin status on the machine, or see Troubleshooting.",
-	);
-	await expect(help.getByRole("link", { name: "Troubleshooting", exact: true }))
-		.toHaveAttribute("href", /docs\/chopin-cli\.md#troubleshooting$/);
+	await expect(help).toHaveAttribute("href", /docs\/chopin-cli\.md#troubleshooting$/);
 
 	// No command scrolls sideways; each wraps inside its well and still reads as what Copy takes.
 	for (let well of await setup.locator(".machines-command pre").all()) {
@@ -260,4 +245,14 @@ test("a wait past a minute says where to look, and a phone wraps each command in
 	let install = setup.getByRole("listitem").nth(0).locator("pre code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();
 	await expect.poll(() => install.innerText()).toBe(installCommand("sh"));
+
+	// Where commands wrap, switching agents still never moves the steps below them.
+	let picker = setup.getByRole("combobox", { name: "Coding agent", exact: true });
+	let approve = async () => (await setup.getByRole("listitem").nth(3).boundingBox())!.y;
+	let approveAt = await approve();
+	for (let id of ["atomic", "claude-code", "codex", "gemini"]) {
+		await picker.selectOption(id);
+		await expect(picker).toHaveValue(id);
+		expect(await approve()).toBe(approveAt);
+	}
 });
