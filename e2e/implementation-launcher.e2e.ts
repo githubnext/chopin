@@ -548,6 +548,37 @@ test(
 	},
 );
 
+test("the agent-offline notice folds to its glyph before the document's title gives way", async ({ seed, join: enter }) => {
+	await seed(
+		"# A rather long document title for the header row\n\nNo local agent is connected.\n",
+		{
+			graph: preparedGraph(),
+		},
+	);
+	let page = await enter(person(), { viewport: { width: 1100, height: 800 } });
+	await page.getByRole("button", { name: "Build plan", exact: true }).click();
+	let notice = page.getByRole("button", { name: "Agent offline", exact: true });
+	await expect(notice).toBeVisible();
+	let shots = process.env.CHOPIN_SHOTS;
+	// A title bar about 600px wide beside Chat, a narrower one, then a narrow window's header.
+	for (let width of [1100, 900, 600, 320]) {
+		await page.setViewportSize({ width, height: 800 });
+		let bar = page.locator(width >= 700 ? ".document-title-bar" : ".room-header");
+		let title = bar.locator(".title-control").first();
+		await expect(notice).toBeVisible();
+		await expect(notice).toBeInViewport({ ratio: 1 });
+		// The title keeps room for ten or so characters; the notice gave way first.
+		await expect.poll(() => title.evaluate(item => item.getBoundingClientRect().width))
+			.toBeGreaterThanOrEqual(80);
+		let [barBox, noticeBox] = [(await bar.boundingBox())!, (await notice.boundingBox())!];
+		expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(barBox.x + barBox.width);
+		if (shots) await bar.screenshot({ path: `${shots}/agent-offline-header-${width}.png` });
+	}
+	// Folded, the glyph still opens Build, which says how to connect the agent.
+	await notice.click();
+	await expect(buildView(page).getByText(/Your local agent isn’t connected/)).toBeVisible();
+});
+
 test(
 	"Build plan waits for unanswered decisions and says so",
 	async ({ seed, join: enter }) => {

@@ -539,7 +539,11 @@ export function BuildPlanButton(
 	let busy = build.busy || build.rebuilding;
 	return (
 		<>
-			<span className={phone ? "build-status" : "build-capsule-row"} key="capsule">
+			<span
+				className={phone ? "build-status" : "build-capsule-row"}
+				data-agent-offline={connectAgent || undefined}
+				key="capsule"
+			>
 				<button
 					aria-describedby={look.tip ? reason : undefined}
 					aria-label={compact ? label : undefined}
@@ -579,7 +583,13 @@ export function BuildPlanButton(
 				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
 				{connectAgent
 					? (
-						<Suspense fallback={<span className="text-sm text-text-secondary">Connect agent</span>}>
+						<Suspense
+							fallback={
+								<span className="build-connection-trigger text-sm text-text-secondary">
+									Connect agent
+								</span>
+							}
+						>
 							<BuildConnectionPopover
 								documentURL={documentURL!}
 								kind="agent"

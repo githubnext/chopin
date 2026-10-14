@@ -132,6 +132,44 @@
 	display: inline-grid;
 }
 
+/*
+ * The agent-offline notice gives way before the document's title, as the machine button beside it
+ * does. In a narrow title bar its words fold into the warning glyph, whose button keeps them as its
+ * name, and the machine button beside it folds to its glyph sooner than it otherwise would, so
+ * Connect agent stays. In a phone-wide window's header Connect agent goes too, leaving the glyph,
+ * which opens Build and the command that connects the agent.
+ */
+@container document-title-bar (max-width: 40rem) {
+	.build-capsule-row[data-agent-offline] .build-capsule-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.build-capsule-row[data-agent-offline] .build-capsule {
+		padding-inline: calc(var(--spacing) * 2);
+	}
+}
+
+@container document-title-bar (max-width: 32rem) {
+	.build-capsule-row[data-agent-offline] .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.build-capsule-row[data-agent-offline] :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
+@media (max-width: 600px) {
+	.room-header .build-capsule-row[data-agent-offline] > .build-connection-trigger {
+		display: none;
+	}
+}
+
 .build-capsule-refusal {
 	max-width: calc(var(--spacing) * 60);
 	overflow: hidden;

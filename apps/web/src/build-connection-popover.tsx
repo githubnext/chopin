@@ -69,11 +69,13 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 	return (
 		<Popover.Root onOpenChange={() => setCopied("")}>
 			<Popover.Trigger
-				className={phone
-					? "build-status-link"
-					: outline
-					? "btn btn-compact btn-outline"
-					: "btn btn-compact btn-primary build-plan shrink-0"}
+				className={`build-connection-trigger ${
+					phone
+						? "build-status-link"
+						: outline
+						? "btn btn-compact btn-outline"
+						: "btn btn-compact btn-primary build-plan shrink-0"
+				}`}
 			>
 				{label}
 			</Popover.Trigger>
