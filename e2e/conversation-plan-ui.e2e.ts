@@ -268,7 +268,7 @@ test("a parent source highlight survives a child panel without creating child Ch
 	await expect.poll(highlightedRooms).toEqual([room]);
 	await expect(parent.locator(`[data-chat-message-id="${parentMessageId}"]`))
 		.toHaveAttribute("data-source-exact", "true");
-	await page.getByRole("button", { name: `Close ${childTitle}` }).click();
+	await page.getByRole("button", { name: `Back to Test ${room.slice(0, 8)}`, exact: true }).click();
 	await page.clock.runFor(500);
 	await expect.poll(highlightedRooms).toEqual([room]);
 	await expect(childWorkspace).toHaveCount(0);

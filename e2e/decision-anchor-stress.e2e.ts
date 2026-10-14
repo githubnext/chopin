@@ -85,8 +85,12 @@ function expectLinked(snapshot: Plan.Open.Reply, widget?: string): string {
 	return linked!.widget;
 }
 
-async function placeCaretAtParagraphEnd(page: Page, textContent: string) {
-	return content(page).evaluate((root, expectedText) => {
+async function placeCaretAtParagraph(
+	page: Page,
+	textContent: string,
+	position: "start" | "end",
+) {
+	return content(page).evaluate((root, { expectedText, position }) => {
 		let paragraph = [...root.querySelectorAll(":scope > p")].find(
 			item => item.textContent === expectedText,
 		);
@@ -96,7 +100,7 @@ async function placeCaretAtParagraphEnd(page: Page, textContent: string) {
 		if (!selection) throw new Error("selection unavailable");
 		(root as HTMLElement).focus();
 		let range = document.createRange();
-		range.setStart(text, text.data.length);
+		range.setStart(text, position === "start" ? 0 : text.data.length);
 		range.collapse(true);
 		selection.removeAllRanges();
 		selection.addRange(range);
@@ -104,10 +108,11 @@ async function placeCaretAtParagraphEnd(page: Page, textContent: string) {
 			active: document.activeElement === root,
 			anchor: selection.anchorNode === text,
 			atEnd: selection.anchorOffset === text.data.length,
+			atStart: selection.anchorOffset === 0,
 			paragraph: paragraph?.textContent ?? null,
 			contentEditable: (root as HTMLElement).contentEditable,
 		};
-	}, textContent);
+	}, { expectedText: textContent, position });
 }
 
 async function expectResolvedDecision(page: Page, room: string) {
@@ -250,7 +255,9 @@ test(
 	"adjacent edits and a reconnect preserve a resolved decision's prose anchor",
 	async ({ join, page, room }, testInfo) => {
 		let sockets: WebSocketRoute[] = [];
+		let offline = false;
 		await page.routeWebSocket("**/ws?**", route => {
+			if (offline) return route.close();
 			route.connectToServer();
 			sockets.push(route);
 		});
@@ -275,11 +282,10 @@ test(
 		widget = expectLinked(await latestDocumentSnapshot(editor, room), widget);
 
 		// Shift the associated paragraph down by inserting context above it.
-		await prose(editor).click();
-		await editor.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
-		await editor.keyboard.press("Enter");
-		await editor.keyboard.press("ArrowUp");
+		expect(await placeCaretAtParagraph(editor, await prose(editor).innerText(), "start"))
+			.toMatchObject({ active: true, anchor: true, atStart: true, contentEditable: "true" });
 		await editor.keyboard.type("Earlier context.");
+		await editor.keyboard.press("Enter");
 		let context = content(editor).locator("p").filter({ hasText: "Earlier context." });
 		await expect(context).toHaveText("Earlier context.");
 		let order = await content(editor).locator("p").allTextContents();
@@ -291,7 +297,7 @@ test(
 		widget = expectLinked(await latestDocumentSnapshot(editor, room), widget);
 
 		// An edited anchored paragraph should retain the same live relation.
-		expect(await placeCaretAtParagraphEnd(editor, await prose(editor).innerText()))
+		expect(await placeCaretAtParagraph(editor, await prose(editor).innerText(), "end"))
 			.toMatchObject({ active: true, anchor: true, atEnd: true, contentEditable: "true" });
 		await editor.keyboard.type(" Still the same decision.");
 		await expect(prose(editor)).toContainText("Still the same decision.");
@@ -300,10 +306,13 @@ test(
 		await expectResolvedDecision(editor, room);
 
 		// Drop the UI connection and let the provider reopen the document itself.
+		offline = true;
 		await sockets[0]!.close();
 		await expect(content(editor)).toHaveAttribute("contenteditable", "false");
+		offline = false;
+		await editor.evaluate(() => window.dispatchEvent(new Event("online")));
 		await expect(content(editor)).toHaveAttribute("contenteditable", "true", { timeout: 20_000 });
-		expect(await placeCaretAtParagraphEnd(editor, await prose(editor).innerText()))
+		expect(await placeCaretAtParagraph(editor, await prose(editor).innerText(), "end"))
 			.toMatchObject({ active: true, anchor: true, atEnd: true, contentEditable: "true" });
 		await editor.keyboard.type(" After reconnect.");
 		await expect(prose(editor)).toContainText("After reconnect.");
@@ -347,11 +356,12 @@ test(
 			hasText: /^Move destination\.$/,
 		});
 		await expect(destination).toHaveCount(1);
-		let caret = await placeCaretAtParagraphEnd(page, "Move destination.");
+		let caret = await placeCaretAtParagraph(page, "Move destination.", "end");
 		expect(caret).toEqual({
 			active: true,
 			anchor: true,
 			atEnd: true,
+			atStart: false,
 			paragraph: "Move destination.",
 			contentEditable: "true",
 		});

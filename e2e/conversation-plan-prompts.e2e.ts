@@ -199,11 +199,11 @@ test("one person's scoped choice saves through the authenticated wire and surviv
 	await expect(cardById(ana, cardId)).toBeVisible();
 
 	await ana.reload();
+	await ana.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 	await expect(content(ana)).toHaveAttribute("contenteditable", "true");
 	await openJevWire(ana, room);
 	await expect(scopedPrompt(ana)).toBeVisible();
-	await ana.getByRole("group", { name: "Document view" })
-		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 	await expect(scopedPrompt(ana)).toContainText("Saved for this spike");
 	await expect(
 		scopedPrompt(ana).getByRole("button", {
