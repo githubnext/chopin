@@ -10,8 +10,12 @@ export function implementationStatus(plan: Plan) {
 	};
 }
 
-/** The lock each open plan last announced, so a release is reported once. */
+/** Last observed lock, seeded on open so a restored build can announce its release once. */
 let announced = new WeakMap<Plan, boolean>();
+
+export function rememberImplementationLock(plan: Plan): void {
+	announced.set(plan, implementationStatus(plan).locked);
+}
 
 export function announceImplementation(plan: Plan) {
 	let status = implementationStatus(plan);
@@ -22,7 +26,7 @@ export function announceImplementation(plan: Plan) {
 	});
 	let wasLocked = announced.get(plan);
 	announced.set(plan, status.locked);
-	if (wasLocked && !status.locked && plan.persistence.liveBuild) {
+	if (wasLocked && !status.locked) {
 		plan.persistence.onEditingUnlocked?.(plan.id);
 	}
 }

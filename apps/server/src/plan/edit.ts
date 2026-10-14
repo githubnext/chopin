@@ -259,8 +259,11 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 	try {
 		root = parse(source(plan));
 		proposed = parse(nextSource);
-		if (plan.document.titleKey !== undefined) {
-			proposed = normalizeDocumentTitleTree(proposed, documentTitleText(root) ?? "");
+		if (plan.document.titleKey !== undefined || plan.persistence?.documentTitles) {
+			proposed = normalizeDocumentTitleTree(
+				proposed,
+				documentTitleText(root) ?? plan.persistence?.committedTitle ?? "",
+			);
 		}
 	} catch (err) {
 		return { ok: false, reason: "invalid", message: reason(err) };

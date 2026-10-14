@@ -116,7 +116,7 @@ test("links a first build refused are owed only once its lock releases", async (
 	expect(instruction).toContain("anchor_plan");
 });
 
-test("a released first build asks for re-linking once, and never with the flag off", async () => {
+test("every released first build notifies once, while relinking stays gated", async () => {
 	let { plan } = await answered(true);
 	let unlocked: string[] = [];
 	plan.persistence.onEditingUnlocked = id => unlocked.push(id);
@@ -141,6 +141,6 @@ test("a released first build asks for re-linking once, and never with the flag o
 	announceImplementation(off);
 	off.builds = [build(undefined, "stopped")];
 	announceImplementation(off);
-	expect(unlocked).toEqual([plan.id]);
+	expect(unlocked).toEqual([plan.id, off.id]);
 	expect(pendingLinks(off)).toEqual([]);
 });

@@ -284,9 +284,11 @@ function documentBackend(): Service.Backend {
 				let opened = Rooms.get(id)?.plan;
 				if (opened) await Service.exclusive(opened, () => Service.activateTitles(opened));
 			}).catch(err => console.error("chopin: could not initialize unlocked document title -", err));
-			void relinkDecisions(id).catch(err =>
-				console.error("chopin: could not re-link decisions after a build -", err)
-			);
+			if (config.liveBuild) {
+				void relinkDecisions(id).catch(err =>
+					console.error("chopin: could not re-link decisions after a build -", err)
+				);
+			}
 			// Spike callouts the lock deferred land now.
 			void spikeScout?.refresh(id);
 		},

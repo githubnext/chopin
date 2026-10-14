@@ -206,7 +206,7 @@ const MAX_BODY_BYTES = Math.max(MAX_REQUEST_BYTES, MAX_IMAGE_REQUEST_BYTES);
 
 const DOCUMENT_IDENTITY = {
 	id: { type: "string" },
-	title: { type: "string", maxLength: MAX_TITLE_LENGTH },
+	title: { type: "string" },
 	description: { type: "string" },
 };
 
@@ -438,7 +438,8 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "rename_document",
-		description: "Rename a Chopin document without changing its canonical plan or revision.",
+		description:
+			"Rename a document's leading H1, display title and URL together. Authored changes advance its revision.",
 		inputSchema: {
 			type: "object",
 			properties: {

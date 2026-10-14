@@ -1,3 +1,4 @@
+import { Compile } from "typebox/compile";
 import { describe, expect, it } from "bun:test";
 
 import { handler, TOOLS } from "../mcp";
@@ -83,6 +84,49 @@ describe("the MCP document protocol", () => {
 			});
 		}
 	});
+
+	it.each(["unopened", "archived", "active"])(
+		"validates retained legacy titles in %s document list and read outputs",
+		async state => {
+			let legacy = {
+				...document,
+				title: "x".repeat(120),
+				...(state === "archived" ? { archivedAt: "2026-10-14T12:00:00.000Z" } : {}),
+			};
+			let mcp = endpoint({
+				async list() {
+					return [{
+						id: legacy.id,
+						title: legacy.title,
+						...(legacy.archivedAt ? { archivedAt: legacy.archivedAt } : {}),
+					}];
+				},
+				async read() {
+					return legacy;
+				},
+			});
+			for (let name of ["list_documents", "read_document"]) {
+				let tool = TOOLS.find(tool => tool.name === name)!;
+				let response = await json(
+					await mcp(
+						request({
+							jsonrpc: "2.0",
+							id: 1,
+							method: "tools/call",
+							params: {
+								name,
+								arguments: name === "list_documents"
+									? { repository: "githubnext/chopin", includeArchived: true }
+									: { id: legacy.id },
+							},
+						}),
+					),
+				);
+				let output = (response.result as { structuredContent: unknown }).structuredContent;
+				expect(Compile(tool.outputSchema).Check(output)).toBe(true);
+			}
+		},
+	);
 
 	it("authenticates initialize, lists repository documents, and reads canonical source", async () => {
 		let mcp = endpoint();

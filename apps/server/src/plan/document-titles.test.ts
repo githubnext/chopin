@@ -1,3 +1,4 @@
+import { announceImplementation } from "../tasks/notifications";
 import { $createHeadingNode } from "@chopin/dialect";
 import * as Y from "yjs";
 import { $createTextNode, $getRoot, $isElementNode } from "lexical";
@@ -223,8 +224,15 @@ describe("synchronized product document titles", () => {
 		expect(Service.source(plan)).toBe("Body.\n");
 		expect((await c.storage.channels.get(plan.id))?.revision).toBe(0);
 		await expect(Service.rename(plan, "Blocked")).rejects.toThrow("implementation is active");
+		let activation: Promise<void> | undefined;
+		plan.persistence.liveBuild = false;
+		plan.persistence.onEditingUnlocked = () => {
+			activation = Service.exclusive(plan, () => Service.activateTitles(plan));
+		};
 		plan.builds[0]!.state = "stopped";
-		await Service.exclusive(plan, () => Service.activateTitles(plan));
+		announceImplementation(plan);
+		expect(activation).toBeDefined();
+		await activation;
 		expect(Service.source(plan)).toBe("# Friendly name\n\nBody.\n");
 		await Service.exclusive(plan, () => Service.rename(plan, "Unlocked"));
 		expect((await c.storage.channels.get(plan.id))?.title).toBe("Unlocked");
@@ -237,6 +245,19 @@ describe("synchronized product document titles", () => {
 		await Service.publish(plan, c.server, plan.id, changed.mutation);
 		expect(Service.source(plan)).toBe("# Next title\n\nBody.\n");
 		expect((await c.storage.channels.get(plan.id))?.title).toBe("Next title");
+		await Service.close(plan);
+	});
+
+	it("returns an invalid rewrite for malformed source while legacy title activation is pending", async () => {
+		let c = await context("Body.\n", true);
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		plan.builds[0]!.state = "stopped";
+		let outcome = await Service.exclusive(plan, () =>
+			Service.rewrite(plan, "<broken", () => {
+				throw new Error("invalid source must not produce a receipt");
+			}));
+		expect(outcome).toMatchObject({ ok: false, reason: "invalid" });
+		expect(Service.source(plan)).toBe("Body.\n");
 		await Service.close(plan);
 	});
 

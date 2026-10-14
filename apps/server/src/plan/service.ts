@@ -6,7 +6,11 @@ import {
 	withDocumentTitle,
 } from "@chopin/dialect";
 import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
-import { announceImplementation, implementationStatus } from "../tasks/notifications";
+import {
+	announceImplementation,
+	implementationStatus,
+	rememberImplementationLock,
+} from "../tasks/notifications";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 /**
  * The plan, as a room offers it.
@@ -128,7 +132,7 @@ export type Backend = {
 	liveBuild?: boolean;
 	/** A build reached a terminal state after its stop was persisted. */
 	onBuildStopped?: (channelId: string) => void;
-	/** A living document's editing lock was released and announced; links it refused are owed. */
+	/** A document's editing lock was released and announced. */
 	onEditingUnlocked?: (channelId: string) => void;
 };
 
@@ -1528,6 +1532,7 @@ export async function open(
 		console.error(`[plan] could not carry anchors into ${id}:`, err);
 	}
 
+	rememberImplementationLock(plan);
 	return plan;
 }
 
@@ -1862,6 +1867,12 @@ export async function publishStaged(
 		(plan.document.titleKey !== undefined || plan.persistence.documentTitles)
 		&& candidate.document.titleKey === undefined
 	) {
+		if (
+			plan.document.titleKey !== undefined
+			&& documentTitleText(parse(room.project(candidate.document))) !== undefined
+		) {
+			room.trackTitle(candidate.document);
+		}
 		let normalized = room.enableTitle(
 			candidate.document,
 			documentTitleText(parse(room.project(plan.document))) ?? plan.persistence.committedTitle,
@@ -1937,9 +1948,7 @@ export async function rewrite(
 		before,
 		[],
 	);
-	if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
-		room.enableTitle(document, plan.persistence.committedTitle);
-	}
+	if (plan.document.titleKey !== undefined) room.trackTitle(document);
 	document.seq = plan.document.seq;
 	let candidate: Plan = {
 		...plan,
@@ -1953,6 +1962,7 @@ export async function rewrite(
 		Questions.rebase(candidate);
 		Comments.rebase(candidate);
 		let outcome = edit.replace(candidate, plan.revision, nextSource);
+		if (outcome.ok && plan.persistence.documentTitles) room.trackTitle(document);
 		if (!outcome.ok) return outcome;
 		let source = room.project(document);
 		let changed = source !== before;
@@ -2311,9 +2321,7 @@ export function placeResearchReference(plan: Plan, id: string): Promise<"placed"
 			room.project(plan.document),
 			[],
 		);
-		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
-			room.enableTitle(document, plan.persistence.committedTitle);
-		}
+		if (plan.document.titleKey !== undefined) room.trackTitle(document);
 		document.seq = plan.document.seq;
 		try {
 			let mutation = room.insertResearch(document, id);
@@ -2348,9 +2356,7 @@ export function placeInvestigationReference(
 			room.project(plan.document),
 			[],
 		);
-		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
-			room.enableTitle(document, plan.persistence.committedTitle);
-		}
+		if (plan.document.titleKey !== undefined) room.trackTitle(document);
 		document.seq = plan.document.seq;
 		try {
 			let { mutation, placement } = room.insertInvestigation(document, id, after);
@@ -2393,9 +2399,7 @@ export function placeExperimentReference(
 			room.project(plan.document),
 			[],
 		);
-		if (plan.document.titleKey !== undefined || plan.persistence.documentTitles) {
-			room.enableTitle(document, plan.persistence.committedTitle);
-		}
+		if (plan.document.titleKey !== undefined) room.trackTitle(document);
 		document.seq = plan.document.seq;
 		try {
 			let mutation = room.placeExperiment(document, experiment, view, decision, remove);
@@ -2425,7 +2429,7 @@ export async function rename(
 		before,
 		[],
 	);
-	room.enableTitle(document);
+	if (plan.document.titleKey !== undefined) room.trackTitle(document);
 	document.seq = plan.document.seq;
 	let candidate: Plan = {
 		...plan,
@@ -2437,6 +2441,7 @@ export async function rename(
 	try {
 		let outcome = edit.replace(candidate, plan.revision, next);
 		if (!outcome.ok) throw new Error("could not rename document title");
+		room.trackTitle(document);
 		await publishStaged(plan, plan.server, plan.id, candidate, outcome.mutation);
 		return { channel: (await plan.persistence.storage.channels.get(plan.id))!, changed: true };
 	} finally {
