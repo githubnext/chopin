@@ -115,7 +115,7 @@ test(
 			"--env",
 			"SOME_FLAG=1",
 			"--",
-			"agent",
+			process.execPath,
 		], {
 			env: {
 				...process.env,
@@ -245,7 +245,7 @@ test(
 			"--planner-command",
 			`${process.execPath} ${script} ${log}`,
 			"--",
-			"agent",
+			process.execPath,
 		], {
 			env: {
 				...process.env,

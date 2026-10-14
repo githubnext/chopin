@@ -1,8 +1,8 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -117,6 +117,17 @@ function fakeChopin(options: { connections?: () => Response; stale?: string } = 
 	return { url: `http://127.0.0.1:${server.port}`, calls, waited: waited.promise };
 }
 
+/** Agents the connects below name; chopin finds them before it pairs, and they never run. */
+const PROGRAMS = await mkdtemp(join(tmpdir(), "chopin-machine-programs-"));
+for (let name of ["agent", "agent-that-never-runs"]) {
+	await writeFile(
+		join(PROGRAMS, process.platform === "win32" ? `${name}.cmd` : name),
+		"#!/bin/sh\n",
+		{ mode: 0o755 },
+	);
+}
+afterAll(() => rm(PROGRAMS, { recursive: true, force: true }));
+
 function cli(args: string[], home: string, url: string, env: Record<string, string> = {}) {
 	let child = Bun.spawn([process.execPath, MAIN, ...args], {
 		env: {
@@ -125,6 +136,7 @@ function cli(args: string[], home: string, url: string, env: Record<string, stri
 			CHOPIN_HOME: home,
 			CHOPIN_CONNECTOR_STATE_DIR: "",
 			...env,
+			PATH: [env.PATH ?? process.env.PATH, PROGRAMS].join(delimiter),
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -342,6 +354,22 @@ test("connect on a machine already paired leaves the pairing key unspent", async
 	expect(chopin.calls.map(call => call.path)).not.toContain("/api/connector/pairings");
 });
 
+test("a key given to connect with an agent that isn't installed is never sent, so it still works", async () => {
+	let home = await scratch("chopin-home-");
+	let root = await checkout();
+	let chopin = fakeChopin();
+	let missing = cli(
+		["connect", root, "--key", PAIRING_KEY, "--", "no-such-agent"],
+		home,
+		chopin.url,
+	);
+	expect(await missing.exited).toBe(1);
+	expect(await missing.output).toContain("no-such-agent isn't on your PATH");
+	expect(chopin.calls).toEqual([]);
+	// The same key pairs once the agent is there.
+	expect(await cli(["pair", "--key", PAIRING_KEY], home, chopin.url).exited).toBe(0);
+});
+
 const REVOKED_TOKEN = `chopin_m_${"R".repeat(43)}`;
 const ELSEWHERE = "https://other-chopin.example";
 
@@ -425,6 +453,7 @@ test("on a terminal, connect with a revoked token forgets it and pairs again", a
 			CHOPIN_URL: chopin.url,
 			CHOPIN_HOME: home,
 			CHOPIN_CONNECTOR_STATE_DIR: "",
+			PATH: [process.env.PATH, PROGRAMS].join(delimiter),
 		},
 		terminal: {
 			cols: 200,

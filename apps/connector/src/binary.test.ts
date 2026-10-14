@@ -255,7 +255,7 @@ test.skipIf(!binary)(
 		};
 		let proxies = ["HTTP_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"];
 		for (let name of ["CHOPIN_URL", "NO_PROXY", "no_proxy", ...proxies]) delete env[name];
-		let connector = Bun.spawn([binary!, "connect", ".", "--", "agent"], {
+		let connector = Bun.spawn([binary!, "connect", ".", "--", process.execPath], {
 			cwd: root,
 			env,
 			stdout: "pipe",

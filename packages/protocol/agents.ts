@@ -1,7 +1,8 @@
 /**
- * The coding agents the Machines page and the setup guide offer for `chopin connect`. Each is
- * checked against its own documentation; the guide's tables come from this list, and a test keeps
- * them the same. Commands are lists of words, so each shell can quote them its own way.
+ * The coding agents the Machines page and the setup guide offer for `chopin connect`, which also
+ * names one's install and sign-in commands when its program is missing. Each is checked against
+ * its own documentation; the guide's tables come from this list, and a test keeps them the same.
+ * Commands are lists of words, so each shell can quote them its own way.
  */
 
 export interface CodingAgent {

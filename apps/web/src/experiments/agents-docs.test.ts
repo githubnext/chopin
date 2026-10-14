@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { AGENTS } from "./agents";
+import { AGENTS } from "@chopin/protocol/agents";
 import { agentArguments, SETUP_GUIDE, SETUP_GUIDE_TROUBLESHOOTING } from "./setup-commands";
 
-import type { CodingAgent } from "./agents";
+import type { CodingAgent } from "@chopin/protocol/agents";
 
 const ROOT = join(import.meta.dir, "../../../..");
 

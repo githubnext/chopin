@@ -1,8 +1,10 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename, isAbsolute, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ConnectorStopped, serveWork } from "./connection";
+import { AGENTS } from "@chopin/protocol/agents";
+import { checkAgent } from "./acp";
+import { ConnectorStopped, redacted, serveWork } from "./connection";
 import { remote } from "./mcp";
 import { parseArgs } from "./args";
 import {
@@ -199,6 +201,39 @@ async function stableCommand(command: string[], base: string) {
 }
 
 /**
+ * Stop before anything is paired or connected when `command`'s program, or the one behind `env`,
+ * isn't installed, so a pairing key is never spent on a machine that can't run work. A coding
+ * agent from the Machines page's list is named with its install and sign-in commands.
+ */
+function requireProgram(command: string[], base: string) {
+	let word = command[programAt(command)];
+	if (!word) return;
+	// The PATH as it is now, which a process (or a test) may have changed since it started.
+	let found = /[\\/]/.test(word)
+		? existsSync(resolve(base, word))
+		: Bun.which(word, { PATH: process.env.PATH ?? "" });
+	if (found) return;
+	let name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
+	let agent = AGENTS.find(item => item.acp[0] === name);
+	if (!agent) {
+		throw new Error(
+			`${word} isn't on your PATH, so nothing was paired or connected. Install it or give its `
+				+ "full path, then run this command again.",
+		);
+	}
+	let { command: signIn, afterward } = agent.signIn;
+	throw new Error(
+		[
+			`${word} isn't installed, so nothing was paired or connected. Install ${agent.name} and `
+			+ "sign in to it:",
+			...agent.install.map(install => `  ${install.join(" ")}`),
+			`  ${signIn.join(" ")}${afterward ? `  (${afterward})` : ""}`,
+			"Then run this command again.",
+		].join("\n"),
+	);
+}
+
+/**
  * `--env KEY=VALUE` words as variables. Chopin sets CHOPIN_* itself and the service sets PATH, so
  * neither can be given.
  */
@@ -275,6 +310,10 @@ export async function connect(
 		);
 	}
 	let env = saved?.env ?? environment(parsed.lists.get("env") ?? []);
+	if (!service) {
+		requireProgram(command, process.cwd());
+		if (plannerCommand.length) requireProgram(plannerCommand, resolve(parsed.positional[0] ?? "."));
+	}
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
 	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
@@ -315,6 +354,25 @@ export async function connect(
 				+ "install to use them.",
 		);
 		return;
+	}
+	// The service install check runs only once connected; a machine about to pair checks first, so
+	// a pairing key isn't spent on an agent that can't start.
+	if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
+		let failed = await checkAgent(saving.command, {
+			cwd: info.root,
+			env: { ...process.env, ...env },
+			timeoutMs: 10_000,
+		});
+		if (failed) {
+			let secrets = Object.values(env);
+			throw new Error(
+				`${command[programAt(command)]} didn't answer ACP initialize (${
+					redacted(failed.how, secrets)
+				}${failed.stderr ? `: ${redacted(failed.stderr, secrets).slice(0, 200)}` : ""}). `
+					+ "Nothing was paired. Check that it starts and is signed in, then run this command "
+					+ "again. For an agent that can't start without a terminal, pass --skip-check.",
+			);
+		}
 	}
 	let release = await lockWorkspace(info.root, directory, { service, planners: plannerDocuments });
 	let failures = startFailures(directory, info.root);

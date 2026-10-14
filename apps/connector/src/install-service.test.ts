@@ -24,11 +24,13 @@ async function setup(
 	{ paired = true } = {},
 ) {
 	let tools: string[] = [];
+	let requests: string[] = [];
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request) {
 			let path = new URL(request.url).pathname;
+			requests.push(path);
 			if (path === "/api/connector/pairings") {
 				let { key } = await request.json() as { key?: string };
 				return key === PAIRING_KEY
@@ -94,12 +96,19 @@ async function setup(
 		},
 		sleep: async () => {},
 	};
-	let saved = { CHOPIN_HOME: process.env.CHOPIN_HOME, CHOPIN_URL: process.env.CHOPIN_URL };
+	let saved = {
+		CHOPIN_HOME: process.env.CHOPIN_HOME,
+		CHOPIN_URL: process.env.CHOPIN_URL,
+		PATH: process.env.PATH,
+	};
 	process.env.CHOPIN_HOME = directory;
 	process.env.CHOPIN_URL = url;
+	// This shell finds the agent too, as connect checks before it pairs.
+	process.env.PATH = `${bin}:${process.env.PATH}`;
 	return {
 		calls,
 		tools,
+		requests,
 		home,
 		directory,
 		bin,
@@ -188,4 +197,30 @@ test.skipIf(process.platform === "win32")(
 		expect(config.service).toBeUndefined();
 	},
 	20_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"connect --install-service checks the agent starts before it spends a pairing key",
+	async () => {
+		await using machine = await setup(systemd, { paired: false });
+		// Signed out or broken: it never answers ACP initialize.
+		await writeFile(join(machine.bin, "agent"), "#!/bin/sh\nexit 3\n", { mode: 0o755 });
+		process.env.CHOPIN_PAIRING_KEY = PAIRING_KEY;
+		let refused = await machine.run().catch(error => error);
+		expect(refused.message).toContain("agent didn't answer ACP initialize (exit 3)");
+		expect(refused.message).toContain("Nothing was paired");
+		expect(machine.requests).toEqual([]);
+		expect(machine.calls).toEqual([]);
+		// Fixed, the same key pairs.
+		await writeFile(
+			join(machine.bin, "agent"),
+			`#!/bin/sh\nexec ${process.execPath} ${join(import.meta.dir, "testing", "fake-agent.ts")}\n`,
+			{ mode: 0o755 },
+		);
+		process.env.CHOPIN_PAIRING_KEY = PAIRING_KEY;
+		await machine.run();
+		expect(machine.requests[0]).toBe("/api/connector/pairings");
+		expect(machine.calls).toContain("systemctl --user enable --now chopin.service");
+	},
+	30_000,
 );

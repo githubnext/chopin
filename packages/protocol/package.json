@@ -10,7 +10,9 @@
 		".": {
 			"types": "./index.d.ts"
 		},
-		"./implementation": { "types": "./implementation.d.ts" },
+		"./implementation": {
+			"types": "./implementation.d.ts"
+		},
 		"./address": {
 			"types": "./address.ts",
 			"default": "./address.ts"
@@ -26,6 +28,10 @@
 		"./github-reference": {
 			"types": "./github-reference.ts",
 			"default": "./github-reference.ts"
+		},
+		"./agents": {
+			"types": "./agents.ts",
+			"default": "./agents.ts"
 		}
 	}
 }

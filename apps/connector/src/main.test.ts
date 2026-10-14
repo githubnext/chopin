@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -15,6 +15,14 @@ import { git } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-main-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
+
+/** Programs the connects below name as their agent and Planner; they are found, never run. */
+let programs = join(scratch, "programs");
+await mkdir(programs);
+for (let name of ["agent", "new-agent", "planner", "a"]) {
+	let file = process.platform === "win32" ? `${name}.cmd` : name;
+	await writeFile(join(programs, file), "#!/bin/sh\n", { mode: 0o755 });
+}
 
 async function checkout() {
 	let root = await mkdtemp(join(scratch, "checkout-"));
@@ -104,6 +112,7 @@ async function connect(
 			CHOPIN_URL: url,
 			CHOPIN_CONNECTOR_STATE_DIR: directory,
 			...extra,
+			PATH: [extra.PATH ?? process.env.PATH, programs].join(delimiter),
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -349,3 +358,66 @@ test("connect on a checkout the running service holds saves it as the last conne
 	expect(JSON.parse(await readFile(join(directory, "config.json"), "utf8")).connect.command)
 		.toEqual(["new-agent", "--acp"]);
 });
+
+test.skipIf(process.platform === "win32")(
+	"connect stops before it pairs when the agent or Planner isn't installed, saying how to get it",
+	async () => {
+		let root = await checkout();
+		// A PATH with git and nothing else, so no coding agent installed here is found.
+		let tools = join(scratch, "tools");
+		await mkdir(tools, { recursive: true });
+		await symlink(Bun.which("git")!, join(tools, "git")).catch(() => {});
+		let only = { PATH: tools };
+		let copilot = await connect(
+			"nothing",
+			[root, "--", "copilot", "--acp", "--allow-all"],
+			undefined,
+			only,
+		);
+		expect(copilot.code).toBe(1);
+		expect(copilot.stderr).toBe(
+			[
+				"copilot isn't installed, so nothing was paired or connected. Install GitHub Copilot CLI "
+				+ "and sign in to it:",
+				"  npm install -g @github/copilot",
+				"  copilot login",
+				"Then run this command again.",
+				"",
+			].join("\n"),
+		);
+		expect(copilot.requests).toEqual([]);
+
+		// Behind env, the program env starts is the one looked for.
+		let codex = await connect(
+			"nothing",
+			[root, "--", "env", "INITIAL_AGENT_MODE=agent-full-access", "codex-acp"],
+			undefined,
+			{ PATH: [tools, dirname(Bun.which("env")!)].join(delimiter) },
+		);
+		expect(codex.code).toBe(1);
+		expect(codex.stderr).toContain("codex-acp isn't installed");
+		expect(codex.stderr).toContain(
+			"  npm install -g @openai/codex @agentclientprotocol/codex-acp\n",
+		);
+		expect(codex.requests).toEqual([]);
+
+		let unknown = await connect("nothing", [root, "--", "my-agent"], undefined, only);
+		expect(unknown.code).toBe(1);
+		expect(unknown.stderr).toBe(
+			"my-agent isn't on your PATH, so nothing was paired or connected. Install it or give its "
+				+ "full path, then run this command again.\n",
+		);
+		expect(unknown.requests).toEqual([]);
+
+		let planner = await connect(
+			"nothing",
+			[root, "--planner", "https://x/d/1", "--planner-command", "my-planner --x", "--", "agent"],
+			undefined,
+			only,
+		);
+		expect(planner.code).toBe(1);
+		expect(planner.stderr).toContain("my-planner isn't on your PATH");
+		expect(planner.requests).toEqual([]);
+	},
+	60_000,
+);

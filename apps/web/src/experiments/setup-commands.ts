@@ -1,8 +1,8 @@
 /** What /connect asks a person to run to set up a machine. Change the commands here only. */
 
-import { DEFAULT_AGENT } from "./agents";
+import { DEFAULT_AGENT } from "@chopin/protocol/agents";
 
-import type { CodingAgent } from "./agents";
+import type { CodingAgent } from "@chopin/protocol/agents";
 
 export type SetupShell = "sh" | "powershell";
 

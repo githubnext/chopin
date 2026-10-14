@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { findAgent } from "../apps/web/src/experiments/agents";
+import { findAgent } from "../packages/protocol/agents";
 import {
 	agentCommand,
 	connectCommand,

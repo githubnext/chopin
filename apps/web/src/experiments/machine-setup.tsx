@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { CheckIcon, CopyIcon } from "@chopin/icons";
-import { AGENTS, findAgent } from "./agents";
+import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
 	connectCommand,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AGENTS, findAgent } from "./agents";
+import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
 	connectArguments,
