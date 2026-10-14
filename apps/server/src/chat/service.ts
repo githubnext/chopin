@@ -2285,9 +2285,9 @@ async function run(
 		} catch (err) {
 			if (chat.handoffJob === next.job) chat.handoffJob = undefined;
 			console.error("[chat] could not save a queued turn:", err);
+			stopAfterPersistenceFailure(chat, server, room);
 			if (next.job) finishJob(next.job, { status: "failed", reason: jobReason(err) });
 			await report(next, { status: "failed" });
-			stopAfterPersistenceFailure(chat, server, room);
 			return;
 		}
 		if (chat.handoffJob === next.job) chat.handoffJob = undefined;
