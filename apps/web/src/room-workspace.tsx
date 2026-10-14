@@ -49,6 +49,8 @@ import {
 } from "@chopin/editor";
 
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
+import { buildBlockers } from "./build-blockers";
+import type { BuildBlocker } from "./build-blockers";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
@@ -644,6 +646,11 @@ export function RoomWorkspace(
 		userId,
 		wire,
 	});
+	let namedBuildBlockers = useMemo(() => buildBlockers(build.snapshot, entries, cardMetadata), [
+		build.snapshot,
+		entries,
+		cardMetadata,
+	]);
 	// Touch has no tooltips, so a phone tap on Build, or on the build slot, says why it can't open.
 	let buildUnavailable = build.look.kind === "plan" && build.look.blocked
 		? build.look.blocked
@@ -980,6 +987,21 @@ export function RoomWorkspace(
 		});
 	};
 
+	let showInvestigation = (id: string) => {
+		selectDestination("plan");
+		requestAnimationFrame(() => {
+			let card = document.querySelector<HTMLElement>(
+				`[data-workspace-room="${CSS.escape(room)}"] [data-investigation="${CSS.escape(id)}"]`,
+			);
+			if (!card) return;
+			card.scrollIntoView({ block: "center" });
+			card.focus({ preventScroll: true });
+		});
+	};
+	let showNamedBuildBlocker = (item: BuildBlocker) => {
+		if (item.kind === "decision") showPlan(item.id, item.question);
+		else showInvestigation(item.id);
+	};
 	let showBuildBlocker = (reason: string) => {
 		let entry = firstOpenDecision(entries, cardMetadata);
 		let question = entry?.value.questions.find(value => value.answer === undefined)?.id
@@ -990,17 +1012,7 @@ export function RoomWorkspace(
 		}
 		let investigation = build.snapshot?.buildInvestigations?.[0];
 		if (investigation) {
-			selectDestination("plan");
-			requestAnimationFrame(() => {
-				let card = document.querySelector<HTMLElement>(
-					`[data-workspace-room="${CSS.escape(room)}"] [data-investigation="${
-						CSS.escape(investigation.id)
-					}"]`,
-				);
-				if (!card) return;
-				card.scrollIntoView({ block: "center" });
-				card.focus({ preventScroll: true });
-			});
+			showInvestigation(investigation.id);
 			return;
 		}
 		if (phone) explainBuild(reason);
@@ -1555,7 +1567,11 @@ export function RoomWorkspace(
 	let buildSlot = profile.implementation && (presentation.type !== "parent-with-child" || phone)
 		&& (
 			<BuildPlanButton
+				blockers={namedBuildBlockers}
+				onBlockerSelect={showNamedBuildBlocker}
 				build={build}
+				documentURL={new URL(documentPath(repository.owner, repository.name, slug), location.origin)
+					.href}
 				canEdit={!!workspaceCanEdit && status === "connected"}
 				compact={mode !== "split"}
 				hot={buildHover === "tab"}
@@ -1581,7 +1597,7 @@ export function RoomWorkspace(
 				<Workspace
 					available={available}
 					buildEnabled={build.tabReady}
-					buildGlyph={<BuildGlyph look={build.look} />}
+					buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
 					buildHot={buildHover === "capsule"}
 					buildUnavailable={buildUnavailable}
 					onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
@@ -1701,7 +1717,7 @@ export function RoomWorkspace(
 							<DecisionViewControl
 								attention={attention}
 								buildEnabled={profile.implementation ? build.tabReady : undefined}
-								buildGlyph={<BuildGlyph look={build.look} />}
+								buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
 								buildHot={buildHover === "capsule"}
 								onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
 								documentActivity={documentActivity(documentWatch, chatActivity.busy)}

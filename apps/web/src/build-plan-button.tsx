@@ -1,5 +1,14 @@
 import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
-import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useReducer,
+	useRef,
+	useState,
+} from "react";
 
 import {
 	advanceFirstBuild,
@@ -15,12 +24,16 @@ import {
 import { ApiError } from "./api";
 import { cancelBuildRequest, rebuildChanges, startBuild } from "./build-start";
 import { useImplementationSnapshot } from "./implementation-snapshot";
+import { BuildBlockerGlyph } from "./build-blocker-glyph";
+import { buildBlockerSummary } from "./build-blockers";
 
 import "./build-plan-button.css";
+import "./build-blocker-popover.css";
 
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { BuildLook, FirstBuild } from "./build-model";
 import type { Wire } from "./wire";
+import type { BuildBlocker } from "./build-blockers";
 
 const RELOAD_ON = [
 	"plan:implementation",
@@ -30,6 +43,12 @@ const RELOAD_ON = [
 ];
 /** Edits only move a built document's change count, so they reload it at most this often. */
 const EDIT_RELOAD_MS = 1000;
+let BuildBlockerPopover = lazy(() =>
+	import("./build-blocker-popover").then(module => ({ default: module.BuildBlockerPopover }))
+);
+let BuildConnectionPopover = lazy(() =>
+	import("./build-connection-popover").then(module => ({ default: module.BuildConnectionPopover }))
+);
 
 /** The document's build, shared by the header capsule, the Build tab and the Build view. */
 export type BuildPlan = {
@@ -258,7 +277,16 @@ export function useBuildPlan(
  * The build's one glyph, identical in the header capsule, on the Build tab and in
  * Build's headline, so the three read as the same thing. Nothing before a build.
  */
-export function BuildGlyph({ look }: { look: BuildLook }) {
+export function BuildGlyph(
+	{ look, blockers }: { look: BuildLook; blockers?: readonly BuildBlocker[] },
+) {
+	if ("blocked" in look && look.blocked && blockers?.length) {
+		return (
+			<span className="build-glyph" aria-hidden="true">
+				<BuildBlockerGlyph tone={buildBlockerSummary(blockers).tone} />
+			</span>
+		);
+	}
 	let inner = look.kind === "tasks" || look.kind === "rebuilding"
 		? <LoaderIcon aria-hidden="true" className="build-glyph-spin" />
 		: look.kind === "building"
@@ -331,15 +359,31 @@ function handOff(from: HTMLElement) {
  * and opens Build. It never hides, including while Build is open.
  */
 export function BuildPlanButton(
-	{ build, canEdit, compact, hot, onExplain, onHover, onOpen, phone, tabReady = true }: {
+	{
+		blockers,
+		build,
+		canEdit,
+		compact,
+		documentURL,
+		hot,
+		onBlockerSelect,
+		onExplain,
+		onHover,
+		onOpen,
+		phone,
+		tabReady = true,
+	}: {
+		blockers?: readonly BuildBlocker[];
 		build: BuildPlan;
 		canEdit: boolean;
 		/** Phone: the glyph alone; Build's headline carries the words. */
 		compact?: boolean;
+		documentURL?: string;
 		/** The Build tab is hovered. */
 		hot?: boolean;
 		onHover: (on: boolean) => void;
 		onOpen: () => void;
+		onBlockerSelect?: (blocker: BuildBlocker) => void;
 		/** Phone: touch has no tooltip, so a tap that cannot act shows this reason instead. */
 		onExplain?: (reason: string) => void;
 		/** A phone's top bar: the status and its action read as links in the title's subtitle. */
@@ -386,6 +430,48 @@ export function BuildPlanButton(
 		if (from) handOff(from);
 	}, [look.kind]);
 
+	if (canEdit && "blocked" in look && look.blocked && blockers?.length && onBlockerSelect) {
+		let summary = buildBlockerSummary(blockers);
+		return (
+			<span className={phone ? "build-status" : "build-capsule-row"}>
+				<Suspense
+					fallback={
+						<span
+							aria-busy="true"
+							className={phone
+								? "build-status build-blocker-capsule"
+								: "build-capsule build-blocker-capsule"}
+							data-tone={summary.tone}
+						>
+							<BuildBlockerGlyph tone={summary.tone} />
+							<span className="build-capsule-label">{summary.label}</span>
+						</span>
+					}
+				>
+					<BuildBlockerPopover
+						hot={hot}
+						items={blockers}
+						onHover={onHover}
+						onSelect={onBlockerSelect}
+						phone={phone}
+					/>
+				</Suspense>
+				{live}
+			</span>
+		);
+	}
+	let connectionReason = ("blocked" in look ? look.blocked : undefined)
+		?? ("tip" in look ? look.tip : undefined);
+	if (canEdit && documentURL && connectionReason?.startsWith("Connect a Planner")) {
+		return (
+			<>
+				<Suspense fallback={<span className="text-sm text-text-secondary">Connect Chopin</span>}>
+					<BuildConnectionPopover documentURL={documentURL} kind="planner" phone={phone} />
+				</Suspense>
+				{live}
+			</>
+		);
+	}
 	if (look.kind === "plan") {
 		if (!canEdit) return null;
 		let blocked = look.blocked;
@@ -398,7 +484,9 @@ export function BuildPlanButton(
 					className={phone
 						? "build-status-link"
 						: "btn btn-compact btn-primary build-plan shrink-0"}
-					data-tooltip={blocked}
+					data-tooltip={blocked === "Chopin isn’t running for this document"
+						? "Chopin is off"
+						: blocked}
 					data-tooltip-detail={blocked ? "" : undefined}
 					data-tooltip-verbatim={blocked ? "" : undefined}
 					onClick={() => {
@@ -418,7 +506,9 @@ export function BuildPlanButton(
 			</>
 		);
 	}
-	let label = buildLabel(look);
+	let connectAgent = canEdit && documentURL
+		&& (look.kind === "agent" || build.needsAgent || build.rebuildNeedsAgent);
+	let label = connectAgent && look.kind === "agent" ? "Agent offline" : buildLabel(look);
 	let blocked = look.kind === "stale" || look.kind === "failed" ? look.blocked : undefined;
 	let action = (look.kind === "stopped" || look.kind === "agent") && look.retry && canEdit
 		? { name: "Retry", run: build.press }
@@ -439,7 +529,11 @@ export function BuildPlanButton(
 					className={phone ? "build-status-link" : "build-capsule"}
 					data-compact={compact || undefined}
 					data-hot={hot || undefined}
-					data-tooltip={compact ? `${label} · ${look.tip}` : look.tip}
+					data-tooltip={connectAgent
+						? "Local agent disconnected"
+						: compact
+						? `${label} · ${look.tip}`
+						: look.tip}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""
 					onBlur={() => onHover(false)}
@@ -466,33 +560,44 @@ export function BuildPlanButton(
 					)}
 				</button>
 				{look.tip && <span className="sr-only" id={reason}>{look.tip}</span>}
-				{action && (
-					<>
-						{phone && <span aria-hidden="true">·</span>}
-						{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
-						<button
-							aria-busy={busy || undefined}
-							aria-describedby={blocked ? actionReason : undefined}
-							aria-disabled={blocked || busy ? true : undefined}
-							className={phone
-								? "build-status-link build-capsule-action"
-								: "btn btn-compact btn-outline build-capsule-action"}
-							data-tooltip={blocked}
-							data-tooltip-detail={blocked ? "" : undefined}
-							data-tooltip-verbatim={blocked ? "" : undefined}
-							onClick={() => {
-								if (blocked) onExplain?.(blocked);
-								else if (!busy) action.run();
-							}}
-							type="button"
-						>
-							{action.name}
-						</button>
-						{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
-					</>
-				)}
+				{connectAgent
+					? (
+						<Suspense fallback={<span className="text-sm text-text-secondary">Connect agent</span>}>
+							<BuildConnectionPopover
+								documentURL={documentURL!}
+								kind="agent"
+								outline
+								phone={phone}
+							/>
+						</Suspense>
+					)
+					: action && (
+						<>
+							{phone && <span aria-hidden="true">·</span>}
+							{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
+							<button
+								aria-busy={busy || undefined}
+								aria-describedby={blocked ? actionReason : undefined}
+								aria-disabled={blocked || busy ? true : undefined}
+								className={phone
+									? "build-status-link build-capsule-action"
+									: "btn btn-compact btn-outline build-capsule-action"}
+								data-tooltip={blocked}
+								data-tooltip-detail={blocked ? "" : undefined}
+								data-tooltip-verbatim={blocked ? "" : undefined}
+								onClick={() => {
+									if (blocked) onExplain?.(blocked);
+									else if (!busy) action.run();
+								}}
+								type="button"
+							>
+								{action.name}
+							</button>
+							{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
+						</>
+					)}
 				{/* On a phone the refusal is read in Build's headline, which opens with it. */}
-				{refused && (
+				{refused && !connectAgent && (
 					<span className={compact ? "sr-only" : "build-capsule-refusal"} role="alert">
 						{refused}
 					</span>

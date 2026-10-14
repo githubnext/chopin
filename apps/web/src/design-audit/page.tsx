@@ -6,6 +6,7 @@ import { AuthoredContent } from "./authored-content";
 import { Controls } from "./controls";
 import { Foundations } from "./foundations";
 import { InteractiveSpecimens } from "./interactive";
+import { BuildBlockerAudit } from "./build-blockers";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
@@ -31,6 +32,7 @@ export function DesignAuditPage() {
 			<AuditSection id="surfaces" title="Application surfaces">
 				<Surfaces />
 				<InteractiveSpecimens />
+				<BuildBlockerAudit />
 			</AuditSection>
 			<AuditSection id="authored-content" title="Authored content">
 				<AuthoredContent />

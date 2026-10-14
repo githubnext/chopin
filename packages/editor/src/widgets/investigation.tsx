@@ -1,6 +1,6 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
-import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
+import { CloseIcon, InvestigationIcon, WarningIcon } from "@chopin/icons";
 
 import { SidecarCard } from "../card";
 import { widgets$ } from "../widget-options";
@@ -59,7 +59,7 @@ function Indicator({ state }: { state: InvestigationState }) {
 	if (state === "completed") {
 		return (
 			<span aria-hidden="true" className="plan-research-badge" data-tone="brand">
-				<SparkleIcon size={14} />
+				<InvestigationIcon size={14} />
 			</span>
 		);
 	}

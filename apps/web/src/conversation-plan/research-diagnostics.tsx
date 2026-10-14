@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { UnfoldSection } from "@chopin/visuals/unfold";
 import type { ConversationPlan } from "@chopin/protocol";
 import { answerText, questionName } from "./analysis-labels";
 
@@ -61,8 +62,7 @@ export function ResearchDiagnostics({ analysis, pending, canEdit, onRetry }: {
 							</dl>
 						</section>
 					)}
-					<details className="mt-2">
-						<summary>Research judgments</summary>
+					<UnfoldSection className="mt-2" label="Research judgments">
 						<dl className="m-0 grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
 							{Object.entries(analysis!.answers).map(([key, value]) => (
 								<div className="contents" key={key}>
@@ -71,7 +71,7 @@ export function ResearchDiagnostics({ analysis, pending, canEdit, onRetry }: {
 								</div>
 							))}
 						</dl>
-					</details>
+					</UnfoldSection>
 				</>
 			)}
 			{analysis?.status === "failed" && canEdit && (

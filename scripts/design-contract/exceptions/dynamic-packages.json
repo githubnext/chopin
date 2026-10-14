@@ -942,7 +942,7 @@
 				1
 			]
 		],
-		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
+		"sourceHash": "e3007577c397e70295e1b6d85106adf090b6664374e9808a108289d2fa647ea6"
 	},
 	{
 		"file": "packages/visuals/src/ui/unfold.tsx",
@@ -956,7 +956,7 @@
 				1
 			]
 		],
-		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
+		"sourceHash": "e3007577c397e70295e1b6d85106adf090b6664374e9808a108289d2fa647ea6"
 	},
 	{
 		"file": "packages/visuals/src/ui/unfold.tsx",
@@ -984,6 +984,20 @@
 				1
 			]
 		],
-		"sourceHash": "098bf723d102ac3e909c8ad91445adbce4d7a76a37ba324956866cdde04f4d68"
+		"sourceHash": "e3007577c397e70295e1b6d85106adf090b6664374e9808a108289d2fa647ea6"
+	},
+	{
+		"file": "packages/icons/src/investigation.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > InvestigationIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "7c0d739dacfc022855c92a4136f0ff1c3645780461787ae82b66bae98aa5a4b4"
 	}
 ]

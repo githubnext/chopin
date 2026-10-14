@@ -19,6 +19,16 @@
 	grid-template-rows: 1fr;
 }
 
+.cv-unfold-accordion:is([data-starting-style], [data-ending-style]) {
+	grid-template-rows: 0fr;
+}
+
+.cv-unfold-section-heading {
+	margin: 0;
+	font-size: inherit;
+	font-weight: inherit;
+}
+
 /* The clip's padding holds the focus ring of full-width controls (an inset ring, as in a focus boundary, needs none); the matching negative
    margin keeps the layout box (and the 0fr fold) unchanged. */
 .cv-unfold-clip {
@@ -68,9 +78,18 @@
 }
 
 .cv-unfold-section-toggle {
+	display: flex;
+	width: 100%;
+	justify-content: space-between;
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-secondary);
+}
+
+.cv-unfold-section-toggle:is(:hover, :focus-visible) {
+	background: var(--color-inset);
 }
 
 .cv-unfold-section-body {

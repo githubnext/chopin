@@ -1,5 +1,6 @@
 import { useCallback, useId, useRef, useState } from "react";
 import { ChevronIcon } from "@chopin/icons";
+import { Accordion } from "@base-ui/react/accordion";
 
 import type { ComponentProps, ReactNode, RefObject } from "react";
 
@@ -109,13 +110,33 @@ export type UnfoldSectionProps = {
 };
 
 export function UnfoldSection({ children, className, defaultOpen, label }: UnfoldSectionProps) {
-	let unfold = useUnfold(defaultOpen);
 	return (
 		<div className={className} data-slot="unfold-section">
-			<UnfoldToggle className="cv-unfold-section-toggle" unfold={unfold}>{label}</UnfoldToggle>
-			<UnfoldPanel unfold={unfold}>
-				<div className="cv-unfold-section-body">{children}</div>
-			</UnfoldPanel>
+			<Accordion.Root defaultValue={defaultOpen ? ["section"] : []} keepMounted>
+				<Accordion.Item value="section">
+					<Accordion.Header className="cv-unfold-section-heading">
+						<Accordion.Trigger
+							className="cv-unfold-toggle cv-unfold-section-toggle"
+							data-slot="unfold-toggle"
+							data-unfold-speed="accordion"
+						>
+							{label}
+							<ChevronIcon aria-hidden="true" className="cv-unfold-chevron" size={12} />
+						</Accordion.Trigger>
+					</Accordion.Header>
+					<Accordion.Panel
+						className="cv-unfold cv-unfold-accordion"
+						data-slot="unfold"
+						data-unfold-speed="accordion"
+					>
+						<div className="cv-unfold-clip">
+							<div className="cv-unfold-content">
+								<div className="cv-unfold-section-body">{children}</div>
+							</div>
+						</div>
+					</Accordion.Panel>
+				</Accordion.Item>
+			</Accordion.Root>
 		</div>
 	);
 }

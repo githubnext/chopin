@@ -131,6 +131,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 		label: "Application surfaces",
 		items: [
 			{
+				id: "build-blockers",
+				label: "Build blockers",
+				source: "apps/web/src/build-blocker-popover.tsx",
+				states: ["decisions", "investigations", "mixed", "hover", "keyboard"],
+			},
+			{
 				id: "interactive-document-actions",
 				label: "Interactive document actions",
 				source: "apps/web/src/design-audit/interactive.tsx",

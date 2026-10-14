@@ -16,6 +16,7 @@ export {
 } from "./github";
 export type { IconProps, IconSize } from "./icon";
 export { iconSizes } from "./icon";
+export { InvestigationIcon } from "./investigation";
 export {
 	ActualSizeIcon,
 	ArrowLeftIcon,

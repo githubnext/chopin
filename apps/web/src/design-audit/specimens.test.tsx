@@ -7,6 +7,7 @@ import { Controls } from "./controls";
 import { AuthoredContent, callouts } from "./authored-content";
 import { Foundations } from "./foundations";
 import { InteractiveSpecimens } from "./interactive";
+import { BuildBlockerAudit } from "./build-blockers";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
@@ -247,7 +248,13 @@ describe("design audit specimens", () => {
 
 	it("renders every application surface and its meaningful states", () => {
 		let markup = renderToStaticMarkup(
-			createElement("div", null, createElement(Surfaces), createElement(InteractiveSpecimens)),
+			createElement(
+				"div",
+				null,
+				createElement(Surfaces),
+				createElement(InteractiveSpecimens),
+				createElement(BuildBlockerAudit),
+			),
 		);
 
 		for (let item of AUDIT_INVENTORY.find(group => group.id === "surfaces")!.items) {

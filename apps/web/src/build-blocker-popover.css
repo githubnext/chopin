@@ -1,0 +1,86 @@
+.build-blocker-glyphs {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) / 2);
+	flex-shrink: 0;
+}
+.build-blocker-decision {
+	color: var(--color-success);
+}
+.build-blocker-investigation {
+	color: var(--color-brand);
+}
+.build-blocker-capsule[data-tone="decision"] {
+	--blocker-ink: var(--color-success-ink);
+	--blocker-wash: var(--color-success-wash);
+}
+.build-blocker-capsule[data-tone="investigation"] {
+	--blocker-ink: var(--color-brand-ink);
+	--blocker-wash: var(--color-brand-wash);
+}
+.build-blocker-capsule {
+	color: var(--blocker-ink, var(--color-text-secondary));
+}
+.build-blocker-capsule.build-capsule {
+	background: var(--blocker-wash, var(--color-inset));
+}
+.build-blocker-capsule.build-capsule:is(:hover, [data-hot]) {
+	background: color-mix(
+		in srgb,
+		var(--blocker-wash, var(--color-inset)) 85%,
+		var(--blocker-ink, var(--color-text-secondary))
+	);
+}
+.build-blocker-popover {
+	position: fixed;
+	inset: auto;
+	margin: 0;
+	width: 21rem;
+	max-width: calc(100vw - 1.5rem);
+	max-height: min(20rem, calc(100svh - 1.5rem));
+	overflow-y: auto;
+	padding: var(--spacing);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	color: var(--color-text-primary);
+	box-shadow: var(--shadow-overlay);
+}
+.build-blocker-row {
+	display: flex;
+	align-items: center;
+	gap: var(--menu-item-gap-compact);
+	width: 100%;
+	min-height: var(--menu-item-height-normal);
+	padding: var(--menu-item-padding-block-compact) var(--menu-item-padding-inline-normal);
+	border-radius: var(--radius-md);
+	text-align: left;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+.build-blocker-row:hover,
+.build-blocker-row:focus-visible {
+	background: var(--color-inset);
+}
+.build-blocker-row:active {
+	background: var(--color-selected);
+}
+.build-blocker-row svg {
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
+	flex-shrink: 0;
+}
+.build-blocker-title {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.build-blocker-arrow {
+	color: var(--color-text-tertiary);
+}
+@media (prefers-reduced-motion: reduce) {
+	.build-blocker-row {
+		transition: none;
+	}
+}

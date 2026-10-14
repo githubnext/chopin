@@ -1,4 +1,5 @@
 import { CheckIcon } from "@chopin/icons";
+import { UnfoldSection } from "@chopin/visuals/unfold";
 
 import { ExcerptCorrection } from "./excerpt-correction";
 import { answerText, questionName, SIGNALS } from "./analysis-labels";
@@ -199,11 +200,8 @@ export function AnalysisOverview({
 				</p>
 			)}
 			{analysis && (
-				<details className="mt-3 hairline-t pt-2">
-					<summary className="cursor-pointer text-sm font-medium text-brand-ink">
-						Model answers and run details
-					</summary>
-					<div className="mt-2 text-sm leading-4 text-text-tertiary">
+				<UnfoldSection className="mt-3 hairline-t pt-2" label="Model answers and run details">
+					<div className="text-sm leading-4 text-text-tertiary">
 						<p className="m-0">
 							Model {analysis.modelVersion || "not recorded"} · Questions{" "}
 							{analysis.questionSetVersion || "not recorded"}
@@ -212,8 +210,9 @@ export function AnalysisOverview({
 						{analysis.policyGate && <p className="m-0 mt-1">Policy: {analysis.policyGate}</p>}
 						{analysis.quoteValidation && (
 							<p className="m-0 mt-1">
-								Source quotes:{" "}
-								{analysis.quoteValidation.filter(range => range.valid).length}/{analysis
+								Source quotes: {analysis.quoteValidation.filter(range =>
+									range.valid
+								).length}/{analysis
 									.quoteValidation.length} valid
 							</p>
 						)}
@@ -233,7 +232,7 @@ export function AnalysisOverview({
 							</section>
 						))}
 					</div>
-				</details>
+				</UnfoldSection>
 			)}
 		</>
 	);
