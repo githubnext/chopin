@@ -19,9 +19,10 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // Shared menu dismissal and the account menu keyboard contract add 1 KB raw.
 // The combined workspace loading shapes need a further 500 B allowance on Linux.
 // The sidebar's Machines entry, its loading row and its lazy chunks add 500 B raw.
+// Titled inline notices and the entry's connected-of-paired count add a further 500 B raw.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
 	gzip: 82_000,
-	raw: 257_000,
+	raw: 257_500,
 };
 
 export function enforceInitialJavaScript(
