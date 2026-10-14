@@ -67,11 +67,20 @@ export const EDIT_OPERATIONS_SCHEMA = {
 } as const;
 
 export async function documentView(plan: Plan): Promise<Record<string, unknown>> {
-	return {
-		document: await documentIdentity(plan),
+	return documentSnapshot(plan, await documentIdentity(plan));
+}
+
+/** Capture the read_plan fields without awaiting storage while the room queue is held. */
+export function documentSnapshot(
+	plan: Plan,
+	document: Awaited<ReturnType<typeof documentIdentity>>,
+): Record<string, unknown> {
+	let source = edit.source(plan);
+	return structuredClone({
+		document,
 		revision: plan.revision,
-		source: edit.source(plan),
-		blocks: edit.outline(plan),
+		source,
+		blocks: edit.outline(plan, source),
 		/*
 		 * Accepted threads only, which only the earlier lifecycle made.
 		 *
@@ -100,7 +109,7 @@ export async function documentView(plan: Plan): Promise<Record<string, unknown>>
 			...(record.answers ? { answers: record.answers } : {}),
 			...(record.resolver ? { answered_by: record.resolver } : {}),
 		})),
-	};
+	});
 }
 
 /**
