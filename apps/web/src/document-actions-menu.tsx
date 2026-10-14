@@ -12,7 +12,14 @@ import {
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { Face } from "@chopin/editor/face";
-import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
+import {
+	ArchiveIcon,
+	ArrowUpIcon,
+	CloseIcon,
+	LinkIcon,
+	MagnifierIcon,
+	PencilIcon,
+} from "@chopin/icons";
 
 import { activeActorRoster, launchUrl } from "./demo-actor";
 import { motionContract } from "./motion-contract";
@@ -38,7 +45,7 @@ export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "d
 export type CollaboratorAction = `collaborator:${string}`;
 
 export type DocumentMenuItem = {
-	action: DocumentAction | CollaboratorAction;
+	action: DocumentAction | CollaboratorAction | "research-agenda";
 	label: string;
 	destructive?: boolean;
 	icon: (props: IconProps) => ReactNode;
@@ -47,12 +54,20 @@ export type DocumentMenuItem = {
 export function documentMenuItems(
 	channel: Pick<Api.Channel, "archivedAt">,
 	collaborators: readonly DemoActor[] = [],
+	agenda = false,
+	readOnly = false,
 ): DocumentMenuItem[] {
-	let personas: DocumentMenuItem[] = channel.archivedAt ? [] : collaborators.map(actor => ({
-		action: `collaborator:${actor.id}` as const,
-		label: `Open as collaborator: ${actor.name}`,
-		icon: () => <Face decorative handle={actor.id} size={14} titled={false} />,
-	}));
+	let personas: DocumentMenuItem[] = channel.archivedAt || readOnly
+		? []
+		: collaborators.map(actor => ({
+			action: `collaborator:${actor.id}` as const,
+			label: `Open as collaborator: ${actor.name}`,
+			icon: () => <Face decorative handle={actor.id} size={14} titled={false} />,
+		}));
+	let research: DocumentMenuItem[] = agenda
+		? [{ action: "research-agenda", label: "Research agenda", icon: MagnifierIcon }]
+		: [];
+	if (readOnly) return [{ action: "copy-link", label: "Copy link", icon: LinkIcon }, ...research];
 	return channel.archivedAt
 		? [
 			{ action: "restore", label: "Restore", icon: ArrowUpIcon },
@@ -61,6 +76,7 @@ export function documentMenuItems(
 		: [
 			{ action: "copy-link", label: "Copy link", icon: LinkIcon },
 			{ action: "rename", label: "Rename", icon: PencilIcon },
+			...research,
 			...personas,
 			{ action: "archive", label: "Archive", icon: ArchiveIcon },
 		];
@@ -84,6 +100,8 @@ export function DocumentActionsMenu(
 		className = "",
 		iconButton = false,
 		onAction,
+		onResearchAgenda,
+		readOnly = false,
 		openDocument = false,
 		trigger,
 	}: {
@@ -92,6 +110,8 @@ export function DocumentActionsMenu(
 		className?: string;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
+		onResearchAgenda?: () => void;
+		readOnly?: boolean;
 		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
 		openDocument?: boolean;
 		trigger: ReactNode;
@@ -110,9 +130,16 @@ export function DocumentActionsMenu(
 	let [open, setOpen] = useState(false);
 	let [sheetOpen, setSheetOpen] = useState(false);
 	let [position, setPosition] = useState<CSSProperties>();
-	let items = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
+	let items = documentMenuItems(
+		channel,
+		openDocument ? activeActorRoster() : [],
+		!!onResearchAgenda,
+		readOnly,
+	);
 	let select = (action: DocumentMenuItem["action"]) => {
-		if (action.startsWith("collaborator:")) {
+		if (action === "research-agenda") {
+			onResearchAgenda?.();
+		} else if (action.startsWith("collaborator:")) {
 			window.open(
 				launchUrl(location.href, action.slice("collaborator:".length)),
 				"_blank",

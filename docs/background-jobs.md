@@ -577,6 +577,10 @@ evidence.
 
 ## Research request orchestration
 
+[Experimental research agendas](research-agenda.md) reuse these workers under an
+explicit per-document public scope. Their coordinator persists a separate bounded
+grant and fences enqueue, execution, and publication against that grant.
+
 The public product has one immediate research request; the database and service
 retain `research_workspaces`, turns, and messages as internal staging and
 historical-reference compatibility:

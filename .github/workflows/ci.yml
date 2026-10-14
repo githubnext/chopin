@@ -236,6 +236,10 @@ jobs:
       - name: Wait for the client build and the databases
         wait: [build, databases]
 
+      - name: Research agenda controls (keyboard, permissions, and stale responses)
+        if: matrix.shard == 1
+        run: bun --bun node_modules/@playwright/test/cli.js test --config e2e/agenda/playwright.config.ts --reporter=github
+
       # Each runner owns its servers and databases. Keep two workers per runner so
       # motion assertions do not compete with more browser processes on the same
       # machine. `e2e/shard-balance.ts` replaces Playwright's equal-count split

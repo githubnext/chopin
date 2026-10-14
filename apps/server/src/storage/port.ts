@@ -1,3 +1,4 @@
+import type { AgendaStore } from "./agenda";
 import type {
 	AddUserProject,
 	AddUserProjectResult,
@@ -312,6 +313,7 @@ export interface StorageAdapter {
 	readonly leases: LeaseStore;
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
+	readonly agendas: AgendaStore;
 	readonly images: ImageStore;
 	readonly machines: MachineStore;
 

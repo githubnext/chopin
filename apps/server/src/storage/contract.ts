@@ -1,3 +1,4 @@
+import { agendaContract } from "./agenda-contract";
 import { researchWorkspace } from "./research-inline-contract-fixtures";
 import { childChannelContract } from "./child-channel-contract";
 import { experimentContract } from "./experiment-contract";
@@ -36,6 +37,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 
 /** The behavioral gate every built-in storage adapter must pass. */
 export function storageContract(name: string, factory: Factory): void {
+	agendaContract(name, factory);
 	experimentContract(name, factory);
 	imageContract(name, factory);
 	machineContract(name, factory);

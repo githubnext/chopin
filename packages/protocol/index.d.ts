@@ -261,3 +261,5 @@ export type Outgoing =
 	| import("./plan").Plan.Outgoing
 	| import("./question").Question.Outgoing
 	| import("./research").Research.Outgoing;
+
+export type { Agenda } from "./agenda";

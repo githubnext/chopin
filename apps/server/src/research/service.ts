@@ -53,7 +53,14 @@ export class ResearchWorkspaceError extends Error {
 	}
 }
 
+export type ResearchOperationGuard = <T>(
+	channelId: string,
+	workspaceId: string,
+	operation: () => Promise<T>,
+) => Promise<T | undefined>;
+
 export type ResearchWorkspaceServiceOptions = {
+	guard?: ResearchOperationGuard;
 	storage: StorageAdapter;
 	jobs: JobService;
 	lease: () => Lease;
@@ -360,9 +367,11 @@ export class ResearchWorkspaceService {
 	#clock: () => Date;
 	#id: () => string;
 	#tails = new Map<string, Promise<void>>();
+	#guard: ResearchOperationGuard;
 
 	constructor(options: ResearchWorkspaceServiceOptions) {
 		this.#storage = options.storage;
+		this.#guard = options.guard ?? ((_channelId, _workspaceId, operation) => operation());
 		this.#jobs = options.jobs;
 		this.#lease = options.lease;
 		this.#current = options.current;
@@ -1148,20 +1157,33 @@ export class ResearchWorkspaceService {
 		if (artifact.kind !== "initial") {
 			throw new ResearchWorkspaceError("invalid-state", "Initial research report is invalid.");
 		}
-		return publishInitialResearchChild({
-			storage: this.#storage,
-			workspace: detail.workspace,
-			answerJobId: job.job.id,
-			title: researchWorkspaceTitle(artifact.report.title),
-			report: artifact.report,
-			sources: artifact.sources,
-			now: this.#time(),
-			lease: this.#lease(),
-			changed: workspace => this.#published(workspace),
-		});
+		return await this.#guard(
+			detail.workspace.channelId,
+			detail.workspace.id,
+			() =>
+				publishInitialResearchChild({
+					storage: this.#storage,
+					workspace: detail.workspace,
+					answerJobId: job.job.id,
+					title: researchWorkspaceTitle(artifact.report.title),
+					report: artifact.report,
+					sources: artifact.sources,
+					now: this.#time(),
+					lease: this.#lease(),
+					changed: workspace => this.#published(workspace),
+				}),
+		) ?? "pending";
 	}
 
 	async #ensureEvidence(workspace: ResearchWorkspace, savedTurn: ResearchTurn): Promise<boolean> {
+		return await this.#guard(
+			workspace.channelId,
+			workspace.id,
+			() => this.#enqueueEvidence(workspace, savedTurn),
+		) ?? false;
+	}
+
+	async #enqueueEvidence(workspace: ResearchWorkspace, savedTurn: ResearchTurn): Promise<boolean> {
 		if (savedTurn.evidenceJobId !== undefined) return false;
 		this.#requireDefinition("research-evidence");
 		let targetKey = this.#target(workspace.id, savedTurn.id, "evidence");
@@ -1192,6 +1214,14 @@ export class ResearchWorkspaceService {
 	}
 
 	async #ensureAnswer(detail: ResearchWorkspaceDetail, savedTurn: ResearchTurn): Promise<boolean> {
+		return await this.#guard(
+			detail.workspace.channelId,
+			detail.workspace.id,
+			() => this.#enqueueAnswer(detail, savedTurn),
+		) ?? false;
+	}
+
+	async #enqueueAnswer(detail: ResearchWorkspaceDetail, savedTurn: ResearchTurn): Promise<boolean> {
 		if (savedTurn.answerJobId !== undefined) return false;
 		this.#requireDefinition("research-answer");
 		let workspace = detail.workspace;

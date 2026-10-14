@@ -1,3 +1,4 @@
+import { PostgresAgendaStore } from "./agenda";
 import { finalizeTitleReceipt } from "../title";
 import { SQL } from "bun";
 
@@ -549,6 +550,11 @@ export class PostgresStorage implements StorageAdapter {
 				await this.#assertLease(transaction, lease);
 			},
 		);
+		this.agendas = new PostgresAgendaStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
 		this.research = new PostgresResearchWorkspaceStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -681,6 +687,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly experiments: PostgresExperimentStore;
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
+	readonly agendas: PostgresAgendaStore;
 	readonly images: PostgresImageStore;
 	readonly machines: PostgresMachineStore;
 

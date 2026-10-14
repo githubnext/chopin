@@ -35,6 +35,14 @@ describe("document actions menu", () => {
 		expect(actions({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual(["restore", "delete"]);
 	});
 
+	it("lets readers inspect an agenda without offering document mutations", () => {
+		let roster = [{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" }];
+		expect(documentMenuItems({}, roster, true, true).map(item => item.action))
+			.toEqual(["copy-link", "research-agenda"]);
+		expect(documentMenuItems({}, [], true).map(item => item.action))
+			.toEqual(["copy-link", "rename", "research-agenda", "archive"]);
+	});
+
 	it("maps standard menu navigation keys without consuming unrelated keys", () => {
 		expect(documentMenuKeyAction("ArrowDown")).toBe("next");
 		expect(documentMenuKeyAction("ArrowUp")).toBe("previous");

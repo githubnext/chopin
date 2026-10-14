@@ -251,6 +251,9 @@ background service and every command.
 
 ## Documentation
 
+- [Experimental research agendas](docs/research-agenda.md): explicitly delegated,
+  bounded public investigations for a document.
+
 For owner-authorized local prototypes, measurements, and service-data investigations,
 see [Local investigations](docs/local-experiments.md). An ACP-compatible agent works
 in a local checkout and publishes captured evidence to Chopin's native views.

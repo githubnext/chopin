@@ -1,0 +1,132 @@
+.research-agenda-dialog {
+	display: flex;
+	flex-direction: column;
+	max-height: calc(100svh - var(--spacing) * 12);
+	width: min(100%, 32rem);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-primary);
+}
+
+.agenda-body {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 3);
+	min-height: 0;
+	overflow-y: auto;
+	padding: var(--spacing);
+	margin-inline: calc(-1 * var(--spacing));
+	overscroll-behavior: contain;
+}
+
+.agenda-meta {
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.agenda-experimental {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing);
+	margin-block: var(--spacing) calc(var(--spacing) * 4);
+}
+
+.agenda-bounds {
+	font-weight: 500;
+}
+
+.agenda-content,
+.agenda-questions,
+.agenda-fields {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	gap: calc(var(--spacing) * 2);
+}
+
+.agenda-content {
+	gap: calc(var(--spacing) * 3);
+}
+
+.agenda-field {
+	width: 100%;
+	min-width: 0;
+	padding: calc(var(--spacing) * 2);
+	font-size: var(--text-sm);
+}
+
+textarea.agenda-field {
+	resize: vertical;
+}
+
+.agenda-scope {
+	min-height: calc(var(--spacing) * 20);
+}
+
+.agenda-saved-scope p {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	margin-block: var(--spacing) calc(var(--spacing) * 2);
+}
+
+.agenda-question {
+	border-top: var(--edge-width) solid var(--color-edge);
+	padding-top: var(--spacing);
+	overflow-wrap: anywhere;
+}
+
+.agenda-question-actions {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.agenda-question-actions select {
+	width: auto;
+	flex: 1;
+}
+
+.agenda-question-status {
+	padding-inline: calc(var(--spacing) * 2);
+	margin-block: var(--spacing);
+}
+
+.agenda-evidence {
+	margin-block: calc(var(--spacing) * 2);
+	color: var(--color-text-secondary);
+}
+
+.agenda-report {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	width: 100%;
+	padding: calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
+	color: var(--color-brand);
+	text-align: start;
+}
+
+.agenda-report span {
+	flex: 1;
+	min-width: 0;
+}
+
+.agenda-report:hover,
+.agenda-report:focus-visible {
+	background: var(--color-hover);
+}
+
+.agenda-actions,
+.agenda-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: calc(var(--spacing) * 2);
+}
+
+.agenda-footer {
+	justify-content: flex-end;
+	flex-shrink: 0;
+	padding-top: calc(var(--spacing) * 3);
+}

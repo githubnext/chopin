@@ -1,3 +1,4 @@
+import { MemoryAgendaStore } from "./agenda";
 import { finalizeTitleReceipt } from "../title";
 import { conflict, missing } from "../errors";
 import { documentSlug, documentSlugCandidate } from "../../channels/slug";
@@ -130,6 +131,10 @@ type Operation = CommitResult;
 /** A strict in-memory adapter used by domain tests, not a production fallback. */
 export class MemoryStorage implements StorageAdapter {
 	readonly driver = "memory";
+	readonly agendas = new MemoryAgendaStore({
+		exists: id => this.#channels.has(id),
+		fence: lease => this.#assertLease(lease),
+	});
 	readonly experiments = new MemoryExperimentStore({
 		exists: id => this.#channels.has(id),
 		active: id => !this.#channels.get(id)?.archivedAt,
@@ -548,6 +553,7 @@ export class MemoryStorage implements StorageAdapter {
 		}
 
 		this.#channels.delete(id);
+		this.agendas.deleteChannel(id);
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);

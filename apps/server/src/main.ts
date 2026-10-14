@@ -26,6 +26,9 @@ import { notAttachedMessage, PlannerAttachments } from "./harness/remote/attachm
 import { MachinePlanners } from "./harness/remote/machine-planners";
 import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
+import { AgendaError, AgendaService } from "./agenda/service";
+import { createAgendaAssessor } from "./agenda/assessor";
+import { registerAgendaRoutes } from "./agenda/routes";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import { registerImageRoutes } from "./images/routes";
@@ -164,6 +167,7 @@ let plannerAttachments: PlannerAttachments | undefined;
 let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
+let agendaService: AgendaService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
@@ -1651,6 +1655,7 @@ function drain(): Promise<void> {
 				record(err);
 			}
 		};
+		agendaService?.stop();
 		await attempt(() => server.stop(true));
 		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 		if (experimentTimer) clearInterval(experimentTimer);
@@ -1933,6 +1938,7 @@ async function announceJobsChanged(channelId: string): Promise<void> {
 
 function announceResearchChanged(channelId: string, workspaceId: string, revision: number): void {
 	if (draining) return;
+	agendaService?.wake(channelId);
 	broadcast(server, channelId, {
 		kind: "research:changed",
 		ts: 0,
@@ -2160,12 +2166,6 @@ if (config.backgroundJobs) {
 		commitCurrent: commitCurrentSummary,
 	}));
 }
-if (config.backgroundJobs && config.agent) {
-	definitions.push(researchAnswerDefinition({ config }));
-}
-if (config.webResearch) {
-	definitions.push(researchEvidenceDefinition({ config }));
-}
 let jobRegistry = new JobRegistry(definitions);
 let jobService = new JobService({
 	storage,
@@ -2176,6 +2176,7 @@ let jobService = new JobService({
 	},
 	onChange: job => {
 		jobRunner?.notify(job);
+		agendaService?.wake(job.channelId);
 		if (job.state === "completed") {
 			void descriptionProjector?.jobChanged(job).catch(err => {
 				console.error("chopin: document description reconciliation failed -", err);
@@ -2208,7 +2209,56 @@ researchService = new ResearchWorkspaceService({
 	current: currentDocumentTarget,
 	publish: announceResearchChanged,
 	terminalNotice: announceResearchTerminal,
+	guard: (channelId, workspaceId, operation) =>
+		agendaService!.guardResearch(channelId, workspaceId, operation),
 });
+agendaService = new AgendaService({
+	storage,
+	research: researchService,
+	lease() {
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
+	},
+	available: () =>
+		!draining && config.agent && config.backgroundJobs && config.webResearch
+		&& config.harness === "copilot-sdk",
+	current: currentDocumentTarget,
+	assessor: createAgendaAssessor(config.model),
+	async resolveOwner(channelId, expected) {
+		let binding = await ownerBindings!.resolve(channelId);
+		if (!binding) return;
+		try {
+			let session = await hostedAuth.sessions.inspect(binding.ownerSessionId);
+			if (
+				!session || session.user.id !== expected.userId
+				|| binding.ownerSessionId !== expected.sessionId
+				|| binding.ownerGeneration !== expected.generation
+				|| binding.credentialRevision !== expected.credentialRevision
+			) {
+				binding.release();
+				return;
+			}
+			return {
+				owner: { ...expected, userHandle: session.user.login },
+				token: binding.currentToken,
+				signal: binding.signal,
+				authorize: async () => !draining && await binding.revalidate(),
+				release: binding.release,
+			};
+		} catch (error) {
+			binding.release();
+			throw error;
+		}
+	},
+});
+if (config.backgroundJobs && config.agent) {
+	jobRegistry.register(agendaService.wrapResearchDefinition(researchAnswerDefinition({ config })));
+}
+if (config.webResearch) {
+	jobRegistry.register(
+		agendaService.wrapResearchDefinition(researchEvidenceDefinition({ config })),
+	);
+}
 referenceService = new ReferenceService({
 	storage,
 	current: currentDocumentTarget,
@@ -2420,6 +2470,36 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 		await ownerAvailable(channel.id);
 	},
 });
+registerAgendaRoutes(router, hostedAuth, {
+	service: agendaService,
+	async authorize(channel, session, repository) {
+		let resolved = await Chat.resolveOwner(
+			hostedAuth,
+			{
+				id: channel.repositoryId,
+				owner: channel.repositoryOwner,
+				name: channel.repositoryName,
+				defaultBranch: repository.defaultBranch,
+			},
+			channel.id,
+			session.session.id,
+		);
+		if (resolved.owner.session.id !== session.session.id) {
+			throw new AgendaError(
+				"unavailable",
+				"The document’s Planner owner must allow public research.",
+			);
+		}
+		await ownerAvailable(channel.id);
+		return {
+			userId: resolved.owner.user.id,
+			userHandle: resolved.owner.user.login,
+			sessionId: resolved.owner.session.id,
+			generation: resolved.ownership.generation,
+			credentialRevision: resolved.owner.access.revision,
+		};
+	},
+});
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
 registerConnectorScript(router, {
@@ -2484,8 +2564,10 @@ try {
 	let recovery = await researchService.recoverPendingPlannerInline(placeResearchReference);
 	scheduleResearchRecovery(recovery.deferred);
 	await researchService.recoverTerminalPlannerInline();
+	await agendaService.start();
 	jobRunner.start();
 } catch (err) {
+	agendaService.stop();
 	if (listening) await listening.stop(true).catch(() => {});
 	if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 	if (sessionCleanup) clearInterval(sessionCleanup);

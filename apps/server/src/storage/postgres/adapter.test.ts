@@ -1010,6 +1010,7 @@ if (url) {
 				"021_document_titles",
 				"022_machine_choices",
 				"023_machine_favorites",
+				"024_research_agendas",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

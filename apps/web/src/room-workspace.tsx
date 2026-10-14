@@ -1,4 +1,6 @@
 import {
+	lazy,
+	Suspense,
 	useCallback,
 	useContext,
 	useEffect,
@@ -123,6 +125,12 @@ import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
 import type { WorkspaceDocumentView } from "./workspace-model";
 
+let ResearchAgenda = lazy(() =>
+	import("./research-agenda/agenda-dialog").then(module => ({
+		default: module.ResearchAgenda,
+	}))
+);
+
 type ManagedHello = Session.Hello & { archivedAt?: string; canManage: boolean };
 type ManagedChannel = Session.Channel & { archivedAt?: string; canManage: boolean };
 type ManagedAccess = Session.Access & { canManage: boolean };
@@ -192,6 +200,7 @@ type TitleProps = {
 	editing?: TitleEdit;
 	label: string;
 	onAction: (action: DocumentAction) => void;
+	onResearchAgenda?: () => void;
 	onEditingChange: (editing?: TitleEdit) => void;
 	onRenamed: (channel: DocumentMetadata) => void;
 	project?: { id: string; name: string };
@@ -222,6 +231,7 @@ export function DocumentTitle(
 		icon,
 		label,
 		onAction,
+		onResearchAgenda,
 		onEditingChange,
 		onRenamed,
 		path,
@@ -331,9 +341,11 @@ export function DocumentTitle(
 						</button>
 					)
 					: <span className="title-control-label truncate">{label}</span>}
-				{canManage && (
+				{(canManage || onResearchAgenda) && (
 					<DocumentActionsMenu
 						openDocument
+						onResearchAgenda={onResearchAgenda}
+						readOnly={!canManage}
 						align="start"
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
@@ -403,6 +415,7 @@ export function Header(
 				icon
 				label={props.label}
 				onAction={props.onAction}
+				onResearchAgenda={props.onResearchAgenda}
 				onEditingChange={props.onEditingChange}
 				onRenamed={props.onRenamed}
 				project={props.project}
@@ -556,6 +569,8 @@ export function RoomWorkspace(
 		};
 	}, [room, wire]);
 	let researchEnabled = profile.research;
+	let [agendaOpen, setAgendaOpen] = useState(false);
+	let [agendaVisited, setAgendaVisited] = useState(false);
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	// A `#task-` link waits for Build to be available, then opens it once.
 	let [taskLink, setTaskLink] = useState(false);
@@ -1170,6 +1185,12 @@ export function RoomWorkspace(
 	]);
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
+	let openAgenda = researchEnabled && !workspaceArchivedAt
+		? () => {
+			setAgendaVisited(true);
+			setAgendaOpen(true);
+		}
+		: undefined;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
 	let editMode = documentEditMode({
 		canEdit: !!workspaceCanEdit && !implementation.locked,
@@ -1489,6 +1510,7 @@ export function RoomWorkspace(
 		editing: titleEdit,
 		label: metadata.title,
 		onAction: action => onDocumentAction(room, action),
+		onResearchAgenda: openAgenda,
 		onEditingChange: setTitleEdit,
 		onRenamed: updateMetadata,
 		project: { id: repository.id, name: repository.name },
@@ -1629,6 +1651,18 @@ export function RoomWorkspace(
 	return (
 		<ChildPhoneChromeContext.Provider value={childChromeValue}>
 			<ChildTitleContext.Provider value={childTitleValue}>
+				{agendaVisited && (
+					<Suspense fallback={null}>
+						<ResearchAgenda
+							channelId={room}
+							open={agendaOpen && !workspaceArchivedAt}
+							onOpenChild={presentation.onChildOpen
+								? child => presentation.onChildOpen!(child.id)
+								: undefined}
+							onDismiss={() => setAgendaOpen(false)}
+						/>
+					</Suspense>
+				)}
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
@@ -1731,6 +1765,7 @@ export function RoomWorkspace(
 									label={metadata.title}
 									members={members}
 									onAction={action => onDocumentAction(room, action)}
+									onResearchAgenda={openAgenda}
 									onComments={() => {
 										// The list stands over the document, so it opens from any tab onto it.
 										selectDestination("plan");

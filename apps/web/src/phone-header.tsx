@@ -46,6 +46,7 @@ type PhoneHeaderDocument = {
 	label: string;
 	members: Session.Member[];
 	onAction: (action: DocumentAction) => void;
+	onResearchAgenda?: () => void;
 	onComments?: () => void;
 	onEditingChange: (editing?: TitleEdit) => void;
 	onRenamed: (channel: DocumentMetadata) => void;
@@ -127,6 +128,7 @@ export function PhoneHeaderContent(
 		label,
 		members,
 		onAction,
+		onResearchAgenda,
 		onComments,
 		onEditingChange,
 		onRenamed,
@@ -245,9 +247,11 @@ export function PhoneHeaderContent(
 						<span aria-hidden="true">{comments}</span>
 					</button>
 				)}
-				{canManage && (
+				{(canManage || onResearchAgenda) && (
 					<DocumentActionsMenu
 						openDocument
+						onResearchAgenda={onResearchAgenda}
+						readOnly={!canManage}
 						channel={{ archivedAt, title: label }}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
