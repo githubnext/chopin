@@ -1,3 +1,4 @@
+import * as Questions from "../questions/service";
 import { announceImplementation } from "../tasks/notifications";
 import { $createHeadingNode } from "@chopin/dialect";
 import * as Y from "yjs";
@@ -330,3 +331,71 @@ describe("synchronized product document titles", () => {
 		expect(normalizedTitle(" ")).toBe("");
 	});
 });
+
+for (let source of ["# Named title\n", "#\n"]) {
+	it(`a titled-only product document admits unanchored questions: ${JSON.stringify(source)}`, async () => {
+		let c = await context(source);
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		let definition = Questions.identify({
+			questions: [{
+				header: "Release",
+				question: "Should we ship?",
+				multiple: false,
+				options: [{ label: "Pilot", description: "" }],
+			}],
+		});
+		let created = Promise.withResolvers<void>();
+		let stop = new AbortController();
+		let waiting = Questions.ask(
+			plan,
+			c.server,
+			plan.id,
+			definition,
+			{
+				revision: plan.revision,
+				blocks: [[]],
+			},
+			created.resolve,
+			stop.signal,
+		);
+		try {
+			await Promise.race([created.promise, waiting]);
+			expect(plan.records.size).toBe(1);
+			expect(Room.hasProse(plan.document)).toBe(false);
+			expect(Room.headingAllowed(plan.document)).toBe(true);
+		} finally {
+			stop.abort();
+			await waiting.catch(() => {});
+			await Service.close(plan);
+		}
+	});
+}
+
+for (let body of ["# Body section\n", "#\n"]) {
+	it(`ordinary body H1 prose still requires question anchors in title mode: ${JSON.stringify(body)}`, async () => {
+		let c = await context(`# Title\n\n${body}`);
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		let definition = Questions.identify({
+			questions: [{
+				header: "Release",
+				question: "Should we ship?",
+				multiple: false,
+				options: [{ label: "Pilot", description: "" }],
+			}],
+		});
+		try {
+			expect(Room.hasProse(plan.document)).toBe(true);
+			expect(Room.headingAllowed(plan.document)).toBe(false);
+			await expect(Questions.ask(plan, c.server, plan.id, definition, {
+				revision: plan.revision,
+				blocks: [[]],
+			})).rejects.toThrow("Relate each question to prose");
+			let standalone = await Room.create("# Ordinary heading\n");
+			expect(Room.hasProse(standalone)).toBe(true);
+			expect(Room.headingAllowed(standalone)).toBe(false);
+			standalone.doc.destroy();
+		} finally {
+			await Service.close(plan);
+		}
+	});
+}

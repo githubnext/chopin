@@ -94,7 +94,7 @@ async function settled(ana: Page, bo: Page, room: string) {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test("one member's choice posts a live Save decision prompt for everyone", async ({ join, room }) => {

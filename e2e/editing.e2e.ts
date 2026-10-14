@@ -34,7 +34,9 @@ test("a markdown shortcut becomes the block it names", async ({ join, room }) =>
 	await page.keyboard.type("# What we are building\n");
 	await page.keyboard.type("A planning surface two people can share.");
 
-	await expect(content(page).getByRole("heading", { level: 1 })).toHaveText(
+	await expect(
+		content(page).getByRole("heading", { level: 1, name: "What we are building", exact: true }),
+	).toHaveText(
 		"What we are building",
 	);
 
@@ -91,7 +93,7 @@ test("Tab leaves a heading instead of indenting it", async ({ join, room }) => {
 
 	await content(page).click();
 	await page.keyboard.type("# Title");
-	let heading = content(page).getByRole("heading", { level: 1 });
+	let heading = content(page).getByRole("heading", { level: 1, name: "Title", exact: true });
 	await expect(heading).toHaveText("Title");
 
 	// A keyboard user has to be able to get past the editor, and trying to
@@ -100,7 +102,7 @@ test("Tab leaves a heading instead of indenting it", async ({ join, room }) => {
 	await expect(content(page)).not.toBeFocused();
 	await expect(heading).toHaveText("Title");
 	await expect(heading).not.toHaveAttribute("style", /padding/);
-	await written(page, room, /^# Title\s*$/);
+	await written(page, room, /^# Title$/m);
 });
 
 test("Tab nests a list item and Shift+Tab brings it back", async ({ join, room }) => {
@@ -139,7 +141,7 @@ test("Tab on a first list item leaves without a phantom indent", async ({ join, 
 	// A later edit from the same author is the barrier: once Ben has it, he
 	// has everything Ana sent before it.
 	await content(ana).getByText("one", { exact: true }).click();
-	await ana.keyboard.press("End");
+	await ana.keyboard.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
 	await ana.keyboard.type("!");
 	await expect(content(ben).getByRole("listitem")).toHaveText(["one!"]);
 	await expect(content(ben).locator("li li")).toHaveCount(0);

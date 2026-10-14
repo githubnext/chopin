@@ -1,3 +1,4 @@
+import { normalizeDocumentTitle } from "../packages/dialect/src/title";
 import { chatInput, expectChatValue } from "./chat-input";
 import { expect, test } from "./room";
 import { textContrast } from "./rendered-contrast";
@@ -56,8 +57,10 @@ for (let width of [1280, 390]) {
 		await actions.click();
 		await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
 		let rename = page.getByRole("textbox", { name: "Document title" });
-		let title = `${"ReleaseHandoff".repeat(8)}${room.slice(0, 8)}`;
-		await rename.fill(title);
+		let typed = `${"ReleaseHandoff".repeat(8)}${room.slice(0, 8)}`;
+		let title = normalizeDocumentTitle(typed);
+		await rename.fill(typed);
+		await expect(rename).toHaveValue(title);
 		await rename.press("Enter");
 		await expect(rename).toBeHidden();
 		await expect.poll(() =>

@@ -40,7 +40,7 @@ function expectSource(
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test("two members share sourced threads and decide on the card", async ({ join, room }) => {

@@ -100,7 +100,7 @@ test("columns render side by side, stack in a narrow document, and unwrap in ord
 	await columns.hover();
 	await content(page).getByRole("button", { name: "Unwrap columns" }).click();
 	await expect(columns).toHaveCount(0);
-	await written(page, room, /^First gallery note\.\n\nSecond gallery note\.\n$/);
+	await written(page, room, /^# Test [^\n]+\n\nFirst gallery note\.\n\nSecond gallery note\.\n$/);
 	await content(page).getByText("First gallery note.").click();
 	await page.keyboard.press("ControlOrMeta+z");
 	await expect(columns).toHaveCount(1);

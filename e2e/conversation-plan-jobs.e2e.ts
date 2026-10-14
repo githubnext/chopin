@@ -104,7 +104,7 @@ async function refineScript(options: { hold?: boolean; target?: string } = {}) {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test.afterEach(async () => {

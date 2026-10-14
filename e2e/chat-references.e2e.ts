@@ -79,6 +79,8 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 
 	await page.setViewportSize({ width: 390, height: 520 });
 	let opened = await join("ana");
+	let parent = await (await opened.request.get(`/api/channels/${room}`)).json();
+	targetPath = `/documents/octo-org/score/${parent.channel.slug}/children/${seededTarget.slug}`;
 	await opened.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
 	let chat = opened.getByRole("complementary", { name: "Chat" });
@@ -224,7 +226,12 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 		.getByRole("link", { name: `#${targetTitle}`, exact: true });
 	await expect(documentLink).toBeVisible();
 	await documentLink.click();
-	await expect(opened).toHaveURL(url => url.pathname === targetPath);
+	await expect(opened.locator(`[data-workspace-room="${targetRoom}"]`)).toBeVisible();
+	let targetDetail = await (await opened.request.get(`/api/channels/${targetRoom}`)).json();
+	await expect(opened).toHaveURL(url =>
+		url.pathname
+			=== `/documents/octo-org/score/${parent.channel.slug}/children/${targetDetail.channel.slug}`
+	);
 });
 
 test("a server without chat references leaves typed tokens ordinary", async ({ join, page, seed }) => {

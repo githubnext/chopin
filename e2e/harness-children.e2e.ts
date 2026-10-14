@@ -100,7 +100,7 @@ test("the root Planner edits the open child from the root's Chat", async ({ base
 		room,
 		crypto.randomUUID(),
 		title,
-		"# Child report\n\nOriginal finding.\n",
+		`# ${title}\n\nOriginal finding.\n`,
 	);
 	let sockets = await watchSockets(page);
 
@@ -169,7 +169,7 @@ test("Send to Chopin on a child comment runs on the root's Chat and replies in t
 		room,
 		crypto.randomUUID(),
 		title,
-		"# Child report\n\nThe tuning section is vague.\n",
+		`# ${title}\n\nThe tuning section is vague.\n`,
 	);
 	let sockets = await watchSockets(page);
 	let opened = await join("ana");
@@ -198,7 +198,10 @@ test("Send to Chopin on a child comment runs on the root's Chat and replies in t
 	await expect(opened).toHaveURL(url => !url.pathname.includes("/children/"));
 	await notice.click();
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
-	await expect(opened).toHaveURL(url => url.pathname === child.path);
+	let parent = await (await opened.request.get(`/api/channels/${room}`)).json();
+	await expect(opened).toHaveURL(url =>
+		url.pathname === `/documents/octo-org/score/${parent.channel.slug}/children/${child.slug}`
+	);
 	await expect(thread.getByText("Done. I tightened the passage you marked.")).toBeVisible();
 	// The root's editor, still mounted beneath, never claimed the child's thread.
 	await expect(opened.getByText(GONE)).toHaveCount(0);
@@ -212,7 +215,7 @@ test("a notice for another child's thread switches to that child and opens it", 
 		room,
 		crypto.randomUUID(),
 		`First child ${room.slice(0, 8)}`,
-		"# First report\n\nThe bridge is fine.\n",
+		`# First child ${room.slice(0, 8)}\n\nThe bridge is fine.\n`,
 	);
 	let secondTitle = `Second child ${room.slice(0, 8)}`;
 	let second = await seedChildChannel(
@@ -220,7 +223,7 @@ test("a notice for another child's thread switches to that child and opens it", 
 		room,
 		crypto.randomUUID(),
 		secondTitle,
-		"# Second report\n\nThe pegs slip under tension.\n",
+		`# ${secondTitle}\n\nThe pegs slip under tension.\n`,
 	);
 	let opened = await join("ana");
 	let goneSeen = await watchForGone(opened);
@@ -236,7 +239,10 @@ test("a notice for another child's thread switches to that child and opens it", 
 	await chat.locator("[data-chat-comment]").filter({ hasText: "say which pegs" }).click();
 	await expect(secondSurface.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
 	await expect(firstSurface).toHaveCount(0);
-	await expect(opened).toHaveURL(url => url.pathname === second.path);
+	let parent = await (await opened.request.get(`/api/channels/${room}`)).json();
+	await expect(opened).toHaveURL(url =>
+		url.pathname === `/documents/octo-org/score/${parent.channel.slug}/children/${second.slug}`
+	);
 	await expect(
 		opened.getByRole("dialog", { name: "Comment thread" })
 			.getByText("Done. I tightened the passage you marked."),

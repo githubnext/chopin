@@ -93,7 +93,7 @@ async function persistedConversation(port: number, room: string) {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test("three members carry two sourced questions through a suggested and a human choice", async ({ join, room, baseURL }) => {

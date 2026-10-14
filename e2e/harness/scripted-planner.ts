@@ -1,3 +1,5 @@
+import { documentTitleText } from "../../packages/dialect/src/title";
+import { parse } from "../../packages/dialect/src/parse";
 import {
 	held,
 	readScript,
@@ -149,7 +151,12 @@ export function createPromptScriptedHarness(
 								let read = await request("read_plan", {});
 								if (!read || !current()) return finish();
 								let revision = readRevision(read);
-								await request(call.tool, substitute(call.args, revision, target));
+								let input = substitute(call.args, revision, target) as Record<string, unknown>;
+								if (call.tool === "draft_heading" && input.title === "$currentTitle") {
+									let document = JSON.parse(String(read.output)) as { source: string };
+									input.title = documentTitleText(parse(document.source)) ?? "";
+								}
+								await request(call.tool, input);
 							}
 							finish();
 						} catch (error) {

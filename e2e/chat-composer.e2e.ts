@@ -195,6 +195,7 @@ test("read-only and archived notices replace the composer input", async ({ join,
 		kind: "session:channel",
 		channelId: room,
 		archivedAt: new Date().toISOString(),
+		updatedAt: new Date(Date.now() + 1000).toISOString(),
 		canManage: true,
 	});
 	await expect(chat.getByText("Archived. Restore it to keep chatting.", { exact: true }))

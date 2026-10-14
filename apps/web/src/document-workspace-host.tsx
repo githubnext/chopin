@@ -10,6 +10,7 @@ import {
 import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
 import { readChildMotionStyle } from "./child-motion-driver";
 import { prepareDocumentLoad } from "./document-loader";
+import { updateDocumentMetadata } from "./document-actions";
 import { documentRouteIdentity } from "./document-route-swap";
 import {
 	initialDocumentWorkspaceState,
@@ -209,6 +210,9 @@ export default function DocumentWorkspaceHost(
 	let routeRef = useRef(route);
 	routeRef.current = route;
 	let routeKey = documentRouteIdentity(route);
+	// Canonical slugs are aliases of the request already in flight, not new documents.
+	let requestAliases = useRef(new Map<DocumentRouteIdentity, DocumentRouteIdentity>());
+	let loadKey = requestAliases.current.get(routeKey) ?? routeKey;
 	let error = state.error;
 	let presentation = state.presentation;
 	let previousPresentation = useRef(presentation);
@@ -217,10 +221,10 @@ export default function DocumentWorkspaceHost(
 	let parentSurface = useRef<HTMLDivElement>(null);
 	let openRequest = useRef(0);
 	useEffect(() => () => void (openRequest.current += 1), []);
-	// The card's key follows the child route, not the loaded channel, so loading never remounts
+	// The card's key follows the child request, so canonical renames never remount
 	// it, and it outlives the route while the card closes.
 	let childKey = useRef<string | undefined>(undefined);
-	if (route.page === "child") childKey.current = route.childSlug;
+	if (route.page === "child") childKey.current = loadKey;
 
 	useEffect(() => {
 		let active = true;
@@ -257,9 +261,16 @@ export default function DocumentWorkspaceHost(
 			if (!active) return;
 			let parent = prepared.parent ?? prepared.detail;
 			let child = prepared.parent ? prepared.detail : undefined;
+			let latest = stateRef.current;
+			if (latest.status === "ready" && latest.loaded.parent.channel.id === parent.channel.id) {
+				parent = {
+					...parent,
+					channel: updateDocumentMetadata(parent.channel, latest.loaded.parent.channel),
+				};
+			}
 			rememberChannel(user.id, parent.channel, parent.repository);
 			if (child) rememberChannel(user.id, child.channel, child.repository);
-			send({ child, parent, route: requestedRoute, type: "ready" });
+			send({ child, parent, route: routeRef.current, type: "ready" });
 			let routeKey = child
 				? documentRouteIdentity({
 					childSlug: child.channel.slug,
@@ -274,10 +285,16 @@ export default function DocumentWorkspaceHost(
 					repository: parent.repository.name,
 					slug: parent.channel.slug,
 				});
+			requestAliases.current.set(routeKey, loadKey);
+			let paths = anchoredChildPaths({
+				owner: parent.repository.owner,
+				repository: parent.repository.name,
+				slug: parent.channel.slug,
+			}, child?.channel.slug);
 			let resolution = {
-				canonicalPath: prepared.pathname,
+				canonicalPath: paths.child ?? paths.parent,
 				channel: (child ?? parent).channel,
-				requestKey: documentRouteIdentity(requestedRoute),
+				requestKey: documentRouteIdentity(routeRef.current),
 				routeKey,
 			};
 			// The outgoing document stays on screen until this one has synced, briefly.
@@ -306,7 +323,7 @@ export default function DocumentWorkspaceHost(
 			active = false;
 			controller.abort();
 		};
-	}, [layerKey, onReady, routeKey, send, state.retry, user.id]);
+	}, [layerKey, loadKey, onReady, send, state.retry, user.id]);
 
 	useLayoutEffect(() => {
 		if (!loaded || parentScrollTop.current === undefined) return;
@@ -425,8 +442,25 @@ export default function DocumentWorkspaceHost(
 		if (kind === "parent" && routeRef.current.page === "child") {
 			history.replaceState(rebaseChildHistoryState(history.state, paths.parent), "");
 		}
+		let canonicalRoute = route.page === "child"
+			? {
+				...route,
+				parentSlug: updated.parent.channel.slug,
+				childSlug: updated.child?.channel.slug ?? route.childSlug,
+			}
+			: { ...route, slug: updated.parent.channel.slug };
+		let canonicalKey = documentRouteIdentity(canonicalRoute);
+		requestAliases.current.set(canonicalKey, loadKey);
 		onCanonicalPath(layerKey, routeKey, pathname);
-	}, [layerKey, onCanonicalPath, routeKey, send]);
+		if (route.page === "document" || updated.child) {
+			onReady(layerKey, {
+				canonicalPath: pathname,
+				channel: (updated.child ?? updated.parent).channel,
+				requestKey: canonicalKey,
+				routeKey: canonicalKey,
+			});
+		}
+	}, [layerKey, loadKey, onCanonicalPath, onReady, routeKey, send]);
 	let parentMetadataChanged = useCallback(
 		(metadata: Metadata) => metadataChanged("parent", metadata),
 		[metadataChanged],

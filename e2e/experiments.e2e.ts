@@ -38,7 +38,7 @@ function card(page: Page, brief: string) {
 }
 
 /** Open the child document a completed investigation published, from its inline card. */
-async function openChild(page: Page, room: string) {
+async function openChild(page: Page) {
 	await card(page, "Startup comparison")
 		// Other tests publish the same fixture into this repository, so its title may be numbered.
 		.getByRole("button", { name: /^Open Startup comparison/ })
@@ -46,7 +46,7 @@ async function openChild(page: Page, room: string) {
 		.click({ position: { x: 16, y: 16 } });
 	let child = page.getByRole("region", { name: /^Child document: Startup comparison/ });
 	let provenance = child.locator("[data-child-provenance]");
-	await expect(provenance).toContainText(`Investigation from Test ${room.slice(0, 8)}`);
+	await expect(provenance).toContainText("Investigation from Investigation");
 	await expect(provenance).toContainText("1 view");
 	await expect(child.getByRole("heading", { name: "Startup comparison", exact: true }))
 		.toBeVisible();
@@ -188,7 +188,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		await heldChart;
 		await route.continue();
 	});
-	let child = await openChild(page, room);
+	let child = await openChild(page);
 	await expect(child.getByText("Loading chart…", { exact: true })).toBeVisible();
 	let table = child.getByRole("table", { name: "Median startup time", exact: true });
 	await expect(table).toContainText("183");
@@ -221,7 +221,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		await heldPeerChart;
 		await route.continue();
 	});
-	let peerChild = await openChild(peer, room);
+	let peerChild = await openChild(peer);
 	await peerChild.getByRole("combobox", { name: "Filter Workload", exact: true }).selectOption(
 		JSON.stringify("small"),
 	);
@@ -245,7 +245,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		await heldNarrowChart;
 		await route.continue();
 	});
-	let narrowChild = await openChild(narrow, room);
+	let narrowChild = await openChild(narrow);
 	let narrowTable = narrowChild.getByRole("table", { name: "Median startup time", exact: true });
 	await expect(narrowChild.getByText("Loading chart…", { exact: true })).toBeVisible();
 	let narrowLoadingHeight = await narrowChild.getByText("Loading chart…", { exact: true })
@@ -289,7 +289,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		return renderAttempts === 1 ? route.abort("failed") : route.continue();
 	});
 	await failed.reload();
-	let failedChild = await openChild(failed, room);
+	let failedChild = await openChild(failed);
 	await expect(failedChild.getByRole("alert").filter({ hasText: "Chart could not load." }))
 		.toBeVisible();
 	await expect(failedChild.getByRole("table", { name: "Median startup time", exact: true }))
@@ -326,7 +326,7 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 	await expect(queued).toHaveCount(0);
 	await tool("disconnect_workspace", {});
 	await page.reload();
-	await expect((await openChild(page, room)).getByRole("table", {
+	await expect((await openChild(page)).getByRole("table", {
 		name: "Median startup time",
 		exact: true,
 	})).toContainText("410");

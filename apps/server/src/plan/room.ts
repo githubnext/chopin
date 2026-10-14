@@ -893,17 +893,26 @@ export function digests(target: Document): string[] {
 	);
 }
 
-/** Whether the source contains plan content rather than only decision widgets. */
+function bodyBlocks(target: Document) {
+	let protectedTitle = target.titleKey !== undefined && target.editor.getEditorState().read(() => {
+		let first = $getRoot().getFirstChild();
+		return $isHeadingNode(first) && first.getTag() === "h1" && first.getKey() === target.titleKey;
+	});
+	return parse(project(target)).children.slice(protectedTitle ? 1 : 0);
+}
+
+/** Whether the authored body contains prose rather than only decision widgets. */
 export function hasProse(target: Document): boolean {
-	return parse(project(target)).children.some(node =>
+	return bodyBlocks(target).some(node =>
 		node.type !== "mdxJsxFlowElement"
 		|| (node.name !== "Questionnaire" && node.name !== "Decision")
 	);
 }
 
 export function headingAllowed(target: Document): boolean {
-	let blocks = parse(project(target)).children;
-	let placeholder = blocks[0]?.type === "heading" && blocks[0].depth === 1
+	let blocks = bodyBlocks(target);
+	let placeholder = target.titleKey === undefined
+		&& blocks[0]?.type === "heading" && blocks[0].depth === 1
 		&& blocks[0].children.length === 0;
 	return blocks.slice(placeholder ? 1 : 0).every(node =>
 		node.type === "mdxJsxFlowElement"

@@ -121,7 +121,15 @@ export async function seedChildChannel(
 		});
 	});
 	await seedChannel(port, id, source, state);
-	return { id, path: `${testChannelPath(parentId)}/children/${slug}`, slug };
+	let parentPath = await sql(port, async database => {
+		let [parent] = await database<{ owner: string; repository: string; slug: string }[]>`
+			SELECT c.repository_owner AS owner, c.repository_name AS repository, s.slug
+			FROM channels c JOIN channel_slugs s ON s.channel_id = c.id AND s.canonical = true
+			WHERE c.id = ${parentId}
+		`;
+		return `/documents/${parent!.owner}/${parent!.repository}/${parent!.slug}`;
+	});
+	return { id, path: `${parentPath}/children/${slug}`, slug };
 }
 
 export async function countChildChannels(port: number, parentId: string): Promise<number> {

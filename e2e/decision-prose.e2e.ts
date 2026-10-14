@@ -84,7 +84,7 @@ async function openPopover(page: Page): Promise<Locator> {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test.afterEach(async () => {

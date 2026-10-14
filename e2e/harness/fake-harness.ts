@@ -165,7 +165,7 @@ export function createFakeHarness(
 							revision: current,
 							operations: [{
 								op: "insert",
-								index: 0,
+								index: 1,
 								source: ASKED.map(item => `${item.header}: we chose the first option.`)
 									.join("\n\n"),
 							}],

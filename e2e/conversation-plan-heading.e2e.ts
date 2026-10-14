@@ -3,7 +3,7 @@ import { openJevWire, sendChat, wireFrames } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 test.afterEach(async () => {
 	await resetPlannerJobs();

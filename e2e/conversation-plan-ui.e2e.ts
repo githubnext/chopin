@@ -28,7 +28,7 @@ async function expectOpenCardReadOnly(card: ReturnType<typeof decisionCard>) {
 }
 
 test.beforeEach(async () => {
-	await resetPlannerJobs({ suggest: true });
+	await resetPlannerJobs({ heading: true, suggest: true });
 });
 
 test("Chat analysis diagnostics float without moving a bottom message", async ({ join, room }) => {

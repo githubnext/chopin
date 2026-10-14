@@ -512,23 +512,20 @@ test("two people typing in one fence both end up in it", async ({ join, room, se
 	let ana = await join("ana");
 	let bo = await join("bo");
 
-	/*
-	 * Select everything and collapse the selection to the end you want.
-	 * Clicking a line means clicking a coordinate inside a `<pre>`, and
-	 * Home and End are a different key on each platform; this is neither.
-	 * The fence is the whole document here, so its ends are the document's.
-	 */
-	await content(ana).getByRole("button", { name: "Show source" }).click();
-	await content(ana).locator("[data-plan-source]").click();
-	await ana.keyboard.press("ControlOrMeta+a");
-	await ana.keyboard.press("ArrowLeft");
-	await ana.keyboard.type("// ana ");
-
-	await content(bo).getByRole("button", { name: "Show source" }).click();
-	await content(bo).locator("[data-plan-source]").click();
-	await bo.keyboard.press("ControlOrMeta+a");
-	await bo.keyboard.press("ArrowRight");
-	await bo.keyboard.type(" // bo");
+	// Select inside the canonical fence; the permanent title precedes it.
+	for (let [page, atEnd] of [[ana, false], [bo, true]] as const) {
+		await content(page).getByRole("button", { name: "Show source" }).click();
+		await content(page).locator("[data-plan-source]").evaluate((element, atEnd) => {
+			let range = document.createRange();
+			range.selectNodeContents(element);
+			range.collapse(!atEnd);
+			let selection = getSelection()!;
+			selection.removeAllRanges();
+			selection.addRange(range);
+			element.closest<HTMLElement>("[contenteditable]")!.focus();
+		}, atEnd);
+		await page.keyboard.type(atEnd ? " // bo" : "// ana ");
+	}
 
 	for (let page of [ana, bo]) {
 		// The source is one shared text, so neither edit replaces the other.

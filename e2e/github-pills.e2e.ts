@@ -89,8 +89,8 @@ test("the caret can edit inside a pill", async ({ join, room, seed }) => {
 	let edited = content(page).getByRole("link", { name: /Add draft outline #1/ });
 	await expect(edited).toHaveAttribute("data-gh-state", "pr-open");
 
-	// Home leaves the pill for the start of the line, as it would in prose.
-	await page.keyboard.press("Home");
+	// Moving to the line start leaves the pill, as it would in prose.
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
 	await expect(edited).not.toHaveAttribute("data-gh-editing");
 	await page.keyboard.type("Now ");
 	await written(page, room, `Now Shipped [Add draft outline](${BASE}/pull/1).`);

@@ -358,7 +358,9 @@ test("typing straight after New document names it without losing a character", a
 			await page.keyboard.type(name, { delay });
 			await page.keyboard.press("Enter");
 			await expect(headerDocument(page)).toHaveAccessibleName(`Document: ${name}`);
-			await expect(content(page)).not.toContainText(name.slice(0, 5));
+			await expect(content(page).getByRole("heading", { level: 1, name, exact: true }))
+				.toHaveCount(1);
+			await expect(content(page).locator(":scope > :not(h1)")).toHaveText([""]);
 		}
 	} finally {
 		await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
@@ -1147,10 +1149,12 @@ test(
 			"# A calmer document\n\nRetrying navigation keeps the document and draft available.\n",
 		);
 		await page.setViewportSize({ width: 1452, height: 895 });
-		let failed = false;
+		let navigationOnline = false;
+		let attempts = 0;
 		await page.route("**/api/navigation", async route => {
-			if (route.request().method() === "GET" && !failed) {
-				failed = true;
+			if (route.request().method() === "GET") attempts++;
+			// Startup revalidation may queue a GET while the first is still in flight.
+			if (route.request().method() === "GET" && !navigationOnline) {
 				await route.abort("failed");
 				return;
 			}
@@ -1167,7 +1171,10 @@ test(
 		let draft = chatInput(page);
 		await fillChat(draft, "Keep this draft while retrying navigation.");
 		await page.screenshot({ path: testInfo.outputPath("navigation-warning.png") });
+		let attemptsBeforeRetry = attempts;
+		navigationOnline = true;
 		await notice.getByRole("button", { name: "Try again", exact: true }).click();
+		await expect.poll(() => attempts).toBeGreaterThan(attemptsBeforeRetry);
 		await expect(notice).toHaveCount(0);
 		await expectChatValue(draft, "Keep this draft while retrying navigation.");
 		await expect(sidebar(page).getByRole("link").and(page.locator('[aria-current="page"]')))
