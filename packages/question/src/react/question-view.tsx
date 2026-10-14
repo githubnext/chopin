@@ -643,6 +643,11 @@ function Resolved(
 											<InlineCode text={answer.question} />
 										</Related>
 									</h4>
+									{question?.description && (
+										<p className="question-hint">
+											<InlineCode text={question.description} />
+										</p>
+									)}
 								</div>
 							</header>
 							<div className="question-options">
@@ -1119,6 +1124,11 @@ export function QuestionView(props: QuestionViewProps) {
 										<InlineCode text={current.question} />
 									</Related>
 								</h4>
+								{current.description && (
+									<p className="question-hint">
+										<InlineCode text={current.description} />
+									</p>
+								)}
 								{current.multiple && <p className="question-hint">Choose any</p>}
 								{previousAnswer && (
 									<p className="question-hint">

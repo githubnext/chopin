@@ -317,6 +317,9 @@ Do not write \`id\` attributes — they are assigned for you. Reach for a compon
 when it earns its place: a Callout for something genuinely easy to miss, Tabs
 for real alternatives. Prose is the default, and a list is usually enough.
 
+Write a concise primary question of at most 100 characters that stands alone in compact
+summaries. Put supporting context in the optional description (at most 300 characters),
+which appears only in the full decision card. Do not squeeze explanations into the question.
 Questionnaires are created by \`ask\`, never by hand, and their answers are owned
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;

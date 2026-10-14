@@ -252,6 +252,7 @@ export type BlockAddress = { index: number; digest: string };
 export type PositionedQuestion = {
 	header: string;
 	question: string;
+	description?: string;
 	options: Array<{ label: string; description: string }>;
 	multiple: boolean;
 	blocks: BlockAddress[];
@@ -267,7 +268,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 		.map((raw, index) => {
 			let name = `questions[${index}]`;
 			let question = record(raw, name);
-			fields(question, ["header", "question", "options", "multiple", "blocks"], [
+			fields(question, ["header", "question", "description", "options", "multiple", "blocks"], [
 				"header",
 				"question",
 				"options",
@@ -281,6 +282,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 				questions: [{
 					header: question.header,
 					question: question.question,
+					...(Object.hasOwn(question, "description") ? { description: question.description } : {}),
 					options: question.options,
 					multiple: question.multiple,
 				}],
@@ -289,6 +291,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 			return {
 				header: normalized.header,
 				question: normalized.question,
+				...(normalized.description === undefined ? {} : { description: normalized.description }),
 				options: normalized.options.map(option => ({
 					label: option.label,
 					description: option.description,

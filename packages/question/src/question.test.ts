@@ -75,7 +75,7 @@ describe("normalize", () => {
 		for (
 			let [override, message] of [
 				[{ header: "x".repeat(limits.MAX_HEADER + 1) }, /exceeds 80 characters/],
-				[{ question: "x".repeat(limits.MAX_QUESTION + 1) }, /exceeds 1000 characters/],
+				[{ question: "x".repeat(limits.MAX_NEW_QUESTION + 1) }, /exceeds 100 characters/],
 				[{ options: many }, /at most 20 options/],
 				[{ options: [{ label: "x".repeat(limits.MAX_LABEL + 1), description: "" }] }, /label/],
 				[

@@ -54,6 +54,8 @@ export declare namespace Question {
 		id: string;
 		header: string;
 		question: string;
+		/** Supporting context, shown only in the full decision card. */
+		description?: string;
 		options: Option[];
 		multiple: boolean;
 		/** Host dialogs preserve raw text, including an explicitly submitted empty answer. */

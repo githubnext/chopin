@@ -124,6 +124,7 @@ export async function ask(
 					id: question.id,
 					header: question.header,
 					prompt: question.question,
+					...(question.description === undefined ? {} : { description: question.description }),
 					multiple: question.multiple,
 					options: question.options.map(option => ({
 						id: option.id,

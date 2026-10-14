@@ -146,6 +146,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		attributes: {
 			header: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			prompt: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
+			description: { type: "text", required: false, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			multiple: { type: "enum", required: true, values: ["true", "false"] },
 		},
 	}),

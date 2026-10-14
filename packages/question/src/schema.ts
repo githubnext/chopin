@@ -98,7 +98,13 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 
 	let questions: Item[] = args.questions.map((source, index) => {
 		let raw = record(source, `Question ${index + 1}`);
-		exact(raw, ["header", "question", "options", "multiple"], `Question ${index + 1}`);
+		exact(raw, [
+			"header",
+			"question",
+			"options",
+			"multiple",
+			...(Object.hasOwn(raw, "description") ? ["description"] : []),
+		], `Question ${index + 1}`);
 
 		if (!Array.isArray(raw.options) || (!verbatim && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
@@ -147,10 +153,21 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 			question: text(
 				raw.question,
 				`Question ${index + 1}`,
-				limits.MAX_QUESTION,
+				limits.MAX_NEW_QUESTION,
 				verbatim,
 				verbatim,
 			),
+			...(Object.hasOwn(raw, "description")
+				? {
+					description: text(
+						raw.description,
+						`Question ${index + 1} description`,
+						limits.MAX_QUESTION_DESCRIPTION,
+						true,
+						verbatim,
+					),
+				}
+				: {}),
 			options,
 			multiple: raw.multiple,
 			...(verbatim ? { verbatim: true as const } : {}),
@@ -184,7 +201,15 @@ export function identified(raw: unknown): Definition {
 		if (verbatim && question.verbatim !== true) fail(`Question ${index + 1} has invalid fields`);
 		exact(
 			question,
-			["id", "header", "question", "options", "multiple", ...(verbatim ? ["verbatim"] : [])],
+			[
+				"id",
+				"header",
+				"question",
+				"options",
+				"multiple",
+				...(Object.hasOwn(question, "description") ? ["description"] : []),
+				...(verbatim ? ["verbatim"] : []),
+			],
 			`Question ${index + 1}`,
 		);
 		storedText(question.id, `Question ${index + 1} id`, limits.MAX_CALL_ID);
@@ -193,6 +218,15 @@ export function identified(raw: unknown): Definition {
 		questionIds.add(id);
 		storedText(question.header, `Question ${index + 1} header`, limits.MAX_HEADER, false, verbatim);
 		storedText(question.question, `Question ${index + 1}`, limits.MAX_QUESTION, false, verbatim);
+		if (Object.hasOwn(question, "description")) {
+			storedText(
+				question.description,
+				`Question ${index + 1} description`,
+				limits.MAX_QUESTION_DESCRIPTION,
+				true,
+				verbatim,
+			);
+		}
 		if (
 			typeof question.multiple !== "boolean"
 			|| !Array.isArray(question.options)

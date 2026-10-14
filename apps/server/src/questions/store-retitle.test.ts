@@ -59,7 +59,7 @@ describe("Store.retitle", () => {
 			ok: false,
 			reason: "invalid",
 		});
-		expect(Store.retitle(questions, "w", "x".repeat(1_001))).toMatchObject({
+		expect(Store.retitle(questions, "w", "x".repeat(101))).toMatchObject({
 			ok: false,
 			reason: "invalid",
 		});

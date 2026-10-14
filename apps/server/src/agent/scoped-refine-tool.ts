@@ -15,7 +15,7 @@ export function createRefineTools() {
 				properties: {
 					revision: { type: "integer", minimum: 0 },
 					id: { type: "string" },
-					title: { type: "string", minLength: 1, maxLength: 80 },
+					title: { type: "string", minLength: 1, maxLength: 100 },
 					add_options: {
 						type: "array",
 						maxItems: 10,

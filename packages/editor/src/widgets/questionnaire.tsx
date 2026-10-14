@@ -63,6 +63,7 @@ function definition(value: Questionnaire) {
 			id: question.id,
 			header: question.header,
 			question: question.prompt,
+			...(question.description === undefined ? {} : { description: question.description }),
 			multiple: question.multiple,
 			options: question.options.map(option => ({
 				id: option.id,

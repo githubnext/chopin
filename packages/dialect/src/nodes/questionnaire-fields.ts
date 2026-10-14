@@ -17,6 +17,7 @@ export type Question = {
 	id: string;
 	header: string;
 	prompt: string;
+	description?: string;
 	multiple: boolean;
 	options: Option[];
 	/** Projection of the resolved answer, when there is one. */

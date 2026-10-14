@@ -94,7 +94,7 @@ test("invalid title, options, and placement are refused before any retitle commi
 		for (
 			let invalid of [
 				{ title: "First\rSecond" },
-				{ title: "x".repeat(81) },
+				{ title: "x".repeat(101) },
 				{ title: "Why?", add_options: [{ label: "  ", rationale: "Valid" }] },
 				{ title: "Why?", add_options: [{ label: "Valid", rationale: "  " }] },
 				{ title: "Why?", place_after: { index: 0, digest: room.digest("changed") } },

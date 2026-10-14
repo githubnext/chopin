@@ -31,8 +31,8 @@ export function input(raw: unknown): Input {
 	let title: string | undefined;
 	if (Object.hasOwn(value, "title")) {
 		title = typeof value.title === "string" ? value.title.trim() : "";
-		if (!title || title.length > 80 || /[\r\n\u2028\u2029]/.test(value.title as string)) {
-			throw new Error("title must be 1–80 characters on one line.");
+		if (!title || title.length > 100 || /[\r\n\u2028\u2029]/.test(value.title as string)) {
+			throw new Error("title must be 1–100 characters on one line.");
 		}
 	}
 	let add_options: Option[] = [];

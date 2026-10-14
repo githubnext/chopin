@@ -17,6 +17,24 @@ describe("questionnaire", () => {
 		expect(out).toContain('multiple="false"');
 	});
 
+	it("round-trips supporting context through MDX and the atomic Lexical node", () => {
+		let source = OPEN.replace(
+			'prompt="How should we deploy?"',
+			'prompt="How should we deploy?" description="Compare our `rollback` options."',
+		);
+		let out = through(source);
+		expect(through(out)).toBe(out);
+		expect(out).toContain('description="Compare our `rollback` options."');
+		let instance = editor();
+		importPlan(instance, out, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let node = $getRoot().getFirstChild();
+			if (!$isQuestionnaireNode(node)) throw new Error("expected questionnaire");
+			expect(node.getQuestionnaire().questions[0]?.description)
+				.toBe("Compare our `rollback` options.");
+		});
+	});
+
 	it("round-trips a resolved answer projection", () => {
 		let source = OPEN.replace(
 			"</Question>",

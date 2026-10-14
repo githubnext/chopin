@@ -458,6 +458,7 @@ function definitionShape(value: Question.Definition) {
 		question.id,
 		question.header,
 		question.question,
+		question.description,
 		question.multiple,
 		question.options.map(option => [option.id, option.label, option.description]),
 	]);

@@ -56,8 +56,12 @@ export function retitle(questions: Questions, id: string, text: string): Retitle
 		return { ok: false, reason: "closed", message: "This decision is no longer open" };
 	}
 	let question = typeof text === "string" ? text.trim() : "";
-	if (!question || question.length > Question.limits.MAX_QUESTION) {
-		return { ok: false, reason: "invalid", message: "A question is 1–1000 characters" };
+	if (!question || question.length > Question.limits.MAX_NEW_QUESTION) {
+		return {
+			ok: false,
+			reason: "invalid",
+			message: `A question is 1–${Question.limits.MAX_NEW_QUESTION} characters`,
+		};
 	}
 	let current = entry.definition.questions[0]!;
 	if (current.question === question) {

@@ -458,7 +458,17 @@ export const documentTools = {
 						type: "object",
 						properties: {
 							header: { type: "string", minLength: 1, maxLength: 80 },
-							question: { type: "string", minLength: 1, maxLength: 1000 },
+							question: {
+								type: "string",
+								minLength: 1,
+								maxLength: 100,
+								description: "A concise question that stands alone in compact summaries.",
+							},
+							description: {
+								type: "string",
+								maxLength: 300,
+								description: "Optional supporting context shown only in the full decision card.",
+							},
 							options: {
 								type: "array",
 								minItems: 1,

@@ -28,7 +28,8 @@ function matches(record: Record, projections: Questionnaire[]): boolean {
 		&& projected.answer === undefined && projected.choices === undefined
 		&& projected.previous === undefined
 		&& projected.id === question.id && projected.header === question.header
-		&& projected.prompt === question.question && projected.multiple === question.multiple
+		&& projected.prompt === question.question && projected.description === question.description
+		&& projected.multiple === question.multiple
 		&& projected.options.length === question.options.length
 		&& projected.options.every((option, index) => {
 			let expected = question.options[index]!;

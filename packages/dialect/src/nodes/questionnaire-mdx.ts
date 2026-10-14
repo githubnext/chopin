@@ -38,6 +38,9 @@ export function fromElement(node: Jsx): Questionnaire {
 			id: attribute(element, "id") ?? "",
 			header: attribute(element, "header") ?? "",
 			prompt: attribute(element, "prompt") ?? "",
+			...(attribute(element, "description") === undefined
+				? {}
+				: { description: attribute(element, "description") }),
 			multiple: attribute(element, "multiple") === "true",
 			options,
 		};
@@ -99,6 +102,7 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 				...identity(question.id),
 				{ type: "mdxJsxAttribute" as const, name: "header", value: question.header },
 				{ type: "mdxJsxAttribute" as const, name: "prompt", value: question.prompt },
+				...attributes({ description: question.description }),
 				{ type: "mdxJsxAttribute" as const, name: "multiple", value: String(question.multiple) },
 			],
 			children: [

@@ -19,7 +19,7 @@ export function createDirectTools() {
 					title: {
 						type: "string",
 						minLength: 1,
-						maxLength: 80,
+						maxLength: 100,
 						description: "Only for a question retitle call; omit add_options.",
 					},
 					add_options: {
