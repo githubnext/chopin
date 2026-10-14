@@ -346,6 +346,14 @@ test("on a phone the machine button is a 44px icon in the composer, opening a sh
 	await expect(sheet).toBeVisible();
 	let row = sheet.getByRole("menuitemradio", { name: /^build-box/ });
 	expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	// Its star sits at the right end of its own row, with a 44px target.
+	let [rowBox, starBox] = [
+		(await row.boundingBox())!,
+		(await sheet.getByRole("button", { name: "Favorite build-box" }).boundingBox())!,
+	];
+	expect(starBox.y).toBeGreaterThanOrEqual(rowBox.y);
+	expect(starBox.y + starBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height);
+	expect(starBox.x).toBeGreaterThan(rowBox.x + rowBox.width / 2);
 	await shoot(page, "phone-sheet");
 	await row.tap();
 	await expect(sheet).toBeHidden();

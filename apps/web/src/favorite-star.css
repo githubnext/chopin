@@ -40,8 +40,8 @@
 	}
 }
 
-/* A touch target of 44px around the star without growing the row. */
-.favorite-star[data-touch] {
+/* A touch target of 44px around the star without growing the row; the menu's own star is placed. */
+.favorite-star[data-touch]:not(.machine-menu-star) {
 	position: relative;
 }
 
