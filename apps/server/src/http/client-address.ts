@@ -9,6 +9,10 @@ import { isIP } from "node:net";
 
 type Range = { bytes: Uint8Array; prefix: number };
 
+function groups(part: string) {
+	return part ? part.split(":") : [];
+}
+
 /** IPv4 as its IPv6-mapped form, so one comparison covers both. */
 function bytesOf(address: string): Uint8Array | undefined {
 	let plain = address.replace(/^\[|\]$/g, "").replace(/%.*$/, "");
@@ -24,7 +28,6 @@ function bytesOf(address: string): Uint8Array | undefined {
 	}
 	if (kind !== 6) return undefined;
 	let [head, tail = ""] = plain.split("::");
-	let groups = (part: string) => part ? part.split(":") : [];
 	let left = groups(head!);
 	let right = groups(tail);
 	// An embedded IPv4 tail counts as two groups.
@@ -95,7 +98,7 @@ export function clientAddress(request: Request, trusted: TrustedProxies): string
 	if (trusted.matches(peer)) {
 		let hops = (request.headers.get("x-forwarded-for") ?? "").split(",").map(value => value.trim())
 			.filter(Boolean);
-		for (let hop of hops.reverse()) {
+		for (let hop of hops.toReversed()) {
 			if (!bytesOf(hop)) break;
 			address = hop;
 			if (!trusted.matches(hop)) break;
