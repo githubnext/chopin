@@ -94,6 +94,13 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
 	await expect.poll(() => command.innerText()).toBe(connectCommand(origin, "powershell"));
 	await expect(page.getByText("Waiting for your machine…", { exact: true })).toBeVisible();
+	// The connect step says it installs the background service, and the next that it takes over.
+	await expect(steps.nth(2).locator("p")).toHaveText(
+		"In a checkout of your repository, run this. It pairs the machine and installs a background service, so it keeps running after you close the terminal or SSH.",
+	);
+	await expect(steps.nth(3).locator("p")).toHaveText(
+		"Open the link it prints, check that the code matches, and choose Connect. GitHub may ask you to authorize the machine first. Then the service takes over; chopin status shows it.",
+	);
 
 	// GitHub Copilot CLI is picked first. Picking another coding agent changes only its install and
 	// connect steps, and says what to know about it; the pick outlasts a reload.
@@ -111,10 +118,15 @@ test("the Machines entry leads to setup, and the new machine appears there as it
 	await expect.poll(() => command.innerText())
 		.toBe(connectCommand(origin, "powershell", findAgent("atomic")));
 	await expect.poll(() => install.innerText()).toBe(installCommand("powershell"));
+	// Claude Code asks in the terminal, so it runs there instead of as the service: one note says
+	// why, and the steps don't mention the service.
 	await picker.selectOption({ label: "Claude Code" });
 	await expect(picker).toHaveAccessibleDescription(
-		/^Not yet tested with Chopin\. Asks for permission/,
+		"Not yet tested with Chopin. Claude Code asks for permission in the terminal, so it runs there instead of as a service. Keep that terminal open.",
 	);
+	await expect(steps.nth(2).locator("p"))
+		.toHaveText("In a checkout of your repository, connect this machine.");
+	await expect(steps.nth(3)).not.toContainText("service");
 	await page.reload();
 	await expect(picker).toHaveValue("claude-code");
 	await setup.getByRole("button", { name: "Linux and macOS", exact: true }).click();

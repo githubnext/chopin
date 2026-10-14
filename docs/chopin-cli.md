@@ -9,9 +9,27 @@ your own coding agent in your own checkout.
 The machine only makes outgoing requests. Chopin never connects in, and the
 browser never reads your files.
 
+## Terminal or service?
+
+`chopin connect` runs in the terminal you start it from. The service runs the
+same connection in the background, so no terminal has to stay open. The
+Machines page sets up the service, and it's the one to use on a remote machine
+or a server.
+
+| How it runs      | What happens                                                                                                                                                                    | Use it for                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `chopin connect` | Runs in this terminal and stops when you close it or your SSH session ends.                                                                                                     | Trying it out               |
+| The service      | Runs in the background and starts again after a reboot. Closing SSH doesn't stop it. On Linux, logging out doesn't either; on macOS and Windows it runs while you're logged in. | Remote machines and servers |
+
+`chopin service install` runs a copy of what `chopin connect` last ran.
+`chopin connect --install-service` does both: it connects once, then installs
+the service. [Keep it running](#keep-it-running) has the details for each
+operating system.
+
 ## Set up a remote machine
 
-To run Chopin's work on a build box or cloud VM you reach over SSH:
+To run Chopin's work on a build box or cloud VM you reach over SSH, use the
+service, so the work keeps running after you close SSH:
 
 1. SSH in: `ssh me@build-box`.
 2. Install `chopin`:
@@ -22,7 +40,8 @@ To run Chopin's work on a build box or cloud VM you reach over SSH:
 
 3. Install your coding agent there and sign in to it. [Coding agents](#coding-agents)
    lists the commands.
-4. From a checkout, connect and install the service in one go:
+4. From a checkout, connect and install the service in one go with
+   `--install-service`:
 
    ```sh
    cd ~/src/score
@@ -30,7 +49,8 @@ To run Chopin's work on a build box or cloud VM you reach over SSH:
    ```
 
    For another agent, put its **Connect with** arguments in place of
-   `-- copilot --acp --allow-all`.
+   `-- copilot --acp --allow-all`. Claude Code needs a setting first; see
+   [Coding agents](#coding-agents).
 
 5. The terminal prints a link and a code. Open the link in the browser on your
    own computer, sign in, check that the code matches and choose **Connect**.
@@ -43,9 +63,8 @@ To run Chopin's work on a build box or cloud VM you reach over SSH:
 The **Machines** page, at `/connect` on your server, shows these steps with
 your server's address filled in and a menu of coding agents.
 
-Run it as the service, as above, if it should outlive your SSH session. A
-`chopin connect` you start over SSH can stop when the session ends, even under
-`nohup` or `setsid`.
+A plain `chopin connect` you start over SSH can stop when the session ends,
+even under `nohup` or `setsid`.
 
 ## Install
 

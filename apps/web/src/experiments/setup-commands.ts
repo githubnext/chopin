@@ -30,13 +30,22 @@ export function agentArguments(agent: CodingAgent): string[] {
 }
 
 /**
+ * Whether setup installs the background service for this agent. The service is the recommended
+ * way to run, since it outlives the terminal; only an agent that would wait on a permission prompt
+ * nobody can answer runs in the terminal instead.
+ */
+export function runsAsService(agent: CodingAgent): boolean {
+	return agent.unattended === true;
+}
+
+/**
  * Everything after `chopin`, one line per whole argument group: connect this checkout, run it as a
  * background service if the agent can run unattended, its variables, then the agent it starts.
  */
 export function connectArguments(agent: CodingAgent, shell: SetupShell = "sh"): string[] {
 	return [
 		"connect .",
-		...(agent.unattended === true ? ["--install-service"] : []),
+		...(runsAsService(agent) ? ["--install-service"] : []),
 		...agent.env.map(variable => `--env ${quote(variable, shell)}`),
 		`-- ${words(agent.acp, shell)}`,
 	];

@@ -212,6 +212,10 @@ curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install
 CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
 ```
 
+That runs in your terminal and stops when you close it. On a remote machine or
+server, add `--install-service` so a background service keeps it running after
+you close SSH.
+
 For another coding agent, install it, sign in, and put its **Connect with**
 arguments in place of `-- copilot --acp --allow-all`:
 

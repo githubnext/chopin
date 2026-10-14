@@ -1,7 +1,13 @@
 import { useEffect, useId, useState } from "react";
 import { CheckIcon, CopyIcon, InfoIcon } from "@chopin/icons";
 import { AGENTS, findAgent } from "./agents";
-import { agentCommand, connectCommand, installCommand, SETUP_GUIDE } from "./setup-commands";
+import {
+	agentCommand,
+	connectCommand,
+	installCommand,
+	runsAsService,
+	SETUP_GUIDE,
+} from "./setup-commands";
 
 import type { ReactNode } from "react";
 import type { CodingAgent } from "./agents";
@@ -53,14 +59,14 @@ const SHELLS: { shell: SetupShell; label: string }[] = [
 const AGENT_KEY = "chopin:machines:agent";
 
 /**
- * One line on what to know about the picked agent; nothing for a tested one that runs unattended.
- * The setup guide says how to let an agent that asks run as a service.
+ * One note on what to know about the picked agent; nothing for a tested one that runs as the
+ * service. The setup guide says how to let an agent that asks run as a service.
  */
 function agentNote(agent: CodingAgent): string | undefined {
 	let notes = [
 		...(agent.testedWithChopin ? [] : ["Not yet tested with Chopin."]),
-		...(agent.unattended === true ? [] : [
-			"Asks for permission in the terminal, so keep chopin connect open there.",
+		...(runsAsService(agent) ? [] : [
+			`${agent.name} asks for permission in the terminal, so it runs there instead of as a service. Keep that terminal open.`,
 		]),
 	];
 	return notes.length ? notes.join(" ") : undefined;
@@ -69,8 +75,8 @@ function agentNote(agent: CodingAgent): string | undefined {
 /**
  * What to run on a machine to set it up with this server: install chopin, install and sign in to
  * the picked coding agent, then connect a checkout, which pairs the machine through this browser
- * and keeps it running as a service. The last step is `last`: on a first run, the live wait for
- * the machine.
+ * and installs the background service, unless the agent must ask in the terminal. The last step
+ * is `last`: on a first run, the live wait for the machine.
  */
 export function MachineSetup(
 	{ headingId, last, title }: { headingId: string; last?: ReactNode; title: string },
@@ -82,6 +88,7 @@ export function MachineSetup(
 	let pickerId = useId();
 	let noteId = useId();
 	let note = agentNote(agent);
+	let service = runsAsService(agent);
 	return (
 		<section aria-labelledby={headingId} className="machines-setup">
 			<h2 className="text-base font-semibold" id={headingId}>{title}</h2>
@@ -132,7 +139,11 @@ export function MachineSetup(
 					<Command label="agent commands" shell={shell} text={agentCommand(agent, shell)} />
 				</li>
 				<li>
-					<p>In a checkout of your repository, connect this machine.</p>
+					<p>
+						{service
+							? "In a checkout of your repository, run this. It pairs the machine and installs a background service, so it keeps running after you close the terminal or SSH."
+							: "In a checkout of your repository, connect this machine."}
+					</p>
 					<Command
 						label="connect command"
 						shell={shell}
@@ -143,6 +154,7 @@ export function MachineSetup(
 					<p>
 						Open the link it prints, check that the code matches, and choose Connect. GitHub may ask
 						you to authorize the machine first.
+						{service && " Then the service takes over; chopin status shows it."}
 					</p>
 				</li>
 				<li>

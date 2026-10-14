@@ -7,6 +7,7 @@ import {
 	installCommand,
 	pairCommand,
 	quote,
+	runsAsService,
 } from "./setup-commands";
 
 test("install uses the released installer for each shell, breaking before the pipe where the shell can", () => {
@@ -62,14 +63,32 @@ test("connect passes the agent's --env on its own line, before the agent's comma
 
 test("an agent that asks for permission connects without the service, so a person can answer", () => {
 	let claude = findAgent("claude-code");
-	expect(claude.unattended).not.toBe(true);
+	expect(runsAsService(claude)).toBe(false);
 	expect(connectCommand("https://chopin.example", "sh", claude)).toBe(
 		[
 			"CHOPIN_URL=https://chopin.example chopin connect . \\",
 			"  -- claude-agent-acp",
 		].join("\n"),
 	);
-	expect(connectArguments(claude)).not.toContain("--install-service");
+	expect(connectCommand("https://chopin.example", "powershell", claude)).toBe(
+		[
+			'$env:CHOPIN_URL="https://chopin.example"',
+			"chopin connect . `",
+			"  -- claude-agent-acp",
+		].join("\n"),
+	);
+});
+
+test("every agent that can run unattended connects as the service, in either shell", () => {
+	for (let agent of AGENTS) {
+		expect(runsAsService(agent)).toBe(agent.unattended === true);
+		for (let shell of ["sh", "powershell"] as const) {
+			expect(connectArguments(agent, shell).includes("--install-service"))
+				.toBe(runsAsService(agent));
+		}
+	}
+	expect(AGENTS.filter(runsAsService).map(agent => agent.id))
+		.toEqual(["copilot", "atomic", "codex", "gemini"]);
 });
 
 test("installing an agent and signing in is one copyable block, @-scoped packages quoted for PowerShell", () => {
