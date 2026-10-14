@@ -149,7 +149,10 @@ test("shared-cookie tabs keep distinct presence, edits and durable authorship", 
 		});
 	await scope.getByRole("checkbox", { name: /^Anchors / }).check();
 	await scope.getByRole("button", { name: "Save", exact: true }).click();
-	await page.getByRole("button", { name: "2 resolved", exact: true }).click();
+	await expect(page.getByRole("button", { name: "2 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect(page.locator('[data-document-view="decisions"]')).toContainText(
 		"Answered by @octocat",
 	);

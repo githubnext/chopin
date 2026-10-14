@@ -52,18 +52,14 @@ function markup(stored?: string, entries = [RESOLVED], failed = false): string {
 	return renderToStaticMarkup(createElement(Decisions, { motion, store }));
 }
 
-test("resolved history starts collapsed and restores an explicit open preference", () => {
-	let collapsed = markup();
-	expect(collapsed).toContain('aria-expanded="false"');
-	expect(collapsed).not.toContain("aria-controls");
-	expect(collapsed).toContain('data-feedback-icon="closed"');
-	expect(collapsed).toContain('data-motion-feedback="icon"');
-	let restored = markup("true");
-	expect(restored).toContain('aria-expanded="true"');
-	expect(restored).toMatch(/aria-controls="[^"]+"/);
-	expect(restored).toContain('data-motion-disclosure="decision-history"');
-	expect(restored).toContain('data-feedback-icon="open"');
-	expect(restored).toContain('data-motion-feedback="icon"');
+test("resolved history opens by default, including after a previously saved collapse", () => {
+	for (let stored of [undefined, "false", "true"]) {
+		let html = markup(stored);
+		expect(html).toContain('aria-expanded="true"');
+		expect(html).toMatch(/aria-controls="[^"]+"/);
+		expect(html).toContain('data-slot="unfold-section"');
+		expect(html).toContain('data-plan-sidecar-questionnaire="questionnaire"');
+	}
 });
 
 test("an expired card is listed with the resolved cards and says nobody answered", () => {
@@ -83,7 +79,7 @@ test("an expired card is listed with the resolved cards and says nobody answered
 		},
 	};
 	let history = markup("true", [expired, RESOLVED]);
-	expect(history).toContain('<span class="tabular-nums">2 resolved</span>');
+	expect(history).toContain("2 resolved");
 	expect(history).toContain('data-plan-sidecar-questionnaire="expired"');
 	expect(history).toContain("Ship the migration?");
 	expect(history).toContain(
@@ -124,7 +120,7 @@ test("two open decisions render as a desktop deck above resolved history", () =>
 	expect(html).toContain('aria-roledescription="carousel"');
 	expect(html).toContain('aria-label="2 open decisions"');
 	expect(html).toContain("1 of 2");
-	expect(html.indexOf("data-deck=")).toBeLessThan(html.indexOf("resolved</span>"));
+	expect(html.indexOf("data-deck=")).toBeLessThan(html.indexOf("1 resolved"));
 	expect(html).not.toContain("decision-save-bar");
 });
 

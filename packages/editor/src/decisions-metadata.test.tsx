@@ -47,16 +47,16 @@ function markup(meta?: Question.CardMeta, canEdit?: boolean) {
 	}));
 }
 
-test("reopened metadata moves an answered node out of collapsed history", () => {
+test("reopened metadata moves an answered node out of resolved history", () => {
 	let html = markup({ ...META, status: "reopened" });
 	expect(html).toContain("<input");
 	expect(html).not.toContain('aria-expanded="false"');
 });
 
-test("decided and absent metadata keep the existing collapsed history", () => {
+test("decided and absent metadata show the expanded resolved history", () => {
 	for (let meta of [META, undefined]) {
 		let html = markup(meta);
-		expect(html).toContain('aria-expanded="false"');
+		expect(html).toContain('aria-expanded="true"');
 		expect(html).not.toContain("<input");
 	}
 });

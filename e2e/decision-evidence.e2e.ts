@@ -373,7 +373,10 @@ test("empty, remote-closed, and hidden-document cards do not retain evidence por
 	await expect(panel).toHaveCount(0);
 
 	await ana.getByRole("button", { name: "Decisions", exact: true }).click();
-	await ana.getByRole("button", { name: "1 resolved", exact: true }).click();
+	await expect(ana.getByRole("button", { name: "1 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let resolved = ana.locator(
 		'[data-document-view="decisions"] article[data-plan-sidecar-questionnaire]',
 	).filter({ hasText: QUESTION });

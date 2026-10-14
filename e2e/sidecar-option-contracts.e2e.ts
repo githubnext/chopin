@@ -386,7 +386,10 @@ test("legacy saved custom answers remain readable", async ({ join, seed }) => {
 	let card = questionnaire(page).filter({
 		has: page.getByText("How should we deploy?", { exact: true }),
 	});
-	await page.getByRole("button", { name: /resolved/ }).click();
+	await expect(page.getByRole("button", { name: /resolved/ })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 
 	await expect(card).toContainText("Only collaborative anchors");
 	await expect(card.getByRole("radio")).toHaveCount(0);

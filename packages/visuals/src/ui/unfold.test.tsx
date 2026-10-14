@@ -72,6 +72,7 @@ test("a section pairs a labelled toggle with its panel", () => {
 	);
 
 	expect(markup).toContain('data-slot="unfold-section"');
+	expect(markup).toContain('data-press="wide"');
 	expect(markup).toMatch(/<button[^>]*aria-expanded="false"[^>]*>Report<(?:svg)/);
 	expect(markup).toContain('<div class="cv-unfold-section-body"><p>Body</p></div>');
 });

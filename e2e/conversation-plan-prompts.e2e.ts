@@ -466,7 +466,10 @@ test("an old prompt retires after Save and Reopen before a new suggestion", asyn
 	let retiredCount = await ana.locator("[data-decision-prompt]").count();
 
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	await ana.getByRole("button", { name: "1 resolved" }).click();
+	await expect(ana.getByRole("button", { name: "1 resolved" })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	let resolved = ana.locator(
 		`[data-document-view="decisions"] article[data-plan-sidecar-questionnaire="${cardId}"]`,
 	);

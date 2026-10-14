@@ -65,7 +65,10 @@ test("icons keep their size and sit on the first line beside wrapped decision te
 
 	await page.getByRole("button", { name: /^Decisions/ }).click();
 	let decisions = page.locator('[data-document-view="decisions"]');
-	await decisions.getByRole("button", { name: /resolved/ }).click();
+	await expect(decisions.getByRole("button", { name: /resolved/ })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect(decisions).toContainText("How should we roll this out?");
 	await expect.poll(() => squeezed(decisions)).toEqual([]);
 });

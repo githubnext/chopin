@@ -174,7 +174,10 @@ test("ordinary prose edits retain the marker; deletion orphans it for both reade
 	await expect(marker(ana)).toHaveCount(0);
 	await expect(marker(ben)).toHaveCount(0);
 	await ana.getByRole("button", { name: /^Decisions/ }).click();
-	await ana.getByRole("button", { name: "1 resolved", exact: true }).click();
+	await expect(ana.getByRole("button", { name: "1 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect.poll(() => proseOrphaned(ana)).toBe(true);
 	await expect(ana.locator('[data-document-view="decisions"]')).toContainText(OPTION);
 
@@ -182,7 +185,10 @@ test("ordinary prose edits retain the marker; deletion orphans it for both reade
 	await ready(ben);
 	await openJevWire(ben, room);
 	await ben.getByRole("button", { name: /^Decisions/ }).click();
-	await ben.getByRole("button", { name: "1 resolved", exact: true }).click();
+	await expect(ben.getByRole("button", { name: "1 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect.poll(() => proseOrphaned(ben)).toBe(true);
 	await expect(ben.locator('[data-document-view="decisions"]')).toContainText(OPTION);
 });
@@ -204,7 +210,10 @@ test("Backspace after a hidden decided card moves into its prose without deletin
 	await expect(content(page)).toContainText("Following detail.");
 	await expect(marker(page)).toBeVisible();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved", exact: true }).click();
+	await expect(page.getByRole("button", { name: "1 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect.poll(() => proseOrphaned(page)).toBe(false);
 	await page.reload();
 	await page.getByRole("button", { name: "Document", exact: true }).click();
@@ -224,7 +233,10 @@ test("Backspace from an empty paragraph after resolved prose keeps the decision"
 	await expect(content(page)).toContainText(`We decided: ${OPTION}`);
 	await expect(marker(page)).toBeVisible();
 	await page.getByRole("button", { name: /^Decisions/ }).click();
-	await page.getByRole("button", { name: "1 resolved", exact: true }).click();
+	await expect(page.getByRole("button", { name: "1 resolved", exact: true })).toHaveAttribute(
+		"aria-expanded",
+		"true",
+	);
 	await expect.poll(() => proseOrphaned(page)).toBe(false);
 });
 

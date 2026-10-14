@@ -669,39 +669,11 @@ test("decision cards save independently with progressive custom answers", async 
 	// With nothing left open, the deck gives way to resolved history.
 	let history = page.getByRole("button", { name: "2 resolved" });
 	await expect(history).toBeVisible();
-	let historyIcon = history.locator("[data-feedback-icon]");
-	await history.hover();
-	await page.evaluate(() => {
-		let record = { starts: 0 };
-		Reflect.set(window, "__feedbackIconTransitions", record);
-		document.addEventListener("transitionstart", event => {
-			if (
-				event.target instanceof Element
-				&& event.target.matches('[data-motion-feedback="icon"]')
-			) record.starts++;
-		}, true);
-	});
-	await history.click();
-	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "open");
-	expect(
-		await historyIcon.evaluate(element =>
-			getComputedStyle(element).transitionDuration.split(",").some(duration =>
-				parseFloat(duration) > 0
-			)
-		),
-	).toBe(true);
-	await expect.poll(() =>
-		page.evaluate(() => {
-			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
-			return record.starts > 0;
-		})
-	).toBe(true);
-	let historyContent = page.locator('[data-motion-disclosure="decision-history"]');
-	await expect(historyContent).toBeVisible();
-	let historyId = await historyContent.getAttribute("id");
+	await expect(history).toHaveAttribute("aria-expanded", "true");
+	let historyId = await history.getAttribute("aria-controls");
 	expect(historyId).toBeTruthy();
-	await expect(history).toHaveAttribute("aria-controls", historyId!);
-	await expect(historyContent).not.toHaveClass(/is-closing/);
+	let historyContent = page.locator(`[id="${historyId}"]`);
+	await expect(historyContent).toBeVisible();
 	let resolved = questionnaire(page).filter({ hasText: "Where should room state live?" });
 	await expect(resolved).toContainText("On disk as MDX");
 	await expect(resolved).toContainText("Answered by @ana");
@@ -711,39 +683,14 @@ test("decision cards save independently with progressive custom answers", async 
 	});
 	await expect(resolvedScope).toContainText("Only collaborative anchors");
 	await expect(resolvedScope).toContainText("Answered by @ana");
-	let iconStarts = await page.evaluate(() => {
-		let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
-		return record.starts;
-	});
 	await history.focus();
 	await page.keyboard.press("Space");
-	await expect(historyIcon).toHaveAttribute("data-feedback-icon", "closed");
-	await historyIcon.evaluate(() =>
-		new Promise<void>(resolve => {
-			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-		})
-	);
-	await expect(historyIcon).toHaveCSS("transition-duration", "0s");
-	expect(
-		await page.evaluate(() => {
-			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
-			return record.starts;
-		}),
-	).toBe(iconStarts);
-	await historyIcon.hover();
-	await historyIcon.evaluate(() =>
-		new Promise<void>(resolve => {
-			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-		})
-	);
-	expect(
-		await page.evaluate(() => {
-			let record = Reflect.get(window, "__feedbackIconTransitions") as { starts: number };
-			return record.starts;
-		}),
-	).toBe(iconStarts);
-	await expect(history).not.toHaveAttribute("aria-controls");
-	await expect(historyContent).toHaveCount(0);
+	await expect(history).toHaveAttribute("aria-expanded", "false");
+	await expect(resolved).not.toBeVisible();
+	await expect(history).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(history).toHaveAttribute("aria-expanded", "true");
+	await expect(resolved).toBeVisible();
 });
 
 test("Save and Next wait for a chosen answer", async ({ join, seed }) => {
