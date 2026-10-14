@@ -150,16 +150,22 @@ test("answered decisions with no prose leave the document blank and writable", a
 	await expect(plan).toHaveAttribute("data-plan-blank", "");
 	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(0);
 	await expect(page.getByRole("status").filter({ hasText: "Writing up" })).toHaveCount(0);
-	expect(
-		await plan.locator(":scope > p").first().evaluate(element =>
-			getComputedStyle(element, "::before").content
-		),
-	).toBe('"Start writing, or ask Chopin to plan"');
+	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	await expect(prompt).toBeVisible();
+	await expect.poll(async () => {
+		let [writing, hint] = await Promise.all([
+			plan.locator(":scope > p").first().boundingBox(),
+			prompt.boundingBox(),
+		]);
+		return !!writing && !!hint && Math.abs(writing.x - hint.x) < 1
+			&& Math.abs(writing.y - hint.y) < 1;
+	}).toBe(true);
 
 	await plan.click();
 	await page.keyboard.type("Notes from the call.");
 	await expect(plan).toContainText("Notes from the call.");
 	await expect(plan).not.toHaveAttribute("data-plan-blank");
+	await expect(prompt).toHaveCount(0);
 
 	// Still answered, and still counted, in Decisions.
 	await decisionsButton(page).click();

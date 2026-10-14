@@ -1184,6 +1184,20 @@ export function RoomWorkspace(
 	useEffect(() => {
 		if (childOpen) setEditing(false);
 	}, [childOpen]);
+	// Reveal each requested child once; loading and canonical renames keep a later tab choice.
+	let requestedChild =
+		presentation.type === "parent-with-child" && presentation.childState === "open"
+			? presentation.childId ?? null
+			: undefined;
+	let previousChild = useRef<string | null | undefined>(undefined);
+	useEffect(() => {
+		let previous = previousChild.current;
+		previousChild.current = requestedChild;
+		if (requestedChild === undefined) return;
+		if (previous === undefined || (previous !== null && previous !== requestedChild)) {
+			latestSelectDestination.current("plan");
+		}
+	}, [requestedChild]);
 	let [childEdit, setChildEdit] = useState<{ docked: boolean; editing: boolean }>();
 	let childToggle = useRef<() => void>(undefined);
 	let reportChildEdit = useCallback(

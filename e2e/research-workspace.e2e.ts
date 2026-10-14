@@ -363,9 +363,35 @@ test("the research draft takes its line in document flow without overlapping any
 	let opening = page.getByText("Opening paragraph.", { exact: true });
 	let box = (await opening.boundingBox())!;
 	await opening.click({ position: { x: box.width - 1, y: box.height / 2 } });
-	// Enter straight after a click can reach Lexical before the click's selection does.
-	await expect.poll(() => page.evaluate(() => getSelection()?.anchorNode?.textContent))
-		.toBe("Opening paragraph.");
+	// The DOM can already name this paragraph while Lexical still holds the restored list caret.
+	await expect.poll(() =>
+		opening.evaluate(element => {
+			type Point = { key: string; offset: number };
+			let root = element.closest("[contenteditable]") as HTMLElement & {
+				__lexicalEditor: {
+					getEditorState(): {
+						_selection: { anchor?: Point; focus?: Point } | null;
+						_nodeMap: Map<string, { __text?: string }>;
+					};
+				};
+			};
+			let state = root.__lexicalEditor.getEditorState();
+			let anchor = state._selection?.anchor;
+			let focus = state._selection?.focus;
+			let dom = getSelection();
+			return {
+				dom: dom?.isCollapsed
+					? { text: dom.anchorNode?.textContent, offset: dom.anchorOffset }
+					: null,
+				lexical: anchor && focus && anchor.key === focus.key && anchor.offset === focus.offset
+					? { text: state._nodeMap.get(anchor.key)?.__text, offset: anchor.offset }
+					: null,
+			};
+		})
+	).toEqual({
+		dom: { text: "Opening paragraph.", offset: "Opening paragraph.".length },
+		lexical: { text: "Opening paragraph.", offset: "Opening paragraph.".length },
+	});
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("/research");
 	await page.keyboard.press("Enter");

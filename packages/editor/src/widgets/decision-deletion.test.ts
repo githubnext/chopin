@@ -12,7 +12,7 @@ import {
 import { $createQuestionnaireNode, registry } from "@chopin/dialect";
 import { QuestionnaireStore } from "../questionnaires";
 import { registerDocumentTitle } from "../document-title";
-import { registerDecisionDeletion } from "./decision-deletion";
+import { $isAdjacentDecisionProse, registerDecisionDeletion } from "./decision-deletion";
 
 for (let target of ["prose", "missing", "unrelated", "title"] as const) {
 	test(`decided-card deletion ${target === "prose" ? "reaches" : "refuses"} the ${target} target across empty caret paragraphs`, () => {
@@ -66,5 +66,53 @@ for (let target of ["prose", "missing", "unrelated", "title"] as const) {
 			expect($getRoot().getChildren().map(node => node.getKey())).toEqual(before);
 		});
 		resolve.mockRestore();
+	});
+}
+
+for (let target of ["prose", "linked", "missing", "unrelated", "title", "separated"] as const) {
+	test(`generic decided-card merging ${target === "prose" || target === "linked" ? "accepts" : "refuses"} an adjacent ${target} target`, () => {
+		let editor = createHeadlessEditor({
+			nodes: registry().nodes,
+			onError: error => {
+				throw error;
+			},
+		});
+		let questions = new QuestionnaireStore();
+		let key = "";
+		editor.update(() => {
+			let heading = $createHeadingNode("h1").append($createTextNode("Title"));
+			let prose = $createParagraphNode().append($createTextNode("Decided prose."));
+			$getRoot().append(heading);
+			key = target === "title" ? heading.getKey() : prose.getKey();
+			if (target !== "title") $getRoot().append(prose);
+			if (target === "unrelated") {
+				$getRoot().append($createParagraphNode().append($createTextNode("Unrelated prose.")));
+			}
+			if (target === "separated") $getRoot().append($createParagraphNode());
+			$getRoot().append($createQuestionnaireNode({
+				id: "decided",
+				status: "decided",
+				questions: [{
+					id: "question",
+					header: "Choose",
+					prompt: "Choose",
+					multiple: false,
+					options: [{ id: "option", label: "Choice" }],
+				}],
+			}));
+		}, { discrete: true });
+		let prose = spyOn(questions, "proseKey").mockReturnValue(
+			target === "missing" || target === "linked" ? undefined : key,
+		);
+		let links = spyOn(questions, "blocks").mockImplementation((widget, question) =>
+			target === "linked" && widget === "decided" && question === "question" ? [key] : []
+		);
+		editor.read(() => {
+			expect($isAdjacentDecisionProse($getRoot().getLastChild()!, questions)).toBe(
+				target === "prose" || target === "linked",
+			);
+		});
+		prose.mockRestore();
+		links.mockRestore();
 	});
 }

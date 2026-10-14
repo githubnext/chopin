@@ -274,15 +274,16 @@ test("an empty plan puts its muted prompt at the first writing position", async 
 	// The prompt is a sibling overlay. The editable tree needs its own empty
 	// block, and the two must share one stable first writing position.
 	await expect(paragraph).toHaveCount(1);
+	await expect(prompt).toBeVisible();
 	// Read both positions in one frame: separate calls can straddle the resize layout.
 	await expect.poll(() =>
 		editor.evaluate(element => {
 			let paragraph = element.querySelector("p")!;
-			let placeholder = element.closest(".mdxeditor-root-contenteditable")!
-				.querySelector(":scope > .plan-content p")!;
-			return Math.abs(
-				paragraph.getBoundingClientRect().x - placeholder.getBoundingClientRect().x,
-			);
+			let placeholder = element.parentElement!
+				.querySelector(":scope > .plan-body-placeholder")!;
+			let writing = paragraph.getBoundingClientRect();
+			let hint = placeholder.getBoundingClientRect();
+			return Math.max(Math.abs(writing.x - hint.x), Math.abs(writing.y - hint.y));
 		})
 	).toBeLessThan(0.05);
 	let paragraphBox = await paragraph.boundingBox();

@@ -551,6 +551,73 @@ test("an in-app child opens and submits its own comment composer", async ({ base
 		.toBeVisible();
 });
 
+test("mobile child requests reveal Document while canonical renames preserve a later Chat choice", async ({ baseURL, join, page, room, seed }) => {
+	await installPointerMedia(page, { coarse: true, primaryCoarse: true });
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
+	let firstTitle = `First mobile source ${room.slice(0, 8)}`;
+	let secondTitle = `Second mobile source ${room.slice(0, 8)}`;
+	let first = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		firstTitle,
+		CHILD_SOURCE,
+	);
+	let second = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		secondTitle,
+		CHILD_SOURCE,
+	);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await join("ana");
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+	let tabs = parent.getByRole("navigation", { name: "Workspace view" });
+	let chat = tabs.getByRole("button", { name: /^Chat/ });
+	await chat.click();
+	await page.getByRole("button", { name: "Documents", exact: true }).click();
+	await page.getByRole("dialog", { name: "Documents" })
+		.getByRole("link", { name: firstTitle, exact: true }).click();
+	let child = page.locator(`[data-workspace-room="${first.id}"]`);
+	await expect(child).toBeVisible();
+	await child.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+	await chat.click();
+	await expect(child).toBeHidden();
+
+	// Remote title publication changes both URL segments, but it is not a new child request.
+	let renamedChild = await page.request.patch(`/api/channels/${first.id}`, {
+		data: { title: `Renamed mobile source ${room.slice(0, 8)}` },
+		headers: { origin: new URL(baseURL!).origin },
+	});
+	expect(renamedChild.ok()).toBe(true);
+	let childDetail = await renamedChild.json();
+	let renamedParent = await page.request.patch(`/api/channels/${room}`, {
+		data: { title: `Renamed mobile parent ${room.slice(0, 8)}` },
+		headers: { origin: new URL(baseURL!).origin },
+	});
+	expect(renamedParent.ok()).toBe(true);
+	let parentDetail = await renamedParent.json();
+	await expect(page).toHaveURL(url =>
+		url.pathname
+			=== `/documents/octo-org/score/${parentDetail.channel.slug}/children/${childDetail.channel.slug}`
+	);
+	await expect(chat).toHaveAttribute("aria-current", "page");
+	await expect(parent.getByRole("complementary", { name: "Chat" })).toBeVisible();
+	await expect(child).toBeHidden();
+	await expect(child).toHaveAttribute("data-mount-token", "preserved");
+
+	await page.getByRole("button", { name: "Documents", exact: true }).click();
+	await page.getByRole("dialog", { name: "Documents" })
+		.getByRole("link", { name: secondTitle, exact: true }).click();
+	await expect(page.locator(`[data-workspace-room="${second.id}"]`)).toBeVisible();
+	await expect(tabs.getByRole("button", { name: /^Document/ }))
+		.toHaveAttribute("aria-current", "page");
+	await expect(child).toHaveCount(0);
+	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+});
+
 test("a delayed sibling route removes the previous editable child immediately", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First source ${room.slice(0, 8)}`;

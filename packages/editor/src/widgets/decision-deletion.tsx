@@ -74,6 +74,21 @@ function browserBoundary(editor: LexicalEditor): LexicalNode | null {
 	return topLevel(node).getPreviousSibling();
 }
 
+/** Only an adjacent paragraph linked by a stored decision target may take the generic merge. */
+export function $isAdjacentDecisionProse(
+	card: LexicalNode,
+	questions: QuestionnaireStore | undefined,
+): boolean {
+	if (!$isQuestionnaireNode(card) || !questions) return false;
+	let previous = card.getPreviousSibling();
+	if (!$isParagraphNode(previous)) return false;
+	let key = previous.getKey();
+	return questions.proseKey(card.getId()) === key
+		|| card.getQuestionnaire().questions.some(question =>
+			questions.blocks(card.getId(), question.id).includes(key)
+		);
+}
+
 function moveIntoProse(card: LexicalNode, questions: QuestionnaireStore | undefined): void {
 	if (!$isQuestionnaireNode(card)) return;
 	let key = questions?.proseKey(card.getId());
@@ -116,11 +131,12 @@ export function registerDecisionDeletion(
 			event => {
 				let card = browserBoundary(editor);
 				if (!decided(card, meta)) return false;
+				if ($isAdjacentDecisionProse(card!, questions)) return false;
 				moveIntoProse(card!, questions);
 				event.preventDefault();
 				return true;
 			},
-			// Preserve the exact prose target before generic hidden-decorator deletion merges blocks.
+			// Intercept separated or unlinked targets before generic hidden-decorator deletion.
 			COMMAND_PRIORITY_CRITICAL,
 		),
 		editor.registerCommand(
