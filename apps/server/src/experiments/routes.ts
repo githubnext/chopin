@@ -60,7 +60,14 @@ type Options = {
 	connectorVersion?: string;
 	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
 	planners?: MachinePlanners;
+	/** A person chose a machine for a document, or went back to automatic. */
+	chosen?: (documentId: string, userId: string) => void;
 };
+
+/** What a person is told when the machine they chose for a document cannot take its work. */
+export function offlineMessage(label = "The machine you chose") {
+	return `${label} is offline. Start chopin connect on it, or choose another machine.`;
+}
 
 const OSES = new Set(["linux", "darwin", "win32"]);
 const ARCHES = new Set(["x64", "arm64"]);
@@ -201,6 +208,12 @@ function described(live: Connection[]) {
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
+	/** Stored machine choices, read once; every connection waits for them before taking work. */
+	let choicesLoaded = auth.storage.machines.choices().then(list => {
+		for (let value of list) connections.choose(value.channelId, value.userId, value.machineId);
+	}).catch(error => {
+		console.error("chopin: could not read machine choices -", error);
+	});
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
 	auth.pairings.ended = sessionId => keys.ended(sessionId);
@@ -281,9 +294,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	async function choose(owner: string, repositoryId: string, documentId: string) {
 		let live = connections.candidates(repositoryId, owner, documentId);
-		if (!live.length) fail("no-workspace");
+		if (!live.length) await refuseOffline(owner, documentId);
 		for (let connection of live) if (!await busy(connection)) return connection;
 		return live[0];
+	}
+	/**
+	 * Nothing can take the work: `machine-offline`, naming the machine, when the person chose one,
+	 * else `no-workspace`. A chosen machine is never silently replaced by another.
+	 */
+	async function refuseOffline(owner: string, documentId: string): Promise<never> {
+		let chosen = connections.chosen(documentId, owner);
+		if (!chosen) fail("no-workspace");
+		fail("machine-offline", offlineMessage((await auth.storage.machines.get(chosen))?.label));
 	}
 	async function mutationAllowed(id: string) {
 		if (options.canMutate && !await options.canMutate(id)) fail("document-locked");
@@ -347,7 +369,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							: {}),
 						...(code === CONNECTOR_UPDATE_REQUIRED ? versions : {}),
 					},
-					code === "authentication-required" || code.startsWith("machine-")
+					code === "authentication-required"
+						|| code.startsWith("machine-") && code !== "machine-offline"
 						? 401
 						: code.includes("forbidden") || code === "pairing-key-invalid"
 						? 403
@@ -538,6 +561,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			aboutMachine(request),
 		);
 		await auth.machines.seen(machine);
+		// Remembered, so the machine can be chosen for this repository's documents while offline.
+		if (!machine.repositories.some(value => value.repositoryId === repository.id)) {
+			await auth.storage.machines.serve(machine.id, {
+				repositoryId: repository.id,
+				repository: input.repository,
+				commit: input.commit,
+				...(input.branch ? { branch: input.branch } : {}),
+			});
+		}
+		await choicesLoaded;
 		connections.wake(repository.id);
 		options.connected?.(repository.id, machine.userId);
 		return json({
@@ -634,6 +667,80 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!await auth.machines.revoke(params.id, session.user.id)) fail("not-found");
 		await disconnectMachine(params.id);
 		return json({ revoked: true });
+	});
+	/**
+	 * The caller's own machines that serve a document's repository, the one they chose for it (null
+	 * for automatic), and the machine automatic would use now. Only ever the caller's own.
+	 */
+	async function machineChoice(userId: string, documentId: string, repositoryId: string) {
+		await choicesLoaded;
+		let serving = (await auth.machines.list(userId)).filter(machine =>
+			machine.repositories.some(value => value.repositoryId === repositoryId)
+			|| connections.machine(machine.id).some(value => value.source.repositoryId === repositoryId)
+		);
+		let chosen = connections.chosen(documentId, userId);
+		let automatic: Connection | undefined;
+		if (!chosen) {
+			let live = connections.candidates(repositoryId, userId, documentId);
+			for (let connection of live) {
+				if (!await busy(connection)) {
+					automatic = connection;
+					break;
+				}
+			}
+			automatic ??= live[0];
+		}
+		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
+		return {
+			choice: chosen ?? null,
+			automatic: automatic ? { id: automatic.machineId, label: label(automatic.machineId) } : null,
+			machines: serving.map(machine => {
+				let live = connections.machine(machine.id);
+				return {
+					id: machine.id,
+					label: machine.label,
+					connected: live.some(value => value.source.repositoryId === repositoryId),
+					reauthorize: !!machine.reauthorizeAt,
+					lastSeenAt: machine.lastSeenAt.getTime(),
+					version: live.find(value => value.version)?.version ?? null,
+					...described(live),
+				};
+			}),
+		};
+	}
+	route("GET", "/api/documents/:id/machine", async (request, params) => {
+		let { session, channel } = await access(
+			await auth.sessions.authenticate(request),
+			params.id,
+			false,
+		);
+		return json(await machineChoice(session.user.id, channel.id, channel.repositoryId));
+	});
+	/** Choose one of the caller's machines for a document's work, or null for automatic. */
+	route("POST", "/api/documents/:id/machine", async (request, params) => {
+		let { session, channel } = await access(
+			await auth.sessions.authenticate(request),
+			params.id,
+			true,
+		);
+		let { machine } = z.object({ machine: z.string().min(1).max(100).nullable() }).strict().parse(
+			await body(request),
+		);
+		let userId = session.user.id;
+		if (machine !== null) {
+			let current = await machineChoice(userId, channel.id, channel.repositoryId);
+			if (!current.machines.some(value => value.id === machine)) {
+				let owned = (await auth.machines.list(userId)).some(value => value.id === machine);
+				fail(owned ? "repository-unserved" : "not-found");
+			}
+		}
+		await auth.storage.machines.choose(
+			{ channelId: channel.id, userId, ...(machine ? { machineId: machine } : {}) },
+			auth.clock(),
+		);
+		connections.choose(channel.id, userId, machine ?? undefined);
+		options.chosen?.(channel.id, userId);
+		return json(await machineChoice(userId, channel.id, channel.repositoryId));
 	});
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
@@ -746,6 +853,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	async function disconnectMachine(machineId: string, code?: string) {
 		let live = connections.machine(machineId);
 		connections.revokeMachine(machineId, code);
+		// Storage forgets a revoked machine's choices with it.
+		if (code === undefined) connections.unchoose(machineId);
 		for (let connection of live) await interrupt(connection);
 	}
 	async function disconnect(connection: Connection) {
@@ -1204,5 +1313,5 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		}
 	}
-	return { service, connections, access, mutationAllowed, route, body, json, sweep };
+	return { service, connections, access, mutationAllowed, route, body, json, sweep, refuseOffline };
 }

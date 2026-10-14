@@ -1,6 +1,12 @@
 import type { SQL } from "bun";
-import { conflict } from "../errors";
-import type { CreateMachine, MachineCredentials, MachineRepository, StoredMachine } from "../model";
+import { conflict, missing } from "../errors";
+import type {
+	CreateMachine,
+	MachineChoice,
+	MachineCredentials,
+	MachineRepository,
+	StoredMachine,
+} from "../model";
 import type { MachineStore } from "../port";
 
 type MachineRow = {
@@ -136,14 +142,59 @@ export class PostgresMachineStore implements MachineStore {
 		});
 	}
 	revoke(id: string, userId: string, now: Date) {
-		return this.run("revoke machine", async () => {
-			let updated = await this.sql<{ id: string }[]>`
-				UPDATE machines
-				SET credential_ciphertext = NULL, credential_revision = NULL, revoked_at = ${now}
-				WHERE id = ${id} AND user_id = ${userId} AND revoked_at IS NULL
-				RETURNING id
+		return this.run("revoke machine", () =>
+			this.sql.begin(async transaction => {
+				let updated = await transaction<{ id: string }[]>`
+					UPDATE machines
+					SET credential_ciphertext = NULL, credential_revision = NULL, revoked_at = ${now}
+					WHERE id = ${id} AND user_id = ${userId} AND revoked_at IS NULL
+					RETURNING id
+				`;
+				if (updated.length) await transaction`DELETE FROM machine_choices WHERE machine_id = ${id}`;
+				return updated.length > 0;
+			}));
+	}
+	serve(id: string, repository: MachineRepository) {
+		return this.run("record a machine's repository", async () => {
+			let entry = JSON.stringify([repository]);
+			await this.sql`
+				UPDATE machines SET repositories = repositories || ${entry}::text::jsonb
+				WHERE id = ${id} AND revoked_at IS NULL
+					AND NOT repositories @> ${
+				JSON.stringify([{ repositoryId: repository.repositoryId }])
+			}::text::jsonb
 			`;
-			return updated.length > 0;
+		});
+	}
+	choices() {
+		return this.run("list machine choices", async () => {
+			let rows = await this.sql<MachineChoice[]>`
+				SELECT c.channel_id AS "channelId", c.user_id AS "userId", c.machine_id AS "machineId"
+				FROM machine_choices c JOIN machines m ON m.id = c.machine_id
+				WHERE m.revoked_at IS NULL
+			`;
+			return rows.map(row => ({ ...row }));
+		});
+	}
+	choose(choice: Omit<MachineChoice, "machineId"> & { machineId?: string }, now: Date) {
+		return this.run("choose a machine", async () => {
+			if (!choice.machineId) {
+				await this.sql`
+					DELETE FROM machine_choices
+					WHERE channel_id = ${choice.channelId} AND user_id = ${choice.userId}
+				`;
+				return;
+			}
+			// Only the person's own unrevoked machine; anything else is missing.
+			let inserted = await this.sql<{ machineId: string }[]>`
+				INSERT INTO machine_choices (channel_id, user_id, machine_id, chosen_at)
+				SELECT ${choice.channelId}, ${choice.userId}, id, ${now} FROM machines
+				WHERE id = ${choice.machineId} AND user_id = ${choice.userId} AND revoked_at IS NULL
+				ON CONFLICT (channel_id, user_id)
+				DO UPDATE SET machine_id = EXCLUDED.machine_id, chosen_at = EXCLUDED.chosen_at
+				RETURNING machine_id AS "machineId"
+			`;
+			if (!inserted.length) throw missing(`machine ${choice.machineId} is not the person's`);
 		});
 	}
 }

@@ -161,7 +161,10 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 	});
 	readonly images: ImageStore = this.#images;
-	readonly machines: MachineStore = new MemoryMachineStore(id => this.#users.has(id));
+	readonly machines: MachineStore = new MemoryMachineStore(
+		id => this.#users.has(id),
+		id => this.#channels.has(id),
+	);
 
 	readonly users: UserStore = {
 		put: input => {

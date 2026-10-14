@@ -249,6 +249,8 @@ export type RebuildConnections = {
 	list: (repositoryId: string, owner?: string) => Connection[];
 	assign: (connectionId: string, documentId: string) => void;
 	assigned: (connectionId: string) => string | undefined;
+	/** Whether the connection may take its owner's work on this document: their machine choice. */
+	allows?: (documentId: string, connection: Connection) => boolean;
 };
 
 export type RebuildResult =
@@ -307,6 +309,7 @@ export async function queueRebuild(
 			return !!connection && connection.owner === owner
 				&& connection.source.repositoryId === live.repositoryId
 				&& (!options.automatic || connection.autoRun === true)
+				&& (connections.allows?.(plan.id, connection) ?? true)
 				&& (assigned === undefined || assigned === plan.id);
 		};
 		let connection = original && connections.get(original.connectionId);

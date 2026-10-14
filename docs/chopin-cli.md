@@ -187,6 +187,25 @@ chopin connect . --env SOME_FLAG=1 -- copilot --acp --allow-all
 secrets in your agent's own login instead. You can't set `PATH` or a
 `CHOPIN_` variable this way.
 
+### Choose a machine for a document
+
+With more than one machine connected for a repository, Chopin picks one for
+you by default: the machine that last worked on the document, else the first
+idle one. To pick it yourself, choose a machine for the document. The choice
+is yours alone and holds for that document until you change it:
+
+- **Build plan**, **Build**, **Run** and investigations you start in the
+  document go to the machine you chose, behind any work it is already running.
+- Rebuilds and prototypes Chopin starts for you follow the same choice, and
+  still need the machine's consent to automatic work.
+- You can choose only your own machines that serve the document's repository.
+- If the machine you chose is offline, work fails with **build-box is
+  offline** (your machine's name) instead of moving to another machine. Start
+  `chopin connect` on it, or choose another one.
+- Choosing **Automatic** goes back to Chopin's pick.
+
+Disconnecting a machine clears every choice of it.
+
 ### Coding agents
 
 The Machines page offers these agents. **Connect with** is what follows

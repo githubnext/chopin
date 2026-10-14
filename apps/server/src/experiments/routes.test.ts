@@ -1545,3 +1545,82 @@ test("the connector versions this server wants are public", async () => {
 	expect(response.status).toBe(200);
 	expect(await response.json()).toEqual({ protocol: CONNECTOR_PROTOCOLS, version: "0.1.3" });
 });
+
+test("a person chooses which of their machines runs a document's work, and back to automatic", async () => {
+	let { alice, bob, documentId, request, pair, tool, storage } = await setup();
+	let laptop = await pair(alice.cookie);
+	let buildBox = await pair(alice.cookie);
+	await request(
+		`/api/connector/machines/${buildBox.machine}/label`,
+		{ label: "build-box" },
+		alice.cookie,
+	);
+	let path = `/api/documents/${documentId}/machine`;
+	let shown = await (await request(path, undefined, alice.cookie)).json();
+	expect(shown.choice).toBeNull();
+	expect(shown.automatic).toMatchObject({ id: expect.any(String) });
+	expect(shown.machines.map((item: { label: string }) => item.label).sort()).toEqual([
+		"Laptop",
+		"build-box",
+	]);
+	expect(shown.machines.every((item: { connected: boolean }) => item.connected)).toBe(true);
+	// Only the caller's own machine, and only one serving the document's repository.
+	let bobs = await pair(bob.cookie);
+	expect((await request(path, { machine: bobs.machine }, alice.cookie)).status).toBe(404);
+	let elsewhere = await pair(alice.cookie, "org/other");
+	let unserved = await request(path, { machine: elsewhere.machine }, alice.cookie);
+	expect(unserved.status).toBe(409);
+	expect((await unserved.json()).error).toBe("repository-unserved");
+	expect((await request(path, { machine: buildBox.machine }, alice.cookie)).status).toBe(200);
+	expect((await (await request(path, undefined, alice.cookie)).json()).choice).toBe(
+		buildBox.machine,
+	);
+	// Stored, so a restarted server keeps it; bob's own choice is untouched.
+	expect(await storage.machines.choices()).toContainEqual({
+		channelId: documentId,
+		userId: "alice",
+		machineId: buildBox.machine,
+	});
+	expect((await (await request(path, undefined, bob.cookie)).json()).choice).toBeNull();
+
+	// Run goes to the chosen machine even though the laptop was used last.
+	let run = async () => {
+		let id = crypto.randomUUID();
+		await request(
+			`/api/documents/${documentId}/experiments`,
+			{ id, brief: "Measure" },
+			alice.cookie,
+		);
+		return {
+			id,
+			response: await request(
+				`/api/documents/${documentId}/experiments/${id}/run`,
+				{},
+				alice.cookie,
+			),
+		};
+	};
+	expect((await run()).response.status).toBe(200);
+	let offered = text(await tool(buildBox.token, "wait_for_experiment", {}));
+	expect(offered.id).toBeString();
+	expect(error(await tool(laptop.token, "claim_experiment", { id: offered.id })))
+		.toStartWith("connection-forbidden");
+
+	// An offline chosen machine is never silently replaced by another.
+	await tool(buildBox.token, "disconnect_workspace", {});
+	let offline = (await run()).response;
+	expect(offline.status).toBe(409);
+	expect(await offline.json()).toEqual({
+		error: "machine-offline",
+		message: "build-box is offline. Start chopin connect on it, or choose another machine.",
+	});
+	let listed = await (await request(path, undefined, alice.cookie)).json();
+	expect(listed.machines.find((item: { id: string }) => item.id === buildBox.machine).connected)
+		.toBe(false);
+
+	expect((await request(path, { machine: null }, alice.cookie)).status).toBe(200);
+	expect((await run()).response.status).toBe(200);
+	expect((await (await request(path, undefined, alice.cookie)).json()).automatic.id).toBe(
+		laptop.machine,
+	);
+});

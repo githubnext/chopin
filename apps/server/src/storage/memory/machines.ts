@@ -1,6 +1,6 @@
 import { conflict, missing } from "../errors";
 
-import type { CreateMachine, StoredMachine } from "../model";
+import type { CreateMachine, MachineChoice, MachineRepository, StoredMachine } from "../model";
 import type { MachineStore } from "../port";
 
 function copy(value: StoredMachine): StoredMachine {
@@ -14,7 +14,12 @@ function hex(value: Uint8Array): string {
 export class MemoryMachineStore implements MachineStore {
 	#machines = new Map<string, StoredMachine>();
 	#tokens = new Map<string, string>();
-	constructor(private userExists: (id: string) => boolean) {}
+	/** Keyed by document and person. */
+	#choices = new Map<string, MachineChoice>();
+	constructor(
+		private userExists: (id: string) => boolean,
+		private channelExists: (id: string) => boolean = () => true,
+	) {}
 	async create(input: CreateMachine) {
 		if (!this.userExists(input.userId)) throw missing(`user ${input.userId} does not exist`);
 		if (this.#machines.has(input.id) || this.#tokens.has(hex(input.tokenHash))) {
@@ -72,6 +77,37 @@ export class MemoryMachineStore implements MachineStore {
 		if (!found || found.userId !== userId || found.revokedAt) return false;
 		delete found.credentials;
 		found.revokedAt = new Date(now);
+		for (let [key, choice] of this.#choices) if (choice.machineId === id) this.#choices.delete(key);
 		return true;
+	}
+	async serve(id: string, repository: MachineRepository) {
+		let found = this.#machines.get(id);
+		if (!found || found.revokedAt) return;
+		if (found.repositories.some(value => value.repositoryId === repository.repositoryId)) return;
+		found.repositories.push(structuredClone(repository));
+	}
+	async choices() {
+		// A deleted document takes its choices with it, as the database's cascade does.
+		return [...this.#choices.values()].filter(value => this.channelExists(value.channelId))
+			.map(value => ({ ...value }));
+	}
+	async choose(choice: Omit<MachineChoice, "machineId"> & { machineId?: string }) {
+		let key = `${choice.channelId}\n${choice.userId}`;
+		if (!choice.machineId) {
+			this.#choices.delete(key);
+			return;
+		}
+		let found = this.#machines.get(choice.machineId);
+		if (!found || found.revokedAt || found.userId !== choice.userId) {
+			throw missing(`machine ${choice.machineId} is not the person's`);
+		}
+		if (!this.channelExists(choice.channelId)) {
+			throw missing(`channel ${choice.channelId} is missing`);
+		}
+		this.#choices.set(key, {
+			channelId: choice.channelId,
+			userId: choice.userId,
+			machineId: choice.machineId,
+		});
 	}
 }

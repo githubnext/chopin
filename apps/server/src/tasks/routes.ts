@@ -22,6 +22,8 @@ type Options = {
 	assess?: (id: string, planRevision: number) => void;
 	/** LIVE_BUILD: builds may queue behind a prototype or another document's build. */
 	liveBuild?: boolean;
+	/** Throws `machine-offline` naming the machine the person chose, else `no-workspace`. */
+	refuseOffline?: (owner: string, documentId: string) => Promise<never>;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -62,6 +64,9 @@ async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
 	}
 }
 
+/** The machine the person chose for the document is offline; the message names it. */
+class MachineOffline extends Error {}
+
 /** A browser build runs on the clicker's own connection for the document's repository. */
 export function registerImplementationRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connector = implementationConnector(
@@ -82,6 +87,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		try {
 			return await handler(request, url, params);
 		} catch (error) {
+			if (error instanceof MachineOffline) {
+				return json({ error: "machine-offline", message: error.message }, 409);
+			}
 			if (error instanceof GitHubError) return json({ error: error.message }, error.status);
 			if (error instanceof AdmissionDenied) return json({ error: error.message }, 403);
 			console.error("chopin: implementation request failed", error);
@@ -138,6 +146,21 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			else list.push(connection);
 		}
 		return [...free, ...prototyping, ...building];
+	}
+	/**
+	 * Refuse a Build that nothing can take: `machine-offline` naming the machine the person chose
+	 * for the document, never silently another, or else `no-workspace`.
+	 */
+	async function unavailable(owner: string, repositoryId: string, id: string): Promise<void> {
+		if (options.connections.candidates(repositoryId, owner, id).length) return;
+		try {
+			await options.refuseOffline?.(owner, id);
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "machine-offline") {
+				throw new MachineOffline(error.message);
+			}
+		}
+		throw new GitHubError("no-workspace", 409);
 	}
 	router.on(
 		"GET",
@@ -216,9 +239,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				throw new GitHubError("repository write access is required", 403);
 			}
 			let input = await body(request, buildSchema);
-			if (!options.connections.list(channel.repositoryId, session.user.id).length) {
-				throw new GitHubError("no-workspace", 409);
-			}
+			await unavailable(session.user.id, channel.repositoryId, id);
 			let [connection] = await available(session.user.id, channel.repositoryId, id);
 			if (!connection) {
 				throw new GitHubError(
@@ -279,9 +300,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			if (!repository.permissions.push && !repository.permissions.admin || channel.archivedAt) {
 				throw new GitHubError("repository write access is required", 403);
 			}
-			if (!options.connections.list(channel.repositoryId, session.user.id).length) {
-				throw new GitHubError("no-workspace", 409);
-			}
+			await unavailable(session.user.id, channel.repositoryId, id);
 			// Like Build: a connection running a prototype or another document's build is busy.
 			let free: Connection[] = [];
 			for (
@@ -308,6 +327,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						assign: (connectionId, documentId) =>
 							options.connections.assign(connectionId, documentId),
 						assigned: connectionId => options.connections.assigned(connectionId),
+						allows: (documentId, connection) => options.connections.allows(documentId, connection),
 					}, { by: session.user.id }),
 			);
 			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);

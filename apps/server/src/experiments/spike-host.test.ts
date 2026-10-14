@@ -112,6 +112,23 @@ test("new spike work skips a connection silent for two heartbeats", async () => 
 	}
 });
 
+test("a prototype runs only on the machine its editor chose for the document", async () => {
+	let context = await hosted();
+	try {
+		let connection = pair(context);
+		let repositoryId = context.plan.persistence.repositoryId;
+		context.connections.choose(context.plan.id, "U_test", "M_elsewhere");
+		expect(await context.host.connection(repositoryId, "U_test", context.plan.id))
+			.toBeUndefined();
+		context.connections.choose(context.plan.id, "U_test", "M_1");
+		expect(await context.host.connection(repositoryId, "U_test", context.plan.id)).toMatchObject({
+			id: connection.id,
+		});
+	} finally {
+		await Service.close(context.plan);
+	}
+});
+
 test("a spike is durably placing before its callout is published", async () => {
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	let context = await hosted();

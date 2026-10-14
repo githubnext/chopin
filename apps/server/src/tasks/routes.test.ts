@@ -165,6 +165,7 @@ async function setup(
 		assess: options.assess,
 		liveBuild: options.liveBuild ?? false,
 		connections: experiments.connections,
+		refuseOffline: experiments.refuseOffline,
 		busy: async connectionId =>
 			(await experiments.service.store.active()).some(item =>
 				item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
@@ -1688,6 +1689,58 @@ test("a connector that disconnects fails its running rebuild at once, without go
 			error: "Your local agent disconnected.",
 		});
 		expect(context.plan.live?.baseRevision).toBe(live?.baseRevision);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("Build uses the machine the person chose for the document, never another", async () => {
+	let context = await setup();
+	try {
+		let first = await paired(context);
+		let chosen = await paired(context);
+		await context.call(`/api/connector/machines/${chosen.machine}/label`, { label: "build-box" });
+		let choose = (machine: string | null) =>
+			context.call(`/api/documents/${context.plan.id}/machine`, { machine });
+		expect((await choose(chosen.machine)).status).toBe(200);
+		let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+		// The first machine was paired first and is idle, but the person chose build-box.
+		await tool(context, chosen.token, "disconnect_workspace");
+		let offline = await context.call(context.path, review);
+		expect(offline.status).toBe(409);
+		expect(await offline.json()).toEqual({
+			error: "machine-offline",
+			message: "build-box is offline. Start chopin connect on it, or choose another machine.",
+		});
+		expect(context.plan.builds).toEqual([]);
+		// Back to automatic, the first machine takes it.
+		expect((await choose(null)).status).toBe(200);
+		let built = await (await context.call(context.path, review)).json();
+		expect(built.connectionId).toBe(first.connection.id);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("an automatic rebuild follows the builder's machine choice", async () => {
+	let { context, rebuild } = await rebuilding(true);
+	try {
+		await tool(context, rebuild.runToken, "report_rebuild", {
+			summary: "No change needed.",
+			commits: [],
+			tasks: [],
+		});
+		expect((await edit(context.plan, "A later edit.")).ok).toBe(true);
+		let connections = context.experiments.connections;
+		let own = connections.get(context.plan.builds.at(-1)!.connectionId)!;
+		connections.choose(context.plan.id, "U_test", "another-machine");
+		expect((await queueRebuild(context.plan, connections, { automatic: true })).kind).toBe(
+			"unavailable",
+		);
+		connections.choose(context.plan.id, "U_test", own.machineId);
+		expect((await queueRebuild(context.plan, connections, { automatic: true })).kind).toBe(
+			"queued",
+		);
 	} finally {
 		await Plan.close(context.plan);
 	}

@@ -2331,6 +2331,7 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 	}),
 	liveBuild: !!config.liveBuild,
 	connections: experiments.connections,
+	refuseOffline: experiments.refuseOffline,
 	busy: async connectionId =>
 		(await experiments!.service.store.active()).some(item =>
 			item.connectionId === connectionId && ["running", "publishing"].includes(item.state)

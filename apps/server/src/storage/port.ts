@@ -36,7 +36,9 @@ import type {
 	Lease,
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
+	MachineChoice,
 	MachineCredentials,
+	MachineRepository,
 	PauseBackgroundJob,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
@@ -112,6 +114,15 @@ export interface MachineStore {
 	revoke(id: string, userId: string, now: Date): Promise<boolean>;
 	/** Rename the owner's live machine; false for anyone else's, or a revoked one. */
 	rename(id: string, userId: string, label: string): Promise<boolean>;
+	/** Add a repository the machine connected a checkout of, unless it already serves it. */
+	serve(id: string, repository: MachineRepository): Promise<void>;
+	/** Every choice of an unrevoked machine. Revoking a machine forgets its choices. */
+	choices(): Promise<MachineChoice[]>;
+	/** Set one person's machine for one document, or without `machineId` go back to automatic. */
+	choose(
+		choice: Omit<MachineChoice, "machineId"> & { machineId?: string },
+		now: Date,
+	): Promise<void>;
 }
 
 export interface ImageStore {

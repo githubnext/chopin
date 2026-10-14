@@ -82,6 +82,8 @@ export class Connections {
 	/** Documents whose builds wait behind a connection's current one, first queued first. */
 	#queued = new Map<string, string[]>();
 	#used = new Map<string, string>();
+	/** Each person's machine for a document, keyed by document and person; none is automatic. */
+	#choices = new Map<string, string>();
 	#locks = new Map<string, Promise<unknown>>();
 	constructor(private now = () => Date.now()) {}
 	create(input: PairingInput) {
@@ -233,12 +235,43 @@ export class Connections {
 	use(documentId: string, connectionId: string) {
 		this.#used.set(documentId, connectionId);
 	}
-	/** Live connections for a repository, the one last used for `documentId` first. */
+	/**
+	 * Live connections for a repository that may take `owner`'s work on `documentId`, the one last
+	 * used for the document first. A chosen machine's connections only, so an offline choice
+	 * leaves none rather than falling back to another machine.
+	 */
 	candidates(repositoryId: string, owner: string, documentId: string) {
 		let last = this.#used.get(documentId);
-		return this.list(repositoryId, owner).sort((a, b) =>
-			Number(b.id === last) - Number(a.id === last)
-		);
+		let chosen = this.chosen(documentId, owner);
+		return this.list(repositoryId, owner).filter(value =>
+			chosen === undefined || value.machineId === chosen
+		).sort((a, b) => Number(b.id === last) - Number(a.id === last));
+	}
+	/** Whether a connection may take its owner's work on `documentId`, as candidates() decides. */
+	allows(documentId: string, connection: Connection) {
+		let chosen = this.chosen(documentId, connection.owner);
+		return chosen === undefined || connection.machineId === chosen;
+	}
+	/** The machine `owner` chose for `documentId`, or undefined for automatic. */
+	chosen(documentId: string, owner: string) {
+		return this.#choices.get(`${documentId}\n${owner}`);
+	}
+	/** Remember a stored choice; without a machine, the person is back to automatic. */
+	choose(documentId: string, owner: string, machineId?: string) {
+		let key = `${documentId}\n${owner}`;
+		if (machineId) this.#choices.set(key, machineId);
+		else this.#choices.delete(key);
+	}
+	/** The documents whose work someone chose a machine for. */
+	choosing(machineId: string) {
+		return [...this.#choices].filter(([, value]) => value === machineId).map(([key]) => {
+			let [documentId, owner] = key.split("\n") as [string, string];
+			return { documentId, owner };
+		});
+	}
+	/** A revoked machine is nobody's choice any more. */
+	unchoose(machineId: string) {
+		for (let [key, value] of this.#choices) if (value === machineId) this.#choices.delete(key);
 	}
 	runToken(
 		connectionId: string,

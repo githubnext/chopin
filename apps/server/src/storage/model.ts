@@ -124,6 +124,12 @@ export type StoredMachine = {
 };
 export type CreateMachine = Omit<StoredMachine, "reauthorizeAt" | "revokedAt">;
 
+/**
+ * Which of a person's machines works on one document for them. No row is the automatic choice:
+ * their live connection last used for the document, else the first idle one.
+ */
+export type MachineChoice = { channelId: string; userId: string; machineId: string };
+
 export type ChannelDescription = {
 	value: string;
 	revision: number;

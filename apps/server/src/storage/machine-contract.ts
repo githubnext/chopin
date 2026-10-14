@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { contractId as id, openedStorage } from "./contract-support";
+import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -198,6 +198,67 @@ export function machineContract(name: string, factory: StorageFactory) {
 				expect(found?.revokedAt).toEqual(now);
 				expect(found?.credentials).toBeUndefined();
 				expect(await storage.machines.revoke(id("missing"), userId, now)).toBe(false);
+			} finally {
+				await storage.close();
+			}
+		});
+		it("keeps one machine choice per document and person until it is cleared", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId } = await userAndChannel(storage);
+				let first = machine(userId);
+				let second = machine(userId);
+				await storage.machines.create(first);
+				await storage.machines.create(second);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				await storage.machines.choose({ channelId, userId, machineId: first.id }, now);
+				await storage.machines.choose({ channelId, userId, machineId: second.id }, now);
+				let mine = (await storage.machines.choices()).filter(value =>
+					value.channelId === channelId
+				);
+				expect(mine).toEqual([{ channelId, userId, machineId: second.id }]);
+				await storage.machines.choose({ channelId, userId }, now);
+				expect(
+					(await storage.machines.choices()).filter(value => value.channelId === channelId),
+				).toEqual([]);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("forgets the choices of a revoked machine", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId } = await userAndChannel(storage);
+				let input = machine(userId);
+				await storage.machines.create(input);
+				await storage.machines.choose({ channelId, userId, machineId: input.id }, new Date());
+				await storage.machines.revoke(input.id, userId, new Date());
+				expect(
+					(await storage.machines.choices()).filter(value => value.channelId === channelId),
+				).toEqual([]);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("remembers each repository a machine connects, once", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let input = machine(userId);
+				await storage.machines.create(input);
+				let checkout = {
+					repositoryId: id("repository"),
+					repository: "octo-org/other",
+					commit: "b".repeat(40),
+				};
+				await storage.machines.serve(input.id, checkout);
+				await storage.machines.serve(input.id, { ...checkout, commit: "c".repeat(40) });
+				expect((await storage.machines.get(input.id))?.repositories).toEqual([
+					...input.repositories,
+					checkout,
+				]);
 			} finally {
 				await storage.close();
 			}
