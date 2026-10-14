@@ -182,7 +182,8 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		await page.goto("/connect");
 		await expect(page.getByRole("heading", { name: "Your machines", exact: true })).toHaveCount(1);
 		let machines = page.getByRole("table", { name: "Your machines" });
-		await expect(machines.getByText(hostname(), { exact: true })).toBeVisible();
+		await expect(machines.getByRole("button", { name: `Actions for ${hostname()}`, exact: true }))
+			.toBeVisible();
 		await expect(machines).toContainText("Connected");
 		// Disconnecting is in the machine's menu and asks first, naming the machine; cancelling keeps
 		// it connected.
