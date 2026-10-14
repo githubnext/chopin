@@ -61,6 +61,8 @@ async function answered(input: Awaited<ReturnType<typeof fixture>>, withOwner = 
 	return JSON.parse(response);
 }
 
+let nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+
 test("ask returns the saved answer with a read_plan-shaped current document", async () => {
 	let { host, room, ask, card } = await fixture();
 	let pending = ask();
@@ -224,6 +226,92 @@ test("ask omits the snapshot when all cancelled, missing an owner, or no longer 
 	}
 });
 
+for (let late of ["resolve", "reject"] as const) {
+	test(`ask returns outcomes while identity lookup waits, then ignores its late ${late}`, async () => {
+		let input = await fixture();
+		let lookingUp = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let get = input.host.storage.channels.get;
+		input.host.storage.channels.get = async id => {
+			lookingUp.resolve();
+			await release.promise;
+			return get(id);
+		};
+		let queued = 0;
+		input.room.exclusive = action => {
+			queued++;
+			return Plan.exclusive(input.host.plan, action);
+		};
+		let pending = input.ask();
+		let question = await input.card();
+		await input.host.answer(question.id, [0]);
+		await lookingUp.promise;
+		let response = await pending;
+		if (typeof response !== "string") throw new Error("ask returned no text");
+		expect(JSON.parse(response)).toEqual({
+			outcomes: [{ status: "answered", answered_by: "reader", answers: expect.any(Array) }],
+		});
+		if (late === "resolve") release.resolve();
+		else release.reject(new Error("lookup failed after budget"));
+		await nextTurn();
+		expect(queued).toBe(0);
+	});
+}
+
+test("ask returns outcomes while owner revalidation waits, then skips the queue", async () => {
+	let input = await fixture();
+	let revalidating = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<boolean>();
+	input.owner.revalidate = async () => {
+		revalidating.resolve();
+		return release.promise;
+	};
+	let queued = 0;
+	input.room.exclusive = action => {
+		queued++;
+		return Plan.exclusive(input.host.plan, action);
+	};
+	let pending = input.ask();
+	let question = await input.card();
+	await input.host.answer(question.id, [0]);
+	await revalidating.promise;
+	let response = await pending;
+	if (typeof response !== "string") throw new Error("ask returned no text");
+	expect(JSON.parse(response)).toEqual({
+		outcomes: [{ status: "answered", answered_by: "reader", answers: expect.any(Array) }],
+	});
+	release.resolve(true);
+	await nextTurn();
+	expect(queued).toBe(0);
+});
+
+test("ask returns outcomes while room access waits, then skips late projection", async () => {
+	let input = await fixture();
+	let queued = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let drained = Promise.withResolvers<void>();
+	let projected: unknown;
+	input.room.exclusive = async action => {
+		queued.resolve();
+		await release.promise;
+		projected = await Plan.exclusive(input.host.plan, action);
+		drained.resolve();
+		return projected as never;
+	};
+	let pending = input.ask();
+	let question = await input.card();
+	await input.host.answer(question.id, [0]);
+	await queued.promise;
+	let response = await pending;
+	if (typeof response !== "string") throw new Error("ask returned no text");
+	expect(JSON.parse(response)).toEqual({
+		outcomes: [{ status: "answered", answered_by: "reader", answers: expect.any(Array) }],
+	});
+	release.resolve();
+	await drained.promise;
+	expect(projected).toBeUndefined();
+});
+
 for (let kind of ["owner", "tool"] as const) {
 	test(`ask omits the snapshot when ${kind} aborts during identity lookup`, async () => {
 		let input = await fixture();
@@ -242,8 +330,12 @@ for (let kind of ["owner", "tool"] as const) {
 		await lookingUp.promise;
 		if (kind === "owner") input.controller.abort(new Error("credential expired"));
 		else tool.abort();
-		release.resolve();
-		let response = await pending;
+		let response: Awaited<typeof pending>;
+		try {
+			response = await pending;
+		} finally {
+			release.resolve();
+		}
 		if (typeof response !== "string") throw new Error("ask returned no text");
 		expect(JSON.parse(response)).toEqual({
 			outcomes: [{ status: "answered", answered_by: "reader", answers: expect.any(Array) }],

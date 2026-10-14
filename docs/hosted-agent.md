@@ -483,13 +483,14 @@ every turn.
   inside the session, such as an Atomic extension, can use either to address
   that document over MCP.
 
-After an `ask` questionnaire has a saved answer, its result also includes
+After an `ask` questionnaire has a saved answer, its result may include
 `current_plan` with the same document, revision, source, block outline, comments,
 and question records as `read_plan`. The Planner can edit from that revision and
-still uses `anchor_plan` to relate the answer to prose. When none of a batch's
-questions were answered, the result has only its outcomes. If document lookup
-or owner revalidation fails, the answer outcomes remain available but no document
-snapshot is returned.
+still uses `anchor_plan` to relate the answer to prose. The optional snapshot
+has a 50 ms budget for document lookup, owner revalidation, and room access;
+if it cannot finish, the saved answer returns without waiting and the Planner
+can call `read_plan`. When none of a batch's questions were answered, or lookup
+or revalidation fails, the result contains only the outcomes.
 
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.

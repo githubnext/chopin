@@ -175,6 +175,7 @@ const roomContext = z.object({
 });
 const referenceContext = roomContext.extend({ repository: z.object({ id: z.string() }) });
 type Owner = Pick<ActiveOwnerBinding, "revalidate" | "signal">;
+const SNAPSHOT_BUDGET_MS = 50;
 const ownerContext = roomContext.extend({
 	owner: z.custom<Owner>(value =>
 		!!value && typeof (value as Owner).revalidate === "function" && !!(value as Owner).signal
@@ -524,15 +525,37 @@ export const documentTools = {
 				if (!ended.some(outcome => outcome.status === "answered") || !owner || stopped()) {
 					return result;
 				}
+				let disposed = false;
+				let stop = Promise.withResolvers<undefined>();
+				let dispose = () => {
+					if (disposed) return;
+					disposed = true;
+					stop.resolve(undefined);
+				};
+				let timer = setTimeout(dispose, SNAPSHOT_BUDGET_MS);
+				owner.signal.addEventListener("abort", dispose, { once: true });
+				abortSignal?.addEventListener("abort", dispose, { once: true });
+				if (stopped()) dispose();
 				try {
-					let document = await documentIdentity(context.plan);
-					if (stopped() || !await owner.revalidate() || stopped()) return result;
-					let current = await context.exclusive(async () =>
-						stopped() ? undefined : documentSnapshot(context.plan, document)
-					);
-					return stopped() || !current ? result : { ...result, current_plan: current };
-				} catch {
-					return result;
+					if (disposed) return result;
+					// The optional read must never hold an answered questionnaire behind GitHub I/O.
+					let capture = (async () => {
+						let [document, authorized] = await Promise.all([
+							documentIdentity(context.plan),
+							owner.revalidate(),
+						]);
+						if (!authorized || disposed || stopped()) return undefined;
+						return context.exclusive(async () =>
+							disposed || stopped() ? undefined : documentSnapshot(context.plan, document)
+						);
+					})().catch(() => undefined);
+					let current = await Promise.race([capture, stop.promise]);
+					return disposed || stopped() || !current ? result : { ...result, current_plan: current };
+				} finally {
+					dispose();
+					clearTimeout(timer);
+					owner.signal.removeEventListener("abort", dispose);
+					abortSignal?.removeEventListener("abort", dispose);
 				}
 			}),
 	}),
