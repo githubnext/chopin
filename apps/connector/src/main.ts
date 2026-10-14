@@ -444,6 +444,23 @@ export async function connect(
 		}).catch(() => {});
 		if (token) await reportAgent(url, token, agent);
 	};
+	/**
+	 * Ask the agent its name and version once per connection, as the start check does, so Chopin
+	 * knows them before any job. It runs beside the connection, never holding it up; an agent that
+	 * doesn't answer within 10 seconds is left unnamed until a job or the next connection.
+	 */
+	let probeAgent = (token: string, signal: AbortSignal) => {
+		let started = [...saving.command];
+		let at = programAt(started);
+		started[at] = which(started[at]!) ?? started[at]!;
+		void checkAgent(started, {
+			cwd: info.root,
+			env: { ...process.env, ...env },
+			timeoutMs: 10_000,
+			signal,
+			onInfo: agent => void rememberAgent(agent, token),
+		}).catch(() => {});
+	};
 	// An agent that asks permission in the terminal can't run unattended; say so before it pairs.
 	if (installing && known && known.unattended !== true) {
 		createOutput().error(
@@ -567,6 +584,7 @@ export async function connect(
 							agent: (await readConfig(directory)).agents?.[program],
 						});
 						let api = await remote(url, connectionToken, signal);
+						probeAgent(connectionToken, AbortSignal.any([abort.signal, signal]));
 						if (!announced) {
 							output.connected(info.repository);
 							// Only a connect that got this far saves its settings for service install.

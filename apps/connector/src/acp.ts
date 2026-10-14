@@ -128,7 +128,8 @@ function initialize(connection: ReturnType<ClientApp["connect"]>) {
 
 /**
  * Start the agent with `env` as its whole environment and ask it to initialize, then stop it.
- * Undefined once it answers within `timeoutMs`; otherwise how it failed.
+ * Undefined once it answers within `timeoutMs`; otherwise how it failed. `onInfo` hears the name
+ * and version it answered with.
  */
 export async function checkAgent(
 	command: string[],
@@ -137,6 +138,8 @@ export async function checkAgent(
 		env: NodeJS.ProcessEnv;
 		timeoutMs?: number;
 		onInfo?: (info: AgentInfo) => void;
+		/** Stops the agent at once, as a failure. */
+		signal?: AbortSignal;
 	},
 ): Promise<AgentFailure | undefined> {
 	let timeoutMs = options.timeoutMs ?? 10_000;
@@ -148,6 +151,9 @@ export async function checkAgent(
 			),
 		timeoutMs,
 	);
+	let abort = () => agent.connection.close(new Error("stopped"));
+	options.signal?.addEventListener("abort", abort, { once: true });
+	if (options.signal?.aborted) abort();
 	try {
 		let info = agentInfo(await initialize(agent.connection));
 		if (info) options.onInfo?.(info);
@@ -156,6 +162,7 @@ export async function checkAgent(
 		return await agent.failure(error);
 	} finally {
 		clearTimeout(deadline);
+		options.signal?.removeEventListener("abort", abort);
 		await agent.stop();
 	}
 }
