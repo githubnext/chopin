@@ -185,6 +185,36 @@ test("the toolbar cannot turn the title into prose or an ordinary heading", asyn
 	await written(page, room, /^# Original title\n\nBody prose\.\n$/);
 });
 
+test("title list-format actions preserve body lists and leave editing usable", async ({ join, seed, room }) => {
+	await seed("# Original title\n\nBody prose.\n\n- Preserved body item\n");
+	let page = await join("ana");
+	let errors: string[] = [];
+	page.on("pageerror", error => errors.push(error.message));
+	page.on("console", message => {
+		if (message.type() === "error" && message.text().includes("endlessly")) {
+			errors.push(message.text());
+		}
+	});
+	for (let kind of ["Bulleted list", "Numbered list"]) {
+		await selectTitle(page);
+		let toolbar = page.getByRole("toolbar", { name: "Text formatting" });
+		await toolbar.getByRole("button", { name: "Block type: Heading 1" }).click();
+		await toolbar.getByRole("button", { name: kind, exact: true }).click();
+		await expect(title(page)).toHaveText("Original title");
+		await expect(content(page).getByRole("listitem")).toHaveCount(1);
+		await expect(content(page).getByRole("listitem")).toHaveText("Preserved body item");
+	}
+	await selectTitle(page, 14);
+	await page.keyboard.type(" updated");
+	await expect(title(page)).toHaveText("Original title updated");
+	await written(
+		page,
+		room,
+		/^# Original title updated\n\nBody prose\.\n\n- Preserved body item\n$/,
+	);
+	expect(errors).toEqual([]);
+});
+
 test("a range deletion across the title boundary keeps unselected body prose separate", async ({ join, seed, room }) => {
 	await seed("# Original title\n\nBody prose.\n");
 	let page = await join("ana");

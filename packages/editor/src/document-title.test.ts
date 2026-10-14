@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
 import { createHeadlessEditor } from "@lexical/headless";
+import {
+	$createListItemNode,
+	$createListNode,
+	$insertList,
+	INSERT_ORDERED_LIST_COMMAND,
+	INSERT_UNORDERED_LIST_COMMAND,
+	registerList,
+} from "@lexical/list";
 import { $createHeadingNode, $isHeadingNode } from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
 import {
@@ -20,6 +28,7 @@ import { $createQuestionnaireNode, registry } from "@chopin/dialect";
 import { registerDocumentTitle } from "./document-title";
 import { collectPlanState } from "./questionnaires";
 import { registerDecisionDeletion } from "./widgets/decision-deletion";
+import { availableCommands } from "./toolbar/slash";
 
 import type { LexicalEditor } from "lexical";
 
@@ -50,6 +59,130 @@ function tree(editor: LexicalEditor) {
 		}))
 	);
 }
+
+test("registered list transforms reject a title list without a neighboring list", () => {
+	let { editor, key } = fixture();
+	registerList(editor);
+	editor.update(() => {
+		let heading = $getRoot().getFirstChild();
+		if (!$isElementNode(heading)) throw new Error("missing heading");
+		heading.selectEnd();
+		$insertList("bullet");
+	}, { discrete: true });
+	expect(tree(editor)[0]).toEqual({ key, type: "heading", text: "Title", tag: "h1" });
+	expect(tree(editor).map(node => node.type)).toEqual(["heading", "paragraph"]);
+});
+
+for (let type of ["bullet", "number"] as const) {
+	test(`registered ${type} transforms retain inline title content and the adjacent body list`, () => {
+		let errors: Error[] = [];
+		let editor = createHeadlessEditor({
+			nodes: registry().nodes,
+			onError: error => errors.push(error),
+		});
+		registerList(editor);
+		let titleKey = "";
+		let textKey = "";
+		let listKey = "";
+		editor.update(() => {
+			let text = $createTextNode("title").toggleFormat("bold");
+			let heading = $createHeadingNode("h1").append($createTextNode("A "), text);
+			let list = $createListNode(type).append(
+				$createListItemNode().append($createTextNode("Body item")),
+			);
+			titleKey = heading.getKey();
+			textKey = text.getKey();
+			listKey = list.getKey();
+			$getRoot().append(
+				heading,
+				list,
+				$createParagraphNode().append($createTextNode("Body prose")),
+			);
+			text.select(1, 4);
+		}, { discrete: true });
+		registerDocumentTitle(editor);
+		editor.update(() => $insertList(type), { discrete: true });
+		expect(errors).toEqual([]);
+		expect(tree(editor)).toEqual([
+			{ key: titleKey, type: "heading", text: "A title", tag: "h1" },
+			{ key: listKey, type: "list", text: "Body item", tag: undefined },
+			{ key: expect.any(String), type: "paragraph", text: "Body prose", tag: undefined },
+		]);
+		editor.getEditorState().read(() => {
+			let heading = $getRoot().getFirstChild();
+			if (!$isElementNode(heading)) throw new Error("missing title");
+			expect(heading.getChildren().every(node => node.isInline())).toBe(true);
+			expect(heading.getAllTextNodes()[1]?.hasFormat("bold")).toBe(true);
+			let selection = $getSelection();
+			expect(
+				$isRangeSelection(selection) && {
+					anchor: selection.anchor.key,
+					start: selection.anchor.offset,
+					focus: selection.focus.key,
+					end: selection.focus.offset,
+				},
+			).toEqual({ anchor: textKey, start: 1, focus: textKey, end: 4 });
+		});
+	});
+}
+
+for (let command of [INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND]) {
+	test(`a registered ${command.type} command preserves an empty title and its caret`, () => {
+		let { editor, key } = fixture("");
+		registerList(editor);
+		editor.update(() => {
+			let heading = $getRoot().getFirstChild();
+			if (!$isElementNode(heading)) throw new Error("missing heading");
+			heading.selectStart();
+			expect(editor.dispatchCommand(command, undefined)).toBe(true);
+		}, { discrete: true });
+		expect(tree(editor).map(node => node.type)).toEqual(["heading", "paragraph"]);
+		editor.getEditorState().read(() => {
+			let selection = $getSelection();
+			expect($isRangeSelection(selection) && selection.anchor.key).toBe(key);
+		});
+	});
+}
+
+test("registered list commands still convert ordinary body prose", () => {
+	let { editor, key } = fixture();
+	registerList(editor);
+	editor.update(() => {
+		let body = $getRoot().getLastChild();
+		if (!$isElementNode(body)) throw new Error("missing body");
+		body.selectStart();
+		editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+	}, { discrete: true });
+	expect(tree(editor)[0]).toEqual({ key, type: "heading", text: "Title", tag: "h1" });
+	expect(tree(editor).map(node => ({ type: node.type, text: node.text }))).toEqual([
+		{ type: "heading", text: "Title" },
+		{ type: "list", text: "Body" },
+	]);
+});
+
+test("the actual callout conversion restores inline title content without a paragraph child", () => {
+	let { editor, key } = fixture();
+	let textKey = "";
+	editor.update(() => {
+		let heading = $getRoot().getFirstChild();
+		if (!$isElementNode(heading)) throw new Error("missing heading");
+		let text = heading.getAllTextNodes()[0]!;
+		textKey = text.getKey();
+		text.select(1, 4);
+		let command = availableCommands("").find(command => command.id === "callout");
+		if (command?.kind !== "insert") throw new Error("missing callout command");
+		command.run(editor);
+	}, { discrete: true });
+	expect(tree(editor)[0]).toEqual({ key, type: "heading", text: "Title", tag: "h1" });
+	expect(tree(editor).map(node => node.type)).toEqual(["heading", "paragraph"]);
+	editor.getEditorState().read(() => {
+		let heading = $getRoot().getFirstChild();
+		if (!$isElementNode(heading)) throw new Error("missing heading");
+		expect(heading.getChildren().every(node => node.isInline())).toBe(true);
+		let selection = $getSelection();
+		expect($isRangeSelection(selection) && selection.anchor.key).toBe(textKey);
+	});
+});
 
 test("formatting a title as a paragraph retains its name and node identity", () => {
 	let { editor, key } = fixture();

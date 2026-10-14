@@ -1,5 +1,10 @@
 import { $createHeadingNode, $isHeadingNode } from "@lexical/rich-text";
 import {
+	INSERT_CHECK_LIST_COMMAND,
+	INSERT_ORDERED_LIST_COMMAND,
+	INSERT_UNORDERED_LIST_COMMAND,
+} from "@lexical/list";
+import {
 	$createParagraphNode,
 	$createTextNode,
 	$getNodeByKey,
@@ -186,8 +191,27 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 				let old = $getNodeByKey(key);
 				heading = $isHeadingNode(old) ? old : $createHeadingNode("h1");
 				if ($isElementNode(replacement) && !$isRootNode(replacement)) {
-					heading.append(...replacement.getChildren());
-					replacement.replace(heading);
+					// A list or callout can also hold body blocks. Recover only the title's inline run.
+					let carrier = moved!;
+					while (!$isElementNode(carrier) || carrier.isInline()) {
+						carrier = carrier.getParentOrThrow();
+					}
+					let parents = carrier.getParents().filter(parent => !$isRootNode(parent));
+					let inline = carrier.getChildren().filter(node => node.isInline());
+					heading.append(...inline);
+					replacement.insertBefore(heading);
+					let selection = $getSelection();
+					if ($isRangeSelection(selection)) {
+						for (let point of [selection.anchor, selection.focus]) {
+							if (point.key === carrier.getKey()) {
+								point.set(heading.getKey(), Math.min(point.offset, inline.length), "element");
+							}
+						}
+					}
+					if (carrier.getChildrenSize() === 0) carrier.remove();
+					for (let parent of parents) {
+						if (parent.isAttached() && parent.getChildrenSize() === 0) parent.remove();
+					}
 				} else {
 					heading.clear();
 					let first = root.getFirstChild();
@@ -223,6 +247,21 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 			: editor.registerRootListener(() => editor.getEditorState().read(decorate)),
 		editor.registerCommand(INSERT_PARAGRAPH_COMMAND, leave, COMMAND_PRIORITY_HIGH),
 		editor.registerCommand(INSERT_LINE_BREAK_COMMAND, leave, COMMAND_PRIORITY_HIGH),
+		editor.registerCommand(
+			INSERT_UNORDERED_LIST_COMMAND,
+			() => canEdit && !!inside(),
+			COMMAND_PRIORITY_HIGH,
+		),
+		editor.registerCommand(
+			INSERT_ORDERED_LIST_COMMAND,
+			() => canEdit && !!inside(),
+			COMMAND_PRIORITY_HIGH,
+		),
+		editor.registerCommand(
+			INSERT_CHECK_LIST_COMMAND,
+			() => canEdit && !!inside(),
+			COMMAND_PRIORITY_HIGH,
+		),
 		editor.registerCommand(DELETE_CHARACTER_COMMAND, boundary, COMMAND_PRIORITY_HIGH),
 		editor.registerCommand(DELETE_WORD_COMMAND, boundary, COMMAND_PRIORITY_HIGH),
 		editor.registerCommand(DELETE_LINE_COMMAND, boundary, COMMAND_PRIORITY_HIGH),
