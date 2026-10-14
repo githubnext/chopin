@@ -52,11 +52,11 @@ test("experiment notifications refresh loaded receipts without changing investig
 	});
 	let store = new ExperimentStore("document");
 	store.values.set(value.id, value);
-	let changed!: () => void;
+	let listeners = new Map<string, () => void>();
 	let wire = {
-		on: (_kind: string, callback: () => void) => {
-			changed = callback;
-			return () => {};
+		on: (kind: string, callback: () => void) => {
+			listeners.set(kind, callback);
+			return () => listeners.delete(kind);
 		},
 	} as unknown as Wire;
 	let disconnect = store.connect(wire);
@@ -64,7 +64,7 @@ test("experiment notifications refresh loaded receipts without changing investig
 		await new Promise(resolve => setTimeout(resolve, 0));
 		expect(detailReads).toBe(1);
 		value = { ...value, followthrough: { id: "review", revision: 2, status: "done" } };
-		changed();
+		listeners.get("experiment:changed")!();
 		await new Promise(resolve => setTimeout(resolve, 0));
 		expect(detailReads).toBe(2);
 		expect(store.get(value.id)?.revision).toBe(1);
@@ -72,6 +72,101 @@ test("experiment notifications refresh loaded receipts without changing investig
 	} finally {
 		disconnect();
 	}
+});
+
+test("same-wire session hello reloads missed review state at an unchanged investigation revision", async () => {
+	let value = item();
+	value.followthrough = { id: "review", revision: 1, status: "running" };
+	let detailReads = 0;
+	let mutations = 0;
+	fetchWith(async (path, init) => {
+		if (init?.method === "POST") mutations++;
+		if (path.endsWith("/investigation")) {
+			detailReads++;
+			return Response.json(value);
+		}
+		return Response.json({ experiments: [{ ...value, decisionCount: 0 }] });
+	});
+	let store = new ExperimentStore("document");
+	store.values.set(value.id, value);
+	let listeners = new Map<string, () => void>();
+	let wire = {
+		on: (kind: string, listener: () => void) => {
+			listeners.set(kind, listener);
+			return () => listeners.delete(kind);
+		},
+	} as unknown as Wire;
+	let disconnect = store.connect(wire);
+	try {
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(detailReads).toBe(1);
+		value = {
+			...value,
+			followthrough: { id: "review", revision: 2, status: "failed", reason: "interrupted" },
+		};
+		listeners.get("session:hello")!();
+		await new Promise(resolve => setTimeout(resolve, 0));
+		expect(detailReads).toBe(2);
+		expect(store.get(value.id)?.revision).toBe(1);
+		expect(store.get(value.id)?.followthrough).toEqual(value.followthrough);
+		expect(mutations).toBe(0);
+	} finally {
+		disconnect();
+	}
+	expect(listeners.size).toBe(0);
+});
+
+test("a disconnected store ignores an aborted list response", async () => {
+	let resolve!: (response: Response) => void;
+	let reply = new Promise<Response>(accept => {
+		resolve = accept;
+	});
+	fetchWith(async () => reply);
+	let store = new ExperimentStore("document");
+	let disconnect = store.connect();
+	disconnect();
+	resolve(Response.json({ experiments: [{ ...item(), decisionCount: 0 }] }));
+	await new Promise(accept => setTimeout(accept, 0));
+	expect(store.items).toEqual([]);
+	expect(store.snapshot()).toBe(0);
+});
+
+test("a routine refresh preserves a superseded reconnect's required detail reload", async () => {
+	let value = item();
+	value.followthrough = { id: "review", revision: 1, status: "running" };
+	let replies: Array<(response: Response) => void> = [];
+	let detailReads = 0;
+	let mutations = 0;
+	fetchWith(async (path, init) => {
+		if (init?.method === "POST") mutations++;
+		if (path.endsWith("/investigation")) {
+			detailReads++;
+			return Response.json({
+				...value,
+				followthrough: { id: "review", revision: 2, status: "failed", reason: "interrupted" },
+			});
+		}
+		return new Promise<Response>(resolve => replies.push(resolve));
+	});
+	let store = new ExperimentStore("document");
+	store.values.set(value.id, value);
+	let reconnect = store.refresh(true);
+	let poll = store.refresh();
+	let summary = { experiments: [{ ...value, decisionCount: 0 }] };
+	replies[1]!(Response.json(summary));
+	await poll;
+	replies[0]!(Response.json(summary));
+	await reconnect;
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(detailReads).toBe(1);
+	expect(store.get(value.id)?.revision).toBe(1);
+	expect(store.get(value.id)?.followthrough?.status).toBe("failed");
+	let nextPoll = store.refresh();
+	replies[2]!(Response.json(summary));
+	await nextPoll;
+	await new Promise(resolve => setTimeout(resolve, 0));
+	expect(detailReads).toBe(1);
+	expect(mutations).toBe(0);
 });
 
 test("review actions send the receipt revision and preserve it across stale detail reads", async () => {

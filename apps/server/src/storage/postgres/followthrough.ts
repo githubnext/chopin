@@ -1,4 +1,5 @@
 import type { SQL, TransactionSQL } from "bun";
+import { corrupt } from "../errors";
 import {
 	changeFollowthrough,
 	followthroughLimit,
@@ -27,11 +28,34 @@ type Row = {
 	created_at: Date;
 	updated_at: Date;
 	reason: string | null;
-	context: FollowthroughContext | null;
+	context: unknown;
 	attempt_token: string | null;
 };
 
+function claimContext(value: unknown): FollowthroughContext | undefined {
+	if (value === null) return;
+	if (typeof value === "string") {
+		try {
+			value = JSON.parse(value);
+		} catch {
+			throw corrupt("storage returned invalid follow-through context");
+		}
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw corrupt("storage returned invalid follow-through context");
+	}
+	let context = value as Record<string, unknown>;
+	if (
+		typeof context.planRevision !== "number" || !Number.isSafeInteger(context.planRevision)
+		|| context.planRevision < 0 || typeof context.sourceHash !== "string"
+		|| !context.sourceHash.trim() || context.sourceHash.length > 128
+		|| [...context.sourceHash].some(character => character.charCodeAt(0) < 32)
+	) throw corrupt("storage returned invalid follow-through context");
+	return { planRevision: context.planRevision, sourceHash: context.sourceHash };
+}
+
 function decode(row: Row): Followthrough {
+	let context = claimContext(row.context);
 	return {
 		id: row.id,
 		channelId: row.channel_id,
@@ -45,7 +69,7 @@ function decode(row: Row): Followthrough {
 		createdAt: new Date(row.created_at),
 		updatedAt: new Date(row.updated_at),
 		...(row.reason === null ? {} : { reason: row.reason }),
-		...(row.context === null ? {} : { context: row.context }),
+		...(context ? { context } : {}),
 		...(row.attempt_token === null ? {} : { attemptToken: row.attempt_token }),
 	};
 }

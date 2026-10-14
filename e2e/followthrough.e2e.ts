@@ -1,8 +1,12 @@
 import { chatInput } from "./chat-input";
-import { persistedReview, seedPublishedResult } from "./followthrough-fixtures";
+import {
+	persistedReview,
+	recoverRunningReviews,
+	seedPublishedResult,
+} from "./followthrough-fixtures";
 import { authenticate, expect, roomPath, test } from "./room";
 import { HARNESS, HOST } from "./servers";
-import { readSource } from "./database";
+import { readSource, titleChannel } from "./database";
 import {
 	CONTRADICTION_MARKER,
 	HUMAN_SENTINEL,
@@ -13,7 +17,7 @@ import {
 import type { Followthrough, Research } from "../packages/protocol/index";
 import type { PublishedInvestigation } from "../packages/experiment/src/records";
 import type { PublishedResult } from "./followthrough-fixtures";
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 
 function resultCard(page: Page, result: PublishedResult) {
 	return page.getByRole("article", {
@@ -163,6 +167,62 @@ test("a reader sees review status but cannot retry or dismiss it", async ({ base
 	await expect(page).toHaveURL(url => url.pathname === result.child.path);
 });
 
+test("socket reconnect refreshes missed research and investigation reviews without replaying work", async ({ baseURL, join, page, room, seed }) => {
+	let port = Number(new URL(baseURL!).port);
+	let research = crypto.randomUUID();
+	let investigation = crypto.randomUUID();
+	await seed(
+		`# Test ${
+			room.slice(0, 8)
+		}\n\n<Research id="${research}" />\n\n<Investigation id="${investigation}" />\n`,
+	);
+	let results = [
+		await seedPublishedResult(port, room, "research", research, "running"),
+		await seedPublishedResult(port, room, "investigation", investigation, "running"),
+	];
+	let sockets: WebSocketRoute[] = [];
+	let offline = false;
+	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
+		route.connectToServer();
+		sockets.push(route);
+	});
+	await join("ana");
+	for (let result of results) {
+		await expect(resultCard(page, result)).toContainText("Reviewing findings");
+	}
+	let loads = 0;
+	let reviewWrites: string[] = [];
+	page.on("load", () => loads++);
+	page.on("request", request => {
+		if (request.method() === "POST" && request.url().includes("/followthrough/")) {
+			reviewWrites.push(request.url());
+		}
+	});
+	let connections = sockets.length;
+	offline = true;
+	await sockets.at(-1)!.close();
+	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
+	expect(await recoverRunningReviews(port, room)).toBe(2);
+	for (let result of results) {
+		await expect(resultCard(page, result)).toContainText("Reviewing findings");
+	}
+	offline = false;
+	await expect.poll(() => sockets.length).toBeGreaterThan(connections);
+	for (let result of results) {
+		let card = resultCard(page, result);
+		await expect(card).toContainText("Review interrupted");
+		await expect(card.getByRole("button", { name: "Retry review", exact: true })).toBeEnabled();
+		expect(await persistedReview(port, room, result.receipt.id)).toMatchObject({
+			status: "failed",
+			revision: 1,
+			attempts: 1,
+		});
+	}
+	expect(loads).toBe(0);
+	expect(reviewWrites).toEqual([]);
+});
+
 test.describe("automatic result review with the existing scripted Planner", () => {
 	test.use({ baseURL: `http://${HOST}:${HARNESS}` });
 	test(
@@ -171,18 +231,10 @@ test.describe("automatic result review with the existing scripted Planner", () =
 			test.setTimeout(90_000);
 			let port = Number(new URL(baseURL!).port);
 			let id = crypto.randomUUID();
+			await titleChannel(port, room, "Startup cache strategy");
 			await seed(
-				`# Test ${
-					room.slice(0, 8)
-				}\n\n${PROVISIONAL_RECOMMENDATION}\n\n${HUMAN_SENTINEL}\n\n<Investigation id="${id}" />\n`,
+				`# Startup cache strategy\n\n${PROVISIONAL_RECOMMENDATION}\n\n${HUMAN_SENTINEL}\n\n<Investigation id="${id}" />\n`,
 			);
-			let page = await join("ana", { viewport: { width: 1440, height: 1000 } });
-			let chat = page.getByRole("complementary", { name: "Chat", exact: true });
-			await chatInput(chat).fill("@chopin Read this document and the latest pull request.");
-			await chat.getByRole("button", { name: "Send message", exact: true }).click();
-			await expect(chat.getByText(/Latest pull request: Restring the harp section/)).toBeVisible({
-				timeout: 20_000,
-			});
 			let before = await readSource(port, room);
 			let result = await seedPublishedResult(
 				port,
@@ -193,8 +245,21 @@ test.describe("automatic result review with the existing scripted Planner", () =
 				CONTRADICTION_MARKER,
 				"Choose the cache scope from the captured startup comparison.",
 			);
-			await page.reload();
+			let page = await join("ana", { viewport: { width: 1440, height: 1000 } });
 			let card = resultCard(page, result);
+			await expect(card).toContainText("Waiting for the Planner");
+			let beforeScreenshot = testInfo.outputPath("followthrough-contradiction-before.png");
+			await page.screenshot({ path: beforeScreenshot });
+			await testInfo.attach("scripted-investigation-followthrough-before", {
+				path: beforeScreenshot,
+				contentType: "image/png",
+			});
+			let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+			await chatInput(chat).fill("@chopin Read this document and the latest pull request.");
+			await chat.getByRole("button", { name: "Send message", exact: true }).click();
+			await expect(chat.getByText(/Latest pull request: Restring the harp section/)).toBeVisible({
+				timeout: 20_000,
+			});
 			await expect(card).toContainText("Findings reviewed", { timeout: 45_000 });
 			await expect.poll(() => readSource(port, room)).toBe(
 				before.replace(PROVISIONAL_RECOMMENDATION, REVISED_RECOMMENDATION),

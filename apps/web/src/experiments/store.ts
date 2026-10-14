@@ -14,6 +14,7 @@ export class ExperimentStore {
 	#version = 0;
 	#controller = new AbortController();
 	#request = 0;
+	#reloadDetails = false;
 	#details = new Map<string, number>();
 	#mutations = new Set<string>();
 	items: InvestigationSummary[] = [];
@@ -42,6 +43,7 @@ export class ExperimentStore {
 		return this.#mutations.has(id);
 	}
 	async refresh(reloadDetails = false) {
+		this.#reloadDetails ||= reloadDetails;
 		let request = ++this.#request;
 		let controller = this.#controller;
 		try {
@@ -50,21 +52,27 @@ export class ExperimentStore {
 				undefined,
 				this.#controller.signal,
 			);
-			if (request !== this.#request) return;
+			if (
+				request !== this.#request
+				|| controller !== this.#controller || controller.signal.aborted
+			) return;
+			// A later routine poll must carry a reconnect's pending detail reload.
+			let reload = this.#reloadDetails;
+			this.#reloadDetails = false;
 			this.items = result.experiments;
 			this.error = "";
-			this.changed();
 			for (let item of result.experiments) {
 				if (item.decisionCount && !this.values.has(item.id)) void this.load(item.id);
 			}
 			for (let [id, value] of this.values) {
 				if (
-					reloadDetails
+					reload
 					|| result.experiments.find(item => item.id === id)?.revision !== value.revision
 				) {
 					void this.load(id);
 				}
 			}
+			this.changed();
 		} catch (error) {
 			if (
 				controller === this.#controller && !controller.signal.aborted && request === this.#request
@@ -146,10 +154,12 @@ export class ExperimentStore {
 		this.#controller = new AbortController();
 		// Review receipts advance independently of an investigation's own revision.
 		let off = wire?.on("experiment:changed", () => void this.refresh(true));
+		let reconnected = wire?.on("session:hello", () => void this.refresh(true));
 		void this.refresh(true);
 		let timer = setInterval(() => void this.refresh(), 20_000);
 		return () => {
 			off?.();
+			reconnected?.();
 			clearInterval(timer);
 			this.#controller.abort();
 		};

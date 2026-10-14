@@ -156,6 +156,13 @@ export class ResearchRequestStore implements ResearchStore {
 		if (this.#disposed) return;
 		void this.#load(id);
 	}
+
+	/** Reconcile missed notifications after reconnect, including already published reports. */
+	refreshRetained(): void {
+		if (this.#disposed) return;
+		for (let id of this.#references.keys()) void this.#load(id, true);
+	}
+
 	async create(question: string, requestId: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
 		let result = await this.#api.create(this.#channelId, question, requestId);

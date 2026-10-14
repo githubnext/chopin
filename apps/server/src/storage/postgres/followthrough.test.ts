@@ -38,10 +38,13 @@ if (url) {
 				planRevision: 7,
 				sourceHash: "hash",
 			}, lease);
+			expect(claimed?.context).toEqual({ planRevision: 7, sourceHash: "hash" });
 			await first.close();
 			let second = new PostgresStorage(url);
 			try {
 				expect(await second.followthrough.get(channelId, pending!.id)).toEqual(claimed!);
+				expect((await second.followthrough.get(channelId, pending!.id))?.context)
+					.toEqual({ planRevision: 7, sourceHash: "hash" });
 				expect(await second.followthrough.recoverInterrupted(lease)).toBe(1);
 				expect(await second.followthrough.recoverInterrupted(lease)).toBe(0);
 				expect(await second.followthrough.get(channelId, pending!.id)).toMatchObject({

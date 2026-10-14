@@ -88,6 +88,62 @@ async function settle() {
 }
 
 describe("research request store", () => {
+	it("reconnect refreshes retained ready reviews and fences stale reads without mutations", async () => {
+		let current = request("retained", "ready", {
+			followthrough: { id: "review", revision: 1, status: "running" },
+		});
+		let stale = deferred<Research.RequestView>();
+		let reads: string[] = [];
+		let mutations = 0;
+		let published = 0;
+		let server = current;
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channel, id) => {
+					reads.push(id);
+					if (reads.length === 3) return stale.promise;
+					return { ...server, id };
+				},
+				retry: async () => {
+					mutations++;
+					return current;
+				},
+				cancel: async () => {
+					mutations++;
+					return current;
+				},
+				review: async () => {
+					mutations++;
+					return current.followthrough!;
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: () => published++,
+		});
+		let retained = store.retain("retained");
+		let released = store.retain("released");
+		await settle();
+		released();
+		store.refresh("retained");
+		server = request("retained", "ready", {
+			followthrough: { id: "review", revision: 2, status: "failed", reason: "interrupted" },
+		});
+		store.refreshRetained();
+		await settle();
+		stale.resolve(current);
+		await settle();
+		expect(reads).toEqual(["retained", "released", "retained", "retained"]);
+		expect(store.get("retained")?.followthrough).toEqual(server.followthrough);
+		expect(store.get("released")).toBeUndefined();
+		expect(mutations).toBe(0);
+		expect(published).toBe(0);
+		retained();
+		store.dispose();
+		store.refreshRetained();
+		expect(reads).toHaveLength(4);
+	});
+
 	it("refreshes a ready report's review without replaying publication or stale progress", async () => {
 		let current = request("request-one", "ready", {
 			followthrough: { id: "review-1", revision: 0, status: "pending" },

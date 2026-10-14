@@ -45,7 +45,8 @@ The card shows the current status. Writers can **Dismiss review** while pending
 or failed, or **Retry review** after failure. These actions change scheduling;
 they do not launch new research or local code. A proposed next investigation
 still requires a person to select Run. Readers can open the evidence and observe
-the review status.
+the review status. Reconnecting an authenticated session refreshes retained result
+cards, including reports whose publication finished earlier.
 
 Startup changes interrupted running receipts to failed. Once model work may have
 started, neither reconnects nor repeated reads automatically replay it: earlier

@@ -152,3 +152,17 @@ export async function persistedReview(port: number, channelId: string, id: strin
 		await database.close();
 	}
 }
+
+/** A worker recovery commit whose notification a disconnected browser cannot receive. */
+export async function recoverRunningReviews(port: number, channelId: string): Promise<number> {
+	let database = new SQL(databaseUrl(port));
+	try {
+		let rows = await database`UPDATE result_followthrough
+			SET status = 'failed', reason = 'interrupted', revision = revision + 1,
+				updated_at = GREATEST(updated_at, now())
+			WHERE channel_id = ${channelId} AND status = 'running' RETURNING id`;
+		return rows.length;
+	} finally {
+		await database.close();
+	}
+}
