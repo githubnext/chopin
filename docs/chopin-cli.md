@@ -28,43 +28,71 @@ operating system.
 
 ## Add a machine
 
-In Chopin, open **Machines**. With no machine paired yet, the setup card is
-already open; otherwise choose **Add a machine**. Pick the machine's system and
-your coding agent, copy the command, and run it in a checkout on that machine.
-On Linux or macOS it looks like this:
+In Chopin, open **Machines** and choose **Add machine**. It offers two ways:
+
+- **Your computer**, a laptop or desktop you use. You approve it in the
+  browser.
+- **Server or VM**, a remote machine that stays connected in the background.
+  It pairs with a single-use key, so nobody opens a browser on it.
+
+Either way you copy one command and run it in a checkout on that machine. The
+installer installs `chopin`, then runs `chopin connect` itself. If the install
+fails, it stops with its own message and runs nothing. The agent must be
+installed and signed in first: the page shows its install command under **Show
+install command**, and [Coding agents](#coding-agents) lists them all.
+
+### Your computer
+
+Pick the system and your coding agent. On Linux or macOS the command looks like
+this:
 
 ```sh
-installer=$(mktemp) \
-  && curl -fsSL -o "$installer" \
-  https://github.com/githubnext/chopin/releases/latest/download/install.sh \
-  && sh "$installer" && rm -f "$installer" \
-  && CHOPIN_URL=https://your-chopin-instance.example \
-  CHOPIN_PAIRING_KEY=chopin_k_… \
-  ~/.local/bin/chopin connect . \
-  --install-service \
-  -- copilot --acp --allow-all
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | \
+  CHOPIN_URL=https://your-chopin-instance.example sh -s -- connect --install-service -- copilot --acp --allow-all
 ```
 
-It installs `chopin`, pairs the machine with a single-use key and installs the
-service. The machine appears on the page as it connects. Nothing opens in a
-browser, so the same command works over SSH. If the install fails, the command
-stops with the installer's message and the key stays unused. On Windows the
-PowerShell command connects only after `install.ps1` succeeds, and sets the key
-in `CHOPIN_PAIRING_KEY` for that one command. It assigns the key to `$token`
-first, so PSReadLine 2.0.4 and later leave the line out of their history file.
+In PowerShell on Windows:
+
+```powershell
+$env:CHOPIN_URL = 'https://your-chopin-instance.example'
+& ([scriptblock]::Create((irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1))) connect --install-service '--' copilot --acp --allow-all
+```
+
+It prints a link and a code. Open the link in the browser you're signed in to,
+check the code and approve. The machine connects, installs the service and
+appears on the page. An agent that asks permission in the terminal, such as
+Claude Code, runs in that terminal instead of as the service, so keep it open.
+
+PowerShell takes a bare `--` as the end of its own arguments and drops it, so
+the command puts chopin's `--` in quotes.
+
+### Server or VM
+
+**Add machine** → **Server or VM** opens **Add a server**. Choose the agent,
+whether it runs in the background (on unless the agent asks permission in the
+terminal), and whether Chopin may build and prototype on it automatically (off
+unless you turn it on; see [Connect a checkout](#connect-a-checkout)). Then
+press **Generate install script**. The command carries a single-use key:
+
+```sh
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | \
+  CHOPIN_URL=https://your-chopin-instance.example CHOPIN_PAIRING_KEY=chopin_k_… sh -s -- connect --install-service -- copilot --acp --allow-all
+```
+
+It pairs at once, with no browser, so it works over SSH and in scripts. The key
+never goes on a command line: sh passes it in the environment of the one
+installer, and in PowerShell the first line sets it in the session and
+install.ps1 removes it once chopin has run. That line assigns the key to
+`$token` first, so PSReadLine 2.0.4 and later leave it out of their history
+file.
 
 The key works once, for ten minutes, and only for the account that made it.
-**New key** replaces it, and the page makes a new one as the old one expires.
-`chopin` sends the key once and never saves it. If your server needs GitHub to
-authorize the machine, the page checks with GitHub before it makes the first
-key; that returns at once if you have used Chopin before. Chopin holds that
-authorization for 25 minutes at most, for the browser sign-in that asked for it
-only. Signing out ends it and the key it made.
-
-The agent must be installed and signed in first. The card shows its install
-command under **Show install command**, and [Coding agents](#coding-agents)
-lists them all. Automatic rebuilds and prototypes stay off; see
-[Connect a checkout](#connect-a-checkout).
+Chopin makes one only when you press **Generate install script**, and
+**Re-generate install script** replaces it. `chopin` sends the key once and
+never saves it. If your server needs GitHub to authorize the machine, pressing
+Generate checks with GitHub first; that returns at once if you have used Chopin
+before. Chopin holds that authorization for 25 minutes at most, for the browser
+sign-in that asked for it only. Signing out ends it and the key it made.
 
 To pair with a key yourself, pass it as `--key` or in `CHOPIN_PAIRING_KEY`:
 
@@ -73,8 +101,8 @@ chopin pair --key chopin_k_…
 chopin connect . --key chopin_k_… -- copilot --acp --allow-all
 ```
 
-Without a key, `chopin connect` pairs through your browser instead, as
-[Connect a checkout](#connect-a-checkout) describes.
+If curl can't download the installer at all, it prints why and sh, given no
+script, runs nothing and exits 0.
 
 A plain `chopin connect` you start over SSH can stop when the session ends,
 even under `nohup` or `setsid`. Use the service there.
@@ -369,8 +397,8 @@ Each message says what to run next. The first line of each:
 | `… isn't inside a git checkout`                     | `cd` into your repository's folder, then run the command again.                                                                                                                                                                                                                                                                  |
 | `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                                                                                                                                                                                                                                            |
 | `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                                                                                                                                                                                                                                      |
-| `Chopin refused the pairing key`                    | Copy a new command from **Machines** → **Add a machine**, then run it.                                                                                                                                                                                                                                                           |
-| `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then copy a new command.                                                                                                                                                                                                                                  |
+| `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Server or VM**, then run it.                                                                                                                                                                                                                                       |
+| `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then generate a new script.                                                                                                                                                                                                                               |
 | `The account that made the key can't push to …`     | Ask an owner for write access, then run the command again.                                                                                                                                                                                                                                                                       |
 | `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                                                                                                                                                                                                                                               |
 | `… didn't answer ACP initialize`                    | Sign in to the agent with the command the message names, then run the command again.                                                                                                                                                                                                                                             |

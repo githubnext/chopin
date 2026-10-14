@@ -228,8 +228,9 @@ arguments in place of `-- copilot --acp --allow-all`:
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `-- gemini --acp --yolo`                                  | No                 |
 
 The **Machines** page, at `/connect` on your server, gives one command that
-installs `chopin` and pairs the machine with a single-use key, with your server
-filled in. It works over SSH too; see
+installs `chopin` and connects the machine, with your server filled in: your
+computer pairs once you approve it in the browser, and a server pairs with a
+single-use key, so it works over SSH too; see
 [Add a machine](docs/chopin-cli.md#add-a-machine). See
 [Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
 background service and every command.
