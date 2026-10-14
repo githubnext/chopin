@@ -66,6 +66,30 @@ async function sampleMove(page: Page, id: string, fractions: number[]) {
 }
 
 /**
+ * Wait in the page, frame by frame, for a card's move to start, then hold the whole
+ * deck there. A move that follows a server round trip starts whenever the reply
+ * lands and lasts a few hundred milliseconds, which polling from the test can miss.
+ */
+function heldMove(page: Page, id: string) {
+	return deck(page).evaluate((element, slot) =>
+		new Promise<boolean>(resolve => {
+			let deadline = performance.now() + 10_000;
+			let check = () => {
+				let card = element.querySelector<HTMLElement>(`[data-deck-slot="${slot}"]`);
+				if (card?.getAnimations().some(item => item.id === "deck-move")) {
+					for (let animation of element.getAnimations({ subtree: true })) animation.pause();
+					resolve(true);
+				} else if (performance.now() > deadline) {
+					resolve(false);
+				} else {
+					requestAnimationFrame(check);
+				}
+			};
+			check();
+		}), id);
+}
+
+/**
  * Pause the whole deck at moments through a move and read, at each, how much of
  * the best-shown card's content is visible: its opacity times its uncovered share.
  */
@@ -442,11 +466,7 @@ test("no frame of a move hides the front card's content", async ({ join, seed })
 	// Answering advances on its own, with the same guarantee.
 	await top(page).getByText("Option 1", { exact: true }).click();
 	await top(page).getByRole("button", { name: "Save", exact: true }).click();
-	await expect.poll(() =>
-		slotOf(page, fixture.ids[0]!).evaluate(element =>
-			element.getAnimations().some(item => item.id === "deck-move")
-		)
-	).toBe(true);
+	expect(await heldMove(page, fixture.ids[0]!), "the answered card moves").toBe(true);
 	let visible = await contentVisibility(page, moments);
 	for (let reading of visible) expect(reading).toBeGreaterThan(0.5);
 	await expect(top(page).getByRole("heading", { name: fixture.prompts[1] })).toBeVisible();
