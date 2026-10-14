@@ -26,45 +26,50 @@ or a server.
 the service. [Keep it running](#keep-it-running) has the details for each
 operating system.
 
-## Set up a remote machine
+## Add a machine
 
-To run Chopin's work on a build box or cloud VM you reach over SSH, use the
-service, so the work keeps running after you close SSH:
+In Chopin, open **Machines**. With no machine paired yet, the setup card is
+already open; otherwise choose **Add a machine**. Pick the machine's system and
+your coding agent, copy the command, and run it in a checkout on that machine.
+On Linux or macOS it looks like this:
 
-1. SSH in: `ssh me@build-box`.
-2. Install `chopin`:
+```sh
+curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh \
+  | sh && CHOPIN_URL=https://your-chopin-instance.example \
+  CHOPIN_PAIRING_KEY=chopin_k_… \
+  ~/.local/bin/chopin connect . \
+  --install-service \
+  -- copilot --acp --allow-all
+```
 
-   ```sh
-   curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-   ```
+It installs `chopin`, pairs the machine with a single-use key and installs the
+service. The machine appears on the page as it connects. Nothing opens in a
+browser, so the same command works over SSH. On Windows the command passes the
+key as `--key`.
 
-3. Install your coding agent there and sign in to it. [Coding agents](#coding-agents)
-   lists the commands.
-4. From a checkout, connect and install the service in one go with
-   `--install-service`:
+The key works once, for ten minutes, and only for the account that made it.
+**New key** replaces it, and the page makes a new one as the old one expires.
+`chopin` sends the key once and never saves it. If your server needs GitHub to
+authorize the machine, the page checks with GitHub before it makes the first
+key; that returns at once if you have used Chopin before.
 
-   ```sh
-   cd ~/src/score
-   CHOPIN_URL=https://your-chopin-instance.example chopin connect . --install-service -- copilot --acp --allow-all
-   ```
+The agent must be installed and signed in first. The card shows its install
+command under **Show install command**, and [Coding agents](#coding-agents)
+lists them all. Automatic rebuilds and prototypes stay off; see
+[Connect a checkout](#connect-a-checkout).
 
-   For another agent, put its **Connect with** arguments in place of
-   `-- copilot --acp --allow-all`. Claude Code needs a setting first; see
-   [Coding agents](#coding-agents).
+To pair with a key yourself, pass it as `--key` or in `CHOPIN_PAIRING_KEY`:
 
-5. The terminal prints a link and a code. Open the link in the browser on your
-   own computer, sign in, check that the code matches and choose **Connect**.
-   Pairing happens in your browser. The remote machine needs none.
-6. Once it prints `✓ Installed the chopin service`, run `chopin status` to
-   check on it.
-7. The machine shows under **Machines** in Chopin's sidebar, or at `/connect`
-   on your server.
+```sh
+chopin pair --key chopin_k_…
+chopin connect . --key chopin_k_… -- copilot --acp --allow-all
+```
 
-The **Machines** page, at `/connect` on your server, shows these steps with
-your server's address filled in and a menu of coding agents.
+Without a key, `chopin connect` pairs through your browser instead, as
+[Connect a checkout](#connect-a-checkout) describes.
 
 A plain `chopin connect` you start over SSH can stop when the session ends,
-even under `nohup` or `setsid`.
+even under `nohup` or `setsid`. Use the service there.
 
 ## Install
 
@@ -106,7 +111,8 @@ Once it connects, `chopin connect` saves the server, so you set `CHOPIN_URL`
 only this once. Later commands use the saved server. Without `CHOPIN_URL` or a
 saved server, `chopin` uses `https://chopin.githubnext.com`.
 
-The first time, `chopin connect` pairs this machine with your Chopin account:
+The first time, without a pairing key, `chopin connect` pairs this machine with
+your Chopin account in a browser:
 
 1. The terminal prints a link and a short code.
 2. Open the link and sign in to Chopin.
@@ -150,13 +156,13 @@ secrets in your agent's own login instead. You can't set `PATH` or a
 The Machines page offers these agents. **Connect with** is what follows
 `chopin connect .`:
 
-| Agent                                                                                               | Install                                                       | Sign in                                                  | Connect with                                              | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `copilot login`                                          | `-- copilot --acp --allow-all`                            | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `atomic`, sign in with /login, then quit                 | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
-| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `claude-agent-acp --cli`, sign in with /login, then quit | `-- claude-agent-acp`                                     | No                 |
-| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `codex login`                                            | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `gemini`, sign in, then quit                             | `-- gemini --acp --yolo`                                  | No                 |
+| Agent                                                                                               | Install                                                       | Sign in                                                  | Node.js        | Connect with                                              | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | -------------- | --------------------------------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `copilot login`                                          | 22 or newer    | `-- copilot --acp --allow-all`                            | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `atomic`, sign in with /login, then quit                 | 22.19 or newer | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
+| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `claude-agent-acp --cli`, sign in with /login, then quit | 22 or newer    | `-- claude-agent-acp`                                     | No                 |
+| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `codex login`                                            | 20 or newer    | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `gemini`, sign in, then quit                             | 20 or newer    | `-- gemini --acp --yolo`                                  | No                 |
 
 Install the agent globally, as the table does, not through `npx`, so the
 service finds the same program each time. Each **Connect with** approves the agent's tools
@@ -321,9 +327,9 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 | Command                                                     | What it does                                                                              |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `chopin connect [checkout] -- <agent>`                      | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
+| `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.            |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                |
-| `chopin pair [--label <name>]`                              | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
+| `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                |
 | `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log. |
 | `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                |
 | `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                        |
@@ -340,6 +346,28 @@ somewhere other than the default folder.
 Start with `chopin status` and the log it names. For problems in the browser,
 see
 [Trouble connecting](local-experiments.md#trouble-connecting).
+
+Each message says what to run next. The first line of each:
+
+| Message starts with                                 | Do this                                                                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `curl or wget is required`                          | Install curl, for example `sudo apt install curl`, then run the command again.                             |
+| `could not download`                                | Check your connection and any proxy (`HTTPS_PROXY`), then run the command again.                           |
+| `… isn't writable by you`                           | Run `sudo chown -R "$(id -un)" "$HOME/.local"`, then run the command again.                                |
+| `… is not on your PATH`                             | Add the line the installer prints to your shell profile. The setup command runs `chopin` by its full path. |
+| `… isn't installed`                                 | Install and sign in to the agent with the commands the message lists, then run the command again.          |
+| `… needs Node.js … or newer`                        | Install that Node.js (`nvm install 22`, or nodejs.org), reinstall the agent, then run the command again.   |
+| `… isn't inside a git checkout`                     | `cd` into your repository's folder, then run the command again.                                            |
+| `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                      |
+| `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                |
+| `Chopin refused the pairing key`                    | Copy a new command from **Machines** → **Add a machine**, then run it.                                     |
+| `The account that made the key can't push to …`     | Ask an owner for write access, then run the command again.                                                 |
+| `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                         |
+| `… didn't answer ACP initialize`                    | Sign in to the agent with the command the message names, then run the command again.                       |
+| `… asks for permission in the terminal`             | Run the command without `--install-service` and keep the terminal open.                                    |
+| `This machine is already paired with …`             | To pair it for another account, run `chopin unpair`, then the command again.                               |
+| `This machine is no longer paired with Chopin`      | Run `chopin pair`, then connect again.                                                                     |
+| `The service has to keep running after you log out` | Have an administrator run `sudo loginctl enable-linger "$(id -un)"`, then run the command again.           |
 
 **"CHOPIN_URL is …, but chopin connect saved …"** Install uses the server
 `chopin connect` saved. Run `chopin connect` again with the server you want in
