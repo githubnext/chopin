@@ -30,6 +30,10 @@ const HOP_BY_HOP = new Set([
 /** Credentials belong to the application server, never its development UI upstream. */
 const PRIVATE = new Set(["authorization", "cookie"]);
 
+/** Vite's default build names use an eight-character hash before the extension. */
+const FINGERPRINTED_ASSET_PATH = /^\/assets\/.+-[A-Za-z0-9_-]{8}\.[^/]+$/;
+const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
 function forwardable(headers: Headers): Headers {
 	let out = new Headers();
 	for (let [name, value] of headers) {
@@ -83,6 +87,16 @@ export async function serve(url: URL, dir: string): Promise<Response> {
 	}
 
 	let file = Bun.file(join(dir, url.pathname));
-	if (await file.exists()) return new Response(file);
-	return new Response(Bun.file(join(dir, "index.html")));
+	if (await file.exists()) {
+		let headers = new Headers();
+		if (FINGERPRINTED_ASSET_PATH.test(url.pathname)) {
+			headers.set("cache-control", IMMUTABLE_CACHE_CONTROL);
+		} else if (url.pathname.toLowerCase().endsWith(".html")) {
+			headers.set("cache-control", "no-cache");
+		}
+		return new Response(file, { headers });
+	}
+	return new Response(Bun.file(join(dir, "index.html")), {
+		headers: { "cache-control": "no-cache" },
+	});
 }
