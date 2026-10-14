@@ -5,6 +5,8 @@ import { deterministicChannelId } from "../../channels/id";
 import type { ExperimentStore, InvestigationChildInput } from "../experiments";
 import type { ChannelRecord, CreateChannel, Lease } from "../model";
 import { conflict, missing } from "../errors";
+import { enqueueFollowthrough } from "./followthrough";
+import { assertResultInitial } from "../followthrough";
 
 function decode(value: unknown): Investigation {
 	return investigationSchema.parse(typeof value === "string" ? JSON.parse(value) : value);
@@ -103,6 +105,11 @@ export class PostgresExperimentStore implements ExperimentStore {
 			if (channel.archivedAt) throw conflict("experiment document archived");
 			// A child document never holds investigations, so it never publishes one either.
 			if (channel.parentChannelId) throw conflict("experiment document is a child");
+			if (
+				current.state !== "publishing" || !current.candidate || current.spike
+				|| current.generation !== value.generation
+			) throw conflict("experiment result is not ready");
+			assertResultInitial(child.initial);
 			let childId = deterministicChannelId(channel.repositoryId, `investigation:${value.id}`);
 			await this.createChannel(sql, {
 				id: childId,
@@ -119,6 +126,14 @@ export class PostgresExperimentStore implements ExperimentStore {
 			await sql`UPDATE experiments SET revision = ${saved.revision}, state = ${saved.state},
 				child_channel_id = ${childId}, payload = ${JSON.stringify(saved)}::jsonb
 				WHERE id = ${saved.id}`;
+			await enqueueFollowthrough(sql, {
+				channelId: value.documentId,
+				childId,
+				kind: "investigation",
+				sourceId: saved.id,
+				resultKey: String(saved.generation),
+				now: child.now,
+			});
 			return saved;
 		}) as Investigation | false;
 	}

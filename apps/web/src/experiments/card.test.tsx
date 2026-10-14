@@ -29,12 +29,12 @@ function setup(state: PublishedInvestigation["state"]) {
 	return { store, item };
 }
 
-function render(store: ExperimentStore, userId = "ana", locked = false) {
+function render(store: ExperimentStore, userId = "ana", locked = false, canEdit = true) {
 	return renderToStaticMarkup(createElement(InvestigationReference, {
 		store,
 		id: "investigation",
 		userId,
-		canEdit: true,
+		canEdit,
 		locked,
 		onRemove() {},
 		onOpen() {},
@@ -53,6 +53,46 @@ test("a required investigation explains why it blocks Build even after failure",
 	expect(markup).toContain("Choose a startup approach from measured evidence");
 	expect(markup).not.toContain("Remove investigation");
 	expect(removableInvestigation(store, "investigation")).toBe(false);
+});
+
+test("required published findings use review controls and retain legacy manual fallback", () => {
+	let { store, item } = setup("completed");
+	item.buildBlocker = "Choose a startup approach";
+	store.items[0]!.buildBlocker = item.buildBlocker;
+	item.child = {
+		id: "child",
+		title: "Startup evidence",
+		slug: "startup-evidence",
+		summary: "Measured costs.",
+	};
+	for (let status of ["pending", "running", "failed", "skipped"] as const) {
+		item.followthrough = { id: "review", revision: 1, status, reason: "interrupted" };
+		let markup = render(store);
+		expect(markup).not.toContain("Apply findings");
+		expect(markup).not.toContain("Apply the findings before building");
+		expect(markup).toContain('aria-label="Open Startup evidence"');
+	}
+	item.followthrough = { id: "review", revision: 2, status: "done" };
+	expect(render(store)).toContain("Findings reviewed");
+	expect(render(store)).toContain(">Apply findings</button>");
+	item.followthrough = { id: "review", revision: 3, status: "skipped", reason: "dismissed" };
+	expect(render(store)).toContain(">Apply findings</button>");
+	delete item.followthrough;
+	expect(render(store)).toContain(">Apply findings</button>");
+});
+
+test("investigation review is reader-visible and writer-actionable while a build is locked", () => {
+	let { store, item } = setup("completed");
+	item.child = { id: "child", title: "Evidence", slug: "evidence", summary: "Findings." };
+	item.followthrough = { id: "review", revision: 1, status: "failed", reason: "interrupted" };
+	let writer = render(store, "ana", true);
+	expect(writer).toContain("Review interrupted");
+	expect(writer).toMatch(/<button(?![^>]*disabled)[^>]*>Retry review<\/button>/);
+	expect(writer).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*<button/);
+	let reader = render(store, "ana", true, false);
+	expect(reader).toContain("Review interrupted");
+	expect(reader).not.toContain("Retry review");
+	expect(reader).not.toContain("Dismiss review");
 });
 
 test("a requested investigation offers Run and can be withdrawn", () => {

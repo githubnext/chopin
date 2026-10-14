@@ -91,6 +91,8 @@ export type PlanEditorProps = {
 	busy?: boolean;
 	/** Read-only because this participant may view but not edit. */
 	readOnly?: boolean;
+	/** May retry or dismiss result reviews while the document itself is read-only for a build. */
+	canReviewResults?: boolean;
 	/**
 	 * This client's own reading or editing mode on a phone. Reading locks the text like
 	 * `readOnly` but keeps selection and commenting; a permission lock still wins.
@@ -186,6 +188,7 @@ export function PlanEditor(
 		planner,
 		commentPlanner,
 		readOnly,
+		canReviewResults,
 		research,
 		researchLauncher,
 		scrollTop,
@@ -503,6 +506,7 @@ export function PlanEditor(
 						wire,
 						connected: !offline,
 						canEdit: !readOnly,
+						canReviewResults,
 						editMode,
 						blocked,
 						formatDock,
@@ -545,6 +549,7 @@ export function PlanEditor(
 			changes,
 			offline,
 			readOnly,
+			canReviewResults,
 			editMode,
 			blocked,
 			formatDock,

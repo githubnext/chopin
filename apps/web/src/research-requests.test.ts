@@ -17,6 +17,7 @@ function request(
 		sources: overrides.sources ?? [],
 		createdAt: overrides.createdAt ?? "2026-08-24T09:00:00.000Z",
 		updatedAt: overrides.updatedAt ?? "2026-08-24T09:01:00.000Z",
+		followthrough: overrides.followthrough,
 	};
 	if (stage === "failed") {
 		return { ...base, state: "failed", stage, error: "Research could not be completed." };
@@ -87,6 +88,166 @@ async function settle() {
 }
 
 describe("research request store", () => {
+	it("reconnect refreshes retained ready reviews and fences stale reads without mutations", async () => {
+		let current = request("retained", "ready", {
+			followthrough: { id: "review", revision: 1, status: "running" },
+		});
+		let stale = deferred<Research.RequestView>();
+		let reads: string[] = [];
+		let mutations = 0;
+		let published = 0;
+		let server = current;
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async (_channel, id) => {
+					reads.push(id);
+					if (reads.length === 3) return stale.promise;
+					return { ...server, id };
+				},
+				retry: async () => {
+					mutations++;
+					return current;
+				},
+				cancel: async () => {
+					mutations++;
+					return current;
+				},
+				review: async () => {
+					mutations++;
+					return current.followthrough!;
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: () => published++,
+		});
+		let retained = store.retain("retained");
+		let released = store.retain("released");
+		await settle();
+		released();
+		store.refresh("retained");
+		server = request("retained", "ready", {
+			followthrough: { id: "review", revision: 2, status: "failed", reason: "interrupted" },
+		});
+		store.refreshRetained();
+		await settle();
+		stale.resolve(current);
+		await settle();
+		expect(reads).toEqual(["retained", "released", "retained", "retained"]);
+		expect(store.get("retained")?.followthrough).toEqual(server.followthrough);
+		expect(store.get("released")).toBeUndefined();
+		expect(mutations).toBe(0);
+		expect(published).toBe(0);
+		retained();
+		store.dispose();
+		store.refreshRetained();
+		expect(reads).toHaveLength(4);
+	});
+
+	it("refreshes a ready report's review without replaying publication or stale progress", async () => {
+		let current = request("request-one", "ready", {
+			followthrough: { id: "review-1", revision: 0, status: "pending" },
+		});
+		let reads = [current];
+		let published = 0;
+		let timer = scheduler();
+		let store = new ResearchRequestStore({
+			api: api({ get: async () => reads.shift() ?? current }),
+			channelId: "channel-one",
+			onOpen() {},
+			onPublished: () => published++,
+			schedule: timer.schedule,
+		});
+		let off = store.subscribe(() => {});
+		let release = store.retain("request-one");
+		await settle();
+		reads.push(request("request-one", "ready", {
+			question: "A stale rewritten question",
+			followthrough: { id: "review-1", revision: 2, status: "done" },
+		}));
+		store.invalidate("request-one");
+		await settle();
+		expect(store.get("request-one")?.followthrough?.status).toBe("done");
+		expect(store.get("request-one")?.question).toBe(current.question);
+		expect(store.get("request-one")?.child).toBe(current.child);
+		reads.push(current, request("request-one", "searching"));
+		for (let attempt = 0; attempt < 2; attempt++) {
+			store.invalidate("request-one");
+			await settle();
+		}
+		expect(store.get("request-one")?.followthrough?.revision).toBe(2);
+		expect(store.get("request-one")?.stage).toBe("ready");
+		expect(published).toBe(0);
+		expect(timer.pending).toBe(0);
+		release();
+		off();
+		store.dispose();
+	});
+
+	it("fences stale reads and disables duplicate review mutations through refresh", async () => {
+		let ready = request("request-one", "ready", {
+			followthrough: { id: "review-1", revision: 1, status: "failed", reason: "interrupted" },
+		});
+		let mutation = deferred<NonNullable<Research.RequestView["followthrough"]>>();
+		let stale = deferred<Research.RequestView>();
+		let reads = 0;
+		let calls: unknown[][] = [];
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async () => ++reads === 2 ? stale.promise : ready,
+				review: async (...args) => {
+					calls.push(args);
+					return mutation.promise;
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+		let release = store.retain("request-one");
+		await settle();
+		store.invalidate("request-one");
+		let action = store.review("request-one", "retry");
+		expect(store.mutating("request-one")).toBe(true);
+		await store.review("request-one", "retry");
+		expect(calls).toEqual([["channel-one", ready.followthrough, "retry"]]);
+		mutation.resolve({ id: "review-1", revision: 2, status: "pending" });
+		await action;
+		stale.resolve(ready);
+		await settle();
+		expect(store.get("request-one")?.followthrough).toEqual({
+			id: "review-1",
+			revision: 2,
+			status: "pending",
+		});
+		expect(store.mutating("request-one")).toBe(false);
+		expect(reads).toBe(3);
+		release();
+		store.dispose();
+	});
+
+	it("keeps failed review actions visible and releases shared mutation state", async () => {
+		let ready = request("request-one", "ready", {
+			followthrough: { id: "review-1", revision: 1, status: "failed" },
+		});
+		let store = new ResearchRequestStore({
+			api: api({
+				get: async () => ready,
+				review: async () => {
+					throw new Error("refused");
+				},
+			}),
+			channelId: "channel-one",
+			onOpen() {},
+		});
+		let release = store.retain("request-one");
+		await settle();
+		await expect(store.review("request-one", "dismiss")).rejects.toThrow("refused");
+		expect(store.mutating("request-one")).toBe(false);
+		expect(store.get("request-one")).toBe(ready);
+		release();
+		store.dispose();
+	});
+
 	it("starts one request with the exact brief and stable request identity", async () => {
 		let calls: Array<{ channelId: string; question: string; requestId: string }> = [];
 		let store = new ResearchRequestStore({

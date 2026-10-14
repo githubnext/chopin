@@ -115,10 +115,12 @@ reveals the card. Optional investigations do not block Build. Failure, interrupt
 and stopping execution retain the requirement so it can be retried. Removing an
 unstarted proposal withdraws the requirement. Completed required evidence remains
 blocking until the Planner incorporates its findings and creates any necessary
-human decision cards; it then clears the investigation's reason. These reviews run
-under the existing Planner owner, without starting local work. If a review fails or
-is interrupted, select **Apply findings** on the completed card to start a fresh
-Planner request.
+human decision cards; it then clears the investigation's reason. Published results
+queue durable [follow-through](result-followthrough.md) under the existing Planner
+owner. The card shows its review status and offers **Retry review** after failure
+or interruption. These reviews do not start local work. Historical cards without
+a review receipt retain **Apply findings**; it is also available after a completed
+or dismissed review leaves a blocker unresolved.
 
 Results contain restricted document MDX, typed datasets, native view specifications
 and small text evidence. Supported views are tables, metric comparisons, bars and

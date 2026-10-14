@@ -1104,6 +1104,7 @@ export function RoomWorkspace(
 		let off = [
 			...(profile.chat ? [conversationStore.listen(socket)] : []),
 			socket.on<ManagedHello>("session:hello", frame => {
+				research.refreshRetained();
 				let editable = frame.canEdit && !frame.archivedAt;
 				let accessChanged = latestCanEdit.current !== editable
 					|| latestCanManage.current !== frame.canManage;
@@ -1474,6 +1475,7 @@ export function RoomWorkspace(
 				questionMotion={QUESTION_MOTION}
 				questions={questions}
 				readOnly={!workspaceCanEdit || implementation.locked}
+				canReviewResults={!!workspaceCanEdit && status === "connected" && !!wire?.connected}
 				research={profile.research ? research : undefined}
 				researchLauncher={researchLauncher}
 				scrollTop={planScrollTop}

@@ -79,6 +79,7 @@ import type {
 	UserRecord,
 } from "./model";
 import type { ExperimentStore } from "./experiments";
+import type { FollowthroughStore } from "./followthrough";
 
 export interface UserStore {
 	put(user: PutUser): Promise<UserRecord>;
@@ -303,6 +304,7 @@ export interface ResearchWorkspaceStore {
 /** The complete durable boundary. No provider-specific primitive crosses it. */
 export interface StorageAdapter {
 	readonly experiments: ExperimentStore;
+	readonly followthrough: FollowthroughStore;
 	readonly driver: string;
 	readonly users: UserStore;
 	readonly sessions: SessionStore;

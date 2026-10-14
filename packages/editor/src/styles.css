@@ -107,6 +107,31 @@
 	z-index: 2;
 }
 
+.plan-followthrough {
+	position: relative;
+	z-index: 2;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	pointer-events: none;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.plan-followthrough > span {
+	margin-inline-end: auto;
+}
+
+.plan-followthrough button {
+	pointer-events: auto;
+}
+
+.plan-followthrough[data-followthrough-status="failed"] > span {
+	color: var(--color-destructive-ink);
+}
+
 /* The preview sits above the whole-card open button; only its links take the pointer. */
 .plan-research-preview-toggle {
 	position: relative;

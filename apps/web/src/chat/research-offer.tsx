@@ -263,7 +263,12 @@ function AcceptedResearch(
 	let request = useSyncExternalStore(
 		subscribe,
 		() => id ? store.get(id) : undefined,
-		() => undefined,
+		() => id ? store.get(id) : undefined,
+	);
+	let mutating = useSyncExternalStore(
+		subscribe,
+		() => id ? store.mutating(id) : false,
+		() => id ? store.mutating(id) : false,
 	);
 	useEffect(() => id ? store.retain(id) : undefined, [id, store]);
 	let [shown, setShown] = useState<{ id?: string; stage?: Research.RequestStage }>({});
@@ -292,8 +297,9 @@ function AcceptedResearch(
 			state: "pending",
 			stage: "queued",
 		}) as Research.RequestView;
-	let canEdit = controls.canAct && canExecute && !!request;
+	let canEdit = controls.canAct && (request?.stage === "ready" || canExecute) && !!request;
 	let action = (run: () => Promise<unknown>, failure: string, cancel = false) => {
+		if (!canEdit || busy || mutating) return;
 		setBusy(true);
 		setError(undefined);
 		void run().catch(() => setError({ text: failure, cancel })).finally(() => setBusy(false));
@@ -323,7 +329,7 @@ function AcceptedResearch(
 		<div className="flex flex-col gap-2">
 			<ResearchCard
 				actionError={actionError}
-				busy={busy}
+				busy={busy || mutating}
 				canEdit={canEdit}
 				request={view}
 				onCancel={id && canEdit
@@ -339,6 +345,13 @@ function AcceptedResearch(
 							() => store.retry(id),
 							"Research could not be retried. Try again when connected.",
 						)
+					: undefined}
+				onRetryReview={id && canEdit
+					? () => action(() => store.review(id, "retry"), "Review could not be retried. Try again.")
+					: undefined}
+				onDismissReview={id && canEdit
+					? () =>
+						action(() => store.review(id, "dismiss"), "Review could not be dismissed. Try again.")
 					: undefined}
 			/>
 			{(note

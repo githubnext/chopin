@@ -1,7 +1,8 @@
-import type { Research } from "@chopin/protocol";
+import type { Followthrough, Research } from "@chopin/protocol";
 import type { ResearchOpener, ResearchStore } from "@chopin/editor";
 
 import { ApiError, response } from "./api";
+import { updateFollowthrough } from "./followthrough";
 
 const POLL_INTERVAL = 2_000;
 
@@ -53,6 +54,7 @@ export type ResearchRequestApi = {
 	get(channelId: string, requestId: string, signal?: AbortSignal): Promise<Research.RequestView>;
 	cancel(channelId: string, requestId: string): Promise<Research.RequestView>;
 	retry(channelId: string, requestId: string): Promise<Research.RequestView>;
+	review?: typeof updateFollowthrough;
 };
 
 export type ResearchRequestSchedule = (callback: () => void, delay: number) => () => void;
@@ -154,6 +156,13 @@ export class ResearchRequestStore implements ResearchStore {
 		if (this.#disposed) return;
 		void this.#load(id);
 	}
+
+	/** Reconcile missed notifications after reconnect, including already published reports. */
+	refreshRetained(): void {
+		if (this.#disposed) return;
+		for (let id of this.#references.keys()) void this.#load(id, true);
+	}
+
 	async create(question: string, requestId: string): Promise<Research.RequestView> {
 		this.#assertAvailable();
 		let result = await this.#api.create(this.#channelId, question, requestId);
@@ -173,6 +182,30 @@ export class ResearchRequestStore implements ResearchStore {
 			let result = await this.#api.retry(this.#channelId, id);
 			this.#fenceRead(id);
 			return this.#accept(id, result, "retry");
+		} finally {
+			this.#endMutation(id);
+		}
+	}
+
+	async review(id: string, action: Followthrough.Action): Promise<Research.RequestView> {
+		this.#assertAvailable();
+		let request = this.#snapshots.get(id);
+		if (!request?.followthrough || request.stage !== "ready") {
+			throw new Error("This research has no review to update.");
+		}
+		if (this.mutating(id)) return request;
+		this.#beginMutation(id);
+		try {
+			let view = await (this.#api.review ?? updateFollowthrough)(
+				this.#channelId,
+				request.followthrough,
+				action,
+			);
+			if (view.id !== request.followthrough.id) throw new Error("Review response did not match.");
+			this.#fenceRead(id);
+			this.#accept(id, { ...request, followthrough: view });
+			await this.#load(id, true);
+			return this.#snapshots.get(id) ?? request;
 		} finally {
 			this.#endMutation(id);
 		}
@@ -228,9 +261,19 @@ export class ResearchRequestStore implements ResearchStore {
 		}
 		if (this.#disposed) return snapshot;
 		let previous = this.#snapshots.get(id);
+		// The published result is terminal; its separate review can still advance.
+		if (previous?.stage === "ready") {
+			let next = snapshot.followthrough;
+			let current = previous.followthrough;
+			if (
+				snapshot.stage !== "ready" || snapshot.child.id !== previous.child.id || !next
+				|| current && (next.id !== current.id || next.revision <= current.revision)
+			) return previous;
+			snapshot = { ...previous, followthrough: next };
+		}
 		if (
 			previous && TERMINAL_STAGES.has(previous.stage)
-			&& (acceptance !== "retry" || previous.stage === "ready")
+			&& previous.stage !== "ready" && acceptance !== "retry"
 		) return previous;
 		this.#snapshots.set(id, snapshot);
 		if (

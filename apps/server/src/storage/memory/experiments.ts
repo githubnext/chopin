@@ -4,6 +4,8 @@ import { deterministicChannelId } from "../../channels/id";
 import type { ExperimentStore, InvestigationChildInput } from "../experiments";
 import type { ChannelRecord, CreateChannel, Lease } from "../model";
 import { conflict, missing } from "../errors";
+import type { FollowthroughPublication } from "../followthrough";
+import { assertResultInitial } from "../followthrough";
 
 export class MemoryExperimentStore implements ExperimentStore {
 	#records = new Map<string, Investigation>();
@@ -14,6 +16,7 @@ export class MemoryExperimentStore implements ExperimentStore {
 			fence: (lease: Lease) => void;
 			channel: (id: string) => ChannelRecord | undefined;
 			createChannel: (input: CreateChannel) => ChannelRecord;
+			followthrough: (input: FollowthroughPublication) => () => void;
 		},
 	) {}
 	async get(id: string) {
@@ -77,9 +80,22 @@ export class MemoryExperimentStore implements ExperimentStore {
 		if (channel.archivedAt) throw conflict("experiment document archived");
 		// A child document never holds investigations, so it never publishes one either.
 		if (channel.parentChannelId) throw conflict("experiment document is a child");
+		if (
+			current.state !== "publishing" || !current.candidate || current.spike
+			|| current.generation !== value.generation
+		) throw conflict("experiment result is not ready");
+		assertResultInitial(child.initial);
 		let saved = investigationSchema.parse({
 			...value,
 			childId: deterministicChannelId(channel.repositoryId, `investigation:${value.id}`),
+		});
+		let publishReceipt = this.options.followthrough({
+			channelId: channel.id,
+			childId: saved.childId!,
+			kind: "investigation",
+			sourceId: saved.id,
+			resultKey: String(saved.generation),
+			now: child.now,
 		});
 		this.options.createChannel({
 			id: saved.childId!,
@@ -93,6 +109,7 @@ export class MemoryExperimentStore implements ExperimentStore {
 			initial: child.initial,
 		});
 		this.#records.set(saved.id, structuredClone(saved));
+		publishReceipt();
 		return saved;
 	}
 }

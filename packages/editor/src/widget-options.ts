@@ -10,7 +10,7 @@ import type { ChangeStore } from "./changes";
 import type { ContentSwapMotion } from "./content-swap";
 import type { EditMode } from "./edit-mode";
 import type { MotionDisclosureContract } from "./disclosure-motion";
-import type { Research } from "@chopin/protocol";
+import type { Followthrough, Research } from "@chopin/protocol";
 import type { GitHubReference, GitHubReferenceResult } from "@chopin/protocol/github-reference";
 import type { ResearchDraftStore } from "./research-draft";
 import type { QuestionnaireStore } from "./questionnaires";
@@ -36,6 +36,8 @@ export type ResearchStore = {
 	create(question: string, requestId: string): Promise<Research.RequestView>;
 	cancel(id: string): Promise<Research.RequestView>;
 	retry(id: string): Promise<Research.RequestView>;
+	/** Optional for hosts that support automatic review of published results. */
+	review?(id: string, action: Followthrough.Action): Promise<Research.RequestView>;
 	opener(id: string, current?: HTMLElement | null): ResearchOpener;
 	open(child: Research.ReadyChild, opener: ResearchOpener): void;
 };
@@ -99,6 +101,8 @@ export type WidgetOptions = {
 	connected?: boolean;
 	synced?: boolean;
 	canEdit?: boolean;
+	/** Writer capability for result review scheduling, independent of a document build lock. */
+	canReviewResults?: boolean;
 	/** This client's reading or editing mode on a phone; see `edit-mode.ts`. */
 	editMode?: EditMode;
 	/** Locked for any reason other than reading mode, so a reader's selection can still comment. */

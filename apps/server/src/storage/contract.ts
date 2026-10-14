@@ -1,6 +1,7 @@
 import { researchWorkspace } from "./research-inline-contract-fixtures";
 import { childChannelContract } from "./child-channel-contract";
 import { experimentContract } from "./experiment-contract";
+import { followthroughContract } from "./followthrough-contract";
 import { imageContract } from "./image-contract";
 import { machineContract } from "./machine-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
@@ -37,6 +38,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 /** The behavioral gate every built-in storage adapter must pass. */
 export function storageContract(name: string, factory: Factory): void {
 	experimentContract(name, factory);
+	followthroughContract(name, factory);
 	imageContract(name, factory);
 	machineContract(name, factory);
 	childChannelContract(name, factory);

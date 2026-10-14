@@ -27,6 +27,9 @@ import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
+import { createFollowthrough } from "./followthrough/runtime";
+import { registerFollowthroughRoutes } from "./followthrough/routes";
+import type { Followthrough } from "./storage/followthrough";
 import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
 import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
@@ -162,6 +165,7 @@ let plannerAttachments: PlannerAttachments | undefined;
 let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
+let followthrough: ReturnType<typeof createFollowthrough> | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
@@ -286,6 +290,7 @@ function documentBackend(): Service.Backend {
 			wake: opened => conversationRuntime.wake(opened),
 			relink: config.liveBuild ? relinkDecisions : undefined,
 			refreshSpikes: id => spikeScout?.refresh(id),
+			reviewResults: id => wakeFollowthrough(id, true),
 			onError: (message, err) => console.error(message, err),
 		}),
 	};
@@ -351,7 +356,7 @@ function ownerAvailable(channelId: string): Promise<void> {
 	let opened = Rooms.get(channelId)?.plan;
 	if (opened) conversationRuntime.wake(opened);
 	settlePendingSpikes(channelId);
-	void reviewCompletedInvestigations(channelId);
+	wakeFollowthrough(channelId);
 	void currentDocumentTarget(channelId).then(target => {
 		if (target) buildReadiness?.schedule(target);
 	});
@@ -364,7 +369,7 @@ function serverInstructionDeps(): ServerInstructionDeps {
 		unavailable: id => deletingChannels.has(id),
 		owner: async id => await ownerBindings?.resolve(id),
 		transition: withDocumentTransition,
-		open: room => plan(room, server),
+		open: room => plan(room, server, false),
 		conversation,
 		instruct: async (context, { handle, text, said, about }) => {
 			// This runs inside the document transition, after any archive has committed.
@@ -444,16 +449,22 @@ function scheduleResearchRecovery(deferred: number): void {
  * Two clients opening at the same moment must not build two documents, so the
  * first stores its promise and the second waits on it.
  */
-async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Service.Plan> {
+async function plan(
+	room: Rooms.Room,
+	server: Server<SocketData>,
+	wakeResults = true,
+): Promise<Service.Plan> {
 	if (room.closing) await room.closing;
 	if (deletingChannels.has(room.id)) throw new Error("document is unavailable");
 	if (room.opening) {
 		let opened = await room.opening;
 		conversationRuntime.wake(opened);
+		if (wakeResults) wakeFollowthrough(room.id);
 		return opened;
 	}
 	if (room.plan) {
 		conversationRuntime.wake(room.plan);
+		if (wakeResults) wakeFollowthrough(room.id);
 		return room.plan;
 	}
 	let backend = documentBackend();
@@ -484,6 +495,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			// Retrying only when unlocked keeps the retry's own room open from looping.
 			if (spikeScout && !Service.implementationActive(opened)) void spikeScout.refresh(room.id);
 			settlePendingSpikes(room.id);
+			if (wakeResults) wakeFollowthrough(room.id);
 		}
 		return opened;
 	});
@@ -1633,6 +1645,7 @@ let draining: Promise<void> | undefined;
 
 function drain(): Promise<void> {
 	return draining ??= (async () => {
+		followthrough?.close();
 		let errors: Error[] = [];
 		let record = (reason: unknown) => {
 			errors.push(reason instanceof Error ? reason : new Error(String(reason)));
@@ -1932,6 +1945,30 @@ function announceResearchChanged(channelId: string, workspaceId: string, revisio
 		workspaceId,
 		revision,
 	});
+	wakeFollowthrough(channelId);
+}
+
+function wakeFollowthrough(channelId: string, retry = false): void {
+	if (!config.agent || draining) return;
+	void followthrough?.wake(channelId, retry);
+}
+
+function announceFollowthrough(receipt: Followthrough): void {
+	if (draining) return;
+	if (receipt.kind === "research") {
+		broadcast(server, receipt.channelId, {
+			kind: "research:changed",
+			ts: 0,
+			workspaceId: receipt.sourceId,
+			revision: receipt.revision,
+		});
+	} else {
+		broadcast(server, receipt.channelId, {
+			kind: "experiment:changed",
+			ts: 0,
+			documentId: receipt.channelId,
+		});
+	}
 }
 
 function announceResearchTerminal(channelId: string, id: string, text: string): Promise<void> {
@@ -2108,7 +2145,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
 		}
 		void spikeScout?.refresh(documentId);
-		void reviewCompletedInvestigations(documentId);
+		wakeFollowthrough(documentId);
 		void liveSync?.blockersChanged(documentId)
 			.catch(err => console.error("chopin: investigation build scheduling failed -", err));
 	},
@@ -2201,6 +2238,20 @@ researchService = new ResearchWorkspaceService({
 	publish: announceResearchChanged,
 	terminalNotice: announceResearchTerminal,
 });
+followthrough = createFollowthrough({
+	agent: config.agent,
+	storage,
+	lease() {
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
+	},
+	opened: id => Rooms.get(id)?.plan,
+	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
+	attached: async id => !plannerAttachments || await plannerAttachments.confirmed(id),
+	instruct: serverInstruction,
+	changed: announceFollowthrough,
+	error: err => console.error("chopin: result review failed -", err),
+});
 referenceService = new ReferenceService({
 	storage,
 	current: currentDocumentTarget,
@@ -2212,15 +2263,6 @@ function pastReadiness(channelId: string): boolean {
 	let held = Rooms.get(channelId)?.plan;
 	return !!held && (Service.implementationActive(held) || !!held.chat?.busy
 		|| [...held.records.values()].some(record => record.status === "open"));
-}
-
-async function reviewCompletedInvestigations(channelId: string): Promise<void> {
-	if (!config.agent || !experiments || draining) return;
-	try {
-		await readinessReviews.evidence(channelId);
-	} catch (err) {
-		console.error("chopin: investigation evidence review failed -", err);
-	}
 }
 
 if (config.liveBuild) {
@@ -2412,6 +2454,14 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 		await ownerAvailable(channel.id);
 	},
 });
+registerFollowthroughRoutes(router, hostedAuth, {
+	lease() {
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
+	},
+	changed: announceFollowthrough,
+	wake: id => wakeFollowthrough(id, true),
+});
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
 registerConnectorScript(router, {
@@ -2438,6 +2488,7 @@ try {
 	writerLease.hold(acquired);
 	let reset = await storage.sessions.reset(new Date(), acquired, LEASE_TTL_MS);
 	writerLease.held = reset.lease;
+	await storage.followthrough.recoverInterrupted(reset.lease);
 	// Before any room opens, so no child Conversation is ever loaded or served.
 	let children = await storage.collaboration.dropChildConversations(reset.lease);
 	if (children.cleared.length) {
@@ -2484,6 +2535,7 @@ try {
 	await cleaningSessions;
 	await stoppingLease;
 	summaryCoordinator?.close();
+	followthrough?.close();
 	liveSync?.close();
 	buildReadiness?.close();
 	spikeScout?.close();

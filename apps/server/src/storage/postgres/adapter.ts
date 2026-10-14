@@ -9,6 +9,7 @@ import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
 import { PostgresExperimentStore } from "./experiments";
+import { PostgresFollowthroughStore } from "./followthrough";
 import { PostgresImageStore } from "./images";
 import { PostgresMachineStore } from "./machines";
 import { PostgresResearchWorkspaceStore } from "./research";
@@ -521,6 +522,10 @@ export class PostgresStorage implements StorageAdapter {
 		this.#url = url;
 		this.#sql = new SQL(url, { connectionTimeout: 10, idleTimeout: 30, max: 10 });
 		this.#renewal = leaseConnection(url);
+		this.followthrough = new PostgresFollowthroughStore(
+			this.#sql,
+			(sql, lease) => this.#assertLease(sql, lease),
+		);
 		this.experiments = new PostgresExperimentStore(
 			this.#sql,
 			(sql, lease) => this.#assertLease(sql, lease),
@@ -679,6 +684,7 @@ export class PostgresStorage implements StorageAdapter {
 
 	readonly navigation: NavigationStore;
 	readonly experiments: PostgresExperimentStore;
+	readonly followthrough: PostgresFollowthroughStore;
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: PostgresImageStore;

@@ -13,6 +13,7 @@ import { StorageError } from "../storage/errors";
 import { MAX_TITLE_LENGTH } from "../channels/title";
 import { publishInitialResearchChild } from "./publication";
 import { projectRequestView } from "./request-view";
+import { followthroughView } from "../followthrough/view";
 
 import type { ConversationPlan, Job, Research } from "@chopin/protocol";
 import type {
@@ -1459,7 +1460,7 @@ export class ResearchWorkspaceService {
 				sourceCount: sources.length,
 			};
 		}
-		return projectRequestView({
+		let projected = projectRequestView({
 			workspace: detail.workspace,
 			turn: savedTurn,
 			evidence,
@@ -1467,6 +1468,15 @@ export class ResearchWorkspaceService {
 			sources,
 			child,
 		});
+		if (child) {
+			let review = (await this.#storage.followthrough.forSource(
+				detail.workspace.channelId,
+				"research",
+				detail.workspace.id,
+			)).find(value => value.childId === child.id && value.resultKey === savedTurn.answerJobId);
+			if (review) return { ...projected, followthrough: followthroughView(review) };
+		}
+		return projected;
 	}
 
 	async #browserJob(

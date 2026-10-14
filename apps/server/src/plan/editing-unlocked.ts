@@ -6,6 +6,7 @@ type Dependencies = {
 	wake: (plan: Service.Plan) => void;
 	relink?: (id: string) => Promise<void>;
 	refreshSpikes: (id: string) => Promise<unknown> | undefined;
+	reviewResults?: (id: string) => void;
 	onError: (message: string, error: unknown) => void;
 };
 
@@ -25,5 +26,6 @@ export function createEditingUnlocked(deps: Dependencies): (id: string) => void 
 		}
 		// Spike callouts the lock deferred land now.
 		void deps.refreshSpikes(id);
+		deps.reviewResults?.(id);
 	};
 }

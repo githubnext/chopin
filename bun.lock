@@ -210,6 +210,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@chopin/diagrams": "workspace:*",
+        "@chopin/protocol": "workspace:*",
         "zod": "catalog:harness",
       },
       "devDependencies": {

@@ -51,12 +51,13 @@ function researchWorkspace(
 	};
 }
 
-async function completedInitialResearch(
+export async function completedInitialResearch(
 	storage: StorageAdapter,
 	channelId: string,
 	createdBy: string,
 	lease: Lease,
 	complete = true,
+	workspaceId?: string,
 ): Promise<{
 	workspaceId: string;
 	answerJobId: string;
@@ -69,7 +70,12 @@ async function completedInitialResearch(
 		sidecar: JsonValue;
 	};
 }> {
-	let draft = await storage.research.create(researchWorkspace(channelId, createdBy, lease));
+	let draft = await storage.research.create(researchWorkspace(
+		channelId,
+		createdBy,
+		lease,
+		workspaceId ? { id: workspaceId } : {},
+	));
 	let confirmed = await storage.research.confirm({
 		channelId,
 		workspaceId: draft.workspace.id,
@@ -158,6 +164,21 @@ export function researchPublicationContract(factory: StorageFactory): void {
 			};
 			let published = await storage.research.publishInitialReport(input);
 			let childId = deterministicChannelId(repositoryId, ready.workspaceId);
+			let [receipt] = await storage.followthrough.forSource(
+				channelId,
+				"research",
+				ready.workspaceId,
+			);
+			expect(receipt).toMatchObject({
+				channelId,
+				childId,
+				kind: "research",
+				sourceId: ready.workspaceId,
+				resultKey: ready.answerJobId,
+				status: "pending",
+				revision: 0,
+				attempts: 0,
+			});
 
 			expect(published).toMatchObject({
 				repeated: false,
@@ -204,6 +225,8 @@ export function researchPublicationContract(factory: StorageFactory): void {
 					now: new Date(input.now.getTime() + 2),
 				}),
 			).toEqual({ ...published, repeated: true });
+			expect(await storage.followthrough.forSource(channelId, "research", ready.workspaceId))
+				.toEqual([receipt!]);
 
 			await storage.channels.archive({
 				id: childId,
@@ -355,6 +378,8 @@ export function researchPublicationContract(factory: StorageFactory): void {
 			};
 			await expect(storage.research.publishInitialReport(staleInput))
 				.rejects.toMatchObject({ failure: "conflict" });
+			expect(await storage.followthrough.forSource(channelId, "research", stale.workspaceId))
+				.toEqual([]);
 			expect(await storage.channels.get(deterministicChannelId(repositoryId, stale.workspaceId)))
 				.toBeUndefined();
 			expect((await storage.research.get(channelId, stale.workspaceId))!.workspace)
@@ -385,6 +410,14 @@ export function researchPublicationContract(factory: StorageFactory): void {
 				now: new Date("2026-01-07T03:07:05.000Z"),
 				lease,
 			})).rejects.toMatchObject({ failure: "conflict" });
+			expect(
+				await storage.followthrough.forSource(
+					incompleteParent.id,
+					"research",
+					incomplete.workspaceId,
+				),
+			)
+				.toEqual([]);
 
 			let foreignChannel = await storage.channels.create({
 				id: id("foreign-publication-parent"),

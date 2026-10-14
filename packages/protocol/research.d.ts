@@ -1,5 +1,6 @@
 import type { Frame } from "./index";
 import type { Job } from "./job";
+import type { Followthrough } from "./followthrough";
 
 type KIND<K extends string> = Frame & { kind: K };
 
@@ -59,6 +60,7 @@ export declare namespace Research {
 		readonly updatedAt: string;
 		/** Code-owned current worker activity; contains no search query or model prose. */
 		readonly activity?: string;
+		readonly followthrough?: Followthrough.View;
 	};
 
 	export type RequestView =

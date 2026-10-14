@@ -594,9 +594,11 @@ historical-reference compatibility:
    no-web report-synthesis worker with the resulting private findings and
    normalized public evidence.
 6. A complete report artifact is validated and converted to canonical MDX.
-7. One fenced storage transaction creates an initialized ordinary child channel
-   and links it to the request. Only then does the card become ready and the
-   child enter navigation.
+7. One fenced storage transaction creates an initialized ordinary child channel,
+   links it to the request, and records pending
+   [follow-through](result-followthrough.md). Only then does the card become ready
+   and the child enter navigation. The parent's Planner reviews the findings
+   under its existing owner when it can run.
 
 Failure or cancellation publishes no child. Explicit retry clears only terminal
 initial job links under optimistic guards, preserves the request and brief, and
