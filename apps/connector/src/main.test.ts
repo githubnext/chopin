@@ -52,6 +52,7 @@ async function connect(
 	extra: Record<string, string> = {},
 ) {
 	let requests: Array<[string, string | null, string | null]> = [];
+	let interrupted = false;
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -85,7 +86,12 @@ async function connect(
 				});
 				server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
 				server.setRequestHandler(CallToolRequestSchema, async request => {
-					if (request.params.name === "wait_for_work") connector.kill("SIGINT");
+					// One Ctrl-C, though a connector with a Planner command polls twice: for work
+					// and for its Planners.
+					if (request.params.name === "wait_for_work" && !interrupted) {
+						interrupted = true;
+						connector.kill("SIGINT");
+					}
 					return { content: [{ type: "text", text: "{}" }] };
 				});
 				let transport = new WebStandardStreamableHTTPServerTransport({
@@ -422,3 +428,17 @@ test.skipIf(process.platform === "win32")(
 	},
 	60_000,
 );
+
+test("connect refuses --planner without a Planner command, before it pairs", async () => {
+	let root = await checkout();
+	let refused = await connect("pairing", [
+		root,
+		"--planner",
+		"https://chopin.example/d/one",
+		"--",
+		"agent",
+	]);
+	expect(refused.code).toBe(1);
+	expect(refused.stderr).toContain("--planner <document URL> needs --planner-command <command>.");
+	expect(refused.requests).toEqual([]);
+});

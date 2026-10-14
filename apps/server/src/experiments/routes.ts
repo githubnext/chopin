@@ -15,6 +15,7 @@ import {
 	CONNECTOR_AGENT_HEADER,
 	CONNECTOR_AGENT_VERSION_HEADER,
 	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLANNER_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
@@ -22,8 +23,10 @@ import {
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
+import type { PlannerAssignment, PlannerControl } from "@chopin/protocol/connector";
 import { documentsPath } from "@chopin/protocol/document-url";
 import { documentUrl } from "../channels/document-url";
+import type { PlannerAttachments } from "../harness/remote/attachments";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
 import type { About, Connection } from "./connections";
@@ -60,6 +63,8 @@ type Options = {
 	connectorVersion?: string;
 	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
 	planners?: MachinePlanners;
+	/** Who holds each document's Planner under HARNESS=remote, which a chosen machine's backend joins. */
+	attachments?: () => PlannerAttachments | undefined;
 	/** A person chose a machine for a document, or went back to automatic. */
 	chosen?: (documentId: string, userId: string) => void;
 };
@@ -96,6 +101,7 @@ function aboutMachine(request: Request): About {
 		...(os && arch && !extra && OSES.has(os) && ARCHES.has(arch) ? { platform: { os, arch } } : {}),
 		service: header(CONNECTOR_SERVICE_HEADER) === "1",
 		planner: header(CONNECTOR_PLANNER_HEADER) === "1",
+		plannerCommand: header(CONNECTOR_PLANNER_COMMAND_HEADER) === "1",
 		...(agent.success ? { agent: agent.data } : {}),
 	};
 }
@@ -132,14 +138,21 @@ export const SPIKE_DEADLINE_MS = 20 * 60_000;
 export const MAX_INVESTIGATION_IMAGES = 3;
 /**
  * The connector protocols this server speaks; a connector outside them must update first.
- * Protocol 2 pairs a machine once and connects checkouts with its stored token.
+ * Protocol 2 pairs a machine once and connects checkouts with its stored token. Protocol 4 polls
+ * `wait_for_work` with the Planners it runs, and is answered with the ones its owner chose it for.
  */
-export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 3 };
+export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 4 };
 
 /** The chopin release a connector says it runs; a script or source run has none. */
 function releaseVersion(request: Request): string | undefined {
 	let version = request.headers.get(CONNECTOR_VERSION_HEADER) ?? "";
 	return /^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$/.test(version) ? version : undefined;
+}
+
+/** The connector protocol a compatible request says it speaks; one without the header speaks 1. */
+function protocolOf(request: Request): number {
+	let header = request.headers.get(CONNECTOR_PROTOCOL_HEADER);
+	return header && /^\d{1,9}$/.test(header) ? Number(header) : 1;
 }
 
 /**
@@ -341,6 +354,84 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!chosen) fail("no-workspace");
 		fail("machine-offline", offlineMessage((await auth.storage.machines.get(chosen))?.label));
 	}
+	/**
+	 * The documents whose Planner each paired machine was told to run, by machine id, each with its
+	 * repository. Forgotten with a restart, which also releases every Planner.
+	 */
+	let dispatched = new Map<string, Map<string, string>>();
+	/**
+	 * Whether a connection can run its owner's Planners on request: it has a Planner command, speaks
+	 * protocol 4, and this server runs the remote Planner with machines' own GitHub authorization.
+	 */
+	function runsPlanners(connection: Connection) {
+		return !!options.planners && auth.machines.durable && !!connection.about?.plannerCommand
+			&& (connection.protocol ?? 1) >= 4;
+	}
+	/**
+	 * The documents in a connection's repository whose Planner it should run: those its owner chose
+	 * its machine for, except one whose Planner another account holds, which is never taken over.
+	 */
+	async function plannerDocuments(connection: Connection): Promise<PlannerAssignment[]> {
+		if (!runsPlanners(connection)) return [];
+		await readChoices();
+		let documents: PlannerAssignment[] = [];
+		for (let { documentId, owner } of connections.choosing(connection.machineId)) {
+			if (owner !== connection.owner) continue;
+			let channel = await auth.storage.channels.get(documentId);
+			if (
+				!channel || channel.archivedAt || channel.repositoryId !== connection.source.repositoryId
+			) continue;
+			let holder = options.attachments?.()?.holding(documentId);
+			if (holder && holder.userId !== connection.owner) continue;
+			let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+			documents.push({ id: channel.id, url });
+		}
+		let told = new Map(dispatched.get(connection.machineId));
+		for (let [documentId, repositoryId] of told) {
+			if (repositoryId === connection.source.repositoryId) told.delete(documentId);
+		}
+		for (let document of documents) told.set(document.id, connection.source.repositoryId);
+		if (told.size) dispatched.set(connection.machineId, told);
+		else dispatched.delete(connection.machineId);
+		return documents;
+	}
+	/**
+	 * Stop the Planner backends `machineId` was told to run, except where `keep` says otherwise:
+	 * its attached link is refused with `message` and closed, and its credentials withdrawn. Its
+	 * connector, asked again, no longer runs them either.
+	 */
+	async function stopPlanners(
+		machineId: string,
+		message: (label: string) => string,
+		keep: (documentId: string, repositoryId: string) => boolean = () => false,
+	) {
+		let told = dispatched.get(machineId);
+		if (!told) return;
+		let label = (await auth.storage.machines.get(machineId))?.label ?? "The machine";
+		for (let [documentId, repositoryId] of told) {
+			if (keep(documentId, repositoryId)) continue;
+			told.delete(documentId);
+			options.planners?.withdraw(machineId, documentId);
+			await options.attachments?.()?.stopMachine(documentId, machineId, message(label));
+		}
+		if (!told.size) dispatched.delete(machineId);
+	}
+	/** A machine's last connection that could run Planners in a repository ended: they stop. */
+	connections.onEnded = connection => {
+		let repositoryId = connection.source.repositoryId;
+		if (
+			connections.machine(connection.machineId).some(value =>
+				value.source.repositoryId === repositoryId && runsPlanners(value)
+			)
+		) return;
+		void stopPlanners(
+			connection.machineId,
+			label => `${label} disconnected from Chopin, so it stopped running this document's Planner.`,
+			(_documentId, repository) => repository !== repositoryId,
+		).catch(error =>
+			console.error("chopin: could not stop a disconnected machine's Planner -", error)
+		);
+	};
 	async function mutationAllowed(id: string) {
 		if (options.canMutate && !await options.canMutate(id)) fail("document-locked");
 	}
@@ -590,6 +681,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				login: user?.login ?? machine.userId,
 				autoRun: machine.autoRun,
 				version: releaseVersion(request),
+				protocol: protocolOf(request),
 			},
 			label,
 			{ ...checkout, repositoryId: repository.id },
@@ -756,10 +848,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		automatic ??= live[0];
 		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
 		let favorite = connections.favorite(userId);
+		let capable = (machineId: string) => {
+			let live = connections.machine(machineId);
+			return live.length
+				? live.some(value => value.source.repositoryId === repositoryId && runsPlanners(value))
+				: !!options.planners && auth.machines.durable
+					&& !!connections.about(machineId)?.plannerCommand;
+		};
 		return {
 			choice: chosen ?? null,
 			/** The caller's favorite machine, which Automatic prefers where it serves the repository. */
 			favorite: favorite ?? null,
+			planner: plannerState(userId, documentId, repositoryId, chosen, serving),
 			automatic: automatic
 				? {
 					id: automatic.machineId,
@@ -781,9 +881,41 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					service: live.length
 						? live.some(value => value.about?.service)
 						: !!connections.about(machine.id)?.service,
+					// Whether it can run the document's Planner when chosen: it has a Planner command.
+					runsPlanners: capable(machine.id),
 				};
 			}),
 		};
+	}
+	/**
+	 * Who runs the document's Planner, as its chooser sees it, or null when Chopin does not run
+	 * Planners on machines: `held` by another account (named), `attached` through the caller's own
+	 * account (with which of their machines, if one), `starting` while the chosen machine's backend
+	 * has yet to attach, else `none`.
+	 */
+	function plannerState(
+		userId: string,
+		documentId: string,
+		repositoryId: string,
+		chosen: string | undefined,
+		serving: Array<{ id: string }>,
+	) {
+		if (!options.planners || !auth.machines.durable) return null;
+		let holder = options.attachments?.()?.holding(documentId);
+		if (holder && holder.userId !== userId) {
+			return { state: "held" as const, login: holder.login, machine: null };
+		}
+		if (holder?.attached) {
+			let machine = serving.some(value => value.id === holder.machineId) ? holder.machineId! : null;
+			return { state: "attached" as const, login: holder.login, machine };
+		}
+		if (
+			chosen
+			&& connections.machine(chosen).some(value =>
+				value.source.repositoryId === repositoryId && runsPlanners(value)
+			)
+		) return { state: "starting" as const, login: null, machine: chosen };
+		return { state: "none" as const, login: null, machine: null };
 	}
 	route("GET", "/api/documents/:id/machine", async (request, params) => {
 		let { session, channel } = await access(
@@ -817,7 +949,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			{ channelId: channel.id, userId, ...(machine ? { machineId: machine } : {}) },
 			auth.clock(),
 		);
+		let previous = connections.chosen(channel.id, userId);
 		connections.choose(channel.id, userId, machine ?? undefined);
+		// The machine chosen before stops running the document's Planner, which the new one starts.
+		if (previous && previous !== machine) {
+			await stopPlanners(
+				previous,
+				label =>
+					`${session.user.login} chose ${
+						machine ? "another machine" : "Automatic"
+					} for this document, so ${label} stopped running its Planner.`,
+				documentId => documentId !== channel.id,
+			);
+		}
+		connections.wake(channel.repositoryId);
 		options.chosen?.(channel.id, userId);
 		return json(await machineChoice(userId, channel.id, channel.repositoryId));
 	});
@@ -932,6 +1077,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	async function disconnectMachine(machineId: string, code?: string) {
 		let live = connections.machine(machineId);
 		connections.revokeMachine(machineId, code);
+		await stopPlanners(
+			machineId,
+			label =>
+				`${label} was disconnected from Chopin, so it stopped running this document's Planner.`,
+		);
 		// Storage forgets a revoked machine's choices with it.
 		if (code === undefined) connections.unchoose(machineId);
 		for (let connection of live) await interrupt(connection);
@@ -966,6 +1116,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			.catch(async error => {
 				if (error instanceof ExperimentError && error.code.startsWith("machine-")) {
 					await disconnectMachine(machine.id, error.code);
+				}
+				// Without push access the machine's owner can no longer run its Planners there.
+				if (error instanceof ExperimentError && error.code === "repository-forbidden") {
+					let repositoryId = found.connection.source.repositoryId;
+					await stopPlanners(
+						machine.id,
+						label =>
+							`${found.connection.login} can no longer push to this document's repository, so `
+							+ `${label} stopped running its Planner.`,
+						(_documentId, repository) => repository !== repositoryId,
+					);
 				}
 				throw error;
 			});
@@ -1135,6 +1296,23 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				// The connection ends; the paired machine stays paired.
 				await disconnect(connection);
 				value = { disconnected: true };
+			} else if (name === "wait_for_work" && args.planners) {
+				// A protocol 4 connector's Planner poll: what it should run, once that differs from what
+				// it runs. Never work, which its own poll without `planners` waits for.
+				let running = new Set(args.planners as string[]);
+				let changed = async (): Promise<PlannerControl | undefined> => {
+					let planners = await plannerDocuments(connection);
+					return planners.length === running.size && planners.every(value => running.has(value.id))
+						? undefined
+						: { kind: "planners", planners };
+				};
+				value = await changed();
+				if (!value) {
+					await connections.wait(connection.source.repositoryId, request.signal);
+					await connector(token);
+					value = await changed();
+				}
+				value ??= { waiting: true };
 			} else if (name === "wait_for_work") {
 				// A build in an archived document cannot be claimed; its expiry fails it in the sweep.
 				let build = async () => {
@@ -1394,6 +1572,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		}
 	}
+	/** A document's Planner attached, detached or was released: its chosen machines are asked again. */
+	function plannerChanged(channelId: string) {
+		void auth.storage.channels.get(channelId).then(
+			channel => channel && connections.wake(channel.repositoryId),
+			() => {},
+		);
+	}
 	return {
 		service,
 		connections,
@@ -1405,5 +1590,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		sweep,
 		refuseOffline,
 		machineChoices: readChoices,
+		plannerChanged,
 	};
 }

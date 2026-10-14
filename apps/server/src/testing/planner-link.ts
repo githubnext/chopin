@@ -139,6 +139,8 @@ export async function linkAuth(channelId?: string) {
 		storage,
 		sessions,
 		logins,
+		/** Each signed-in account's browser cookie, by login. */
+		cookies,
 		channel,
 		/** Moves the browser logins' clock, so they expire without the server's clock moving. */
 		clock,

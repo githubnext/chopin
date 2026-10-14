@@ -386,6 +386,21 @@ document and restarts it when it exits. See
 [Planner backend commands](planner-link.md#planner-backend-commands) for what
 the backend must do.
 
+With `--planner-command` alone, the machine says it can run Planners without
+naming any document:
+
+```sh
+chopin connect . --planner-command "my-planner --flag" -- copilot --acp --allow-all
+```
+
+Then, when you choose this machine for a document with the machine button,
+Chopin asks it to start that document's Planner, as long as the Planner is
+free or already yours; it never takes over a Planner another account holds.
+The backend gets its credential just as with `--planner`. Choosing another
+machine or **Automatic**, disconnecting or revoking the machine, or losing push
+access to the repository stops it. Older `chopin` releases are never asked.
+This needs a server that speaks connector protocol 4.
+
 ## Update
 
 ```sh

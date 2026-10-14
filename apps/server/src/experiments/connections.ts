@@ -22,6 +22,8 @@ export type Connection = {
 	autoRun?: boolean;
 	/** The chopin release that opened it, when it said; known only while it is connected. */
 	version?: string;
+	/** The connector protocol it spoke as it connected; 4 and up can run Planners on request. */
+	protocol?: number;
 	/** What the connector said about its machine as it connected. */
 	about?: About;
 };
@@ -32,6 +34,8 @@ export type About = {
 	platform?: { os: string; arch: string };
 	service?: boolean;
 	planner?: boolean;
+	/** It has a Planner command, so it can run the Planner of a document it is chosen for. */
+	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
@@ -91,6 +95,8 @@ export class Connections {
 	#locks = new Map<string, Promise<unknown>>();
 	/** What each machine's newest connection said about it, kept once it disconnects. */
 	#about = new Map<string, About>();
+	/** Called once with each connection that ends: disconnected, expired, or its machine revoked. */
+	onEnded?: (connection: Connection) => void;
 	constructor(private now = () => Date.now()) {}
 	create(input: PairingInput) {
 		this.sweep();
@@ -132,7 +138,14 @@ export class Connections {
 	}
 	/** A paired machine's checkout comes online; its token lives only in this process. */
 	open(
-		machine: { id: string; owner: string; login: string; autoRun: boolean; version?: string },
+		machine: {
+			id: string;
+			owner: string;
+			login: string;
+			autoRun: boolean;
+			version?: string;
+			protocol?: number;
+		},
 		label: string,
 		source: Source,
 		about: About = {},
@@ -149,6 +162,7 @@ export class Connections {
 			expiresAt: this.now() + CONNECTION_MS,
 			autoRun: machine.autoRun,
 			...(machine.version ? { version: machine.version } : {}),
+			...(machine.protocol !== undefined ? { protocol: machine.protocol } : {}),
 			about,
 		};
 		let token = randomBytes(32).toString("base64url");
@@ -354,7 +368,10 @@ export class Connections {
 			if (key.startsWith(`${id}:`)) this.#runTokens.delete(key);
 		}
 		for (let [key, grant] of this.#tokens) if (grant.connectionId === id) this.#tokens.delete(key);
-		if (connection) this.wake(connection.source.repositoryId);
+		if (connection) {
+			this.wake(connection.source.repositoryId);
+			this.onEnded?.(connection);
+		}
 	}
 	revokeMachine(machineId: string, code = "machine-revoked") {
 		for (let connection of this.#connections.values()) {

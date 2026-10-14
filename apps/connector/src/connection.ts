@@ -1,3 +1,4 @@
+import type { PlannerAssignment, PlannerControl } from "@chopin/protocol/connector";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { classifyConnectorError, connectorMessage, errorCode } from "./machine";
 import type { Classify, ErrorClass } from "./machine";
@@ -136,6 +137,11 @@ export async function serveWork(options: {
 	forgetMs?: number;
 	/** How long one attempt to connect may take before it counts as failed; 15 seconds. */
 	connectTimeoutMs?: number;
+	/**
+	 * With a Planner command: the Planners Chopin asked this machine to run, polled for beside the
+	 * work, and how to start and stop them.
+	 */
+	planners?: Planners;
 }) {
 	let { signal, output } = options;
 	let classify = options.classify ?? classifyConnectorError;
@@ -205,7 +211,7 @@ export async function serveWork(options: {
 			forgottenSince = undefined;
 			connected = true;
 			connectedAt = now();
-			await serve(link, { ...options, run: (kind, claim) => options.run(link, kind, claim) });
+			await serveBoth(link, { ...options, classify });
 			// Leaving promptly matters more than being heard: a silent connection also expires.
 			let last = current;
 			if (last) {
@@ -242,6 +248,81 @@ export async function serveWork(options: {
 			if (failures <= ANNOUNCED) output.reconnecting(wait);
 			else if (failures === ANNOUNCED + 1) output.stillReconnecting();
 			if (wait) await sleep(wait, signal);
+		}
+	}
+}
+
+/** The Planners Chopin asks a connector to run, and how it starts and stops them. */
+export type Planners = {
+	/** The documents whose Planners it runs because Chopin asked, by id. */
+	running(): string[];
+	/** Run exactly these, starting the new ones and stopping the others. */
+	assign(planners: PlannerAssignment[]): void;
+};
+
+/**
+ * The work poll and, with `planners`, the Planner poll beside it on the same connection. A
+ * failure that retrying cannot help ends both, after any run in progress finishes, and is thrown.
+ */
+async function serveBoth(
+	link: Link,
+	options: {
+		run: (api: Link, kind: WorkKind, claim: unknown) => Promise<void>;
+		signal: AbortSignal;
+		planners?: Planners;
+		classify: Classify;
+		random?: () => number;
+	},
+) {
+	let work = {
+		signal: options.signal,
+		run: (kind: WorkKind, claim: unknown) => options.run(link, kind, claim),
+	};
+	let planners = options.planners;
+	if (!planners) return serve(link, work);
+	let failed = new AbortController();
+	let signal = AbortSignal.any([options.signal, failed.signal]);
+	let failure: { error: unknown } | undefined;
+	let fail = (error: unknown) => {
+		failure ??= { error };
+		failed.abort();
+	};
+	await Promise.all([
+		serve(link, { ...work, signal }).catch(fail),
+		pollPlanners(link, planners, signal, options.classify, options.random).catch(fail),
+	]);
+	if (failure && !options.signal.aborted) throw failure.error;
+}
+
+/**
+ * The Planner poll (protocol 4): `wait_for_work` naming the Planners this connector runs, which
+ * Chopin answers with the ones it should run once they differ. A transient failure is retried on
+ * the reconnect backoff; another is thrown. It returns when `signal` aborts.
+ */
+async function pollPlanners(
+	api: Link,
+	planners: Planners,
+	signal: AbortSignal,
+	classify: Classify,
+	random?: () => number,
+) {
+	let attempt = 0;
+	while (!signal.aborted) {
+		let answer: Partial<PlannerControl>;
+		try {
+			answer = await api.call("wait_for_work", { planners: planners.running() }, signal) as Partial<
+				PlannerControl
+			>;
+			attempt = 0;
+		} catch (error) {
+			if (signal.aborted) return;
+			if (!transient(classify(error))) throw error;
+			await delay(backoff(attempt++, random), signal);
+			continue;
+		}
+		if (signal.aborted) return;
+		if (answer.kind === "planners" && Array.isArray(answer.planners)) {
+			planners.assign(answer.planners);
 		}
 	}
 }

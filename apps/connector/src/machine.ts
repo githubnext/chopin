@@ -5,6 +5,7 @@ import {
 	CONNECTOR_AGENT_HEADER,
 	CONNECTOR_AGENT_VERSION_HEADER,
 	CONNECTOR_HOST_HEADER,
+	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLANNER_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_SERVICE_HEADER,
@@ -289,6 +290,8 @@ async function pairOnce(options: Parameters<typeof pair>[0]) {
 export type About = {
 	service?: boolean;
 	planner?: boolean;
+	/** It has a Planner command, so Chopin may ask it to run the Planner of a document. */
+	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
 };
 
@@ -299,6 +302,7 @@ function aboutHeaders(about: About): Record<string, string> {
 		[CONNECTOR_PLATFORM_HEADER]: `${process.platform} ${process.arch}`,
 		...(about.service ? { [CONNECTOR_SERVICE_HEADER]: "1" } : {}),
 		...(about.planner ? { [CONNECTOR_PLANNER_HEADER]: "1" } : {}),
+		...(about.plannerCommand ? { [CONNECTOR_PLANNER_COMMAND_HEADER]: "1" } : {}),
 		[CONNECTOR_AGENT_HEADER]: about.agent?.name,
 		[CONNECTOR_AGENT_VERSION_HEADER]: about.agent?.version,
 	};

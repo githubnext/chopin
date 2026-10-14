@@ -2074,6 +2074,7 @@ let machinePlanners = config.agent && config.harness === "remote"
 	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
 	planners: machinePlanners,
+	attachments: () => plannerAttachments,
 	implementations: () => implementations,
 	connectorVersion: config.connectorVersion,
 	lease() {
@@ -2125,6 +2126,8 @@ ownerBindings = new ActiveOwnerBindings(hostedAuth);
 if (config.agent && config.harness === "remote") {
 	plannerAttachments = new PlannerAttachments(hostedAuth, config.plannerAttachGraceMs);
 	plannerAttachments.onChange((channelId, planner) => {
+		// A machine chosen for the document may start its Planner, or stop waiting to.
+		experiments?.plannerChanged(channelId);
 		if (server && !draining) {
 			broadcast(server, channelId, { kind: "session:planner", ts: 0, planner });
 		}

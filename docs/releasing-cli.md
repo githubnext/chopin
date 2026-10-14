@@ -73,6 +73,12 @@ speaks it. Publish a `chopin` release built with protocol 2 before deploying a
 server with this change, so `chopin update` has a release to install; the first
 published release is `cli-v0.0.1`.
 
+Connector protocol 4 adds the Planner poll: a connector run with
+`--planner-command` also calls `wait_for_work` with the documents whose
+Planners it runs, and the server answers with the ones its owner chose the
+machine for. A server older than protocol 4 refuses a protocol 4 connector, so
+deploy the server first, then publish a release built with protocol 4.
+
 A server recommends the version in its own `apps/connector/package.json`
 unless `CONNECTOR_VERSION` names another, and `chopin update` with no version
 installs that release. Publish a release before deploying a server whose

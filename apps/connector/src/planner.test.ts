@@ -709,3 +709,140 @@ test("--planner-command splits into words as a shell would, quotes and escapes i
 	expect(() => commandWords(`my-planner --label="hello`)).toThrow(/unmatched double quote/);
 	expect(() => commandWords(`my-planner 'hello`)).toThrow(/unmatched single quote/);
 });
+
+test.skipIf(process.platform === "win32")(
+	"connect --planner-command alone runs the Planners Chopin asks for, and stops one it no longer asks for",
+	async () => {
+		let { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+		let { WebStandardStreamableHTTPServerTransport } = await import(
+			"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+		);
+		let { CallToolRequestSchema, ListToolsRequestSchema } = await import(
+			"@modelcontextprotocol/sdk/types.js"
+		);
+		let registered: Record<string, string | null>[] = [];
+		let asked: unknown[] = [];
+		/** Each Planner poll's `planners`, in order. */
+		let polls: string[][] = [];
+		let release = Promise.withResolvers<void>();
+		let document = "";
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					registered.push({
+						protocol: request.headers.get("chopin-connector-protocol"),
+						planner: request.headers.get("chopin-connector-planner"),
+						plannerCommand: request.headers.get("chopin-connector-planner-command"),
+					});
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					asked.push(await request.json());
+					return Response.json({
+						token: `chopin_p_${String(asked.length).padStart(43, "P")}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: document },
+					});
+				}
+				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				mcp.setRequestHandler(CallToolRequestSchema, async call => {
+					let args = (call.params.arguments ?? {}) as { planners?: string[] };
+					let value: unknown = {};
+					if (call.params.name === "wait_for_work" && args.planners) {
+						polls.push(args.planners);
+						if (polls.length === 1) {
+							value = { kind: "planners", planners: [{ id: "D_1", url: document }] };
+						} else if (polls.length === 2) {
+							// Its owner chooses another machine for the document.
+							await release.promise;
+							value = { kind: "planners", planners: [] };
+						} else await new Promise(() => {});
+					} else if (call.params.name === "wait_for_work") {
+						// No work for this checkout; the work poll waits.
+						await new Promise(() => {});
+					}
+					return { content: [{ type: "text", text: JSON.stringify(value) }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await mcp.connect(transport);
+				return transport.handleRequest(request);
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		document = `${origin}/octo-org/score/plan`;
+		let directory = await mkdtemp(join(scratch, "dispatched-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, STAYING_BACKEND);
+		let root = await checkout();
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			root,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--",
+			process.execPath,
+		], {
+			env: {
+				...process.env,
+				CHOPIN_URL: origin,
+				CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = Promise.all([
+			new Response(connector.stdout).text(),
+			new Response(connector.stderr).text(),
+		]);
+		try {
+			await until(async () => (await entries(log)).length >= 1, 15_000);
+			// It said it can run Planners, without running any of its own.
+			expect(registered[0]).toEqual({ protocol: "4", planner: null, plannerCommand: "1" });
+			expect(asked).toEqual([{ document }]);
+			let [launched] = await entries(log);
+			await until(async () => polls.length >= 2, 5_000);
+			expect(polls.slice(0, 2)).toEqual([[], ["D_1"]]);
+
+			release.resolve();
+			await until(async () => (await entries(log)).some(entry => entry.stopped), 10_000);
+			expect((await entries(log)).filter(entry => entry.stopped)).toEqual([{
+				stopped: launched.pid,
+			}]);
+			await until(async () => polls.length >= 3, 5_000);
+			expect(polls[2]).toEqual([]);
+			// Not started again once Chopin stopped asking.
+			await Bun.sleep(1_500);
+			expect((await entries(log)).filter(entry => entry.pid)).toHaveLength(1);
+
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			let [stdout, stderr] = await output;
+			expect(`${stdout}${stderr}`).not.toContain("chopin_p_");
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);

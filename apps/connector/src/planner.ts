@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { PlannerAssignment } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
@@ -69,6 +70,57 @@ export async function servePlanners(options: {
 	healthyMs?: number;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
+}
+
+/**
+ * The Planners Chopin asks this machine to run, for documents its owner chose it for: `assign`
+ * starts a backend, as `servePlanners` does, for each document new to the list and stops each
+ * one no longer on it. `running` names the documents asked for, by id, for the next Planner poll.
+ * A document `--planner` already runs is never started twice. `stop` stops them all.
+ */
+export function dispatchedPlanners(options: {
+	url: string;
+	machine: string;
+	/** The `--planner` documents, by URL or id, which run on their own. */
+	documents: string[];
+	command: string[];
+	cwd: string;
+	output: Output;
+	signal: AbortSignal;
+	failures?: StartFailures;
+	env?: Record<string, string>;
+	healthyMs?: number;
+}) {
+	let running = new Map<string, { stop: AbortController; served: Promise<void> }>();
+	let own = new Set(options.documents);
+	return {
+		running: () => [...running.keys()],
+		assign(planners: PlannerAssignment[]) {
+			let wanted = new Map(planners.map(value => [value.id, value]));
+			for (let [id, backend] of running) {
+				if (wanted.has(id)) continue;
+				running.delete(id);
+				backend.stop.abort();
+			}
+			for (let [id, planner] of wanted) {
+				if (running.has(id) || options.signal.aborted) continue;
+				let stop = new AbortController();
+				let served = own.has(id) || own.has(planner.url)
+					? Promise.resolve()
+					: servePlanner({
+						...options,
+						document: planner.url,
+						signal: AbortSignal.any([options.signal, stop.signal]),
+					});
+				running.set(id, { stop, served });
+			}
+		},
+		async stop() {
+			for (let backend of running.values()) backend.stop.abort();
+			await Promise.all([...running.values()].map(backend => backend.served));
+			running.clear();
+		},
+	};
 }
 
 async function servePlanner(options: {

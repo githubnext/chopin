@@ -22,7 +22,7 @@ import {
 } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
-import { commandWords, servePlanners } from "./planner";
+import { commandWords, dispatchedPlanners, servePlanners } from "./planner";
 import { runWork } from "./run";
 import { implementationBridge } from "./implementation";
 import { readConfig, updateConfig } from "./config";
@@ -366,14 +366,14 @@ export async function connect(
 	let plannerCommand = saved?.plannerCommand ?? (plannerLine === undefined
 		? JSON.parse(process.env.CHOPIN_PLANNER_COMMAND ?? "[]")
 		: commandWords(plannerLine));
+	// A Planner command alone lets Chopin ask this machine to run the Planner of a document its
+	// owner chose it for; --planner documents always need one.
 	if (
 		!Array.isArray(plannerCommand)
 		|| plannerCommand.some(item => typeof item !== "string" || !item)
-		|| !!plannerDocuments.length !== !!plannerCommand.length
+		|| plannerDocuments.length > 0 && !plannerCommand.length
 	) {
-		throw new Error(
-			`--planner <document URL> and --planner-command <command> go together.\n\n${USAGE}`,
-		);
+		throw new Error(`--planner <document URL> needs --planner-command <command>.\n\n${USAGE}`);
 	}
 	let env = saved?.env ?? environment(parsed.lists.get("env") ?? []);
 	if (!service) {
@@ -527,7 +527,7 @@ export async function connect(
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
 			let planners = new AbortController();
-			let planning = servePlanners({
+			let backends = {
 				url,
 				machine,
 				documents: plannerDocuments,
@@ -537,7 +537,10 @@ export async function connect(
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
 				env,
-			});
+			};
+			let planning = servePlanners(backends);
+			// The Planners Chopin asks for, of documents this machine's owner chose it for.
+			let dispatched = plannerCommand.length ? dispatchedPlanners(backends) : undefined;
 			try {
 				await serveWork({
 					// Every connection registers anew with the machine token: a connection token lasts only
@@ -546,6 +549,7 @@ export async function connect(
 						connectionToken = await register(url, machine, checkout, signal, {
 							service,
 							planner: plannerDocuments.length > 0,
+							plannerCommand: plannerCommand.length > 0,
 							agent: (await readConfig(directory)).agents?.[program],
 						});
 						let api = await remote(url, connectionToken, signal);
@@ -564,6 +568,7 @@ export async function connect(
 					},
 					signal: abort.signal,
 					output,
+					...(dispatched ? { planners: dispatched } : {}),
 					run: (api, kind, claim) =>
 						runWork(api, kind, claim, {
 							onAgent: agent => void rememberAgent(agent, connectionToken),
@@ -591,7 +596,7 @@ export async function connect(
 				output.say("This machine needs pairing with Chopin again.");
 			} finally {
 				planners.abort();
-				await planning;
+				await Promise.all([planning, dispatched?.stop()]);
 			}
 		}
 	} catch (error) {
@@ -737,6 +742,8 @@ const HELP = [
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
+	"      --planner-command alone lets Chopin start the Planner of a document you choose this",
+	"      machine for, and stop it when you choose another.",
 	"      --env KEY=VALUE (repeatable) sets a variable for the agent and the Planner. It is saved",
 	"      in config.json, so keep secrets in the agent's own login. CHOPIN_* and PATH are refused.",
 	"      --install-service connects once, then stops and runs service install, so one command",

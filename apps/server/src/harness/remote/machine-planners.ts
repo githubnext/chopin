@@ -71,6 +71,18 @@ export class MachinePlanners {
 		return { token, expiresAt };
 	}
 
+	/**
+	 * Forgets every credential `machineId` holds for `channelId`, so a backend Chopin stopped there
+	 * cannot attach again with one; the machine's next credential request is answered as usual.
+	 */
+	withdraw(machineId: string, channelId: string): void {
+		for (let [key, issued] of this.#issued) {
+			if (issued.machineId === machineId && issued.channelId === channelId) {
+				this.#issued.delete(key);
+			}
+		}
+	}
+
 	/** Whether a bearer is shaped as a Planner credential rather than a GitHub token. */
 	static claims(token: string): boolean {
 		return token.startsWith(PREFIX);

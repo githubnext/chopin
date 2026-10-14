@@ -197,12 +197,13 @@ rests on ends or the document's Planner is reset. The server then sends
 `refused` and closes an attached link at once, and any eligible account,
 including the same one, can attach again immediately:
 
-| Cause                                                                                         | Refusal code       | Close code |
-| --------------------------------------------------------------------------------------------- | ------------------ | ---------- |
-| The owner's browser sign-in signs out or expires                                              | `sign-in-required` | 4401       |
-| The machine whose credential attached it is disconnected, or GitHub refuses its authorization | `access-revoked`   | 4403       |
-| A repository writer resets the document's Planner                                             | `access-revoked`   | 4403       |
-| The stored ownership no longer names this attachment's sign-in                                | `access-revoked`   | 4403       |
+| Cause                                                                                                                                     | Refusal code       | Close code |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
+| The owner's browser sign-in signs out or expires                                                                                          | `sign-in-required` | 4401       |
+| The machine whose credential attached it is disconnected, or GitHub refuses its authorization                                             | `access-revoked`   | 4403       |
+| Chopin started it on a machine chosen for the document, and its owner chose another machine or Automatic, or the machine lost push access | `access-revoked`   | 4403       |
+| A repository writer resets the document's Planner                                                                                         | `access-revoked`   | 4403       |
+| The stored ownership no longer names this attachment's sign-in                                                                            | `access-revoked`   | 4403       |
 
 The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an

@@ -25,7 +25,11 @@ export function implementationSchemas(
 	if (!runScoped) {
 		let id = z.string().uuid();
 		return {
-			wait_for_work: z.object({}).strict(),
+			// Protocol 4: with `planners`, the connector's Planner poll, naming the documents whose
+			// Planners it runs; it is answered only with what it should run, never with work.
+			wait_for_work: z.object({
+				planners: z.array(z.string().min(1).max(100)).max(64).optional(),
+			}).strict(),
 			claim_implementation_build: z.object({ id }).strict(),
 			renew_implementation_build: z.object({
 				id,

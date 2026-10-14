@@ -193,7 +193,9 @@ export function plannerLink(
 			channelId: channel.id,
 			repository: { id: repository.id, owner: repository.owner, name: repository.name },
 			user: { id: caller.user.id, login: caller.user.login },
-			...(login ? { login, machine: machine!.machine.label } : {}),
+			...(login
+				? { login, machine: machine!.machine.label, machineId: machine!.machine.id }
+				: {}),
 		}, link);
 		if (!granted.ok) return granted;
 		channelId = channel.id;

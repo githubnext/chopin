@@ -45,6 +45,8 @@ export type AttachRequest = {
 	 */
 	login?: string;
 	machine?: string;
+	/** That machine's id, so choosing another machine for the document can stop its Planner. */
+	machineId?: string;
 };
 
 export type AttachRefusal = {
@@ -66,8 +68,9 @@ type Hold = {
 	login: string;
 	ownerSessionId: string;
 	generation: number;
-	/** The paired machine whose delegated login owns the document, by label. */
+	/** The paired machine whose delegated login owns the document, by label and id. */
 	machine?: string;
+	machineId?: string;
 	link?: PlannerLink;
 	forget?: () => void;
 	timer?: ReturnType<typeof setTimeout>;
@@ -124,6 +127,38 @@ export class PlannerAttachments {
 	/** The GitHub login holding the document's Planner, attached or within its grace period. */
 	holder(channelId: string): string | undefined {
 		return this.#holds.get(channelId)?.login;
+	}
+
+	/**
+	 * Who holds the document's Planner, attached or within its grace period: the account, and the
+	 * paired machine whose Planner backend holds it, if one does. Only for its owner's own views.
+	 */
+	holding(
+		channelId: string,
+	): { userId: string; login: string; machineId?: string; attached: boolean } | undefined {
+		let hold = this.#holds.get(channelId);
+		if (!hold) return undefined;
+		return {
+			userId: hold.userId,
+			login: hold.login,
+			...(hold.machineId !== undefined ? { machineId: hold.machineId } : {}),
+			attached: hold.link !== undefined,
+		};
+	}
+
+	/**
+	 * The Planner backend of paired machine `machineId` stops being the document's Planner, as its
+	 * owner chose another machine or it disconnected: an attached link is refused with `message`
+	 * and closed, and the ownership released without a grace period. A hold through any other
+	 * login, or one already in its grace period, is left as it is.
+	 */
+	stopMachine(channelId: string, machineId: string, message: string): Promise<void> {
+		return this.#serialized(channelId, async () => {
+			let hold = this.#holds.get(channelId);
+			if (!hold?.link || hold.machineId !== machineId) return;
+			this.#invalidate(hold, { ok: false, code: "access-revoked", message });
+			await this.#release(hold);
+		});
 	}
 
 	/** Whether the document's Planner is attached, held through a grace period, or free, and by whom. */
@@ -287,6 +322,7 @@ export class PlannerAttachments {
 			ownerSessionId: login.session.id,
 			generation: claimed.generation,
 			...(request.machine !== undefined ? { machine: request.machine } : {}),
+			...(request.machineId !== undefined ? { machineId: request.machineId } : {}),
 		};
 		let live = await this.#auth.sessions.resolve(hold.ownerSessionId);
 		let refusal = pending.invalidated

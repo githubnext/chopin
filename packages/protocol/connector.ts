@@ -14,8 +14,22 @@ export const CONNECTOR_HOST_HEADER = "chopin-connector-host";
 export const CONNECTOR_PLATFORM_HEADER = "chopin-connector-platform";
 /** `1` when the background service runs the connection. */
 export const CONNECTOR_SERVICE_HEADER = "chopin-connector-service";
-/** `1` when the machine also runs Planners for documents. */
+/** `1` when the machine also runs Planners for documents named to `chopin connect --planner`. */
 export const CONNECTOR_PLANNER_HEADER = "chopin-connector-planner";
+/**
+ * `1` when the machine has a Planner command, so Chopin may ask it to run the Planner of a
+ * document its owner chose it for (connector protocol 4).
+ */
+export const CONNECTOR_PLANNER_COMMAND_HEADER = "chopin-connector-planner-command";
+
+/** A document whose Planner Chopin asks a connector to run, by id and by URL. */
+export type PlannerAssignment = { id: string; url: string };
+/**
+ * Chopin's answer to a protocol 4 connector's Planner poll (`wait_for_work` with `planners`) when
+ * the documents whose Planners it should run differ from the ones it named: every one it should
+ * run now. It carries no `id`, so a connector that knows no `kind: "planners"` waits again.
+ */
+export type PlannerControl = { kind: "planners"; planners: PlannerAssignment[] };
 /** The coding agent's name and version from its ACP initialize answer, when it has given one. */
 export const CONNECTOR_AGENT_HEADER = "chopin-connector-agent";
 export const CONNECTOR_AGENT_VERSION_HEADER = "chopin-connector-agent-version";
