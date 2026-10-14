@@ -363,6 +363,7 @@ export function buildRefusalCopy(message: string): string {
 	if (/^no-workspace$/.test(message)) return "Start your local agent, then retry";
 	let offline = /^(.+ is offline)\. /.exec(message);
 	if (offline) return offline[1]!;
+	if (message.startsWith("Can't read your machine choice")) return message.replace(/\.$/, "");
 	if (/offline or busy/.test(message)) return "Your local agent is offline or busy with other work";
 	if (/nothing to build/.test(message)) return "There are no changes to build";
 	if (/busy/i.test(message)) return "Your local agent is busy with another document";

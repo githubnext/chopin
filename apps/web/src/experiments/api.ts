@@ -12,7 +12,15 @@ export async function experimentRequest<T>(
 		signal,
 	});
 	let result = await response.json();
-	if (!response.ok) throw new Error(result.error ?? "Investigation request failed");
+	if (!response.ok) {
+		// The machine the person chose is offline, or their choice cannot be read: the server's
+		// sentence says which. Work never moves to another machine.
+		let sentence = result.error === "machine-offline"
+			|| result.error === "machine-choice-unavailable";
+		throw new Error(
+			(sentence && result.message) || result.error || "Investigation request failed",
+		);
+	}
 	return result;
 }
 

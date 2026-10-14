@@ -301,6 +301,10 @@ describe("first build", () => {
 		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
 		expect(buildRefusalCopy("unanswered questionnaires")).toBe("Answer the open decisions first");
 		expect(buildRefusalCopy("something internal")).toBe("The build couldn’t start. Try again");
+		// The person's machine choice cannot be read; the Build never goes to another machine.
+		expect(buildRefusalCopy("Can't read your machine choice right now. Try again.")).toBe(
+			"Can't read your machine choice right now. Try again",
+		);
 		// The server names the machine the person chose; the copy keeps the name.
 		expect(
 			buildRefusalCopy(
