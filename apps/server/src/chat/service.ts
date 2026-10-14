@@ -611,6 +611,8 @@ export type Room = {
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
+	/** Read-only, current advisory context; never authorizes a build. */
+	recommendation?: () => Promise<import("@chopin/protocol/recommendation").RecommendationSnapshot>;
 	references?: ReferenceService;
 	createResearch?: (request: {
 		entryId: string;
@@ -1598,6 +1600,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		anchors: () => Service.anchors(plan, server, room),
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
+		recommendation: context.recommendation,
 		children: context.children,
 		currentMemberRequest: () => currentMemberRequest(chat),
 		readinessInvestigationRequest: async () => {

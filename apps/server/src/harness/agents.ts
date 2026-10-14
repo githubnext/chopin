@@ -6,6 +6,7 @@ import { type DocumentRoom, documentTools } from "../agent/tools";
 import { type HostedRepository, repositoryTools } from "../agent/repository";
 import { jobTools, scopedJobTools } from "../agent/job-tools";
 import { createScopedTools } from "../agent/scoped-tools";
+import { recommendationOutputSchema } from "../recommendations/schema";
 import type { ConversationPlan } from "@chopin/protocol";
 import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
@@ -198,11 +199,16 @@ export function createSummaryAgent(harness: HarnessV1) {
 	return structuredAgent(harness, descriptionSchema, false);
 }
 
+export function createRecommendationAgent(harness: HarnessV1) {
+	return structuredAgent(harness, recommendationOutputSchema, false);
+}
+
 export function createResearchAgent(harness: HarnessV1) {
 	return structuredAgent(harness, publicEvidenceSchema, true);
 }
 
 export let summaryAgent = createSummaryAgent(harnessFor(harnessSelection()));
+export let recommendationAgent = createRecommendationAgent(harnessFor(harnessSelection()));
 export let researchBriefAgent = structuredAgent(
 	harnessFor(harnessSelection()),
 	researchBriefSchema,

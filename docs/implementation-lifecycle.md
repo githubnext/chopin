@@ -35,6 +35,14 @@ and current tool descriptions remain authoritative.
 
 ## Drafting tasks from Build plan
 
+The Document's **Suggested next step** is a separate, evidence-based advisory
+assessment. It may recommend a small first build while broader exploration
+remains open, or name one uncertainty to resolve. **Discuss with Chopin** sends
+its proposed next action to Chat; **Keep exploring** dismisses the suggestion.
+Neither action approves or starts an implementation, and a recommendation never
+overrides the blockers below. See
+[next-build recommendations](background-jobs.md#next-build-recommendations).
+
 Only **Build plan** in the document header sends `implementation:draft`, and
 only when the document has no tasks for its current revision, or its last build
 was returned for changes. Opening the Build tab never drafts or starts anything;

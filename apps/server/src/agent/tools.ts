@@ -155,6 +155,8 @@ export type DocumentRoom = {
 	/** Tells the room where this batch wrote, moved and removed. */
 	changes: (found: edit.Change[]) => void;
 	jobs?: JobService;
+	/** A provisional derived assessment, separate from implementation eligibility. */
+	recommendation?: () => Promise<import("@chopin/protocol/recommendation").RecommendationSnapshot>;
 	/** The same verified member request that owns the current live turn. */
 	currentMemberRequest?: () => ActiveMemberRequest | undefined;
 	/** A server readiness review or live Build task draft may propose using its existing owner. */
@@ -196,7 +198,13 @@ export const documentTools = {
 		// anybody needs to approve.
 		metadata: { skipPermission: true },
 		execute: (_raw, { context: { room: context } }) =>
-			answer("read_plan", () => documentView(context.plan)),
+			answer("read_plan", async () => {
+				let snapshot = await documentView(context.plan);
+				let advice = await context.recommendation?.().catch(() => undefined);
+				return advice?.state === "ready" && advice.planRevision === snapshot.revision
+					? { ...snapshot, recommendation: { advisory: true, ...advice.recommendation } }
+					: snapshot;
+			}),
 	}),
 
 	read_reference: tool({

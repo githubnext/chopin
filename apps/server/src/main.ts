@@ -3,6 +3,10 @@ import { draftInstruction, draftRefusal } from "./tasks/draft";
 import { planningReadiness } from "./tasks/plan-graphs";
 import { READINESS_INSTRUCTION } from "./tasks/readiness-instruction";
 import { ReadinessReviews } from "./tasks/readiness-review";
+import { RecommendationCoordinator } from "./recommendations/coordinator";
+import { createRecommendationLoader } from "./recommendations/load";
+import { buildRecommendationDefinition } from "./recommendations/job";
+import { registerRecommendationRoutes } from "./recommendations/routes";
 /**
  * The server.
  *
@@ -168,6 +172,7 @@ let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
+let recommendations: RecommendationCoordinator | undefined;
 let readinessReviews = new ReadinessReviews({
 	list: id => experiments!.service.store.list(id),
 	start: (channelId, about) =>
@@ -278,6 +283,7 @@ function documentBackend(): Service.Backend {
 			buildReadiness?.schedule(target);
 			spikeScout?.schedule(target);
 		},
+		onContextPersisted: recommendationContextChanged,
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
 		onEditingUnlocked: createEditingUnlocked({
@@ -348,6 +354,7 @@ function settlePendingSpikes(channelId: string): void {
 
 /** Wake owner-bound work: background jobs and spike settlements that waited for an owner. */
 function ownerAvailable(channelId: string): Promise<void> {
+	recommendations?.schedule(channelId);
 	let opened = Rooms.get(channelId)?.plan;
 	if (opened) conversationRuntime.wake(opened);
 	settlePendingSpikes(channelId);
@@ -477,6 +484,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			!!channel && !channel.parentChannelId,
 		);
 		if (!channel?.archivedAt) {
+			recommendations?.schedule(room.id);
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled(opened)) Inject.ask(opened, server, room.id);
 			if (Marks.enabled(opened)) await Marks.mark(opened);
@@ -552,6 +560,8 @@ function conversation(
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,
+		recommendation: () =>
+			recommendations?.read(room.id) ?? Promise.resolve({ state: "unavailable" }),
 		references: referenceService,
 		investigations: experiments
 			? {
@@ -1668,6 +1678,7 @@ function drain(): Promise<void> {
 		summaryCoordinator?.close();
 		liveSync?.close();
 		buildReadiness?.close();
+		recommendations?.close();
 		spikeScout?.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
@@ -1717,6 +1728,7 @@ async function resetOpenAgents(
 }
 
 function announceChannel(channel: ChannelRecord): void {
+	if (channel.parentChannelId) recommendations?.schedule(channel.parentChannelId);
 	let room = Rooms.get(channel.id);
 	if (!room) return;
 	for (let ws of room.members.values()) {
@@ -1753,6 +1765,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 		throw new StorageError("missing", `channel ${channelId} is being deleted`);
 	}
 	archivingChannels.add(channelId);
+	recommendations?.forget(channelId);
 	let room = Rooms.get(channelId);
 	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
 	try {
@@ -1830,6 +1843,7 @@ async function restoreChannelLocked(channelId: string, now: Date) {
 	announceChannel(result.channel);
 	void Service.announceCatalogueUnanswered(server, storage, result.channel);
 	if (summaryCoordinator) void summaryCoordinator.ensure(channelId).catch(() => {});
+	recommendations?.schedule(channelId);
 	return result;
 }
 
@@ -1925,6 +1939,7 @@ async function announceJobsChanged(channelId: string): Promise<void> {
 }
 
 function announceResearchChanged(channelId: string, workspaceId: string, revision: number): void {
+	recommendations?.schedule(channelId);
 	if (draining) return;
 	broadcast(server, channelId, {
 		kind: "research:changed",
@@ -2104,6 +2119,7 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 			});
 		}),
 	changed(documentId) {
+		recommendations?.schedule(documentId);
 		if (server && !draining) {
 			broadcast(server, documentId, { kind: "experiment:changed", ts: 0, documentId });
 		}
@@ -2142,8 +2158,26 @@ if (config.agent && config.harness === "remote") {
 		}
 	});
 }
+let loadRecommendation = createRecommendationLoader({
+	storage,
+	withPlan: withImplementationPlan,
+	document: currentDocumentTarget,
+	investigations: id => experiments!.service.store.list(id),
+	unavailable: id => !!draining || archivingChannels.has(id) || deletingChannels.has(id),
+});
+
+function recommendationContextChanged(channelId: string): void {
+	if (!recommendations) return;
+	recommendations.schedule(channelId);
+	// A published research child can be edited after publication.
+	void storage.channels.get(channelId).then(channel => {
+		if (channel?.parentChannelId) recommendations?.schedule(channel.parentChannelId);
+	}).catch(err => console.error("chopin: recommendation context lookup failed", err));
+}
+
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
+	definitions.push(buildRecommendationDefinition({ config, current: loadRecommendation }));
 	definitions.push(researchBriefDefinition({ config }));
 	definitions.push(documentSummaryDefinition({
 		config,
@@ -2167,6 +2201,7 @@ let jobService = new JobService({
 		return writerLease.held;
 	},
 	onChange: job => {
+		recommendations?.jobChanged(job);
 		jobRunner?.notify(job);
 		if (job.state === "completed") {
 			void descriptionProjector?.jobChanged(job).catch(err => {
@@ -2180,6 +2215,31 @@ let jobService = new JobService({
 	publish: announceJobsChanged,
 });
 if (config.agent && config.backgroundJobs) researchBriefJobs = jobService;
+if (config.agent && config.backgroundJobs && config.harness !== "remote") {
+	recommendations = new RecommendationCoordinator({
+		service: jobService,
+		jobs: storage.jobs,
+		current: loadRecommendation,
+		eligible: async id => {
+			if (draining || Rooms.get(id)?.plan?.chat.busy) return false;
+			let binding = await ownerBindings?.resolve(id);
+			if (!binding) return false;
+			try {
+				return !binding.signal.aborted && await binding.revalidate();
+			} finally {
+				binding.release();
+			}
+		},
+		changed: id => {
+			if (server && !draining) broadcast(server, id, { kind: "recommendation:changed", ts: 0 });
+		},
+		error: err => console.error("chopin: recommendation scheduling failed", err),
+	});
+}
+registerRecommendationRoutes(router, hostedAuth, {
+	read: id => recommendations?.read(id) ?? Promise.resolve({ state: "unavailable" }),
+	schedule: id => recommendations?.schedule(id),
+});
 if (config.backgroundJobs) {
 	descriptionProjector = new DocumentDescriptionProjector({
 		storage,
@@ -2320,6 +2380,7 @@ registerMcpRoutes(router, hostedAuth, {
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,
 	onDocumentPersisted: target => {
+		recommendationContextChanged(target.channelId);
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
 		liveSync?.schedule(target);
 		buildReadiness?.schedule(target);
@@ -2486,6 +2547,7 @@ try {
 	summaryCoordinator?.close();
 	liveSync?.close();
 	buildReadiness?.close();
+	recommendations?.close();
 	spikeScout?.close();
 	let stoppingJobs = jobRunner.shutdown();
 	ownerBindings.revokeAll();

@@ -12,6 +12,7 @@ import type {
 } from "../../apps/server/src/harness/harness-v1";
 import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
 import { nameDocument } from "./fake-heading";
+import { fakeStructuredWorker } from "./fake-recommendation";
 
 type FakeHarnessSettings = {
 	credentials: (id: string) => string | undefined;
@@ -95,6 +96,8 @@ export function createFakeHarness(
 				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
 					let available = new Set(turn.tools.map(spec => spec.name));
 					let prompt = promptText(turn.prompt);
+					let structured = fakeStructuredWorker(turn, prompt);
+					if (structured) return structured;
 					let heading = prompt.startsWith("[Background job: heading]\n");
 					if (heading && available.size !== HEADING_TOOL_NAMES.length) {
 						throw new Error("e2e-fake heading job received tools outside its scope");

@@ -244,6 +244,8 @@ export interface BackgroundJobStore {
 		after?: BackgroundJobCursor,
 	): Promise<BackgroundJobPage | undefined>;
 	get(channelId: string, jobId: string): Promise<BackgroundJobDetail | undefined>;
+	/** The job at the target's current generation, including terminal outcomes. */
+	current(channelId: string, targetKey: string): Promise<BackgroundJobDetail | undefined>;
 }
 
 export interface ResearchWorkspaceStore {

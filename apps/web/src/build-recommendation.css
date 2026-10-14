@@ -1,0 +1,94 @@
+.build-recommendation {
+	min-width: 0;
+	padding: calc(var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-neutral-surface);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	overflow-wrap: anywhere;
+}
+
+.build-recommendation-label {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	margin: 0 0 calc(var(--spacing) * 2);
+	color: var(--color-text-tertiary);
+}
+
+.build-recommendation-title {
+	margin: 0;
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+	font-weight: var(--font-weight-medium);
+	color: var(--color-text-primary);
+}
+
+.build-recommendation-scope {
+	margin: calc(var(--spacing) * 1.5) 0 calc(var(--spacing) * 2);
+	color: var(--color-text-secondary);
+}
+
+.build-recommendation-list {
+	display: grid;
+	gap: calc(var(--spacing) * 1.5);
+	margin: 0 0 calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 6) calc(var(--spacing) * 2);
+	list-style: disc;
+	color: var(--color-text-secondary);
+}
+
+.build-recommendation-evidence-kind {
+	color: var(--color-text-tertiary);
+	text-transform: capitalize;
+}
+
+.build-recommendation-evidence-detail {
+	margin: 0;
+	padding: 0 calc(var(--spacing) * 2) calc(var(--spacing) * 2);
+	max-height: calc(var(--spacing) * 50);
+	overflow-y: auto;
+	white-space: pre-wrap;
+	color: var(--color-text-secondary);
+}
+
+.build-recommendation-boundary {
+	margin: calc(var(--spacing) * 3) 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.build-recommendation-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.build-recommendation-actions .btn,
+.build-recommendation-restore .btn {
+	max-width: 100%;
+	height: auto;
+	min-height: calc(var(--spacing) * 6);
+	white-space: normal;
+	text-align: start;
+}
+
+.build-recommendation-error {
+	margin: calc(var(--spacing) * 2) 0 0;
+	color: var(--color-danger-text);
+}
+
+.build-recommendation-restore {
+	display: flex;
+	min-width: 0;
+}
+
+@media (any-pointer: coarse) {
+	.build-recommendation-actions .btn,
+	.build-recommendation-restore .btn {
+		min-height: var(--control-target-coarse);
+	}
+}

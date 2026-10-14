@@ -596,37 +596,60 @@ export class PostgresBackgroundJobStore implements BackgroundJobStore {
 				}),
 		);
 
+	readonly current = (
+		channelId: string,
+		targetKey: string,
+	): Promise<BackgroundJobDetail | undefined> =>
+		this.#run(
+			"read current background job",
+			() =>
+				this.#sql.begin("isolation level repeatable read read only", async transaction => {
+					let [found] = await transaction<{ id: string }[]>`
+					SELECT j.id FROM background_jobs j
+					JOIN background_job_targets t ON t.channel_id = j.channel_id
+						AND t.target_key = j.target_key AND t.generation = j.target_generation
+					WHERE j.channel_id = ${channelId} AND j.target_key = ${targetKey}
+				`;
+					return found ? this.#detail(transaction, channelId, found.id) : undefined;
+				}),
+		);
+
 	readonly get = (channelId: string, jobId: string): Promise<BackgroundJobDetail | undefined> =>
 		this.#run(
 			"read background job",
 			() =>
-				this.#sql.begin("isolation level repeatable read read only", async transaction => {
-					let revision = await this.#readRevision(transaction, channelId);
-					if (revision === undefined) return undefined;
-					let [found] = await transaction<JobRow[]>`
-					SELECT ${transaction.unsafe(JOB_COLUMNS)}
-					FROM background_jobs
-					WHERE channel_id = ${channelId} AND id = ${jobId}
-				`;
-					if (!found) return undefined;
-					let saved = job(found);
-					let savedTarget = await this.#readTarget(
-						transaction,
-						saved.channelId,
-						saved.targetKey,
-					);
-					let [foundArtifact] = await transaction<ArtifactRow[]>`
-					SELECT ${transaction.unsafe(ARTIFACT_COLUMNS)}
-					FROM background_job_artifacts WHERE job_id = ${saved.id}
-				`;
-					return {
-						revision,
-						target: savedTarget,
-						job: saved,
-						artifact: foundArtifact ? artifact(foundArtifact) : undefined,
-					};
-				}),
+				this.#sql.begin(
+					"isolation level repeatable read read only",
+					transaction => this.#detail(transaction, channelId, jobId),
+				),
 		);
+
+	async #detail(
+		transaction: TransactionSQL,
+		channelId: string,
+		jobId: string,
+	): Promise<BackgroundJobDetail | undefined> {
+		let revision = await this.#readRevision(transaction, channelId);
+		if (revision === undefined) return undefined;
+		let [found] = await transaction<JobRow[]>`
+			SELECT ${transaction.unsafe(JOB_COLUMNS)}
+			FROM background_jobs
+			WHERE channel_id = ${channelId} AND id = ${jobId}
+		`;
+		if (!found) return undefined;
+		let saved = job(found);
+		let savedTarget = await this.#readTarget(transaction, saved.channelId, saved.targetKey);
+		let [foundArtifact] = await transaction<ArtifactRow[]>`
+			SELECT ${transaction.unsafe(ARTIFACT_COLUMNS)}
+			FROM background_job_artifacts WHERE job_id = ${saved.id}
+		`;
+		return {
+			revision,
+			target: savedTarget,
+			job: saved,
+			artifact: foundArtifact ? artifact(foundArtifact) : undefined,
+		};
+	}
 
 	#claimedTransition(
 		action: string,

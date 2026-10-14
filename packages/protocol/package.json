@@ -13,6 +13,9 @@
 		"./implementation": {
 			"types": "./implementation.d.ts"
 		},
+		"./recommendation": {
+			"types": "./recommendation.d.ts"
+		},
 		"./address": {
 			"types": "./address.ts",
 			"default": "./address.ts"

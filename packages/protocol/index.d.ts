@@ -250,6 +250,7 @@ export type Incoming =
 
 /** Everything a client may receive, on a room socket or the sidebar socket. */
 export type Outgoing =
+	| import("./recommendation").RecommendationChanged
 	| import("./experiment").Experiment.Changed
 	| Session.Outgoing
 	| Sidebar.Outgoing

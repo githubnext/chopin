@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { documentPath } from "@chopin/protocol/document-url";
+import { MENTION } from "@chopin/protocol/address";
 import {
 	ArchiveIcon,
 	CheckIcon,
@@ -49,6 +50,8 @@ import {
 } from "@chopin/editor";
 
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
+import { BuildRecommendation } from "./build-recommendation";
+import { useBuildRecommendation } from "./use-build-recommendation";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import { MachineButton } from "./machine-button";
@@ -56,6 +59,7 @@ import { offlineChoice, useMachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
+import { chatSendPayload } from "./chat/references";
 import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
 import { ChildProvenance } from "./child-provenance";
 import { ChildTitleContext } from "./child-title";
@@ -658,6 +662,18 @@ export function RoomWorkspace(
 		userId,
 		wire,
 	});
+	let recommendationActive = presentation.type !== "child" && agent && !deleted
+		&& !(archivedAt ?? metadata.archivedAt) && !!build.snapshot
+		&& !build.tabReady && !build.busy && !implementation.locked;
+	let recommendation = useBuildRecommendation({
+		active: recommendationActive,
+		connected: status === "connected",
+		room,
+		wire,
+	});
+	let [exploringRecommendation, setExploringRecommendation] = useState<
+		{ room: string; key: string }
+	>();
 	let namedBuildBlockers = useMemo(() => buildBlockers(build.snapshot, entries, cardMetadata), [
 		build.snapshot,
 		entries,
@@ -1171,6 +1187,25 @@ export function RoomWorkspace(
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	let recommendationDisabled = !workspaceCanEdit || !agent || plannerDetached
+		|| status !== "connected" || !chatActivity.loaded || chatActivity.busy;
+	let discussRecommendation = async (snapshot: NonNullable<typeof recommendation.snapshot>) => {
+		if (
+			recommendationDisabled || !recommendationActive || !wire?.connected
+			|| snapshot.key !== recommendation.current()?.key
+		) return;
+		let payload = chatSendPayload(
+			`${MENTION} ${snapshot.recommendation.nextAction}`,
+			[],
+			agent,
+			crypto.randomUUID(),
+		);
+		if (!payload) return;
+		if (mode === "split") setDesktopChatOpen(true);
+		else dispatch({ type: "set-chat", open: true });
+		if (chatSendAcks.wire === wire && chatSendAcks.enabled) await wire.ask("chat:send", payload);
+		else wire.send("chat:send", payload);
+	};
 	let editMode = documentEditMode({
 		canEdit: !!workspaceCanEdit && !implementation.locked,
 		editing,
@@ -1462,12 +1497,26 @@ export function RoomWorkspace(
 				// The skeleton's lines continue in the column until the document first arrives; a
 				// later reconnection keeps the document it already shows.
 				preface={presentation.type === "child" && presentation.parent || loading
+						|| recommendation.snapshot
 					? (
 						<>
 							{presentation.type === "child" && presentation.parent && (
 								<ChildProvenance channelId={room} parent={presentation.parent} />
 							)}
 							{loading && <DocumentSkeleton />}
+							{recommendation.snapshot && !loading && (
+								<BuildRecommendation
+									dismissed={exploringRecommendation?.room === room
+										&& exploringRecommendation.key === recommendation.snapshot.key}
+									disabled={recommendationDisabled}
+									key={room}
+									onDismiss={() =>
+										setExploringRecommendation({ room, key: recommendation.snapshot!.key })}
+									onDiscuss={discussRecommendation}
+									onRestore={() => setExploringRecommendation(undefined)}
+									snapshot={recommendation.snapshot}
+								/>
+							)}
 						</>
 					)
 					: undefined}

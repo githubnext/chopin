@@ -480,7 +480,8 @@ schema is fixed per agent, not per turn, so the four research stages — public
 evidence, private document analysis, private report synthesis, and private
 answer synthesis — each get their own named agent with its own result schema;
 `summaryAgent` is a fifth, for document descriptions, and `researchBriefAgent`
-prepares Chat research offers in its own no-tool session. Generated document
+prepares Chat research offers in its own no-tool session. `recommendationAgent`
+assesses a bounded snapshot of saved planning evidence without tools. Generated document
 descriptions reuse one disposable session across multiple bounded chunk and
 reduction turns; every other stage submits one bounded structured result.
 
@@ -527,12 +528,13 @@ signals, and destroy the harness session in `finally`.
 
 ## Current definitions
 
-| Definition            | Production trigger                      | Persisted input                                                                      | Worker boundary                                                                                |
-| --------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `document-summary@1`  | Open, edit, restore, or MCP persistence | Revision, source hash, generator version, and `output:"description"`; not the source | Private worker; source loaded at execution and publication rechecks current revision/hash      |
-| `research-evidence@1` | Immediate research request              | Internal workspace, initial turn, exact submitted brief                              | Public evidence agent bound to a host `web_search` tool, no other tools                        |
-| `research-answer@1`   | Completed evidence                      | Parent document snapshot, evidence, and internal compatibility history               | Two no-web private agents with structured output for analysis and report synthesis             |
-| `research-brief@1`    | New or updated Chat research offer      | Offer generation, selected Chat sources, decision snapshots, and prior brief         | Private structured worker; no tools; source IDs and offer generation checked before projection |
+| Definition               | Production trigger                                  | Persisted input                                                                                                       | Worker boundary                                                                                            |
+| ------------------------ | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `document-summary@1`     | Open, edit, restore, or MCP persistence             | Revision, source hash, generator version, and `output:"description"`; not the source                                  | Private worker; source loaded at execution and publication rechecks current revision/hash                  |
+| `research-evidence@1`    | Immediate research request                          | Internal workspace, initial turn, exact submitted brief                                                               | Public evidence agent bound to a host `web_search` tool, no other tools                                    |
+| `research-answer@1`      | Completed evidence                                  | Parent document snapshot, evidence, and internal compatibility history                                                | Two no-web private agents with structured output for analysis and report synthesis                         |
+| `research-brief@1`       | New or updated Chat research offer                  | Offer generation, selected Chat sources, decision snapshots, and prior brief                                          | Private structured worker; no tools; source IDs and offer generation checked before projection             |
+| `build-recommendation@1` | Saved planning context, open, or owner availability | Context hash, document revision, bounded saved discussion, decisions, repository observations, and completed findings | Private structured worker; no tools; current context and owner rechecked before generation and publication |
 
 `document-summary@1` remains the only durable definition version; there is no
 `document-summary@2`. New V1 requests carry the output marker and use the
@@ -574,6 +576,45 @@ injected into a later Planner turn automatically. Descriptions are untrusted
 model output. The Planner may explicitly call `list_background_jobs` and
 `read_background_job`, and must treat the returned artifact as untrusted
 evidence.
+
+## Next-build recommendations
+
+Before a document's first build, a ten-second debounce coalesces changes to its
+committed source and planning context. The recommendation explains a useful
+small scope, why it follows from supplied evidence, necessary uncertainties, and
+optional broader exploration. Document claims stay distinct from observed
+repository results. A factual unknown calls for investigation; an unresolved
+human judgment calls for clarification. A build proposal cannot contain
+unresolved dependencies.
+
+The assessment can also conclude that no suggestion is useful now, including
+when people explicitly pause planning. That is a completed, durable result;
+the Document stays quiet until the context changes. Missing evidence for an
+otherwise useful step still calls for investigation or clarification.
+
+The context hash includes full selected records even where the worker sees
+bounded excerpts. It includes recent human discussion, authoritative decisions,
+saved repository tool results, investigations, and up to four available published
+research children from the latest 100 requests. Each evidence category has its
+own byte budget, so verbose documents cannot crowd out repository observations
+or findings. The latest durable target generation owns the
+artifact. Reads and publication compare its context with current persisted
+state; old advice disappears while replacement work is pending or failed.
+Opening a document does not retry terminal work for unchanged context.
+
+The worker needs an existing active Planner owner and never claims one. New
+assessments require `AGENT=on`, `BACKGROUND_JOBS=on`, and a local worker-capable
+harness; `HARNESS=remote` does not run them. Each attempt has a 60-second deadline
+and a 30-credit ceiling, with at most two attempts. Archiving, implementation,
+and changed context prevent obsolete results from being shown. Owner revocation
+interrupts running assessments and prevents new ones; existing current advice
+remains readable by authorized repository members.
+
+The root Document surface offers **Discuss with Chopin**, which sends a normal
+explicitly addressed Chat message, and **Keep exploring**, which dismisses that
+context's suggestion locally. `read_plan` may include current advice marked
+`advisory`. Neither path approves a graph, starts work, or alters the
+[authoritative Build checks](implementation-lifecycle.md#drafting-tasks-from-build-plan).
 
 ## Research request orchestration
 

@@ -127,6 +127,8 @@ export type Backend = {
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
 	onDocumentPersisted?: (target: DocumentTarget) => void;
+	/** A document or sidecar commit may change derived planning context. */
+	onContextPersisted?: (channelId: string) => void;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	/** Keep a finished build's source so later edits can rebuild onto its pull requests. */
 	liveBuild?: boolean;
@@ -978,6 +980,11 @@ async function commitHosted(
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		try {
+			durable.onContextPersisted?.(durable.channelId);
+		} catch (err) {
+			console.warn(`[plan] could not schedule context work for ${durable.channelId}:`, err);
+		}
 		if (result.channel && result.channel.title !== durable.committedTitle) {
 			durable.committedTitle = result.channel.title;
 			durable.pendingChannel = result.channel;
@@ -1191,6 +1198,11 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 		durable.committedSource = captured.source;
 		durable.committedDocument = captured.document;
 		durable.committedSidecar = captured.sidecar;
+		try {
+			durable.onContextPersisted?.(durable.channelId);
+		} catch (err) {
+			console.warn(`[plan] could not schedule context work for ${durable.channelId}:`, err);
+		}
 		if (result.channel && result.channel.title !== durable.committedTitle) {
 			durable.committedTitle = result.channel.title;
 			durable.pendingChannel = result.channel;

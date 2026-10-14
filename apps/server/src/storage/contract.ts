@@ -2599,6 +2599,7 @@ export function storageContract(name: string, factory: Factory): void {
 				let beforeChannel = await storage.channels.get(channelId);
 				let beforeCollaboration = await storage.collaboration.load(channelId, new Date());
 				expect(await storage.jobs.list(channelId, 20)).toEqual({ revision: 0, jobs: [] });
+				expect(await storage.jobs.current(channelId, "missing")).toBeUndefined();
 				await expect(storage.jobs.enqueue(backgroundJob(channelId, lease, { id: "" })))
 					.rejects.toMatchObject({ failure: "conflict" });
 				expect((await storage.jobs.list(channelId, 20))!.revision).toBe(0);
@@ -2610,6 +2611,7 @@ export function storageContract(name: string, factory: Factory): void {
 					input: { revision: 1, nested: ["source"] },
 				});
 				let first = await storage.jobs.enqueue(input);
+				expect((await storage.jobs.current(channelId, input.targetKey))?.job.id).toBe(first.job.id);
 				expect(first.repeated).toBe(false);
 				expect(first.job).toMatchObject({
 					state: "pending",
@@ -2632,6 +2634,10 @@ export function storageContract(name: string, factory: Factory): void {
 					now: new Date(input.now.getTime() + 1),
 				}));
 				expect(second.job).toMatchObject({ targetGeneration: 2, revision: 2 });
+				expect((await storage.jobs.current(channelId, input.targetKey))?.job.id).toBe(
+					second.job.id,
+				);
+				expect(await storage.jobs.current("another-channel", input.targetKey)).toBeUndefined();
 				expect((await storage.jobs.get(channelId, first.job.id))!.job.state).toBe("superseded");
 				let independent = await storage.jobs.enqueue(backgroundJob(channelId, lease, {
 					targetKey: "research:evidence-1",
@@ -2826,6 +2832,9 @@ export function storageContract(name: string, factory: Factory): void {
 					revision: 9,
 					value: { abstract: "Current summary", sources: [] },
 				});
+				expect(await storage.jobs.current(channelId, completed.job.targetKey)).toEqual(
+					await storage.jobs.get(channelId, completed.job.id),
+				);
 				(completed.artifact!.value as { abstract: string }).abstract = "mutated";
 				expect((await storage.jobs.get(channelId, completed.job.id))!.artifact!.value)
 					.toMatchObject({ abstract: "Current summary" });
