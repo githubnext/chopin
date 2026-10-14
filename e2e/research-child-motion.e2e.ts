@@ -318,6 +318,9 @@ test("a sidebar row rises from the lower centre and closes by fading", async ({ 
 
 test("reduced motion crossfades without transform animation", async ({ baseURL, join, room, seed, page }) => {
 	await setup(page);
+	// Expose a canonical URL arriving before React's route commit; opening must retain its opener.
+	let session = await page.context().newCDPSession(page);
+	await session.send("Emulation.setCPUThrottlingRate", { rate: 6 });
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	let { title } = await seedReadyCard(baseURL!, room, seed);
 	let opened = await join("ana");

@@ -135,8 +135,6 @@ export function HostedApp(
 ) {
 	let [route, setRoute] = useState(() => hostedRoute(location.pathname));
 	let [navigationRevision, setNavigationRevision] = useState(0);
-	let hostedRouteRef = useRef(route);
-	hostedRouteRef.current = route;
 	let childOpener = useRef<ResearchOpener | undefined>(undefined);
 	// The root document can replace a research card's opener while the child's first commit lays
 	// out, so the clicked element and its rect are kept from the click itself.
@@ -175,7 +173,8 @@ export function HostedApp(
 		let nextRoute = hostedRoute(target.pathname);
 		if (options.replace) history.replaceState(history.state, "", next);
 		else {
-			let currentRoute = hostedRouteRef.current;
+			// Canonical history can change before React commits its matching route.
+			let currentRoute = hostedRoute(location.pathname);
 			let siblingChild = nextRoute.page === "child" && currentRoute.page === "child"
 				&& nextRoute.owner.toLocaleLowerCase() === currentRoute.owner.toLocaleLowerCase()
 				&& nextRoute.repository.toLocaleLowerCase()
