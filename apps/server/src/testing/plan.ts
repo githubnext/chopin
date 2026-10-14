@@ -14,6 +14,7 @@ import type { JsonValue } from "../storage/model";
 import type { SocketData } from "../wire";
 
 export type SeedState = {
+	documentDevelopment?: import("../document-development/state").State;
 	graph?: import("../tasks/graphs").Graph;
 	builds?: import("@chopin/protocol/implementation").BuildRequest[];
 	revision?: number;
@@ -187,6 +188,7 @@ export async function checkpointSource(
 		transcript: state.transcript ?? [],
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
+		...(state.documentDevelopment ? { documentDevelopment: state.documentDevelopment } : {}),
 	} as JsonValue;
 	let document = await Room.create(source);
 	let canonical = Room.project(document);

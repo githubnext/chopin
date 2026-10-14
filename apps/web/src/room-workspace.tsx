@@ -84,6 +84,9 @@ import {
 } from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { DocumentDevelopmentControl, DocumentDevelopmentStore } from "./document-development";
+import { DocumentRecoveryControl } from "./document-development-recovery";
+import { DocumentRecoveryStore } from "./document-development-recovery-store";
 import { DocumentRename } from "./document-rename";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader, PhoneHeaderContent } from "./phone-header";
@@ -452,6 +455,8 @@ export function RoomWorkspace(
 	let [sourceDestination, setSourceDestination] = useState<ChatDestination | undefined>(undefined);
 	let sourceToken = useRef(0);
 	let conversationStore = useMemo(() => new ConversationPlanStore(room), [room]);
+	let developmentStore = useMemo(() => new DocumentDevelopmentStore(), [room]);
+	let recoveryStore = useMemo(() => new DocumentRecoveryStore(), [room]);
 	let conversation = useConversationPlan(conversationStore);
 	let conversationGeneration = conversationStore.generation;
 	let [announcement, setAnnouncement] = useState({ text: "", sequence: 0 });
@@ -1092,6 +1097,8 @@ export function RoomWorkspace(
 				onDocumentDeleted(room);
 			},
 			onStatus: next => {
+				developmentStore.reset();
+				recoveryStore.reset();
 				if (next === "connected") {
 					conversationStore.reset();
 					cardMeta.listen(undefined);
@@ -1102,6 +1109,8 @@ export function RoomWorkspace(
 		setWire(socket);
 
 		let off = [
+			developmentStore.listen(socket),
+			recoveryStore.listen(socket),
 			...(profile.chat ? [conversationStore.listen(socket)] : []),
 			socket.on<ManagedHello>("session:hello", frame => {
 				let editable = frame.canEdit && !frame.archivedAt;
@@ -1166,6 +1175,8 @@ export function RoomWorkspace(
 		threads,
 		cardMeta,
 		conversationStore,
+		developmentStore,
+		recoveryStore,
 		updateMetadata,
 	]);
 
@@ -1767,7 +1778,30 @@ export function RoomWorkspace(
 						</>
 					}
 					// Build plan or its capsule closes the status, so the rule before the faces follows it.
-					status={<>{statusNotices}{mode === "split" && buildSlot}</>}
+					status={
+						<>
+							{statusNotices}
+							{mode === "split" && buildSlot}
+							{view === "plan" && !childRoom && !childOpen && (
+								<div
+									className="document-development-row"
+									data-inset={mode !== "split" || undefined}
+								>
+									<DocumentDevelopmentControl
+										canEdit={!!workspaceCanEdit}
+										connected={status === "connected"}
+										store={developmentStore}
+									/>
+									<DocumentRecoveryControl
+										canEdit={!!workspaceCanEdit}
+										connected={status === "connected"}
+										documentHeadingId={workspaceIds.heading.plan}
+										store={recoveryStore}
+									/>
+								</div>
+							)}
+						</>
+					}
 					ids={workspaceIds}
 					phoneAction={barEdit && (
 						<button

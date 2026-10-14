@@ -1,6 +1,7 @@
 import {
 	displayTitle,
 	documentTitleText,
+	limits,
 	normalizeDocumentTitleTree,
 	serialize,
 	withDocumentTitle,
@@ -49,6 +50,8 @@ import { restoreReferences } from "../chat/references";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { sidecarUnansweredDecisions } from "../questions/unanswered";
+import * as Development from "../document-development/state";
+import * as Recovery from "../document-development/recovery";
 import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, broadcastRepository, fail, relay, reply, tell } from "../wire";
@@ -127,6 +130,10 @@ export type Backend = {
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
 	onDocumentPersisted?: (target: DocumentTarget) => void;
+	onDocumentDevelopmentPersisted?: (
+		channelId: string,
+		state: Development.State | undefined,
+	) => void;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	/** Keep a finished build's source so later edits can rebuild onto its pull requests. */
 	liveBuild?: boolean;
@@ -188,6 +195,7 @@ type Persistence = Backend & {
 };
 
 type Captured = {
+	recoveryPrepared?: boolean;
 	finalizeTitleReceipt?: boolean;
 	title?: string;
 	revision: number;
@@ -197,6 +205,7 @@ type Captured = {
 	document: Uint8Array;
 	sidecar: JsonValue;
 	sidecarText: string;
+	documentDevelopment?: Development.State;
 };
 
 export type Plan = {
@@ -228,6 +237,8 @@ export type Plan = {
 	conversationPlanPendingEffects: Effect[];
 	/** Card actions waiting to be mirrored into their conversation thread. */
 	pendingCardActions: PendingCardAction[];
+	/** Provenance and delivery receipts for incremental conversation-derived prose. */
+	documentDevelopment?: Development.State;
 
 	/**
 	 * Every questionnaire this plan has ever held, answered or not.
@@ -313,11 +324,16 @@ type Sidecar = {
 	conversationPlanPendingEffects?: Effect[];
 	pendingCardActions?: PendingCardAction[];
 	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
+	documentDevelopment?: Development.State;
 };
 
 type ChatView = Pick<Chat.Chat, "entries" | "runs">;
 
-function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
+function state(
+	plan: Plan,
+	chat: ChatView = plan.chat,
+	documentDevelopment = plan.documentDevelopment,
+): Sidecar {
 	return {
 		version: 1,
 		revision: plan.revision,
@@ -350,18 +366,24 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 			: {}),
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
 		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
+		...(documentDevelopment ? { documentDevelopment } : {}),
 	};
 }
 
-function jsonState(plan: Plan, chat?: ChatView): { value: JsonValue; text: string } {
-	let text = JSON.stringify(state(plan, chat));
+function jsonState(
+	plan: Plan,
+	chat?: ChatView,
+	documentDevelopment?: Development.State,
+): { value: JsonValue; text: string } {
+	let text = JSON.stringify(state(plan, chat, documentDevelopment));
 	return { value: JSON.parse(text) as JsonValue, text };
 }
 
 function capture(plan: Plan, chat?: ChatView): Captured {
 	assertEventCapacity(plan.conversationPlan, plan.pendingCardActions.length);
 	if (plan.persistence) assertOptionCapacity(plan);
-	let sidecar = jsonState(plan, chat);
+	let documentDevelopment = Development.capture(plan);
+	let sidecar = jsonState(plan, chat, documentDevelopment);
 	let source = room.project(plan.document);
 	return {
 		...(plan.document.titleKey !== undefined
@@ -374,6 +396,7 @@ function capture(plan: Plan, chat?: ChatView): Captured {
 		document: Y.encodeStateAsUpdate(plan.document.doc),
 		sidecar: sidecar.value,
 		sidecarText: sidecar.text,
+		...(documentDevelopment ? { documentDevelopment } : {}),
 	};
 }
 
@@ -538,6 +561,7 @@ function restoredState(
 	}
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
+	if (Object.hasOwn(item, "documentDevelopment")) expected.push("documentDevelopment");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -704,6 +728,7 @@ function restoredState(
 		|| conversationPlanRetries.some(entry => !messageIds.has(entry.messageId))
 	) throw new Error("hosted channel has conversation analysis without a source message");
 	let workflowRuns = restoreWorkflowRuns(item.workflowRuns);
+	let documentDevelopment = Development.restore(item.documentDevelopment);
 	return {
 		version: 1,
 		revision: item.revision,
@@ -726,6 +751,7 @@ function restoredState(
 		...(outbox.pending.length ? { conversationPlanPendingEffects: outbox.pending } : {}),
 		...(pendingCardActions.length ? { pendingCardActions } : {}),
 		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
+		...(documentDevelopment ? { documentDevelopment } : {}),
 	};
 }
 
@@ -913,6 +939,18 @@ function scheduleCheckpoint(plan: Plan): void {
 	}, 500);
 }
 
+function adoptDevelopment(plan: Plan, state: Development.State | undefined): void {
+	let before = (plan.persistence.committedSidecar as Record<string, JsonValue>).documentDevelopment;
+	let changed = !isDeepStrictEqual(before, state);
+	plan.documentDevelopment = state;
+	if (!changed) return;
+	try {
+		plan.persistence.onDocumentDevelopmentPersisted?.(plan.id, state);
+	} catch (error) {
+		console.warn(`[plan] could not announce document development state for ${plan.id}:`, error);
+	}
+}
+
 async function commitHosted(
 	plan: Plan,
 	update: Uint8Array | undefined,
@@ -923,10 +961,25 @@ async function commitHosted(
 	notifyDocumentPersisted = true,
 ): Promise<void> {
 	let durable = plan.persistence;
+	if (update && captured.documentDevelopment?.recovery) {
+		captured.documentDevelopment.recovery = Recovery.carryRecovery(
+			captured.documentDevelopment.recovery,
+			// Raw human bytes omit deletes cascaded by the live retired parent. Retain them
+			// even when this batch only saves a conflict and produces no corrective delta.
+			captured.recoveryPrepared ? captured.document : update,
+			captured.recoveryPrepared,
+		);
+		captured.sidecar = {
+			...(captured.sidecar as Record<string, JsonValue>),
+			documentDevelopment: JSON.parse(JSON.stringify(captured.documentDevelopment)),
+		};
+		captured.sidecarText = JSON.stringify(captured.sidecar);
+	}
 	if (
 		!update && captured.sidecarText === durable.lastSidecar
 		&& (captured.title === undefined || captured.title === durable.committedTitle)
 	) {
+		adoptDevelopment(plan, captured.documentDevelopment);
 		scheduleCheckpoint(plan);
 		return;
 	}
@@ -973,6 +1026,7 @@ async function commitHosted(
 			captured.sidecar = result.sidecar;
 			captured.sidecarText = JSON.stringify(result.sidecar);
 		}
+		adoptDevelopment(plan, captured.documentDevelopment);
 		durable.lastSidecar = captured.sidecarText;
 		durable.committedEpoch = captured.epoch;
 		durable.committedSource = captured.source;
@@ -1186,6 +1240,7 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 			captured.sidecar = result.sidecar;
 			captured.sidecarText = JSON.stringify(result.sidecar);
 		}
+		adoptDevelopment(plan, captured.documentDevelopment);
 		durable.lastSidecar = captured.sidecarText;
 		durable.committedEpoch = captured.epoch;
 		durable.committedSource = captured.source;
@@ -1455,6 +1510,7 @@ export async function open(
 		conversationPlanEffects: sidecar.conversationPlanEffects ?? [],
 		conversationPlanPendingEffects: sidecar.conversationPlanPendingEffects ?? [],
 		pendingCardActions: sidecar.pendingCardActions ?? [],
+		...(sidecar.documentDevelopment ? { documentDevelopment: sidecar.documentDevelopment } : {}),
 		outlines: new Map(),
 		records: new Map(
 			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
@@ -1475,6 +1531,7 @@ export async function open(
 	};
 
 	let committed = capture(plan);
+	plan.documentDevelopment = committed.documentDevelopment;
 	plan.persistence = {
 		...backend,
 		channelId: id,
@@ -1730,6 +1787,14 @@ async function commit(plan: Plan): Promise<void> {
 		return;
 	}
 
+	let recovered: Awaited<ReturnType<typeof Recovery.recoverHumanBatch>>;
+	try {
+		recovered = await Recovery.recoverHumanBatch(plan, batch.map(item => item.update));
+	} catch (error) {
+		if (!(error instanceof Recovery.RecoveryValidationError)) throw error;
+		await rejectBatch(plan, batch, ["invalid-recovery-update"]);
+		return;
+	}
 	let relationshipsChanged = false;
 	let before = signature(plan);
 	let previousRecords = new Map(plan.records);
@@ -1749,6 +1814,7 @@ async function commit(plan: Plan): Promise<void> {
 	let merged = Y.mergeUpdates([
 		...batch.map(item => item.update),
 		...(correction ? [correction.update] : []),
+		...(recovered?.mutation ? [recovered.mutation.update] : []),
 	]);
 	let operationId = `plan:${plan.document.epoch}:${
 		createHash("sha256").update(merged).digest("hex")
@@ -1759,7 +1825,10 @@ async function commit(plan: Plan): Promise<void> {
 			plan,
 			merged,
 			operationId,
-			capture(plan),
+			{
+				...capture(recovered ? { ...plan, documentDevelopment: recovered.state } : plan),
+				recoveryPrepared: !!recovered,
+			},
 			false,
 			outcome.researchProjections,
 		);
@@ -1792,12 +1861,15 @@ async function commit(plan: Plan): Promise<void> {
 		});
 	}
 
-	if (correction) {
+	if (recovered?.mutation || correction) {
 		broadcast(plan.server, plan.id, {
 			kind: "plan:update",
 			ts: 0,
 			epoch: plan.document.epoch,
-			update: encode(correction.update),
+			update: encode(Y.mergeUpdates([
+				...(correction ? [correction.update] : []),
+				...(recovered?.mutation ? [recovered.mutation.update] : []),
+			])),
 			seq: outcome.seq,
 		});
 	}
@@ -2289,7 +2361,35 @@ export async function close(plan: Plan): Promise<void> {
 	persistence.checkpointTimer = undefined;
 	await Chat.close(plan.chat);
 	await plan.flushing;
+	await commit(plan);
 	await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan), true);
+	if (
+		plan.documentDevelopment?.recovery
+		&& Recovery.recoveryBytes(plan.documentDevelopment.recovery) + room.stateSize(plan.document)
+			>= limits.MAX_COLLAB_BYTES
+		&& !(await plan.persistence.storage.channels.get(plan.id))?.archivedAt
+	) {
+		let compacted = await room.replace(room.project(plan.document));
+		let candidate: Plan = {
+			...plan,
+			document: compacted,
+			records: new Map(plan.records),
+			threads: new Map(plan.threads),
+		};
+		try {
+			if (plan.document.titleKey !== undefined) room.trackTitle(compacted);
+			Questions.rebase(candidate);
+			Comments.rebase(candidate);
+			await replaceHosted(plan, `epoch:${compacted.epoch}`, capture(candidate));
+			plan.document.doc.destroy();
+			plan.document = compacted;
+			plan.records = candidate.records;
+			plan.threads = candidate.threads;
+		} catch (error) {
+			compacted.doc.destroy();
+			throw error;
+		}
+	}
 	await checkpointHosted(plan);
 	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);

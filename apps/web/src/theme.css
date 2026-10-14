@@ -799,11 +799,12 @@ body {
 	gap: calc(var(--spacing) * 2);
 }
 
-.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) {
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"], .document-development-row:empty)) {
 	padding-inline-end: calc(var(--spacing) * 2);
 }
 
-.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) + .room-members {
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"], .document-development-row:empty))
+	+ .room-members {
 	align-self: stretch;
 	padding-inline-start: calc(var(--spacing) * 2);
 	border-inline-start: var(--edge-width) solid var(--color-divider);

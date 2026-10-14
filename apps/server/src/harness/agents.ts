@@ -11,6 +11,7 @@ import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
 import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 import { harnessFor } from "./harnesses";
+import { documentDevelopmentOutputSchema } from "../document-development/schema";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { ToolSet } from "ai";
@@ -197,6 +198,14 @@ function structuredAgent<Schema extends z.ZodType>(
 export function createSummaryAgent(harness: HarnessV1) {
 	return structuredAgent(harness, descriptionSchema, false);
 }
+
+export function createDocumentDevelopmentAgent(harness: HarnessV1) {
+	return structuredAgent(harness, documentDevelopmentOutputSchema, false);
+}
+
+export let documentDevelopmentAgent = createDocumentDevelopmentAgent(
+	harnessFor(harnessSelection()),
+);
 
 export function createResearchAgent(harness: HarnessV1) {
 	return structuredAgent(harness, publicEvidenceSchema, true);

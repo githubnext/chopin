@@ -54,6 +54,8 @@ export type Config = {
 	webResearch: boolean;
 	/** Explicitly enables the conversation-derived cards prototype. */
 	conversationPlan?: boolean;
+	/** Develop provisional prose from ordinary discussion through an isolated worker. */
+	conversationDocument?: boolean;
 	conversationPlanModel?: string;
 	conversationPlanTimeoutMs?: number;
 	/** Explicitly enables Jev-routed foreground visual authoring. */
@@ -245,6 +247,7 @@ export function load(): Config {
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		conversationPlan,
+		conversationDocument: process.env.CONVERSATION_DOCUMENT === "on" && agent && backgroundJobs,
 		conversationPlanModel,
 		conversationPlanTimeoutMs,
 		plannerVisuals,

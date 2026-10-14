@@ -145,11 +145,12 @@ export async function settle(): Promise<void> {
 	for (let i = 0; i < 3; i++) await new Promise(resolve => setTimeout(resolve, 0));
 }
 
-function build(epoch: string): Document {
+function build(epoch: string, report?: (error: unknown) => void): Document {
 	let reg = schema();
 	let editor = createHeadlessEditor({
 		nodes: reg.nodes,
 		onError(err) {
+			report?.(err);
 			console.error("[plan] lexical:", err);
 		},
 	});
@@ -333,6 +334,40 @@ export async function restore(
 		restored.doc.destroy();
 		throw err;
 	}
+}
+
+/** An internal recovery mirror may contain retired projections; only extracted blocks are validated. */
+export async function recoveryDocument(
+	epoch: string,
+	checkpoint: Uint8Array,
+	updates: Uint8Array[] = [],
+): Promise<Document> {
+	let errors: unknown[] = [];
+	let restored = build(epoch, error => errors.push(error));
+	try {
+		Y.applyUpdate(restored.doc, checkpoint, REMOTE);
+		await settle();
+		for (let update of updates) Y.applyUpdate(restored.doc, update, REMOTE);
+		await settle();
+		if (errors.length) throw new AggregateError(errors, "invalid recovery document");
+		return restored;
+	} catch (error) {
+		restored.doc.destroy();
+		throw error;
+	}
+}
+
+/** Export one retained identity without granting authority to the rest of a recovery mirror. */
+export function anchoredSource(target: Document, anchor: Anchor): string | undefined {
+	let index = anchorIndex(target, anchor);
+	if (index === undefined) return undefined;
+	return target.editor.getEditorState().read(() => {
+		let blocks = $exportPlanTree({ registry: schema() }).children.filter(node =>
+			node.type !== "paragraph" || node.children.length > 0
+		);
+		let node = blocks[index];
+		return node ? serialize({ type: "root", children: [node] }) : undefined;
+	});
 }
 
 /** State the given client is missing, or the whole document when it has none. */
@@ -1005,13 +1040,19 @@ export function resolveAnchor(target: Document, anchor: Anchor): string | undefi
 
 /** Whether an anchor resolves to the addressable block at this current index. */
 export function matchesAnchor(target: Document, anchor: Anchor, index: number): boolean {
+	let found = anchorIndex(target, anchor);
+	return found !== undefined && found === index;
+}
+
+/** The canonical index of a live anchored identity, without a content-based fallback. */
+export function anchorIndex(target: Document, anchor: Anchor): number | undefined {
 	let key = resolveAnchor(target, anchor);
-	if (!key) return false;
-	let found: string | undefined;
+	if (!key) return undefined;
+	let found = -1;
 	target.editor.getEditorState().read(() => {
-		found = addressable()[index]?.getKey();
+		found = addressable().findIndex(node => node.getKey() === key);
 	});
-	return key === found;
+	return found < 0 ? undefined : found;
 }
 
 /**

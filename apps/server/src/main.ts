@@ -40,6 +40,15 @@ import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
 import { createEditingUnlocked } from "./plan/editing-unlocked";
 import { researchBriefDefinition } from "./jobs/research-brief";
+import { documentDevelopmentDefinition } from "./document-development/job";
+import { executionAllowed as documentDevelopmentAllowed } from "./document-development/execution";
+import { DocumentDevelopment } from "./document-development/runtime";
+import {
+	recoveryView,
+	stateView as documentDevelopmentState,
+	view as documentDevelopmentView,
+} from "./document-development/view";
+import { recoveryConflicts, resolveRecovery } from "./document-development/recovery-actions";
 import {
 	greetJoinedPlan,
 	prepareOpenedPlan,
@@ -166,6 +175,7 @@ let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
+let documentDevelopment: DocumentDevelopment | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
 let readinessReviews = new ReadinessReviews({
@@ -201,6 +211,7 @@ let conversationRuntime = createConversationRuntime({
 	server: () => server,
 	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
 	researchJobs: () => researchBriefJobs,
+	memberMessagePersisted: (opened, entry) => documentDevelopment?.message(opened, entry),
 });
 
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
@@ -278,6 +289,10 @@ function documentBackend(): Service.Backend {
 			buildReadiness?.schedule(target);
 			spikeScout?.schedule(target);
 		},
+		onDocumentDevelopmentPersisted: (id, state) => {
+			if (config.conversationDocument) broadcast(server, id, documentDevelopmentState(state));
+			broadcast(server, id, recoveryView(state));
+		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
 		onEditingUnlocked: createEditingUnlocked({
@@ -349,7 +364,10 @@ function settlePendingSpikes(channelId: string): void {
 /** Wake owner-bound work: background jobs and spike settlements that waited for an owner. */
 function ownerAvailable(channelId: string): Promise<void> {
 	let opened = Rooms.get(channelId)?.plan;
-	if (opened) conversationRuntime.wake(opened);
+	if (opened) {
+		conversationRuntime.wake(opened);
+		documentDevelopment?.wake(opened);
+	}
 	settlePendingSpikes(channelId);
 	void reviewCompletedInvestigations(channelId);
 	void currentDocumentTarget(channelId).then(target => {
@@ -477,6 +495,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			!!channel && !channel.parentChannelId,
 		);
 		if (!channel?.archivedAt) {
+			documentDevelopment?.wake(opened);
 			if (summaryCoordinator) void summaryCoordinator.ensure(room.id).catch(() => {});
 			if (Inject.enabled(opened)) Inject.ask(opened, server, room.id);
 			if (Marks.enabled(opened)) await Marks.mark(opened);
@@ -814,6 +833,7 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
 	let closing = withDocumentLock(room.id, async () => {
 		if (!force && (room.members.size > 0 || room.holds)) return;
 		let held = room.plan;
+		documentDevelopment?.forget(room.id);
 		room.plan = undefined;
 		if (held) {
 			let stopped = conversationRuntime.stop(held);
@@ -927,6 +947,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (currentChannel) applyChannelAccess(ws, currentChannel, ws.data.canManage);
 				implementations?.track(room.id);
 				let parent = room.parentChannelId;
+				if (documentDevelopment && !parent) tell(ws, documentDevelopmentView(opened));
+				if (!parent) tell(ws, recoveryView(opened.documentDevelopment));
 				await greetJoinedPlan(
 					opened,
 					ws,
@@ -1037,6 +1059,91 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			else if (frame.kind === "chat:unqueue") Chat.unqueue(chat(room, ws), ws, frame);
 			else await Chat.controlRun(chat(room, ws), ws, frame);
 			return;
+
+		case "document-development:control": {
+			let opened = room.plan;
+			if (
+				!documentDevelopment || !opened || opened.parentChannelId
+				|| archivingChannels.has(room.id) || ws.data.channelArchivedAt
+				|| typeof frame.paused !== "boolean"
+			) {
+				fail(ws, frame.rid, "Document updates are unavailable.");
+				return;
+			}
+			try {
+				await documentDevelopment.pause(opened, frame.paused);
+				reply(ws, frame.rid, documentDevelopmentView(opened));
+			} catch (error) {
+				fail(
+					ws,
+					frame.rid,
+					error instanceof Error ? error.message : "Cannot change draft updates.",
+				);
+			}
+			return;
+		}
+
+		case "document-development:recovery-read":
+		case "document-development:recovery-resolve": {
+			let opened = room.plan;
+			if (
+				!opened || opened.parentChannelId || room.closing
+				|| typeof frame.id !== "string" || frame.id.length > 200
+				|| typeof frame.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(frame.digest)
+			) {
+				fail(ws, frame.rid, "Recovered edits are unavailable.");
+				return;
+			}
+			let current = recoveryConflicts(opened).find(item =>
+				item.id === frame.id && item.digest === frame.digest
+			);
+			let stale = () => {
+				tell(ws, recoveryView(opened.documentDevelopment));
+				fail(ws, frame.rid, "These recovered edits have changed. Open the latest version.");
+			};
+			if (!current) return stale();
+			if (frame.kind === "document-development:recovery-read") {
+				reply(ws, frame.rid, {
+					kind: "document-development:recovery-read",
+					ts: 0,
+					item: current,
+				});
+				return;
+			}
+			if (
+				archivingChannels.has(room.id) || ws.data.channelArchivedAt
+				|| !["add", "dismiss"].includes(frame.action)
+			) {
+				fail(ws, frame.rid, "Recovered edits are unavailable.");
+				return;
+			}
+			try {
+				let result = await resolveRecovery(
+					opened,
+					frame.id,
+					frame.digest,
+					frame.action,
+					() =>
+						Rooms.get(room.id) === room && room.plan === opened && !room.closing
+						&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id)
+						&& !ws.data.channelArchivedAt && !ws.data.closed && ws.data.canEdit
+						&& ws.data.room === room.id && room.members.get(ws.data.client) === ws,
+				);
+				if (result === "stale") return stale();
+				if (result === "blocked") {
+					fail(ws, frame.rid, "Recovered edits cannot be changed while the document is locked.");
+					return;
+				}
+				reply(ws, frame.rid, recoveryView(opened.documentDevelopment));
+			} catch (error) {
+				fail(
+					ws,
+					frame.rid,
+					error instanceof Error ? error.message : "Cannot resolve recovered edits.",
+				);
+			}
+			return;
+		}
 
 		case "conversation-plan:correct":
 		case "conversation-plan:scoped-choice-save":
@@ -1206,6 +1313,7 @@ const VIEWER_ALLOWED = new Set([
 	"job:list",
 	"job:get",
 	"conversation-plan:research-link",
+	"document-development:recovery-read",
 ]);
 
 type AnySocket = ServerWebSocket<SocketData | SidebarSocketData | PlannerLinkSocketData>;
@@ -1665,6 +1773,7 @@ function drain(): Promise<void> {
 			if (result.status === "rejected") record(result.reason);
 		}
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
+		await documentDevelopment?.close();
 		summaryCoordinator?.close();
 		liveSync?.close();
 		buildReadiness?.close();
@@ -1756,6 +1865,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 	let room = Rooms.get(channelId);
 	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
 	try {
+		documentDevelopment?.forget(channelId);
 		await summaryCoordinator?.suspend(channelId);
 		let result = await withDocumentLock(channelId, async () => {
 			let active = Rooms.get(channelId)?.plan;
@@ -1848,6 +1958,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 	let room = Rooms.get(channelId);
 	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
 	try {
+		documentDevelopment?.forget(channelId);
 		await summaryCoordinator?.suspend(channelId);
 		await jobRunner?.cancelChannel(channelId);
 		ownerBindings?.revokeChannel(channelId);
@@ -2145,6 +2256,7 @@ if (config.agent && config.harness === "remote") {
 let definitions: JobDefinition[] = [];
 if (config.backgroundJobs) {
 	definitions.push(researchBriefDefinition({ config }));
+	if (config.conversationDocument) definitions.push(documentDevelopmentDefinition({ config }));
 	definitions.push(documentSummaryDefinition({
 		config,
 		current: currentDocumentTarget,
@@ -2168,6 +2280,7 @@ let jobService = new JobService({
 	},
 	onChange: job => {
 		jobRunner?.notify(job);
+		documentDevelopment?.jobChanged(job);
 		if (job.state === "completed") {
 			void descriptionProjector?.jobChanged(job).catch(err => {
 				console.error("chopin: document description reconciliation failed -", err);
@@ -2180,6 +2293,48 @@ let jobService = new JobService({
 	publish: announceJobsChanged,
 });
 if (config.agent && config.backgroundJobs) researchBriefJobs = jobService;
+if (config.conversationDocument) {
+	documentDevelopment = new DocumentDevelopment({
+		jobs: jobService,
+		async withPlan(id, action) {
+			let current = Rooms.get(id);
+			let opened = current?.plan;
+			if (!current || !opened || current.closing) return;
+			let held = Rooms.hold(id);
+			try {
+				let channel = await storage.channels.get(id);
+				let available = () =>
+					!draining && !channel?.archivedAt && !!channel
+					&& !channel.parentChannelId && current.plan === opened && !current.closing
+					&& !archivingChannels.has(id) && !deletingChannels.has(id);
+				if (!available()) return;
+				return await action(opened, available);
+			} finally {
+				held.release();
+				evict(held.room);
+			}
+		},
+		async authorize(id) {
+			let owner = await ownerBindings?.resolve(id);
+			if (!owner) return;
+			try {
+				if (await owner.revalidate()) {
+					return {
+						valid: () => !owner.signal.aborted && Date.now() < owner.expiresAt.getTime(),
+						release: owner.release,
+					};
+				}
+			} catch (error) {
+				owner.release();
+				throw error;
+			}
+			owner.release();
+		},
+		changed: opened => broadcast(server, opened.id, documentDevelopmentView(opened)),
+		error: err => console.error("chopin: document development failed -", err),
+	});
+}
+
 if (config.backgroundJobs) {
 	descriptionProjector = new DocumentDescriptionProjector({
 		storage,
@@ -2251,8 +2406,17 @@ jobRunner = new JobRunner({
 		return writerLease.held;
 	},
 	resolveActivePlanner: async job => {
+		let allowed = async () => {
+			if (job.type !== "document-development") return true;
+			if (!config.conversationDocument) return false;
+			let current = Rooms.get(job.channelId)?.plan
+				?? (await storage.collaboration.load(job.channelId, new Date()))?.sidecar;
+			return documentDevelopmentAllowed(current, job);
+		};
+		if (!await allowed()) return undefined;
 		let binding = await ownerBindings!.resolve(job.channelId);
 		if (!binding) return undefined;
+		let revalidate = async () => await allowed() && await binding.revalidate();
 		return {
 			credential: {
 				kind: "active-planner",
@@ -2262,7 +2426,7 @@ jobRunner = new JobRunner({
 				credentialRevision: binding.credentialRevision,
 				expiresAt: new Date(binding.expiresAt),
 				signal: binding.signal,
-				authorize: binding.revalidate,
+				authorize: revalidate,
 			},
 			ownerKey: binding.ownerSessionId,
 			binding: {
@@ -2273,7 +2437,7 @@ jobRunner = new JobRunner({
 				repositoryId: binding.repository.id,
 			},
 			signal: binding.signal,
-			active: binding.revalidate,
+			active: revalidate,
 			release: binding.release,
 		};
 	},

@@ -1,0 +1,45 @@
+.document-development-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: var(--spacing);
+}
+
+.document-development-row:not(:has(.document-development)) {
+	display: none;
+}
+
+.document-development-glyph {
+	display: none;
+}
+
+@container document-title-bar (max-width: 40rem) {
+	.document-title-status .document-development-glyph {
+		display: block;
+	}
+
+	/* The extra controls need the machine picker's compact form before the title runs out. */
+	.document-title-status:has(.document-development) .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.document-title-status:has(.document-development)
+		:is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
+/* Both controls share the document's existing top inset, including on phones. */
+.document-development-row[data-inset] {
+	width: max-content;
+	max-width: 100%;
+	margin-inline-start: auto;
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 4);
+	background: var(--color-page);
+}
+
+.navigation-modal-content.document-recovery-dialog {
+	max-height: calc(100dvh - var(--spacing) * 8);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}

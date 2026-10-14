@@ -197,6 +197,7 @@ async function seed(
 		transcript: state.transcript ?? [],
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
+		...(state.documentDevelopment ? { documentDevelopment: state.documentDevelopment } : {}),
 	};
 	await sql(port, async database => {
 		await database`

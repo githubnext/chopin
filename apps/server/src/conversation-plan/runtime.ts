@@ -28,6 +28,7 @@ type RuntimeDeps = {
 	interpret?: Dependencies["interpret"];
 	researchInterpret?: Dependencies["researchInterpret"];
 	researchJobs?: () => JobService | undefined;
+	memberMessagePersisted?: (plan: Plan.Plan, entry: Plan.Plan["chat"]["entries"][number]) => void;
 	onError?: (error: unknown) => void;
 };
 
@@ -241,6 +242,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			contexts.remember(opened, "authenticated-context", context);
 			context.memberMessagePersisted = (entry, claimantSessionId) => {
 				if (!deps.config.agent || entry.author.kind !== "member") return;
+				deps.memberMessagePersisted?.(opened, entry);
 				admissions.set(opened, { id: entry.id, context: { ...context, claimantSessionId } });
 				admit(opened);
 			};

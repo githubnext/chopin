@@ -41,6 +41,7 @@ function server(port: number, database: string, extra: Record<string, string>) {
 			SERVER_HOST: HOST,
 			AGENT: "off",
 			CONVERSATION_PLAN: process.env.E2E_RESEARCH_OFFERS === "1" ? "on" : "off",
+			CONVERSATION_DOCUMENT: "off",
 			JEV_API_KEY: "e2e-jev-only",
 			JEV_MODEL: "jev-e2e",
 			BACKGROUND_JOBS: "on",
@@ -76,8 +77,9 @@ function harnessServer(port: number, database: string) {
 			SERVER_HOST: HOST,
 			AGENT: "on",
 			CONVERSATION_PLAN: "off",
+			CONVERSATION_DOCUMENT: process.env.E2E_DOCUMENT_DEVELOPMENT === "1" ? "on" : "off",
 			HARNESS: "e2e-fake",
-			BACKGROUND_JOBS: "off",
+			BACKGROUND_JOBS: process.env.E2E_DOCUMENT_DEVELOPMENT === "1" ? "on" : "off",
 			WEB_RESEARCH: "off",
 			STORAGE_DRIVER: "postgres",
 			DATABASE_URL: database,
@@ -172,6 +174,7 @@ export default defineConfig({
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
 				"**/document-title-naming.e2e.ts",
+				"**/document-development.e2e.ts",
 				"**/harness-comments.e2e.ts",
 				"**/harness-decisions-deck.e2e.ts",
 				"**/harness-children.e2e.ts",
@@ -205,6 +208,9 @@ export default defineConfig({
 			testMatch: [
 				"**/harness.e2e.ts",
 				"**/document-title-naming.e2e.ts",
+				...(process.env.E2E_DOCUMENT_DEVELOPMENT === "1"
+					? ["**/document-development.e2e.ts"]
+					: []),
 				"**/harness-comments.e2e.ts",
 				"**/harness-decisions-deck.e2e.ts",
 				"**/harness-children.e2e.ts",

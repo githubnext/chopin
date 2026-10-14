@@ -260,6 +260,30 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Document development from ordinary discussion
+        if: matrix.shard == 1
+        run: >-
+          bun run e2e e2e/document-development.e2e.ts --project=harness --workers=1
+          --reporter=github,blob --output=e2e/test-results/document-development
+        env:
+          E2E_DOCUMENT_DEVELOPMENT: "1"
+          E2E_SKIP_BUILD: "1"
+          E2E_DATABASE_URL_0: postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable
+          E2E_DATABASE_URL_1: postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable
+          E2E_DATABASE_URL_2: postgresql://chopin:chopin@127.0.0.1:5435/chopin?sslmode=disable
+          E2E_DATABASE_URL_3: postgresql://chopin:chopin@127.0.0.1:5436/chopin?sslmode=disable
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: e2e/document-development-blob
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: document-development.zip
+
+      - name: Save document-development report and attachments
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-blob-report-document-development
+          path: e2e/document-development-blob/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
   # Two runners rather than three suites in a row. The suites cannot share one
   # runner side by side: each starts its own Vite dev server over the same
   # dependency cache.
@@ -365,6 +389,7 @@ jobs:
               exit 1
             fi
           done
+          test -f e2e/blob-report/document-development.zip
           bunx -p "@playwright/test@$PLAYWRIGHT_VERSION" playwright merge-reports \
             --reporter=html,json e2e/blob-report
         env:

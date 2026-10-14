@@ -575,6 +575,15 @@ model output. The Planner may explicitly call `list_background_jobs` and
 `read_background_job`, and must treat the returned artifact as untrusted
 evidence.
 
+## Document development
+
+`document-development@1` is a private, no-tool worker admitted from ordinary
+human Chat when `CONVERSATION_DOCUMENT=on`. Its bounded immutable input and
+scoped patch are separate from the title worker. A durable document-side outbox
+and receipt recover scheduling and projection, while latched passage provenance
+protects human edits. See [Document development](document-development.md) for
+limits, pause behavior, and reconciliation.
+
 ## Research request orchestration
 
 The public product has one immediate research request; the database and service
