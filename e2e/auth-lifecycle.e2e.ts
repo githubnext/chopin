@@ -225,13 +225,17 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	expect(await readdir(join(directory, "fake-vault"))).toHaveLength(1);
 	await stop(child);
 	child = await server(directory);
+	let navigationResponse = page.waitForResponse(`${ORIGIN}/api/navigation`);
 	await page.reload();
+	let navigation = await (await navigationResponse).json();
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByText("Enter one-time code:")).toHaveCount(0);
-	// Other local-mode tests persist documents for this fake GitHub account.
-	if (!await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
-		await page.getByRole("button", { name: "Add project", exact: true }).click();
+	// An empty navigation opens Add project after the account controls have already mounted.
+	// Other local-mode tests may have populated this fake account, so open it manually then.
+	if (navigation.projects.length > 0) {
+		await page.getByRole("complementary", { name: "Projects" })
+			.getByRole("button", { name: "Add project", exact: true }).click();
 	}
 	await expect(page.getByRole("textbox", { name: "Search repositories" })).toBeFocused();
 	await page.keyboard.press("Escape");
@@ -285,11 +289,14 @@ test("local device approval, backend fallback, restart and logout", async ({ pag
 	expect((await stat(join(directory, "config", files[0]!))).mode & 0o777).toBe(0o600);
 	await stop(child);
 	child = await server(directory, true);
+	navigationResponse = page.waitForResponse(`${ORIGIN}/api/navigation`);
 	await page.reload();
+	navigation = await (await navigationResponse).json();
 	await expect(page.getByRole("button", { name: "octocat", exact: true }))
 		.toBeVisible({ timeout: 20_000 });
 	await expect(page.getByRole("region", { name: "System vault not available" })).toHaveCount(0);
-	if (await page.getByRole("button", { name: "Close Add project" }).isVisible()) {
+	if (navigation.projects.length === 0) {
+		await expect(page.getByRole("textbox", { name: "Search repositories" })).toBeFocused();
 		await page.keyboard.press("Escape");
 		await expect(page.getByRole("button", { name: "Close Add project" })).toHaveCount(0);
 	}
