@@ -35,7 +35,11 @@ const CURRENT = {
 
 async function setup(
 	shared?: { storage: MemoryStorage; lease: unknown },
-	extra: { implementations?: () => ImplementationConnector | undefined } = {},
+	{ durable = true, ...extra }: {
+		implementations?: () => ImplementationConnector | undefined;
+		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
+		durable?: boolean;
+	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
 	let now = new Date();
@@ -70,7 +74,8 @@ async function setup(
 	let github = {
 		repositoryAccess: async (token: string, owner: string, name: string) => {
 			checked.push(token);
-			return { id: name, owner, name, permissions: { pull: true, push: true, admin: false } };
+			let push = name !== "readonly";
+			return { id: name, owner, name, permissions: { pull: true, push, admin: false } };
 		},
 	} as unknown as GitHub;
 	let config = {
@@ -83,7 +88,7 @@ async function setup(
 	let refresh = { refuse: false, count: 0 };
 	let clock = { offset: 0 };
 	let machines = new Machines(storage, () => new Date(Date.now() + clock.offset), {
-		key: config.encryptionKey,
+		key: durable ? config.encryptionKey : undefined,
 		origin: config.origin,
 		clientId: config.clientId,
 		refresh: async () => {
@@ -107,10 +112,11 @@ async function setup(
 		github,
 		config,
 		admission: new Admission(config, github),
-		clock: () => new Date(),
+		clock: () => new Date(Date.now() + clock.offset),
 		machines,
 		pairings: {} as {
 			complete?: (pairing: string, userId: string, grant: never) => Promise<string>;
+			authorized?: (userId: string, grant: never) => void;
 		},
 	};
 	let runtime = registerExperimentRoutes(router, auth as never, {
@@ -159,6 +165,19 @@ async function setup(
 			refreshExpiresIn: 15_897_600,
 		} as never);
 	}
+	/** GitHub authorizes the next machine a pairing key pairs, as the OAuth callback does. */
+	function authorizeKeys(userId: string, accessToken = "ghu_key_1") {
+		auth.pairings.authorized!(userId, {
+			accessToken,
+			accessExpiresIn: 28_800,
+			refreshToken: accessToken.replace("ghu_", "ghr_"),
+			refreshExpiresIn: 15_897_600,
+		} as never);
+	}
+	/** Mint a pairing key in the browser, as the Machines page does. */
+	async function mint(cookie: string) {
+		return (await request("/api/connector/pairing-keys", {}, cookie)).json();
+	}
 	/** Register a checkout with a paired machine's token, as `chopin connect` does. */
 	async function open(machineToken: string, repository = "org/repo") {
 		return request(
@@ -205,6 +224,8 @@ async function setup(
 		pair,
 		open,
 		authorized,
+		authorizeKeys,
+		mint,
 		checked,
 		refresh,
 		clock,
@@ -829,6 +850,118 @@ test("a pairing completes only for the GitHub account that approved it", async (
 			secret: pending.secret,
 		})).json(),
 	).toEqual({ waiting: true });
+});
+
+const CHECKOUT = { repository: "org/repo", commit: "a".repeat(40), label: "Laptop" };
+const REFUSED_KEY = { error: "pairing-key-invalid" };
+
+test("a pairing key minted in the browser pairs a machine once, at once, with automatic work off", async () => {
+	let { alice, request, mint, authorizeKeys, open, checked } = await setup();
+	expect((await request("/api/connector/pairing-keys", {})).status).toBe(401);
+	// The machine needs its own GitHub authorization, which the key carries from the browser.
+	expect(await mint(alice.cookie)).toEqual({ authorize: "/auth/github/connector?key" });
+	authorizeKeys("alice");
+	let before = Date.now();
+	let minted = await mint(alice.cookie);
+	expect(minted.key).toMatch(/^chopin_k_[A-Za-z0-9_-]{43}$/);
+	expect(minted.expiresAt).toBeGreaterThanOrEqual(before + 10 * 60_000);
+	expect(minted.expiresAt).toBeLessThanOrEqual(Date.now() + 10 * 60_000);
+
+	let paired = await request("/api/connector/pairings", { ...CHECKOUT, key: minted.key });
+	expect(paired.status).toBe(200);
+	let { token } = await paired.json();
+	expect(token).toMatch(/^chopin_m_/);
+	// The repository was checked with the authorization the key carried, not the browser's.
+	expect(checked).toEqual(["ghu_key_1"]);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toMatchObject([
+		{ label: "Laptop", repositories: ["org/repo"], autoRun: false },
+	]);
+	expect((await open(token)).status).toBe(200);
+	expect(checked.at(-1)).toBe("ghu_key_1");
+
+	// Used once, it is refused, and the authorization went with it.
+	let again = await request("/api/connector/pairings", { ...CHECKOUT, key: minted.key });
+	expect(again.status).toBe(403);
+	expect(await again.json()).toEqual(REFUSED_KEY);
+	expect(await mint(alice.cookie)).toEqual({ authorize: "/auth/github/connector?key" });
+});
+
+test("two machines racing with one pairing key: exactly one pairs", async () => {
+	let { alice, request, mint, authorizeKeys } = await setup();
+	authorizeKeys("alice");
+	let { key } = await mint(alice.cookie);
+	let answers = await Promise.all(
+		[1, 2].map(() => request("/api/connector/pairings", { ...CHECKOUT, key })),
+	);
+	expect(answers.map(answer => answer.status).sort()).toEqual([200, 403]);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toHaveLength(1);
+});
+
+test("an expired, replaced, malformed or unknown pairing key is refused alike", async () => {
+	let { alice, request, mint, authorizeKeys, clock } = await setup();
+	authorizeKeys("alice");
+	let first = await mint(alice.cookie);
+	let second = await mint(alice.cookie);
+	let refused = async (key: string) => {
+		let answer = await request("/api/connector/pairings", { label: "Laptop", key });
+		return [answer.status, await answer.json()];
+	};
+	// Minting another revokes the one before it.
+	expect(await refused(first.key)).toEqual([403, REFUSED_KEY]);
+	expect(await refused("chopin_k_short")).toEqual([403, REFUSED_KEY]);
+	expect(await refused(`chopin_k_${"A".repeat(43)}`)).toEqual([403, REFUSED_KEY]);
+	clock.offset = 10 * 60_000 + 1;
+	expect(await refused(second.key)).toEqual([403, REFUSED_KEY]);
+	// No machine was paired by any of them.
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toEqual([]);
+});
+
+test("a pairing key gives no more than the browser approval: push access, its own account", async () => {
+	let { alice, bob, request, mint, authorizeKeys } = await setup();
+	// Bob's GitHub authorization never lets Alice mint.
+	authorizeKeys("bob");
+	expect(await mint(alice.cookie)).toEqual({ authorize: "/auth/github/connector?key" });
+	authorizeKeys("alice");
+	let { key } = await mint(alice.cookie);
+	// A checkout the account can't push to is refused, and the key is not spent on it.
+	let readonly = await request("/api/connector/pairings", {
+		...CHECKOUT,
+		repository: "org/readonly",
+		key,
+	});
+	expect(readonly.status).toBe(403);
+	expect((await readonly.json()).error).toBe("repository-forbidden");
+	expect((await request("/api/connector/pairings", { ...CHECKOUT, key })).status).toBe(200);
+	// The machine is Alice's, not Bob's.
+	let bobs = await (await request("/api/connector/machines", undefined, bob.cookie)).json();
+	expect(bobs.machines).toEqual([]);
+});
+
+test("minting pairing keys is rate-limited per person", async () => {
+	let { alice, bob, request, authorizeKeys, clock } = await setup();
+	authorizeKeys("alice");
+	authorizeKeys("bob");
+	let mint = (cookie: string) => request("/api/connector/pairing-keys", {}, cookie);
+	for (let index = 0; index < 10; index++) expect((await mint(alice.cookie)).status).toBe(200);
+	let limited = await mint(alice.cookie);
+	expect(limited.status).toBe(429);
+	expect(await limited.json()).toEqual({ error: "pairing-key-rate-limited" });
+	expect((await mint(bob.cookie)).status).toBe(200);
+	clock.offset = 10 * 60_000;
+	expect((await mint(alice.cookie)).status).toBe(200);
+});
+
+test("under AUTH_MODE=local a key needs no GitHub step and pairs with the owner's login", async () => {
+	let { alice, request, mint, checked } = await setup(undefined, { durable: false });
+	let { key } = await mint(alice.cookie);
+	expect(key).toMatch(/^chopin_k_/);
+	let paired = await request("/api/connector/pairings", { ...CHECKOUT, key });
+	expect(paired.status).toBe(200);
+	expect((await paired.json()).token).toMatch(/^chopin_m_/);
+	expect(checked).toEqual(["token"]);
 });
 
 test("a pairing carries a confirmation code the page can show", async () => {

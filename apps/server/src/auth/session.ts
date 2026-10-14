@@ -51,7 +51,10 @@ type StoredAttempt = {
 	verifier: string;
 	expiresAt: string;
 	returnPath?: string;
-	/** A connector pairing this authorization mints a machine's own GitHub token pair for. */
+	/**
+	 * A connector pairing this authorization mints a machine's own GitHub token pair for, or `key`
+	 * for the next machine a pairing key pairs.
+	 */
 	pairing?: string;
 };
 

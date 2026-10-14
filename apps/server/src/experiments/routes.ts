@@ -20,6 +20,7 @@ import { documentUrl } from "../channels/document-url";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
 import type { Connection } from "./connections";
+import { PairingKeys } from "./pairing-keys";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
 import { investigationSummary } from "./document";
@@ -54,12 +55,16 @@ type Options = {
 	planners?: MachinePlanners;
 };
 const label = z.string().trim().min(1).max(100);
-/** `chopin pair` names a checkout only when it runs inside one. */
+/**
+ * `chopin pair` names a checkout only when it runs inside one. With a pairing key it pairs at
+ * once, as the key's owner.
+ */
 const pairingSchema = z.object({
 	label,
 	repository: sourceSchema.shape.repository.optional(),
 	commit: sourceSchema.shape.commit.optional(),
 	branch: sourceSchema.shape.branch,
+	key: z.string().max(100).optional(),
 }).strict().refine(value => !value.repository === !value.commit, "invalid checkout");
 const checkoutSchema = sourceSchema.omit({ repositoryId: true }).extend({ label }).strict();
 
@@ -150,6 +155,8 @@ function json(value: unknown, status = 200) {
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections();
+	let keys = new PairingKeys(() => auth.clock().getTime());
+	auth.pairings.authorized = (userId, grant) => keys.authorize(userId, grant);
 	let changed = (id: string) => {
 		void auth.storage.channels.get(id).then(
 			channel => channel && connections.wake(channel.repositoryId),
@@ -295,10 +302,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					},
 					code === "authentication-required" || code.startsWith("machine-")
 						? 401
-						: code.includes("forbidden")
+						: code.includes("forbidden") || code === "pairing-key-invalid"
 						? 403
 						: code === "not-found"
 						? 404
+						: code === "pairing-key-rate-limited"
+						? 429
 						: code === "unavailable"
 						? 503
 						: 409,
@@ -311,9 +320,61 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("GET", "/api/connector/version", async () => json(versions));
 	route("POST", "/api/connector/pairings", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
-		let created = connections.create(pairingSchema.parse(await body(request)));
+		let { key, ...input } = pairingSchema.parse(await body(request));
+		if (key !== undefined) return json(await keyed(key, input));
+		let created = connections.create(input);
 		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
 	});
+	/**
+	 * A signed-in person mints a single-use key that pairs one machine as them, as approving its
+	 * pairing would. Where machines hold their own GitHub authorization, GitHub authorizes the next
+	 * machine first, in the browser, and the key carries that authorization to the machine.
+	 */
+	route("POST", "/api/connector/pairing-keys", async request => {
+		z.object({}).strict().parse(await body(request));
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		if (auth.machines.durable && !keys.authorized(session.user.id)) {
+			return json({ authorize: "/auth/github/connector?key" });
+		}
+		return json(keys.mint(session.user.id));
+	});
+	/**
+	 * Pair a machine with a key: approved at once as the key's owner, with automatic work off, and
+	 * a checkout only one the owner can push to, all as approving in the browser would. The key is
+	 * spent only once those checks pass.
+	 */
+	async function keyed(key: string, input: z.infer<typeof pairingSchema>) {
+		let { userId, grant } = keys.peek(key);
+		let caller: Caller;
+		if (auth.machines.durable) {
+			if (!grant) fail("pairing-key-invalid");
+			caller = { userId, use: operation => operation(grant.accessToken) };
+		} else {
+			let session = await auth.sessions.forUser(userId);
+			if (!session) fail("owner-sign-in-required");
+			caller = browser(session);
+		}
+		let repository = input.repository
+			? await repositoryWrite(caller, input.repository)
+			: undefined;
+		let spent = keys.take(key);
+		let { token } = await auth.machines.pair({
+			userId,
+			label: input.label,
+			repositories: repository && input.repository && input.commit
+				? [{
+					repositoryId: repository.id,
+					repository: input.repository,
+					commit: input.commit,
+					...(input.branch ? { branch: input.branch } : {}),
+				}]
+				: [],
+			autoRun: false,
+			...(spent.grant && auth.machines.durable ? { grant: spent.grant } : {}),
+		});
+		return { token };
+	}
 	/** Where the pairing page sends the person once the machine is paired. */
 	function landing(input: { repository?: string }) {
 		let [owner, name] = input.repository?.split("/") ?? [];
@@ -1032,6 +1093,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	async function sweep() {
 		connections.sweep();
+		keys.sweep();
 		await service.recover();
 		await options.implementations?.()?.sweep();
 		let active = await service.store.active();

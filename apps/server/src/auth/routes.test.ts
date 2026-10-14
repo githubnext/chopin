@@ -435,6 +435,58 @@ describe("hosted authentication routes", () => {
 		expect(malformed!.status).toBe(400);
 	});
 
+	it("holds GitHub's authorization of pairing keys only for the account signed in here", async () => {
+		let github = new FakeGitHub();
+		let router = new Router();
+		let auth = registerAuthRoutes(router, { config: CONFIG, storage: new MemoryStorage(), github });
+		let held: Array<{ userId: string; accessToken: string }> = [];
+		auth.pairings.authorized = (userId, grant) => {
+			held.push({ userId, accessToken: grant.accessToken });
+		};
+		let session = pair(
+			cookies(await callback(router)).find(value => value.startsWith("__Host-chopin_session="))!,
+		);
+		let authorize = async (cookie?: string) => {
+			let start = (await router.handle(
+				new Request("https://chopin.test/auth/github/connector?key"),
+			))!;
+			expect(start.status).toBe(302);
+			let state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+			let back = new URL("https://chopin.test/auth/github/callback");
+			back.searchParams.set("code", "code");
+			back.searchParams.set("state", state);
+			return (await router.handle(
+				new Request(back, {
+					headers: { cookie: [pair(cookies(start)[0]!), cookie].filter(Boolean).join("; ") },
+				}),
+			))!;
+		};
+		// Signed out, there is no account here to hold it for.
+		expect((await authorize()).status).toBe(403);
+		expect(held).toEqual([]);
+
+		let response = await authorize(session);
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toBe("/connect?add");
+		expect(held).toEqual([{ userId: "U_octocat", accessToken: "ghu_route_secret" }]);
+		expect(cookies(response).some(value => value.includes("chopin_session="))).toBe(false);
+
+		// GitHub signed in as someone else: refused, so no key carries another account's grant.
+		github.exchange = async () => ({
+			accessToken: "ghu_route_other",
+			accessExpiresIn: 28_800,
+			refreshToken: "ghr_route_other",
+			refreshExpiresIn: 15_897_600,
+		});
+		github.user = async () => ({ id: "U_other", login: "other", avatarUrl: "" });
+		let other = await authorize(session);
+		expect(other.status).toBe(403);
+		expect(await other.json()).toEqual({
+			error: "GitHub authorized @other, but you are signed in to Chopin as @octocat.",
+		});
+		expect(held).toHaveLength(1);
+	});
+
 	it("falls back to the product root for unsafe, empty, or duplicate return paths", async () => {
 		let router = new Router();
 		registerAuthRoutes(router, {

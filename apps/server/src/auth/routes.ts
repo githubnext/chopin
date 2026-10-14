@@ -17,6 +17,8 @@ type Clock = () => Date;
 
 const RETURN_PATH_MAX_LENGTH = 2_048;
 const RESERVED_RETURN_PATHS = ["/api", "/auth", "/ws", "/mcp"];
+/** The OAuth attempt's pairing when it authorizes pairing keys rather than one pairing's machine. */
+const KEY_ATTEMPT = "key";
 
 type Dependencies = {
 	config: AuthConfig;
@@ -41,10 +43,12 @@ export type HostedAuth = {
 	machines: Machines;
 	/**
 	 * Finishes a connector pairing once GitHub authorized a token pair for that machine, returning
-	 * where the browser goes next. Set by the connector routes.
+	 * where the browser goes next; and holds an authorization for the pairing keys a person mints.
+	 * Set by the connector routes.
 	 */
 	pairings: {
 		complete?: (pairing: string, userId: string, grant: GitHubTokenGrant) => Promise<string>;
+		authorized?: (userId: string, grant: GitHubTokenGrant) => void;
 	};
 	clock: Clock;
 };
@@ -317,10 +321,10 @@ export function registerAuthRoutes(
 		});
 		// GitHub refresh tokens are single-use, so a paired machine gets its own authorization
 		// rather than a copy of the browser login's. An App the person already authorized returns
-		// at once without asking again.
+		// at once without asking again. `?key` authorizes the next machine a pairing key pairs.
 		router.on("GET", "/auth/github/connector", async (_request, url) => {
-			let pairing = parameter(url, "pairing");
-			if (!pairing || !/^[0-9a-f-]{36}$/.test(pairing)) {
+			let pairing = url.searchParams.has("key") ? KEY_ATTEMPT : parameter(url, "pairing");
+			if (!pairing || pairing !== KEY_ATTEMPT && !/^[0-9a-f-]{36}$/.test(pairing)) {
 				return json({ error: "pairing is missing or invalid" }, 400);
 			}
 			let issued = await attempts.issue(undefined, pairing);
@@ -372,6 +376,25 @@ export function registerAuthRoutes(
 				let profile = await admission.user(grant.accessToken);
 				let now = clock();
 				await storage.users.put({ ...profile, now });
+				if (stored.pairing === KEY_ATTEMPT) {
+					// Held for the account signed in here only, which is the one that mints the key.
+					let session = await sessions.authenticate(request);
+					if (!session) return json({ error: "Sign in to Chopin first." }, 403, clear);
+					if (session.user.id !== profile.id) {
+						return json(
+							{
+								error: `GitHub authorized @${profile.login}, but you are signed in to Chopin as `
+									+ `@${session.user.login}.`,
+							},
+							403,
+							clear,
+						);
+					}
+					let authorized = context.pairings.authorized;
+					if (!authorized) return json({ error: "pairing is unavailable" }, 404, clear);
+					authorized(profile.id, grant);
+					return redirected("/connect?add", 303, [clear]);
+				}
 				if (stored.pairing) {
 					let complete = context.pairings.complete;
 					if (!complete) return json({ error: "pairing is unavailable" }, 404, clear);
