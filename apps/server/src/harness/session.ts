@@ -7,7 +7,7 @@ import {
 	refinePlannerAgent,
 	visualPlannerAgent,
 } from "./agents";
-import { githubTools, type GitHubToolsError, type Result } from "./github-tools";
+import { githubTools, type GitHubToolsError, lazyGithubTools, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 import {
 	type FullPlanner,
@@ -139,13 +139,7 @@ export async function openPlannerSession(
 	} catch (cause) {
 		return { ok: false, error: { kind: "Unavailable", cause } };
 	}
-	let tools: Awaited<ReturnType<typeof githubTools>>;
-	try {
-		tools = await (deps.githubTools ?? githubTools)(owner);
-	} catch (cause) {
-		return { ok: false, error: { kind: "Unavailable", cause } };
-	}
-	if (!tools.ok) return tools;
+	let tools = lazyGithubTools(owner, deps.githubTools ?? githubTools);
 	let sandbox: Sandbox;
 	try {
 		sandbox = await (deps.createSandbox ?? createJustBashNetworkSandboxSession)();
@@ -286,7 +280,7 @@ export async function openPlannerSession(
 							...channel,
 							instructions,
 							owner,
-							githubTools: tools.value,
+							githubTools: tools,
 							...(hostTools ? { toolSignal: hostTools.signal } : {}),
 						},
 					});

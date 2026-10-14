@@ -206,18 +206,26 @@ describe("openPlannerSession", () => {
 		expect(destroyed.sandbox).toBe(0);
 	});
 
-	it("preserves a missing GitHub tool error without opening a sandbox", async () => {
-		let { owner, channel, deps, destroyed } = fixture();
-		deps.githubTools = async () => ({
-			ok: false,
-			error: { kind: "MissingTool", name: "pull_request_read" },
-		});
-		let result = await openPlannerSession(owner, channel, deps);
-		expect(result).toEqual({
-			ok: false,
-			error: { kind: "MissingTool", name: "pull_request_read" },
-		});
-		expect(destroyed.sandbox).toBe(0);
+	it("opens a document session while GitHub discovery is unresolved", async () => {
+		let { owner, channel, deps } = fixture();
+		let discovery = Promise.withResolvers<
+			Awaited<ReturnType<NonNullable<typeof deps.githubTools>>>
+		>();
+		let invoked = Promise.withResolvers<void>();
+		deps.githubTools = () => {
+			invoked.resolve();
+			return discovery.promise;
+		};
+		let pending = openPlannerSession(owner, channel, deps);
+		let first = await Promise.race([
+			pending.then(() => "opened" as const),
+			invoked.promise.then(() => "discovery invoked" as const),
+		]);
+		discovery.resolve({ ok: true, value: {} });
+		let opened = await pending;
+		if (opened.ok) await opened.value.destroy();
+		expect(opened.ok).toBe(true);
+		expect(first).toBe("opened");
 	});
 
 	for (
