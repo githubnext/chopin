@@ -61,7 +61,7 @@ download() {
 			fail "$1 was redirected to a URL that is not HTTPS. Refusing to use it."
 		fi
 	else
-		fail "curl or wget is required to download chopin."
+		fail "curl or wget is required to download chopin. Install curl (for example sudo apt install curl), then run this command again."
 	fi
 }
 
@@ -105,7 +105,7 @@ trap 'exit 143' TERM
 version="${1:-${CHOPIN_VERSION:-}}"
 if [ -z "$version" ]; then
 	download "$RELEASES_API_URL?per_page=100" "$scratch/releases.json" \
-		|| fail "could not list releases from $RELEASES_API_URL."
+		|| fail "could not list releases from $RELEASES_API_URL. Check your connection and any proxy (HTTPS_PROXY), then run this command again."
 	version="$(tr -d '\n\r' <"$scratch/releases.json" \
 		| grep -o '"tag_name"[[:space:]]*:[[:space:]]*"cli-v[^"]*"' \
 		| head -n 1 | sed 's/.*"cli-v\([^"]*\)"$/\1/')"
@@ -123,16 +123,17 @@ printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)
 
 release="$BASE_URL/cli-v$version"
 printf 'Installing chopin %s (%s) from %s\n' "$version" "$asset" "$release"
-download "$release/$asset" "$scratch/$asset" || fail "could not download $release/$asset."
+offline="Check your connection and any proxy (HTTPS_PROXY), then run this command again."
+download "$release/$asset" "$scratch/$asset" || fail "could not download $release/$asset. $offline"
 download "$release/checksums.txt" "$scratch/checksums.txt" \
-	|| fail "could not download $release/checksums.txt."
+	|| fail "could not download $release/checksums.txt. $offline"
 
 # A checksums.txt saved with Windows line endings ends each name with \r.
 expected="$(awk -v name="$asset" '{ sub(/\r$/, "") } $2 == name || $2 == "*" name { print $1; exit }' "$scratch/checksums.txt")"
 [ -n "$expected" ] || fail "checksums.txt has no entry for $asset."
 actual="$(sha256 "$scratch/$asset")"
 if [ "$actual" != "$expected" ]; then
-	fail "the SHA-256 of $asset is $actual, but checksums.txt says $expected. Refusing to install it."
+	fail "the SHA-256 of $asset is $actual, but checksums.txt says $expected. Refusing to install it. Run the command again; if it fails the same way, report it at https://github.com/githubnext/chopin/issues."
 fi
 echo "Verified the SHA-256 checksum."
 
@@ -146,10 +147,12 @@ chmod 755 "$scratch/$asset"
 reported="$("$scratch/$asset" --version 2>&1)" \
 	|| fail "the downloaded chopin does not run on this machine: $reported"
 
-mkdir -p "$directory"
+# shellcheck disable=SC2016 # printed for the user to paste, unexpanded.
+unwritable="$directory isn't writable by you, so chopin can't be installed there. Make it yours with: sudo chown -R \"\$(id -un)\" \"\$HOME/.local\", then run this command again."
+mkdir -p "$directory" 2>/dev/null || fail "$unwritable"
 # Copy beside the destination first, into a new file of its own, so the rename that replaces an
 # older chopin is atomic and nothing already at a predictable name is written through.
-staged="$(mktemp "$directory/.chopin.XXXXXX")" || fail "could not create a file in $directory."
+staged="$(mktemp "$directory/.chopin.XXXXXX" 2>/dev/null)" || fail "$unwritable"
 cp "$scratch/$asset" "$staged"
 chmod 755 "$staged"
 mv -f "$staged" "$target"

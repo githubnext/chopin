@@ -378,7 +378,8 @@ test.skipIf(process.platform === "win32")(
 		expect(copilot.stderr).toBe(
 			[
 				"copilot isn't installed, so nothing was paired or connected. Install GitHub Copilot CLI "
-				+ "and sign in to it:",
+				+ "(it needs Node.js 22 or newer) and sign in to it:",
+				"  (npm comes with Node.js: install Node.js 22 or newer from https://nodejs.org first)",
 				"  npm install -g @github/copilot",
 				"  copilot login",
 				"Then run this command again.",

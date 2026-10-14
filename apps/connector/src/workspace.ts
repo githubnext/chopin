@@ -16,15 +16,51 @@ export function git(cwd: string, ...args: string[]): string {
 	return result.stdout.trim();
 }
 
+/**
+ * The checkout at `path`: its root, GitHub repository, commit and branch. What stops it says what
+ * to do, since `chopin connect` is often the first thing run in a new folder.
+ */
 export async function workspace(path: string) {
-	let root = await realpath(git(path, "rev-parse", "--show-toplevel"));
-	let origin = git(root, "remote", "get-url", "origin");
+	let again = "then run this command again.";
+	let top: string;
+	try {
+		top = git(path, "rev-parse", "--show-toplevel");
+	} catch (error) {
+		if (!Bun.which("git", { PATH: process.env.PATH ?? "" })) {
+			throw new Error(
+				`git isn't installed, so nothing was paired or connected. Install git, ${again}`,
+				{ cause: error },
+			);
+		}
+		throw new Error(
+			`${path} isn't inside a git checkout, so nothing was paired or connected. cd into your `
+				+ `repository's folder (a clone from GitHub), ${again}`,
+			{ cause: error },
+		);
+	}
+	let root = await realpath(top);
+	let origin = "";
+	try {
+		origin = git(root, "remote", "get-url", "origin");
+	} catch { /* Said below, as for an origin elsewhere. */ }
 	let match = origin.match(/(?:github\.com[:/])([^/]+\/[^/]+?)(?:\.git)?$/i);
-	if (!match) throw new Error("The checkout must have a github.com origin.");
+	if (!match) {
+		throw new Error(
+			`${root}'s origin ${origin ? `(${redacted(origin)}) ` : ""}isn't a github.com repository, `
+				+ "so Chopin can't connect it. Check it with `git remote -v`; Chopin connects clones of "
+				+ "GitHub repositories.",
+		);
+	}
+	let commit: string;
+	try {
+		commit = git(root, "rev-parse", "HEAD");
+	} catch {
+		throw new Error(`${root} has no commits yet. Commit once with \`git commit\`, ${again}`);
+	}
 	return {
 		root,
-		repository: match[1],
-		commit: git(root, "rev-parse", "HEAD"),
+		repository: match[1]!,
+		commit,
 		branch: git(root, "branch", "--show-current") || undefined,
 	};
 }

@@ -1,6 +1,7 @@
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CONNECTOR_UPDATE_REQUIRED } from "@chopin/protocol/connector";
+import { redacted } from "./connection";
 import { CONNECTOR_HEADERS, ConnectorError, refusal } from "./mcp";
 import type { Output } from "./output";
 
@@ -193,6 +194,37 @@ export async function pair(options: {
 	checkout?: Omit<Checkout, "label">;
 	key?: string;
 }) {
+	try {
+		return await pairOnce(options);
+	} catch (error) {
+		throw pairingFailure(error, options.url, options.checkout?.repository);
+	}
+}
+
+/** What stopped a pairing, in words that say what to do next. */
+function pairingFailure(error: unknown, url: string, repository?: string) {
+	let again = "then run this command again.";
+	let code = errorCode(error);
+	if (code === "repository-forbidden") {
+		return new Error(
+			`The account that made the key can't push to ${repository ?? "this repository"} on GitHub, `
+				+ `so Chopin won't connect this checkout. Ask an owner for write access, ${again}`,
+		);
+	}
+	if (code === "owner-sign-in-required") {
+		return new Error(`Sign in to Chopin at ${url} in a browser, ${again}`);
+	}
+	if (!(error instanceof ConnectorError) && classifyConnectorError(error) === "retry") {
+		let cause = error instanceof Error ? redacted(error.message).split("\n")[0] : "no answer";
+		return new Error(
+			`Can't reach Chopin at ${url} (${cause}). Check CHOPIN_URL, your network and any proxy, `
+				+ again,
+		);
+	}
+	return error;
+}
+
+async function pairOnce(options: Parameters<typeof pair>[0]) {
 	let token: string | undefined;
 	if (options.key) {
 		let paired = await post(

@@ -107,7 +107,7 @@ function Install-Chopin([string]$Version) {
 			} catch [System.OperationCanceledException] {
 				throw
 			} catch {
-				Stop-Install "could not list releases from ${ReleasesApiUrl}: $_"
+				Stop-Install "could not list releases from ${ReleasesApiUrl}: $_ Check your connection and any proxy, then run this command again."
 			}
 			$Latest = @($Releases | Where-Object { $_.tag_name -like 'cli-v*' -and -not $_.draft -and -not $_.prerelease })[0]
 			if (-not $Latest) { Stop-Install 'no chopin CLI release (a cli-v* tag) was found.' }
@@ -124,7 +124,7 @@ function Install-Chopin([string]$Version) {
 			} catch [System.OperationCanceledException] {
 				throw
 			} catch {
-				Stop-Install "could not download $Release/$($File[0]): $_"
+				Stop-Install "could not download $Release/$($File[0]): $_ Check your connection and any proxy, then run this command again."
 			}
 		}
 
@@ -138,7 +138,7 @@ function Install-Chopin([string]$Version) {
 		if (-not $Expected) { Stop-Install "checksums.txt has no entry for $Asset." }
 		$Actual = (Get-FileHash -LiteralPath $Download -Algorithm SHA256).Hash.ToLowerInvariant()
 		if ($Actual -ne $Expected) {
-			Stop-Install "the SHA-256 of $Asset is $Actual, but checksums.txt says $Expected. Refusing to install it."
+			Stop-Install "the SHA-256 of $Asset is $Actual, but checksums.txt says $Expected. Refusing to install it. Run the command again; if it fails the same way, report it at https://github.com/githubnext/chopin/issues."
 		}
 		Write-Host 'Verified the SHA-256 checksum.'
 

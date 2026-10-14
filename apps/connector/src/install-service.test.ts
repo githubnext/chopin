@@ -117,6 +117,12 @@ async function setup(
 				host,
 				executable: "/opt/chopin/bin/chopin",
 			}),
+		/** As `run`, with `agent` as the ACP command instead. */
+		runAgent: (...agent: string[]) =>
+			connect([root, "--install-service", "--", ...agent], {
+				host,
+				executable: "/opt/chopin/bin/chopin",
+			}),
 		async [Symbol.asyncDispose]() {
 			for (let [name, value] of Object.entries(saved)) {
 				if (value === undefined) delete process.env[name];
@@ -208,7 +214,7 @@ test.skipIf(process.platform === "win32")(
 		process.env.CHOPIN_PAIRING_KEY = PAIRING_KEY;
 		let refused = await machine.run().catch(error => error);
 		expect(refused.message).toContain("agent didn't answer ACP initialize (exit 3)");
-		expect(refused.message).toContain("Nothing was paired");
+		expect(refused.message).toContain("so nothing was paired");
 		expect(machine.requests).toEqual([]);
 		expect(machine.calls).toEqual([]);
 		// Fixed, the same key pairs.
@@ -221,6 +227,26 @@ test.skipIf(process.platform === "win32")(
 		await machine.run();
 		expect(machine.requests[0]).toBe("/api/connector/pairings");
 		expect(machine.calls).toContain("systemctl --user enable --now chopin.service");
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a known agent that won't start is named with its sign-in command, before the key is spent",
+	async () => {
+		await using machine = await setup(systemd, { paired: false });
+		await writeFile(
+			join(machine.bin, "copilot"),
+			"#!/bin/sh\necho 'Error: not logged in' >&2\nexit 1\n",
+			{ mode: 0o755 },
+		);
+		process.env.CHOPIN_PAIRING_KEY = PAIRING_KEY;
+		let refused = await machine.runAgent("copilot", "--acp").catch(error => error);
+		expect(refused.message).toContain(
+			"copilot didn't answer ACP initialize (exit 1: Error: not logged in)",
+		);
+		expect(refused.message).toContain("sign in with `copilot login`, then run this command again");
+		expect(machine.requests).toEqual([]);
 	},
 	30_000,
 );

@@ -1,8 +1,9 @@
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:fs";
 import { hostname } from "node:os";
 import { basename, isAbsolute, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { AGENTS } from "@chopin/protocol/agents";
+import { AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
+import type { CodingAgent } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
 import { ConnectorStopped, redacted, serveWork } from "./connection";
 import { remote } from "./mcp";
@@ -182,7 +183,7 @@ async function unpairCommand(args: string[]) {
 async function stableCommand(command: string[], base: string) {
 	let at = programAt(command);
 	let word = command[at]!;
-	let found = /[\\/]/.test(word) ? resolve(base, word) : Bun.which(word);
+	let found = /[\\/]/.test(word) ? resolve(base, word) : which(word);
 	if (!found) return command;
 	let host = systemHost();
 	let seen = await stablePath(host.platform, host.env, found);
@@ -200,21 +201,29 @@ async function stableCommand(command: string[], base: string) {
 	return [...command.slice(0, at), seen.stable, ...command.slice(at + 1)];
 }
 
+/** The PATH as it is now, which a process (or a test) may have changed since it started. */
+function which(program: string) {
+	return Bun.which(program, { PATH: process.env.PATH ?? "" });
+}
+
 /**
  * Stop before anything is paired or connected when `command`'s program, or the one behind `env`,
  * isn't installed, so a pairing key is never spent on a machine that can't run work. A coding
- * agent from the Machines page's list is named with its install and sign-in commands.
+ * agent from the Machines page's list is named with its install and sign-in commands, and one
+ * that runs on a Node.js older than it needs is refused too.
  */
 function requireProgram(command: string[], base: string) {
 	let word = command[programAt(command)];
 	if (!word) return;
-	// The PATH as it is now, which a process (or a test) may have changed since it started.
 	let found = /[\\/]/.test(word)
-		? existsSync(resolve(base, word))
-		: Bun.which(word, { PATH: process.env.PATH ?? "" });
-	if (found) return;
+		? (existsSync(resolve(base, word)) ? resolve(base, word) : null)
+		: which(word);
 	let name = basename(word).replace(/\.(exe|cmd|bat)$/i, "");
 	let agent = AGENTS.find(item => item.acp[0] === name);
+	if (found) {
+		if (agent) requireNode(agent, found);
+		return;
+	}
 	if (!agent) {
 		throw new Error(
 			`${word} isn't on your PATH, so nothing was paired or connected. Install it or give its `
@@ -224,10 +233,51 @@ function requireProgram(command: string[], base: string) {
 	let { command: signIn, afterward } = agent.signIn;
 	throw new Error(
 		[
-			`${word} isn't installed, so nothing was paired or connected. Install ${agent.name} and `
-			+ "sign in to it:",
+			`${word} isn't installed, so nothing was paired or connected. Install ${agent.name} (it `
+			+ `needs Node.js ${agent.node} or newer) and sign in to it:`,
+			...(which("npm")
+				? []
+				: [
+					`  (npm comes with Node.js: install Node.js ${agent.node} or newer from https://nodejs.org first)`,
+				]),
 			...agent.install.map(install => `  ${install.join(" ")}`),
 			`  ${signIn.join(" ")}${afterward ? `  (${afterward})` : ""}`,
+			"Then run this command again.",
+		].join("\n"),
+	);
+}
+
+/**
+ * Refuse an agent whose program runs on Node.js (its `#!` line names node) when the node on PATH
+ * is older than the agent needs, which otherwise fails later with an unreadable stack trace.
+ */
+function requireNode(agent: CodingAgent, program: string) {
+	let head = Buffer.alloc(200);
+	try {
+		let file = openSync(program, "r");
+		try {
+			head = head.subarray(0, readSync(file, head, 0, head.length, 0));
+		} finally {
+			closeSync(file);
+		}
+	} catch {
+		return;
+	}
+	if (!/^#!.*\bnode\b/.test(head.toString("latin1").split("\n")[0]!)) return;
+	let node = which("node");
+	let version = node
+		? Bun.spawnSync([node, "--version"], { stdout: "pipe" }).stdout.toString().trim()
+		: "";
+	if (version && !nodeOlder(version, agent.node)) return;
+	throw new Error(
+		[
+			`${agent.name} needs Node.js ${agent.node} or newer; this machine has ${
+				version ? version.replace(/^v/, "") : "none on its PATH"
+			}, so nothing was paired or connected.`,
+			`Install Node.js ${agent.node} or newer from https://nodejs.org (or \`nvm install ${
+				nodeMajor(agent.node)
+			}\`), then reinstall the agent:`,
+			...agent.install.map(install => `  ${install.join(" ")}`),
 			"Then run this command again.",
 		].join("\n"),
 	);
@@ -355,22 +405,42 @@ export async function connect(
 		);
 		return;
 	}
+	let known = AGENTS.find(item => item.acp[0] === basename(command[programAt(command)] ?? ""));
+	// An agent that asks permission in the terminal can't run unattended; say so before it pairs.
+	if (installing && known && known.unattended !== true) {
+		createOutput().error(
+			`${known.name} asks for permission in the terminal, which the service can't show. Unless `
+				+ `you ${known.unattended.setting}, run this command without --install-service and keep `
+				+ "the terminal open.",
+		);
+	}
 	// The service install check runs only once connected; a machine about to pair checks first, so
-	// a pairing key isn't spent on an agent that can't start.
+	// a pairing key isn't spent on an agent that can't start or isn't signed in.
 	if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
-		let failed = await checkAgent(saving.command, {
+		// By the path this shell finds it on, as the PATH may have changed since chopin started.
+		let started = [...saving.command];
+		let at = programAt(started);
+		started[at] = which(started[at]!) ?? started[at]!;
+		let failed = await checkAgent(started, {
 			cwd: info.root,
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 		});
 		if (failed) {
 			let secrets = Object.values(env);
+			let signIn = known ? `, sign in with \`${known.signIn.command.join(" ")}\`` : "";
 			throw new Error(
-				`${command[programAt(command)]} didn't answer ACP initialize (${
-					redacted(failed.how, secrets)
-				}${failed.stderr ? `: ${redacted(failed.stderr, secrets).slice(0, 200)}` : ""}). `
-					+ "Nothing was paired. Check that it starts and is signed in, then run this command "
-					+ "again. For an agent that can't start without a terminal, pass --skip-check.",
+				[
+					`${command[programAt(command)]} didn't answer ACP initialize (${
+						redacted(failed.how, secrets)
+					}${
+						failed.stderr
+							? `: ${redacted(failed.stderr, secrets).split("\n")[0]!.slice(0, 200)}`
+							: ""
+					}), so nothing was paired.`,
+					`Check that it starts${signIn}, then run this command again. For an agent that can't `
+					+ "start without a terminal, add --skip-check.",
+				].join("\n"),
 			);
 		}
 	}
@@ -403,7 +473,10 @@ export async function connect(
 				);
 			}
 			if (stored && key) {
-				output.say(`This machine is already paired with ${url}, so the pairing key wasn't used.`);
+				output.say(
+					`This machine is already paired with ${url}, so the pairing key wasn't used. To pair `
+						+ `it for the account that made the key, run \`${SELF} unpair\`, then this command again.`,
+				);
 			}
 			let machine = stored
 				?? await pair({

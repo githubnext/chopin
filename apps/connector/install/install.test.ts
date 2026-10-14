@@ -289,6 +289,42 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 		}
 		expect(release.requests).toEqual([]);
 	});
+
+	test("every refusal says what to do next", async () => {
+		using release = fakeRelease({
+			"0.2.0": assets("chopin-linux-x64", fakeChopin("0.2.0")),
+			"0.3.0": assets("chopin-linux-x64", fakeChopin("0.3.0"), sha256("something else")),
+		});
+		let offline = await install(await machine(), release.env, "9.9.9");
+		expect(offline.stderr).toContain("could not download");
+		expect(offline.stderr).toContain("Check your connection and any proxy (HTTPS_PROXY)");
+
+		let tampered = await install(await machine(), release.env, "0.3.0");
+		expect(tampered.stderr).toContain("Refusing to install it.");
+		expect(tampered.stderr).toContain("Run the command again");
+
+		let locked = await machine();
+		await mkdir(join(locked.home, ".local/bin"), { recursive: true });
+		await chmod(join(locked.home, ".local/bin"), 0o555);
+		let unwritable = await install(locked, release.env, "0.2.0");
+		await chmod(join(locked.home, ".local/bin"), 0o755);
+		expect(unwritable.code).not.toBe(0);
+		expect(unwritable.stderr).toContain(`chown -R "$(id -un)" "$HOME/.local"`);
+
+		// Neither curl nor wget: only the tools install.sh uses besides them.
+		let bare = await machine();
+		let tools = join(bare.home, "tools");
+		await mkdir(tools);
+		for (let tool of ["sh", "mktemp", "rm", "tr", "grep", "head", "sed", "awk", "cut", "cat"]) {
+			await symlink(Bun.which(tool)!, join(tools, tool));
+		}
+		for (let tool of ["sha256sum", "chmod", "mkdir", "cp", "mv"]) {
+			await symlink(Bun.which(tool)!, join(tools, tool));
+		}
+		let missing = await install({ ...bare, path: `${bare.shims}:${tools}` }, release.env, "0.2.0");
+		expect(missing.stderr).toContain("curl or wget is required");
+		expect(missing.stderr).toContain("sudo apt install curl");
+	});
 });
 
 describe("install.ps1", () => {
