@@ -679,17 +679,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			|| connections.machine(machine.id).some(value => value.source.repositoryId === repositoryId)
 		);
 		let chosen = connections.chosen(documentId, userId);
+		// What Automatic would use now, shown beside it even while a machine is chosen.
 		let automatic: Connection | undefined;
-		if (!chosen) {
-			let live = connections.candidates(repositoryId, userId, documentId);
-			for (let connection of live) {
-				if (!await busy(connection)) {
-					automatic = connection;
-					break;
-				}
+		let live = connections.candidates(repositoryId, userId, documentId, null);
+		for (let connection of live) {
+			if (!await busy(connection)) {
+				automatic = connection;
+				break;
 			}
-			automatic ??= live[0];
 		}
+		automatic ??= live[0];
 		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
 		return {
 			choice: chosen ?? null,

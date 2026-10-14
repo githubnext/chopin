@@ -240,11 +240,16 @@ export class Connections {
 	 * used for the document first. A chosen machine's connections only, so an offline choice
 	 * leaves none rather than falling back to another machine.
 	 */
-	candidates(repositoryId: string, owner: string, documentId: string) {
+	candidates(
+		repositoryId: string,
+		owner: string,
+		documentId: string,
+		/** Null asks what automatic would pick, whatever the person chose. */
+		chosen: string | null | undefined = this.chosen(documentId, owner),
+	) {
 		let last = this.#used.get(documentId);
-		let chosen = this.chosen(documentId, owner);
 		return this.list(repositoryId, owner).filter(value =>
-			chosen === undefined || value.machineId === chosen
+			!chosen || value.machineId === chosen
 		).sort((a, b) => Number(b.id === last) - Number(a.id === last));
 	}
 	/** Whether a connection may take its owner's work on `documentId`, as candidates() decides. */

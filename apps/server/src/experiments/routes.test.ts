@@ -1572,9 +1572,10 @@ test("a person chooses which of their machines runs a document's work, and back 
 	expect(unserved.status).toBe(409);
 	expect((await unserved.json()).error).toBe("repository-unserved");
 	expect((await request(path, { machine: buildBox.machine }, alice.cookie)).status).toBe(200);
-	expect((await (await request(path, undefined, alice.cookie)).json()).choice).toBe(
-		buildBox.machine,
-	);
+	let chosen = await (await request(path, undefined, alice.cookie)).json();
+	expect(chosen.choice).toBe(buildBox.machine);
+	// Automatic still says what it would use, for the menu's Automatic row.
+	expect(chosen.automatic).toMatchObject({ id: expect.any(String), label: expect.any(String) });
 	// Stored, so a restarted server keeps it; bob's own choice is untouched.
 	expect(await storage.machines.choices()).toContainEqual({
 		channelId: documentId,
