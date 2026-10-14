@@ -32,12 +32,16 @@
 	border-color: var(--color-hover);
 }
 
+/*
+ * The first control in its row to give way: it shrinks and its name truncates, and where its row is
+ * narrow it folds to its glyph (below), so Send, Build plan and the people beside it keep their size.
+ */
 .machine-button {
 	display: inline-flex;
 	min-width: 0;
 	max-width: 14rem;
 	height: var(--control-height-compact);
-	flex: none;
+	flex: 0 1 auto;
 	align-items: center;
 	gap: calc(var(--spacing) * 1.5);
 	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 1.5);
@@ -71,13 +75,46 @@
 	color: var(--color-text-tertiary);
 }
 
-/* A narrow window's room header keeps the document's title: the button folds to its glyph there. */
+/*
+ * Where its row is narrow the button is its glyph alone; its accessible name still says which
+ * machine. A narrow window's room header keeps the document's title; a narrow title bar folds it
+ * as it leaves one face; a narrow composer keeps the draft's controls and Send.
+ */
 @media (max-width: 639px) {
 	.room-header .machine-button {
 		padding-inline: calc(var(--spacing) * 1.5);
 	}
 
 	.room-header :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
+/* Beside Build plan, a quarter of the bar at most, so the document's title keeps the rest. */
+.room-header .machine-button {
+	max-width: min(14rem, 25vw);
+}
+
+.document-title-status .machine-button {
+	max-width: min(14rem, 25cqi);
+}
+
+@container document-title-bar (max-width: 26rem) {
+	.document-title-status .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.document-title-status :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
+@container composer-footer (width < 24rem) {
+	.composer-machine .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.composer-machine :is(.machine-button-name, .machine-button-chevron) {
 		display: none;
 	}
 }
@@ -118,6 +155,15 @@
 	top: 50%;
 	right: var(--spacing);
 	translate: 0 -50%;
+}
+
+/* On the sheet the star's 44px target ends at the row's edge, so the sheet never scrolls sideways. */
+.machine-sheet-group .machine-menu-row > [role="menuitemradio"] {
+	padding-inline-end: calc(var(--control-height-compact) + var(--spacing) * 5.5);
+}
+
+.machine-sheet-group .machine-menu-star {
+	right: calc((var(--control-target-coarse) - var(--control-height-compact)) / 2);
 }
 
 /*
@@ -178,9 +224,13 @@
 	background: var(--color-edge);
 }
 
-/* Phone: the same rows on a sheet, each a 44px target or taller. */
+/*
+ * Phone: the same rows on a sheet, each a 44px target or taller. One column the sheet's width, so a
+ * long name truncates (the row's accessible name keeps it whole) and the check and star stay put.
+ */
 .machine-sheet-group {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	overflow: hidden auto;
 	max-height: calc(100dvh * var(--sheet-large-detent));
 	border-radius: var(--radius-sheet);
@@ -209,6 +259,7 @@
 	position: relative;
 	width: var(--composer-pill-control);
 	height: var(--composer-pill-control);
+	flex: none;
 	justify-content: center;
 	padding: 0;
 	border-radius: var(--radius-full);

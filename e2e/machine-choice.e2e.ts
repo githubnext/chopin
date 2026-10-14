@@ -379,3 +379,99 @@ test("on a phone the machine button is a 44px icon in the composer, opening a sh
 		.toHaveClass(/\bmachine-offline\b/);
 	await shoot(page, "phone-sheet-offline");
 });
+
+/** Sixty characters: a machine named as people name their computers, at length. */
+const LONG_NAME = "alex-lavaee-workstation-in-the-basement-closet-under-stairs2";
+
+test("a long machine name shrinks the machine button before Send or Build plan on a 320px window", async ({ seed, join: enter }) => {
+	expect(LONG_NAME).toHaveLength(60);
+	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
+	let page = await enter(person(), { viewport: { width: 320, height: 800 }, deviceScaleFactor: 3 });
+	await connected(page, LONG_NAME, { [CONNECTOR_SERVICE_HEADER]: "1" });
+	await page.reload();
+	let views = page.getByRole("navigation", { name: "Workspace view" });
+	let chat = composer(page).getByRole("button", { name: /^Machine: / });
+	let send = composer(page).getByRole("button", { name: "Send message" });
+	let footer = composer(page).locator(".composer-footer");
+	let viewport = page.viewportSize()!;
+	// Every control of the composer's bottom row, Send included, whole inside the window, with the
+	// machine button inside the row.
+	let fits = async () => {
+		let [row, button, sending] = await footer.evaluate(item => {
+			let box = (target: Element | null) => target!.getBoundingClientRect().toJSON();
+			return [
+				box(item),
+				box(item.querySelector(".machine-button")),
+				box(item.querySelector(".send-action")),
+			];
+		}) as Array<{ x: number; y: number; width: number; height: number }>;
+		expect(sending!.x).toBeGreaterThanOrEqual(0);
+		expect(sending!.x + sending!.width).toBeLessThanOrEqual(viewport.width);
+		expect(button!.x).toBeGreaterThanOrEqual(row!.x);
+		expect(button!.x + button!.width).toBeLessThanOrEqual(sending!.x);
+		expect(row!.x + row!.width).toBeLessThanOrEqual(viewport.width);
+	};
+	await views.getByRole("button", { name: /^Chat/ }).click();
+	await expect(chat).toBeVisible();
+	await chat.click();
+	await page.getByRole("menu", { name: "Machine for this document" })
+		.getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) }).click();
+	await expect(chat).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
+	await fits();
+	// Send still sends from where it is.
+	await expect(send).toBeInViewport({ ratio: 1 });
+	await crop(page, footer, "narrow-chat-long-name");
+	await shoot(page, "narrow-chat-long-name-full");
+	// Build plan's row in the header keeps Build plan whole beside the button.
+	await views.getByRole("button", { name: /^Document/ }).click();
+	let header = page.locator(".room-header .machine-button");
+	await expect(header).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
+	await expect(page.locator(".build-plan")).toBeInViewport({ ratio: 1 });
+	await expect(header).toBeInViewport({ ratio: 1 });
+	await shoot(page, "narrow-header-long-name");
+	// A laptop's title bar gives the button a quarter at most, so the document's title keeps the
+	// rest; the name still shows, cut short.
+	await page.setViewportSize({ width: 1280, height: 800 });
+	let bar = page.locator(".document-title-bar");
+	let titled = bar.locator(".machine-button");
+	await expect(titled.locator(".machine-button-name")).toBeVisible();
+	let [barBox, titledBox] = [(await bar.boundingBox())!, (await titled.boundingBox())!];
+	expect(titledBox.width).toBeLessThanOrEqual(barBox.width / 4 + 0.5);
+	await expect(page.locator(".build-plan")).toBeInViewport({ ratio: 1 });
+	await crop(page, [page.locator(".build-plan"), titled], "desktop-build-long-name");
+});
+
+test("a phone's machine sheet keeps a long machine name inside its rows", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	await connected(page, LONG_NAME, { [CONNECTOR_SERVICE_HEADER]: "1" });
+	await page.reload();
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: "Chat", exact: true }).tap();
+	let button = composer(page).getByRole("button", { name: /^Machine: / });
+	await expect(button).toBeInViewport({ ratio: 1 });
+	await button.tap();
+	let sheet = page.getByRole("dialog", { name: "Machine for this document" });
+	let row = sheet.getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) });
+	// The full name stays in the row's accessible name, however it is cut on screen.
+	await expect(row).toBeVisible();
+	await expect(sheet.getByRole("button", { name: `Favorite ${LONG_NAME}` })).toBeVisible();
+	// After the sheet's rise, every row's right end, star included, inside the window, and the
+	// sheet never scrolls sideways.
+	await page.waitForTimeout(800);
+	let measured = await sheet.evaluate(item => {
+		let group = item.querySelector(".machine-sheet-group")!;
+		return {
+			scroll: group.scrollWidth,
+			client: group.clientWidth,
+			rights: [...group.querySelectorAll(".machine-sheet-item, [data-star]")]
+				.map(target => target.getBoundingClientRect().right),
+		};
+	});
+	expect(measured.scroll).toBeLessThanOrEqual(measured.client);
+	expect(measured.rights.length).toBeGreaterThanOrEqual(4);
+	for (let right of measured.rights) expect(right).toBeLessThanOrEqual(390);
+	await shoot(page, "phone-sheet-long-name");
+	await row.tap();
+	await expect(sheet).toBeHidden();
+	await expect(button).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
+});
