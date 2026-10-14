@@ -1,5 +1,5 @@
 import { createContext, useContext, useId, useState } from "react";
-import { ChevronIcon } from "@chopin/icons";
+import { ChevronIcon, ScribbleIcon } from "@chopin/icons";
 import { MotionDisclosure } from "@chopin/editor";
 
 import { motionContract } from "./motion-contract";
@@ -50,6 +50,11 @@ export function TraceIcon({ children }: { children: ReactNode }) {
 			{children}
 		</span>
 	);
+}
+
+/** A pen line that writes itself and wipes away while work runs. */
+export function TraceScribble() {
+	return <ScribbleIcon className="trace-scribble" data-slot="trace-scribble" size={16} />;
 }
 
 /** `enter` plays a short rise when the title's `key` changes. */

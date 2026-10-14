@@ -1,11 +1,20 @@
 import { useSyncExternalStore } from "react";
-import { DecisionIcon, MagnifierIcon, PencilIcon, WrenchIcon } from "@chopin/icons";
+import {
+	CodePullRequestIcon,
+	DecisionIcon,
+	GlobeSearchIcon,
+	MagnifierIcon,
+	PageIcon,
+	PencilIcon,
+	TerminalIcon,
+	WrenchIcon,
+} from "@chopin/icons";
 
 import {
 	duration,
 	summarize,
 	toolCopy,
-	toolKind,
+	toolGlyph,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
@@ -19,6 +28,7 @@ import {
 	TraceDescription,
 	TraceIcon,
 	TraceLine,
+	TraceScribble,
 	TraceTitle,
 } from "../trace";
 
@@ -44,7 +54,11 @@ function isOpen(value: Questionnaire): boolean {
 const TOOL_ICONS = {
 	ask: DecisionIcon,
 	other: WrenchIcon,
-	read: MagnifierIcon,
+	page: PageIcon,
+	"pull-request": CodePullRequestIcon,
+	search: MagnifierIcon,
+	terminal: TerminalIcon,
+	web: GlobeSearchIcon,
 	write: PencilIcon,
 } as const;
 
@@ -57,7 +71,8 @@ function ToolCall(
 		: tool.status === "failed"
 		? "Failed"
 		: "Done";
-	let Icon = TOOL_ICONS[toolKind(tool.name)];
+	let glyph = toolGlyph(tool.name);
+	let Icon = TOOL_ICONS[glyph];
 	let line = (
 		<TraceLine
 			status={status === "Running"
@@ -69,7 +84,7 @@ function ToolCall(
 				: undefined}
 		>
 			<TraceIcon>
-				<Icon size={14} />
+				{status === "Running" && glyph !== "ask" ? <TraceScribble /> : <Icon size={14} />}
 			</TraceIcon>
 			<TraceTitle wrap>{toolCopy(tool.name)}</TraceTitle>
 			{status === "Running" || status === "Done"
@@ -114,16 +129,6 @@ function ToolCall(
 				</TraceCollapsibleContent>
 			</TraceCollapsible>
 		</div>
-	);
-}
-
-function Lattice() {
-	return (
-		<TraceIcon>
-			<span className="chat-work-lattice">
-				{Array.from({ length: 9 }, (_, index) => <span key={index} />)}
-			</span>
-		</TraceIcon>
 	);
 }
 
@@ -186,7 +191,11 @@ export function WorkProgress(
 						<DecisionIcon size={14} />
 					</TraceIcon>
 				)
-				: active && <Lattice />}
+				: active && (
+					<TraceIcon>
+						<TraceScribble />
+					</TraceIcon>
+				)}
 			<TraceTitle enter key={headline}>{headline}</TraceTitle>
 			{count && <TraceDescription>{count}</TraceDescription>}
 			{status && (

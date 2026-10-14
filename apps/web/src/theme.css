@@ -1329,37 +1329,6 @@ body {
 	gap: calc(var(--spacing) * 2);
 }
 
-.chat-work-lattice {
-	display: grid;
-	grid-template-columns: repeat(3, 3px);
-	gap: 3px;
-	place-content: center;
-}
-
-.chat-work-lattice > span {
-	width: 3px;
-	height: 3px;
-	border-radius: 50%;
-	background: var(--color-brand);
-	animation: chat-work-dot calc(var(--duration-base) * 8) var(--motion-move) infinite;
-}
-
-.chat-work-lattice > span:is(:nth-child(2), :nth-child(4)) {
-	animation-delay: var(--duration-fast);
-}
-
-.chat-work-lattice > span:is(:nth-child(3), :nth-child(5), :nth-child(7)) {
-	animation-delay: var(--duration-base);
-}
-
-.chat-work-lattice > span:is(:nth-child(6), :nth-child(8)) {
-	animation-delay: var(--panel-open-dur);
-}
-
-.chat-work-lattice > span:nth-child(9) {
-	animation-delay: var(--duration-linger);
-}
-
 .chat-tool-call-details {
 	display: grid;
 	gap: calc(var(--spacing) * 2);
@@ -2118,7 +2087,6 @@ button.question-add:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.chat-work-lattice > span,
 	.chat-source-tint {
 		animation: none;
 	}

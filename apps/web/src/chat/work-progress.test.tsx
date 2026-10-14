@@ -66,7 +66,7 @@ test("disconnected work stays inspectable without claiming an active or interrup
 
 	expect(markup).toContain("Connection lost");
 	expect(markup).toContain('aria-expanded="false"');
-	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).not.toContain("trace-scribble");
 	expect(markup).not.toContain("Interrupted");
 });
 
@@ -84,7 +84,7 @@ test("an active ask preserves the static decision wait while keeping tool detail
 	}));
 	expect(markup).toContain("Waiting on your decision");
 	expect(markup).toContain("data-tool-waiting");
-	expect(markup).not.toContain("chat-work-lattice");
+	expect(markup).not.toContain("trace-scribble");
 	expect(markup).not.toContain('data-status="running"');
 	expect(markup).toContain('aria-expanded="false"');
 });

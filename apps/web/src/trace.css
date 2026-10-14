@@ -52,6 +52,12 @@
 	pointer-events: none;
 }
 
+.trace-scribble path {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: trace-scribble calc(var(--duration-linger) * 4) var(--motion-move) infinite;
+}
+
 .trace-title {
 	min-width: 0;
 	overflow: hidden;
@@ -166,6 +172,19 @@
 	}
 }
 
+@keyframes trace-scribble {
+	0% {
+		stroke-dashoffset: 1;
+	}
+	45%,
+	60% {
+		stroke-dashoffset: 0;
+	}
+	100% {
+		stroke-dashoffset: -1;
+	}
+}
+
 @keyframes trace-shimmer {
 	from {
 		background-position: 100% 0;
@@ -189,5 +208,10 @@
 
 	.trace-chevron {
 		transition: none;
+	}
+
+	.trace-scribble path {
+		animation: none;
+		stroke-dashoffset: 0;
 	}
 }

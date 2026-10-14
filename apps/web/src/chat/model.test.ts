@@ -5,6 +5,8 @@ import {
 	duration,
 	group,
 	summarize,
+	toolGlyph,
+	toolKind,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
@@ -419,5 +421,47 @@ describe("waiting decisions in work progression", () => {
 		expect(waitingText(1)).toBe("Waiting on your decision");
 		expect(waitingText(0)).toBe("Waiting on your decision");
 		expect(waitingText(3)).toBe("Waiting on 3 decisions");
+	});
+});
+
+describe("tool glyphs", () => {
+	it("draws each Planner and harness tool by what it touches", () => {
+		let cases: [string, ReturnType<typeof toolGlyph>][] = [
+			["ask", "ask"],
+			["read_plan", "page"],
+			["read_child", "page"],
+			["list_children", "page"],
+			["read_reference", "page"],
+			["read_implementation_graph", "page"],
+			["list_investigations", "page"],
+			["read_repository_file", "search"],
+			["search_repository", "search"],
+			["list_repository_tree", "search"],
+			["grep", "search"],
+			["read", "search"],
+			["web_search", "web"],
+			["web_fetch", "web"],
+			["WebFetch", "web"],
+			["fetch", "web"],
+			["bash", "terminal"],
+			["run_command", "terminal"],
+			["shell/exec", "terminal"],
+			["list_pull_requests", "pull-request"],
+			["pull_request_read", "pull-request"],
+			["create_pr", "pull-request"],
+			["edit_plan", "write"],
+			["anchor_child", "write"],
+			["write", "write"],
+			["reply_comment", "other"],
+			["repository_history", "other"],
+		];
+		for (let [name, glyph] of cases) expect(toolGlyph(name), name).toBe(glyph);
+	});
+
+	it("leaves the phase kinds unchanged", () => {
+		expect(toolKind("web_search")).toBe("read");
+		expect(toolKind("pull_request_read")).toBe("read");
+		expect(toolKind("bash")).toBe("other");
+		expect(workPhase(running("read_plan"), false, true)).toBe("Gathering context");
 	});
 });

@@ -245,6 +245,33 @@ export function toolKind(name: string): ToolKind {
 	return "other";
 }
 
+export type ToolGlyph =
+	| "ask"
+	| "page"
+	| "search"
+	| "web"
+	| "terminal"
+	| "pull-request"
+	| "write"
+	| "other";
+
+/** A finer reading of a tool name than `toolKind`, for the trace's icon only. */
+export function toolGlyph(name: string): ToolGlyph {
+	let kind = toolKind(name);
+	if (kind === "ask") return "ask";
+	let segment = (words: string) => new RegExp(`(^|[_/.-])(${words})(?=$|[_/.-])`, "i").test(name);
+	if (/pull_?requests?/i.test(name) || segment("prs?")) return "pull-request";
+	if (segment("bash|shell|terminal|exec|command|sh")) return "terminal";
+	if (segment("web|fetch|url|http|browse") || /^web/i.test(name)) return "web";
+	if (kind === "write") return "write";
+	if (kind === "read") {
+		return segment("plan|child|children|document|reference|investigations?|implementation_graph")
+			? "page"
+			: "search";
+	}
+	return "other";
+}
+
 export function workPhase(
 	tools: Chat.Activity[],
 	streaming: boolean,

@@ -982,7 +982,7 @@ test("a Planner question waits on people and opens its card", async ({ join, pag
 	let chat = chatPane(page);
 	let waiting = chat.locator("[data-tool-waiting]");
 	await expect(waiting).toHaveText(/Waiting on your decision/);
-	await expect(waiting.locator(".chat-work-lattice")).toHaveCount(0);
+	await expect(waiting.locator('[data-slot="trace-scribble"]')).toHaveCount(0);
 	await waiting.getByRole("button", { name: "Open decision" }).click();
 	await expect(
 		page.locator(
