@@ -594,6 +594,7 @@ export default function DocumentWorkspaceHost(
 		child: layer,
 		// Chat's focus follows the open child and lapses as soon as it starts to close.
 		childId: presentation === "open" ? loaded.child?.channel.id : undefined,
+		childRequestKey: childKey.current ?? loadKey,
 		childState: presentation === "closing" ? "closing" as const : "open" as const,
 		motion,
 		onChildClose: closeChild,

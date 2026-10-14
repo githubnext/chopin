@@ -1187,14 +1187,14 @@ export function RoomWorkspace(
 	// Reveal each requested child once; loading and canonical renames keep a later tab choice.
 	let requestedChild =
 		presentation.type === "parent-with-child" && presentation.childState === "open"
-			? presentation.childId ?? null
+			? presentation.childRequestKey
 			: undefined;
-	let previousChild = useRef<string | null | undefined>(undefined);
+	let previousChild = useRef<string | undefined>(undefined);
 	useEffect(() => {
 		let previous = previousChild.current;
 		previousChild.current = requestedChild;
 		if (requestedChild === undefined) return;
-		if (previous === undefined || (previous !== null && previous !== requestedChild)) {
+		if (previous !== requestedChild) {
 			latestSelectDestination.current("plan");
 		}
 	}, [requestedChild]);

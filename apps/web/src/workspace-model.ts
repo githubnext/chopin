@@ -17,6 +17,8 @@ export type WorkspacePresentation =
 		child: ReactNode;
 		/** The child open in the stack; Chat sends it as the Planner's focus. */
 		childId?: string;
+		/** The host's request identity, stable through loading and canonical title changes. */
+		childRequestKey: string;
 		childState: "open" | "closing";
 		motion: ChildMotionStyle;
 		onChildClose: () => void;

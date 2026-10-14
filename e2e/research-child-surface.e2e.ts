@@ -618,6 +618,78 @@ test("mobile child requests reveal Document while canonical renames preserve a l
 	await expect(parent).toHaveAttribute("data-mount-token", "preserved");
 });
 
+test("a pending mobile sibling reveals Document once and settling preserves a later Chat choice", async ({ baseURL, join, page, room, seed }) => {
+	await installPointerMedia(page, { coarse: true, primaryCoarse: true });
+	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
+	let firstTitle = `First pending source ${room.slice(0, 8)}`;
+	let secondTitle = `Second pending source ${room.slice(0, 8)}`;
+	let first = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		firstTitle,
+		CHILD_SOURCE,
+	);
+	let second = await seedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		secondTitle,
+		CHILD_SOURCE,
+	);
+	let gates: { release: () => void; requested: Promise<void> }[] = [];
+	for (let child of [first, second]) {
+		let requested!: () => void;
+		let request = new Promise<void>(resolve => requested = resolve);
+		let release!: () => void;
+		let held = new Promise<void>(resolve => release = resolve);
+		await page.route(url => url.pathname.endsWith(`/documents/${child.slug}`), async route => {
+			requested();
+			await held;
+			await route.continue().catch(() => {});
+		});
+		gates.push({ release, requested: request });
+	}
+	await page.setViewportSize({ width: 390, height: 844 });
+	await join("ana");
+	let parent = page.locator(`[data-workspace-room="${room}"]`);
+	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
+	let tabs = parent.getByRole("navigation", { name: "Workspace view" });
+	let chat = tabs.getByRole("button", { name: /^Chat/ });
+	let document = tabs.getByRole("button", { name: /^Document/ });
+	try {
+		await page.getByRole("button", { name: "Documents", exact: true }).click();
+		await page.getByRole("dialog", { name: "Documents" })
+			.getByRole("link", { name: firstTitle, exact: true }).click();
+		await gates[0]!.requested;
+		await expect(document).toHaveAttribute("aria-current", "page");
+		await expect(page.getByText("Opening child document…", { exact: true })).toBeVisible();
+		await chat.click();
+		await page.getByRole("button", { name: "Documents", exact: true }).click();
+		await page.getByRole("dialog", { name: "Documents" })
+			.getByRole("link", { name: secondTitle, exact: true }).click();
+		await gates[1]!.requested;
+		await expect(page).toHaveURL(url => url.pathname === second.path);
+		await expect(document).toHaveAttribute("aria-current", "page");
+		await expect(page.getByText("Opening child document…", { exact: true })).toBeVisible();
+
+		// Settling this same request must preserve a tab chosen after its opening.
+		await chat.click();
+		gates[1]!.release();
+		let child = page.locator(`[data-workspace-room="${second.id}"]`);
+		await expect(child.locator("[data-plan-synced]")).toBeAttached();
+		await expect(chat).toHaveAttribute("aria-current", "page");
+		await expect(parent.getByRole("complementary", { name: "Chat" })).toBeVisible();
+		await expect(child).toBeHidden();
+		await document.click();
+		await expect(child).toBeVisible();
+		await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
+		await expect(parent).toHaveAttribute("data-mount-token", "preserved");
+	} finally {
+		for (let gate of gates) gate.release();
+	}
+});
+
 test("a delayed sibling route removes the previous editable child immediately", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First source ${room.slice(0, 8)}`;

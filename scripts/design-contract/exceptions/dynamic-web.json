@@ -42,7 +42,7 @@
 	},
 	{
 		"file": "apps/web/src/document-workspace-host.tsx",
-		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, a close callback, the open child's channel id that Chat sends as its focus, and a child-open callback; a document presentation carries only that child-open callback.",
+		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, a close callback, the open child's channel id that Chat sends as its focus, a child-open callback, and the child request key retained across canonical changes and used only to reveal a newly requested Document view; a document presentation carries only that child-open callback.",
 		"cases": [
 			[
 				"dynamic",
@@ -59,7 +59,7 @@
 				1
 			]
 		],
-		"sourceHash": "73d43558552ac6d750cbeae6b6050a97debec51ad643dd606dfa5ad08feef9f0"
+		"sourceHash": "201e83e15db914171abbbeac5030abb0c2bb5b8671466bcb7126b060702d506e"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",

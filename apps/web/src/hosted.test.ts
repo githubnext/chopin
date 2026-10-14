@@ -323,6 +323,7 @@ describe("anchored child lifecycle", () => {
 			controls: createElement("button", { type: "button" }, "Decisions"),
 			presentation: {
 				child: createElement("div", { "data-layer": "" }, "Child layer"),
+				childRequestKey: "child-request",
 				childState: "open",
 				motion,
 				onChildClose() {},
@@ -408,6 +409,7 @@ describe("anchored child lifecycle", () => {
 				mode: "compact",
 				presentation: {
 					child: createElement("div", null, "Child layer"),
+					childRequestKey: "child-request",
 					childState: "open",
 					motion: "zoom",
 					onChildClose() {},
