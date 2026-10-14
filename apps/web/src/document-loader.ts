@@ -48,6 +48,7 @@ export async function prepareDocumentLoad(
 		},
 	signal: AbortSignal,
 	readers: DocumentReaders = Api,
+	onParentReady?: (parent: Api.ChannelDetail) => void,
 ): Promise<{ detail: Api.ChannelDetail; parent?: Api.ChannelDetail; pathname: string }> {
 	if ("id" in address) {
 		let detail = await readers.channel(address.id, signal);
@@ -65,10 +66,21 @@ export async function prepareDocumentLoad(
 		return { detail, parent, pathname: validatedChildPath(detail, parent) };
 	}
 	if (address.parentSlug) {
-		let [detail, parent] = await Promise.all([
-			readers.document(address.owner, address.repository, address.slug, signal),
-			readers.document(address.owner, address.repository, address.parentSlug, signal),
-		]);
+		// Settle the child read so its early failure does not suppress a parent that is still
+		// arriving. A direct child URL can show that parent while its child fails or loads.
+		let child = readers.document(address.owner, address.repository, address.slug, signal)
+			.then(detail => ({ detail }), error => ({ error }));
+		let parent = await readers.document(
+			address.owner,
+			address.repository,
+			address.parentSlug,
+			signal,
+		);
+		if (parent.channel.parentChannelId) throw new Api.ApiError("Child document not found", 404);
+		onParentReady?.(parent);
+		let result = await child;
+		if ("error" in result) throw result.error;
+		let detail = result.detail;
 		return { detail, parent, pathname: validatedChildPath(detail, parent) };
 	}
 	let detail = await readers.document(

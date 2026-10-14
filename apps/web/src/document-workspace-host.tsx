@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
@@ -24,11 +24,18 @@ import type { DocumentWorkspaceAction } from "./document-workspace-state";
 import { activeActor } from "./active-actor";
 import type { DocumentRouteIdentity } from "./document-route-swap";
 import type { HostedRoute } from "./hosted";
+import type { HostedWorkspaceProps } from "./hosted";
 import type { ChildOpen, WorkspacePresentation } from "./workspace-model";
 
-let RoomWorkspace = lazy(() =>
-	import("./room-workspace").then(module => ({ default: module.RoomWorkspace }))
-);
+let roomWorkspaceImport: Promise<typeof import("./room-workspace")> | undefined;
+export function loadRoomWorkspace(
+	importer: () => Promise<typeof import("./room-workspace")> = () => import("./room-workspace"),
+) {
+	return roomWorkspaceImport ??= importer().catch(reason => {
+		roomWorkspaceImport = undefined;
+		throw reason;
+	});
+}
 
 type DocumentRoute = Extract<HostedRoute, { page: "document" | "child" }>;
 type Metadata = Pick<
@@ -172,6 +179,24 @@ export default function DocumentWorkspaceHost(
 	},
 ) {
 	let [state, setState] = useState(initialDocumentWorkspaceState);
+	let [RoomWorkspace, setRoomWorkspace] = useState<ComponentType<HostedWorkspaceProps>>();
+	let [workspaceError, setWorkspaceError] = useState<unknown>();
+	let [workspaceRetry, setWorkspaceRetry] = useState(0);
+	useEffect(() => {
+		let active = true;
+		// This starts beside the metadata request below, before the document is ready to render.
+		void loadRoomWorkspace().then(
+			module => {
+				if (active) setRoomWorkspace(() => module.RoomWorkspace);
+			},
+			reason => {
+				if (active) setWorkspaceError(reason);
+			},
+		);
+		return () => {
+			active = false;
+		};
+	}, [workspaceRetry]);
 	let stateRef = useRef(state);
 	stateRef.current = state;
 	let send = useCallback((action: DocumentWorkspaceAction) => {
@@ -217,21 +242,18 @@ export default function DocumentWorkspaceHost(
 				? { parentSlug: requestedRoute.parentSlug }
 				: {}),
 		};
-		void (async () => {
-			if (requestedRoute.page === "child" && !current) {
-				let prepared = await prepareDocumentLoad({
-					owner: requestedRoute.owner,
-					repository: requestedRoute.repository,
-					slug: requestedRoute.parentSlug,
-				}, controller.signal);
-				if (!active) return;
-				let parent = prepared.parent ?? prepared.detail;
-				rememberChannel(user.id, parent.channel, parent.repository);
-				send({ parent, route: requestedRoute, type: "parent-ready" });
-			}
-			return await prepareDocumentLoad(address, controller.signal);
-		})().then(prepared => {
-			if (!prepared) return;
+		void prepareDocumentLoad(
+			address,
+			controller.signal,
+			Api,
+			requestedRoute.page === "child" && !current
+				? parent => {
+					if (!active) return;
+					rememberChannel(user.id, parent.channel, parent.repository);
+					send({ parent, route: requestedRoute, type: "parent-ready" });
+				}
+				: undefined,
+		).then(prepared => {
 			if (!active) return;
 			let parent = prepared.parent ?? prepared.detail;
 			let child = prepared.parent ? prepared.detail : undefined;
@@ -435,6 +457,20 @@ export default function DocumentWorkspaceHost(
 		);
 	}
 	if (!loaded) {
+		return <Loading document label="Opening document…" />;
+	}
+	if (workspaceError) {
+		return (
+			<Failure
+				error={workspaceError}
+				onRetry={() => {
+					setWorkspaceError(undefined);
+					setWorkspaceRetry(value => value + 1);
+				}}
+			/>
+		);
+	}
+	if (!RoomWorkspace) {
 		return <Loading document label="Opening document…" />;
 	}
 
