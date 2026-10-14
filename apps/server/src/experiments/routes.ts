@@ -703,6 +703,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					lastSeenAt: machine.lastSeenAt.getTime(),
 					version: live.find(value => value.version)?.version ?? null,
 					...described(live),
+					// An offline machine keeps its server or computer icon.
+					service: live.length
+						? live.some(value => value.about?.service)
+						: !!connections.about(machine.id)?.service,
 				};
 			}),
 		};

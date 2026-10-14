@@ -85,6 +85,8 @@ export class Connections {
 	/** Each person's machine for a document, keyed by document and person; none is automatic. */
 	#choices = new Map<string, string>();
 	#locks = new Map<string, Promise<unknown>>();
+	/** What each machine's newest connection said about it, kept once it disconnects. */
+	#about = new Map<string, About>();
 	constructor(private now = () => Date.now()) {}
 	create(input: PairingInput) {
 		this.sweep();
@@ -147,6 +149,7 @@ export class Connections {
 		};
 		let token = randomBytes(32).toString("base64url");
 		this.#connections.set(connection.id, connection);
+		this.#about.set(machine.id, about);
 		this.#tokens.set(fingerprint(token), { connectionId: connection.id });
 		return { connection, token };
 	}
@@ -155,6 +158,10 @@ export class Connections {
 		return [...this.#connections.values()].filter(value =>
 			value.machineId === machineId && value.expiresAt > this.now()
 		);
+	}
+	/** What a machine last said about itself while this server ran, connected or not. */
+	about(machineId: string): About | undefined {
+		return this.#about.get(machineId);
 	}
 	/** Whether a token is a run's, which the coding agent itself presents. */
 	run(token: string) {
@@ -248,9 +255,8 @@ export class Connections {
 		chosen: string | null | undefined = this.chosen(documentId, owner),
 	) {
 		let last = this.#used.get(documentId);
-		return this.list(repositoryId, owner).filter(value =>
-			!chosen || value.machineId === chosen
-		).sort((a, b) => Number(b.id === last) - Number(a.id === last));
+		return this.list(repositoryId, owner).filter(value => !chosen || value.machineId === chosen)
+			.sort((a, b) => Number(b.id === last) - Number(a.id === last));
 	}
 	/** Whether a connection may take its owner's work on `documentId`, as candidates() decides. */
 	allows(documentId: string, connection: Connection) {

@@ -1550,6 +1550,15 @@ test("a person chooses which of their machines runs a document's work, and back 
 	let { alice, bob, documentId, request, pair, tool, storage } = await setup();
 	let laptop = await pair(alice.cookie);
 	let buildBox = await pair(alice.cookie);
+	// The background service runs it, as its connection says.
+	let service = await (await request(
+		"/api/connector/connections",
+		{ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" },
+		undefined,
+		buildBox.machineToken,
+		{ ...CURRENT, [CONNECTOR_SERVICE_HEADER]: "1" },
+	)).json();
+	await tool(buildBox.token, "disconnect_workspace", {});
 	await request(
 		`/api/connector/machines/${buildBox.machine}/label`,
 		{ label: "build-box" },
@@ -1602,13 +1611,13 @@ test("a person chooses which of their machines runs a document's work, and back 
 		};
 	};
 	expect((await run()).response.status).toBe(200);
-	let offered = text(await tool(buildBox.token, "wait_for_experiment", {}));
+	let offered = text(await tool(service.token, "wait_for_experiment", {}));
 	expect(offered.id).toBeString();
 	expect(error(await tool(laptop.token, "claim_experiment", { id: offered.id })))
 		.toStartWith("connection-forbidden");
 
 	// An offline chosen machine is never silently replaced by another.
-	await tool(buildBox.token, "disconnect_workspace", {});
+	await tool(service.token, "disconnect_workspace", {});
 	let offline = (await run()).response;
 	expect(offline.status).toBe(409);
 	expect(await offline.json()).toEqual({
@@ -1616,8 +1625,8 @@ test("a person chooses which of their machines runs a document's work, and back 
 		message: "build-box is offline. Start chopin connect on it, or choose another machine.",
 	});
 	let listed = await (await request(path, undefined, alice.cookie)).json();
-	expect(listed.machines.find((item: { id: string }) => item.id === buildBox.machine).connected)
-		.toBe(false);
+	expect(listed.machines.find((item: { id: string }) => item.id === buildBox.machine))
+		.toMatchObject({ connected: false, service: true });
 
 	expect((await request(path, { machine: null }, alice.cookie)).status).toBe(200);
 	expect((await run()).response.status).toBe(200);
