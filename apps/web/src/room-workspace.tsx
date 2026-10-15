@@ -191,7 +191,7 @@ type TitleProps = {
 	canManage: boolean;
 	editing?: TitleEdit;
 	label: string;
-	/** The person's machine choice for this document, offered as Run on in the title's menu. */
+	/** The person's machine choice for this document, offered as Machine in the title's menu. */
 	machine?: MachineChoice;
 	onAction: (action: DocumentAction) => void;
 	onEditingChange: (editing?: TitleEdit) => void;

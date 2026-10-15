@@ -1,5 +1,5 @@
 /**
- * Run on, in a document's title menu, starts the document's Planner on the machine chosen under
+ * Machine, in a document's title menu, starts the document's Planner on the machine chosen under
  * `HARNESS=remote`; a machine without a Planner command can't be chosen there.
  * `HARNESS=remote` needs its own server, so this file starts one against a database of its own.
  */
@@ -226,17 +226,17 @@ async function shoot(page: Page, name: string, target?: ReturnType<Page["locator
 	await (target ?? page).screenshot({ path: `${SHOTS}/${name}.png` });
 }
 
-/** Open the title's menu and swap it to Run on's machine list. */
+/** Open the title's menu and swap it to Machine's machine list. */
 async function runOn(page: Page) {
 	await page.getByRole("group", { name: /^Document: / })
 		.getByRole("button", { name: /^Actions for / }).click();
 	let menu = page.getByRole("menu", { name: /^Actions for / });
-	await menu.getByRole("menuitem", { name: /^Run on/ }).click();
+	await menu.getByRole("menuitem", { name: /^Machine\b/ }).click();
 	await expect(menu.getByRole("menuitemradio").first()).toBeVisible();
 	return menu;
 }
 
-test("Run on starts the document's Planner on the machine chosen", async ({ browser }) => {
+test("Machine'starts the document's Planner on the machine chosen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP);
@@ -247,7 +247,7 @@ test("Run on starts the document's Planner on the machine chosen", async ({ brow
 
 	// A machine without a Planner command can't be chosen.
 	let menu = await runOn(page);
-	await expect(menu.getByRole("menuitemradio", { name: /^Your default/ }))
+	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
 		.toHaveAttribute("aria-checked", "true");
 	await expect(menu.getByRole("menuitemradio", { name: /^desk/ }))
 		.toHaveAttribute("aria-disabled", "true");
@@ -255,7 +255,7 @@ test("Run on starts the document's Planner on the machine chosen", async ({ brow
 		"aria-disabled",
 		"true",
 	);
-	await shoot(page, "planner-run-on");
+	await shoot(page, "planner-machine");
 
 	// Choosing studio asks its connector to start the Planner, which then attaches.
 	await menu.getByRole("menuitemradio", { name: /^studio/ }).click();
@@ -281,7 +281,7 @@ test("Run on starts the document's Planner on the machine chosen", async ({ brow
 	await link.detach().catch(() => {});
 });
 
-test("on a phone, Run on's sheet starts the Planner on the machine chosen", async ({ browser }) => {
+test("on a phone, Machine's sheet starts the Planner on the machine chosen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
@@ -291,8 +291,8 @@ test("on a phone, Run on's sheet starts the Planner on the machine chosen", asyn
 	await ready(page);
 	await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
 	await page.getByRole("dialog", { name: /^Actions for / })
-		.getByRole("button", { name: /^Run on: / }).tap();
-	let sheet = page.getByRole("dialog", { name: "Run on", exact: true });
+		.getByRole("button", { name: /^Machine: / }).tap();
+	let sheet = page.getByRole("dialog", { name: "Machine", exact: true });
 	await expect(sheet.getByRole("menuitemradio", { name: /^desk/ }))
 		.toHaveAttribute("aria-disabled", "true");
 	await shoot(page, "planner-phone-sheet");

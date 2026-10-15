@@ -77,15 +77,15 @@ export function documentMenuItems(
 		];
 }
 
-/** Run on is the title menu's alone: it opens the machine list rather than acting. */
+/** Machine is the title menu's alone: it opens the machine list rather than acting. */
 type MenuEntry = Omit<DocumentMenuItem, "action"> & {
-	action: DocumentMenuItem["action"] | "run-on";
+	action: DocumentMenuItem["action"] | "machine";
 };
 
 const DEFAULT_MACHINE = "default";
 
 function rowLabel(row: MachineRow) {
-	return row.id === null ? "Your default" : row.label;
+	return row.id === null ? "Default machine" : row.label;
 }
 
 /** One quiet word or two beside the name: what the default uses now, or the machine's state. */
@@ -123,7 +123,7 @@ export function DocumentActionsMenu(
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
 		/**
-		 * The person's machine choice for this document: adds Run on, which opens the machine list in
+		 * The person's machine choice for this document: adds Machine, which opens the machine list in
 		 * place of the actions. A rare override; the sidebar's Machines sets the default.
 		 */
 		machine?: MachineChoice;
@@ -150,12 +150,16 @@ export function DocumentActionsMenu(
 	let choice = machine?.state;
 	let chosen = chosenMachine(choice);
 	let rows = choice ? machineRows(choice, Date.now()) : [];
-	let runOn = chosen?.label ?? "Default";
+	let currentMachine = chosen?.label ?? "Default";
 	let base = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
 	let items: MenuEntry[] = choice && !channel.archivedAt
 		? base.flatMap(item =>
 			item.action === "rename"
-				? [item, { action: "run-on" as const, label: `Run on: ${runOn}`, icon: ServerIcon }]
+				? [item, {
+					action: "machine" as const,
+					label: `Machine: ${currentMachine}`,
+					icon: ServerIcon,
+				}]
 				: [item]
 		)
 		: base;
@@ -164,7 +168,7 @@ export function DocumentActionsMenu(
 		if (row.id !== (chosen?.id ?? null)) void machine.choose(row.id);
 	};
 	let select = (action: MenuEntry["action"]) => {
-		if (action === "run-on") {
+		if (action === "machine") {
 			setMachineSheet(true);
 			return;
 		}
@@ -277,7 +281,7 @@ export function DocumentActionsMenu(
 		setView("machines");
 	};
 	let showActions = () => {
-		initialItem.current = items.findIndex(item => item.action === "run-on");
+		initialItem.current = items.findIndex(item => item.action === "machine");
 		setView("actions");
 	};
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -286,7 +290,7 @@ export function DocumentActionsMenu(
 			return;
 		}
 		let focused = document.activeElement as HTMLElement | null;
-		if (event.key === "ArrowRight" && focused?.dataset.action === "run-on") {
+		if (event.key === "ArrowRight" && focused?.dataset.action === "machine") {
 			event.preventDefault();
 			showMachines();
 			return;
@@ -397,13 +401,13 @@ export function DocumentActionsMenu(
 							disabled: row.disabled,
 							label: rowLabel(row),
 						}))}
-						label="Run on"
+						label="Machine"
 						onClose={() => setMachineSheet(false)}
 						onSelect={action => {
 							let row = rows.find(value => (value.id ?? DEFAULT_MACHINE) === action);
 							if (row) pickMachine(row);
 						}}
-						title="Run this document on"
+						title="Machine for this document"
 					/>
 				</Suspense>
 			)}
@@ -425,7 +429,7 @@ export function DocumentActionsMenu(
 							<>
 								<MenuItem onClick={showActions}>
 									<ChevronIcon aria-hidden="true" className="rotate-180" />
-									Run on
+									Machine
 								</MenuItem>
 								<MenuSeparator />
 								{rows.map(row => (
@@ -451,11 +455,11 @@ export function DocumentActionsMenu(
 							</>
 						)
 						: items.map(item =>
-							item.action === "run-on"
+							item.action === "machine"
 								? (
 									<button
 										className="app-menu-item"
-										data-action="run-on"
+										data-action="machine"
 										data-density="normal"
 										key={item.action}
 										onClick={showMachines}
@@ -463,8 +467,8 @@ export function DocumentActionsMenu(
 										type="button"
 									>
 										<item.icon aria-hidden="true" />
-										Run on
-										<span className="app-menu-item-meta">{runOn}</span>
+										Machine
+										<span className="app-menu-item-meta">{currentMachine}</span>
 										<ChevronIcon aria-hidden="true" className="app-menu-item-chevron" size={12} />
 									</button>
 								)

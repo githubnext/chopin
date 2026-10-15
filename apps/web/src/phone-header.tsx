@@ -38,7 +38,7 @@ function prefetchDocumentsSheet() {
 /** The phone bar's own room: its title, subtitle and trailing controls. */
 type PhoneHeaderDocument = {
 	archivedAt?: string;
-	/** The person's machine choice for this document, offered as Run on in the actions sheet. */
+	/** The person's machine choice for this document, offered as Machine in the actions sheet. */
 	machine?: MachineChoice;
 	canManage: boolean;
 	/** Open comment threads in the document; the bar offers a list of them when there are any. */

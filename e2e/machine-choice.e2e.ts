@@ -131,27 +131,27 @@ function titleActions(page: Page) {
 		.getByRole("button", { name: /^Actions for / });
 }
 
-/** Open the title's menu and swap it to Run on's machine list. */
+/** Open the title's menu and swap it to Machine's machine list. */
 async function runOn(page: Page) {
 	await titleActions(page).click();
 	let menu = page.getByRole("menu", { name: /^Actions for / });
-	await menu.getByRole("menuitem", { name: /^Run on/ }).click();
+	await menu.getByRole("menuitem", { name: /^Machine\b/ }).click();
 	await expect(menu.getByRole("menuitemradio").first()).toBeVisible();
 	return menu;
 }
 
-/** On a phone: the top bar's actions sheet, then Run on's own sheet of machines. */
+/** On a phone: the top bar's actions sheet, then Machine's own sheet of machines. */
 async function phoneRunOn(page: Page) {
 	await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
 	await page.getByRole("dialog", { name: /^Actions for / })
-		.getByRole("button", { name: /^Run on: / }).tap();
-	let sheet = page.getByRole("dialog", { name: "Run on", exact: true });
+		.getByRole("button", { name: /^Machine: / }).tap();
+	let sheet = page.getByRole("dialog", { name: "Machine", exact: true });
 	await expect(sheet).toBeVisible();
-	await expect(sheet).toContainText("Run this document on");
+	await expect(sheet).toContainText("Machine for this document");
 	return sheet;
 }
 
-test("Run on in the title's menu chooses where work runs, and an offline choice stops Build plan", async ({ seed, join: enter }) => {
+test("Machine in the title's menu chooses where work runs, and an offline choice stops Build plan", async ({ seed, join: enter }) => {
 	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
 	let page = await enter(person(), DESKTOP);
 	let box = await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
@@ -159,9 +159,9 @@ test("Run on in the title's menu chooses where work runs, and an offline choice 
 	await page.reload();
 	let menu = page.getByRole("menu", { name: /^Actions for / });
 
-	// Run on sits in the title's menu, saying the default is in use.
+	// Machine'sits in the title's menu, saying the default is in use.
 	await titleActions(page).click();
-	let item = menu.getByRole("menuitem", { name: /^Run on/ });
+	let item = menu.getByRole("menuitem", { name: /^Machine\b/ });
 	await expect(item).toContainText("Default");
 	await shoot(page, "desktop-title-menu");
 	// ArrowRight opens the list; it starts on the chosen row.
@@ -169,17 +169,17 @@ test("Run on in the title's menu chooses where work runs, and an offline choice 
 	await item.focus();
 	await page.keyboard.press("ArrowRight");
 	await expect(menu.getByRole("menuitemradio")).toHaveCount(3);
-	let fallback = menu.getByRole("menuitemradio", { name: /^Your default/ });
+	let fallback = menu.getByRole("menuitemradio", { name: /^Default machine/ });
 	await expect(fallback).toHaveAttribute("aria-checked", "true");
 	await expect(fallback).toBeFocused();
 	await expect(fallback).toContainText(/build-box|laptop/);
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ })).toContainText("Connected");
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
 		.toHaveAttribute("aria-checked", "false");
-	await shoot(page, "desktop-run-on");
-	// ArrowLeft goes back to the actions, on Run on; Escape closes and returns focus.
+	await shoot(page, "desktop-machine");
+	// ArrowLeft goes back to the actions, on Machine; Escape closes and returns focus.
 	await page.keyboard.press("ArrowLeft");
-	await expect(menu.getByRole("menuitem", { name: /^Run on/ })).toBeFocused();
+	await expect(menu.getByRole("menuitem", { name: /^Machine\b/ })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(menu).toBeHidden();
 	await expect(titleActions(page)).toBeFocused();
@@ -189,8 +189,8 @@ test("Run on in the title's menu chooses where work runs, and an offline choice 
 	await expect(menu).toBeHidden();
 	await page.reload();
 	await titleActions(page).click();
-	await expect(menu.getByRole("menuitem", { name: /^Run on/ })).toContainText("build-box");
-	await menu.getByRole("menuitem", { name: /^Run on/ }).click();
+	await expect(menu.getByRole("menuitem", { name: /^Machine\b/ })).toContainText("build-box");
+	await menu.getByRole("menuitem", { name: /^Machine\b/ }).click();
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
 		.toHaveAttribute("aria-checked", "true");
 	await page.keyboard.press("Escape");
@@ -232,13 +232,13 @@ test("Run on in the title's menu chooses where work runs, and an offline choice 
 	await expect(plan).toHaveText("Build plan");
 	await expect(page.getByRole("alert").filter({ hasText: /offline/i })).toHaveCount(0);
 	await crop(page, plan, "desktop-build-offline");
-	// Run on's list shows the chosen machine offline and not choosable.
+	// Machine's list shows the chosen machine offline and not choosable.
 	await runOn(page);
 	let offline = menu.getByRole("menuitemradio", { name: /^build-box/ });
 	await expect(offline).toHaveAttribute("aria-disabled", "true");
 	await expect(offline).toHaveAttribute("aria-checked", "true");
 	await expect(offline).toContainText("Offline");
-	await shoot(page, "desktop-run-on-offline");
+	await shoot(page, "desktop-machine-offline");
 	await page.keyboard.press("Escape");
 
 	// The machine reconnecting enables Build plan again, as choosing the default does.
@@ -248,21 +248,23 @@ test("Run on in the title's menu chooses where work runs, and an offline choice 
 	await box.disconnect();
 	await page.reload();
 	await offlineLook(false);
-	await (await runOn(page)).getByRole("menuitemradio", { name: /^Your default/ }).click();
+	await (await runOn(page)).getByRole("menuitemradio", { name: /^Default machine/ }).click();
 	await offlineLook(true);
 	await titleActions(page).click();
-	await expect(menu.getByRole("menuitem", { name: /^Run on/ })).toContainText("Default");
-	await menu.getByRole("menuitem", { name: /^Run on/ }).click();
-	await expect(menu.getByRole("menuitemradio", { name: /^Your default/ })).toContainText("laptop");
+	await expect(menu.getByRole("menuitem", { name: /^Machine\b/ })).toContainText("Default");
+	await menu.getByRole("menuitem", { name: /^Machine\b/ }).click();
+	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ })).toContainText(
+		"laptop",
+	);
 });
 
-test("on a phone, Run on in the actions sheet opens a sheet of machines", async ({ join: enter }) => {
+test("on a phone, Machine in the actions sheet opens a sheet of machines", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	let box = await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
 	await page.reload();
 	let sheet = await phoneRunOn(page);
 	let row = sheet.getByRole("menuitemradio", { name: /^build-box/ });
-	await expect(sheet.getByRole("menuitemradio", { name: /^Your default/ }))
+	await expect(sheet.getByRole("menuitemradio", { name: /^Default machine/ }))
 		.toHaveAttribute("aria-checked", "true");
 	await expect(row).toContainText("Connected");
 	expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -272,7 +274,7 @@ test("on a phone, Run on in the actions sheet opens a sheet of machines", async 
 	await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
 	await expect(
 		page.getByRole("dialog", { name: /^Actions for / })
-			.getByRole("button", { name: "Run on: build-box", exact: true }),
+			.getByRole("button", { name: "Machine: build-box", exact: true }),
 	).toBeVisible();
 	await page.getByRole("dialog", { name: /^Actions for / })
 		.getByRole("button", { name: "Cancel", exact: true }).tap();
@@ -292,7 +294,7 @@ test("on a phone, Run on in the actions sheet opens a sheet of machines", async 
 /** Sixty characters: a machine named as people name their computers, at length. */
 const LONG_NAME = "alex-lavaee-workstation-in-the-basement-closet-under-stairs2";
 
-test("a phone's Run on sheet keeps a long machine name inside its rows", async ({ join: enter }) => {
+test("a phone's Machine'sheet keeps a long machine name inside its rows", async ({ join: enter }) => {
 	expect(LONG_NAME).toHaveLength(60);
 	let page = await enter(person(), PHONE);
 	await connected(page, LONG_NAME, { [CONNECTOR_SERVICE_HEADER]: "1" });
@@ -322,7 +324,7 @@ test("a phone's Run on sheet keeps a long machine name inside its rows", async (
 	await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
 	await expect(
 		page.getByRole("dialog", { name: /^Actions for / })
-			.getByRole("button", { name: `Run on: ${LONG_NAME}`, exact: true }),
+			.getByRole("button", { name: `Machine: ${LONG_NAME}`, exact: true }),
 	).toBeInViewport();
 });
 

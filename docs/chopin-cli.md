@@ -191,45 +191,41 @@ secrets in your agent's own login instead. You can't set `PATH` or a
 ### Choose a machine for a document
 
 With more than one machine connected for a repository, Chopin picks one for
-you by default: the machine that last worked on the document, else the first
-idle one. To pick it yourself, use the machine button in the document's Chat
-box or beside **Build plan**. It shows the machine and its state, such as
-**build-box** with a green dot. Both buttons show the same choice; changing
-either changes both. Its menu offers **Automatic** (with the machine it uses
-now), your machines that serve the repository (offline ones greyed out), and
-**Add machine…**. The choice is yours alone and holds for that document until
-you change it:
+you by default: your default machine when it is connected and free, else the
+machine that last worked on the document, else the first idle one. Most people
+never need more than that. To pin one document to a machine, open the
+document's title menu and choose **Machine**. It shows the current choice
+(**Default**, or a machine's name) and opens the machine list in place:
+**Default machine** (with the machine it uses now), then your machines that
+serve the repository with their state; offline ones are greyed out. On a phone,
+**Machine** in the title's actions sheet opens the same list as a sheet. The
+choice is yours alone and holds for that document until you change it:
 
 - **Build plan**, **Build**, **Run** and investigations you start in the
   document go to the machine you chose, behind any work it is already running.
 - Rebuilds and prototypes Chopin starts for you follow the same choice, and
   still need the machine's consent to automatic work.
 - You can choose only your own machines that serve the document's repository.
-- If the machine you chose is offline, its machine buttons and **Build plan**
-  are greyed out, as offline machines are in the menu, and **Build plan**
-  starts nothing. They change within a few seconds of the machine going
-  offline or coming back, as does the Machines count in the sidebar, without a
-  reload; a screen reader hears **build-box is offline** (your
-  machine's name). Other work fails with those words rather than moving to
-  another machine. Start `chopin connect` on it, or choose another one.
+- If the machine you chose is offline, **Build plan** is greyed out, as offline
+  machines are in the list, and starts nothing. It changes within a few seconds
+  of the machine going offline or coming back, as does the Machines count in
+  the sidebar, without a reload; a screen reader hears **build-box is offline**
+  (your machine's name). Other work fails with those words rather than moving
+  to another machine. Start `chopin connect` on it, or choose another one.
 - If Chopin can't read your choice (its database is briefly unavailable), work
   fails with **Can't read your machine choice right now. Try again.** It never
   falls back to another machine; once the choice can be read, it applies again.
-- Choosing **Automatic** goes back to Chopin's pick.
+- Choosing **Default machine** goes back to Chopin's pick.
 
 Disconnecting a machine clears every choice of it, and clears it as your
-favorite.
+default.
 
-You can also mark one of your machines as your favorite with the star at the
-right of its row in the machine menu, or on the **Machines** page (its star,
-or **Set as favorite** in its menu). Only one machine is your favorite, and
-starring it doesn't change the document's choice. **Automatic** then
-uses it first whenever it is connected for the document's repository and free,
-and otherwise picks as before, so Automatic may move to another machine; a
-machine you chose for a document never does. Your favorite is yours alone and
-applies to every document where you leave **Automatic** on. The menu's
-Automatic row says which machine it uses, starred when that is your favorite,
-or that your favorite is offline.
+Your default machine is the one marked as your favorite on the **Machines**
+page (its star, or **Set as favorite** in its menu). Only one machine is your
+default. Chopin uses it first whenever it is connected for the document's
+repository and free, and otherwise picks as before; a machine you chose for a
+document never moves. Your default is yours alone and applies to every document
+left on **Default machine**.
 
 ### Coding agents
 
@@ -415,23 +411,19 @@ naming any document:
 chopin connect . --planner-command "my-planner --flag" --agent copilot
 ```
 
-Choose this machine for a document with the machine button, and Chopin asks it
-to start that document's Planner, unless another account holds it. The backend
+Choose this machine for a document under **Machine** in its title menu, and
+Chopin asks it to start that document's Planner, unless another account holds it. The backend
 gets its credential as with `--planner`.
 
-Choosing another machine or **Automatic** stops it and prints
+Choosing another machine or **Default machine** stops it and prints
 `Stopped the Planner for <document>: the document chose another machine.` So do
 disconnecting or revoking the machine, or losing push access to the repository.
 Chopin then voids the credentials it gave the machine for that document.
 
 This needs a server that speaks connector protocol 4.
 
-The machine button in the document's Chat box shows who runs its Planner:
-your machine's name once its Planner is attached, **Starting…** until then,
-the machine greyed out when it is offline, or **Held by @someone** when
-another account holds the Planner (read-only: it opens no menu). In its menu,
-a machine started without `--planner-command` is greyed out with **Can't run a
-Planner**.
+In the **Machine** list, a machine started without `--planner-command` is
+greyed out.
 
 ## Where things live on this machine
 
