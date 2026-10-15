@@ -44,18 +44,18 @@ export function AccountMenu({ id, menu }: { id?: string; menu: AccountMenuState 
 			role="menu"
 		>
 			<MenuItem density="compact" href="/auth/github/install" rel="noopener" target="_blank">
-				<LockIcon aria-hidden="true" size={14} />
+				<LockIcon aria-hidden="true" size={16} />
 				Manage repository access
 			</MenuItem>
 			<MenuItem
 				density="compact"
 				onClick={menu.onShortcuts}
 			>
-				<KeyboardIcon aria-hidden="true" size={14} />Keyboard shortcuts
+				<KeyboardIcon aria-hidden="true" size={16} />Keyboard shortcuts
 			</MenuItem>
 			<MenuSeparator />
 			<MenuItem density="compact" onClick={menu.onSignOut}>
-				<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
+				<SignInIcon aria-hidden="true" className="-scale-x-100" size={16} />
 				Sign out
 			</MenuItem>
 		</div>

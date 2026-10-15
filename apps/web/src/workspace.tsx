@@ -208,7 +208,7 @@ export function SurfaceToggle(
 				data-motion-feedback="icon"
 				key={expanded ? "restore" : "expand"}
 			>
-				{expanded ? <MessageIcon size={14} /> : <ExpandIcon size={14} />}
+				{expanded ? <MessageIcon size={16} /> : <ExpandIcon size={16} />}
 				{expanded && status && (
 					<span
 						aria-hidden="true"
@@ -508,7 +508,7 @@ export function Workspace(
 													tabIndex={-1}
 													type="button"
 												>
-													<ArrowLeftIcon aria-hidden="true" size={14} />
+													<ArrowLeftIcon aria-hidden="true" size={16} />
 												</button>
 											)}
 											{title}
@@ -541,7 +541,7 @@ export function Workspace(
 										onClick={nested!.onChildClose}
 										type="button"
 									>
-										<ArrowLeftIcon aria-hidden="true" size={14} />
+										<ArrowLeftIcon aria-hidden="true" size={16} />
 									</button>
 									<ol className="workspace-stack-path flex min-w-0 items-center gap-1 text-xs">
 										{nested!.path.map((entry, index) => (
@@ -553,7 +553,7 @@ export function Workspace(
 														: (
 															<button
 																aria-current="page"
-																className="btn btn-compact btn-ghost min-w-0"
+																className="btn btn-xs btn-ghost min-w-0"
 																onClick={() => {
 																	onDestination("plan");
 																	requestAnimationFrame(() => {
@@ -569,7 +569,7 @@ export function Workspace(
 														)
 													: (
 														<button
-															className="btn btn-compact btn-ghost min-w-0"
+															className="btn btn-xs btn-ghost min-w-0"
 															onClick={nested!.onChildClose}
 															type="button"
 														>

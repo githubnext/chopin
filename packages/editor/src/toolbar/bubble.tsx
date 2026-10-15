@@ -64,7 +64,7 @@ const BLOCKS: Array<{ id: Block; glyph: ReactNode; label: string }> = [
 	{ id: "h2", glyph: "H2", label: "Heading 2" },
 	{ id: "h3", glyph: "H3", label: "Heading 3" },
 	{ id: "quote", glyph: ">", label: "Quote" },
-	{ id: "bullet", glyph: <ListIcon size={14} />, label: "Bulleted list" },
+	{ id: "bullet", glyph: <ListIcon size={16} />, label: "Bulleted list" },
 	{ id: "number", glyph: "OL", label: "Numbered list" },
 ];
 
@@ -515,7 +515,7 @@ export function SelectionBubble(
 							data-press="small"
 						>
 							<span aria-hidden="true">{describe(block).short}</span>
-							<ChevronIcon aria-hidden="true" className="size-3.5 rotate-90" />
+							<ChevronIcon aria-hidden="true" className="size-4 rotate-90" />
 						</button>
 
 						<span aria-hidden="true" className={`${SEAM} plan-bubble-seam`} />

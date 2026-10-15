@@ -307,7 +307,7 @@ function CommentPopover(
 		<div className="plan-resolved-comment" data-pinned="">
 			<div className="plan-resolved-comment-head">
 				<p className="plan-resolved-comment-status">
-					<CheckIcon aria-hidden="true" size={14} />
+					<CheckIcon aria-hidden="true" size={16} />
 					<span>
 						{thread.resolver ? `Resolved by ${displayName(thread.resolver)}` : "Resolved"}
 					</span>
@@ -337,7 +337,7 @@ function CommentPopover(
 						onClick={close}
 						type="button"
 					>
-						<CloseIcon aria-hidden="true" size={14} />
+						<CloseIcon aria-hidden="true" size={16} />
 					</button>
 				)}
 			</div>

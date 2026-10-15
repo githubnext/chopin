@@ -49,10 +49,10 @@
 .build-blocker-row {
 	display: flex;
 	align-items: flex-start;
-	gap: var(--menu-item-gap-compact);
+	gap: var(--menu-item-gap-normal);
 	width: 100%;
 	min-height: var(--menu-item-height-normal);
-	padding: var(--menu-item-padding-block-compact) var(--menu-item-padding-inline-normal);
+	padding: var(--menu-item-padding-block-normal) var(--menu-item-padding-inline-normal);
 	border-radius: var(--radius-md);
 	text-align: left;
 	font-size: var(--text-sm);

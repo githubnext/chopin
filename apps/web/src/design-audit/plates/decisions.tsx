@@ -36,7 +36,7 @@ export function DecisionsPlate() {
 				className="btn btn-sm btn-ghost design-audit-resolved-toggle"
 				type="button"
 			>
-				<ChevronIcon className="rotate-90" size={14} />
+				<ChevronIcon className="rotate-90" size={16} />
 				<span>3</span>
 				<span>resolved</span>
 			</button>

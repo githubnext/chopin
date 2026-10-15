@@ -48,7 +48,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 			{command && <pre className="build-connection-code"><code>{command}</code></pre>}
 			<div className="build-connection-actions">
 				<button
-					className="btn btn-compact btn-outline"
+					className="btn btn-xs btn-outline"
 					disabled={!command}
 					onClick={() => copy(command, "Command copied")}
 					type="button"
@@ -73,8 +73,8 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 					phone
 						? "build-status-link"
 						: outline
-						? "btn btn-compact btn-outline"
-						: "btn btn-compact btn-primary build-plan shrink-0"
+						? "btn btn-xs btn-outline"
+						: "btn btn-xs btn-primary build-plan shrink-0"
 				}`}
 			>
 				{label}
@@ -93,7 +93,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 									<div className="build-connection-url">
 										<code>{documentURL}</code>
 										<button
-											className="btn btn-compact btn-outline shrink-0"
+											className="btn btn-xs btn-outline shrink-0"
 											onClick={() => copy(documentURL, "URL copied")}
 											type="button"
 										>

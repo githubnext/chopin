@@ -682,7 +682,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 										: "text-text-secondary"
 								}`}
 							>
-								<command.icon size={14} className="shrink-0" />
+								<command.icon size={16} className="shrink-0" />
 								<span className="ml-2 w-24 shrink-0">{command.label}</span>
 								<span
 									aria-hidden="true"

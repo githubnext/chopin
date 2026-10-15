@@ -236,7 +236,7 @@ export function MessageMarkers(
 					title={jobsOnly ? "Inspect Planner jobs" : "Inspect message analysis"}
 					type="button"
 				>
-					<CodeIcon aria-hidden="true" size={14} />
+					<CodeIcon aria-hidden="true" size={16} />
 				</button>
 			)}
 			{visible && createPortal(

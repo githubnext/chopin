@@ -148,7 +148,7 @@ function MachinesPage() {
 				description="Choose settings, then generate an install script."
 				lead={
 					<a className="machines-back" href="/machines">
-						<ArrowLeftIcon aria-hidden="true" size={14} />
+						<ArrowLeftIcon aria-hidden="true" size={16} />
 						Back to Machines
 					</a>
 				}
@@ -185,7 +185,7 @@ function MachinePage({ id }: { id: string }) {
 					}}
 					type="button"
 				>
-					<ArrowLeftIcon aria-hidden="true" size={14} />
+					<ArrowLeftIcon aria-hidden="true" size={16} />
 					Machines
 				</button>
 			}
@@ -324,7 +324,7 @@ export default function PairingPage() {
 						<>
 							{problem.retry && loadError && (
 								<button
-									className="btn btn-compact btn-outline"
+									className="btn btn-xs btn-outline"
 									onClick={() => setAttempt(value => value + 1)}
 									type="button"
 								>
@@ -332,7 +332,7 @@ export default function PairingPage() {
 									Try again
 								</button>
 							)}
-							<a className="btn btn-compact btn-outline" href="/machines">Go to your machines</a>
+							<a className="btn btn-xs btn-outline" href="/machines">Go to your machines</a>
 						</>
 					)}
 					message={problem.body}

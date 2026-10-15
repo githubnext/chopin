@@ -251,7 +251,7 @@ export function ReferencePicker(
 			<div aria-busy={state.status === "loading"} aria-label={label} id={id} role="listbox">
 				{state.status === "loading" && (
 					<p className="composer-picker-status" role="status">
-						<LoaderIcon className="chat-tool-loader" size={14} />Loading documents...
+						<LoaderIcon className="chat-tool-loader" size={16} />Loading documents...
 					</p>
 				)}
 				{state.status === "limit" && (
@@ -267,13 +267,13 @@ export function ReferencePicker(
 				)}
 				{state.status === "ready" && state.options.length === 0 && (
 					<p className="composer-picker-status" role="status">
-						<SearchIcon size={14} />
+						<SearchIcon size={16} />
 						{empty}
 					</p>
 				)}
 				{state.status === "ready" && state.truncated && (
 					<p className="composer-picker-status" role="status">
-						<InfoIcon size={14} />Some documents are not shown.
+						<InfoIcon size={16} />Some documents are not shown.
 					</p>
 				)}
 				{state.options.map((option, index) => {

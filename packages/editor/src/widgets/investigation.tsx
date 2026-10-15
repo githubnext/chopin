@@ -52,14 +52,14 @@ function Indicator({ state }: { state: InvestigationState }) {
 	if (state === "failed" || state === "interrupted") {
 		return (
 			<span aria-hidden="true" className="plan-research-badge">
-				<WarningIcon size={14} />
+				<WarningIcon size={16} />
 			</span>
 		);
 	}
 	if (state === "completed") {
 		return (
 			<span aria-hidden="true" className="plan-research-badge" data-tone="brand">
-				<InvestigationIcon size={14} />
+				<InvestigationIcon size={16} />
 			</span>
 		);
 	}
@@ -150,7 +150,7 @@ export function InvestigationCard(
 									onClick={event => settle(event, onRemove)}
 									type="button"
 								>
-									<CloseIcon aria-hidden="true" size={14} />
+									<CloseIcon aria-hidden="true" size={16} />
 								</button>
 							)}
 						</Swap>

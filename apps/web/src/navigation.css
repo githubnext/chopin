@@ -1349,7 +1349,7 @@
 	width: 100%;
 	align-items: center;
 	gap: var(--item-gap);
-	border-radius: var(--radius-sm);
+	border-radius: var(--radius-md);
 	padding: var(--item-padding-block) var(--item-padding-inline);
 	min-height: var(--item-height);
 	font-size: var(--text-sm);
@@ -1407,8 +1407,9 @@
 	color: var(--color-destructive-ink);
 }
 
+/* Runs through the panel's padding to its edges. */
 .app-menu-separator {
-	margin: var(--menu-separator-margin) 0;
+	margin: var(--menu-separator-margin) calc(var(--menu-padding) * -1);
 	height: var(--edge-width);
 	background: var(--color-edge);
 }

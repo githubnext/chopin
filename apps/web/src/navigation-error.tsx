@@ -12,7 +12,7 @@ export function NavigationError(
 			<InlineNotice
 				message={message === "Failed to fetch" ? "Could not reach Chopin." : message}
 				actions={onRetry && (
-					<button className="btn btn-compact btn-outline" onClick={onRetry} type="button">
+					<button className="btn btn-xs btn-outline" onClick={onRetry} type="button">
 						{retryLabel}
 					</button>
 				)}

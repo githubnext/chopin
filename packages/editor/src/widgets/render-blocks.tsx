@@ -301,7 +301,7 @@ function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => v
 			className="plan-code-toggle btn btn-icon btn-ghost"
 			data-tooltip={collapsed ? "Show source" : "Hide source"}
 		>
-			<CodeIcon aria-hidden="true" size={14} />
+			<CodeIcon aria-hidden="true" size={16} />
 		</button>
 	);
 }
@@ -545,7 +545,7 @@ function DiagramError({ message }: { message: string }) {
 	return (
 		<div data-plan-error="">
 			<span aria-hidden="true" className="plan-error-badge">
-				<WarningIcon size={14} />
+				<WarningIcon size={16} />
 			</span>
 			<div className="plan-error-text">
 				<strong className="plan-error-title">This diagram could not be drawn</strong>
@@ -649,7 +649,7 @@ function WireframeError({ message }: { message: string }) {
 	return (
 		<div data-plan-error="">
 			<span aria-hidden="true" className="plan-error-badge">
-				<WarningIcon size={14} />
+				<WarningIcon size={16} />
 			</span>
 			<div className="plan-error-text">
 				<strong className="plan-error-title">This wireframe could not be drawn</strong>

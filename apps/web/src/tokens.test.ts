@@ -120,7 +120,7 @@ function sizes(name: string): { height: number; width?: number } {
 		if (!found) continue;
 		let value = found[1]!.replace(/var\((--[\w-]+)\)/g, (_, token) => resolved(token));
 		let length = /^([\d.]+)rem$/.exec(value);
-		let scaled = /^calc\(var\(--spacing\) \* ([\d.]+)\)$/.exec(value);
+		let scaled = /^calc\((?:var\(--spacing\)|0\.25rem) \* ([\d.]+)\)$/.exec(value);
 		if (length) result[property] = Number(length[1]) * 16;
 		else if (scaled) {
 			result[property] = Number.parseFloat(resolved("--spacing")) * 16 * Number(scaled[1]);
@@ -303,13 +303,16 @@ describe("edges and depth", () => {
 
 describe("controls", () => {
 	it("exposes the settled button sizes and destructive states", () => {
+		// shadcn Nova's scale.
+		expect(sizes("btn-xs")).toEqual({ height: 24 });
+		expect(sizes("btn-sm")).toEqual({ height: 28 });
 		expect(sizes("btn-md")).toEqual({ height: 32 });
-		expect(sizes("btn-sm")).toEqual({ height: 24 });
-		expect(sizes("btn-compact")).toEqual({ height: 24 });
+		expect(sizes("btn-lg")).toEqual({ height: 36 });
+		expect(sizes("btn-icon-xs")).toEqual({ height: 24, width: 24 });
 		expect(sizes("btn-icon")).toEqual({ height: 28, width: 28 });
-		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 3)");
-		expect(inlinePadding("btn-sm")).toBe("var(--control-padding-inline)");
-		expect(resolved("--control-padding-inline")).toBe("calc(var(--spacing) * 2)");
+		expect(inlinePadding("btn-xs")).toBe("calc(var(--spacing) * 2)");
+		expect(inlinePadding("btn-sm")).toBe("calc(var(--spacing) * 2.5)");
+		expect(inlinePadding("btn-md")).toBe("calc(var(--spacing) * 2.5)");
 		expect(utility("btn-icon")).toContain("padding: var(--icon-button-padding);");
 		expect(declared("--icon-button-padding")).toBe(
 			"calc((var(--icon-button-size) - var(--icon-size-default)) / 2)",
@@ -346,7 +349,7 @@ describe("controls", () => {
 
 	it("spaces button icons and gives busy actions a readable disabled state", () => {
 		let button = utility("btn");
-		expect(button).toContain("gap: calc(var(--spacing) * 2)");
+		expect(button).toContain("gap: calc(var(--spacing) * 1.5)");
 		expect(button).toMatch(/&\[aria-busy="true"\]:disabled\s*\{[\s\S]*opacity:\s*0\.65/);
 		expect(button).toMatch(
 			/&\[aria-busy="true"\] \[data-button-loader\]\s*\{[\s\S]*animation:\s*button-loader-spin/,
@@ -386,7 +389,7 @@ describe("controls", () => {
 			let lines = readFileSync(file, "utf8").split("\n");
 			for (let [index, line] of lines.entries()) {
 				if (!line.includes("className=") || !/(?<![\w-])btn(?![\w-])/.test(line)) continue;
-				if (/\bbtn-(?:md|sm|compact|icon)\b/.test(line)) continue;
+				if (/\bbtn-(?:xs|sm|md|lg|icon|icon-xs)\b/.test(line)) continue;
 				if (
 					relative(ROOT, file) === "apps/web/src/icon-button.tsx"
 					&& line.includes("app-icon-button btn")

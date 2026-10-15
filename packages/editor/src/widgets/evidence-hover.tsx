@@ -41,7 +41,7 @@ export function EvidenceTrigger() {
 			title="Inspect decision evidence"
 			type="button"
 		>
-			<CodeIcon aria-hidden="true" size={14} />
+			<CodeIcon aria-hidden="true" size={16} />
 		</button>
 	);
 }

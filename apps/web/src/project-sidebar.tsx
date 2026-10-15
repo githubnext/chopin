@@ -560,7 +560,7 @@ export function ProjectSidebar(
 							ref={allDocumentsButton}
 							type="button"
 						>
-							<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
+							<ChevronIcon aria-hidden="true" className="rotate-180" size={16} />
 							<span>All documents</span>
 						</button>
 						{searchButton}

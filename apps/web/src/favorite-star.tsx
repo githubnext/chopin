@@ -32,7 +32,7 @@ export function FavoriteStar(
 			onKeyDown={onKeyDown}
 			type="button"
 		>
-			<StarIcon aria-hidden="true" filled={favorite} size={14} />
+			<StarIcon aria-hidden="true" filled={favorite} size={16} />
 		</button>
 	);
 }

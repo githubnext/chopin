@@ -107,7 +107,7 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 
 	return (
 		<span className="inline-flex items-center gap-1.5 text-sm text-text-tertiary tabular-nums">
-			<Face decorative handle={by} size={14} titled={false} />
+			<Face decorative handle={by} size={16} titled={false} />
 			<span>
 				{verb} by{" "}
 				<span className="text-brand-ink">{isDemoHandle(by) ? displayName(by) : `@${by}`}</span>

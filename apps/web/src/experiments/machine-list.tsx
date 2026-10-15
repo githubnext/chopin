@@ -466,7 +466,7 @@ function MachineRows(
 									<span className="machines-row-name">
 										<StatusDot label={statusWords(machine, now)} state={state} />
 										<span className="machines-name">{machine.label}</span>
-										<MachineIcon aria-hidden="true" className="machines-row-icon" size={14} />
+										<MachineIcon aria-hidden="true" className="machines-row-icon" size={16} />
 									</span>
 									<span className="machines-secondary machines-truncate">{detail}</span>
 								</span>
@@ -513,7 +513,7 @@ export function YourMachines(
 			<h2 className="sr-only" id={headingId}>Your machines</h2>
 			{machines.error && <MachinesProblem code={machines.error} onRetry={machines.retry} />}
 			<label className="machines-search">
-				<SearchIcon aria-hidden="true" className="machines-search-icon" size={14} />
+				<SearchIcon aria-hidden="true" className="machines-search-icon" size={16} />
 				<span className="sr-only">Search machines</span>
 				<input
 					className="field"
@@ -617,7 +617,7 @@ export function MachineDetail(
 			<ul aria-label={`Actions for ${machine.label}`} className="machines-detail-actions">
 				<li>
 					<button className="machines-row" onClick={() => rename(machine)} type="button">
-						<PencilIcon aria-hidden="true" size={14} />
+						<PencilIcon aria-hidden="true" size={16} />
 						Edit machine name…
 					</button>
 				</li>
@@ -628,7 +628,7 @@ export function MachineDetail(
 						onClick={() => void machines.favor(machine.id, !machine.favorite)}
 						type="button"
 					>
-						<StarIcon aria-hidden="true" filled={machine.favorite} size={14} />
+						<StarIcon aria-hidden="true" filled={machine.favorite} size={16} />
 						{machine.favorite ? "Remove favorite" : "Set as favorite"}
 					</button>
 				</li>
@@ -658,7 +658,7 @@ export function MachineDetail(
 						onClick={() => disconnect(machine)}
 						type="button"
 					>
-						<CloseIcon aria-hidden="true" size={14} />
+						<CloseIcon aria-hidden="true" size={16} />
 						Disconnect machine…
 					</button>
 				</li>

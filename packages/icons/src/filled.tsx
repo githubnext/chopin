@@ -1,6 +1,6 @@
 import type { IconProps } from "./icon";
 
-export function ChopinIcon({ size = 14, ...props }: IconProps) {
+export function ChopinIcon({ size = 16, ...props }: IconProps) {
 	let labelled = props["aria-label"] !== undefined || props["aria-labelledby"] !== undefined;
 	return (
 		<svg

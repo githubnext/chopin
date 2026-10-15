@@ -60,7 +60,7 @@ export function SearchIcon(props: IconProps) {
 	);
 }
 
-export function LoaderIcon({ size = 14, ...props }: IconProps) {
+export function LoaderIcon({ size = 16, ...props }: IconProps) {
 	let labelled = props["aria-label"] !== undefined || props["aria-labelledby"] !== undefined;
 	let paths = [
 		[

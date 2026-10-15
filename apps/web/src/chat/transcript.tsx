@@ -88,7 +88,7 @@ function SystemEntry(
 			data-chat-system
 		>
 			<div className="shrink-0">
-				<Icon aria-hidden="true" size={14} />
+				<Icon aria-hidden="true" size={16} />
 			</div>
 			{linked
 				? (
@@ -133,7 +133,7 @@ function CommentSystemEntry(
 			type="button"
 		>
 			<span className="chat-comment-notice-head">
-				<MessageForwardIcon aria-hidden="true" className="icon-first-line" size={14} />
+				<MessageForwardIcon aria-hidden="true" className="icon-first-line" size={16} />
 				<span>
 					Comment on <span className="chat-comment-notice-title">“{comment.excerpt}”</span>{" "}
 					sent to Chopin
@@ -270,7 +270,7 @@ function MessageBody(
 								title="Withdraw"
 								type="button"
 							>
-								<CloseIcon aria-hidden="true" size={14} />
+								<CloseIcon aria-hidden="true" size={16} />
 							</button>
 						)}
 				</div>

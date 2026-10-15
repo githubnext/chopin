@@ -380,7 +380,7 @@ function Undecided(
 								onClick={() => onCardSource(value.id)}
 								type="button"
 							>
-								<MessageForwardIcon aria-hidden="true" size={14} />
+								<MessageForwardIcon aria-hidden="true" size={16} />
 							</button>
 						)}
 					</>
@@ -818,9 +818,9 @@ function DecisionChip(
 			onClick={() => onShow(value.id)}
 			type="button"
 		>
-			<DecisionIcon aria-hidden="true" className="decision-chip-icon" size={14} />
+			<DecisionIcon aria-hidden="true" className="decision-chip-icon" size={16} />
 			<span className="decision-chip-question">{question}</span>
-			<ChevronIcon aria-hidden="true" className="decision-chip-chevron" size={14} />
+			<ChevronIcon aria-hidden="true" className="decision-chip-chevron" size={16} />
 		</button>
 	);
 }

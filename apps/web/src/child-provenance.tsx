@@ -80,8 +80,8 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 			<p className="child-provenance-line">
 				<span aria-hidden="true" className="plan-research-badge" data-tone="brand">
 					{origin.kind === "Investigation"
-						? <InvestigationIcon size={14} />
-						: <SparkleIcon size={14} />}
+						? <InvestigationIcon size={16} />
+						: <SparkleIcon size={16} />}
 				</span>
 				<span className="min-w-0">
 					{origin.kind} from{" "}

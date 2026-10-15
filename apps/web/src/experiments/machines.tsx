@@ -83,7 +83,7 @@ export function MachinesProblem({ code, onRetry }: { code: string; onRetry: () =
 	return (
 		<InlineNotice
 			actions={problem.retry && (
-				<button className="btn btn-compact btn-outline" onClick={onRetry} type="button">
+				<button className="btn btn-xs btn-outline" onClick={onRetry} type="button">
 					<RestartIcon aria-hidden="true" />
 					Retry
 				</button>
@@ -329,7 +329,7 @@ export function MachineActions(
 							onRename();
 						}}
 					>
-						<PencilIcon aria-hidden="true" size={14} />
+						<PencilIcon aria-hidden="true" size={16} />
 						Edit machine name…
 					</MenuItem>
 					{onFavorite && (
@@ -339,7 +339,7 @@ export function MachineActions(
 								onFavorite();
 							}}
 						>
-							<StarIcon aria-hidden="true" filled={machine.favorite} size={14} />
+							<StarIcon aria-hidden="true" filled={machine.favorite} size={16} />
 							{machine.favorite ? "Remove favorite" : "Set as favorite"}
 						</MenuItem>
 					)}
@@ -355,7 +355,7 @@ export function MachineActions(
 									)}
 							>
 								{state?.ok
-									? <CheckIcon aria-hidden="true" className="machines-copyable-done" size={14} />
+									? <CheckIcon aria-hidden="true" className="machines-copyable-done" size={16} />
 									: <CopyIcon />}
 								<span className="machines-menu-copy">
 									{state?.ok ? "Copied" : item.label}
@@ -374,7 +374,7 @@ export function MachineActions(
 						}}
 						tone="destructive"
 					>
-						<CloseIcon aria-hidden="true" size={14} />
+						<CloseIcon aria-hidden="true" size={16} />
 						Disconnect machine…
 					</MenuItem>
 				</div>,

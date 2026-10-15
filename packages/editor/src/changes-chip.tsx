@@ -154,7 +154,7 @@ function Chip(
 				>
 					<ArrowUpIcon
 						className={side === "below" ? "rotate-180" : undefined}
-						size={14}
+						size={16}
 					/>
 					<span className="tabular-nums" aria-hidden="true">{count(waiting)}</span>
 				</button>
@@ -173,11 +173,11 @@ function Chip(
 				>
 					<MotionDisclosureIcon
 						className="editor-motion-feedback"
-						closed={<ChevronIcon size={14} />}
+						closed={<ChevronIcon size={16} />}
 						motionOwner={iconMotionOwner}
 						open={open}
 						opened={
-							<ChevronIcon className={side === "below" ? "-rotate-90" : "rotate-90"} size={14} />
+							<ChevronIcon className={side === "below" ? "-rotate-90" : "rotate-90"} size={16} />
 						}
 					/>
 					<span className="sr-only">What the agent changed</span>

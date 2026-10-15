@@ -179,7 +179,7 @@ function Presence(
 function DecisionHeading() {
 	return (
 		<header className="flex items-center gap-2 px-3 py-2.5 hairline-b">
-			<CheckIcon aria-hidden="true" size={14} />
+			<CheckIcon aria-hidden="true" size={16} />
 			<span className="text-sm font-medium text-text-primary">Decision</span>
 		</header>
 	);

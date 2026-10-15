@@ -27,7 +27,7 @@ export function ProjectSidebarLoading(
 				<div className="min-h-0 flex-1 overflow-y-auto">
 					<header className="project-sidebar-header">
 						<div className="flex items-center gap-2">
-							<span className="size-3.5 shrink-0" />
+							<span className="size-4 shrink-0" />
 							<span className="text-xs font-semibold text-brand">Chopin</span>
 						</div>
 						<IconButton
@@ -44,11 +44,11 @@ export function ProjectSidebarLoading(
 					<div aria-hidden="true" className="pointer-events-none">
 						<div className="project-sidebar-primary-actions">
 							<div className="project-sidebar-primary-action">
-								<span className="size-3.5 shrink-0" />
+								<span className="size-4 shrink-0" />
 								<span>Loading projects…</span>
 							</div>
 							<div className="project-sidebar-primary-action">
-								<span className="size-3.5 shrink-0" />
+								<span className="size-4 shrink-0" />
 								<span>Search</span>
 							</div>
 						</div>
@@ -62,11 +62,11 @@ export function ProjectSidebarLoading(
 				</div>
 				<div aria-hidden="true" className="project-sidebar-footer-actions pointer-events-none">
 					<div className="project-sidebar-primary-action">
-						<span className="size-3.5 shrink-0" />
+						<span className="size-4 shrink-0" />
 						<span>Archived</span>
 					</div>
 					<div className="project-sidebar-primary-action">
-						<span className="size-3.5 shrink-0" />
+						<span className="size-4 shrink-0" />
 						<span>Machines</span>
 					</div>
 				</div>

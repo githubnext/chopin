@@ -200,8 +200,8 @@
 	display: grid;
 	flex: none;
 	place-items: center;
-	width: calc(var(--spacing) * 3.5);
-	height: calc(var(--spacing) * 3.5);
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
 	animation: build-fade var(--duration-base) var(--ease-out);
 }
 

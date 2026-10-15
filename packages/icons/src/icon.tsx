@@ -8,7 +8,7 @@ export type IconProps = Omit<SVGProps<SVGSVGElement>, "height" | "width"> & {
 };
 
 export function LineIcon(
-	{ children, size = 14, viewBox = "0 0 18 18", ...props }: IconProps & {
+	{ children, size = 16, viewBox = "0 0 18 18", ...props }: IconProps & {
 		children: React.ReactNode;
 		viewBox?: string;
 	},

@@ -19,8 +19,8 @@ export function SendAction(
 			type="button"
 		>
 			{busy
-				? <LoaderIcon aria-hidden="true" data-button-loader="" size={14} />
-				: <ArrowUpIcon aria-hidden="true" size={14} />}
+				? <LoaderIcon aria-hidden="true" data-button-loader="" size={16} />
+				: <ArrowUpIcon aria-hidden="true" size={16} />}
 		</button>
 	);
 }

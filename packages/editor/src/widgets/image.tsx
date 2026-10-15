@@ -93,7 +93,7 @@ function Image(
 									setEditing(true);
 								}}
 							>
-								<PencilIcon size={14} aria-hidden="true" />
+								<PencilIcon size={16} aria-hidden="true" />
 							</button>
 							{!failed && width > 0 && (
 								<button
@@ -106,7 +106,7 @@ function Image(
 										resize.reset();
 									}}
 								>
-									<RestartIcon size={14} aria-hidden="true" />
+									<RestartIcon size={16} aria-hidden="true" />
 								</button>
 							)}
 						</span>

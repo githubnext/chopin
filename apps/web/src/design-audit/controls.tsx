@@ -186,7 +186,7 @@ export function Controls() {
 								disabled={state === "Disabled"}
 								type="button"
 							>
-								<PlusIcon aria-hidden="true" size={14} />
+								<PlusIcon aria-hidden="true" size={16} />
 							</button>
 						</StateSample>
 					))}

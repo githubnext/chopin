@@ -106,8 +106,8 @@ export function ChatComposer(
 					id={cueId}
 				>
 					{error
-						? <WarningIcon className="icon-danger icon-first-line" size={14} />
-						: <InfoIcon className="icon-first-line" size={14} />}
+						? <WarningIcon className="icon-danger icon-first-line" size={16} />
+						: <InfoIcon className="icon-first-line" size={16} />}
 					<span>{notice.text}</span>
 					{notice.action && (error
 						? (
@@ -194,7 +194,7 @@ export function ChatComposer(
 											disabled={references.disabled}
 											onClick={references.onMentionDocs}
 										>
-											<PlusIcon size={14} />
+											<PlusIcon size={16} />
 										</button>
 									)}
 								</div>
@@ -234,7 +234,7 @@ export function ChatComposer(
 												title="Stop Chopin"
 												type="button"
 											>
-												<img alt="" className="size-[14px]" src={plannerStop} />
+												<img alt="" className="size-4" src={plannerStop} />
 											</button>
 										)}
 										{run?.action === "resume" && (
@@ -246,7 +246,7 @@ export function ChatComposer(
 												title="Resume Chopin"
 												type="button"
 											>
-												<img alt="" className="size-[14px]" src={plannerResume} />
+												<img alt="" className="size-4" src={plannerResume} />
 											</button>
 										)}
 									</span>

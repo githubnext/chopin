@@ -64,7 +64,7 @@ function ToolCall(
 				: undefined}
 		>
 			<TraceIcon>
-				{status === "Running" && glyph !== "ask" ? <TraceScribble /> : <Icon size={14} />}
+				{status === "Running" && glyph !== "ask" ? <TraceScribble /> : <Icon size={16} />}
 			</TraceIcon>
 			<TraceTitle wrap>{toolCopy(tool.name)}</TraceTitle>
 			{status === "Running" || status === "Done"
@@ -148,7 +148,7 @@ export function WorkProgress(
 				{waiting
 					? (
 						<TraceIcon>
-							<DecisionIcon size={14} />
+							<DecisionIcon size={16} />
 						</TraceIcon>
 					)
 					: active && (

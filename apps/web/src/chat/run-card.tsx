@@ -94,13 +94,13 @@ function RunRing() {
 function RunGlyph({ status }: { status: Wire.Run["status"] }) {
 	if (status === "running") return <RunPulse />;
 	if (status === "waiting") {
-		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={14} />;
+		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
 	}
 	if (status === "finished") {
-		return <CheckIcon aria-hidden="true" className="text-success-ink" size={14} />;
+		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
 	}
 	if (status === "failed" || status === "blocked") {
-		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={14} />;
+		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={16} />;
 	}
 	return <RunRing />;
 }
@@ -108,13 +108,13 @@ function RunGlyph({ status }: { status: Wire.Run["status"] }) {
 function StageGlyph({ status }: { status: Wire.RunStage["status"] }) {
 	if (status === "running") return <RunPulse />;
 	if (status === "completed") {
-		return <CheckIcon aria-hidden="true" className="text-success-ink" size={14} />;
+		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
 	}
 	if (status === "failed" || status === "blocked") {
-		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={14} />;
+		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={16} />;
 	}
 	if (status === "awaiting_input") {
-		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={14} />;
+		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
 	}
 	return <RunRing />;
 }
@@ -182,7 +182,7 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 					<ChevronIcon
 						aria-hidden="true"
 						className="run-chevron shrink-0 text-text-quaternary"
-						size={14}
+						size={16}
 					/>
 				</button>
 				{control && (
@@ -194,7 +194,7 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 						title={control.label}
 						type="button"
 					>
-						<img alt="" className="size-[14px]" src={control.icon} />
+						<img alt="" className="size-4" src={control.icon} />
 					</button>
 				)}
 			</div>
@@ -219,7 +219,7 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 									<WrenchIcon
 										aria-hidden="true"
 										className="shrink-0 text-text-quaternary"
-										size={14}
+										size={16}
 									/>
 								)}
 								<span className="min-w-0 truncate font-mono">

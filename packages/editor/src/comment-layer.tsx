@@ -1464,7 +1464,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				onMouseEnter={() => setNoticeHeld(true)}
 				onMouseLeave={() => setNoticeHeld(false)}
 			>
-				{notice.undo && <CheckIcon aria-hidden="true" size={14} />}
+				{notice.undo && <CheckIcon aria-hidden="true" size={16} />}
 				<span>{notice.text}</span>
 				{notice.undo && (
 					<button

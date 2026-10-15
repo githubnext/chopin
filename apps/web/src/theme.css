@@ -150,12 +150,19 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: calc(var(--spacing) * 2);
+	gap: calc(var(--spacing) * 1.5);
 	border: 0;
-	border-radius: var(--radius-md);
+	border-radius: var(--radius-lg);
 	font-size: var(--text-sm);
 	font-weight: 500;
 	white-space: nowrap;
+
+	/* Each size sets its icon, as shadcn's Nova does: 12px at xs, 14px at sm, 16px above. */
+	& svg {
+		flex: none;
+		width: var(--btn-icon-size, var(--icon-size-default));
+		height: var(--btn-icon-size, var(--icon-size-default));
+	}
 
 	&:disabled {
 		cursor: default;
@@ -177,20 +184,36 @@
 	}
 }
 
-@utility btn-md {
-	height: 2rem;
-	padding-inline: calc(var(--spacing) * 3);
+/* Kept whether or not a page uses them yet, so the whole scale is always available. */
+@source inline("btn-lg btn-icon-xs");
+
+/* shadcn Nova's button scale: xs 24px, sm 28px, md 32px, lg 36px. */
+@utility btn-xs {
+	--btn-icon-size: var(--icon-size-compact);
+	height: calc(var(--spacing) * 6);
+	gap: var(--spacing);
+	padding-inline: calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
+	font-size: var(--text-xs);
 }
 
 @utility btn-sm {
-	height: var(--control-height-compact);
-	padding-inline: var(--control-padding-inline);
+	--btn-icon-size: calc(var(--spacing) * 3.5);
+	height: calc(var(--spacing) * 7);
+	gap: var(--spacing);
+	padding-inline: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-md);
+	font-size: var(--text-xs);
 }
 
-@utility btn-compact {
-	height: var(--control-height-compact);
-	padding-inline: var(--control-padding-inline);
-	font-size: var(--text-xs);
+@utility btn-md {
+	height: calc(var(--spacing) * 8);
+	padding-inline: calc(var(--spacing) * 2.5);
+}
+
+@utility btn-lg {
+	height: calc(var(--spacing) * 9);
+	padding-inline: calc(var(--spacing) * 2.5);
 }
 
 @utility btn-with-count {
@@ -205,6 +228,15 @@
 	width: var(--icon-button-size);
 	height: var(--icon-button-size);
 	padding: var(--icon-button-padding);
+	border-radius: var(--radius-md);
+}
+
+@utility btn-icon-xs {
+	--btn-icon-size: var(--icon-size-compact);
+	width: calc(var(--spacing) * 6);
+	height: calc(var(--spacing) * 6);
+	padding: 0;
+	border-radius: var(--radius-md);
 }
 
 @utility btn-primary {

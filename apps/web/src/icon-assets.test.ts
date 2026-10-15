@@ -37,11 +37,11 @@ test("the interface uses only the shared Nucleo icon family", () => {
 	for (let file of files) expect(readFileSync(file, "utf8")).not.toContain("@phosphor-icons/react");
 });
 
-test("interface icons default to fourteen pixels with compact sidebar controls at twelve", () => {
+test("interface icons default to sixteen pixels with compact sidebar controls at twelve", () => {
 	let icon = readFileSync(join(repository, "packages/icons/src/icon.tsx"), "utf8");
 	let system = readFileSync(join(repository, "packages/icons/src/system.tsx"), "utf8");
-	expect(icon).toContain("size = 14");
-	expect(system).toContain("LoaderIcon({ size = 14");
+	expect(icon).toContain("size = 16");
+	expect(system).toContain("LoaderIcon({ size = 16");
 
 	let names = [
 		"Archive",

@@ -118,7 +118,7 @@ function OpenInPlan({ id, onOpenCard }: { id: string; onOpenCard: (id: string) =
 			title="Open in plan"
 			type="button"
 		>
-			<DocumentIcon aria-hidden="true" size={14} />
+			<DocumentIcon aria-hidden="true" size={16} />
 		</button>
 	);
 }
@@ -140,7 +140,7 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 	if (view.state === "collapsed") {
 		return (
 			<div className="flex items-center gap-2 text-sm text-text-tertiary" data-decision-prompt={id}>
-				<DecisionIcon aria-hidden="true" size={14} />
+				<DecisionIcon aria-hidden="true" size={16} />
 				<span className="min-w-0 flex-1 truncate">{view.text}</span>
 				<OpenInPlan id={id} onOpenCard={onOpenCard} />
 			</div>
@@ -230,7 +230,7 @@ export function ActivityLine({ entry, onOpenCard }: DecisionEntryProps) {
 			data-chat-system
 			data-decision-activity
 		>
-			<SparkleIcon aria-hidden="true" className="mt-0.5 shrink-0" size={14} />
+			<SparkleIcon aria-hidden="true" className="mt-0.5 shrink-0" size={16} />
 			<p className="m-0 min-w-0 text-sm break-words">
 				{content}
 			</p>

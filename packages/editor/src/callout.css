@@ -85,8 +85,8 @@
 
 .plan-callout-type > svg,
 .plan-callout-option > svg {
-	width: 0.875rem;
-	height: 0.875rem;
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
 }
 
 .plan-callout-type > [data-nucleo-icon] {

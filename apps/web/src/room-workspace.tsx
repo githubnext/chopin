@@ -283,7 +283,7 @@ export function DocumentTitle(
 			{path && (
 				<button
 					aria-label={`Back to ${label}`}
-					className="document-title-crumb btn btn-compact btn-ghost min-w-0"
+					className="document-title-crumb btn btn-xs btn-ghost min-w-0"
 					onClick={path.onReturn}
 					type="button"
 				>
@@ -357,7 +357,7 @@ export function DocumentTitle(
 					<Badge icon={ArchiveIcon} label="Archived" size="sm" textSize="2xs" tone="warning" />
 					{canManage && (
 						<button
-							className="btn btn-compact btn-outline"
+							className="btn btn-xs btn-outline"
 							onClick={() => onAction("restore")}
 							type="button"
 						>
@@ -377,7 +377,7 @@ export function DocumentTitle(
 			{path.onShowChild && (
 				<button
 					aria-current="page"
-					className="document-title-crumb document-title-child-crumb btn btn-compact btn-ghost min-w-0"
+					className="document-title-crumb document-title-child-crumb btn btn-xs btn-ghost min-w-0"
 					onClick={path.onShowChild}
 					type="button"
 				>
@@ -1493,7 +1493,7 @@ export function RoomWorkspace(
 						data-child-title-bar
 					>
 						<span className="child-title-icon">
-							<MagnifierIcon aria-hidden="true" size={14} />
+							<MagnifierIcon aria-hidden="true" size={16} />
 						</span>
 						<div className="document-title-slot">{childTitleControl}</div>
 						<button
@@ -1503,7 +1503,7 @@ export function RoomWorkspace(
 							onClick={presentation.onClose}
 							type="button"
 						>
-							<CloseIcon aria-hidden="true" size={14} />
+							<CloseIcon aria-hidden="true" size={16} />
 						</button>
 					</div>
 				)}

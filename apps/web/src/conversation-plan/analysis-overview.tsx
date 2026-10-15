@@ -157,7 +157,7 @@ export function AnalysisOverview({
 									outcome.status === "accepted" ? "text-success-ink" : "text-text-tertiary"
 								}`}
 							>
-								{outcome.status === "accepted" && <CheckIcon aria-hidden="true" size={14} />}
+								{outcome.status === "accepted" && <CheckIcon aria-hidden="true" size={16} />}
 							</span>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-baseline justify-between gap-2">

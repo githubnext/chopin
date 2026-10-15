@@ -3,7 +3,7 @@
  * Style the track and arc through `[data-progress-track]` and `[data-progress-arc]`.
  */
 export function ProgressRingIcon(
-	{ progress = 0, size = 14 }: { progress?: number; size?: number },
+	{ progress = 0, size = 16 }: { progress?: number; size?: number },
 ) {
 	let radius = 5.25;
 	let circumference = 2 * Math.PI * radius;

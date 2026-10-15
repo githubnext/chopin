@@ -321,10 +321,10 @@ function Heading(
 									key={type}
 									value={type}
 								>
-									<TypeIcon type={type} size={14} />
+									<TypeIcon type={type} size={16} />
 									<Select.ItemText>{LABELS[type]}</Select.ItemText>
 									<Select.ItemIndicator asChild>
-										<CheckIcon aria-hidden="true" size={14} />
+										<CheckIcon aria-hidden="true" size={16} />
 									</Select.ItemIndicator>
 								</Select.Item>
 							))}

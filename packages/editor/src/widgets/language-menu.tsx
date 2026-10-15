@@ -194,7 +194,7 @@ export function LanguageMenu(
 						>
 							<span className="min-w-0 flex-1 truncate">{name}</span>
 							{index === selected && (
-								<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={14} />
+								<CheckIcon aria-hidden="true" className="shrink-0 text-brand-ink" size={16} />
 							)}
 						</div>
 					))}

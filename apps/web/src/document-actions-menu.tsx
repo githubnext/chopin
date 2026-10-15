@@ -62,7 +62,7 @@ export function documentMenuItems(
 	let personas: DocumentMenuItem[] = channel.archivedAt ? [] : collaborators.map(actor => ({
 		action: `collaborator:${actor.id}` as const,
 		label: `Open as collaborator: ${actor.name}`,
-		icon: () => <Face decorative handle={actor.id} size={14} titled={false} />,
+		icon: () => <Face decorative handle={actor.id} size={16} titled={false} />,
 	}));
 	return channel.archivedAt
 		? [
@@ -481,7 +481,7 @@ export function DocumentActionsMenu(
 										}}
 										tone={item.destructive ? "destructive" : "normal"}
 									>
-										<item.icon aria-hidden="true" size={14} />
+										<item.icon aria-hidden="true" size={16} />
 										{item.label}
 									</MenuItem>
 								)

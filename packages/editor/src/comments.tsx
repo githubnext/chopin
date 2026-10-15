@@ -199,7 +199,7 @@ function Actions({ link, onResolve }: { link?: string; onResolve?: () => void })
 						ref={trigger}
 						type="button"
 					>
-						<EllipsisIcon aria-hidden="true" size={14} />
+						<EllipsisIcon aria-hidden="true" size={16} />
 					</button>
 					{menu && (
 						<div
@@ -226,7 +226,7 @@ function Actions({ link, onResolve }: { link?: string; onResolve?: () => void })
 								role="menuitem"
 								type="button"
 							>
-								<LinkIcon aria-hidden="true" size={14} />
+								<LinkIcon aria-hidden="true" size={16} />
 								Copy link
 							</button>
 						</div>
@@ -242,7 +242,7 @@ function Actions({ link, onResolve }: { link?: string; onResolve?: () => void })
 					onClick={onResolve}
 					type="button"
 				>
-					<CheckIcon aria-hidden="true" size={14} />
+					<CheckIcon aria-hidden="true" size={16} />
 				</button>
 			)}
 		</div>
@@ -484,7 +484,7 @@ function Composer({
 						onClick={send}
 						type="button"
 					>
-						<ArrowUpIcon aria-hidden="true" size={14} />
+						<ArrowUpIcon aria-hidden="true" size={16} />
 					</button>
 				</div>
 			</div>
@@ -554,7 +554,7 @@ export function ThreadCard({
 					onClick={onBack}
 					type="button"
 				>
-					<ChevronIcon aria-hidden="true" className="rotate-180" size={14} />
+					<ChevronIcon aria-hidden="true" className="rotate-180" size={16} />
 					{backLabel}
 				</button>
 			)}

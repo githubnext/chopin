@@ -62,7 +62,7 @@ export function DecisionCard(
 				onClick={() => setOpen(current => !current)}
 				type="button"
 			>
-				<MessageIcon aria-hidden="true" className="shrink-0" size={14} />
+				<MessageIcon aria-hidden="true" className="shrink-0" size={16} />
 				<span className="min-w-0 flex-1 truncate">
 					Accepted: <span className="text-text-primary">{outcome}</span>
 				</span>
@@ -73,9 +73,9 @@ export function DecisionCard(
 				</span>
 				<MotionDisclosureIcon
 					className="editor-motion-feedback shrink-0 text-text-tertiary"
-					closed={<ChevronIcon size={14} />}
+					closed={<ChevronIcon size={16} />}
 					open={open}
-					opened={<ChevronIcon className="rotate-90" size={14} />}
+					opened={<ChevronIcon className="rotate-90" size={16} />}
 				/>
 			</button>
 			{motion

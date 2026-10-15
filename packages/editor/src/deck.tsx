@@ -520,7 +520,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 							onClick={() => step(-1)}
 							type="button"
 						>
-							<ChevronIcon aria-hidden="true" className="decision-deck-back" size={14} />
+							<ChevronIcon aria-hidden="true" className="decision-deck-back" size={16} />
 						</button>
 						<span className="decision-deck-count">
 							<span className="decision-deck-index">{index}</span> of {items.length}
@@ -534,7 +534,7 @@ export function Deck({ items, label, onLeave, reduced = prefersReduced }: DeckPr
 							onClick={() => step(1)}
 							type="button"
 						>
-							<ChevronIcon aria-hidden="true" size={14} />
+							<ChevronIcon aria-hidden="true" size={16} />
 						</button>
 					</div>
 				</div>

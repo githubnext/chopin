@@ -490,7 +490,7 @@ export function BuildPlanButton(
 					aria-describedby={blocked || offline ? reason : undefined}
 					aria-disabled={blocked || offline ? true : undefined}
 					className={`${
-						phone ? "build-status-link" : "btn btn-compact btn-primary build-plan shrink-0"
+						phone ? "build-status-link" : "btn btn-xs btn-primary build-plan shrink-0"
 					}${offline ? " machine-offline" : ""}`}
 					data-tooltip={blocked === "Chopin isn’t running for this document"
 						? "Chopin is off"
@@ -600,7 +600,7 @@ export function BuildPlanButton(
 								aria-disabled={blocked || busy ? true : undefined}
 								className={phone
 									? "build-status-link build-capsule-action"
-									: "btn btn-compact btn-outline build-capsule-action"}
+									: "btn btn-xs btn-outline build-capsule-action"}
 								data-tooltip={blocked}
 								data-tooltip-detail={blocked ? "" : undefined}
 								data-tooltip-verbatim={blocked ? "" : undefined}

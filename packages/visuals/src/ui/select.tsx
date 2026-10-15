@@ -37,7 +37,7 @@ export function SelectTrigger({
 		>
 			{children}
 			<SelectPrimitive.Icon className="cv-select-chevron" data-slot="select-icon">
-				<ChevronIcon aria-hidden="true" size={14} />
+				<ChevronIcon aria-hidden="true" size={16} />
 			</SelectPrimitive.Icon>
 		</SelectPrimitive.Trigger>
 	);
@@ -73,13 +73,13 @@ export function SelectContent({
 					data-slot="select-popup"
 				>
 					<SelectPrimitive.ScrollUpArrow className="cv-select-scroll cv-select-scroll-up">
-						<ChevronIcon aria-hidden="true" size={14} />
+						<ChevronIcon aria-hidden="true" size={16} />
 					</SelectPrimitive.ScrollUpArrow>
 					<SelectPrimitive.List className="cv-select-listbox" data-slot="select-listbox">
 						{children}
 					</SelectPrimitive.List>
 					<SelectPrimitive.ScrollDownArrow className="cv-select-scroll cv-select-scroll-down">
-						<ChevronIcon aria-hidden="true" size={14} />
+						<ChevronIcon aria-hidden="true" size={16} />
 					</SelectPrimitive.ScrollDownArrow>
 				</SelectPrimitive.Popup>
 			</SelectPrimitive.Positioner>
@@ -104,7 +104,7 @@ export function SelectItem({
 		>
 			<SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
 			<SelectPrimitive.ItemIndicator className="cv-select-check" data-slot="select-checkmark">
-				<CheckIcon aria-hidden="true" size={14} />
+				<CheckIcon aria-hidden="true" size={16} />
 			</SelectPrimitive.ItemIndicator>
 		</SelectPrimitive.Item>
 	);

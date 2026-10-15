@@ -288,7 +288,7 @@ export function DocumentsSheet(
 											aria-hidden="true"
 											className="documents-sheet-project-chevron"
 											data-open={switching || undefined}
-											size={14}
+											size={16}
 										/>
 									</button>
 									<Drawer.Close
@@ -383,7 +383,7 @@ export function DocumentsSheet(
 											>
 												<ArchiveIcon aria-hidden="true" className="documents-sheet-row-icon" />
 												<span className="truncate">Archived</span>
-												<ChevronIcon aria-hidden="true" className="ml-auto" size={14} />
+												<ChevronIcon aria-hidden="true" className="ml-auto" size={16} />
 											</button>
 										</li>
 										<li className="documents-sheet-row" data-current={machinesCurrent || undefined}>

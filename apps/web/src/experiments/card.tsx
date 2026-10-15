@@ -114,7 +114,7 @@ export function InvestigationReference(
 					{state === "completed" && current?.buildBlocker && onApply && canEdit && (
 						<div>
 							<button
-								className="btn btn-compact btn-outline"
+								className="btn btn-xs btn-outline"
 								disabled={busy || locked}
 								onClick={() => void act(onApply)}
 								type="button"

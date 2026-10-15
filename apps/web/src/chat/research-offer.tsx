@@ -466,7 +466,7 @@ export function ResearchOfferCard(
 				data-research-offer={offer.id}
 				role="group"
 			>
-				<SearchIcon aria-hidden="true" className="shrink-0" size={14} />
+				<SearchIcon aria-hidden="true" className="shrink-0" size={16} />
 				<span className="min-w-0 truncate">Research suggestion dismissed</span>
 			</div>
 		);
@@ -520,7 +520,7 @@ export function ResearchOfferCard(
 		>
 			<div className="plan-research-tracked gap-2 rounded-lg bg-page px-3 py-2.5 shadow-resting ring-hairline">
 				<div className="flex min-h-6 items-center gap-2">
-					<SearchIcon aria-hidden="true" className="shrink-0 text-text-tertiary" size={14} />
+					<SearchIcon aria-hidden="true" className="shrink-0 text-text-tertiary" size={16} />
 					<p className="m-0 min-w-0 truncate text-sm font-medium text-text-primary">
 						Research suggestion
 					</p>
@@ -547,7 +547,7 @@ export function ResearchOfferCard(
 							onClick={retryRefinement}
 							type="button"
 						>
-							<WarningIcon aria-hidden="true" size={14} />
+							<WarningIcon aria-hidden="true" size={16} />
 						</button>
 					)}
 					{authors.length > 0 && controls.onSource && (
@@ -597,7 +597,7 @@ export function ResearchOfferCard(
 							<PlusIcon
 								aria-hidden="true"
 								className="mt-0.5 shrink-0 text-text-tertiary"
-								size={14}
+								size={16}
 							/>
 							<p className="m-0 min-w-0 flex-1 break-words py-0.5">{addition.text}</p>
 							{controls.canAct && (
@@ -618,7 +618,7 @@ export function ResearchOfferCard(
 											)}
 										type="button"
 									>
-										<CheckIcon aria-hidden="true" size={14} />
+										<CheckIcon aria-hidden="true" size={16} />
 									</button>
 									<button
 										aria-label="Dismiss addition"
@@ -636,7 +636,7 @@ export function ResearchOfferCard(
 											)}
 										type="button"
 									>
-										<CloseIcon aria-hidden="true" size={14} />
+										<CloseIcon aria-hidden="true" size={16} />
 									</button>
 								</>
 							)}

@@ -90,7 +90,7 @@ function Generate(
 			<InlineNotice
 				actions={problem.retry && (
 					<button
-						className="btn btn-compact btn-outline"
+						className="btn btn-xs btn-outline"
 						onClick={() => generate(autoRun)}
 						type="button"
 					>

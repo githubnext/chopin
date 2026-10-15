@@ -49,7 +49,7 @@ export function RelationNote(
 					event.currentTarget !== document.activeElement && onLeave?.(question)}
 				type="button"
 			>
-				<DocumentIcon aria-hidden="true" size={14} />
+				<DocumentIcon aria-hidden="true" size={16} />
 				<span>Show in document</span>
 				{count > 1 && (
 					<span aria-hidden="true" className="text-text-tertiary tabular-nums">{count}</span>
@@ -74,7 +74,7 @@ export function RelationNote(
 	if (relation === "orphaned") {
 		return (
 			<span className={`${ROW} px-1 text-warning-ink`} data-relation="orphaned">
-				<WarningIcon aria-hidden="true" size={14} />
+				<WarningIcon aria-hidden="true" size={16} />
 				<span>Related text was removed</span>
 			</span>
 		);
@@ -82,7 +82,7 @@ export function RelationNote(
 
 	return (
 		<span className={`${ROW} px-1 text-text-tertiary`} data-relation="empty">
-			<DocumentIcon aria-hidden="true" className="text-text-quaternary" size={14} />
+			<DocumentIcon aria-hidden="true" className="text-text-quaternary" size={16} />
 			<span>No related text</span>
 		</span>
 	);

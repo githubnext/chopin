@@ -81,7 +81,7 @@ export function EvidencePopover({ rows, onSource }: {
 								onClick={() => onSource({ source: row.source!, itemId: row.optionId! })}
 								type="button"
 							>
-								<MessageForwardIcon aria-hidden="true" size={14} />
+								<MessageForwardIcon aria-hidden="true" size={16} />
 							</button>
 						</div>
 					)}
@@ -104,7 +104,7 @@ export function EvidencePopover({ rows, onSource }: {
 												onClick={() => onSource({ source, itemId: item.id })}
 												type="button"
 											>
-												<MessageForwardIcon aria-hidden="true" size={14} />
+												<MessageForwardIcon aria-hidden="true" size={16} />
 											</button>
 										)}
 									</li>
