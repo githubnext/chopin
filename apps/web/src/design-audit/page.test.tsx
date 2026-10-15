@@ -20,7 +20,7 @@ describe("design audit page", () => {
 		}
 	});
 
-	it("documents one shared foundation with only the audit field Select adopted", () => {
+	it("documents one shared foundation with no shared controls adopted yet", () => {
 		let markup = renderToStaticMarkup(createElement(DesignAuditPage));
 		let adoptedControls = markup.match(
 			/<ul aria-label="Adopted shared controls">([\s\S]*?)<\/ul>/,
@@ -28,8 +28,8 @@ describe("design audit page", () => {
 
 		expect(markup).toContain("One foundation, gradual adoption");
 		expect(adoptedControls.match(/<li/g)).toHaveLength(1);
-		expect(adoptedControls).toContain("Select");
-		expect(adoptedControls).toContain("Design audit field only");
+		expect(adoptedControls).toContain("None yet");
+		expect(adoptedControls).not.toContain("Select");
 	});
 
 	it("records adoption provenance and post-PR11 state in the inventory", () => {
@@ -45,7 +45,7 @@ describe("design audit page", () => {
 			id: "shared-adoption",
 			label: "One foundation, gradual adoption",
 			source: "apps/web/src/design-audit/adoption.tsx",
-			states: ["shared-foundation", "audit-field-select"],
+			states: ["shared-foundation", "no-adopted-controls"],
 		});
 	});
 });

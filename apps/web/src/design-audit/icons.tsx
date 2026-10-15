@@ -87,13 +87,15 @@ const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 export function IconCatalogue() {
 	return (
 		<div className="design-audit-icon-catalogue">
-			<div className="design-audit-icon-states" aria-label="Icon colour states">
-				{(["Default", "Active", "Disabled"] as const).map(state => (
-					<div data-icon-state={state.toLowerCase()} key={state}>
-						<CheckIcon aria-hidden="true" size={16} />
-						<span>{state}</span>
-					</div>
-				))}
+			<div className="design-audit-icon-states" aria-label="Icon colour roles">
+				<div data-icon-state="default">
+					<CheckIcon aria-hidden="true" size={16} />
+					<span>Default</span>
+				</div>
+				<div data-icon-state="danger">
+					<WarningIcon aria-hidden="true" className="icon-danger" size={16} />
+					<span>Danger</span>
+				</div>
 			</div>
 			<h4>Nucleo icons</h4>
 			<div className="design-audit-icon-grid">

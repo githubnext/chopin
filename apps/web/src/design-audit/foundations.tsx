@@ -286,13 +286,13 @@ export function Foundations() {
 			<AuditPlate
 				item="presentation-table"
 				title="Presentation tables"
-				description="Static native tables for compact structured data, including narrow overflow."
+				description="Static native tables for compact structured data, including a narrow container."
 			>
 				<div className="design-audit-tables">
 					<div data-table-example="plain">
 						<TableExample rows={TABLE_ROWS} />
 					</div>
-					<div className="design-audit-table-narrow" data-table-example="contained-overflow">
+					<div className="design-audit-table-narrow" data-table-example="contained-narrow">
 						<TableExample rows={OVERFLOW_TABLE_ROWS} variant="contained" />
 					</div>
 				</div>

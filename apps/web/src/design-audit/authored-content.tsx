@@ -117,7 +117,7 @@ let selectedTable: TableDescription = {
 	shape: { columns: 3, rows: 4, simple: true },
 };
 
-let timestamp ="2026-08-28T10:00:00.000Z";
+let timestamp = "2026-08-28T10:00:00.000Z";
 
 function request(
 	stage: Research.RequestStage,

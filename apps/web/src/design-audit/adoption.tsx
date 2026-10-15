@@ -19,8 +19,8 @@ export function Adoption() {
 					<h4>Adopted shared controls</h4>
 					<ul aria-label="Adopted shared controls">
 						<li>
-							<strong>Select</strong>
-							<span>Design audit field only</span>
+							<strong>None yet</strong>
+							<span>Controls use the app's own btn, field, and IconButton</span>
 						</li>
 					</ul>
 				</div>

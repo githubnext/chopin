@@ -324,8 +324,8 @@ describe("controls", () => {
 	it("gives every button tier guarded states without a rest border", () => {
 		for (let tier of ["primary", "secondary", "ghost", "destructive"]) {
 			let rule = utility(`btn-${tier}`);
-			expect(rule).toMatch(/&:hover:not\(:disabled\)/);
-			expect(rule).toMatch(/&:active:not\(:disabled\)/);
+			expect(rule).toContain('&:is(:hover, [data-force-state="hover"]):not(:disabled)');
+			expect(rule).toContain('&:is(:active, [data-force-state="active"]):not(:disabled)');
 			expect(rule.slice(0, rule.indexOf("&:"))).not.toMatch(/\bborder(?:-\w+)?:/);
 		}
 	});

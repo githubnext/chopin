@@ -239,6 +239,10 @@
 	border-radius: var(--radius-md);
 }
 
+/*
+ * `data-force-state` lets the design audit show a button's hover, press, or
+ * focus through these same rules. Nothing in the app sets it.
+ */
 @utility btn-primary {
 	background-color: var(--color-brand);
 	box-shadow: var(--shadow-resting);
@@ -248,12 +252,12 @@
 
 	/* Touch has no hover to leave, so a tapped button would keep it. */
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-brand-hover);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-brand-active);
 	}
 }
@@ -265,12 +269,12 @@
 	outline-offset: calc(-1 * var(--button-edge-width));
 
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-gray-300);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-gray-400);
 	}
 }
@@ -283,12 +287,12 @@
 	box-shadow: var(--shadow-resting);
 
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-inset);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-gray-200);
 		box-shadow: none;
 	}
@@ -301,12 +305,12 @@
 	outline-offset: calc(-1 * var(--button-edge-width));
 
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-danger-surface-hover);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-danger-surface-active);
 	}
 }
@@ -316,12 +320,12 @@
 	color: var(--color-text-secondary);
 
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-gray-200);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-gray-300);
 	}
 }
@@ -333,12 +337,12 @@
 	outline-offset: calc(-1 * var(--button-edge-width));
 
 	@media (hover: hover) {
-		&:hover:not(:disabled) {
+		&:is(:hover, [data-force-state="hover"]):not(:disabled) {
 			background-color: var(--color-destructive-hover);
 		}
 	}
 
-	&:active:not(:disabled) {
+	&:is(:active, [data-force-state="active"]):not(:disabled) {
 		background-color: var(--color-destructive-active);
 	}
 }
@@ -360,6 +364,17 @@
 		border-color: var(--color-destructive);
 		outline: 2px solid var(--color-destructive);
 		outline-offset: 2px;
+	}
+}
+
+/* An inline action or link in running text: brand ink, underlined while pointed at. */
+@utility link {
+	color: var(--color-brand-ink);
+
+	@media (hover: hover) {
+		&:is(:hover, [data-force-state="hover"]) {
+			text-decoration-line: underline;
+		}
 	}
 }
 
@@ -2019,7 +2034,7 @@ button.question-add:disabled {
 	--focus-ring-offset: -2px;
 }
 
-:where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):focus-visible {
+:where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):is(:focus-visible, [data-force-state="focus"]) {
 	outline: var(--focus-ring-width) solid var(--focus-ring-color);
 	outline-offset: var(--focus-ring-offset);
 }

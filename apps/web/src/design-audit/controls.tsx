@@ -1,12 +1,12 @@
 import { LoaderIcon, PlusIcon } from "@chopin/icons";
 import { useRef } from "react";
 import { StaticPlanEditor } from "@chopin/editor/static";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@chopin/visuals";
 
 import { SidebarAccount } from "../account-menu";
 import { RepositoryOptions } from "../add-project-dialog";
 import { BuildGlyph } from "../build-plan-button";
 import { DecisionViewControl } from "../decision-view-control";
+import { IconButton } from "../icon-button";
 import { AuditPlate, StateLabel } from "./frame";
 
 import type * as Api from "../api";
@@ -32,7 +32,14 @@ const TABS = [
 	"</Tabs>",
 ].join("\n") + "\n";
 
-const STATES = ["Default", "Hover", "Active", "Focus", "Disabled"] as const;
+/** Each state is the production rule itself, reached through `data-force-state`. */
+const STATES = [
+	{ label: "Default" },
+	{ force: "hover", label: "Hover" },
+	{ force: "active", label: "Active" },
+	{ force: "focus", label: "Focus" },
+	{ disabled: true, label: "Disabled" },
+] as const satisfies readonly { disabled?: true; force?: string; label: string }[];
 
 const BUILDING = <BuildGlyph look={{ done: 2, kind: "building", total: 5 }} />;
 
@@ -107,11 +114,11 @@ function ButtonRow(
 	return (
 		<div className="design-audit-control-grid">
 			{STATES.map(state => (
-				<StateSample key={state} state={state}>
+				<StateSample key={state.label} state={state.label}>
 					<button
 						className={`btn btn-md ${className}`}
-						data-audit-state={state.toLowerCase()}
-						disabled={state === "Disabled"}
+						data-force-state={"force" in state ? state.force : undefined}
+						disabled={"disabled" in state}
 						type="button"
 					>
 						{label}
@@ -121,6 +128,18 @@ function ButtonRow(
 		</div>
 	);
 }
+
+const ICON_BUTTONS = [
+	{ label: "Ghost", recipe: {} },
+	{ label: "Nested in a hovered row", recipe: { tone: "nested" } },
+	{ label: "Compact", recipe: { glyph: "compact", size: "compact" } },
+] as const;
+
+/** Icon buttons have no pressed fill; hover and focus share one. */
+const ICON_STATES = STATES.filter(state => state.label !== "Active");
+
+/** Links have no pressed or disabled treatment in the app. */
+const LINK_STATES = STATES.filter(state => !("disabled" in state) && state.label !== "Active");
 
 export function Controls() {
 	return (
@@ -172,64 +191,73 @@ export function Controls() {
 			</AuditPlate>
 
 			<AuditPlate
-				description="The shared 28px square control with a 14px glyph and 7px inset."
+				description="The shared IconButton in its tones and sizes."
 				item="icon-buttons"
 				title="Icon buttons"
 			>
-				<div className="design-audit-control-grid">
-					{STATES.map(state => (
-						<StateSample key={state} state={state}>
-							<button
-								aria-label="Add document"
-								className="btn btn-icon btn-ghost"
-								data-audit-state={state.toLowerCase()}
-								disabled={state === "Disabled"}
-								type="button"
-							>
-								<PlusIcon aria-hidden="true" size={16} />
-							</button>
-						</StateSample>
+				<div className="design-audit-button-families">
+					{ICON_BUTTONS.map(({ label, recipe }) => (
+						<div key={label}>
+							<h4>{label}</h4>
+							<div className="design-audit-control-grid">
+								{ICON_STATES.map(state => (
+									<StateSample key={state.label} state={state.label}>
+										<IconButton
+											{...recipe}
+											aria-label="Add document"
+											data-force-state={"force" in state ? state.force : undefined}
+											disabled={"disabled" in state}
+										>
+											<PlusIcon aria-hidden="true" />
+										</IconButton>
+									</StateSample>
+								))}
+							</div>
+						</div>
 					))}
 				</div>
 			</AuditPlate>
 
-			<AuditPlate description="Inline navigation and action links." item="links" title="Links">
+			<AuditPlate
+				description="Inline actions and links in running text."
+				item="links"
+				title="Links"
+			>
 				<div className="design-audit-control-grid">
-					{STATES.map(state => (
-						<StateSample key={state} state={state}>
+					{LINK_STATES.map(state => (
+						<StateSample key={state.label} state={state.label}>
 							<a
-								aria-disabled={state === "Disabled" ? true : undefined}
-								className="design-audit-link"
-								data-audit-state={state.toLowerCase()}
-								href={state === "Disabled" ? undefined : "#links"}
+								className="link text-sm"
+								data-force-state={"force" in state ? state.force : undefined}
+								href="#links"
 							>
-								Read the document
+								Configure
 							</a>
 						</StateSample>
 					))}
 				</div>
 			</AuditPlate>
 
-			<AuditPlate description="Text, selection, and multiline inputs." item="fields" title="Fields">
+			<AuditPlate description="Text and multiline inputs." item="fields" title="Fields">
 				<div className="design-audit-field-grid">
 					<label htmlFor="audit-field-default">
 						Default<input
-							className="field"
+							className="field h-8 w-full px-2 text-sm"
 							defaultValue="Document title"
 							id="audit-field-default"
 						/>
 					</label>
 					<label htmlFor="audit-field-focus">
 						Focus<input
-							className="field"
-							data-audit-state="focus"
+							className="field h-8 w-full px-2 text-sm"
+							data-force-state="focus"
 							defaultValue="Focused title"
 							id="audit-field-focus"
 						/>
 					</label>
 					<label htmlFor="audit-field-disabled">
 						Disabled<input
-							className="field"
+							className="field h-8 w-full px-2 text-sm"
 							defaultValue="Unavailable"
 							disabled
 							id="audit-field-disabled"
@@ -238,40 +266,22 @@ export function Controls() {
 					<label htmlFor="audit-field-invalid">
 						Error<input
 							aria-invalid="true"
-							className="field"
+							className="field h-8 w-full px-2 text-sm"
 							defaultValue=""
 							id="audit-field-invalid"
 						/>
 					</label>
 					<label htmlFor="audit-field-readonly">
 						Read only<input
-							className="field"
+							className="field h-8 w-full px-2 text-sm"
 							defaultValue="Stored title"
 							id="audit-field-readonly"
 							readOnly
 						/>
 					</label>
-					<div className="design-audit-field-control">
-						<span id="audit-field-select-label">Select</span>
-						<Select
-							defaultValue="active"
-							items={[
-								{ value: "active", label: "Active documents" },
-								{ value: "archived", label: "Archived documents" },
-							]}
-						>
-							<SelectTrigger aria-labelledby="audit-field-select-label" id="audit-field-select">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="active">Active documents</SelectItem>
-								<SelectItem value="archived">Archived documents</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
 					<label className="design-audit-field-wide" htmlFor="audit-field-textarea">
 						Textarea<textarea
-							className="field"
+							className="min-h-16 min-w-0 resize-y field px-2 py-1 text-sm font-normal"
 							defaultValue="Write a message to the room"
 							id="audit-field-textarea"
 							rows={3}

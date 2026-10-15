@@ -2,9 +2,3 @@
 	display: grid;
 	gap: 0.75rem;
 }
-
-/* Only the plate's own terminal alerts; the composer below keeps its production styles. */
-.design-audit-error-stack > [role="alert"] {
-	font-size: var(--text-sm);
-	color: var(--color-destructive-ink);
-}

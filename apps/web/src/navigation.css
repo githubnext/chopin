@@ -655,11 +655,11 @@
 	object-fit: contain;
 }
 
-.app-icon-button[data-tone="nested"]:is(:hover:not(:disabled), :focus-visible) {
+.app-icon-button[data-tone="nested"]:is(:hover:not(:disabled), :focus-visible, [data-force-state]) {
 	background: var(--color-hover-nested);
 }
 
-.app-icon-button[data-tone="ghost"]:is(:hover:not(:disabled), :focus-visible) {
+.app-icon-button[data-tone="ghost"]:is(:hover:not(:disabled), :focus-visible, [data-force-state]) {
 	background: var(--color-selected-strong);
 }
 

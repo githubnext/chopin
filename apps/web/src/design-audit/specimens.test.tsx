@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { SelectItem } from "@chopin/visuals";
-import { Children, createElement, isValidElement } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Controls } from "./controls";
@@ -11,25 +10,10 @@ import { BuildBlockerAudit } from "./build-blockers";
 import { AUDIT_INVENTORY } from "./inventory";
 import { Surfaces } from "./surfaces";
 
-import type { ReactElement, ReactNode } from "react";
-
 function plate(markup: string, item: string): string {
 	let start = markup.indexOf(`<section class="design-audit-plate" data-audit-item="${item}">`);
 	let end = markup.indexOf("</section>", start);
 	return start === -1 || end === -1 ? "" : markup.slice(start, end + "</section>".length);
-}
-
-function elementsOfType(
-	node: ReactNode,
-	type: ReactElement["type"],
-	found: ReactElement<{ children?: ReactNode; value?: unknown }>[] = [],
-) {
-	Children.forEach(node, child => {
-		if (!isValidElement<{ children?: ReactNode; value?: unknown }>(child)) return;
-		if (child.type === type) found.push(child);
-		elementsOfType(child.props.children, type, found);
-	});
-	return found;
 }
 
 describe("design audit specimens", () => {
@@ -192,7 +176,7 @@ describe("design audit specimens", () => {
 		let specimen = plate(markup, "presentation-table");
 		expect(specimen).toContain('data-audit-item="presentation-table"');
 		expect(specimen).toContain('data-table-example="plain"');
-		expect(specimen).toContain('data-table-example="contained-overflow"');
+		expect(specimen).toContain('data-table-example="contained-narrow"');
 		expect(specimen).toContain('data-variant="plain"');
 		expect(specimen).toContain('data-variant="contained"');
 		expect(specimen.match(/data-slot="table"/g)).toHaveLength(2);
@@ -231,28 +215,28 @@ describe("design audit specimens", () => {
 		);
 		expect(plate(markup, "dropdowns")).toContain("Manage repository access");
 		expect(markup).not.toContain("design-audit-dropdown-trigger");
-		expect(markup).toContain('data-slot="select-trigger"');
-		expect(markup).toContain('data-slot="select-value"');
-		expect(markup).not.toContain('<select class="field"');
+		expect(markup).not.toContain('data-slot="select-trigger"');
+		for (let id of ["buttons", "icon-buttons", "links", "fields"]) {
+			expect(plate(markup, id)).not.toContain("data-audit-state");
+		}
 		expect(markup).toMatch(/aria-busy="true"[^>]*disabled[^>]*>[\s\S]*data-button-loader/);
-		expect(
-			elementsOfType(Controls(), SelectItem).map(item => [item.props.value, item.props.children]),
-		).toEqual([
-			["active", "Active documents"],
-			["archived", "Archived documents"],
-		]);
+		expect(markup).toContain('class="field h-8 w-full px-2 text-sm"');
+		expect(markup).toContain('class="app-icon-button btn');
+		expect(markup).toContain('class="link text-sm"');
+		for (let state of ["hover", "active", "focus"]) {
+			expect(markup).toContain(`data-force-state="${state}"`);
+		}
 	});
 
-	it("gives focused audit links breathing room", async () => {
-		let css = await Bun.file(new URL("./controls.css", import.meta.url)).text();
+	it("shows control states through the production rules", async () => {
+		let audit = await Bun.file(new URL("./controls.css", import.meta.url)).text();
+		let theme = await Bun.file(new URL("../theme.css", import.meta.url)).text();
 
-		expect(css).toMatch(
-			new RegExp(
-				String.raw`\.design-audit-link:is\(\[data-audit-state="focus"\], :focus-visible\)`
-					+ String.raw`[\s\S]*margin-inline:\s*-0\.25rem;`
-					+ String.raw`[\s\S]*padding-inline:\s*0\.25rem;`,
-			),
-		);
+		expect(audit).not.toContain(".btn-");
+		expect(audit).not.toContain("design-audit-link");
+		expect(theme).toContain('&:is(:hover, [data-force-state="hover"]):not(:disabled)');
+		expect(theme).toContain('&:is(:active, [data-force-state="active"]):not(:disabled)');
+		expect(theme).toContain("@utility link");
 	});
 
 	it("renders every application surface and its meaningful states", () => {

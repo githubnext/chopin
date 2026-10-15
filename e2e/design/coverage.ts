@@ -14,9 +14,9 @@ export let specimens = [
 		sample,
 		covers: "Real button classes: hierarchy, focus, disabled and busy states",
 	})),
-	{ id: "fields", covers: "Labelled input, invalid, readonly, disabled and real Select" },
+	{ id: "fields", covers: "Labelled input, focus, invalid, readonly, disabled and textarea" },
 	{ id: "chat", covers: "Real transcript, tool activity, queued text and terminal error" },
 	{ id: "callouts", covers: "Real static editor and five authored callout variants" },
 	{ id: "code", covers: "Real plain and highlighted code previews" },
-	{ id: "table", covers: "Real static editor table and deliberate internal overflow" },
+	{ id: "table", covers: "Real static editor table, its phone overflow lane and action dock" },
 ] as const;

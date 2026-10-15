@@ -159,14 +159,14 @@ export function BuildView(
 				? (
 					<span className="build-blockers">
 						{phase.decisions && (
-							<button className="build-link" onClick={onShowDecisions} type="button">
+							<button className="build-link link" onClick={onShowDecisions} type="button">
 								{unanswered > 0
 									? `Answer ${plural(unanswered, "decision", "decisions")} first`
 									: "Answer the open decisions first"}
 							</button>
 						)}
 						{phase.comments && (
-							<button className="build-link" onClick={onShowDocument} type="button">
+							<button className="build-link link" onClick={onShowDocument} type="button">
 								{comments > 0
 									? `Update the document for ${
 										plural(comments, "accepted comment", "accepted comments")

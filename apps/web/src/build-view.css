@@ -107,14 +107,9 @@
 	padding: 0;
 	border: 0;
 	background: none;
-	color: var(--color-brand-ink);
 	font: inherit;
 	text-align: start;
 	cursor: pointer;
-}
-
-.build-link:hover {
-	text-decoration: underline;
 }
 
 .build-return {

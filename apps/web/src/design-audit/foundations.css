@@ -214,22 +214,6 @@
 	max-width: 100%;
 }
 
-.design-audit-table-narrow .design-audit-table {
-	min-width: calc(var(--spacing) * 160);
-}
-
-.design-audit-icon-states [data-icon-state="default"] [data-nucleo-icon] {
-	color: var(--color-icon);
-}
-
-.design-audit-icon-states [data-icon-state="active"] [data-nucleo-icon] {
-	color: var(--color-brand);
-}
-
-.design-audit-icon-states [data-icon-state="disabled"] {
-	opacity: 0.4;
-}
-
 @media (max-width: 639px) {
 	.design-audit-type-stack > div {
 		grid-template-columns: 1fr;

@@ -59,6 +59,9 @@ export { DecisionSaveHost } from "./save-bar";
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
 export type { PlanStatusProps } from "./status";
+export { TableActionToolbarView } from "./table/action-toolbar";
+export type { TableActionDockPlacement, TableActionGroup } from "./table/action-toolbar";
+export type { Table as TableDescription } from "./table/ops";
 export {
 	handlesOpenComment,
 	openCommentList,
@@ -70,6 +73,7 @@ export {
 	useThreads,
 } from "./threads";
 export type { Draft, ThreadState, ThreadView } from "./threads";
+export { ResearchDraftShell } from "./toolbar/research";
 export {
 	MENU_SURFACE,
 	ROW as MENU_ROW,
@@ -98,9 +102,5 @@ export {
 	ResearchComposer,
 	ResearchReference,
 } from "./widgets";
-export { ResearchDraftShell } from "./toolbar/research";
 export type { InvestigationCardProps } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
-export { TableActionToolbarView } from "./table/action-toolbar";
-export type { TableActionDockPlacement, TableActionGroup } from "./table/action-toolbar";
-export type { Table as TableDescription } from "./table/ops";

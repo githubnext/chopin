@@ -38,85 +38,10 @@
 	align-items: center;
 }
 
-.design-audit [data-audit-state="hover"].btn-primary {
-	background: var(--color-brand-hover);
-}
-
-.design-audit [data-audit-state="active"].btn-primary {
-	background: var(--color-brand-active);
-}
-
-.design-audit [data-audit-state="hover"].btn-secondary {
-	background: var(--color-gray-300);
-}
-
-.design-audit [data-audit-state="active"].btn-secondary {
-	background: var(--color-gray-400);
-}
-
-.design-audit [data-audit-state="hover"].btn-ghost {
-	background: var(--color-gray-200);
-}
-
-.design-audit [data-audit-state="active"].btn-ghost {
-	background: var(--color-gray-300);
-}
-
-.design-audit [data-audit-state="hover"].btn-destructive {
-	background: var(--color-destructive-hover);
-}
-
-.design-audit [data-audit-state="active"].btn-destructive {
-	background: var(--color-destructive-active);
-}
-
 .design-audit-danger-actions .design-audit-control-state > div {
 	padding: 0.5rem;
 	border-radius: var(--radius-md);
 	background: var(--color-danger-surface);
-}
-
-.design-audit [data-audit-state="hover"].btn-outline-danger {
-	background: var(--color-danger-surface-hover);
-}
-
-.design-audit [data-audit-state="active"].btn-outline-danger {
-	background: var(--color-danger-surface-active);
-}
-
-.design-audit [data-audit-state="focus"] {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
-}
-
-.design-audit-link {
-	border-radius: var(--radius-sm);
-	font-size: var(--text-sm);
-	font-weight: 500;
-	color: var(--color-brand-ink);
-	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.18em;
-}
-
-.design-audit-link:is([data-audit-state="focus"], :focus-visible) {
-	margin-inline: -0.25rem;
-	padding-inline: 0.25rem;
-}
-
-.design-audit-link[data-audit-state="hover"] {
-	color: var(--color-brand-hover);
-	text-decoration-color: currentColor;
-}
-
-.design-audit-link[data-audit-state="active"] {
-	color: var(--color-brand-active);
-}
-
-.design-audit-link[aria-disabled="true"] {
-	color: var(--color-text-quaternary);
-	text-decoration: none;
 }
 
 .design-audit-field-grid {
@@ -125,25 +50,11 @@
 	gap: 1rem;
 }
 
-.design-audit-field-grid label,
-.design-audit-field-control {
+.design-audit-field-grid label {
 	display: grid;
 	gap: 0.375rem;
 	font-size: var(--text-sm);
-	font-weight: 500;
 	color: var(--color-text-secondary);
-}
-
-.design-audit-field-control .cv-select-trigger {
-	width: 100%;
-}
-
-.design-audit-field-grid :is(input, select, textarea) {
-	width: 100%;
-	min-width: 0;
-	padding: 0.375rem 0.5rem;
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
 }
 
 .design-audit-field-wide {
