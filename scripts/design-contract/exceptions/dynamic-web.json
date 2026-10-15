@@ -143,7 +143,7 @@
 				1
 			]
 		],
-		"sourceHash": "10983f1492d50b12ebebcd6c7be52b4da7f8d2ca1817e1693f229a2b0ecba7c4"
+		"sourceHash": "db781012e5b6d249dc29cf714b8b7a48020b60502e6ec2e8a1f595238bbc59ac"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "39847923947ec187c3f3cb1973ab1df745dea4bcaff882fc5dbbf9bd2108d42f"
+		"sourceHash": "723ea86268699e23b89d9e785a712c105dba331e17853bdd33880a55334523f4"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
