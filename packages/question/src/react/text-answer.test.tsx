@@ -38,7 +38,7 @@ test("written decisions use one answer field and the existing Save action", () =
 	expect(html).not.toContain("Add an approach");
 	expect(html).not.toContain("Add an option");
 	expect(html).toContain(">Save<");
-	expect(html).toContain(">Open<");
+	expect(html).not.toContain(">Open<");
 	expect(html).not.toContain('type="radio"');
 	expect(html).not.toContain('type="checkbox"');
 });
