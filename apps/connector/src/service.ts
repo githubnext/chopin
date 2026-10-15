@@ -640,19 +640,46 @@ function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: 
 }
 
 /**
- * The agent's command with stable absolute paths, and the PATH the service runs with, once the
- * agent (the program behind `env` when it is wrapped in one), the interpreters its script names
- * and git all resolve under it to paths that outlast this login and shell; otherwise a refusal,
- * before anything is written.
+ * The program `chopin connect` saved, by the full path it found it at, so install never finds
+ * another one by name on its own PATH; refused when it was saved without one or is gone since.
  */
-async function agentPath(host: ServiceHost, command: string[]) {
+function savedProgram(
+	host: ServiceHost,
+	word: string,
+	what: "agent" | "Planner command",
+	checkout: string,
+) {
+	let again = `Nothing was installed. Run \`chopin connect\` again in ${checkout} so chopin saves `
+		+ `the ${what}'s full path.`;
+	if (!paths(host.platform).isAbsolute(word)) {
+		throw new ServiceError(`The ${what} ${word} was saved without its full path. ${again}`);
+	}
+	let found = finder(host)(word, pathVariable(host));
+	if (!found) {
+		throw new ServiceError(
+			`The ${what} ${word}, which chopin connect found, is no longer there. ${again}`,
+		);
+	}
+	return found;
+}
+
+/**
+ * The agent's command with stable absolute paths, and the PATH the service runs with, once the
+ * agent (the program behind `env` when it is wrapped in one) is where connect found it, and it,
+ * the interpreters its script names and git all resolve under that PATH to paths that outlast
+ * this login and shell; otherwise a refusal, before anything is written.
+ */
+async function agentPath(host: ServiceHost, settings: ConnectSettings) {
 	let which = finder(host);
 	let path = paths(host.platform);
+	let command = settings.command;
 	let at = programAt(command);
 	let resolved = [...command];
 	for (let index of new Set([0, at])) {
 		let word = command[index]!;
-		let found = which(word, pathVariable(host));
+		let found = index === at
+			? savedProgram(host, word, "agent", settings.checkout)
+			: which(word, pathVariable(host));
 		if (!found) {
 			throw new ServiceError(
 				`The agent command ${word} is not on your PATH. Nothing was installed. `
@@ -728,24 +755,14 @@ export type Installed = {
 
 /**
  * The PATH the service runs with, once the Planner backend (the program behind `env` when it is
- * wrapped in one) and the interpreters its script names resolve under it, adding their stable
- * directories where needed; otherwise a refusal. A relative path resolves in the checkout,
- * where `connect` starts the backend.
+ * wrapped in one) is where connect found it and the interpreters its script names resolve under
+ * that PATH, adding their stable directories where needed; otherwise a refusal.
  */
 async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servicePath: string) {
 	let command = settings.plannerCommand;
 	let planner = command[programAt(command)];
 	if (!settings.planners.length || !planner) return servicePath;
-	let refuse = (why: string) => new ServiceError(`${why} Nothing was installed.`);
-	let path = paths(host.platform);
-	let named = /[\\/]/.test(planner) ? path.resolve(settings.checkout, planner) : planner;
-	let found = finder(host)(named, servicePath);
-	if (!found) {
-		throw refuse(
-			`The service would not find the Planner command ${planner} under the PATH it runs with:\n`
-				+ `  ${servicePath}\nInstall it there, or give its absolute path in --planner-command.`,
-		);
-	}
+	let found = savedProgram(host, planner, "Planner command", settings.checkout);
 	let passed = await links(host.platform, found);
 	refuseFleeting(
 		host,
@@ -828,7 +845,7 @@ export async function installService(
 	let config = await readConfig(program.directory);
 	let settings = config.connect;
 	if (!settings) throw new ServiceError(CONNECT_FIRST);
-	let resolved = await agentPath(host, settings.command);
+	let resolved = await agentPath(host, settings);
 	// The service runs the agent by its stable path, not one through a shell's own links.
 	settings = { ...settings, command: resolved.command };
 	let unusable = unsupportedPath(host.platform, program);

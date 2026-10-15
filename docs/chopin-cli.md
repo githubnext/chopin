@@ -273,7 +273,9 @@ no stable path, it warns that `chopin service install` will refuse it.
 `chopin service install` runs your connection in the background, so it starts
 again after a reboot and needs no open terminal. Anything that should outlive
 your login session belongs in the service. It copies what `chopin connect`
-last ran, server included, and runs that copy.
+last ran, server included, and runs that copy. The settings store the full path
+of the agent `chopin connect` found, so the service runs that same agent
+whatever your `PATH` is when you install it.
 
 The quickest way is one command. It connects, and once it sees
 `✓ Connected.` it disconnects and installs the service:

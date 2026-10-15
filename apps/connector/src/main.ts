@@ -1,6 +1,6 @@
 import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:fs";
 import { hostname } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
 import type { CodingAgent } from "@chopin/protocol/agents";
@@ -187,29 +187,30 @@ async function unpairCommand(args: string[]) {
 }
 
 /**
- * `command` with its program, or the one behind `env`, by its stable path when this shell finds
- * it only through a per-shell or temporary directory, as fnm's, saying so. One with no stable
- * path is kept, with a warning, as service install would refuse it.
+ * `command` with its program, or the one behind `env`, by the full path this shell finds it at,
+ * so service install runs that program whatever its own PATH finds. One this shell finds only
+ * through a per-shell or temporary directory, as fnm's, is saved by its stable path, saying so;
+ * one with no stable path is saved with a warning, as service install would refuse it.
  */
-async function stableCommand(command: string[], base: string) {
+async function savedCommand(command: string[], base: string) {
 	let at = programAt(command);
 	let word = command[at]!;
 	let found = /[\\/]/.test(word) ? resolve(base, word) : which(word);
 	if (!found) return command;
 	let host = systemHost();
 	let seen = await stablePath(host.platform, host.env, found);
-	if (!seen) return command;
-	if ("fleeting" in seen) {
+	if (seen && "fleeting" in seen) {
 		createOutput().error(
 			`${word} is ${found}, which lasts only as long as this shell, so chopin service install `
 				+ "will refuse it.",
 		);
-		return command;
+	} else if (seen) {
+		createOutput().say(
+			`Saved ${word} as ${seen.stable}, since ${found} lasts only as long as this shell.`,
+		);
+		found = seen.stable;
 	}
-	createOutput().say(
-		`Saved ${word} as ${seen.stable}, since ${found} lasts only as long as this shell.`,
-	);
-	return [...command.slice(0, at), seen.stable, ...command.slice(at + 1)];
+	return [...command.slice(0, at), found, ...command.slice(at + 1)];
 }
 
 /** The PATH as it is now, which a process (or a test) may have changed since it started. */
@@ -432,18 +433,11 @@ export async function connect(
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
 	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
-	// The service runs what a terminal's connect saves. A relative agent path would resolve
-	// against the service's own working directory.
-	let agent = command[0]!;
+	// The service runs what a terminal's connect saves, by the full paths this shell found.
 	let saving = service ? { command, plannerCommand } : {
-		command: await stableCommand(
-			!isAbsolute(agent) && (agent.includes("/") || agent.includes(sep))
-				? [resolve(agent), ...command.slice(1)]
-				: command,
-			process.cwd(),
-		),
+		command: await savedCommand(command, process.cwd()),
 		plannerCommand: plannerCommand.length
-			? await stableCommand(plannerCommand, info.root)
+			? await savedCommand(plannerCommand, info.root)
 			: plannerCommand,
 	};
 	let save = () =>
@@ -842,9 +836,9 @@ const HELP = [
 	"      Pairs this machine first if it isn't paired yet, with --key or CHOPIN_PAIRING_KEY as",
 	"      pair does. --name <label> names it in Chopin as it pairs (default: the hostname); a",
 	"      machine paired already keeps its name, which its menu on the Machines page changes.",
-	"      Once connected, saves what it runs for service install (never the key). A",
-	"      program this shell finds only through a version manager's per-shell directory is saved",
-	"      by its stable path.",
+	"      Once connected, saves what it runs for service install (never the key), with the",
+	"      agent and Planner command by the full path this shell finds them at. One found only",
+	"      through a version manager's per-shell directory is saved by its stable path.",
 	"      --planner <document URL> (repeatable) with --planner-command <command> also runs that",
 	"      command in the checkout as each document's Planner under HARNESS=remote, and starts it",
 	"      again whenever it exits. CHOPIN_PLANNER_COMMAND may hold the command as a JSON array.",
