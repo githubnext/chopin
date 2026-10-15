@@ -551,7 +551,9 @@ document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
 workflow store, so runs interrupted that way can be resumed from a later
-session.
+session. A Build is not a workflow run and has no card in Chat: its tasks, their
+state and pull requests show under **Build**, whichever machine runs it. The
+Planner's instructions say so, so it does not point people to Chat for a Build.
 
 An interrupted turn is visible and is never replayed automatically because it
 may already have made durable document or question changes. `HarnessAgent.stream()`

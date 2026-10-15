@@ -323,7 +323,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
 			expect(instructions).toContain("proceed on your best judgement");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
-			expect(instructions).toContain("Chat shows a card for each run");
+			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("`intercom` tool can reach other sessions");
 			expect(instructions).toContain("one working in a checkout of owner/repo");
 			expect(instructions).not.toContain("You have no shell");
@@ -358,7 +358,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("`read_repository_file`");
 			expect(instructions).toContain("proceed on your best judgement");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
-			expect(instructions).toContain("Chat shows a card for each run");
+			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("one working in a checkout of owner/repo");
 		}
 		forgetWorkspaces();

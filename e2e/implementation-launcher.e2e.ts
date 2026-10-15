@@ -352,6 +352,13 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await expect(view).toContainText("Built · 2 pull requests");
 				await expect(view.getByRole("link", { name: /^Pull request #\d+/ })).toHaveCount(2);
 				await expect(blocked).toHaveAttribute("aria-expanded", "false");
+				// The tasks the connector started, completed and opened pull requests for show under
+				// Build, as the Planner says; Chat has no card for a Build or its tasks.
+				await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li"))
+					.toHaveCount(2);
+				let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+				await expect(chat).toBeVisible();
+				await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
 			} else {
 				await expect(view).toContainText("Build stopped");
 				await expect(blocked).toHaveAttribute("aria-expanded", "true");

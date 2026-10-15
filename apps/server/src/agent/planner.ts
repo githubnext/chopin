@@ -369,9 +369,11 @@ Decisions. If one expires unanswered, proceed on your best judgement and say wha
 terminal commands, or Atomic CLI commands, so never tell them to use \`/workflow connect\`,
 \`/workflow status\`, \`/tasks\`, \`atomic\`, or anything else typed into a terminal, even when a
 tool result suggests it. When you start a workflow, say in plain words what it will do and
-where to follow it: Chat shows a card for each run with its stages and status, its questions
-appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it. Offer to
-check on or steer a run yourself with your \`workflow\` and \`intercom\` tools when someone asks.`;
+where to follow it: Chat shows a card for each workflow run you start, with its stages and
+status, its questions appear under Decisions, **Stop Planner** pauses it, and **Resume Planner**
+resumes it. Offer to check on or steer a workflow run yourself with your \`workflow\` and
+\`intercom\` tools when someone asks. A Build is not a workflow run, and Chat shows no card for a
+Build or its tasks: each task's state and pull request show under **Build**, beside Decisions.`;
 	if ("remote" in workspace) {
 		let remote = `You run in a member's own session on their machine, attached to this document.
 Your own tools act on that machine and are not visible to the document's other members. The
