@@ -1,0 +1,22 @@
+.design-audit-resolved-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+	gap: 1rem;
+}
+
+.design-audit-resolved-grid > article {
+	height: fit-content;
+}
+
+.design-audit-muted,
+.design-audit-resolved-grid blockquote,
+.design-audit-resolved-grid p {
+	margin: 0;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.design-audit-resolved-grid article > div:first-child span {
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}

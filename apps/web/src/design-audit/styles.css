@@ -25,9 +25,9 @@
 
 .design-audit-header h1,
 .design-audit-section h2,
-.design-audit-plate h3,
+.design-audit-plate > header > h3,
 .design-audit-header p,
-.design-audit-plate p {
+.design-audit-plate > header > p {
 	margin: 0;
 }
 
@@ -133,14 +133,14 @@
 	margin-block-end: 1rem;
 }
 
-.design-audit-plate h3 {
+.design-audit-plate > header > h3 {
 	font-size: var(--text-lg);
 	font-weight: 600;
 	line-height: var(--text-lg--line-height);
 	text-wrap: balance;
 }
 
-.design-audit-plate p {
+.design-audit-plate > header > p {
 	max-width: 70ch;
 	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
@@ -196,6 +196,7 @@
 
 .design-audit-adoption p {
 	margin-block-start: 0.25rem;
+	text-wrap: pretty;
 }
 
 .design-audit-adoption ul {

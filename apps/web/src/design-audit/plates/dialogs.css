@@ -1,0 +1,56 @@
+.design-audit-dialog-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+	gap: 1rem;
+}
+
+.design-audit-dialog-grid > div {
+	display: grid;
+	align-content: start;
+	gap: 0.5rem;
+}
+
+.design-audit-dialog {
+	padding: 1rem;
+	border-radius: var(--radius-xl);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+}
+
+.design-audit-dialog h4,
+.design-audit-dialog p {
+	margin: 0;
+}
+
+.design-audit-dialog h4 {
+	font-size: var(--text-lg);
+	font-weight: 600;
+}
+
+.design-audit-dialog p,
+.design-audit-dialog label,
+.design-audit-dialog [role="alert"] {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.design-audit-dialog label {
+	display: grid;
+	gap: 0.375rem;
+	margin-block-start: 0.75rem;
+	font-weight: 500;
+	color: var(--color-text-secondary);
+}
+
+.design-audit-dialog [role="alert"] {
+	margin-block-start: 0.75rem;
+	color: var(--color-destructive-ink);
+}
+
+.design-audit-dialog-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.5rem;
+	margin-block-start: 1.25rem;
+}
