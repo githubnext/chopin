@@ -50,10 +50,10 @@ test("the button names the chosen machine and its state, or what automatic uses 
 		),
 	).toBe("Machine: build-box, needs pairing again");
 	expect(machineButtonLabel(state({ automatic: { id: "M_box", label: "build-box" } }))).toBe(
-		"Machine: Automatic, uses build-box",
+		"Machine: Default machine, uses build-box",
 	);
-	expect(machineButtonLabel(state())).toBe("Machine: Automatic, no machine connected");
-	expect(machineButtonLabel(undefined)).toBe("Machine: Automatic");
+	expect(machineButtonLabel(state())).toBe("Machine: Default machine, no machine connected");
+	expect(machineButtonLabel(undefined)).toBe("Machine: Default machine");
 });
 
 test("only a chosen machine that is offline stops Build, and says which", () => {
@@ -86,7 +86,7 @@ test("the menu offers Automatic, then each machine, with offline ones disabled",
 		NOW,
 	);
 	expect(rows.map(row => [row.id, row.label, row.checked, row.disabled])).toEqual([
-		[null, "Automatic", false, false],
+		[null, "Default machine", false, false],
 		["M_box", "build-box", true, false],
 		["M_laptop", "laptop", false, true],
 	]);
@@ -158,7 +158,7 @@ test("Chat's machine button says who runs the Planner", () => {
 		true,
 	);
 	expect(rows.map(row => [row.label, row.disabled, row.detail])).toEqual([
-		["Automatic", false, "No machine connected now"],
+		["Default machine", false, "No machine connected now"],
 		["build-box", false, "Connected with chopin 0.0.5 on Linux"],
 		["desk", true, "Can't run a Planner"],
 	]);

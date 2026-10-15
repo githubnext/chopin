@@ -385,9 +385,9 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await page.reload();
 	let chat = composer(page).getByRole("button", { name: /^Machine: / });
 	let header = page.locator(".machine-button:not(.composer-machine .machine-button)").first();
-	await expect(chat).toHaveAccessibleName(/^Machine: Automatic, uses (build-box|laptop)$/);
+	await expect(chat).toHaveAccessibleName(/^Machine: Default machine, uses (build-box|laptop)$/);
 	await expect(header).toHaveAccessibleName(await chat.getAttribute("aria-label") ?? "");
-	await expect(chat).toContainText("Automatic");
+	await expect(chat).toContainText("Default machine");
 	// Inside the composer's bottom row at its right end, just left of Send.
 	let send = composer(page).getByRole("button", { name: "Send message" });
 	let [machineBox, sendBox] = [(await chat.boundingBox())!, (await send.boundingBox())!];
@@ -402,7 +402,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	let menu = page.getByRole("menu", { name: "Machine for this document" });
 	await expect(menu).toBeVisible();
 	await expect(menu.getByRole("menuitemradio")).toHaveCount(3);
-	let automatic = menu.getByRole("menuitemradio", { name: /^Automatic/ });
+	let automatic = menu.getByRole("menuitemradio", { name: /^Default machine/ });
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
 	await expect(automatic).toBeFocused();
 	await expect(automatic).toContainText(/Uses (build-box|laptop) now/);
@@ -509,8 +509,8 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await page.reload();
 	await offlineLook(false);
 	await header.click();
-	await menu.getByRole("menuitemradio", { name: /^Automatic/ }).click();
-	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
+	await menu.getByRole("menuitemradio", { name: /^Default machine/ }).click();
+	await expect(header).toHaveAccessibleName("Machine: Default machine, uses laptop");
 	await offlineLook(true);
 
 	// A star in the menu sets the favorite Automatic prefers, without changing the choice.
@@ -525,9 +525,9 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	let starred = menu.getByRole("button", { name: "Remove build-box as favorite" });
 	await expect(starred).toHaveAttribute("aria-pressed", "true");
 	await expect(menu).toBeVisible();
-	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
+	await expect(header).toHaveAccessibleName("Machine: Default machine, uses laptop");
 	// The favorite is offline, so Automatic says so and uses the laptop.
-	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
+	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
 		.toContainText("Uses laptop now because build-box is offline");
 	await expect(menu.getByRole("button", { name: /favorite/i })).toHaveCount(2);
 	await expect(menu.locator("[data-star][aria-pressed=true]")).toHaveCount(1);
@@ -535,10 +535,10 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	// Back online, Automatic uses the favorite.
 	await box.reconnect();
 	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-	await expect(header).toHaveAccessibleName("Machine: Automatic, uses build-box");
+	await expect(header).toHaveAccessibleName("Machine: Default machine, uses build-box");
 	await header.click();
 	// Starred on its own row only; Automatic's line just names it.
-	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
+	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
 		.toContainText("Uses build-box now");
 	// The star is its own control: Right from the machine's row, Left back.
 	await page.keyboard.press("ArrowDown");
@@ -724,8 +724,8 @@ test("the title's Machine, Chat's button and Build plan's button share one choic
 	await titleSays("build-box");
 	// Chosen beside Build plan: Chat's button and the title's menu follow.
 	await header.click();
-	await menu.getByRole("menuitemradio", { name: /^Automatic/ }).click();
-	await expect(chat).toHaveAccessibleName(/^Machine: Automatic, uses /);
+	await menu.getByRole("menuitemradio", { name: /^Default machine/ }).click();
+	await expect(chat).toHaveAccessibleName(/^Machine: Default machine, uses /);
 	await titleSays("Default");
 	await shoot(page, "three-places-in-step");
 });

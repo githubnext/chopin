@@ -69,11 +69,11 @@ const STATE_WORDS: Record<MachineState, string> = {
 
 /** The machine button's accessible name: which machine, and whether it can take work now. */
 export function machineButtonLabel(state: MachineChoiceState | undefined): string {
-	if (!state) return "Machine: Automatic";
+	if (!state) return "Machine: Default machine";
 	let chosen = chosenMachine(state);
 	if (chosen) return `Machine: ${chosen.label}, ${STATE_WORDS[machineState(chosen)]}`;
 	let using = automaticLabel(state);
-	return `Machine: Automatic, ${using ? `uses ${using}` : "no machine connected"}`;
+	return `Machine: Default machine, ${using ? `uses ${using}` : "no machine connected"}`;
 }
 
 function automaticLabel(state: MachineChoiceState) {
@@ -195,7 +195,7 @@ export function machineRows(
 	return [
 		{
 			id: null,
-			label: "Automatic",
+			label: "Default machine",
 			detail,
 			checked: !chosen,
 			disabled: false,

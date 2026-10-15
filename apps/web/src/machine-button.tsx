@@ -208,7 +208,7 @@ export function MachineButton(
 		// A row scrolled out of the panel comes into view as it takes focus.
 		items[next]?.scrollIntoView({ block: "nearest" });
 	};
-	let name = runner?.name ?? chosen?.label ?? "Automatic";
+	let name = runner?.name ?? chosen?.label ?? "Default machine";
 	let label = runner?.label ?? machineButtonLabel(state);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. Only its accessible name says why.
