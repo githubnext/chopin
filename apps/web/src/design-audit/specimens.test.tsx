@@ -265,6 +265,17 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-current="page"');
 		expect(markup).toContain('aria-label="Compact workspace view"');
 		expect(markup).toContain('data-chat-entry="true"');
+		let chat = plate(markup, "chat");
+		expect(chat).toContain('class="workspace-root');
+		expect(chat).toContain('class="composer-surface field"');
+		expect(chat).toContain('class="composer-notice motion-feedback"');
+		expect(chat).toContain("Reconnect");
+		expect(chat).toContain('aria-label="Stop Chopin"');
+		expect(chat).toContain("Read-only access");
+		expect(chat).toContain("Document archived");
+		expect(chat).not.toContain("<textarea");
+		expect(chat).not.toContain("design-audit-chat-error");
+		expect(plate(markup, "errors")).toContain('class="btn btn-sm btn-outline-danger"');
 		expect(markup).toContain("Avatar image loading");
 		expect(markup).toContain("Editing this question");
 		expect(markup).toContain('role="alert"');
