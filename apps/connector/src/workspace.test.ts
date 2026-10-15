@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -7,11 +7,13 @@ import { existsSync } from "node:fs";
 import {
 	connectors,
 	discardWorkspace,
+	endWorkspace,
 	git,
 	lockWorkspace,
 	noPushEnvironment,
 	prepareWorkspace,
 	processStart,
+	pruneRuns,
 	workspace,
 } from "./workspace";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
@@ -233,5 +235,73 @@ test("a spike's agent cannot push, and its throwaway worktree and branch are rem
 		await rm(root, { recursive: true, force: true });
 		await rm(remote, { recursive: true, force: true });
 		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("retention keeps the most recent finished runs, never one running or queued, nor Planner worktrees", async () => {
+	let root = await mkdtemp(join(tmpdir(), "chopin-keep-root-"));
+	let state = await mkdtemp(join(tmpdir(), "chopin-keep-state-"));
+	try {
+		git(root, "init");
+		git(root, "config", "user.name", "Fixture");
+		git(root, "config", "user.email", "fixture@example.test");
+		git(root, "remote", "add", "origin", "https://github.com/octo-org/score.git");
+		await writeFile(join(root, "file.txt"), "base");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "base");
+		let commit = git(root, "rev-parse", "HEAD");
+		let source = { repositoryId: "R_1", repository: "octo-org/score", commit };
+		let prepare = (id: string) => prepareWorkspace(root, state, { id, source });
+		let runs = join(state, "runs");
+
+		// A connector that crashed mid-run left its run unfinished, with an extra worktree in it.
+		let crashed = await prepare("crashed");
+		git(crashed.path, "worktree", "add", "-b", "chopin/left", join(crashed.extras, "left"));
+		await writeFile(join(crashed.extras, "left", "file.txt"), "uncommitted");
+		let gone = Bun.spawn(["true"]);
+		await gone.exited;
+		let journal = JSON.parse(await readFile(crashed.journalPath, "utf8"));
+		await writeFile(crashed.journalPath, JSON.stringify({ ...journal, pid: gone.pid }));
+		// This connector's run in progress, then one it accepted but has yet to start.
+		await prepare("running");
+		await writeFile(
+			join(runs, "queued.json"),
+			JSON.stringify({
+				id: "queued",
+				state: "accepted",
+				pid: process.pid,
+				processStart: (await processStart()(process.pid))!.id,
+			}),
+		);
+		for (let id of ["a", "b", "c", "d"]) {
+			await endWorkspace(root, await prepare(id));
+			await Bun.sleep(5);
+		}
+		let planner = join(state, "planners", "octo-org", "score", "D_1");
+		await mkdir(planner, { recursive: true });
+		await writeFile(join(planner, "notes.txt"), "the Planner's");
+
+		// 0 keeps every run.
+		expect(await pruneRuns(state, 0)).toEqual([]);
+		expect((await pruneRuns(state, 2)).sort()).toEqual(["a", "b", "crashed"]);
+		expect((await readdir(runs)).sort()).toEqual([
+			"c",
+			"c.json",
+			"d",
+			"d.json",
+			"queued.json",
+			"running",
+			"running-worktrees",
+			"running.json",
+		]);
+		let listed = git(root, "worktree", "list", "--porcelain").split("\n")
+			.filter(line => line.startsWith("worktree "));
+		expect(listed).toHaveLength(4);
+		expect(existsSync(join(planner, "notes.txt"))).toBe(true);
+		// The oldest kept goes next; the run in progress never does.
+		expect(await pruneRuns(state, 1)).toEqual(["c"]);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
 	}
 });

@@ -350,6 +350,8 @@ Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
 Service:    running (systemd, pid 4242)
             definition: /home/me/.config/systemd/user/chopin.service
             runs /home/me/src/score with /home/me/.local/bin/copilot --acp --allow-all, on https://your-chopin-instance.example
+Runs:       4 finished runs kept (1.2 GB), 1 running
+Planners:   /home/me/.local/state/chopin/connector/planners/octo-org/score/5f0c…e21 (octo-org/score, document 5f0c…e21)
 Log:        /home/me/.local/state/chopin/connector/chopin.log
 Base dir:   /home/me/.local/state/chopin/connector
 ```
@@ -430,6 +432,25 @@ another account holds the Planner (read-only: it opens no menu). In its menu,
 a machine started without `--planner-command` is greyed out with **Can't run a
 Planner**.
 
+## Where things live on this machine
+
+Everything `chopin connect` does on a machine stays in its base dir,
+`~/.local/state/chopin/connector` unless `--base-dir` or `CHOPIN_HOME` moves
+it, never beside your checkout:
+
+- `runs/<run id>` is each job's own worktree, kept for you to inspect. A build
+  that needs more worktrees, for pull requests at once, makes them in
+  `runs/<run id>-worktrees/`, and they go when the run ends, uncommitted
+  changes included, since their pull requests were pushed.
+- The 15 most recently finished runs are kept; older ones go as `chopin connect`
+  starts and after each run. `--keep-runs <n>` keeps `n` instead, and
+  `--keep-runs 0` keeps every run. A run still going is never removed.
+- `planners/<owner>/<repo>/<document id>` is where a Planner command keeps its
+  own worktree for a document. `chopin` never removes it.
+
+See [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
+for the rest.
+
 ## Update
 
 ```sh
@@ -461,6 +482,7 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 | `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.                                    |
 | `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
+| `chopin connect … --keep-runs <n>`                          | Keeps the worktrees of the `n` most recently finished runs (default 15, 0 for all) and removes older ones.        |
 | `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                        |
 | `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log.                         |
 | `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                        |

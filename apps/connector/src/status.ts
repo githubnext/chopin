@@ -3,7 +3,15 @@ import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { connectors, processStart, type StartFailure } from "./workspace";
+import { join } from "node:path";
+import {
+	connectors,
+	diskUsage,
+	plannerWorktrees,
+	processStart,
+	runs,
+	type StartFailure,
+} from "./workspace";
 
 /** Where the server origin came from: CHOPIN_URL, config.json, or Chopin's own default. */
 export type ServerSource = "CHOPIN_URL" | "config" | "default";
@@ -73,6 +81,13 @@ export type StatusReport = {
 	serviceRuns: ConnectSettings | null;
 	/** What the last `chopin connect` that connected ran, which the next install copies. */
 	lastConnect: ConnectSettings | null;
+	/**
+	 * The runs in `<base>/runs`: how many finished runs' worktrees are `kept`, how many are
+	 * `running` or queued, and the kept worktrees' size in `bytes`, absent where it can't be read.
+	 */
+	runs: { kept: number; running: number; bytes?: number };
+	/** The worktrees Planner commands made in `<base>/planners`, with their repository and document. */
+	plannerWorktrees: Array<{ path: string; repository: string; document: string }>;
 };
 
 const CHECK_MS = 3000;
@@ -145,6 +160,9 @@ export async function collectStatus(options: {
 		service = { state: "unknown", detail: error instanceof Error ? error.message : String(error) };
 	}
 	let config = await readConfig(directory);
+	let found = await runs(directory, processStart(host.platform, host.run));
+	let kept = found.filter(run => !run.active && run.worktree);
+	let bytes = await diskUsage(kept.map(run => join(directory, "runs", run.attempt)));
 	return {
 		version: VERSION,
 		protocol: CONNECTOR_PROTOCOL,
@@ -175,6 +193,12 @@ export async function collectStatus(options: {
 		baseDir: directory,
 		serviceRuns: config.service?.settings ?? null,
 		lastConnect: config.connect ?? null,
+		runs: {
+			kept: kept.length,
+			running: found.filter(run => run.active).length,
+			...(bytes === undefined ? {} : { bytes }),
+		},
+		plannerWorktrees: await plannerWorktrees(directory),
 	};
 }
 
@@ -211,6 +235,13 @@ function failing(failure: Failure, now: number) {
 	return `: failing (${failure.how}${failure.stderr ? `: ${failure.stderr}` : ""})${
 		wait === undefined ? "" : wait > 0 ? `, retrying in ${wait}s` : ", retrying now"
 	}`;
+}
+
+/** `bytes` as a person reads a size. */
+function size(bytes: number) {
+	if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} kB`;
+	if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+	return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
 /** The report as lines for a person; `now` says when a failing Planner is tried again. */
@@ -262,6 +293,10 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 		? `unknown (${service.detail})`
 		: `${service.state} (${service.manager}${service.pid ? `, pid ${service.pid}` : ""})`;
 	let { serviceRuns: runs, lastConnect: last } = report;
+	let kept = report.runs;
+	let worktrees = report.plannerWorktrees.map(item =>
+		`${item.path} (${item.repository}, document ${item.document})`
+	);
 	return [
 		`chopin ${report.version} (connector protocol ${report.protocol})`,
 		row("Server", `${report.server.origin} (${SOURCES[report.server.source]})`),
@@ -283,6 +318,17 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					: []),
 				...service.notes.map(more),
 			]),
+		...(kept.kept || kept.running
+			? [
+				row(
+					"Runs",
+					`${kept.kept} finished run${kept.kept === 1 ? "" : "s"} kept${
+						kept.bytes === undefined ? "" : ` (${size(kept.bytes)})`
+					}${kept.running ? `, ${kept.running} running` : ""}`,
+				),
+			]
+			: []),
+		...(worktrees.length ? [row("Planners", worktrees[0]!), ...worktrees.slice(1).map(more)] : []),
 		row("Log", report.log),
 		row("Base dir", report.baseDir),
 	];

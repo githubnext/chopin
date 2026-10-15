@@ -24,6 +24,8 @@ export type ConnectSettings = {
 	plannerCommand: string[];
 	/** `--env` variables for the agent and the Planner backend. Stored here, so not for secrets. */
 	env?: Record<string, string>;
+	/** `--keep-runs`: how many finished runs' worktrees to keep, 0 for all; absent keeps 15. */
+	keepRuns?: number;
 };
 
 /**

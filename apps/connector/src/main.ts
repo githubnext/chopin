@@ -48,6 +48,7 @@ import {
 	chosenPlanners,
 	connectors,
 	lockWorkspace,
+	pruneRuns,
 	startFailures,
 	stateDirectory,
 	workspace,
@@ -326,6 +327,20 @@ function environment(words: string[]) {
 	return env;
 }
 
+/** How many finished runs' worktrees connect keeps without --keep-runs. */
+const KEEP_RUNS = 15;
+
+/** `--keep-runs <n>`: a whole number, 0 keeping every run; undefined when not given. */
+function runsToKeep(value: string | undefined) {
+	if (value === undefined) return undefined;
+	if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+		throw new Error(
+			`--keep-runs takes a whole number of finished runs to keep, 0 for all; not "${value}".`,
+		);
+	}
+	return Number(value);
+}
+
 /**
  * `connect`. `--service` marks the connector the installed service runs, which runs what install
  * copied. `--install-service` installs the service once connected, then stops; `injected` stands
@@ -337,7 +352,7 @@ export async function connect(
 ) {
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check"],
-		options: ["planner-command", "key", "name"],
+		options: ["planner-command", "key", "name", "keep-runs"],
 		lists: ["planner", "env"],
 	});
 	let service = parsed.flags.has("service");
@@ -347,7 +362,7 @@ export async function connect(
 		service
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
-			|| parsed.options.has("name")
+			|| parsed.options.has("name") || parsed.options.has("keep-runs")
 			|| parsed.flags.has("install-service") || parsed.flags.has("skip-check"))
 	) {
 		throw new Error(
@@ -386,6 +401,7 @@ export async function connect(
 		throw new Error(`--planner <document URL> needs --planner-command <command>.\n\n${USAGE}`);
 	}
 	let env = saved?.env ?? environment(parsed.lists.get("env") ?? []);
+	let keepRuns = saved ? saved.keepRuns : runsToKeep(parsed.options.get("keep-runs"));
 	if (!service) {
 		requireProgram(command, process.cwd());
 		if (plannerCommand.length) requireProgram(plannerCommand, resolve(parsed.positional[0] ?? "."));
@@ -416,6 +432,7 @@ export async function connect(
 				planners: plannerDocuments,
 				plannerCommand: saving.plannerCommand,
 				...(Object.keys(env).length ? { env } : {}),
+				...(keepRuns === undefined ? {} : { keepRuns }),
 			};
 		});
 	if (
@@ -509,6 +526,10 @@ export async function connect(
 		plannerCommand: plannerCommand.length > 0,
 	});
 	let failures = startFailures(directory, info.root);
+	let keep = keepRuns ?? KEEP_RUNS;
+	// Older finished runs go as the connector starts and after each run; never one still going.
+	let prune = () => pruneRuns(directory, keep).then(() => {}, () => {});
+	await prune();
 	let chosen = chosenPlanners(directory, info.root);
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
@@ -572,6 +593,8 @@ export async function connect(
 				documents: plannerDocuments,
 				command: plannerCommand,
 				cwd: info.root,
+				directory,
+				repository: info.repository,
 				output,
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
@@ -624,7 +647,7 @@ export async function connect(
 							interrupt: stop,
 							failures,
 							env,
-						}),
+						}).finally(prune),
 				});
 				break;
 			} catch (error) {
@@ -763,6 +786,7 @@ const USAGE =
 	`Usage: CHOPIN_URL=https://your-instance ${SELF} connect [checkout] [--key <pairing key>] `
 	+ "[--name <label>] "
 	+ "[--planner <document URL>]... [--planner-command <command>] [--env KEY=VALUE]... "
+	+ "[--keep-runs <n>] "
 	+ "[--install-service [--skip-check]] -- agent [ACP arguments]";
 
 const HELP = [
@@ -791,6 +815,8 @@ const HELP = [
 	"      machine for, and stop it when you choose another.",
 	"      --env KEY=VALUE (repeatable) sets a variable for the agent and the Planner. It is saved",
 	"      in config.json, so keep secrets in the agent's own login. CHOPIN_* and PATH are refused.",
+	"      --keep-runs <n> keeps the worktrees of the n most recently finished runs (default 15, 0",
+	"      for all) and removes older ones as it starts and after each run.",
 	"      --install-service connects once, then stops and runs service install, so one command",
 	"      sets up the service. --skip-check passes on to it.",
 	"  status [--json]",
@@ -815,8 +841,8 @@ const HELP = [
 	"  version    Print the CLI version.",
 	"  help       Show this help.",
 	"",
-	"--base-dir (or CHOPIN_HOME) is where the machine token, locks and worktrees live",
-	"(default ~/.local/state/chopin/connector).",
+	"--base-dir (or CHOPIN_HOME) is where the machine token, locks, runs and Planner worktrees",
+	"live (default ~/.local/state/chopin/connector).",
 	"CHOPIN_URL names your Chopin instance for connect, which saves it for the other commands",
 	`and the service (default: ${DEFAULT_URL}).`,
 ].join("\n");

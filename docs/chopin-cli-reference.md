@@ -37,10 +37,29 @@ it connects.
 | `*.chosen.json`   | The documents whose Planners a running connector runs because they chose this machine in Chopin, for `chopin status`.                                                                   |
 | `chopin.log`      | The service's output.                                                                                                                                                                   |
 | `*.lock`          | One lock for each checkout that a connector is serving.                                                                                                                                 |
-| `runs/`           | A Git worktree for each job, kept for you to inspect.                                                                                                                                   |
+| `runs/`           | A Git worktree for each job, kept for you to inspect, and its journal. See [Runs and worktrees](#runs-and-worktrees).                                                                   |
+| `planners/`       | `<owner>/<repo>/<document id>`: the Git worktree a Planner command keeps for a document. `chopin` makes the folders above it and never removes one.                                     |
 
 Chopin stores only a hash of the machine token, plus the machine's own GitHub
 authorization, encrypted like a browser login.
+
+### Runs and worktrees
+
+Each job gets a detached worktree at `runs/<run id>`, and its journal at
+`runs/<run id>.json`. A retried investigation adds `-<generation>` to the id. A
+build's agent is told its worktree and `runs/<run id>-worktrees`, also in
+`$CHOPIN_RUN_WORKTREES`, the only place to add extra worktrees with
+`git worktree add`. When the run ends, the connector stops what still runs in
+them and removes them, uncommitted changes included, since their pull requests
+were pushed; their branches stay. The run's own worktree stays for you to
+inspect.
+
+`chopin connect --keep-runs <n>` keeps the worktrees of the `n` most recently
+finished runs, 15 by default, and 0 keeps them all. It saves `n` with its other
+settings. As it starts and after each run, the connector removes older runs:
+their worktrees, any extra worktrees left in them, and their journals. A run
+still going or waiting to start, in this connector or another one on the same
+base dir, is never removed. Neither is anything in `planners/`.
 
 ## Install a particular version
 
@@ -181,5 +200,7 @@ Scheduler then refuses `restart` or `uninstall`, run them as administrator too.
 | `service`               | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                                                                                                                         |
 | `log`                   | The service's log file.                                                                                                                                                                                                                                                                                                                    |
 | `baseDir`               | The state directory the report is for.                                                                                                                                                                                                                                                                                                     |
-| `serviceRuns`           | What the service runs: `server`, `checkout`, `command`, `planners`, `plannerCommand` and optionally `env`, or `null` before an install.                                                                                                                                                                                                    |
+| `serviceRuns`           | What the service runs: `server`, `checkout`, `command`, `planners`, `plannerCommand` and optionally `env` and `keepRuns`, or `null` before an install.                                                                                                                                                                                     |
 | `lastConnect`           | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                                                                                                                                 |
+| `runs`                  | `kept`, the finished runs whose worktrees are kept, `running`, the runs going or waiting to start, and `bytes`, the kept worktrees' size, absent where `du` can't measure it (on Windows).                                                                                                                                                 |
+| `plannerWorktrees`      | One entry per worktree a Planner command made in `planners/`: `path`, `repository` (`owner/repo`) and `document` (its id).                                                                                                                                                                                                                 |

@@ -580,6 +580,27 @@ to the connector's a line at a time, with its credential, your `--env` values
 and anything that looks like a token replaced with `[redacted]`; a line too
 long to mask is left out, with a note in its place.
 
+### Environment
+
+Each launch, whether for a `--planner` document or one Chopin asked the
+machine to run, gets these variables beside the connector's own environment
+and your `--env` values:
+
+| Variable               | Value                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CHOPIN_URL`           | The server's origin.                                                                                                                                                                                                                                                                                                                              |
+| `CHOPIN_DOCUMENT`      | The document as given to `--planner`, or its URL when Chopin asked for it.                                                                                                                                                                                                                                                                        |
+| `CHOPIN_PLANNER_TOKEN` | The credential for this launch (see [Credential](#credential)).                                                                                                                                                                                                                                                                                   |
+| `CHOPIN_CHECKOUT`      | The absolute root of the checkout `chopin connect` serves, which is also the command's working directory.                                                                                                                                                                                                                                         |
+| `CHOPIN_WORKTREE`      | An absolute path for the command's own Git worktree of that checkout: `<base>/planners/<owner>/<repo>/<document id>` under the connector's base dir, by the checkout's GitHub repository (in lower case) and the document's id in Chopin. The connector makes the folders above it (mode `0700`) but not the folder itself, and never removes it. |
+
+`CHOPIN_WORKTREE` is the same path every time the document's Planner starts, so
+a Planner started again finds its worktree where it left it. The command
+creates the worktree itself, for example with
+`git -C "$CHOPIN_CHECKOUT" worktree add "$CHOPIN_WORKTREE" <branch>`, and picks
+its own branch; the connector chooses none. Run retention never touches
+`planners/`.
+
 ### Credential
 
 The connector asks for a credential just before every launch:
@@ -613,6 +634,8 @@ repository tools act with it.
 - Read `CHOPIN_URL` (the server's origin), `CHOPIN_DOCUMENT` (the document as
   given to `--planner`) and `CHOPIN_PLANNER_TOKEN` from its environment. The
   token is never in its arguments; do not log it.
+- Keep any checkout of its own at `CHOPIN_WORKTREE`, not beside the
+  checkout.
 - Open `/planner-link` on `CHOPIN_URL` with
   `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach` to
   `CHOPIN_DOCUMENT`.

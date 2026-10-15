@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import * as Permission from "./permission";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { serveWork } from "./connection";
@@ -21,6 +21,8 @@ async function run(
 		() => ({}),
 	signal = new AbortController().signal,
 	options: Partial<Parameters<typeof runWork>[3]> = {},
+	/** Looks at the checkout and the base dir once the run has ended, before they are removed. */
+	inspect?: (paths: { root: string; state: string; id: string }) => Promise<void>,
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-rebuild-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-rebuild-state-"));
@@ -67,6 +69,7 @@ async function run(
 			heartbeatMs: 20,
 			...options,
 		});
+		await inspect?.({ root, state, id });
 		return { id, calls, sent, branches: git(root, "branch", "--list", "chopin/*") };
 	} finally {
 		await rm(root, { recursive: true, force: true });
@@ -443,6 +446,74 @@ test("servers the agent left running in its worktree end with the run", async ()
 		await rm(dirname(file), { recursive: true, force: true });
 	}
 });
+
+/** Records the prompt and CHOPIN_RUN_WORKTREES the fake implementer saw, through a file. */
+async function seeing<T>(body: (seen: () => Promise<{ prompt: string; worktrees: string }>) => T) {
+	let file = join(await mkdtemp(join(tmpdir(), "chopin-seen-")), "seen.json");
+	process.env.CHOPIN_TEST_SEEN = file;
+	try {
+		return await body(async () => JSON.parse(await readFile(file, "utf8")));
+	} finally {
+		delete process.env.CHOPIN_TEST_SEEN;
+		await rm(dirname(file), { recursive: true, force: true });
+	}
+}
+
+test.each([
+	["a build", {}, ["--http"]],
+	["a living document's first build", { live: true }, ["--live"]],
+	["a rebuild", { kind: "rebuild" as const }, ["--rebuild"]],
+])(
+	"%s tells the agent its worktree and the one folder for any extra worktrees",
+	async (_name, build, flags) => {
+		await seeing(async seen => {
+			await run(build, flags, undefined, undefined, {}, async ({ state, id }) => {
+				let { prompt, worktrees } = await seen();
+				let runs = join(state, "runs");
+				expect(worktrees).toBe(join(runs, `${id}-worktrees`));
+				expect(prompt).toContain(`Your worktree is ${join(runs, id)}.`);
+				expect(prompt).toContain(
+					`create them only inside ${worktrees} (also in $CHOPIN_RUN_WORKTREES) with `
+						+ "`git worktree add`",
+				);
+				expect(prompt).not.toContain("sub-worktree");
+			});
+		});
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"extra worktrees end with the run, uncommitted changes and their servers too, and the run's own worktree stays",
+	async () => {
+		let file = join(await mkdtemp(join(tmpdir(), "chopin-extra-")), "pid");
+		process.env.CHOPIN_TEST_ORPHAN_PID = file;
+		try {
+			await seeing(seen =>
+				run({}, ["--worktrees"], undefined, undefined, {}, async ({ root, state, id }) => {
+					let { worktrees } = await seen();
+					let runs = join(state, "runs");
+					let listed = git(root, "worktree", "list", "--porcelain").split("\n")
+						.filter(line => line.startsWith("worktree "))
+						.map(line => line.slice("worktree ".length));
+					expect(await Promise.all(listed.map(path => realpath(path).catch(() => path)))).toEqual([
+						await realpath(root),
+						await realpath(join(runs, id)),
+					]);
+					expect(await stat(worktrees).catch(() => "missing")).toBe("missing");
+					expect((await stat(join(runs, id))).isDirectory()).toBe(true);
+					// Their branches, pushed for their pull requests, stay.
+					expect(git(root, "branch", "--list", "chopin/task-*")).toContain("chopin/task-b");
+				})
+			);
+			let pid = Number(await readFile(file, "utf8"));
+			expect(pid).toBeGreaterThan(0);
+			expect(() => process.kill(pid, 0)).toThrow();
+		} finally {
+			delete process.env.CHOPIN_TEST_ORPHAN_PID;
+			await rm(dirname(file), { recursive: true, force: true });
+		}
+	},
+);
 
 /** What fetch rejects with when Chopin cannot be reached. */
 function unreachable() {

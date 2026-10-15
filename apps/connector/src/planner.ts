@@ -5,7 +5,7 @@ import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
-import type { ChosenPlanners, StartFailures } from "./workspace";
+import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -52,17 +52,24 @@ export function commandWords(line: string): string[] {
 /**
  * Run `command` as each document's Planner backend until `signal` aborts. Every launch gets a fresh
  * Planner credential, passed only in its environment as CHOPIN_URL, CHOPIN_DOCUMENT and
- * CHOPIN_PLANNER_TOKEN. A backend that exits, as one whose link closed or whose credential was
- * refused does, is started again on the reconnect backoff. A revoked machine or a document Chopin
- * refuses stops that document's backend. One that exits within `healthyMs` is recorded in
- * `failures` for `chopin status`, until one stays up that long.
+ * CHOPIN_PLANNER_TOKEN, beside CHOPIN_CHECKOUT, the checkout `cwd` it runs in, and CHOPIN_WORKTREE,
+ * where the backend keeps its own worktree of it (see `plannerWorktree`). A backend that exits, as
+ * one whose link closed or whose credential was refused does, is started again on the reconnect
+ * backoff. A revoked machine or a document Chopin refuses stops that document's backend. One that
+ * exits within `healthyMs` is recorded in `failures` for `chopin status`, until one stays up that
+ * long.
  */
 export async function servePlanners(options: {
 	url: string;
 	machine: string;
 	documents: string[];
 	command: string[];
+	/** The checkout's root, which the backends run in. */
 	cwd: string;
+	/** The connector's base dir, which holds the Planners' worktrees. */
+	directory: string;
+	/** The checkout's GitHub repository, `owner/name`. */
+	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
@@ -87,6 +94,8 @@ export function dispatchedPlanners(options: {
 	documents: string[];
 	command: string[];
 	cwd: string;
+	directory: string;
+	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
@@ -123,6 +132,7 @@ export function dispatchedPlanners(options: {
 					: servePlanner({
 						...options,
 						document: planner.url,
+						id: planner.id,
 						signal: AbortSignal.any([options.signal, stop.signal]),
 					});
 				running.set(id, { url: planner.url, own: mine, stop, served });
@@ -144,8 +154,12 @@ async function servePlanner(options: {
 	url: string;
 	machine: string;
 	document: string;
+	/** The document's id in Chopin, when known before its credential names it. */
+	id?: string;
 	command: string[];
 	cwd: string;
+	directory: string;
+	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
@@ -187,9 +201,14 @@ async function servePlanner(options: {
 			continue;
 		}
 		output.say(`› Planner for ${document} started.`);
+		let worktree = await plannerWorktree(
+			options.directory,
+			options.repository,
+			credential.document ?? options.id ?? document,
+		);
 		let launched = Date.now();
 		let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
-		let { how, stderr } = await launch(options, credential.token);
+		let { how, stderr } = await launch(options, credential.token, worktree);
 		clearTimeout(healthy);
 		if (signal.aborted) return;
 		// What the backend printed may hold its credential or an --env value.
@@ -267,14 +286,18 @@ function passMasked(
  * and stderr still reach this process's own, masked by `passMasked`: its credential, the --env
  * values and anything token-shaped. Aborting stops it, then kills it.
  */
-async function launch(options: {
-	url: string;
-	document: string;
-	command: string[];
-	cwd: string;
-	signal: AbortSignal;
-	env?: Record<string, string>;
-}, token: string): Promise<{ how: string; stderr?: string }> {
+async function launch(
+	options: {
+		url: string;
+		document: string;
+		command: string[];
+		cwd: string;
+		signal: AbortSignal;
+		env?: Record<string, string>;
+	},
+	token: string,
+	worktree: string,
+): Promise<{ how: string; stderr?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
@@ -283,6 +306,8 @@ async function launch(options: {
 			CHOPIN_URL: options.url,
 			CHOPIN_DOCUMENT: options.document,
 			CHOPIN_PLANNER_TOKEN: token,
+			CHOPIN_CHECKOUT: options.cwd,
+			CHOPIN_WORKTREE: worktree,
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.

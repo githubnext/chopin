@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, win32 } from "node:path";
+import { join, resolve, sep, win32 } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
@@ -73,6 +74,26 @@ export function stateDirectory() {
 			"chopin",
 			"connector",
 		);
+}
+
+/** A path segment made only of characters safe in any file system, never `.` or `..`. */
+function segment(value: string) {
+	let safe = value.replace(/[^A-Za-z0-9._-]/g, "_");
+	return /^\.*$/.test(safe) ? `_${safe}` : safe;
+}
+
+/**
+ * Where a document's Planner command keeps its own git worktree of the checkout:
+ * `<base>/planners/<owner>/<repo>/<document id>`, by the checkout's GitHub repository, so a
+ * Planner started again finds it there. The folders above it are made private (0700); the
+ * worktree itself is the Planner's to make, and nothing here ever removes it.
+ */
+export async function plannerWorktree(directory: string, repository: string, document: string) {
+	let [owner = "", name = ""] = repository.toLowerCase().split("/");
+	let parent = join(directory, "planners", segment(owner), segment(name));
+	// Never fatal here: a Planner that can't make its worktree says why itself.
+	await mkdir(parent, { recursive: true, mode: 0o700 }).catch(() => {});
+	return join(parent, segment(document));
 }
 
 /** When a process started: `id` differs for each process that held a pid, `at` is in ms. */
@@ -439,11 +460,17 @@ export async function discardWorkspace(root: string, path: string, branch: strin
 	await promisify(execFile)("git", ["-C", root, "branch", "-D", branch]).catch(() => {});
 }
 
+/**
+ * Accept a run: write its journal in `<base>/runs`, then add its detached worktree there. The
+ * journal names this process, so retention never removes a run still going, and `extras`, the
+ * folder beside the worktree where its agent may add extra worktrees, which end with the run.
+ */
 export async function prepareWorkspace(
 	root: string,
 	directory: string,
 	input: Pick<RunInput, "id" | "source">,
 	generation = 1,
+	probe: StartProbe = processStart(),
 ) {
 	let current = await workspace(root);
 	if (current.repository.toLowerCase() !== input.source.repository.toLowerCase()) {
@@ -461,8 +488,17 @@ export async function prepareWorkspace(
 			"This run was already accepted locally. Reconcile it instead of executing it again.",
 		);
 	}
+	let started = await probe(process.pid);
 	await journal.writeFile(
-		JSON.stringify({ id: input.id, generation, source: input.source, state: "accepted" }),
+		JSON.stringify({
+			id: input.id,
+			generation,
+			source: input.source,
+			state: "accepted",
+			pid: process.pid,
+			...(started ? { processStart: started.id } : {}),
+			accepted: Date.now(),
+		}),
 	);
 	await journal.sync();
 	await journal.close();
@@ -483,5 +519,177 @@ export async function prepareWorkspace(
 		path,
 		input.source.commit,
 	], { timeout: 120_000 });
-	return { path, journalPath };
+	let extras = extraWorktrees(path);
+	await mkdir(extras, { recursive: true, mode: 0o700 });
+	return { path, journalPath, extras };
+}
+
+/** The folder for a run's extra worktrees, beside the run's own: `<base>/runs/<run>-worktrees`. */
+function extraWorktrees(path: string) {
+	return `${path}-worktrees`;
+}
+
+/**
+ * End a run's workspace: remove the extra worktrees its agent added (see `removeWorktreesIn`) and
+ * mark its journal finished, which retention orders kept runs by. The run's own worktree stays
+ * for inspection.
+ */
+export async function endWorkspace(
+	root: string,
+	prepared: { extras: string; journalPath: string },
+) {
+	await removeWorktreesIn(["-C", root], prepared.extras);
+	try {
+		let journal = JSON.parse(await readFile(prepared.journalPath, "utf8"));
+		await writeFile(
+			prepared.journalPath,
+			JSON.stringify({ ...journal, state: "finished", finished: Date.now() }),
+			{ mode: 0o600 },
+		);
+	} catch { /* A journal retention already removed has nothing left to mark. */ }
+}
+
+const exec = promisify(execFile);
+
+/**
+ * Remove every worktree inside `folder` of the repository `repository` names (Git's `-C <dir>` or
+ * `--git-dir <dir>`), uncommitted changes included, as their pull requests were pushed; then the
+ * folder, and prune what Git still lists. Their branches stay.
+ */
+async function removeWorktreesIn(repository: string[], folder: string) {
+	let inside = await realpath(folder).catch(() => undefined);
+	if (inside) {
+		let listed = await exec("git", [...repository, "worktree", "list", "--porcelain"])
+			.then(({ stdout }) => String(stdout))
+			.catch(() => "");
+		for (let line of listed.split("\n")) {
+			if (!line.startsWith("worktree ")) continue;
+			let path = line.slice("worktree ".length);
+			let real = await realpath(path).catch(() => path);
+			if (!real.startsWith(inside + sep)) continue;
+			// Twice --force removes a locked worktree too.
+			await exec("git", [...repository, "worktree", "remove", "--force", "--force", path], {
+				timeout: 60_000,
+			}).catch(() => {});
+		}
+	}
+	await rm(folder, { recursive: true, force: true });
+	await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
+}
+
+/** The repository a run's worktree belongs to, as `--git-dir <dir>`; undefined when it has none. */
+async function worktreeRepository(path: string) {
+	// Only a linked worktree has a .git file; a plain folder would name whatever repository holds it.
+	let link = await readFile(join(path, ".git"), "utf8").catch(() => "");
+	if (!link.startsWith("gitdir:")) return undefined;
+	let common = await exec("git", ["-C", path, "rev-parse", "--git-common-dir"])
+		.then(({ stdout }) => resolve(path, String(stdout).trim()))
+		.catch(() => undefined);
+	return common ? ["--git-dir", common] : undefined;
+}
+
+/**
+ * The runs in `<base>/runs`, by their journals: whether each is `active`, still going or queued
+ * because the process its journal names still runs, when it ended (or, for one whose process is
+ * gone, was accepted), and whether its worktree is still there. A journal still being written is
+ * left out.
+ */
+export async function runs(directory: string, probe: StartProbe = processStart()) {
+	let folder = join(directory, "runs");
+	let found: Array<{ attempt: string; active: boolean; at: number; worktree: boolean }> = [];
+	for (let name of await readdir(folder).catch(() => [] as string[])) {
+		if (!name.endsWith(".json")) continue;
+		let file = join(folder, name);
+		let journal: Record<string, unknown>;
+		try {
+			journal = JSON.parse(await readFile(file, "utf8"));
+		} catch {
+			continue;
+		}
+		let active = journal.state !== "finished" && Number.isSafeInteger(journal.pid)
+			&& (journal.pid as number) > 0 && await holds(journal, probe);
+		let at = [journal.finished, journal.accepted].find(value => typeof value === "number")
+			?? (await stat(file).catch(() => undefined))?.mtimeMs ?? 0;
+		let attempt = name.slice(0, -".json".length);
+		found.push({ attempt, active, at: at as number, worktree: existsSync(join(folder, attempt)) });
+	}
+	return found;
+}
+
+/**
+ * Keep the `keep` most recently finished runs in `<base>/runs` that still have a worktree, and
+ * remove every run that finished before them: its extra worktrees, its worktree (uncommitted
+ * changes included), then its journal, pruning Git's list of worktrees. 0 keeps every run. A run
+ * still going or queued (see `runs`) is never removed. Planner worktrees, in `<base>/planners`,
+ * are never touched. Resolves with the runs it removed.
+ */
+export async function pruneRuns(
+	directory: string,
+	keep: number,
+	probe: StartProbe = processStart(),
+): Promise<string[]> {
+	if (keep <= 0) return [];
+	let folder = join(directory, "runs");
+	let ended = (await runs(directory, probe)).filter(run => !run.active);
+	ended.sort((a, b) => b.at - a.at);
+	let kept = 0;
+	let removed: string[] = [];
+	for (let entry of ended) {
+		if (kept < keep) {
+			if (entry.worktree) kept++;
+			continue;
+		}
+		let path = join(folder, entry.attempt);
+		let extras = extraWorktrees(path);
+		let repository = await worktreeRepository(path);
+		if (repository) {
+			await removeWorktreesIn(repository, extras);
+			await exec("git", [...repository, "worktree", "remove", "--force", "--force", path], {
+				timeout: 60_000,
+			}).catch(() => {});
+		}
+		await rm(extras, { recursive: true, force: true });
+		await rm(path, { recursive: true, force: true });
+		if (repository) await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
+		await rm(join(folder, `${entry.attempt}.json`), { force: true });
+		removed.push(entry.attempt);
+	}
+	return removed;
+}
+
+/**
+ * The Planner worktrees in `<base>/planners/<owner>/<repo>/<document id>`: each folder a Planner
+ * command made there.
+ */
+export async function plannerWorktrees(directory: string) {
+	let found: Array<{ path: string; repository: string; document: string }> = [];
+	let folders = async (path: string) =>
+		(await readdir(path, { withFileTypes: true }).catch(() => []))
+			.filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
+	let base = join(directory, "planners");
+	for (let owner of await folders(base)) {
+		for (let name of await folders(join(base, owner))) {
+			for (let document of await folders(join(base, owner, name))) {
+				found.push({
+					path: join(base, owner, name, document),
+					repository: `${owner}/${name}`,
+					document,
+				});
+			}
+		}
+	}
+	return found;
+}
+
+/** The disk space `paths` take, in bytes, by `du`; undefined on Windows or when `du` fails. */
+export async function diskUsage(paths: string[]): Promise<number | undefined> {
+	if (!paths.length) return 0;
+	if (process.platform === "win32") return undefined;
+	try {
+		let { stdout } = await exec("du", ["-sk", ...paths], { timeout: 5_000 });
+		return String(stdout).split("\n").filter(Boolean)
+			.reduce((total, line) => total + Number(line.split(/\s/)[0]) * 1024, 0);
+	} catch {
+		return undefined;
+	}
 }

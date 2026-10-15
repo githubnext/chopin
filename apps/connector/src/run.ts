@@ -14,6 +14,7 @@ import { ask, describePermission, permissionMemory } from "./permission";
 import { stopProcessesIn } from "./processes";
 import {
 	discardWorkspace,
+	endWorkspace,
 	git,
 	noPushEnvironment,
 	prepareWorkspace,
@@ -180,6 +181,7 @@ export async function runWork(
 			implementation ? undefined : claim.generation,
 		);
 		let path = prepared.path;
+		let worktrees = { root: path, extras: prepared.extras };
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
 			git(path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
@@ -201,9 +203,12 @@ export async function runWork(
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
 			command: options.command,
 			cwd: path,
-			...(claim.spike || options.env
-				? { env: { ...options.env, ...(claim.spike ? noPushEnvironment() : {}) } }
-				: {}),
+			env: {
+				...options.env,
+				// Where a build's agent adds any extra worktrees, as its prompt says.
+				...(implementation ? { CHOPIN_RUN_WORKTREES: prepared.extras } : {}),
+				...(claim.spike ? noPushEnvironment() : {}),
+			},
 			onStart: failure =>
 				void (failure
 					? options.failures?.failed(
@@ -212,9 +217,9 @@ export async function runWork(
 					)
 					: options.failures?.started()),
 			prompt: rebuild
-				? rebuildPrompt
+				? rebuildPrompt(worktrees)
 				: implementation
-				? claim.live ? liveImplementationPrompt : implementationPrompt
+				? (claim.live ? liveImplementationPrompt : implementationPrompt)(worktrees)
 				: claim.spike
 				? "Use read_investigation from the Chopin MCP server to read the spike brief and "
 					+ "follow it: build the smallest prototype on this throwaway branch, take 1-3 "
@@ -366,11 +371,18 @@ export async function runWork(
 		if (forgotten && !stopped) throw new ConnectorStopped("forgotten", message);
 	} finally {
 		// Servers the agent started (often in their own process group) end with its run.
-		if (prepared) await stopProcessesIn(prepared.path).catch(() => {});
+		if (prepared) {
+			await stopProcessesIn(prepared.path).catch(() => {});
+			await stopProcessesIn(prepared.extras).catch(() => {});
+		}
 		local?.close();
 		await bridgeApi?.then(api => api.close()).catch(() => {});
 		if (spikeWork) {
 			await discardWorkspace(options.root, spikeWork.path, spikeWork.branch).catch(() => {});
+		}
+		// Extra worktrees end with the run; the run's own stays for inspection.
+		if (prepared) {
+			await endWorkspace(options.root, prepared).catch(() => {});
 		}
 		beating.abort();
 		await heartbeat;

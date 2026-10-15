@@ -337,7 +337,10 @@ export async function reportAgent(url: string, token: string, agent: About["agen
 	await post(url + "/api/connector/agent", agent, token).catch(() => {});
 }
 
-/** A short-lived credential for this machine's Planner backend to attach one document. */
+/**
+ * A short-lived credential for this machine's Planner backend to attach one document, and the
+ * document's id in Chopin when Chopin names it.
+ */
 export async function plannerCredential(
 	url: string,
 	token: string,
@@ -348,7 +351,12 @@ export async function plannerCredential(
 	if (typeof value.token !== "string" || typeof value.expiresAt !== "number") {
 		throw new Error("Missing Planner credential.");
 	}
-	return { token: value.token, expiresAt: value.expiresAt };
+	let id = (value.document as { id?: unknown } | undefined)?.id;
+	return {
+		token: value.token,
+		expiresAt: value.expiresAt,
+		...(typeof id === "string" && id ? { document: id } : {}),
+	};
 }
 
 /** Revoke this machine on the server and forget its token, even if the server already had. */

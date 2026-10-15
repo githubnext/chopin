@@ -195,6 +195,39 @@ test("connect refuses an --env it can't pass on, before it pairs", async () => {
 	}
 });
 
+test("connect --keep-runs saves how many finished runs to keep, and removes older ones as it starts", async () => {
+	let root = await checkout();
+	let state = await mkdtemp(join(scratch, "state-"));
+	let runs = join(state, "runs");
+	await mkdir(runs, { recursive: true });
+	// Three finished runs from earlier connects, each with its worktree.
+	for (let [index, id] of ["old", "older", "newest"].entries()) {
+		git(root, "worktree", "add", "--detach", join(runs, id));
+		let finished = { old: 2_000, older: 1_000, newest: 3_000 }[id]! + index;
+		await writeFile(join(runs, `${id}.json`), JSON.stringify({ id, state: "finished", finished }));
+	}
+	let started = await connect("nothing", [root, "--keep-runs", "1", "--", "agent"], state);
+	expect(started.stdout).toContain("✓ Connected.");
+	expect(JSON.parse(await readFile(join(state, "config.json"), "utf8")).connect.keepRuns).toBe(1);
+	expect(
+		(await Array.fromAsync(new Bun.Glob("*").scan({ cwd: runs, onlyFiles: false }))).sort(),
+	).toEqual(["newest", "newest.json"]);
+	expect(
+		git(root, "worktree", "list", "--porcelain").split("\n")
+			.filter(line => line.startsWith("worktree ")),
+	).toHaveLength(2);
+});
+
+test("connect refuses a --keep-runs that isn't a whole number, before it pairs", async () => {
+	let root = await checkout();
+	for (let bad of ["-1", "x", "1.5", "15abc"]) {
+		let refused = await connect("pairing", [root, `--keep-runs=${bad}`, "--", "agent"]);
+		expect(refused.code).toBe(1);
+		expect(refused.stderr).toContain("--keep-runs takes a whole number");
+		expect(refused.requests).toEqual([]);
+	}
+});
+
 test.skipIf(process.platform === "win32")(
 	"connect saves the stable path behind a shell's fnm directory, and warns when there is none",
 	async () => {

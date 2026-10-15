@@ -36,6 +36,40 @@ let app = new AgentApp()
 	})
 	.onNotification("session/cancel", () => cancelled())
 	.onRequest("session/prompt", async ({ params, client: ownerClient }) => {
+		if (process.env.CHOPIN_TEST_SEEN) {
+			let prompt = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
+			await writeFile(
+				process.env.CHOPIN_TEST_SEEN,
+				JSON.stringify({ prompt, worktrees: process.env.CHOPIN_RUN_WORKTREES ?? null }),
+			);
+		}
+		if (process.argv.includes("--worktrees")) {
+			// Two pull requests at once in extra worktrees where the prompt says, one left with
+			// uncommitted changes and a dev server running in it.
+			let folder = process.env.CHOPIN_RUN_WORKTREES!;
+			for (let name of ["task-a", "task-b"]) {
+				let added = spawnSync("git", [
+					"-C",
+					cwd,
+					"worktree",
+					"add",
+					"-b",
+					`chopin/${name}`,
+					`${folder}/${name}`,
+				], { encoding: "utf8" });
+				if (added.status !== 0) throw new Error(added.stderr);
+			}
+			await writeFile(`${folder}/task-b/source.txt`, "changed, never committed");
+			await writeFile(`${folder}/task-b/new.txt`, "untracked");
+			let server = spawn("sleep", ["600"], {
+				cwd: `${folder}/task-b`,
+				detached: true,
+				stdio: "ignore",
+			});
+			server.unref();
+			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
+			return { stopReason: "end_turn" as const };
+		}
 		if (process.argv.includes("--orphan")) {
 			// A dev server in its own process group, as `vite &` from an agent's shell tool is.
 			let server = spawn("sleep", ["600"], { cwd, detached: true, stdio: "ignore" });

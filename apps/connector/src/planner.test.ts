@@ -1,7 +1,7 @@
 import { afterAll, expect, mock, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { machineFile } from "./machine";
 import { createOutput } from "./output";
 import { commandWords, servePlanners, stopBackend } from "./planner";
@@ -36,7 +36,7 @@ let log = process.argv[2];
 let launches = 0;
 try { launches = readFileSync(log, "utf8").split("\\n").filter(line => line.includes('"argv"')).length; } catch {}
 let env = Object.fromEntries(
-	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "SOME_FLAG"].map(name => [name, process.env[name]]),
+	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "CHOPIN_CHECKOUT", "CHOPIN_WORKTREE", "SOME_FLAG"].map(name => [name, process.env[name]]),
 );
 appendFileSync(log, JSON.stringify({ pid: process.pid, cwd: process.cwd(), argv: process.argv, env }) + "\\n");
 if (launches === 0) process.exit(3);
@@ -102,6 +102,9 @@ test(
 		await writeFile(script, BACKEND);
 		let root = await checkout();
 		let document = `${origin}/octo-org/score/plan`;
+		let state = await mkdtemp(join(scratch, "state-"));
+		// The Planner's own worktree: stable per document, under the base dir, made by the Planner.
+		let worktree = join(state, "planners", "octo-org", "score", "D_1");
 		let connector = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
@@ -120,7 +123,7 @@ test(
 			env: {
 				...process.env,
 				CHOPIN_URL: origin,
-				CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+				CHOPIN_CONNECTOR_STATE_DIR: state,
 			},
 			stdout: "pipe",
 			stderr: "pipe",
@@ -132,20 +135,30 @@ test(
 		try {
 			await until(async () => (await entries(log)).filter(entry => entry.argv).length >= 2, 15_000);
 			let launches = (await entries(log)).filter(entry => entry.argv);
+			let checkoutRoot = await realpath(root);
 			expect(launches.map(launch => launch.env)).toEqual([
 				{
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[0],
+					CHOPIN_CHECKOUT: checkoutRoot,
+					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
 				},
 				{
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[1],
+					CHOPIN_CHECKOUT: checkoutRoot,
+					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
 				},
 			]);
+			// The connector makes the folders above it, private, and leaves the worktree to the Planner.
+			for (let folder of [join(state, "planners"), dirname(dirname(worktree)), dirname(worktree)]) {
+				expect(((await stat(folder)).mode & 0o777).toString(8)).toBe("700");
+			}
+			expect(await stat(worktree).catch(() => "missing")).toBe("missing");
 			expect(launches.map(launch => launch.argv.slice(1))).toEqual([[script, log], [script, log]]);
 			expect(asked).toEqual([
 				{ authorization: `Bearer ${MACHINE}`, body: { document } },
@@ -176,7 +189,7 @@ test(
 const STAYING_BACKEND = `
 import { appendFileSync } from "node:fs";
 let log = process.argv[2];
-appendFileSync(log, JSON.stringify({ pid: process.pid, token: process.env.CHOPIN_PLANNER_TOKEN }) + "\\n");
+appendFileSync(log, JSON.stringify({ pid: process.pid, token: process.env.CHOPIN_PLANNER_TOKEN, checkout: process.env.CHOPIN_CHECKOUT, worktree: process.env.CHOPIN_WORKTREE }) + "\\n");
 process.on("SIGTERM", () => {
 	appendFileSync(log, JSON.stringify({ stopped: process.pid }) + "\\n");
 	process.exit(0);
@@ -337,6 +350,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 		});
@@ -415,6 +430,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -495,6 +512,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -590,6 +609,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -659,6 +680,8 @@ test.skipIf(process.platform === "win32")(
 				documents: ["D_1"],
 				command: [process.execPath, script],
 				cwd: directory,
+				directory,
+				repository: "octo-org/score",
 				output: createOutput(quiet, quiet, {}),
 				signal: new AbortController().signal,
 				failures: startFailures(directory, directory),
@@ -832,6 +855,11 @@ test.skipIf(process.platform === "win32")(
 			expect(registered[0]).toEqual({ protocol: "4", planner: null, plannerCommand: "1" });
 			expect(asked).toEqual([{ document }]);
 			let [launched] = await entries(log);
+			// A dispatched Planner gets its checkout and its own stable worktree path as well.
+			expect(launched.checkout).toBe(await realpath(root));
+			expect(launched.worktree).toBe(join(state, "planners", "octo-org", "score", "D_1"));
+			expect(((await stat(dirname(launched.worktree))).mode & 0o777).toString(8)).toBe("700");
+			expect(await stat(launched.worktree).catch(() => "missing")).toBe("missing");
 			await until(async () => polls.length >= 2, 5_000);
 			expect(polls.slice(0, 2)).toEqual([[], ["D_1"]]);
 			// chopin status lists it beside any --planner one, and says the machine can run Planners.
