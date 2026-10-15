@@ -64,4 +64,19 @@
 	color: var(--color-text-quaternary);
 }
 
-/* The loader spin lives in ../surfaces.css, where its design-contract exception is keyed. */
+/* The navigation loader spins; reduced motion holds it still. */
+.design-audit-navigation-loading svg {
+	animation: design-audit-spin 900ms linear infinite;
+}
+
+@keyframes design-audit-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.design-audit-navigation-loading svg {
+		animation: none;
+	}
+}

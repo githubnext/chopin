@@ -46,7 +46,7 @@
 		]
 	},
 	{
-		"file": "apps/web/src/design-audit/surfaces.css",
+		"file": "apps/web/src/design-audit/plates/navigation.css",
 		"reason": "Continuous loading indicator has an established local repeat period; no equal semantic duration token exists.",
 		"cases": [
 			[

@@ -9,20 +9,3 @@
 @import "./plates/loading-status.css";
 @import "./plates/empty-states.css";
 @import "./plates/errors.css";
-
-/* Navigation loader: kept here because the preserved-value exception names this file. */
-.design-audit-navigation-loading svg {
-	animation: design-audit-spin 900ms linear infinite;
-}
-
-@keyframes design-audit-spin {
-	to {
-		transform: rotate(360deg);
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.design-audit-navigation-loading svg {
-		animation: none;
-	}
-}
