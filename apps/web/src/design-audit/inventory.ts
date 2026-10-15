@@ -176,19 +176,19 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				id: "identity",
 				label: "Identity and collaboration",
 				source: "packages/editor/src/face.tsx",
-				states: ["avatar-loading", "editing-question"],
+				states: ["photograph", "initial", "demo-actor", "presence-overflow", "room-members"],
 			},
 			{
 				id: "decisions",
 				label: "Decisions",
 				source: "packages/editor/src/decisions.tsx",
-				states: ["unanswered", "answered", "resolved", "orphaned", "empty"],
+				states: ["deck", "single", "resolved", "orphaned", "deliberately-empty", "empty"],
 			},
 			{
 				id: "resolved-comments",
 				label: "Resolved comments",
-				source: "packages/editor/src/comments.tsx",
-				states: ["resolved", "deliberately-empty", "orphaned"],
+				source: "packages/editor/src/resolved-comment.tsx",
+				states: ["preview", "pinned", "reopen-error"],
 			},
 			{ id: "loading", label: "Loading", source: "apps/web/src/hosted.tsx", states: ASYNC },
 			{

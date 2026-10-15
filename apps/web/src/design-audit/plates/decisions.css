@@ -1,31 +1,19 @@
-.design-audit-card-grid {
+.design-audit-decisions-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
-	gap: 1rem;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+	align-items: start;
+	gap: 1.5rem 1rem;
 }
 
-.design-audit-card-grid > article {
-	height: fit-content;
-}
-
-.design-audit-choice-stack {
-	display: flex;
-	flex-wrap: wrap;
+.design-audit-decisions-sample {
+	display: grid;
+	min-width: 0;
+	align-content: start;
 	gap: 0.5rem;
 }
 
-.design-audit-resolved-toggle {
-	margin-block-start: 0.75rem;
-}
-
-.design-audit-card-grid blockquote,
-.design-audit-card-grid p {
-	margin: 0;
-	font-size: var(--text-sm);
-	color: var(--color-text-secondary);
-}
-
-.design-audit-card-grid article > div:first-child span {
-	font-size: var(--text-sm);
-	color: var(--color-text-tertiary);
+.design-audit-decisions-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
 }

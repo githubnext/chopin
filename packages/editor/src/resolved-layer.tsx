@@ -41,9 +41,8 @@ import { currentDecision, releaseDecision, subscribeDecision } from "./decision-
 import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
-import { Note, stamp } from "./comments";
 import { CommentSheet, commentSheetHeading } from "./comment-sheet";
-import { displayName } from "./display-name";
+import { ResolvedComment } from "./resolved-comment";
 import { Face } from "./face";
 import { $rangeOf, paintShared } from "./marks";
 import {
@@ -55,7 +54,6 @@ import {
 	ownedPoint,
 	point,
 	popoverBelow,
-	resolvedCommentMeta,
 	resolvedKeys,
 	shown,
 	stack,
@@ -278,74 +276,16 @@ function CommentPopover(
 ) {
 	let { item, pinned } = value;
 	if (item.kind !== "comment") return null;
-	let { thread } = item.comment;
-	let first = thread.notes[0];
-	if (!pinned) {
-		return (
-			<div className="plan-resolved-comment">
-				{first && (
-					<ol className="plan-comment-notes">
-						<Note note={first} />
-					</ol>
-				)}
-				<p className="plan-resolved-comment-meta">
-					{resolvedCommentMeta(
-						{ notes: thread.notes.length, resolver: thread.resolver },
-						displayName,
-					).map((part, index) => (
-						<span key={part}>
-							{index > 0 && " "}
-							{part}
-						</span>
-					))}
-				</p>
-			</div>
-		);
-	}
-	let at = thread.at !== undefined ? stamp(thread.at) : "";
 	return (
-		<div className="plan-resolved-comment" data-pinned="">
-			<div className="plan-resolved-comment-head">
-				<p className="plan-resolved-comment-status">
-					<CheckIcon aria-hidden="true" size={16} />
-					<span>
-						{thread.resolver ? `Resolved by ${displayName(thread.resolver)}` : "Resolved"}
-					</span>
-					{at && (
-						<>
-							{" "}
-							<span>{at}</span>
-						</>
-					)}
-				</p>
-				{onReopen && (
-					<button
-						aria-disabled={pending || undefined}
-						className="btn btn-sm btn-outline"
-						// aria-disabled rather than disabled, so focus stays on the button while it works.
-						onClick={() => !pending && onReopen()}
-						type="button"
-					>
-						Reopen
-					</button>
-				)}
-				{!sheet && (
-					<button
-						aria-label="Close"
-						className="btn btn-icon btn-ghost plan-resolved-comment-close"
-						data-plan-decision-close=""
-						onClick={close}
-						type="button"
-					>
-						<CloseIcon aria-hidden="true" size={16} />
-					</button>
-				)}
-			</div>
-			<ol className="plan-comment-notes">
-				{thread.notes.map(note => <Note key={note.id} note={note} />)}
-			</ol>
-			{error && <p className="m-0 text-sm text-destructive-ink" role="alert">{error}</p>}
-		</div>
+		<ResolvedComment
+			close={close}
+			error={error}
+			onReopen={onReopen}
+			pending={pending}
+			pinned={pinned}
+			sheet={sheet}
+			thread={item.comment.thread}
+		/>
 	);
 }
 

@@ -35,6 +35,18 @@
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"
 		},
+		"./presence-faces": {
+			"types": "./src/presence-faces.tsx",
+			"default": "./src/presence-faces.tsx"
+		},
+		"./questionnaire-fixtures": {
+			"types": "./src/questionnaire-fixtures.ts",
+			"default": "./src/questionnaire-fixtures.ts"
+		},
+		"./resolved-comment": {
+			"types": "./src/resolved-comment.tsx",
+			"default": "./src/resolved-comment.tsx"
+		},
 		"./static": {
 			"types": "./src/static-plan-editor.tsx",
 			"default": "./src/static-plan-editor.tsx"

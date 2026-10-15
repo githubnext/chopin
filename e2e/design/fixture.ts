@@ -21,6 +21,8 @@ export let test = base.extend<DesignOptions>({
 				}),
 		);
 		await page.route("https://invalid.example.invalid/**", route => route.abort());
+		// The identity plate's face without a photograph: registered last, so it wins.
+		await page.route("https://github.com/design-audit--unreachable.png**", route => route.abort());
 		await page.goto("/design-audit");
 		await expect(page.getByRole("heading", { name: "Chopin design audit", exact: true }))
 			.toBeVisible();

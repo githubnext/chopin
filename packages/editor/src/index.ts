@@ -44,6 +44,7 @@ export { PlanEditor } from "./plan-editor";
 export type { PlanEditorProps, PlanState } from "./plan-editor";
 export { isPhone, usePhone, usePointerCapabilities } from "./pointer";
 export { usePopoverDismissal } from "./popover-dismissal";
+export { MAX_FACES, PresenceFaces } from "./presence-faces";
 export { PlanProvider } from "./provider";
 export type { PlanProviderOptions } from "./provider";
 export {
@@ -55,6 +56,8 @@ export {
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
 export { MAX_RESEARCH_BRIEF, ResearchLauncher } from "./research-launcher";
 export type { ResearchLaunchBlock, ResearchLaunchResult } from "./research-launcher";
+export { ResolvedComment } from "./resolved-comment";
+export type { ResolvedCommentProps } from "./resolved-comment";
 export { DecisionSaveHost } from "./save-bar";
 export { SendAction } from "./send-action";
 export { PlanStatus } from "./status";
