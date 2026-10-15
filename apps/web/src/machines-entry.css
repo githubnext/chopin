@@ -10,7 +10,6 @@
 	background: var(--color-page);
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
-	outline: none;
 	transform-origin: var(--transform-origin, bottom left);
 	transition:
 		opacity var(--duration-fast) var(--ease-out),
@@ -81,7 +80,9 @@
 	right: calc(var(--spacing) * -0.75);
 	bottom: calc(var(--spacing) * -0.5);
 	box-sizing: content-box;
-	border: calc(var(--spacing) * 0.375) solid var(--color-page);
+	border-width: calc(var(--spacing) * 0.375);
+	border-style: solid;
+	border-color: var(--color-page);
 }
 
 .machines-menu .app-menu-item[data-checked] .machines-menu-dot {
