@@ -20,7 +20,6 @@ import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
 import type { DraftInputHandle } from "./draft-input";
 import { PlannerAttachment } from "./planner-attachment";
-import { Participation } from "./participation";
 import { TypingReporter } from "./typing";
 import { ChatComposer } from "./composer";
 
@@ -53,6 +52,7 @@ import {
 } from "./reference-picker";
 import {
 	acknowledgeDraft,
+	addressedOutsideReferences,
 	addressesPlanner,
 	boundedChatError,
 	insertReference,
@@ -249,6 +249,9 @@ export function Chat(
 	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
+	let [mode, setMode] = useState(() =>
+		draft.submission?.to === "planner" && !addressedOutsideReferences(draft.text, draft.references)
+	);
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -285,6 +288,8 @@ export function Chat(
 		: wire?.status === "connecting"
 		? "Connecting…"
 		: "Reconnecting…";
+	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
+		|| addressedOutsideReferences(draft.text, draft.references));
 	let workingTurn = transcriptReady ? turn : undefined;
 	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
 		? {
@@ -501,6 +506,7 @@ export function Chat(
 		}
 		let submitted = prepareDraftSubmission(current, undefined, {
 			planner: agent,
+			mode: effectiveMode,
 			referencesEnabled,
 			focus,
 		});
@@ -575,6 +581,48 @@ export function Chat(
 		}
 	});
 
+	let toggleMode = () => {
+		if (!draftable || sending || !agent) return;
+		let current = draftRef.current;
+		let at = selection.start;
+		let end = selection.end;
+		if (effectiveMode) {
+			let removals = [...current.text.matchAll(/(^|[^\w@])@chopin\b/gi)]
+				.map(match => {
+					let start = match.index + match[1]!.length;
+					let end = match.index + match[0].length;
+					// Take one following space too where the mention began the text or followed one,
+					// so removing it leaves no doubled or leading space.
+					let before = current.text[start - 1];
+					if (current.text[end] === " " && (start === 0 || before === " ")) end += 1;
+					return { start, end };
+				})
+				.filter(edit =>
+					!current.references.some(reference =>
+						edit.start < reference.end && edit.end > reference.start
+					)
+				);
+			let next = current.text;
+			let references = current.references;
+			for (let edit of removals.toReversed()) {
+				let revised = next.slice(0, edit.start) + next.slice(edit.end);
+				references = reconcileReferenceDrafts(next, revised, references, edit);
+				if (edit.start < at) at -= Math.min(edit.end - edit.start, at - edit.start);
+				if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
+				next = revised;
+			}
+			setDraft({ text: next, references });
+			setSelection({ start: at, end });
+			setMode(false);
+		} else {
+			setMode(true);
+			setDraft({ text: current.text, references: current.references });
+		}
+		setSendError(undefined);
+		setDismissedPicker(triggerKey ?? mentionKey);
+		pendingCaret.current = { start: at, end };
+	};
+
 	let chooseReference = (target: ReferenceTarget) => {
 		if (!trigger) return;
 		let next = insertReference(draft.text, draft.references, trigger, target);
@@ -588,6 +636,7 @@ export function Chat(
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!mention) return;
 		let next = insertMention(draft.text, mention, candidate);
+		if (candidate.kind === "planner") setMode(true);
 		setDraft(current =>
 			reviseComposerDraft(
 				current,
@@ -670,14 +719,6 @@ export function Chat(
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			{agent && wire && participationState?.enabled && (
-				<Participation
-					key={`${room}:${participationKey}`}
-					state={participationState}
-					wire={wire}
-					disabled={!composerReady}
-				/>
-			)}
 			{transcriptView}
 
 			{agent && !!runs?.length && (
@@ -697,6 +738,11 @@ export function Chat(
 				rootRef={composerRoot}
 				inputRef={textarea}
 				agent={!!agent}
+				mode={{
+					chopin: effectiveMode,
+					disabled: !draftable || sending || !agent,
+					onToggle: toggleMode,
+				}}
 				notice={sendError
 					? {
 						tone: "error",
@@ -862,6 +908,14 @@ export function Chat(
 						}
 						if (!composing && event.key === "Tab" && !event.shiftKey) {
 							setDismissedPicker(mentionKey ?? triggerKey);
+							return;
+						}
+						if (
+							!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
+							&& !event.ctrlKey && !event.altKey && agent && draftable && !sending
+						) {
+							event.preventDefault();
+							if (!event.repeat) toggleMode();
 							return;
 						}
 						let mentionAction = mentionOpen

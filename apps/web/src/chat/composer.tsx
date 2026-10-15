@@ -8,9 +8,11 @@
 import { useId } from "react";
 import type { ReactNode, Ref } from "react";
 
-import { SendAction } from "@chopin/editor";
-import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ChopinMark, SendAction } from "@chopin/editor";
+import { usePhone } from "@chopin/editor/pointer";
+import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
+import { ModeSwitch } from "./mode-switch";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
@@ -28,6 +30,8 @@ export type ChatComposerProps = {
 	inputRef?: Ref<DraftInputHandle>;
 	/** Whether this document's Planner is on; without it the composer is marked off. */
 	agent: boolean;
+	/** Whether the draft is addressed to Chopin, and the Chat/Chopin switch. */
+	mode?: { chopin: boolean; disabled: boolean; onToggle: () => void };
 	/** Why the draft can't be sent, above the field. */
 	notice?: ComposerNotice;
 	/** Archived and read-only documents show why in place of the draft. */
@@ -67,6 +71,7 @@ export function ChatComposer(
 		rootRef,
 		inputRef,
 		agent,
+		mode,
 		notice,
 		unavailable,
 		references,
@@ -86,6 +91,8 @@ export function ChatComposer(
 	let cueId = useId();
 	let connectionId = useId();
 	let error = notice?.tone === "error";
+	let phone = usePhone();
+	let chopin = !!mode?.chopin;
 	return (
 		<div
 			ref={rootRef}
@@ -133,6 +140,7 @@ export function ChatComposer(
 			<div
 				aria-busy={sending}
 				className="composer-surface field"
+				data-mode={chopin ? "chopin" : "chat"}
 				data-error={error || undefined}
 			>
 				{pickers}
@@ -152,11 +160,28 @@ export function ChatComposer(
 					)
 					: (
 						<>
+							{/* A phone's switch shows only an icon; the chip says where the message goes. */}
+							{phone && chopin && mode && (
+								<span className="composer-chopin-row">
+									<button
+										aria-label="Remove Chopin"
+										className="composer-chopin-chip"
+										data-press="none"
+										disabled={mode.disabled}
+										onClick={mode.onToggle}
+										type="button"
+									>
+										<ChopinMark />
+										<span aria-hidden="true">Chopin</span>
+										<CloseIcon aria-hidden="true" size={12} />
+									</button>
+								</span>
+							)}
 							<DraftInput
 								aria-activedescendant={input["aria-activedescendant"]}
 								aria-controls={input["aria-controls"]}
 								aria-expanded={input["aria-expanded"]}
-								historyGroupKey={false}
+								historyGroupKey={chopin}
 								mentions={input.mentions}
 								onBlur={input.onBlur}
 								onChange={input.onChange}
@@ -177,12 +202,19 @@ export function ChatComposer(
 								readOnly={!draftable || sending}
 								role="combobox"
 								onSubmit={onSubmit}
-								placeholder="Message…"
+								placeholder={chopin ? "Ask Chopin…" : "Message your collaborators…"}
 								ref={inputRef}
 							/>
 
 							<div className="composer-footer">
 								<div className="composer-left">
+									{mode && (
+										<ModeSwitch
+											effectiveMode={chopin}
+											disabled={mode.disabled}
+											onToggle={mode.onToggle}
+										/>
+									)}
 									{references && (
 										<button
 											type="button"

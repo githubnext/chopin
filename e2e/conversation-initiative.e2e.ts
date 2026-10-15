@@ -1,4 +1,3 @@
-import { SQL } from "bun";
 import { chatInput, expectChatValue } from "./chat-input";
 import { readSource, seedChildChannel } from "./database";
 import { PULL_REQUESTS } from "./harness/fixtures";
@@ -17,8 +16,6 @@ async function record(scope: Page | BrowserContext, loseFirstAcknowledgement = f
 	let seen: Seen[] = [];
 	let sent: Sent[] = [];
 	let connections = 0;
-	let holdParticipation = false;
-	let held: Array<() => void> = [];
 	await scope.routeWebSocket("**/ws?**", route => {
 		let connection = ++connections;
 		let server = route.connectToServer();
@@ -37,10 +34,6 @@ async function record(scope: Page | BrowserContext, loseFirstAcknowledgement = f
 					loseFirstAcknowledgement = false;
 					server.close();
 					route.close();
-					return;
-				}
-				if (frame.kind === "chat:participation" && holdParticipation) {
-					held.push(() => route.send(message));
 					return;
 				}
 			}
@@ -66,11 +59,6 @@ async function record(scope: Page | BrowserContext, loseFirstAcknowledgement = f
 		histories: () => seen.flatMap(item => item.frame.kind === "chat:history" ? [item.frame] : []),
 		sends: () => sent.flatMap(item => item.frame.kind === "chat:send" ? [item.frame] : []),
 		typing: () => sent.filter(item => item.frame.kind === "chat:typing"),
-		hold: () => holdParticipation = true,
-		release: () => {
-			holdParticipation = false;
-			for (let deliver of held.splice(0)) deliver();
-		},
 	};
 }
 
@@ -87,35 +75,14 @@ async function reply(page: Page) {
 	await expect(pane(page).getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 }
 
-async function pausedInStorage(room: string) {
-	let database = new SQL(
-		process.env.E2E_DATABASE_URL_2
-			|| "postgresql://chopin:chopin@127.0.0.1:5435/chopin?sslmode=disable",
-	);
-	try {
-		let [row] = await database<{ sidecar: string | Record<string, unknown> }[]>`
-			SELECT sidecar
-			FROM channel_state WHERE channel_id = ${room}
-		`;
-		let sidecar = typeof row?.sidecar === "string"
-			? JSON.parse(row.sidecar) as Record<string, unknown>
-			: row?.sidecar;
-		return sidecar?.initiativePaused === true;
-	} finally {
-		await database.close();
-	}
-}
-
 test(
 	"every solo human turn gets one reply, including a brief acknowledgment",
 	async ({ join, page, seed }, info) => {
 		await seed("# Conversational initiative\n\nCompare export formats for a small pilot.\n");
 		let frames = await record(page);
 		await join("ana");
-		await expect(
-			pane(page).getByRole("button", { name: "Pause automatic participation", exact: true }),
-		)
-			.toBeVisible();
+		await expect(pane(page).getByRole("button", { name: /automatic participation/ }))
+			.toHaveCount(0);
 		await send(page, "Thanks, that is clear.");
 		await reply(page);
 		await expect.poll(() => frames.starts().length).toBe(1);
@@ -348,65 +315,6 @@ test("a Planner reply after a pending human message prevents a second automatic 
 	expect(frames.starts()).toHaveLength(1);
 });
 
-test(
-	"pause waits for server confirmation, is shared and durable, and leaves direct requests working",
-	async ({ baseURL, browser, join, page, room, seed }, info) => {
-		await seed("# Paused initiative\n\nCompare export formats for a small pilot.\n");
-		let frames = await record(page);
-		await join("ana");
-		let peer = await openIsolatedRoom(browser, baseURL!, room, "bo", {});
-		try {
-			frames.hold();
-			let pause = pane(page).getByRole("button", {
-				name: "Pause automatic participation",
-				exact: true,
-			});
-			await pause.click();
-			await expect(
-				pane(peer.page).getByRole("button", {
-					name: "Enable automatic participation",
-					exact: true,
-				}),
-			).toBeVisible();
-			await expect(pause).toBeDisabled();
-			await expect(pause).toHaveText("Chopin participates");
-			await expect.poll(() => pausedInStorage(room)).toBe(true);
-			frames.release();
-			let enable = pane(page).getByRole("button", {
-				name: "Enable automatic participation",
-				exact: true,
-			});
-			await expect(enable).toHaveText("Automatic replies paused");
-			await expect(enable).toHaveAttribute("data-tooltip", /ask Chopin directly/);
-			await page.screenshot({ path: info.outputPath("initiative-paused.png"), fullPage: true });
-			await send(peer.page, "INITIATIVE-USEFUL paused: compare the export approaches.");
-			await page.waitForTimeout(1800);
-			expect(frames.starts()).toHaveLength(0);
-			await page.reload();
-			await ready(page);
-			await expect(enable).toBeVisible();
-			expect(frames.histories().at(-1)!.participation).toEqual({ enabled: true, paused: true });
-			await send(page, "@chopin read the document and latest pull request");
-			await reply(page);
-			expect(frames.starts()).toHaveLength(1);
-			await enable.click();
-			await expect(
-				pane(peer.page).getByRole("button", {
-					name: "Pause automatic participation",
-					exact: true,
-				}),
-			).toBeVisible();
-			await expect.poll(() => pausedInStorage(room)).toBe(false);
-			await send(peer.page, "INITIATIVE-USEFUL enabled: compare the export approaches.");
-			await expect.poll(() => frames.starts().length).toBe(2);
-			expect(frames.starts()[1]!.turn.handle).toBe("Chopin");
-		} finally {
-			frames.release();
-			await peer.close();
-		}
-	},
-);
-
 test("ordinary child discussion stays quiet while natural direct requests preserve focus", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Focused initiative root\n\nCompare export formats for a small pilot.\n");
 	let title = `Focused child ${room.slice(0, 8)}`;
@@ -443,27 +351,21 @@ test("ordinary child discussion stays quiet while natural direct requests preser
 	expect(frames.starts().at(-1)!.turn.handle).toBe("Chopin");
 });
 
-for (let paused of [false, true]) {
-	test(`plain-language direct requests get a prompt reply with participation paused=${paused}`, async ({ baseURL, browser, join, page, room, seed }) => {
-		await seed("# Direct conversation\n\nCompare export formats.\n");
-		let frames = await record(page);
-		await join("ana");
-		let peer = await openIsolatedRoom(browser, baseURL!, room, "bo", {});
-		try {
-			if (paused) {
-				await pane(page).getByRole("button", { name: "Pause automatic participation", exact: true })
-					.click();
-			}
-			await send(peer.page, "We are discussing export formats.");
-			let sent = Date.now();
-			await send(page, "Chopin, can you compare the export approaches?");
-			await expect.poll(() => frames.starts().length).toBe(1);
-			expect(frames.starts()[0]!.at - sent).toBeLessThan(2850);
-			await reply(page);
-			await page.waitForTimeout(3500);
-			expect(frames.starts()).toHaveLength(1);
-		} finally {
-			await peer.close();
-		}
-	});
-}
+test("plain-language direct requests get a prompt reply", async ({ baseURL, browser, join, page, room, seed }) => {
+	await seed("# Direct conversation\n\nCompare export formats.\n");
+	let frames = await record(page);
+	await join("ana");
+	let peer = await openIsolatedRoom(browser, baseURL!, room, "bo", {});
+	try {
+		await send(peer.page, "We are discussing export formats.");
+		let sent = Date.now();
+		await send(page, "Chopin, can you compare the export approaches?");
+		await expect.poll(() => frames.starts().length).toBe(1);
+		expect(frames.starts()[0]!.at - sent).toBeLessThan(2850);
+		await reply(page);
+		await page.waitForTimeout(3500);
+		expect(frames.starts()).toHaveLength(1);
+	} finally {
+		await peer.close();
+	}
+});

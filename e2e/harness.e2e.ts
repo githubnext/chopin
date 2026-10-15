@@ -143,7 +143,6 @@ test("the composer addresses one message without changing the next message's des
 	let opened = await join("ana");
 	let chat = chatPane(opened);
 	let draft = chatInput(chat);
-	await expect(chat.getByRole("button", { name: "Talk to Chopin", exact: true })).toHaveCount(0);
 	await draft.fill("@chopin compare the export options");
 	await chat.getByRole("button", { name: "Send message" }).click();
 	await expect.poll(() => sent[0]).toMatchObject({

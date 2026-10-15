@@ -32,16 +32,14 @@ turn instruction asks for one concise final conversational reply without separat
 messages, then yields; this is a model instruction, not a hard limit on the number of text
 segments a tool-using turn can emit.
 
-The composer has one Send action and no persistent addressing mode. `@chopin` remains an
-explicit immediate request, even while someone types. Natural-language requests use the
-short typing-aware judgment window. Already prepared delivery retries preserve their
-original destination, text, references and focus.
+The composer's **Chat**/**Chopin** switch (Shift+Tab) addresses a message to the room or
+directly to Chopin. Addressing Chopin, like `@chopin`, is an explicit immediate request,
+even while someone types. Room messages and natural-language requests use the short
+typing-aware judgment window. Already prepared delivery retries preserve their original
+destination, text, references and focus.
 
-The **Chopin participates** control above the conversation pauses automatic replies for
-everyone in this document. While paused it reads **Automatic replies paused**. The
-preference is saved before the control changes and survives reconnects and restarts.
-`@chopin` and confidently recognized natural-language direct requests still work. Re-
-enabling waits for a new saved contribution; it never replays earlier conversation.
+Automatic participation is always on and cannot be paused. A pause saved by an earlier
+release is ignored, and the server refuses `chat:participation` pause requests.
 
 ## Configuration
 
@@ -51,11 +49,11 @@ enabling waits for a new saved contribution; it never replays earlier conversati
 | `CONVERSATION_INITIATIVE_MODEL`      | `jev-1.13.0` | Jev model for turn-taking judgment, independent of `JEV_MODEL`. |
 | `JEV_TIMEOUT_MS`                     | `30000`      | Shared timeout for a Jev request.                               |
 
-Group and paused-conversation judgments receive the source message, up to ten recent
+Group judgments receive the source message, up to ten recent
 human/Planner messages, a bounded excerpt of the document, and up to four open decision
 questions. The complete encoded context stays below 24,000 characters. Solo replies bypass
-this service. Truncation is explicit; an oversized source message in a group or paused
-conversation is left to explicit `@chopin` invocation. This sends private conversation and
+this service. Truncation is explicit; an oversized source message in a group conversation
+is left to explicit `@chopin` invocation. This sends private conversation and
 document context to TypeSafe, separately from the Planner's model provider. Credentials
 remain on the server.
 
@@ -79,9 +77,9 @@ locks and live, waiting, or paused Planner workflows suppress it.
 
 New human messages invalidate scheduled work and stop an automatic turn that is opening or
 running. Typing invalidates its judgment or admission until the turn actually starts.
-Cancellation never reverses document edits already saved by a turn. Pausing, closing the
-room, and explicit invocation also cancel pending automatic work. A visible system notice
-explains each admitted intervention.
+Cancellation never reverses document edits already saved by a turn. Closing the room and
+explicit invocation also cancel pending automatic work. An automatic reply appears like any
+other Chopin reply, without a separate system notice.
 
 The scheduler lives in `apps/server/src/chat/initiative-schedule.ts`; its runtime adapter
 and semantic judgment are adjacent. Other event sources can eventually use the same Chat

@@ -39,7 +39,10 @@ if (supplied.some(Boolean) && !supplied.every(Boolean)) {
 let managed = !supplied[0];
 try {
 	if (process.env.E2E_SKIP_BUILD !== "1") {
-		await run(["bun", "run", "build"], { VITE_CHILD_MOTION_TOGGLE: "on" });
+		await run(["bun", "run", "build"], {
+			VITE_CHILD_MOTION_TOGGLE: "on",
+			VITE_MESSAGE_ANALYSIS: "on",
+		});
 	}
 	if (managed) {
 		await run([...COMPOSE, "up", "-d", "--wait", ...SERVICES]);

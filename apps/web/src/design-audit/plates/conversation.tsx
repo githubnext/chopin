@@ -2,14 +2,12 @@ import { useState } from "react";
 
 import { ChatComposer } from "../../chat/composer";
 import { boundedChatError } from "../../chat/references";
-import { Participation } from "../../chat/participation";
 import { mentionCandidates } from "../../chat/mentions";
 import { Transcript } from "../../chat/transcript";
 import { AuditPlate, StateLabel } from "../frame";
 
 import type { Chat } from "@chopin/protocol";
 import type { ChatComposerProps } from "../../chat/composer";
-import type { Wire } from "../../wire";
 
 const HANDLE = "maggieappleton";
 
@@ -38,25 +36,33 @@ let MENTIONS = [
 		.map(candidate => candidate.login),
 ];
 
-/** Participation's toggle asks the wire; offline, the audit's press does nothing. */
-let OFFLINE = { connected: false } as Wire;
-
 type Specimen =
 	& Pick<
 		ChatComposerProps,
 		"connectionLabel" | "notice" | "onReconnect" | "run" | "unavailable"
 	>
-	& { sending?: boolean; text?: string };
+	& { sending?: boolean; text?: string; chopin?: boolean };
 
 /** The live composer, holding its own draft so the specimen can be typed into. */
 export function ComposerSpecimen(
-	{ connectionLabel, notice, onReconnect, run, sending = false, text = "", unavailable }: Specimen,
+	{
+		chopin = false,
+		connectionLabel,
+		notice,
+		onReconnect,
+		run,
+		sending = false,
+		text = "",
+		unavailable,
+	}: Specimen,
 ) {
 	let [draft, setDraft] = useState(text);
+	let [mode, setMode] = useState(chopin);
 	let draftable = !unavailable;
 	return (
 		<ChatComposer
 			agent
+			mode={{ chopin: mode, disabled: !draftable || sending, onToggle: () => setMode(on => !on) }}
 			connectionLabel={connectionLabel}
 			draftable={draftable}
 			notice={notice}
@@ -92,11 +98,6 @@ export function ConversationPlate() {
 				<div className="workspace-chat-panel relative flex min-w-0 flex-col overflow-hidden bg-chat-pane">
 					<div className="workspace-chat-body relative min-h-0 flex-1">
 						<div className="flex h-full min-h-0 flex-col">
-							<Participation
-								disabled={false}
-								state={{ enabled: true, paused: false }}
-								wire={OFFLINE}
-							/>
 							<Transcript
 								active
 								entries={CHAT_ENTRIES}
@@ -115,8 +116,8 @@ export function ConversationPlate() {
 			</div>
 			<div className="workspace-root bg-chat-pane design-audit-composer-states">
 				<div>
-					<StateLabel>Mentioning Chopin</StateLabel>
-					<ComposerSpecimen text="@chopin Review the spacing" />
+					<StateLabel>Talking to Chopin</StateLabel>
+					<ComposerSpecimen chopin text="Review the spacing" />
 				</div>
 				<div>
 					<StateLabel>Sending</StateLabel>
@@ -144,11 +145,6 @@ export function ConversationPlate() {
 				<div>
 					<StateLabel>Chopin working</StateLabel>
 					<ComposerSpecimen run={{ action: "stop", disabled: false, onClick: () => {} }} />
-				</div>
-				<div>
-					<StateLabel>Automatic replies paused</StateLabel>
-					<Participation disabled={false} state={{ enabled: true, paused: true }} wire={OFFLINE} />
-					<ComposerSpecimen />
 				</div>
 				<div>
 					<StateLabel>Read-only</StateLabel>

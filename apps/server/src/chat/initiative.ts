@@ -1,6 +1,6 @@
 import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Socket } from "../wire";
-import { broadcast, fail, reply } from "../wire";
+import { fail } from "../wire";
 import * as Service from "../plan/service";
 import { project } from "../plan/room";
 import { instruct, jobReady, type Room } from "./service";
@@ -23,7 +23,8 @@ export type Source = {
 export function participation(context: Room): Wire.Participation {
 	return {
 		enabled: !!context.config.agent && !context.rootChannelId,
-		paused: !!context.chat.initiativePaused,
+		// Automatic participation is always on; a pause saved by the retired toggle is ignored.
+		paused: false,
 	};
 }
 
@@ -48,7 +49,7 @@ export function initiative(context: Room) {
 	if (chat.initiative) return chat.initiative;
 	if (!participation(context).enabled) return;
 	chat.initiative = createInitiativeSchedule<Source>({
-		paused: chat.initiativePaused,
+		paused: false,
 		groupMs: context.config.conversationInitiativeSilenceMs,
 		admit: available,
 		async judge(source, signal, turn) {
@@ -110,7 +111,7 @@ export function initiative(context: Room) {
 					context,
 					"Chopin",
 					initiativeInstruction(move, source.id),
-					"Chopin is joining the conversation.",
+					"",
 					{
 						signal,
 						...(child ? { focus: { channelId: child.id, title: child.title } } : {}),
@@ -145,34 +146,11 @@ export function contributed(context: Room, ws: Socket, entry: Wire.Entry, focus?
 	});
 }
 
-export async function setParticipation(
-	context: Room,
+/** Automatic participation cannot be paused; old clients that still ask are refused. */
+export function setParticipation(
+	_context: Room,
 	ws: Socket,
 	message: Request<Wire.SetParticipation>,
 ) {
-	if (!participation(context).enabled || typeof message.paused !== "boolean") {
-		fail(ws, message.rid, "automatic participation is unavailable");
-		return;
-	}
-	let { chat } = context;
-	let change = async () => {
-		if (chat.closed) return fail(ws, message.rid, "chat is closed");
-		try {
-			await context.persist(() => ({
-				entries: chat.entries,
-				runs: chat.runs,
-				initiativePaused: message.paused,
-			}));
-		} catch {
-			return fail(ws, message.rid, "could not save participation preference");
-		}
-		chat.initiativePaused = message.paused;
-		initiative(context)?.pause(message.paused);
-		let state = { kind: "chat:participation" as const, ts: 0, ...participation(context) };
-		reply(ws, message.rid, state);
-		broadcast(context.server, context.room, state);
-	};
-	let changed = chat.sending.then(change, change);
-	chat.sending = changed.then(() => {}, () => {});
-	await changed;
+	fail(ws, message.rid, "automatic participation cannot be paused");
 }

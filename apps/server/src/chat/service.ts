@@ -1066,6 +1066,8 @@ export function instruct(
 		startRun(context, handle, text, about, context.claimantSessionId);
 	};
 	if (about.spent?.() || about.signal?.aborted) return report(about, { status: "skipped" });
+	// Automatic participation replies like any member would, so it announces nothing.
+	if (!said) return proceed();
 	let announced = instructionNotice(context, said, about.comment);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }

@@ -113,10 +113,7 @@ test("a committed move starts an ordinary Planner turn and never repeats without
 	await until(() => h.prompts.length === 1);
 	expect(h.prompts[0]).toContain(source.requestId);
 	expect(h.prompts[0]).toContain("one concise final conversational reply");
-	expect(h.chat.entries.some(entry =>
-		entry.author.kind === "system"
-		&& entry.text === "Chopin is joining the conversation."
-	)).toBe(true);
+	expect(h.chat.entries.some(entry => entry.author.kind === "system")).toBe(false);
 	expect(h.chat.job).toBeUndefined();
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
@@ -326,104 +323,19 @@ test("a document changed while a Planner session opens cannot reach the stream",
 	}
 });
 
-test.each(["document", "agent answer"] as const)(
-	"a changed %s during the initiative notice save prevents its turn",
-	async target => {
-		let h = await setup.harness();
-		h.judge.mockResolvedValueOnce("respond");
-		await Chat.send(h.context, h.ws, message());
-		let entered = Promise.withResolvers<void>();
-		let release = Promise.withResolvers<void>();
-		h.context.persist = async () => {
-			entered.resolve();
-			await release.promise;
-		};
-		try {
-			await h.clock.advance(1500);
-			await entered.promise;
-			expect(h.chat.entries.at(-1)?.author.kind).toBe("system");
-			if (target === "document") h.context.plan.revision = (h.context.plan.revision ?? 0) + 1;
-			else {
-				h.chat.entries.push({
-					id: "new-answer",
-					author: { kind: "agent" },
-					text: "That question is answered.",
-					ts: 1,
-				});
-			}
-			release.resolve();
-			await h.chat.sending;
-			await flush();
-			await h.clock.advance(10_000);
-			expect(h.prompts).toEqual([]);
-			expect(h.chat.waiting).toEqual([]);
-			expect(h.chat.busy).toBe(false);
-			expect(h.judge).toHaveBeenCalledTimes(1);
-		} finally {
-			release.resolve();
-		}
-	},
-);
-
-test("shared pause persists before acknowledgement and broadcast", async () => {
+test("participation cannot be paused, and a previously saved pause is ignored", async () => {
 	let h = await setup.harness();
-	let entered = Promise.withResolvers<void>();
-	let release = Promise.withResolvers<void>();
-	let candidate: boolean | undefined;
-	h.context.persist = async value => {
-		candidate = value?.().initiativePaused;
-		entered.resolve();
-		await release.promise;
-	};
-	let changing = setParticipation(h.context, h.ws, pause(true));
-	await entered.promise;
-	expect(candidate).toBe(true);
-	expect(participation(h.context).paused).toBe(false);
-	expect(h.replies).toEqual([]);
-	expect(h.frames).toEqual([]);
-	release.resolve();
-	await changing;
-	expect(participation(h.context).paused).toBe(true);
-	expect(h.replies.at(-1)).toMatchObject({
-		kind: "chat:participation",
-		enabled: true,
-		paused: true,
-	});
-	expect(h.frames.at(-1)).toMatchObject({
-		kind: "chat:participation",
-		enabled: true,
-		paused: true,
-	});
-});
-
-test("a failed pause leaves the previous participation and opportunity intact", async () => {
-	let h = await setup.harness();
-	await Chat.send(h.context, h.ws, message());
+	h.chat.initiativePaused = true;
+	let persisted = false;
 	h.context.persist = async () => {
-		throw new Error("save failed");
+		persisted = true;
 	};
 	await setParticipation(h.context, h.ws, pause(true));
-	expect(participation(h.context).paused).toBe(false);
+	expect(persisted).toBe(false);
 	expect(h.replies.at(-1)?.kind).toBe("session:error");
 	expect(h.frames.some(frame => frame.kind === "chat:participation")).toBe(false);
-	await h.clock.advance(1500);
-	expect(h.judge).toHaveBeenCalledTimes(1);
-});
-
-test("paused participation still accepts explicit messages and resume requires fresh input", async () => {
-	let h = await setup.harness();
-	await Chat.send(h.context, h.ws, message("Old source"));
-	await setParticipation(h.context, h.ws, pause(true));
-	await h.clock.advance(10_000);
-	expect(h.judge).not.toHaveBeenCalled();
-	await Chat.send(h.context, h.ws, message("Explicit while paused", "planner"));
-	await until(() => h.prompts.length === 1);
-	h.emit("session.idle");
-	await until(() => !h.chat.busy);
-	await setParticipation(h.context, h.ws, pause(false));
-	await h.clock.advance(10_000);
-	expect(h.judge).not.toHaveBeenCalled();
-	await Chat.send(h.context, h.ws, message("Fresh source"));
+	expect(participation(h.context).paused).toBe(false);
+	await Chat.send(h.context, h.ws, message());
 	await h.clock.advance(1500);
 	expect(h.judge).toHaveBeenCalledTimes(1);
 });

@@ -186,7 +186,7 @@ jobs:
             apps/web/dist
             apps/connector/dist
           key: >-
-            client-${{ runner.os }}-bun-${{ env.BUN_VERSION }}-motion-on-${{ hashFiles(
+            client-${{ runner.os }}-bun-${{ env.BUN_VERSION }}-motion-on-analysis-on-${{ hashFiles(
               'apps/web/**', 'apps/connector/**', 'packages/**', '!**/node_modules/**', '!**/dist/**',
               'package.json', 'bun.lock', 'tsconfig.json', 'patches/**'
             ) }}
@@ -213,6 +213,7 @@ jobs:
         env:
           CLIENT_RESTORED: ${{ steps.client.outputs.cache-hit }}
           VITE_CHILD_MOTION_TOGGLE: "on"
+          VITE_MESSAGE_ANALYSIS: "on"
 
       # Keyed on the Playwright version and nothing else. Keying on the
       # lockfile would discard a 180MB browser every time an unrelated

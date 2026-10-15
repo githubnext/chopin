@@ -23,6 +23,9 @@ import { WorkProgress } from "./work-progress";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
 
+/** Message analysis is a development diagnostic; the browser suite builds it in too. */
+const ANALYSIS = import.meta.env.DEV || import.meta.env.VITE_MESSAGE_ANALYSIS === "on";
+
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { CompletedWork, Group, Message } from "./model";
 import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
@@ -275,7 +278,7 @@ function MessageBody(
 						)}
 				</div>
 			)}
-			{!message.queued && markers.onCardLink && markers.onRetryAnalysis && (
+			{ANALYSIS && !message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
 					canEdit={!!markers.canEdit}
 					messageId={message.id}
