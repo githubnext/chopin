@@ -50,8 +50,8 @@ https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
 The Planner can inspect the selected GitHub repository and its pull requests
 through bounded, read-only tools, then co-author the document. Under the default
-`copilot-sdk` harness, and under `pi`, it cannot write to GitHub, edit a checkout,
-or implement code. `HARNESS=atomic` deliberately runs it as a full Atomic session
+`copilot-sdk` harness it cannot write to GitHub, edit a checkout, or implement
+code. `HARNESS=atomic` deliberately runs it as a full Atomic session
 with shell and filesystem access as the server process's user; see
 [Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). A separate coding agent can connect
 to Chopin through MCP to create or revise documents and consume an approved
@@ -79,14 +79,14 @@ and tool vocabulary remain optimized for planning.
   who invokes the Planner, or who starts a model-backed research request supplies
   the GitHub App user token used for that channel
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
-  `HARNESS=pi` or `HARNESS=atomic`, model access comes from the operator's
+  `HARNESS=atomic`, model access comes from the operator's
   `HARNESS_AUTH` instead.
   A server restart releases that ownership. Hosted browser logins survive
   releases using encrypted session credentials; local device mode restores a
   new session. Returning browsers can claim Planner ownership on a later action.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to the harness's model provider during a turn (GitHub
-  Copilot by default; under `HARNESS=pi` or `HARNESS=atomic`, the provider
+  Copilot by default; under `HARNESS=atomic`, the provider
   chosen by `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
   material, including context loaded during execution, to isolated workers on
   the same harness. The public research worker receives
@@ -108,7 +108,7 @@ and tool vocabulary remain optimized for planning.
   `JEV_API_KEY`. Jev makes small possibility, comprehension, and type decisions
   for one explanatory paragraph at a time; Planner authors the selected visual.
   Routing applies to explicit member requests of at most 1,000 characters under
-  `copilot-sdk` or `pi`. Other turns keep their ordinary authoring behavior.
+  `copilot-sdk`. Other turns keep their ordinary authoring behavior.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 

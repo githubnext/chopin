@@ -15,12 +15,12 @@ import {
 	createAtomicAdapter,
 } from "./atomic/adapter";
 import { harnessContract } from "./contract";
-import { startStubModelServer } from "./pi/model-stub";
+import { startStubModelServer } from "./atomic/model-stub";
 
 import type { HarnessV1StartOptions, HarnessV1StreamPart } from "@ai-sdk/harness";
 import type { ToolSet } from "ai";
 import type { AtomicSettings } from "./atomic/adapter";
-import type { StubTurn } from "./pi/model-stub";
+import type { StubTurn } from "./atomic/model-stub";
 
 let stub = startStubModelServer((prompt, hasPriorToolResult): StubTurn => {
 	if (prompt === "again") {

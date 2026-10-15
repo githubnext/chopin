@@ -1579,7 +1579,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 function visualRouting(context: Room): boolean {
 	if (
 		!context.config?.plannerVisuals || context.chat.job
-		|| !["copilot-sdk", "pi"].includes(context.config.harness)
+		|| context.config.harness !== "copilot-sdk"
 	) return false;
 	let request = currentMemberRequest(context.chat);
 	return !!request && request.text.length <= 1_000;

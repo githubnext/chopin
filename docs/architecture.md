@@ -3,7 +3,7 @@
 Chopin is one Bun application, one browser client, and one PostgreSQL database.
 The application serves the built client, HTTP API, Streamable HTTP MCP endpoint,
 and WebSocket from the same origin. GitHub supplies identity and repository
-authorization; the selected harness (GitHub Copilot by default, Pi, or Atomic)
+authorization; the selected harness (GitHub Copilot by default, or Atomic)
 supplies the hosted document agent runtime, currently named Planner. Under
 `HARNESS=remote` the Planner's model instead runs in a member's client attached
 over the Planner link WebSocket, `/planner-link`, on the same origin.
@@ -36,8 +36,8 @@ and [Self-hosting](self-hosting.md) for deployment.
   blocks starting research from a child; the API may accept the request, but
   publication validation rejects linking a grandchild.
 - The **Planner** is the current name of Chopin's hosted document agent, backed
-  by GitHub Copilot by default, by Pi under `HARNESS=pi`, by an in-process
-  Atomic session under `HARNESS=atomic`, or by a client attached over the
+  by GitHub Copilot by default, by an in-process Atomic session under
+  `HARNESS=atomic`, or by a client attached over the
   Planner link under `HARNESS=remote`.
 - A **coding agent** is an external MCP client that creates, revises, or implements a
   document from its own local workspace.
@@ -59,7 +59,7 @@ flowchart LR
 	R[Remote Planner client] -->|Bearer-authenticated Planner link WebSocket| S
 	S --> P[(PostgreSQL)]
 	S --> G[GitHub API]
-	S --> A[Harness model provider: Copilot, Pi, or Atomic]
+	S --> A[Harness model provider: Copilot or Atomic]
 	S --> W[Built web client]
 ```
 
@@ -134,7 +134,7 @@ request becomes that channel's Planner owner for the lifetime of the process
 session.
 Permission callbacks recheck admission, session identity, credential revision,
 ownership generation, repository role, and App installation before execution.
-Under `copilot-sdk` and `pi` the Planner has bounded, repository-fixed read tools
+Under `copilot-sdk` the Planner has bounded, repository-fixed read tools
 and no ambient checkout, shell, or host filesystem; no harness built-in is active.
 Under `atomic` every Planner session is a
 [full Atomic session](hosted-agent.md#full-atomic-planner) with shell and

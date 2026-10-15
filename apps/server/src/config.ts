@@ -99,15 +99,15 @@ export const DEFAULT_LINK_TIMEOUT_MS = 120_000;
 export const DEFAULT_LINK_MAX_SILENCE_MS = 900_000;
 const DEFAULT_MODEL = "gpt-6-luna";
 
-/** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
- * own catalogs, so those deployments must name a model rather than inherit one
- * the catalog lacks. A remote Planner's client brings its own model; a
+/** The default is a Copilot model ID. Atomic resolves IDs against its own
+ * catalog, so its deployments must name a model rather than inherit one the
+ * catalog lacks. A remote Planner's client brings its own model; a
  * configured one is only passed along as the turn's request. */
 function model(harness: string): string {
 	let configured = process.env.MODEL;
 	if (configured) return configured;
 	if (harness === "remote") return "";
-	if (harness === "pi" || harness === "atomic") {
+	if (harness === "atomic") {
 		throw new Error(`MODEL is required when HARNESS=${harness}`);
 	}
 	return DEFAULT_MODEL;

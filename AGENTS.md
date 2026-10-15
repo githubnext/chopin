@@ -138,8 +138,8 @@ collaborative state and external implementation runs are durable.
   build, settling a prototyped passage) never claim an owner; under
   `HARNESS=remote` they also wait for an attached Planner. The database stores only a token-free owner reference and durable
   context.
-- **Planner tools are repository-fixed under `copilot-sdk` and `pi`.** Those
-  Planners have no shell, checkout, host filesystem, skills, plugins, or arbitrary
+- **Planner tools are repository-fixed under `copilot-sdk`.** That
+  Planner has no shell, checkout, host filesystem, skills, plugins, or arbitrary
   GitHub access. `HARNESS=atomic` deliberately runs every Planner session, local
   or hosted, as a full Atomic session with the operator's Atomic tools and
   resources, including shell and filesystem access as the server process's user.
@@ -197,7 +197,7 @@ child has no Chat: a comment sent to Chopin inside a child, and an
 `invoke_planner` call naming a child, run on the root's Chat with that child as
 focus, and the turn answers in the child's thread.
 
-Under `copilot-sdk` and `pi` the Planner is a custom agent, not a general coding
+Under `copilot-sdk` the Planner is a custom agent, not a general coding
 agent; under `atomic` it is a full Atomic session. Either way its turn runs
 through `HarnessAgent.stream()` from `@ai-sdk/harness`; the conversation stays
 active until the returned stream finishes. An interrupted turn is never

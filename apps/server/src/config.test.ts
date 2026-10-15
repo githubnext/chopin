@@ -105,13 +105,6 @@ describe("configuration", () => {
 		expect(description(config)).not.toContain("direct");
 	});
 
-	it("requires an explicit MODEL under the pi harness", () => {
-		expect(() => configured({ HARNESS: "pi", HARNESS_AUTH: "openai" }))
-			.toThrow("MODEL is required when HARNESS=pi");
-		expect(configured({ HARNESS: "pi", HARNESS_AUTH: "openai", MODEL: "openai/gpt-5.6" }))
-			.toMatchObject({ harness: "pi", model: "openai/gpt-5.6" });
-	});
-
 	it("requires an explicit provider/model MODEL under the atomic harness", () => {
 		expect(() => configured({ HARNESS: "atomic", HARNESS_AUTH: "auto" }))
 			.toThrow("MODEL is required when HARNESS=atomic");
@@ -198,15 +191,8 @@ describe("configuration", () => {
 				"Planner: full Atomic session (shell and filesystem access as this process's user)",
 			);
 		}
-		for (
-			let isolated of [
-				{},
-				{ HARNESS: "pi", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" },
-			]
-		) {
-			for (let mode of [{}, LOCAL]) {
-				expect(description(configured({ ...isolated, ...mode }))).not.toContain("full Atomic");
-			}
+		for (let mode of [{}, LOCAL]) {
+			expect(description(configured(mode))).not.toContain("full Atomic");
 		}
 	});
 

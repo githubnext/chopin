@@ -57,8 +57,7 @@ bearer tokens and browser sessions traverse it.
 
 Chopin runs its hosted agent through `@ai-sdk/harness`. `HARNESS` selects one
 adapter from a code-owned map: the default is `copilot-sdk`, a host-process
-wrapper over `@github/copilot-sdk`; `pi` is a second reviewed adapter over
-`@ai-sdk/harness-pi`; `atomic` embeds Atomic's headless SDK
+wrapper over `@github/copilot-sdk`; `atomic` embeds Atomic's headless SDK
 (`@bastani/atomic`) in the server process; and `remote` runs each Planner turn in
 a client attached over the Planner link instead. Adding an adapter to that map is a
 reviewed trust decision, not a runtime plugin choice: an adapter's
@@ -76,49 +75,9 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=pi` requires an explicit `HARNESS_AUTH`: unset is refused outright.
-Pi's own documented modes are `auto`, `openai`, `anthropic`, `custom`, and
-`ai-gateway`; `direct` is not one of them and is refused. On a non-loopback
-`SERVER_HOST`, only `ai-gateway` is accepted, because every other mode can
-fall back to Pi's native `~/.pi/agent` login. `ai-gateway` reads
-`AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`), `openai` reads `OPENAI_API_KEY`,
-`anthropic` reads `ANTHROPIC_API_KEY`, and `custom` forwards every `*_API_KEY`
-and `*_BASE_URL` variable. With `auto` on loopback, turns use the host
-operator's own Pi login; with an operator key, every admitted writer's turns
-bill that key.
-
-Under `pi`, the channel owner supplies only the GitHub App user token; model
-access comes from `HARNESS_AUTH`, not from the owner's Copilot entitlement.
-Repository reads still come from that GitHub token through Chopin's own host
-tools, never through Pi.
-
-Under `pi`, `MODEL` is required and must be an ID from Pi's model catalog,
-preferably provider-qualified (for example `github-copilot/gpt-5.6-luna`).
-Chopin's default, `gpt-6-luna`, is a Copilot ID that Pi does not recognize.
-`@ai-sdk/harness-pi` 1.0.148 fails the turn for an unknown ID ("Harness 'pi'
-has no model ... in its catalog") instead of falling back to another model, so
-the startup banner always names the model Pi runs.
-
-Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi's resource loader never reads
-`AGENTS.md` or `CLAUDE.md` context files from the session's working directory,
-its parent directories, or Pi's agent directory on the host. The change lives
-in `patches/@ai-sdk%2Fharness-pi@1.0.148.patch`; reapply or drop it when
-bumping `@ai-sdk/harness-pi`, and run the Pi contract suite
-(`apps/server/src/harness/pi.contract.test.ts`), which covers both behaviors.
-
-`@ai-sdk/harness-pi` 1.0.148 cannot return structured output itself, so
-Chopin registers a result tool as an inline Pi extension. The tool runs inside
-Pi and ends the turn (`terminate: true`), so the summary and research workers
-get their structured result without a follow-up model request. The adapter
-enables the tool only for a turn that requests structured output and blocks it
-on every other turn. Prompt text, including quoted earlier chat, cannot enable
-it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
-covers this against the real Pi agent loop; run it before bumping
-`@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
-
 `HARNESS=atomic` runs Atomic 0.9.37 in the Chopin server process through its
-headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI, use
-RPC mode, or substitute Atomic for Pi's runtime.
+headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
+RPC mode.
 
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** Every Planner
@@ -126,7 +85,7 @@ session is a full Atomic session: Atomic's workflows, subagents, MCP, web access
 Intercom, and default coding tools run beside Chopin's document tools, with the
 operator's Atomic extensions, skills, prompt templates, and context files. There is
 no separate flag; choosing the harness is the choice. Operators who do not want that
-should use `copilot-sdk` or `pi`, whose Planner keeps the isolated, Chopin-tools-only
+should use `copilot-sdk`, whose Planner keeps the isolated, Chopin-tools-only
 boundary. Only the summary and research workers still run isolated Atomic sessions.
 See [The atomic Planner](#the-atomic-planner) below and
 [Hosted agent](hosted-agent.md#full-atomic-planner) for the details.
@@ -158,7 +117,7 @@ Copilot login. An integration that passes Atomic a failed model lookup gets
 another model without warning. This adapter looks the model up itself and
 fails the turn before any model request.
 
-Structured output uses the same approach as Pi: an inline Atomic extension
+Structured output uses an inline Atomic extension that
 registers a terminating result tool, enabled only for a turn that requests
 structured output and blocked on every other turn. The tool records the calling
 model's own arguments. The adapter does not use Atomic's
@@ -301,7 +260,7 @@ WebSocket upgrades and the `Authorization` header.
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
 - For `copilot-sdk`, an active Copilot entitlement for each user who may own a
-  hosted agent session. For `pi` or `atomic`, model credentials for the chosen
+  hosted agent session. For `atomic`, model credentials for the chosen
   `HARNESS_AUTH` mode instead.
 
 ## Register the GitHub App
@@ -360,13 +319,13 @@ the image.
 | `CHOPIN_LOCAL_CREDENTIALS_DIR` | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                         |
 | `SERVER_HOST`                  | `127.0.0.1`             | Source-process bind address. The image sets `0.0.0.0`, which local mode refuses. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `PORT`                         | `8787`                  | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `MODEL`                        | `gpt-6-luna`            | Model requested for hosted agent sessions. Required under `HARNESS=pi` and `HARNESS=atomic`; under `atomic` it must be `provider/model` from Atomic's catalog. Optional under `HARNESS=remote`, where the attached client chooses its model and a set value is only passed along as the turn's request.                                                                                                                                                                                                                                                                                                                                                  |
-| `HARNESS`                      | `copilot-sdk`           | Adapter name selected from Chopin's harness map (`copilot-sdk`, `pi`, `atomic`, or `remote`). An unknown name refuses at startup. `remote` runs Planner turns in a client attached at `/planner-link`; see [The remote Planner](#the-remote-planner). `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                                                                                           |
+| `MODEL`                        | `gpt-6-luna`            | Model requested for hosted agent sessions. Required under `HARNESS=atomic`, where it must be `provider/model` from Atomic's catalog. Optional under `HARNESS=remote`, where the attached client chooses its model and a set value is only passed along as the turn's request.                                                                                                                                                                                                                                                                                                                                                                            |
+| `HARNESS`                      | `copilot-sdk`           | Adapter name selected from Chopin's harness map (`copilot-sdk`, `atomic`, or `remote`). An unknown name refuses at startup. `remote` runs Planner turns in a client attached at `/planner-link`; see [The remote Planner](#the-remote-planner). `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                                                                                                 |
 | `PLANNER_ATTACH_GRACE_MS`      | `120000`                | Under `HARNESS=remote`, how long a detached or dropped Planner link keeps the document's Planner ownership so the same account can reattach, in milliseconds, an integer between 0 and 3600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `PLANNER_LINK_PING_MS`         | `15000`                 | Under `HARNESS=remote`, how often the server sends each Planner link a WebSocket protocol ping, in milliseconds, an integer between 1000 and 600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `PLANNER_LINK_TIMEOUT_MS`      | `120000`                | Under `HARNESS=remote`, how long a Planner link may send nothing, not even a pong, before the server closes it as dropped, in milliseconds, an integer between 1000 and 600000 and longer than `PLANNER_LINK_PING_MS`. A whole frame must arrive within it: 2 MiB in 120 seconds is about 17 KiB/s of client upload.                                                                                                                                                                                                                                                                                                                                     |
 | `PLANNER_LINK_MAX_SILENCE_MS`  | `900000`                | Under `HARNESS=remote`, how long a Planner link may send nothing at all, not even a pong, before the server closes it as dropped, however much of what the server queued for it drains meanwhile, in milliseconds, an integer between 1000 and 3600000 and at least `PLANNER_LINK_TIMEOUT_MS`. A draining queue defers the timeout only up to this, since a proxy can drain it while the client reads nothing. The 15-minute default lets a client reading at about 19 KiB/s drain the full 16 MiB the server may queue for it and answer a ping; lower it to release a client that stopped reading behind a proxy sooner, or raise it for slower links. |
-| `HARNESS_AUTH`                 | unset                   | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused.                                                                   |
+| `HARNESS_AUTH`                 | unset                   | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused.                                                                                                                                                                                                                                                        |
 | `HARNESS_EXTENSIONS`           | unset                   | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                                                                                        |
 | `AGENT`                        | on                      | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `BACKGROUND_JOBS`              | on                      | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner. `HARNESS=remote` requires `off`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -394,7 +353,7 @@ paragraphs are not yet supported in a routed edit. `JEV_MODEL` and
 `JEV_TIMEOUT_MS` apply to this path too.
 
 Routing is limited to explicit member requests of at most 1,000 characters under
-`copilot-sdk` or `pi`. Comment turns, longer member requests, background
+`copilot-sdk`. Comment turns, longer member requests, background
 jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
 retained workflow sessions are outside this disposable-session prototype.
 
@@ -624,7 +583,7 @@ After the first deployment:
 5. Create a channel with a user who has push or administration access.
 6. Open the channel in a second browser and verify presence and live edits.
 7. Send one `@chopin` request to verify model access (the owner's Copilot
-   entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for `pi` or
+   entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for
    `atomic`)
    and the hosted agent runtime.
 8. Connect a local coding agent and call `list_documents` if MCP is part of the

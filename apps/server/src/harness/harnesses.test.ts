@@ -6,8 +6,8 @@ import { harnesses, harnessFor, registerCredential, shutdownHarnesses } from "./
 
 afterEach(shutdownHarnesses);
 
-it("selects the tested Copilot SDK, Pi, Atomic, and remote harnesses", () => {
-	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "pi", "atomic", "remote"]);
+it("selects the tested Copilot SDK, Atomic, and remote harnesses", () => {
+	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "atomic", "remote"]);
 	expect(harnessFor({ harness: "copilot-sdk" }).harnessId).toBe("copilot-sdk");
 	expect(() => harnessFor({ harness: "not-installed" })).toThrow("Unknown harness: not-installed");
 });
@@ -27,25 +27,9 @@ it("refuses host-login fallback on public binds but accepts it on loopback", () 
 		.toThrow("Unknown harness: unknown");
 });
 
-it("requires an explicit, Pi-supported auth mode and refuses direct or unknown modes", () => {
-	expect(() => harnessFor({ harness: "pi", host: "127.0.0.1" }))
-		.toThrow("HARNESS_AUTH is required for harness pi");
-	expect(() => harnessFor({ harness: "pi", harnessAuth: "direct", host: "127.0.0.1" }))
-		.toThrow("is not a supported pi authentication mode");
-	expect(() => harnessFor({ harness: "pi", harnessAuth: "bogus", host: "127.0.0.1" }))
-		.toThrow("is not a supported pi authentication mode");
-	expect(harnessFor({ harness: "pi", harnessAuth: "auto", host: "127.0.0.1" }).harnessId).toBe(
-		"pi",
-	);
-});
-
-it("refuses every Pi auth mode but ai-gateway on a non-loopback bind", () => {
-	expect(() => harnessFor({ harness: "pi", harnessAuth: "auto", host: "0.0.0.0" }))
-		.toThrow("must be ai-gateway");
-	expect(() => harnessFor({ harness: "pi", harnessAuth: "custom", host: "0.0.0.0" }))
-		.toThrow("must be ai-gateway");
-	expect(harnessFor({ harness: "pi", harnessAuth: "ai-gateway", host: "0.0.0.0" }).harnessId)
-		.toBe("pi");
+it("refuses pi, which is no longer a harness", () => {
+	expect(() => harnessFor({ harness: "pi", harnessAuth: "ai-gateway", host: "127.0.0.1" }))
+		.toThrow("Unknown harness: pi");
 });
 
 it("requires an explicit, Atomic-supported auth mode and refuses direct or unknown modes", () => {
@@ -85,8 +69,8 @@ it("accepts only existing absolute extension paths, and only for the atomic harn
 	let missing = join(tmpdir(), `chopin-missing-${crypto.randomUUID()}`);
 	expect(() => harnessFor({ ...atomic, harnessExtensions: [missing] }))
 		.toThrow(`HARNESS_EXTENSIONS path ${missing} does not exist`);
-	expect(() => harnessFor({ harness: "pi", harnessAuth: "auto", harnessExtensions: [tmpdir()] }))
-		.toThrow("HARNESS_EXTENSIONS requires HARNESS=atomic, not pi");
+	expect(() => harnessFor({ harness: "copilot-sdk", harnessExtensions: [tmpdir()] }))
+		.toThrow("HARNESS_EXTENSIONS requires HARNESS=atomic, not copilot-sdk");
 	expect(harnessFor({ ...atomic, harnessExtensions: [tmpdir()] }).harnessId).toBe("atomic");
 });
 

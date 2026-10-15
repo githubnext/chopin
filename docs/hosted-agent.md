@@ -3,8 +3,8 @@
 Chopin's Copilot-backed document agent is currently named Planner. It can
 inspect one selected GitHub repository, co-author the shared document, ask the
 participants structured questions, and anchor decisions to prose. For documents
-used as plans, it can also draft an implementation graph. Under `copilot-sdk` and
-`pi` it does not implement code or change GitHub; under `atomic` it runs as a full
+used as plans, it can also draft an implementation graph. Under `copilot-sdk` it
+does not implement code or change GitHub; under `atomic` it runs as a full
 Atomic session, described [below](#full-atomic-planner); under `remote` its model
 runs in a member's own client, described in [Remote Planner](#remote-planner).
 
@@ -14,17 +14,16 @@ that is an implementation limitation, not the document model's boundary.
 
 Chopin runs the Planner through `@ai-sdk/harness`: `HARNESS` selects one adapter
 from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
-`@github/copilot-sdk`. `pi`, over `@ai-sdk/harness-pi`, and `atomic`, which
-embeds Atomic's headless SDK (`@bastani/atomic`) in the server process, are
-further reviewed adapters. Both require an explicit `HARNESS_AUTH`. `remote`
-runs no model in the server at all: each turn goes to a client attached over the
-Planner link. The harness owns the agent loop and model. Under `copilot-sdk` and
-`pi`, Chopin owns every tool the Planner can call.
+`@github/copilot-sdk`. `atomic`, which embeds Atomic's headless SDK
+(`@bastani/atomic`) in the server process, is a further reviewed adapter and
+requires an explicit `HARNESS_AUTH`. `remote` runs no model in the server at
+all: each turn goes to a client attached over the Planner link. The harness owns
+the agent loop and model. Under `copilot-sdk`, Chopin owns every tool the
+Planner can call.
 
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** No other flag
-turns this on or off. Operators who do not want it should use `copilot-sdk` or
-`pi`. See [Self-hosting](self-hosting.md#choose-and-trust-a-harness) for
+turns this on or off. Operators who do not want it should use `copilot-sdk`. See [Self-hosting](self-hosting.md#choose-and-trust-a-harness) for
 `HARNESS`/`HARNESS_AUTH` selection and adapter trust.
 
 ## Ownership
@@ -32,8 +31,8 @@ turns this on or off. Operators who do not want it should use `copilot-sdk` or
 The first eligible editor whose saved Chat message starts title maintenance, who
 invokes the Planner, or who starts a model-backed research request supplies the
 GitHub App user access token for that channel and, under
-the default `copilot-sdk` harness, the Copilot entitlement. Under `HARNESS=pi`
-and `HARNESS=atomic` the owner supplies only the GitHub token; model access
+the default `copilot-sdk` harness, the Copilot entitlement. Under
+`HARNESS=atomic` the owner supplies only the GitHub token; model access
 comes from the operator's `HARNESS_AUTH` mode. Under `HARNESS=remote` the owner
 also supplies only the GitHub token, and the model runs in the client attached
 to the document; only [attaching](#remote-planner) makes an account the owner
@@ -86,7 +85,7 @@ before that session is available for a new Planner claim.
 
 ## Runtime isolation
 
-Under `copilot-sdk` and `pi` the Planner receives only Chopin's host-executed
+Under `copilot-sdk` the Planner receives only Chopin's host-executed
 tools: document, question, relationship, implementation-graph, repository, and
 GitHub tools, each bound to the channel's repository through `toolsContext`. No
 harness built-in is active for the Planner. The default `copilot-sdk` adapter
@@ -107,10 +106,6 @@ That isolated Planner has no:
 - repository-local instruction loading;
 - shared embeddings or cross-session store; or
 - ability to change GitHub.
-
-Under `HARNESS=pi`, Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi does not
-load `AGENTS.md` or `CLAUDE.md` context files from the host filesystem. See
-[Self-hosting](self-hosting.md#choose-and-trust-a-harness).
 
 Chopin's tools available to the Planner under every harness are:
 
@@ -161,8 +156,8 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
-With `PLANNER_VISUALS=on` and a configured Jev key, foreground `copilot-sdk` and
-`pi` sessions for an explicit member request of at most 1,000 characters also
+With `PLANNER_VISUALS=on` and a configured Jev key, foreground `copilot-sdk`
+sessions for an explicit member request of at most 1,000 characters also
 receive `assess_visual`. It routes one explanatory paragraph through
 possibility, comprehension, and type choices before `edit_plan` can publish it.
 The route is bound to the member turn, document revision, passage, and placement.
@@ -197,7 +192,7 @@ Under `HARNESS=atomic` every Planner session is a full Atomic session, in local
 and hosted deployments alike, with no separate flag. The workflows it starts
 get shell and filesystem access **as the server process's user**, not a sandbox
 confined to a repository. Operators who do not want that should use
-`copilot-sdk` or `pi`. Both `HARNESS_AUTH=auto` and `ai-gateway` work, under
+`copilot-sdk`. Both `HARNESS_AUTH=auto` and `ai-gateway` work, under
 their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
 The Planner's own turns offer only read-only tools beside Chopin's document and

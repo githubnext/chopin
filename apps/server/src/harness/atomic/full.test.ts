@@ -20,7 +20,7 @@ import {
 	runCards,
 	untilUnpaused,
 } from "./full";
-import { startStubModelServer } from "../pi/model-stub";
+import { startStubModelServer } from "./model-stub";
 import * as Plan from "../../plan/service";
 import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";

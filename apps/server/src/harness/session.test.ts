@@ -375,9 +375,9 @@ describe("Planner workspaces", () => {
 		await expect(open("planted", "atomic")).rejects.toThrow();
 	});
 
-	it("keeps copilot-sdk and pi Planner sessions isolated, whatever the channel remembers", async () => {
+	it("keeps copilot-sdk Planner sessions isolated, whatever the channel remembers", async () => {
 		rememberCheckout("channel", await checkout("workgit:owner/repo.git"));
-		for (let harness of ["copilot-sdk", "pi", undefined]) {
+		for (let harness of ["copilot-sdk", undefined]) {
 			let { registered, instructions } = await open("channel", harness);
 			expect(registered).toBeUndefined();
 			expect(instructions).toContain("You have no shell");
