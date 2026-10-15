@@ -28,9 +28,9 @@ export function ResolvedActions(
 			{onDiscard && confirming
 				? (
 					<>
-						<p className="m-0 mr-auto text-sm text-text-secondary">Discard this decision?</p>
+						<p className="m-0 mr-auto text-xs text-text-secondary">Discard this decision?</p>
 						<button
-							className="btn btn-sm btn-secondary text-sm"
+							className="btn btn-sm btn-secondary"
 							data-resolved-action="keep"
 							disabled={submitting}
 							onClick={keep}
@@ -39,7 +39,7 @@ export function ResolvedActions(
 							Keep it
 						</button>
 						<button
-							className="btn btn-sm btn-destructive text-sm"
+							className="btn btn-sm btn-destructive"
 							data-resolved-action="confirm-discard"
 							disabled={disabled || submitting}
 							onClick={confirmResolvedDiscard}
@@ -54,7 +54,7 @@ export function ResolvedActions(
 						{note && <div className="mr-auto flex min-w-0">{note}</div>}
 						{onDiscard && (
 							<button
-								className="btn btn-sm btn-secondary text-sm"
+								className="btn btn-sm btn-secondary"
 								data-resolved-action="discard"
 								disabled={disabled || submitting}
 								onClick={beginResolvedDiscard}
@@ -65,7 +65,7 @@ export function ResolvedActions(
 						)}
 						{onReopen && (
 							<button
-								className="btn btn-sm btn-primary text-sm"
+								className="btn btn-sm btn-primary"
 								data-resolved-action="reopen"
 								disabled={disabled || submitting}
 								onClick={onReopen}

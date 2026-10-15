@@ -106,7 +106,7 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 	let stamp = at === undefined ? "" : when(at);
 
 	return (
-		<span className="inline-flex items-center gap-1.5 text-sm text-text-tertiary tabular-nums">
+		<span className="inline-flex items-center gap-1.5 text-xs text-text-tertiary tabular-nums">
 			<Face decorative handle={by} size={14} titled={false} />
 			<span>
 				{verb} by{" "}

@@ -20,7 +20,7 @@ export function cardRelation(
 	return undefined;
 }
 
-const ROW = "inline-flex min-w-0 items-center gap-1.5 text-sm";
+const ROW = "inline-flex min-w-0 items-center gap-1.5 text-xs";
 
 export function RelationNote(
 	{ count = 0, onEnter, onLeave, onSelect, pending = "Linking…", question, relation }: {
