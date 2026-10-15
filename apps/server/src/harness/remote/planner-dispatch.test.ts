@@ -281,7 +281,11 @@ describe("choosing a machine for a document", () => {
 		await choose("member", desk.id);
 		expect(await first.next("refused")).toMatchObject({ code: "access-revoked" });
 		expect((await first.closed).code).toBe(LINK_CLOSE.forbidden);
-		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped running its Planner") },
+		});
 		expect(await desk.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
 		let second = await desk.backend();
 		await second.next("attached");
@@ -294,7 +298,7 @@ describe("choosing a machine for a document", () => {
 			machine: null,
 		});
 		expect(await second.next("refused")).toMatchObject({ code: "access-revoked" });
-		expect(await desk.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await desk.poll([channel.id])).toMatchObject({ kind: "planners", planners: [] });
 		expect(server.attachments.attached(channel.id)).toBe(false);
 	});
 
@@ -339,7 +343,7 @@ describe("choosing a machine for a document", () => {
 		let held = await rivals.backend();
 		await held.next("attached");
 		// So the laptop is no longer asked to run it; then its owner chooses Automatic.
-		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await laptop.poll([channel.id])).toMatchObject({ kind: "planners", planners: [] });
 		await choose("member", null);
 		held.send({ type: "detach" });
 		for (let deadline = Date.now() + 4_000; server.attachments.holder(channel.id);) {
@@ -594,7 +598,11 @@ describe("a document on Default machine", () => {
 		// A new favorite takes it over.
 		await favor("member", desk.id);
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
-		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("changed their favorite machine") },
+		});
 		expect(await desk.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
 	});
 
@@ -623,7 +631,11 @@ describe("a document on Default machine", () => {
 		skew.ms += 2_000;
 		await runtime.sweep();
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
-		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("Nobody has used this document") },
+		});
 	});
 });
 
