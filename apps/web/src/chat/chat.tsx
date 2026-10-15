@@ -13,19 +13,16 @@ import {
 	CONNECTION_GRACE,
 	isDemoHandle,
 	MAX_RESEARCH_BRIEF,
-	SendAction,
 	useConnectionNotice,
 	usePopoverDismissal,
 } from "@chopin/editor";
-import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
-import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
 import { PlannerAttachment } from "./planner-attachment";
 import { Participation } from "./participation";
 import { TypingReporter } from "./typing";
-import "./composer.css";
+import { ChatComposer } from "./composer";
 
 import { CommandPicker } from "./command-picker";
 import {
@@ -77,8 +74,6 @@ import type { CardLink } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
-import plannerStop from "../assets/icons/planner-stop.svg";
-import plannerResume from "../assets/icons/planner-resume.svg";
 
 import type { Chat as Wire, ConversationPlan, Session } from "@chopin/protocol";
 import type { Repository } from "../api";
@@ -266,9 +261,6 @@ export function Chat(
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
-	let instructionsId = useId();
-	let cueId = useId();
-	let connectionId = useId();
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
@@ -701,361 +693,245 @@ export function Chat(
 				</div>
 			)}
 
-			<div
-				ref={composerRoot}
-				className="chat-composer relative shrink-0 px-2.5 pb-2.5"
-				data-planner={agent ? undefined : "off"}
-			>
-				{referencesEnabled && (
-					<p className="sr-only" id={instructionsId}>
-						Type # to reference a document.
-					</p>
-				)}
-				{!readonly && !archived
-					&& (sendError || researchBlock || blockedCommand || !agent) && (
-					<div
-						className={sendError ? "composer-notice motion-feedback" : "composer-notice"}
-						data-motion-feedback={sendError ? "alert" : undefined}
-						role={sendError ? "alert" : "status"}
-						data-error={!!sendError || undefined}
-						id={cueId}
-					>
-						{sendError
-							? <WarningIcon className="icon-danger icon-first-line" size={14} />
-							: <InfoIcon className="icon-first-line" size={14} />}
-						<span>
-							{sendError ?? (researchBlock
-								? researchCopy[researchBlock]
-								: blockedCommand
-								? "Research isn’t available in this document"
-								: "Chopin unavailable")}
-						</span>
-						{sendError
-							? (
-								<button
-									className="btn btn-sm btn-outline-danger"
-									disabled={!composerReady || submitting}
-									onClick={submit}
-								>
-									Retry
-								</button>
-							)
-							: researchBlock === "drafting"
-							? onShowResearch && (
-								<button className="btn btn-sm btn-ghost" onClick={onShowResearch} type="button">
-									Go to it
-								</button>
-							)
-							: (researchBlock === "disconnected" || researchBlock === "unavailable") && (
-								<button className="btn btn-sm btn-ghost" onClick={submit} type="button">
-									Retry
-								</button>
-							)}
-					</div>
-				)}
-				<div
-					aria-busy={sending}
-					className="composer-surface field"
-					data-error={!!sendError || undefined}
-				>
-					{pickerOpen && trigger && (
-						<ReferencePicker
-							active={picker.active}
-							id={pickerId}
-							onActive={picker.setActive}
-							onSelect={chooseReference}
-							state={atReferenceLimit
-								? { status: "limit", options: [] }
-								: picker}
-						/>
-					)}
-					{commandOpen && (
-						<CommandPicker
-							active={commandActive}
-							id={commandPickerId}
-							onActive={index => setCommandCursor({ key: commandKey, index })}
-							onSelect={chooseCommand}
-							options={commandOptions}
-						/>
-					)}
-					{mentionOpen && (
-						<MentionPicker
-							active={mentionActive}
-							id={mentionPickerId}
-							onActive={index => setMentionCursor({ key: mentionKey, index })}
-							onSelect={chooseMention}
-							options={mentionOptions}
-						/>
-					)}
-					{readonly || archived
-						? (
-							<div className="composer-unavailable" role="status">
-								{archived ? <ArchiveIcon size={18} /> : <LockIcon size={18} />}
-								<strong>{archived ? "Document archived" : "Read-only access"}</strong>
-								<p>
-									{archived
-										? "Restore this document to send messages."
-										: "You need write access to send messages."}
-								</p>
-							</div>
-						)
-						: (
-							<>
-								<DraftInput
-									aria-label="Message"
-									aria-activedescendant={commandOpen
-										? referenceOptionId(commandPickerId, commandActive)
-										: mentionOpen
-										? referenceOptionId(mentionPickerId, mentionActive)
-										: pickerOpen && activeOption
-										? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
-										: undefined}
-									aria-autocomplete="list"
-									aria-controls={commandOpen
-										? commandPickerId
-										: mentionOpen
-										? mentionPickerId
-										: pickerOpen
-										? pickerId
-										: undefined}
-									aria-describedby={[
-										referencesEnabled ? instructionsId : undefined,
-										sendError || researchBlock || blockedCommand || !agent
-											? cueId
-											: undefined,
-										connectionLabel ? connectionId : undefined,
-									].filter(Boolean).join(" ") || undefined}
-									aria-disabled={!draftable || sending}
-									aria-invalid={!!sendError || undefined}
-									aria-expanded={commandOpen || pickerOpen || mentionOpen}
-									readOnly={!draftable || sending}
-									role="combobox"
-									resetKey={historyKey}
-									historyGroupKey={false}
-									onSubmit={submit}
-									references={draft.references}
-									mentions={[
-										handle,
-										...mentionCandidates({ authors, people, planner: agent, self: handle }).map(
-											candidate => candidate.login,
-										),
-									]}
-									onChange={event => {
-										let next = event.currentTarget.value;
-										if (next !== draftRef.current.text) typing.current?.change();
-										setDraft(current =>
-											reviseComposerDraft(
-												current,
-												next,
-												event.currentTarget.references
-													?? reconcileReferenceDrafts(current.text, next, current.references),
-											)
-										);
-										setSendError(undefined);
-										setResearchBlock(undefined);
-										setDismissedPicker(undefined);
-										setSelection({
-											start: event.currentTarget.selectionStart,
-											end: event.currentTarget.selectionEnd,
-										});
-									}}
-									onBlur={() => typing.current?.stop()}
-									onKeyDown={event => {
-										let composing = event.nativeEvent.isComposing || event.keyCode === 229;
-										let commandAction = commandOpen
-											? commandKeyAction({
-												key: event.key,
-												keyCode: event.keyCode,
-												isComposing: event.nativeEvent.isComposing,
-												shiftKey: event.shiftKey,
-												altKey: event.altKey,
-												ctrlKey: event.ctrlKey,
-												metaKey: event.metaKey,
-											}, true)
-											: undefined;
-										if (commandAction === "next" || commandAction === "previous") {
-											let step = commandAction === "next" ? 1 : -1;
-											setCommandCursor({
-												key: commandKey,
-												index: (commandActive + step + commandOptions.length)
-													% commandOptions.length,
-											});
-											event.preventDefault();
-											return;
-										}
-										if (commandAction === "select") {
-											chooseCommand(commandOptions[commandActive]!);
-											event.preventDefault();
-											return;
-										}
-										if (!composing && event.key === "Tab" && !event.shiftKey) {
-											setDismissedPicker(mentionKey ?? triggerKey);
-											return;
-										}
-										let mentionAction = mentionOpen
-											? mentionKeyAction({
-												key: event.key,
-												keyCode: event.keyCode,
-												isComposing: event.nativeEvent.isComposing,
-												shiftKey: event.shiftKey,
-												altKey: event.altKey,
-												ctrlKey: event.ctrlKey,
-												metaKey: event.metaKey,
-											}, true)
-											: undefined;
-										if (mentionAction === "next") {
-											moveMention(index => (index + 1) % mentionOptions.length);
-											event.preventDefault();
-											return;
-										}
-										if (mentionAction === "previous") {
-											moveMention(index =>
-												(index - 1 + mentionOptions.length) % mentionOptions.length
-											);
-											event.preventDefault();
-											return;
-										}
-										if (mentionAction === "select" && activeMention) {
-											chooseMention(activeMention);
-											event.preventDefault();
-											return;
-										}
-										let action = pickerOpen
-											? referencePickerKeyAction({
-												key: event.key,
-												keyCode: event.keyCode,
-												isComposing: event.nativeEvent.isComposing,
-												shiftKey: event.shiftKey,
-											}, activeOption !== undefined)
-											: undefined;
-										if (action === "next") {
-											picker.setActive(value =>
-												picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
-											);
-											event.preventDefault();
-											return;
-										}
-										if (action === "previous") {
-											picker.setActive(value =>
-												picker.options.length === 0
-													? 0
-													: (value - 1 + picker.options.length) % picker.options.length
-											);
-											event.preventDefault();
-											return;
-										}
-										if (action === "select" && activeOption) {
-											chooseReference(activeOption);
-											event.preventDefault();
-											return;
-										}
-										if (composing) return;
-										if (event.key !== "Enter" || event.shiftKey) return;
-										event.preventDefault();
-										submit();
-									}}
-									onSelect={event =>
-										setSelection({
-											start: event.currentTarget.selectionStart,
-											end: event.currentTarget.selectionEnd,
-										})}
-									placeholder="Message…"
-									ref={textarea}
-									value={draft.text}
-								/>
-
-								<div className="composer-footer">
-									<div className="composer-left">
-										{referencesEnabled && (
-											<button
-												type="button"
-												className="btn btn-icon btn-ghost"
-												aria-label="Mention docs"
-												title="Mention docs"
-												data-tooltip="Mention docs"
-												data-tooltip-verbatim=""
-												disabled={!composerReady || submitting}
-												onClick={() => {
-													let current = draftRef.current;
-													let next = current.text
-														+ (current.text && !current.text.endsWith(" ") ? " #" : "#");
-													setDraft(reviseComposerDraft(current, next, current.references));
-													setSelection({ start: next.length, end: next.length });
-													setDismissedPicker(undefined);
-													pendingCaret.current = next.length;
-												}}
-											>
-												<PlusIcon size={14} />
-											</button>
-										)}
-									</div>
-									<div className="composer-actions">
-										{/* A row of its own on a phone; see composer.css. */}
-										<span className="composer-connection-group">
-											{/* Always mounted, so the live region hears its first word. */}
-											<span className="composer-connection" id={connectionId} role="status">
-												{connectionLabel && (
-													<span
-														className="composer-connection-label"
-														data-offline={connectionLabel === "Offline" || undefined}
-													>
-														{connectionLabel}
-													</span>
-												)}
-											</span>
-											{/* Where the document header is out of view; see composer.css. */}
-											{connectionNotice === "offline" && wire && (
-												<button
-													className="composer-reconnect btn btn-sm btn-ghost"
-													onClick={() => wire.reconnect()}
-													type="button"
-												>
-													Reconnect
-												</button>
-											)}
-										</span>
-										<span className="composer-run-control">
-											{agent && (busy || counts.active > 0) && (
-												<button
-													aria-label="Stop Chopin"
-													disabled={!composerReady && connectionNotice !== "none"}
-													className="btn btn-icon btn-secondary"
-													onClick={() => control("chat:abort")}
-													title="Stop Chopin"
-													type="button"
-												>
-													<img alt="" className="size-[14px]" src={plannerStop} />
-												</button>
-											)}
-											{agent && !busy && !counts.active && counts.paused > 0 && (
-												<button
-													aria-label="Resume Chopin"
-													disabled={!composerReady && connectionNotice !== "none"}
-													className="btn btn-icon btn-secondary"
-													onClick={() => control("chat:resume")}
-													title="Resume Chopin"
-													type="button"
-												>
-													<img alt="" className="size-[14px]" src={plannerResume} />
-												</button>
-											)}
-										</span>
-										<SendAction
-											busy={sending}
-											disabled={!draftable || sending || !draft.text.trim()
-												|| blockedCommand
-												|| (connectionNotice !== "none" && !draftCommand(draft.text))}
-											onClick={submit}
-											label="Send message"
-										/>
-									</div>
-								</div>
-							</>
+			<ChatComposer
+				rootRef={composerRoot}
+				inputRef={textarea}
+				agent={!!agent}
+				notice={sendError
+					? {
+						tone: "error",
+						text: sendError,
+						action: { label: "Retry", onClick: submit, disabled: !composerReady || submitting },
+					}
+					: researchBlock
+					? {
+						tone: "info",
+						text: researchCopy[researchBlock],
+						action: researchBlock === "drafting"
+							? onShowResearch && { label: "Go to it", onClick: onShowResearch }
+							: researchBlock === "disconnected" || researchBlock === "unavailable"
+							? { label: "Retry", onClick: submit }
+							: undefined,
+					}
+					: blockedCommand
+					? { tone: "info", text: "Research isn’t available in this document" }
+					: !agent
+					? { tone: "info", text: "Chopin unavailable" }
+					: undefined}
+				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
+				references={referencesEnabled
+					? {
+						disabled: !composerReady || submitting,
+						onMentionDocs: () => {
+							let current = draftRef.current;
+							let next = current.text
+								+ (current.text && !current.text.endsWith(" ") ? " #" : "#");
+							setDraft(reviseComposerDraft(current, next, current.references));
+							setSelection({ start: next.length, end: next.length });
+							setDismissedPicker(undefined);
+							pendingCaret.current = next.length;
+						},
+					}
+					: undefined}
+				draftable={draftable}
+				sending={sending}
+				sendDisabled={!draftable || sending || !draft.text.trim()
+					|| blockedCommand
+					|| (connectionNotice !== "none" && !draftCommand(draft.text))}
+				onSubmit={submit}
+				connectionLabel={connectionLabel}
+				onReconnect={connectionNotice === "offline" && wire ? () => wire.reconnect() : undefined}
+				run={agent && (busy || counts.active > 0)
+					? {
+						action: "stop",
+						disabled: !composerReady && connectionNotice !== "none",
+						onClick: () => control("chat:abort"),
+					}
+					: agent && !busy && !counts.active && counts.paused > 0
+					? {
+						action: "resume",
+						disabled: !composerReady && connectionNotice !== "none",
+						onClick: () => control("chat:resume"),
+					}
+					: undefined}
+				pickers={
+					<>
+						{pickerOpen && trigger && (
+							<ReferencePicker
+								active={picker.active}
+								id={pickerId}
+								onActive={picker.setActive}
+								onSelect={chooseReference}
+								state={atReferenceLimit
+									? { status: "limit", options: [] }
+									: picker}
+							/>
 						)}
-				</div>
-
-				<PlannerAttachment planner={planner} />
-			</div>
+						{commandOpen && (
+							<CommandPicker
+								active={commandActive}
+								id={commandPickerId}
+								onActive={index => setCommandCursor({ key: commandKey, index })}
+								onSelect={chooseCommand}
+								options={commandOptions}
+							/>
+						)}
+						{mentionOpen && (
+							<MentionPicker
+								active={mentionActive}
+								id={mentionPickerId}
+								onActive={index => setMentionCursor({ key: mentionKey, index })}
+								onSelect={chooseMention}
+								options={mentionOptions}
+							/>
+						)}
+					</>
+				}
+				attachment={<PlannerAttachment planner={planner} />}
+				input={{
+					"aria-activedescendant": commandOpen
+						? referenceOptionId(commandPickerId, commandActive)
+						: mentionOpen
+						? referenceOptionId(mentionPickerId, mentionActive)
+						: pickerOpen && activeOption
+						? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
+						: undefined,
+					"aria-controls": commandOpen
+						? commandPickerId
+						: mentionOpen
+						? mentionPickerId
+						: pickerOpen
+						? pickerId
+						: undefined,
+					"aria-expanded": commandOpen || pickerOpen || mentionOpen,
+					resetKey: historyKey,
+					references: draft.references,
+					mentions: [
+						handle,
+						...mentionCandidates({ authors, people, planner: agent, self: handle }).map(
+							candidate => candidate.login,
+						),
+					],
+					onChange: event => {
+						let next = event.currentTarget.value;
+						if (next !== draftRef.current.text) typing.current?.change();
+						setDraft(current =>
+							reviseComposerDraft(
+								current,
+								next,
+								event.currentTarget.references
+									?? reconcileReferenceDrafts(current.text, next, current.references),
+							)
+						);
+						setSendError(undefined);
+						setResearchBlock(undefined);
+						setDismissedPicker(undefined);
+						setSelection({
+							start: event.currentTarget.selectionStart,
+							end: event.currentTarget.selectionEnd,
+						});
+					},
+					onBlur: () => typing.current?.stop(),
+					onKeyDown: event => {
+						let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+						let commandAction = commandOpen
+							? commandKeyAction({
+								key: event.key,
+								keyCode: event.keyCode,
+								isComposing: event.nativeEvent.isComposing,
+								shiftKey: event.shiftKey,
+								altKey: event.altKey,
+								ctrlKey: event.ctrlKey,
+								metaKey: event.metaKey,
+							}, true)
+							: undefined;
+						if (commandAction === "next" || commandAction === "previous") {
+							let step = commandAction === "next" ? 1 : -1;
+							setCommandCursor({
+								key: commandKey,
+								index: (commandActive + step + commandOptions.length)
+									% commandOptions.length,
+							});
+							event.preventDefault();
+							return;
+						}
+						if (commandAction === "select") {
+							chooseCommand(commandOptions[commandActive]!);
+							event.preventDefault();
+							return;
+						}
+						if (!composing && event.key === "Tab" && !event.shiftKey) {
+							setDismissedPicker(mentionKey ?? triggerKey);
+							return;
+						}
+						let mentionAction = mentionOpen
+							? mentionKeyAction({
+								key: event.key,
+								keyCode: event.keyCode,
+								isComposing: event.nativeEvent.isComposing,
+								shiftKey: event.shiftKey,
+								altKey: event.altKey,
+								ctrlKey: event.ctrlKey,
+								metaKey: event.metaKey,
+							}, true)
+							: undefined;
+						if (mentionAction === "next") {
+							moveMention(index => (index + 1) % mentionOptions.length);
+							event.preventDefault();
+							return;
+						}
+						if (mentionAction === "previous") {
+							moveMention(index => (index - 1 + mentionOptions.length) % mentionOptions.length);
+							event.preventDefault();
+							return;
+						}
+						if (mentionAction === "select" && activeMention) {
+							chooseMention(activeMention);
+							event.preventDefault();
+							return;
+						}
+						let action = pickerOpen
+							? referencePickerKeyAction({
+								key: event.key,
+								keyCode: event.keyCode,
+								isComposing: event.nativeEvent.isComposing,
+								shiftKey: event.shiftKey,
+							}, activeOption !== undefined)
+							: undefined;
+						if (action === "next") {
+							picker.setActive(value =>
+								picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
+							);
+							event.preventDefault();
+							return;
+						}
+						if (action === "previous") {
+							picker.setActive(value =>
+								picker.options.length === 0
+									? 0
+									: (value - 1 + picker.options.length) % picker.options.length
+							);
+							event.preventDefault();
+							return;
+						}
+						if (action === "select" && activeOption) {
+							chooseReference(activeOption);
+							event.preventDefault();
+							return;
+						}
+						if (composing) return;
+						if (event.key !== "Enter" || event.shiftKey) return;
+						event.preventDefault();
+						submit();
+					},
+					onSelect: event =>
+						setSelection({
+							start: event.currentTarget.selectionStart,
+							end: event.currentTarget.selectionEnd,
+						}),
+					value: draft.text,
+				}}
+			/>
 		</div>
 	);
 }

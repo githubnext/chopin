@@ -624,7 +624,7 @@ describe("migration", () => {
 	it("puts each listed standard control on its shared utility", () => {
 		let controls: StandardControl[] = [
 			{
-				file: "apps/web/src/chat/chat.tsx",
+				file: "apps/web/src/chat/composer.tsx",
 				marker: 'className="composer-surface field"',
 				name: "chat composer",
 				tag: "div",
@@ -757,15 +757,15 @@ describe("migration", () => {
 				size: "btn-icon",
 				tiers: ["btn-ghost"],
 			}],
-			["apps/web/src/chat/chat.tsx", {
+			["apps/web/src/chat/composer.tsx", {
 				action: "Stop Chopin",
-				marker: 'control("chat:abort")',
+				marker: 'aria-label="Stop Chopin"',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],
-			["apps/web/src/chat/chat.tsx", {
+			["apps/web/src/chat/composer.tsx", {
 				action: "Resume Planner",
-				marker: 'control("chat:resume")',
+				marker: 'aria-label="Resume Chopin"',
 				size: "btn-icon",
 				tiers: ["btn-secondary"],
 			}],

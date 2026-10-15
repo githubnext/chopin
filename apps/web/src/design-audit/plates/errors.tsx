@@ -1,5 +1,7 @@
+import { boundedChatError } from "../../chat/references";
 import { TerminalAlert } from "../../terminal-alert";
 import { AuditPlate } from "../frame";
+import { ComposerSpecimen } from "./conversation";
 
 export function ErrorsPlate() {
 	return (
@@ -11,9 +13,15 @@ export function ErrorsPlate() {
 			<div className="design-audit-error-stack">
 				<TerminalAlert>Enter a document name.</TerminalAlert>
 				<TerminalAlert>Could not open this document. Reloading may help.</TerminalAlert>
-				<div className="design-audit-recoverable-error">
-					<TerminalAlert>Research stopped before it finished.</TerminalAlert>
-					<button className="btn btn-sm btn-secondary" type="button">Retry</button>
+				<div className="workspace-root bg-chat-pane">
+					<ComposerSpecimen
+						notice={{
+							tone: "error",
+							text: boundedChatError(undefined),
+							action: { label: "Retry", onClick: () => {} },
+						}}
+						text="Can we tighten the header?"
+					/>
 				</div>
 			</div>
 		</AuditPlate>

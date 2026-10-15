@@ -19,7 +19,7 @@ type DraftEvent = {
 		references?: ReferenceDraft[];
 	};
 };
-type DraftProps =
+export type DraftInputProps =
 	& Pick<
 		HTMLAttributes<HTMLDivElement>,
 		| "role"
@@ -80,7 +80,7 @@ function setSelection(element: HTMLElement, anchor: number, focus: number) {
 	window.getSelection()?.setBaseAndExtent(startNode, startOffset, endNode, endOffset);
 }
 
-export let DraftInput = forwardRef<DraftInputHandle, DraftProps>(function DraftInput(
+export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function DraftInput(
 	{
 		value,
 		references,
