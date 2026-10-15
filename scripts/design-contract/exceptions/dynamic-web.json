@@ -101,21 +101,21 @@
 				1
 			]
 		],
-		"sourceHash": "33dd65615a8b99672962965e6c40a14f20a113b5e8033047de5a7195b2671cc4"
+		"sourceHash": "dc0835f878857c203bc4fd70c81050bd8991d014247d28abbaf40397589157b2"
 	},
 	{
-		"file": "apps/web/src/project-sidebar.tsx",
-		"reason": "Account menu receives the finite transition-presence class from NavigationShell; the sidebar adds only fixed menu classes.",
+		"file": "apps/web/src/account-menu.tsx",
+		"reason": "Account menu receives the finite transition-presence class from NavigationShell through ProjectSidebar; the menu adds only fixed menu classes.",
 		"cases": [
 			[
 				"dynamic",
 				"class",
-				"accountMenu.className",
-				"class > ProjectSidebar > <div>",
+				"menu.className",
+				"class > AccountMenu > <div>",
 				1
 			]
 		],
-		"sourceHash": "33dd65615a8b99672962965e6c40a14f20a113b5e8033047de5a7195b2671cc4"
+		"sourceHash": "3f2d2e63d78f1809a61134400f369c1933fbbab1afbc26ac0763005484f8d2b4"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -143,7 +143,7 @@
 				1
 			]
 		],
-		"sourceHash": "db781012e5b6d249dc29cf714b8b7a48020b60502e6ec2e8a1f595238bbc59ac"
+		"sourceHash": "98e6ed04d4c3d4b9d4708a28c6332f4c1534782ebc9bf85475e00ff281e1ae41"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -298,62 +298,6 @@
 			]
 		],
 		"sourceHash": "f7c06d489223022873b10f1c3ae463e43d02f60212a344b15ae52ebe88eac359"
-	},
-	{
-		"file": "apps/web/src/repository-picker.tsx",
-		"reason": "Anchored picker position comes from measured viewport placement; presentation roles are supplied by separately checked CSS.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"position",
-				"unresolved style > RepositoryPicker > popup > <div>",
-				1
-			]
-		],
-		"sourceHash": "abc9d2a5e3e05c195a599f1ef58f58f0dd1090b9507a0e1c20277fd4d7171a07"
-	},
-	{
-		"file": "apps/web/src/repository-picker.tsx",
-		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"popupPresence.className",
-				"class > RepositoryPicker > popup > <div>",
-				1
-			]
-		],
-		"sourceHash": "abc9d2a5e3e05c195a599f1ef58f58f0dd1090b9507a0e1c20277fd4d7171a07"
-	},
-	{
-		"file": "apps/web/src/document-picker.tsx",
-		"reason": "Anchored picker position comes from measured viewport placement; presentation roles are supplied by separately checked CSS.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"position",
-				"unresolved style > DocumentPicker > popup > <div>",
-				1
-			]
-		],
-		"sourceHash": "a09e6f8b44c76129cae233c1d57ddf54b7109b22e990febb4dddb9de11d6ca8c"
-	},
-	{
-		"file": "apps/web/src/document-picker.tsx",
-		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"popupPresence.className",
-				"class > DocumentPicker > popup > <div>",
-				1
-			]
-		],
-		"sourceHash": "a09e6f8b44c76129cae233c1d57ddf54b7109b22e990febb4dddb9de11d6ca8c"
 	},
 	{
 		"file": "apps/web/src/conversation-plan/markers.tsx",
