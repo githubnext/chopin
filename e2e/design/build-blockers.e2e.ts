@@ -23,7 +23,12 @@ test("named blockers use one row hover surface and no arrow tooltip", async ({ p
 	await expect(row.locator("svg")).toHaveCount(2);
 	await expect(row.locator("button")).toHaveCount(0);
 	await row.locator(".build-blocker-arrow").hover();
-	await expect(page.getByRole("tooltip")).not.toBeVisible();
+	// The resolved-comments plate shows a hover preview, a real tooltip, at rest.
+	await expect(
+		page.getByRole("tooltip").and(
+			page.locator(':not([data-audit-item="resolved-comments"] [role="tooltip"])'),
+		),
+	).not.toBeVisible();
 	let peer = plate(page, "build-blockers").getByRole("status");
 	expect(await row.evaluate(element => getComputedStyle(element).fontSize))
 		.toBe(await peer.evaluate(element => getComputedStyle(element).fontSize));
