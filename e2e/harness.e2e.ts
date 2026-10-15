@@ -126,16 +126,37 @@ test("tool activity redacts credential text before broadcast and history replay"
 	expect(JSON.stringify(history)).not.toContain("synthetic-aws-secret");
 });
 
-test("the composer marks its destination in the mode switch before sending", async ({ join }) => {
+test("the composer addresses one message without changing the next message's destination", async ({ join, page, seed }) => {
+	await seed("# Addressed turn\n\nCompare export formats.\n");
+	let sent: Chat.Send[] = [];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as Chat.Send;
+				if (frame.kind === "chat:send") sent.push(frame);
+			}
+			server.send(message);
+		});
+		server.onMessage(message => route.send(message));
+	});
 	let opened = await join("ana");
 	let chat = chatPane(opened);
 	let draft = chatInput(chat);
-	let toggle = chat.getByRole("button", { name: "Talk to Chopin", exact: true });
-	await expect(toggle).toHaveAttribute("aria-pressed", "false");
-	await draft.fill("should we ask about auth first?");
-	await expect(toggle).toHaveAttribute("aria-pressed", "false");
-	await draft.fill("@chopin should we ask about auth first?");
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
+	await expect(chat.getByRole("button", { name: "Talk to Chopin", exact: true })).toHaveCount(0);
+	await draft.fill("@chopin compare the export options");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	await expect.poll(() => sent[0]).toMatchObject({
+		text: "@chopin compare the export options",
+		to: "planner",
+	});
+	await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
+	await draft.fill("Let's discuss those options");
+	await chat.getByRole("button", { name: "Send message" }).click();
+	await expect.poll(() => sent[1]).toMatchObject({
+		text: "Let's discuss those options",
+		to: "room",
+	});
 });
 
 // Frame order and arrival time are the contract; the browser UI is incidental.
