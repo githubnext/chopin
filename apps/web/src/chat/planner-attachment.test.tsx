@@ -6,8 +6,10 @@ import { PlannerAttachment } from "./planner-attachment";
 
 import type { Session } from "@chopin/protocol";
 
-function render(planner: Session.PlannerAttachment | undefined): string {
-	return renderToStaticMarkup(createElement(PlannerAttachment, { planner }));
+function render(planner: Session.PlannerAttachment | undefined, machine?: string): string {
+	return renderToStaticMarkup(
+		createElement(PlannerAttachment, { planner, ...(machine ? { machine } : {}) }),
+	);
 }
 
 /** The words a person reads, without markup. */
@@ -35,6 +37,15 @@ test("says who detached and until when the document is held for them", () => {
 	expect(words(markup)).toBe(`Planner: lavaman131 detached, held until ${time}`);
 	expect(markup).toContain(`<time dateTime="${until}">${time}</time>`);
 	expect(markup).toContain('data-planner-state="held"');
+});
+
+test("names the machine starting the Planner when it is the viewer's, else whose it is", () => {
+	let markup = render({ state: "starting", login: "mona" }, "studio");
+	expect(words(markup)).toBe("Planner: starting on studio…");
+	expect(markup).toContain('data-planner-state="starting"');
+	expect(words(render({ state: "starting", login: "mona" }))).toBe(
+		"Planner: starting on @mona’s machine…",
+	);
 });
 
 test("keeps its status dot out of the accessible text", () => {

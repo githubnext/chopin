@@ -135,6 +135,8 @@ export type ChatProps = {
 	emptyNotice?: string;
 	/** Who holds the document's remote Planner; absent under every other harness. */
 	planner?: Session.PlannerAttachment;
+	/** The viewer's own machine that is starting the Planner, by name, when one is. */
+	plannerMachine?: string;
 };
 
 /** How many runs are still live, and how many are paused and resumable. */
@@ -214,6 +216,7 @@ export function Chat(
 		notice,
 		emptyNotice,
 		planner,
+		plannerMachine,
 		onShowDecisions,
 		onResearch,
 		onShowResearch,
@@ -715,7 +718,7 @@ export function Chat(
 				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
-					<PlannerAttachment planner={planner} />
+					<PlannerAttachment machine={plannerMachine} planner={planner} />
 				</div>
 			</div>
 		);
@@ -837,7 +840,7 @@ export function Chat(
 						)}
 					</>
 				}
-				attachment={<PlannerAttachment planner={planner} />}
+				attachment={<PlannerAttachment machine={plannerMachine} planner={planner} />}
 				machine={machine}
 				input={{
 					"aria-activedescendant": commandOpen

@@ -108,17 +108,20 @@ export declare namespace Session {
 	/**
 	 * Who holds this document's remote Planner. `held` is a client that detached or
 	 * dropped and keeps the document until `until` (ISO 8601) unless it reattaches.
-	 * Only the holder's GitHub login is named, never its machine or checkout.
+	 * `starting` is a paired machine of `login`'s asked to start it, which has yet to
+	 * attach. Only the GitHub login is named, never its machine or checkout.
 	 */
 	export type PlannerAttachment =
 		| { state: "attached"; login: string }
 		| { state: "held"; login: string; until: string }
+		| { state: "starting"; login: string }
 		| { state: "none" };
 
 	/**
 	 * Sent only under `HARNESS=remote`: once after `Hello`, then to the whole room
 	 * whenever a client attaches, detaches, its grace period ends, or its ownership
-	 * is released by a sign-out, a Planner reset or the server closing its link.
+	 * is released by a sign-out, a Planner reset or the server closing its link, and
+	 * whenever a machine is asked to start it or stops being asked.
 	 * Other harnesses never send it.
 	 */
 	export type Planner = KIND<"session:planner"> & { planner: PlannerAttachment };

@@ -341,3 +341,33 @@ test("once the attached Planner's owner signs out or is reset, @chopin and invok
 		expect.stringContaining("draft the plan"),
 	]);
 });
+
+test("@chopin and invoke_planner wait for a Planner that is starting, then run on it", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let script = scriptedPlanner();
+	let started = 0;
+	// A machine is starting the document's Planner, which attaches a moment after it is asked for.
+	context.plannerStarting = async () => {
+		started++;
+		if (started === 1) {
+			setTimeout(() => {
+				void attach(room.server.url, room.channel.id, script.handlers).then(client =>
+					cleanups.push(() => client.detach())
+				);
+			}, 50);
+		}
+		await room.server.attachments.attachedWithin(room.channel.id, 5_000);
+	};
+	expect(await room.send("@chopin draft the plan")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+	expect(await Chat.invoke(context, RIVAL, "Run the review")).toBeUndefined();
+	await context.chat.running;
+	expect(script.turns.map(turn => turn.prompt)).toEqual([
+		expect.stringContaining("draft the plan"),
+		expect.stringContaining("Run the review"),
+	]);
+	// A message to the room never waits for the Planner.
+	expect(await room.send("Just talking", "room")).toMatchObject({ kind: "chat:send" });
+	expect(started).toBe(2);
+});

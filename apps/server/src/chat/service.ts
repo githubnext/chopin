@@ -616,6 +616,11 @@ export type Room = {
 	 * posted or queued, and only an attachment takes Planner ownership.
 	 */
 	plannerNotAttached?: () => Promise<string | undefined>;
+	/**
+	 * Under `HARNESS=remote`, waits a bounded time for a Planner a machine is starting for this
+	 * document, before an `@chopin` message or `invoke_planner` is checked for one.
+	 */
+	plannerStarting?: () => Promise<void>;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	persist: (chat?: () => Pick<Chat, "entries" | "runs" | "initiativePaused">) => Promise<void>;
 	initiativePresent?: (sessionId: string, actor: string) => boolean;
@@ -668,11 +673,17 @@ export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promis
 		return Promise.resolve();
 	}
 	context.chat.pendingSends++;
-	let process = () => processSend(context, ws, msg);
-	let accepted = context.chat.sending.then(process, process);
-	let completed = accepted.finally(() => context.chat.pendingSends--);
-	context.chat.sending = completed.then(() => {}, () => {});
-	return completed;
+	let enqueue = () => {
+		let process = () => processSend(context, ws, msg);
+		let accepted = context.chat.sending.then(process, process);
+		let completed = accepted.finally(() => context.chat.pendingSends--);
+		context.chat.sending = completed.then(() => {}, () => {});
+		return completed;
+	};
+	// A message to the Planner waits for one that is starting before it joins the queue, so the
+	// room's messages never wait with it.
+	if (msg.to !== "planner" || !context.plannerStarting) return enqueue();
+	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
 /**
@@ -769,10 +780,15 @@ export async function invoke(
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
 		return undefined;
 	};
-	let accepted = chat.sending.then(post, post);
-	let completed = accepted.finally(() => chat.pendingSends--);
-	chat.sending = completed.then(() => {}, () => {});
-	return completed;
+	let enqueue = () => {
+		let accepted = chat.sending.then(post, post);
+		let completed = accepted.finally(() => chat.pendingSends--);
+		chat.sending = completed.then(() => {}, () => {});
+		return completed;
+	};
+	// It waits for a Planner that is starting before it joins the queue, as `@chopin` does.
+	if (!context.plannerStarting) return enqueue();
+	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
 async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {

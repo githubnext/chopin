@@ -243,13 +243,13 @@ rests on ends or the document's Planner is reset. The server then sends
 `refused` and closes an attached connection at once, and any eligible account,
 including the same one, can attach again immediately:
 
-| Cause                                                                                                                                     | Refusal code       | Close code |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
-| The owner's browser sign-in signs out or expires                                                                                          | `sign-in-required` | 4401       |
-| The machine whose credential attached it is disconnected, or GitHub refuses its authorization                                             | `access-revoked`   | 4403       |
-| Chopin started it on a machine chosen for the document, and its owner chose another machine or Automatic, or the machine lost push access | `access-revoked`   | 4403       |
-| A repository writer resets the document's Planner                                                                                         | `access-revoked`   | 4403       |
-| The stored ownership no longer names this attachment's sign-in                                                                            | `access-revoked`   | 4403       |
+| Cause                                                                                                                                                                        | Refusal code       | Close code |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
+| The owner's browser sign-in signs out or expires                                                                                                                             | `sign-in-required` | 4401       |
+| The machine whose credential attached it is disconnected, or GitHub refuses its authorization                                                                                | `access-revoked`   | 4403       |
+| Chopin started it on a machine and moved it to another, or stopped it: a new machine choice or favorite, the document unused for 30 minutes, or the machine lost push access | `access-revoked`   | 4403       |
+| A repository writer resets the document's Planner                                                                                                                            | `access-revoked`   | 4403       |
+| The stored ownership no longer names this attachment's sign-in                                                                                                               | `access-revoked`   | 4403       |
 
 The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an
@@ -287,7 +287,23 @@ with the code `planner-not-attached`, and nothing is posted or queued. A
 document whose Planner is within its grace period counts as unattached, and so
 does one whose attached connection the request finds stale: its owner's browser
 sign-in has ended or the stored ownership no longer names it. The request closes
-that connection before it is refused. The refusal's message names the document URL:
+that connection before it is refused.
+
+When a paired machine is starting the document's Planner, the request first
+waits up to 30 seconds for it to attach, and is refused only if it has not:
+
+```text
+This document's Planner is still starting on @<login>'s machine. Try again in a moment.
+```
+
+If no machine is starting one, the message says how to get one. Where Chopin
+runs Planners on paired machines:
+
+```text
+No Planner is attached to this document. Connect a machine that can run Planners (start `chopin connect` with `--planner-command`), or choose one with the machine button in Chat.
+```
+
+Elsewhere it names the document URL:
 
 ```text
 No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the agent connection from a session in a checkout of <owner/name>; that session becomes this document's Planner.

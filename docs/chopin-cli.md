@@ -233,6 +233,9 @@ choice is yours alone and holds for that document until you change it:
   document go to the machine you chose, behind any work it is already running.
 - Rebuilds and prototypes Chopin starts for you follow the same choice, and
   still need the machine's consent to automatic work.
+- Where Chopin runs Planners on machines, the document's Planner runs there
+  too, and on **Default machine** it runs on the creator's; see
+  [Run a Planner on this machine](#run-a-planner-on-this-machine).
 - You can choose only your own machines.
 - If the machine you chose is offline, **Build plan** is greyed out, as offline
   machines are in the list, and starts nothing. It changes within a few seconds
@@ -406,7 +409,7 @@ A Planner that Chopin refused for good, such as one for a deleted document,
 shows `stopped:` and the reason instead of `failing`.
 
 A connector started with `--planner-command` says it can run Planners, and
-lists each Planner it runs because a document chose this machine in Chopin
+lists each Planner it runs because Chopin asked this machine for it
 beside the `--planner` ones (`canRunPlanners` and `chosenPlanners` in
 `--json`):
 
@@ -449,9 +452,21 @@ Choose this machine for a document under **Machine** in its title menu, and
 Chopin asks it to start that document's Planner, unless another account holds it. The backend
 gets its credential as with `--planner`.
 
-Choosing another machine or **Default machine** stops it and prints
+A document left on **Default machine** gets its Planner too, on a machine of
+the person who created it, picked as for builds: their default machine when it
+is connected and can run Planners, else the machine that last worked on the
+document, else any of theirs that can. Chopin asks for it while someone has the
+document open, and stops it once nobody has used the document for 30 minutes.
+A Planner stays on its machine while that machine is connected, even when
+another comes online; it moves when the machine disconnects or the creator
+changes the document's machine or their default. Chat says
+**Planner: starting on studio…** (the machine's name) until it attaches, and
+an `@chopin` message sent meanwhile waits for it.
+
+Choosing another machine stops it and prints
 `Stopped the Planner for <document>: the document chose another machine.` So do
-disconnecting or revoking the machine, or losing push access to the repository.
+moving it, disconnecting or revoking the machine, leaving the document unused,
+or losing push access to the repository.
 Chopin then voids the credentials it gave the machine for that document.
 
 One machine runs the Planners of documents in as many repositories as you

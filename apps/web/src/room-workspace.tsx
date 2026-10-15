@@ -52,7 +52,12 @@ import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import { MachineButton } from "./machine-button";
-import { offlineChoice, showsMachineChoice, useMachineChoice } from "./machine-choice";
+import {
+	offlineChoice,
+	plannerStartingOn,
+	showsMachineChoice,
+	useMachineChoice,
+} from "./machine-choice";
 import { useLiveMachines } from "./machine-summary";
 import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
@@ -1673,6 +1678,7 @@ export function RoomWorkspace(
 							room={room}
 							sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
 							planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
+							plannerMachine={plannerStartingOn(machineChoice.state)}
 							wire={wire}
 							machine={profile.implementation ? machineButton("chat") : undefined}
 						/>

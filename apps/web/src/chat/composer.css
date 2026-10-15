@@ -254,7 +254,8 @@
 	border-radius: var(--radius-full);
 	background: var(--color-success);
 }
-.chat-composer .composer-planner[data-planner-state="held"] .composer-planner-dot {
+.chat-composer .composer-planner[data-planner-state="held"] .composer-planner-dot,
+.chat-composer .composer-planner[data-planner-state="starting"] .composer-planner-dot {
 	background: var(--color-warning);
 }
 .chat-composer .composer-planner[data-planner-state="none"] {

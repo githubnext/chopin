@@ -85,11 +85,24 @@ type PendingAttach = {
 	invalidated?: AttachRefusal;
 };
 
-/** What `@chopin` and `invoke_planner` say when no Planner is attached to the document. */
-export function notAttachedMessage(url: string, repository: string): string {
+/**
+ * What `@chopin` and `invoke_planner` say when no Planner is attached to the document: with
+ * `machines`, when Chopin runs Planners on people's machines, how to get one there.
+ */
+export function notAttachedMessage(url: string, repository: string, machines = false): string {
+	if (machines) {
+		return "No Planner is attached to this document. Connect a machine that can run Planners "
+			+ "(start `chopin connect` with `--planner-command`), or choose one with the machine "
+			+ "button in Chat.";
+	}
 	return `No Planner is attached to this document. To attach one, connect a Planner client to `
 		+ `${url} over the agent connection from a session in a checkout of ${repository}; `
 		+ `that session becomes this document's Planner.`;
+}
+
+/** What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready. */
+export function startingMessage(login: string): string {
+	return `This document's Planner is still starting on @${login}'s machine. Try again in a moment.`;
 }
 
 export function forbiddenMessage(repository: string): string {
@@ -112,6 +125,22 @@ export class PlannerAttachments {
 	/** Whether a client is attached to the document now, not merely holding it through a grace period. */
 	attached(channelId: string): boolean {
 		return this.#holds.get(channelId)?.link !== undefined;
+	}
+
+	/** Waits at most `ms` for a client to attach to the document; whether one is attached then. */
+	attachedWithin(channelId: string, ms: number): Promise<boolean> {
+		if (this.attached(channelId)) return Promise.resolve(true);
+		return new Promise(resolve => {
+			let finish = () => {
+				clearTimeout(timer);
+				unsubscribe();
+				resolve(this.attached(channelId));
+			};
+			let unsubscribe = this.onChange(id => {
+				if (id === channelId && this.attached(channelId)) finish();
+			});
+			let timer = setTimeout(finish, ms);
+		});
 	}
 
 	/**

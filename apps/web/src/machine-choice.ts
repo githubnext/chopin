@@ -135,6 +135,13 @@ export function plannerButton(
 	return undefined;
 }
 
+/** The person's own machine that is starting the document's Planner, by name, when one is. */
+export function plannerStartingOn(state: MachineChoiceState | undefined): string | undefined {
+	let planner = state?.planner;
+	if (planner?.state !== "starting" || !planner.machine) return undefined;
+	return state?.machines.find(machine => machine.id === planner.machine)?.label;
+}
+
 const OS: Record<string, string> = { linux: "Linux", darwin: "macOS", win32: "Windows" };
 
 /** A machine's one line under its name: its state, then its chopin release and system. */

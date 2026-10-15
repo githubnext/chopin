@@ -376,6 +376,11 @@ export class Connections {
 		if (machineId) this.#choices.set(key, machineId);
 		else this.#choices.delete(key);
 	}
+	/** The machines people chose for a document's work, one per person at most. */
+	chosenFor(documentId: string) {
+		return [...this.#choices].filter(([key]) => key.startsWith(`${documentId}\n`))
+			.map(([, machineId]) => machineId);
+	}
 	/** The documents whose work someone chose a machine for. */
 	choosing(machineId: string) {
 		return [...this.#choices].filter(([, value]) => value === machineId).map(([key]) => {

@@ -16,6 +16,7 @@ import {
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
+import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase } from "./database";
 import { authenticate, expect, ready, roomPath, test } from "./room";
 import { RELEASE } from "./release";
@@ -77,8 +78,12 @@ let processes: ReturnType<typeof spawn>[] = [];
 // One disposable database and application port for the file.
 test.describe.configure({ mode: "default" });
 
+/** The database of the server `remoteServer` started last. */
+let serverDatabase = "";
+
 async function remoteServer() {
 	let database = await freshDatabase();
+	serverDatabase = database;
 	let migrated = Bun.spawn(["bun", "apps/server/src/storage/migrate.ts"], {
 		cwd: ROOT,
 		env: { ...process.env, ...ENV, DATABASE_URL: database },
@@ -306,5 +311,96 @@ test("on a phone, Machine's sheet starts the Planner on the machine chosen", asy
 	await expect(sheet).toBeHidden();
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let link = await studio.backend(room);
+	await link.detach();
+});
+
+/** `handle` created the document, as if they had made it in Chopin. */
+async function createdBy(room: string, handle: string) {
+	let database = new SQL(serverDatabase);
+	try {
+		await database`
+			UPDATE channels SET created_by = (SELECT id FROM users WHERE login = ${handle})
+			WHERE id = ${room}
+		`;
+	} finally {
+		await database.close();
+	}
+}
+
+/** Star one of the signed-in person's machines, by name, as their favorite. */
+async function favor(page: Page, room: string, label: string) {
+	let choice = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`)).json() as {
+		machines: Array<{ id: string; label: string }>;
+	};
+	let id = choice.machines.find(machine => machine.label === label)!.id;
+	let response = await page.request.post(`${ORIGIN}/api/connector/machines/${id}/favorite`, {
+		data: { favorite: true },
+		headers: { origin: ORIGIN },
+	});
+	expect(response.status()).toBe(200);
+}
+
+function plannerStatus(page: Page) {
+	return page.getByRole("status").filter({ hasText: /^Planner:/ });
+}
+
+test("a document on Default machine runs its Planner on its creator's favorite machine, and moves it when that one disconnects", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await favor(page, room, "studio");
+	let desk = await machine(page, "desk", true);
+	await page.reload();
+	await ready(page);
+
+	// Nobody chose a machine: the favorite is asked to start the Planner, and Chat says so.
+	let status = plannerStatus(page);
+	await expect(status).toHaveText("Planner: starting on studio…");
+	expect(await studio.poll([])).toEqual({
+		kind: "planners",
+		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
+	});
+	let first = await studio.backend(room);
+	await expect(status).toHaveText("Planner: mona attached");
+	await expect(page.getByRole("button", { name: "Machine: studio, runs the Planner" }))
+		.toBeVisible();
+	await shoot(page, "default-planner-attached", page.locator(".chat-composer"));
+
+	// The favorite disconnects: the Planner moves to the other machine without anyone choosing it.
+	await studio.disconnect();
+	await expect(status).toHaveText("Planner: starting on desk…");
+	expect(await desk.poll([])).toEqual({
+		kind: "planners",
+		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
+	});
+	let second = await desk.backend(room);
+	await expect(status).toHaveText("Planner: mona attached");
+	await expect(page.getByRole("button", { name: "Machine: desk, runs the Planner" }))
+		.toBeVisible();
+	await first.detach().catch(() => {});
+	await second.detach();
+});
+
+test("@chopin in a document on Default machine waits for the Planner its machine is starting", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	await expect(plannerStatus(page)).toHaveText("Planner: starting on studio…");
+
+	// Sent before the Planner attaches, the message waits for it rather than being refused.
+	let input = chatInput(page);
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	let link = await studio.backend(room);
+	await expect(plannerStatus(page)).toHaveText("Planner: mona attached");
+	await expect(page.getByText("outline the plan").first()).toBeVisible();
+	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
 	await link.detach();
 });

@@ -63,6 +63,8 @@ export type HostedCallbacks = {
 	onChannelRenamed?: (channel: ChannelRecord) => void;
 	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
 	invokePlanner?: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
+	/** What `planner-not-attached` says for a document, at its URL; how to attach one by default. */
+	plannerNotAttached?: (channelId: string, url: string, repository: string) => Promise<string>;
 };
 
 const BEARER = new RegExp("^Bearer ([A-Za-z0-9._~+/-]+=*)$", "i");
@@ -343,10 +345,12 @@ export function hosted(
 					let url =
 						new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 					if (code === "planner-not-attached") {
+						let fullName = `${repository.owner}/${repository.name}`;
 						return {
 							kind: "refused",
 							code,
-							message: notAttachedMessage(url, `${repository.owner}/${repository.name}`),
+							message: await callbacks.plannerNotAttached?.(channel.id, url, fullName)
+								?? notAttachedMessage(url, fullName),
 						};
 					}
 					if (code) return { kind: "refused", code };
