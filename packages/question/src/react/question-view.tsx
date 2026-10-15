@@ -1151,7 +1151,6 @@ export function QuestionView(props: QuestionViewProps) {
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
 							</div>
 							<span className="flex shrink-0 items-center gap-2">
-								{written && <span className="question-response-state">Open</span>}
 								<Presence
 									people={collaborators.filter(person =>
 										person.question === current.id

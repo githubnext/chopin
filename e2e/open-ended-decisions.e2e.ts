@@ -50,7 +50,7 @@ test(
 			.toBeDisabled();
 		await first.getByRole("textbox", { name: "Answer" }).fill(ANSWER);
 		await expect(second.getByRole("textbox", { name: "Answer" })).toHaveValue(ANSWER);
-		await expect(second).toContainText("Open");
+		await expect(second.getByText("Open", { exact: true })).toHaveCount(0);
 		await expect(first.getByRole("button", { name: "Add an approach" })).toHaveCount(0);
 		await expect(first.getByRole("button", { name: "Add an option" })).toHaveCount(0);
 		await expect(first.getByText("Shared draft until someone records it")).toHaveCount(0);
