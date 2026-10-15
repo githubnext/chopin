@@ -159,7 +159,7 @@ test("Machine in the title's menu chooses where work runs, and an offline choice
 	await page.reload();
 	let menu = page.getByRole("menu", { name: /^Actions for / });
 
-	// Machine'sits in the title's menu, saying the default is in use.
+	// Machine sits in the title's menu, saying the default is in use.
 	await titleActions(page).click();
 	let item = menu.getByRole("menuitem", { name: /^Machine\b/ });
 	await expect(item).toContainText("Default");
@@ -294,7 +294,7 @@ test("on a phone, Machine in the actions sheet opens a sheet of machines", async
 /** Sixty characters: a machine named as people name their computers, at length. */
 const LONG_NAME = "alex-lavaee-workstation-in-the-basement-closet-under-stairs2";
 
-test("a phone's Machine'sheet keeps a long machine name inside its rows", async ({ join: enter }) => {
+test("a phone's Machine sheet keeps a long machine name inside its rows", async ({ join: enter }) => {
 	expect(LONG_NAME).toHaveLength(60);
 	let page = await enter(person(), PHONE);
 	await connected(page, LONG_NAME, { [CONNECTOR_SERVICE_HEADER]: "1" });

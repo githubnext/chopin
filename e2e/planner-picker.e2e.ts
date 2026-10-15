@@ -236,7 +236,7 @@ async function runOn(page: Page) {
 	return menu;
 }
 
-test("Machine'starts the document's Planner on the machine chosen", async ({ browser }) => {
+test("Machine starts the document's Planner on the machine chosen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP);
@@ -245,12 +245,15 @@ test("Machine'starts the document's Planner on the machine chosen", async ({ bro
 	await page.reload();
 	await ready(page);
 
-	// A machine without a Planner command can't be chosen.
+	// One list chooses where the document's work and Planner run: a machine without a Planner
+	// command can still be chosen for builds, so it is offered too.
 	let menu = await runOn(page);
 	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
 		.toHaveAttribute("aria-checked", "true");
-	await expect(menu.getByRole("menuitemradio", { name: /^desk/ }))
-		.toHaveAttribute("aria-disabled", "true");
+	await expect(menu.getByRole("menuitemradio", { name: /^desk/ })).not.toHaveAttribute(
+		"aria-disabled",
+		"true",
+	);
 	await expect(menu.getByRole("menuitemradio", { name: /^studio/ })).not.toHaveAttribute(
 		"aria-disabled",
 		"true",
@@ -293,8 +296,10 @@ test("on a phone, Machine's sheet starts the Planner on the machine chosen", asy
 	await page.getByRole("dialog", { name: /^Actions for / })
 		.getByRole("button", { name: /^Machine: / }).tap();
 	let sheet = page.getByRole("dialog", { name: "Machine", exact: true });
-	await expect(sheet.getByRole("menuitemradio", { name: /^desk/ }))
-		.toHaveAttribute("aria-disabled", "true");
+	await expect(sheet.getByRole("menuitemradio", { name: /^desk/ })).not.toHaveAttribute(
+		"aria-disabled",
+		"true",
+	);
 	await shoot(page, "planner-phone-sheet");
 	await sheet.getByRole("menuitemradio", { name: /^studio/ }).tap();
 	await expect(sheet).toBeHidden();
