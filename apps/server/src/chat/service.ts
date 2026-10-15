@@ -588,7 +588,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
 		queued: visible(chat),
-		participation: { enabled: !!chat.initiativeEnabled, paused: !!chat.initiativePaused },
+		participation: { enabled: !!chat.initiativeEnabled, paused: false },
 	});
 }
 
