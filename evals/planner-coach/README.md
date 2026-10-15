@@ -76,7 +76,7 @@ Report live rubric judgments separately from scripted runner tests.
 Verify the runner without live requests:
 
 ```sh
-bun test evals/planner-coach/runner.test.ts
+bun test evals/planner-coach
 bunx --no-install tsgo --noEmit --skipLibCheck -p evals/planner-coach
 ```
 

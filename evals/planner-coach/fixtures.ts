@@ -79,6 +79,10 @@ export function frozenPullRequests(): Tools {
 			[name, schema],
 		) => [name, {
 			...schema,
+			description: name === "list_pull_requests"
+				? "List pull requests in the selected repository."
+				: "Read one pull request in the selected repository: its details, diff, status, "
+					+ "changed files, commits, review comments, reviews, issue comments, or check runs.",
 			execute: async () =>
 				name === "list_pull_requests"
 					? "[]"

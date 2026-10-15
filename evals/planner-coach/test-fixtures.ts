@@ -1,4 +1,5 @@
 import type { Harness } from "./types";
+import type { RuntimeSource } from "../../apps/server/src/harness/copilot-sdk/runtime";
 
 type Step = { name: string; input: unknown | ((previous: unknown) => unknown) };
 
@@ -93,4 +94,68 @@ export function scriptedHarness(turns: Step[][], text = "Scripted response.") {
 		},
 	};
 	return { harness, outputs, prompted: () => prompted, destroyed: () => destroyed };
+}
+
+/** Capture the real Copilot adapter's native configuration without starting a CLI or model. */
+export function nativeCopilot() {
+	type Config = Parameters<RuntimeSource["client"]["createSession"]>[0];
+	let configurations: Config[] = [];
+	let prompts: string[] = [];
+	let source: RuntimeSource = {
+		cleanup() {},
+		client: {
+			async start() {},
+			async stop() {
+				return [];
+			},
+			async forceStop() {},
+			async deleteSession() {},
+			async createSession(config) {
+				configurations.push(config);
+				let listeners = new Set<(event: unknown) => void>();
+				let emit = (event: unknown) => {
+					for (let listener of listeners) listener(event);
+				};
+				return {
+					sessionId: "offline-native-session",
+					rpc: {
+						tools: {
+							async initializeAndValidate() {},
+							async getCurrentMetadata() {
+								return {
+									tools: (config.tools ?? []).map(tool => ({
+										name: tool.name,
+										namespacedName: `custom:${tool.name}`,
+									})),
+								};
+							},
+						},
+						mcp: {
+							async list() {
+								return { servers: [] };
+							},
+						},
+					},
+					on(listener: (event: unknown) => void) {
+						listeners.add(listener);
+						return () => listeners.delete(listener);
+					},
+					async send(input: { prompt: string }) {
+						prompts.push(input.prompt);
+						emit({
+							type: "assistant.message",
+							data: {
+								messageId: "offline-message",
+								content: "Offline transport completed.",
+							},
+						});
+						emit({ type: "session.idle", data: {} });
+					},
+					async abort() {},
+					async disconnect() {},
+				} as never;
+			},
+		},
+	};
+	return { source, configurations, prompts };
 }
