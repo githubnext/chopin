@@ -12,6 +12,12 @@ export type ActionSheetItem<Action extends string> = {
 	icon?: (props: IconProps) => ReactNode;
 	/** Only for what cannot be undone; an archive has Undo, so it reads as ordinary. */
 	destructive?: boolean;
+	/** One of a choice: the chosen row is tinted, as a selected menu row is. */
+	checked?: boolean;
+	/** A quieter word beside the label, such as a machine's state. */
+	detail?: string;
+	/** Shown but not choosable, such as an offline machine. */
+	disabled?: boolean;
 };
 
 /**
@@ -75,14 +81,18 @@ export function ActionSheet<Action extends string>(
 							{title && <p className="action-sheet-title">{title}</p>}
 							{items.map(item => (
 								<button
+									aria-checked={item.checked}
+									aria-disabled={item.disabled || undefined}
 									className="action-sheet-item"
 									data-tone={item.destructive ? "danger" : "normal"}
 									key={item.action}
-									onClick={() => choose(item.action)}
+									onClick={() => !item.disabled && choose(item.action)}
+									role={item.checked === undefined ? undefined : "menuitemradio"}
 									type="button"
 								>
 									{item.icon && <item.icon aria-hidden="true" size={18} />}
 									{item.label}
+									{item.detail && <span className="action-sheet-detail">{item.detail}</span>}
 								</button>
 							))}
 						</div>

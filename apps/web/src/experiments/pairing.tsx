@@ -28,7 +28,7 @@ type Pairing = {
 };
 
 /**
- * The frame every /connect view shares inside the navigation: the page title and its action, on
+ * The frame every /machines view shares inside the navigation: the page title and its action, on
  * the ground, scrolling on its own. `lead` sits above the title, as Back does.
  */
 function MachinesFrame(
@@ -63,8 +63,8 @@ function MachinesFrame(
 	);
 }
 
-/** The page for adding a server with a key, as /connect?server, so it shares /connect's route. */
-const SERVER_PATH = "/connect?server";
+/** The page for adding a server with a key, as /machines?server, so it shares /machines's route. */
+const SERVER_PATH = "/machines?server";
 
 /**
  * The person's machines, under Add machine: Your computer opens a dialog with the command to run,
@@ -78,10 +78,12 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 	let arrived = useArrivedMachine(list);
 	let bannerId = useId();
 	let login = useLogin();
-	// /connect?add, as a document's machine button's Add machine opens it, starts with the dialog.
+	// /machines?add, as a document's machine button's Add machine opens it, starts with the dialog.
 	let [adding, setAdding] = useState(() => new URLSearchParams(location.search).has("add"));
 	useEffect(() => {
-		if (new URLSearchParams(location.search).has("add")) history.replaceState(null, "", "/connect");
+		if (new URLSearchParams(location.search).has("add")) {
+			history.replaceState(null, "", "/machines");
+		}
 	}, []);
 	let dialog = useTransitionPresence(adding ? true : undefined, 150, motionImmediately());
 	let [announcement, setAnnouncement] = useState("");
@@ -132,7 +134,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 }
 
 /**
- * /connect, or /connect?server for adding a server, read from the address as the navigation shell
+ * /machines, or /machines?server for adding a server, read from the address as the navigation shell
  * renders the route again on every move between them. Its links go either way; Server or VM, a
  * menu item rather than a link, moves through history the way Back does, which the shell follows.
  */
@@ -145,7 +147,7 @@ function MachinesPage() {
 			<MachinesFrame
 				description="Choose settings, then generate an install script."
 				lead={
-					<a className="machines-back" href="/connect">
+					<a className="machines-back" href="/machines">
 						<ArrowLeftIcon aria-hidden="true" size={14} />
 						Back to Machines
 					</a>
@@ -179,7 +181,7 @@ function MachinePage({ id }: { id: string }) {
 					className="machines-back"
 					onClick={() => {
 						if (sessionStorage.getItem("chopin:machines:scroll") !== null) history.back();
-						else goTo("/connect");
+						else goTo("/machines");
 					}}
 					type="button"
 				>
@@ -223,7 +225,7 @@ function ConnectedMachines({ label }: { label: string }) {
 		<YourMachines
 			login={login}
 			machines={machines}
-			onChoose={kind => goTo(kind === "server" ? SERVER_PATH : "/connect")}
+			onChoose={kind => goTo(kind === "server" ? SERVER_PATH : "/machines")}
 		/>
 	);
 }
@@ -257,7 +259,7 @@ export default function PairingPage() {
 	let helpId = useId();
 	useEffect(() => {
 		let abort = new AbortController();
-		// Without a pairing, /connect lists the person's machines.
+		// Without a pairing, /machines lists the person's machines.
 		if (!id) return;
 		setLoadError("");
 		experimentRequest<Pairing>(
@@ -330,7 +332,7 @@ export default function PairingPage() {
 									Try again
 								</button>
 							)}
-							<a className="btn btn-compact btn-outline" href="/connect">Go to your machines</a>
+							<a className="btn btn-compact btn-outline" href="/machines">Go to your machines</a>
 						</>
 					)}
 					message={problem.body}
@@ -398,7 +400,7 @@ export default function PairingPage() {
 										Connect
 									</button>
 									{/* Nothing to cancel on the server: an unapproved pairing expires on its own. */}
-									<a className="btn btn-md btn-ghost" href="/connect">Not my machine</a>
+									<a className="btn btn-md btn-ghost" href="/machines">Not my machine</a>
 									{pairing.authorize && (
 										<p className="machines-authorize-note">
 											GitHub may ask you to authorize this machine.

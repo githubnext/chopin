@@ -711,3 +711,10 @@ an earlier connection of the same machine still counts as attached is started ag
 on that backoff until the server notices that connection is gone (up to the
 120-second timeout in [Pings](#pings)); a closed connection's grace period does not
 block the same machine.
+
+A backend Chopin asked the machine to run (see
+[Run a Planner on this machine](chopin-cli.md#run-a-planner-on-this-machine)) is started again only once
+Chopin's Planner poll still asks for it. Chopin closes the link of a Planner it
+no longer asks for, so the backend can exit before the poll's answer arrives;
+the connector then waits for that answer, and stops the backend for good when
+the answer leaves its document out.

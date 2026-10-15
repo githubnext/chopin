@@ -17,16 +17,17 @@ export const SIGNALS: Record<string, string> = {
 export function answerText(answer: ConversationPlan.AnalysisAnswer): string {
 	if (answer.type === "noul") return `${Math.round(answer.noul * 100)}% signal`;
 	if (answer.type === "choice") {
-		return `${answer.choice.replaceAll("_", " ")} · ${
+		return `${answer.choice.replaceAll("_", " ")} at ${
 			Math.round(answer.confidence * 100)
 		}% confidence`;
 	}
-	return `${answer.score} · ${Math.round(answer.confidence * 100)}% confidence${
-		answer.legend[String(answer.score)] ? ` · ${answer.legend[String(answer.score)]}` : ""
-	}`;
+	let legend = answer.legend[String(answer.score)];
+	return `${answer.score}${legend ? ` (${legend})` : ""} at ${
+		Math.round(answer.confidence * 100)
+	}% confidence`;
 }
 
 export function questionName(key: string): string {
-	return key.replace(/^c(\d+)_/, (_, number: string) => `Excerpt ${Number(number) + 1} · `)
+	return key.replace(/^c(\d+)_/, (_, number: string) => `Excerpt ${Number(number) + 1}: `)
 		.replaceAll("_", " ");
 }

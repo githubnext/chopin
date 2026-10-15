@@ -84,7 +84,7 @@ export function renderRadar(spec) {
 						cx: p.x,
 						cy: p.y,
 						r: 2.5,
-						"data-sc-tip": `${s.name} · ${axes[i]}: ${fmt(v, spec.unit || "")}`,
+						"data-sc-tip": `${axes[i]} for ${s.name}: ${fmt(v, spec.unit || "")}`,
 					});
 				}),
 			]),

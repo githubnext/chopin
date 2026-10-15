@@ -85,7 +85,7 @@ export function setActorRoster(list: readonly DemoActor[]): void {
 
 /** The title a collaborator tab shows, so it is never mistaken for the presenter's. */
 export function actorTitle(base: string, actor: DemoActor | undefined): string {
-	return actor ? `${actor.name} · ${base}` : base;
+	return actor ? `${actor.name} in ${base}` : base;
 }
 
 /** Chat drafts are private to whoever is typing, so an actor's never mixes with another's. */
@@ -99,7 +99,7 @@ export function adoptActor(roster: readonly DemoActor[]): void {
 	setFaceProfiles(roster);
 	setActiveActor(actor);
 	setActorRoster(roster);
-	if (actor && !document.title.startsWith(`${actor.name} · `)) {
+	if (actor && !document.title.startsWith(`${actor.name} in `)) {
 		document.title = actorTitle(document.title, actor);
 	}
 	if (strippedSearch !== undefined) {

@@ -15,7 +15,7 @@ export function WriteupStatus(
 ) {
 	let [retrying, setRetrying] = useState(false);
 	let [error, setError] = useState<string>();
-	if (meta.proseOrphaned) return <span className="text-text-tertiary">· prose removed</span>;
+	if (meta.proseOrphaned) return <span className="text-text-tertiary">Prose removed</span>;
 	let writeup = meta.writeup;
 	if (writeup?.status === "writing") {
 		return (

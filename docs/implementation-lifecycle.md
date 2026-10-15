@@ -46,7 +46,7 @@ investigation card. A completeness score cannot disable Build. With `LIVE_BUILD`
 a debounced assessment instead asks the existing owner-bound Planner to place
 necessary decisions and investigations in the document and explain them in Chat.
 It never claims an owner or runs an investigation. After the press the same slot becomes a status capsule:
-**Breaking into tasks…**, **Building · 3 of 8**, **Built**, **N changes to
+**Breaking into tasks…**, **Building 3 of 8**, **Built**, **N changes to
 build**, **Building changes…**, or **Build stopped**/**Build failed** with
 **Retry**. The Build tab carries the same glyph, and the change count is the
 number of top-level blocks added, removed or changed since the last built

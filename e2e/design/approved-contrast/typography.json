@@ -29,7 +29,7 @@
 				"target": [
 					"div:nth-child(1) > .design-audit-type-label > code"
 				],
-				"html": "<code>11.3–11.5px · step −2.5</code>",
+				"html": "<code>11.3–11.5px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -51,7 +51,7 @@
 				"target": [
 					"div:nth-child(2) > .design-audit-type-label > code"
 				],
-				"html": "<code>12–12.3px · step −2</code>",
+				"html": "<code>12–12.3px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -73,7 +73,7 @@
 				"target": [
 					"div:nth-child(3) > .design-audit-type-label > code"
 				],
-				"html": "<code>13.4–14px · step −1</code>",
+				"html": "<code>13.4–14px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -95,7 +95,7 @@
 				"target": [
 					"div:nth-child(4) > .design-audit-type-label > code"
 				],
-				"html": "<code>15–16px · step 0</code>",
+				"html": "<code>15–16px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -117,7 +117,7 @@
 				"target": [
 					"div:nth-child(5) > .design-audit-type-label > code"
 				],
-				"html": "<code>18.8–20.8px · step +2</code>",
+				"html": "<code>18.8–20.8px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -139,7 +139,7 @@
 				"target": [
 					"div:nth-child(6) > .design-audit-type-label > code"
 				],
-				"html": "<code>21.1–23.7px · step +3</code>",
+				"html": "<code>21.1–23.7px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -161,7 +161,7 @@
 				"target": [
 					"div:nth-child(7) > .design-audit-type-label > code"
 				],
-				"html": "<code>26.4–30.8px · step +5</code>",
+				"html": "<code>26.4–30.8px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		}
@@ -196,7 +196,7 @@
 				"target": [
 					"div:nth-child(1) > .design-audit-type-label > code"
 				],
-				"html": "<code>11.3–11.5px · step −2.5</code>",
+				"html": "<code>11.3–11.5px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -218,7 +218,7 @@
 				"target": [
 					"div:nth-child(2) > .design-audit-type-label > code"
 				],
-				"html": "<code>12–12.3px · step −2</code>",
+				"html": "<code>12–12.3px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -240,7 +240,7 @@
 				"target": [
 					"div:nth-child(3) > .design-audit-type-label > code"
 				],
-				"html": "<code>13.4–14px · step −1</code>",
+				"html": "<code>13.4–14px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -262,7 +262,7 @@
 				"target": [
 					"div:nth-child(4) > .design-audit-type-label > code"
 				],
-				"html": "<code>15–16px · step 0</code>",
+				"html": "<code>15–16px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -284,7 +284,7 @@
 				"target": [
 					"div:nth-child(5) > .design-audit-type-label > code"
 				],
-				"html": "<code>18.8–20.8px · step +2</code>",
+				"html": "<code>18.8–20.8px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -306,7 +306,7 @@
 				"target": [
 					"div:nth-child(6) > .design-audit-type-label > code"
 				],
-				"html": "<code>21.1–23.7px · step +3</code>",
+				"html": "<code>21.1–23.7px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		},
@@ -328,7 +328,7 @@
 				"target": [
 					"div:nth-child(7) > .design-audit-type-label > code"
 				],
-				"html": "<code>26.4–30.8px · step +5</code>",
+				"html": "<code>26.4–30.8px</code>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.12 (foreground color: #78766e, background color: #f4f4f1, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		}

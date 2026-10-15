@@ -12,7 +12,7 @@
 		},
 		{
 			"label": "Investigate",
-			"sub": "Owned agent · worktree at source",
+			"sub": "Owned agent with a worktree at source",
 			"focal": true
 		},
 		{

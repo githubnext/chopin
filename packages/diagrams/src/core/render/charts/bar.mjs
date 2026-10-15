@@ -106,7 +106,7 @@ function renderMarimekko(spec) {
 				y: y + 1,
 				width: Math.max(0, w - 2),
 				height: Math.max(0, h - 2),
-				"data-sc-tip": `${c.label} · ${s.name}: ${fmt(s.value, spec.unit || "")} (${
+				"data-sc-tip": `${s.name} in ${c.label}: ${fmt(s.value, spec.unit || "")} (${
 					Math.round((s.value / c.total) * 100)
 				}%)`,
 			}));
@@ -367,7 +367,7 @@ export function render(spec, { settings = {} } = {}) {
 		if (multi && !focal) return `c-bar s-${(si % 5) + 1}`;
 		return `c-bar${focal ? " is-focal" : ""}`;
 	};
-	const tip = (s, i) => `${cats[i]}${multi ? ` · ${s.name}` : ""}: ${fmt(s.values[i], unit)}`;
+	const tip = (s, i) => `${multi ? `${s.name} in ` : ""}${cats[i]}: ${fmt(s.values[i], unit)}`;
 	if (settings.width) {
 		const fitted = renderFitted(
 			{ spec, cats, series, dom, multi, unit, barCls, tip, step },

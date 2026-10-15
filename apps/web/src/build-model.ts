@@ -72,7 +72,7 @@ export function syncHint(
 	if (status?.kind === "needs-attention") return attentionHint(snapshot);
 	if (status?.kind !== "out-of-sync") return;
 	let retry = status.outstanding
-		? ` · will also retry ${plural(status.outstanding, "blocked task", "blocked tasks")}`
+		? `. ${plural(status.outstanding, "blocked task", "blocked tasks")} will retry too`
 		: "";
 	if (status.reason === "pending") return `Changes will build shortly${retry}`;
 	if (status.reason === "failed") return `The last rebuild failed${retry}`;
@@ -623,7 +623,7 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 			return {
 				kind: "built",
 				pullRequests: snapshot.live!.pullRequests.length,
-				tip: `Every pull request matches the document${who ? ` · built by ${who}` : ""}`,
+				tip: `${who ? `Built by ${who}. ` : ""}Every pull request matches the document`,
 			};
 		}
 		if (sync.kind === "needs-attention") {
@@ -735,7 +735,7 @@ export function buildLabel(look: BuildLook): string {
 		case "tasks":
 			return "Preparing tasks";
 		case "building":
-			return `Building · ${look.done} of ${look.total}`;
+			return `Building ${look.done} of ${look.total}`;
 		case "stopped":
 			return "Build stopped";
 		case "agent":

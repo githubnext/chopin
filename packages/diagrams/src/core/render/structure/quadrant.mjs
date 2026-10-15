@@ -62,7 +62,7 @@ export function render(spec) {
 		);
 		if (consultant) {
 			(o.items || []).slice(0, 6).forEach((it, k) =>
-				parts.push(text({ class: "q-item", x: x + 14, y: y + 62 + k * 18 }, `· ${it}`))
+				parts.push(text({ class: "q-item", x: x + 14, y: y + 62 + k * 18 }, it))
 			);
 			if ((o.items || []).length > 6) {
 				problems.push({

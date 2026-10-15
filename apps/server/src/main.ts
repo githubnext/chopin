@@ -57,6 +57,7 @@ import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
 import { registerConnectorScript } from "./http/connector-script";
+import { registerMachinesPath } from "./http/machines-path";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
@@ -2425,6 +2426,7 @@ registerConnectorScript(router, {
 	bundle: join(import.meta.dir, "../../connector/dist/connector.js"),
 	source: join(import.meta.dir, "../../connector/src/main.ts"),
 });
+registerMachinesPath(router);
 
 try {
 	await storage.health();

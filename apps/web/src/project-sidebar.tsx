@@ -471,7 +471,7 @@ export function ProjectSidebar(
 		newDocumentPhase?: DocumentCreationPhase | "loading";
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
 		currentDocumentId?: string;
-		/** /connect is open, so the Machines entry is the current page. */
+		/** /machines is open, so the Machines entry is the current page. */
 		machinesCurrent?: boolean;
 		onAccount: () => void;
 		focusProjectId?: string;

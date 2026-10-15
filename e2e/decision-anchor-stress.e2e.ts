@@ -38,7 +38,7 @@ function commentDecision(page: Page) {
 
 async function expectAcceptedQuote(page: Page) {
 	let accepted = commentDecision(page);
-	let disclosure = accepted.getByRole("button", { name: /^Accepted ·/ });
+	let disclosure = accepted.getByRole("button", { name: /^Accepted:/ });
 	if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
 	await expect(disclosure).toHaveAttribute("aria-expanded", "true");
 	await expect(accepted).toContainText(MARKED_PROSE);

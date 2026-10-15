@@ -45,7 +45,6 @@ export type ToolSummary = {
 	finished: number;
 	failures: number;
 	interrupted: number;
-	toolTime: number;
 };
 
 export type WorkPhase =
@@ -298,13 +297,57 @@ export function summarize(tools: Chat.Activity[], active: boolean): ToolSummary 
 		finished: tools.filter(tool => tool.status !== "running").length,
 		failures: tools.filter(tool => tool.status === "failed").length,
 		interrupted: active ? 0 : tools.filter(tool => tool.status === "running").length,
-		toolTime: tools.reduce((total, tool) => total + (tool.took ?? 0), 0),
 	};
 }
 
+export type ToolPileKind = { glyph: ToolGlyph; failed: boolean };
+
+/** Each glyph a finished turn used, in order of first use; a kind fails if any of its calls did. */
+export function toolKinds(tools: Chat.Activity[]): ToolPileKind[] {
+	let kinds = new Map<ToolGlyph, ToolPileKind>();
+	for (let tool of tools) {
+		let glyph = toolGlyph(tool.name);
+		let kind = kinds.get(glyph) ?? { glyph, failed: false };
+		kind.failed ||= tool.status === "failed";
+		kinds.set(glyph, kind);
+	}
+	return [...kinds.values()];
+}
+
+/** The finished summary's accessible name, which carries what its glyphs only show. */
+export function workSummaryLabel(
+	summary: ToolSummary,
+	disconnected: boolean,
+	time = 0,
+): string {
+	let used = `Used ${summary.count} ${summary.count === 1 ? "tool" : "tools"}`;
+	let parts = [time > 0 ? `${used} in ${duration(time)}` : used];
+	if (disconnected) parts.push("connection lost");
+	else if (summary.interrupted > 0) parts.push(`${summary.interrupted} interrupted`);
+	if (summary.failures > 0) parts.push(`${summary.failures} failed`);
+	return parts.join(", ");
+}
+
+/** Whole units only: milliseconds under a second, seconds under a minute, then minutes. */
 export function duration(milliseconds: number): string {
-	if (milliseconds < 1_000) return `${milliseconds}ms`;
-	return `${(milliseconds / 1_000).toFixed(1).replace(/\.0$/, "")}s`;
+	let ms = Math.round(milliseconds);
+	if (ms < 1_000) return `${ms}ms`;
+	let seconds = Math.round(ms / 1_000);
+	if (seconds < 60) return `${seconds}s`;
+	return `${Math.round(ms / 60_000)}m`;
+}
+
+/**
+ * How long a turn's tools took end to end: first start to last finish. `startedAt` is optional
+ * on the wire, so without it this falls back to the sum of each call's own time.
+ */
+export function workTime(tools: Chat.Activity[]): number {
+	let starts = tools.flatMap(tool => tool.startedAt === undefined ? [] : [tool.startedAt]);
+	let ends = tools.flatMap(tool =>
+		tool.startedAt === undefined || tool.took === undefined ? [] : [tool.startedAt + tool.took]
+	);
+	if (starts.length && ends.length) return Math.max(...ends) - Math.min(...starts);
+	return tools.reduce((total, tool) => total + (tool.took ?? 0), 0);
 }
 
 function askedPrompts(args: string | undefined): string[] {

@@ -1,5 +1,5 @@
 /**
- * What /connect says when a request fails. The server answers with a code (see `fail()` in
+ * What /machines says when a request fails. The server answers with a code (see `fail()` in
  * apps/server/src/experiments); people read a title that says what happened and a line that says
  * what to do next, never the code itself.
  */

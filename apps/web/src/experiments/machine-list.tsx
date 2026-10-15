@@ -330,9 +330,12 @@ function MachineTable(
 											/>
 										)}
 									</span>
-									<span className="machines-secondary machines-truncate">
-										{[owner, machine.repositories.join(", ")].filter(Boolean).join(" · ")}
-									</span>
+									{owner && <span className="machines-secondary machines-truncate">{owner}</span>}
+									{machine.repositories.length > 0 && (
+										<span className="machines-secondary machines-truncate">
+											{machine.repositories.join(", ")}
+										</span>
+									)}
 								</span>
 							</TableCell>
 							<TableCell>
@@ -428,14 +431,21 @@ function MachineRows(
 			<ul>
 				{list.map(machine => {
 					let state = machineState(machine);
-					let detail = state === "connected"
-						? [
-							machine.hostname,
-							machine.version && `chopin ${machine.version}`,
-							OS[machine.platform?.os ?? ""],
-						]
-							.filter(Boolean).join(" · ") || machine.repositories[0] || "Connected"
-						: statusWords(machine, now);
+					let parts = [
+						machine.hostname,
+						machine.version && `chopin ${machine.version}`,
+						OS[machine.platform?.os ?? ""],
+					].filter(Boolean);
+					let detail = state !== "connected"
+						? statusWords(machine, now)
+						: parts.length
+						? parts.map((part, index) => (
+							<span className="machines-detail-part" key={index}>
+								{index > 0 && " "}
+								{part}
+							</span>
+						))
+						: machine.repositories[0] || "Connected";
 					return (
 						<li className="machines-row-item" key={machine.id}>
 							<FavoriteStar
@@ -448,7 +458,7 @@ function MachineRows(
 								className="machines-row"
 								onClick={() => {
 									sessionStorage.setItem(SCROLL_KEY, String(page()?.scrollTop ?? 0));
-									goTo(`/connect?machine=${encodeURIComponent(machine.id)}`);
+									goTo(`/machines?machine=${encodeURIComponent(machine.id)}`);
 								}}
 								type="button"
 							>
@@ -540,7 +550,7 @@ export function YourMachines(
 }
 
 /**
- * One machine on a phone, at /connect?machine=<id>: its name and state, what it is, and its
+ * One machine on a phone, at /machines?machine=<id>: its name and state, what it is, and its
  * actions as full-width rows. Back returns to the list where it was.
  */
 export function MachineDetail(
@@ -551,7 +561,7 @@ export function MachineDetail(
 	},
 ) {
 	let machine = machines.machines?.find(value => value.id === id);
-	let { dialogs, rename, disconnect } = useMachineDialogs(machines, () => goTo("/connect"));
+	let { dialogs, rename, disconnect } = useMachineDialogs(machines, () => goTo("/machines"));
 	let [copied, setCopied] = useState<string>();
 	useEffect(() => {
 		if (!copied) return;

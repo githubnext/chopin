@@ -26,5 +26,5 @@ test("a reopened legacy answer keeps its read-only previous text", () => {
 			}],
 		},
 	}));
-	expect(markup).toContain("Previously: Use the existing GitHub app · @ana");
+	expect(markup).toContain("Previously chosen by @ana: Use the existing GitHub app");
 });

@@ -67,11 +67,11 @@ test("only a chosen machine that is offline stops Build, and says which", () => 
 });
 
 test("each machine's line says its state, release and system, or when it was last seen", () => {
-	expect(machineDetail(machine(), NOW)).toBe("Connected · chopin 0.0.5 · Linux");
+	expect(machineDetail(machine(), NOW)).toBe("Connected with chopin 0.0.5 on Linux");
 	expect(machineDetail(machine({ version: null, platform: null }), NOW)).toBe("Connected");
 	expect(
 		machineDetail(machine({ connected: false, lastSeenAt: NOW - 3 * 3_600_000 }), NOW),
-	).toBe("Offline · last seen 3h ago");
+	).toBe("Offline, last seen 3h ago");
 	expect(machineDetail(machine({ reauthorize: true }), NOW)).toBe("Needs pairing again");
 });
 
@@ -123,7 +123,7 @@ test("Automatic names the machine it uses, saying when the favorite is offline; 
 		uses: { label: "studio", favorite: false },
 		note: "build-box is offline",
 	});
-	expect(fallen[0]!.detail).toBe("Uses studio now · build-box is offline");
+	expect(fallen[0]!.detail).toBe("Uses studio now because build-box is offline");
 });
 
 test("Chat's machine button says who runs the Planner", () => {
@@ -158,7 +158,7 @@ test("Chat's machine button says who runs the Planner", () => {
 	);
 	expect(rows.map(row => [row.label, row.disabled, row.detail])).toEqual([
 		["Automatic", false, "No machine connected now"],
-		["build-box", false, "Connected · chopin 0.0.5 · Linux"],
+		["build-box", false, "Connected with chopin 0.0.5 on Linux"],
 		["desk", true, "Can't run a Planner"],
 	]);
 	// Build plan's menu, or a server that runs no Planners on machines, offers it as before.

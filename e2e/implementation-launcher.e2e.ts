@@ -175,7 +175,7 @@ async function connector(baseURL: string, command: string[], env: Record<string,
 		let timer = setTimeout(() => reject(new Error(`Pairing timed out: ${output}`)), 15_000);
 		let read = (chunk: Buffer) => {
 			output += String(chunk);
-			let match = output.match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/);
+			let match = output.match(/http:\/\/[^\s]+\/machines\?pairing=[\w-]+/);
 			if (match) {
 				clearTimeout(timer);
 				resolve(match[0]);
@@ -349,9 +349,16 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			let blocked = view.getByRole("button", { name: /^Connect the local agent/ });
 			let dependent = view.getByRole("button", { name: /^Review the connection/ });
 			if (mode === "complete") {
-				await expect(view).toContainText("Built · 2 pull requests");
+				await expect(view).toContainText("Built 2 pull requests");
 				await expect(view.getByRole("link", { name: /^Pull request #\d+/ })).toHaveCount(2);
 				await expect(blocked).toHaveAttribute("aria-expanded", "false");
+				// The tasks the connector started, completed and opened pull requests for show under
+				// Build, as the Planner says; Chat has no card for a Build or its tasks.
+				await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li"))
+					.toHaveCount(2);
+				let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+				await expect(chat).toBeVisible();
+				await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
 			} else {
 				await expect(view).toContainText("Build stopped");
 				await expect(blocked).toHaveAttribute("aria-expanded", "true");
@@ -372,7 +379,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			);
 			await openBuild();
 			await expect(view).toContainText(
-				mode === "complete" ? "Built · 2 pull requests" : "Blocked: Choose the next tracer",
+				mode === "complete" ? "Built 2 pull requests" : "Blocked: Choose the next tracer",
 			);
 			if (
 				process.env.CHOPIN_LAUNCHER_SCREENSHOT
@@ -458,21 +465,14 @@ function capsuleBuild(page: import("@playwright/test").Page) {
 }
 
 /**
- * Build, and the machine button after it, stay 12px from the faces, with the rule as far from Build as from the first face; the faces
+ * Build stays 12px from the faces, with the rule as far from Build as from the first face; the faces
  * sit as far from the rule as from the bar's end, top and bottom.
  */
 async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 	let people = build.page().getByRole("group", { name: /^People here/ });
 	await expect(build).toBeVisible();
 	await expect(people.locator(":scope > [data-tooltip]").first()).toBeVisible();
-	// The machine button follows Build's controls in the bar when the viewer is a writer.
-	let control = await build.evaluate(element =>
-		Math.max(
-			element.getBoundingClientRect().right,
-			...[...element.closest("[data-document-title-bar]")!.querySelectorAll(".machine-button")]
-				.map(machine => machine.getBoundingClientRect().right),
-		)
-	);
+	let control = await build.evaluate(element => element.getBoundingClientRect().right);
 	let gaps = await people.evaluate(group => {
 		let rule = parseFloat(getComputedStyle(group).borderInlineStartWidth);
 		let bar = group.closest("[data-document-title-bar]")!;
@@ -731,7 +731,7 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
-		let capsule = page.getByRole("button", { name: /^Building · 0 of 2/ });
+		let capsule = page.getByRole("button", { name: /^Building 0 of 2/ });
 		await expect(capsule).toBeVisible();
 		await expectClearOfPeople(capsule);
 		// The capsule and the Build tab light each other, and the capsule opens Build.
@@ -746,7 +746,7 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		await expect(view).toBeVisible();
 		// The capsule stays while its own view is open.
 		await expect(capsule).toBeVisible();
-		await expect(view.getByText(/^Building · 0 of 2 · started by you/)).toBeVisible();
+		await expect(view.getByText(/^Building 0 of 2 started by you/)).toBeVisible();
 		await expect(view.getByRole("button", { name: /Retry|Return to planning/ })).toHaveCount(0);
 		await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li")).toHaveCount(2);
 		let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();

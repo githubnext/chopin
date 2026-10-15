@@ -116,7 +116,7 @@ export function IconCatalogue() {
 				] as const).map(({ label, size }) => (
 					<div key={label}>
 						<MessageIcon aria-hidden="true" size={size} />
-						<span>{label} · {size}px</span>
+						<span>{label} at {size}px</span>
 					</div>
 				))}
 			</div>

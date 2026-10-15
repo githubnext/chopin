@@ -279,7 +279,7 @@ export function render(spec, { settings = {} } = {}) {
 						cx: xAt(i),
 						cy: y(val),
 						r: v === "bump" ? 4 : 3,
-						"data-sc-tip": `${s.name} · ${xs[i]}: ${v === "bump" ? `#${val}` : fmt(val, unit)}`,
+						"data-sc-tip": `${s.name} at ${xs[i]}: ${v === "bump" ? `#${val}` : fmt(val, unit)}`,
 					}),
 				)
 			);

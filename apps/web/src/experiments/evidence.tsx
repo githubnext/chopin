@@ -131,7 +131,7 @@ function DecisionRecord({ store, item, decision, canEdit, onError }: {
 			<h4 className="m-0 font-semibold">{decision.conclusion}</h4>
 			{decision.rationale && <p className="m-0 text-text-secondary">{decision.rationale}</p>}
 			<p className="m-0 text-xs text-text-tertiary">
-				Recorded by {decision.by} · Fixed evidence
+				Fixed evidence recorded by {decision.by}
 			</p>
 			{view && item.result && (
 				<UnfoldSection label="View saved evidence">

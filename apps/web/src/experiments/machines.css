@@ -1,4 +1,4 @@
-/* /connect: the person's machines, how to add one, and the pairing confirmation. */
+/* /machines: the person's machines, how to add one, and the pairing confirmation. */
 
 /* Inside the navigation, the page fills the workspace and scrolls on its own. */
 .machines-page {
@@ -609,6 +609,11 @@
 	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
+}
+
+/* Space, not a separator glyph, keeps a row's hostname, release and system apart. */
+.machines-detail-part + .machines-detail-part {
+	margin-inline-start: calc(var(--spacing) * 1.5);
 }
 
 .machines-truncate {

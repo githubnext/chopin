@@ -808,7 +808,7 @@ function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionna
 function DecisionChip(
 	{ onShow, value }: { onShow: (questionnaireId: string) => void; value: Questionnaire },
 ) {
-	let question = value.questions.map(item => item.prompt).join(" · ");
+	let question = value.questions.map(item => item.prompt).join(" ");
 	return (
 		<button
 			aria-label={`Decision: ${question}, answer in Decisions`}

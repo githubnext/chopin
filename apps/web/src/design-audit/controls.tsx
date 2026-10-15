@@ -93,10 +93,10 @@ export function Controls() {
 						<ButtonRow className="btn-destructive" label="Delete document" />
 					</div>
 					<div className="design-audit-button-sizes" data-audit-sample="sizes">
-						<StateSample state="Medium · 32px high · 12px sides">
+						<StateSample state="Medium: 32px high, 12px sides">
 							<button className="btn btn-md btn-primary" type="button">Medium</button>
 						</StateSample>
-						<StateSample state="Small · 24px high · 8px sides">
+						<StateSample state="Small: 24px high, 8px sides">
 							<button className="btn btn-sm btn-secondary" type="button">Small</button>
 						</StateSample>
 						<StateSample state="Busy">
@@ -261,20 +261,20 @@ export function Controls() {
 				<div className="flex flex-col gap-4">
 					<div className="design-audit-tab-specimens">
 						<div>
-							<StateLabel>Document view switcher · Document selected</StateLabel>
+							<StateLabel>Document view switcher with Document selected</StateLabel>
 							<DecisionViewControl onView={() => {}} unanswered={3} view="plan" />
 						</div>
 						<div>
-							<StateLabel>Document view switcher · Decisions selected</StateLabel>
+							<StateLabel>Document view switcher with Decisions selected</StateLabel>
 							<DecisionViewControl onView={() => {}} unanswered={3} view="decisions" />
 						</div>
 						<div>
-							<StateLabel>Document view switcher · no unanswered decisions</StateLabel>
+							<StateLabel>Document view switcher with no unanswered decisions</StateLabel>
 							<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
 						</div>
 					</div>
 					<div>
-						<StateLabel>Authored tabs · first tab selected</StateLabel>
+						<StateLabel>Authored tabs with the first tab selected</StateLabel>
 						<StaticPlanEditor source={TABS} />
 					</div>
 				</div>
@@ -293,7 +293,7 @@ export function Controls() {
 						</button>
 					</div>
 					<div>
-						<StateLabel>Open · focus · disabled</StateLabel>
+						<StateLabel>Open, focused and disabled</StateLabel>
 						<div aria-label="Document actions" className="design-audit-menu" role="menu">
 							<button role="menuitem" type="button">Rename document</button>
 							<button data-audit-state="focus" role="menuitem" type="button">

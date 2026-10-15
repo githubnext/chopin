@@ -241,7 +241,7 @@ agents:
 Any other agent that speaks ACP works too: give its command after `--` instead,
 as in `chopin connect . -- my-agent --acp`.
 
-The **Machines** page, at `/connect` on your server, gives one command that
+The **Machines** page, at `/machines` on your server (its former address, `/connect`, redirects there), gives one command that
 installs `chopin` and connects the machine, with your server filled in: your
 computer pairs once you approve it in the browser, and a server pairs with a
 single-use key, so it works over SSH too; see

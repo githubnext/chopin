@@ -92,13 +92,17 @@ function DocumentSpecimen() {
 					<div className="plan-content diagram-gallery-document-diagrams">
 						<figure data-specimen-diagram="first">
 							<Diagram spec={first.spec} />
-							<figcaption>{label(first.type)} · first instance</figcaption>
+							<figcaption>
+								{label(first.type)} <span className="text-text-tertiary">first instance</span>
+							</figcaption>
 						</figure>
 						{secondMounted
 							? (
 								<figure data-specimen-diagram="second">
 									<Diagram spec={second.spec} />
-									<figcaption>{label(second.type)} · second instance</figcaption>
+									<figcaption>
+										{label(second.type)} <span className="text-text-tertiary">second instance</span>
+									</figcaption>
 								</figure>
 							)
 							: (
@@ -126,7 +130,9 @@ export function DiagramGalleryPage() {
 		<main className="diagram-gallery" data-diagram-gallery="">
 			<header className="diagram-gallery-header">
 				<div>
-					<p className="diagram-gallery-kicker">Development gallery · SeeCode rendering module</p>
+					<p className="diagram-gallery-kicker">
+						Development gallery for the SeeCode rendering module
+					</p>
 					<h1>Diagrams in a document</h1>
 					<p>
 						Browse the retained catalogue, inspect one example at a time, and try two views in a

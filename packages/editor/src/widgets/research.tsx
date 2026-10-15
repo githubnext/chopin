@@ -421,7 +421,12 @@ export function ResearchCard(
 					<Swap id={stage}>
 						<span>
 							{WORDS[stage]}
-							{sourceCount && <span className="plan-research-meta">{"\u00a0· "}{sourceCount}</span>}
+							{sourceCount && (
+								<>
+									{" "}
+									<span className="plan-research-meta ms-1">{sourceCount}</span>
+								</>
+							)}
 						</span>
 					</Swap>
 					<div className="plan-research-remove">

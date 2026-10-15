@@ -48,7 +48,7 @@ test("research diagnostics distinguish policy thresholds and combined clarity fr
 	expect(html).toContain("79% (minimum 80%; not met)");
 	expect(html).toContain("Subject clarity (explicit + contextual)");
 	expect(html).toContain("87% (minimum 80%; met)");
-	expect(html).toContain("contextual · 27% confidence");
+	expect(html).toContain("contextual at 27% confidence");
 });
 
 test("historical research analyses display their original outcome without inventing a policy", () => {

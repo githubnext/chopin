@@ -41,6 +41,7 @@ import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
 import { createHash } from "node:crypto";
 import { imagePath } from "../images/format";
+import { MACHINES_PATH } from "../http/machines-path";
 import { MAX_IMAGE_REQUEST_BYTES, prepareImage } from "../mcp/image";
 import { spikeReport, spikeSubmissionSchema } from "./spikes";
 
@@ -529,7 +530,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { key, ...input } = pairingSchema.parse(await body(request));
 		if (key !== undefined) return json(await keyed(key, input));
 		let created = connections.create(input);
-		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
+		return json({ ...created, url: `${auth.config.origin}${MACHINES_PATH}?pairing=${created.id}` });
 	});
 	/**
 	 * A signed-in person mints a single-use key that pairs one machine as them, as approving its
@@ -641,7 +642,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			});
 			connections.paired(id, machine.id, token);
 		}
-		return `/connect?pairing=${id}`;
+		return `${MACHINES_PATH}?pairing=${id}`;
 	}
 	auth.pairings.complete = complete;
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {

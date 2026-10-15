@@ -138,8 +138,9 @@ export function ExperimentView(
 	return (
 		<section aria-label={view.title} className="flex min-w-0 flex-col gap-3">
 			<h3 className="m-0 text-sm font-semibold">{view.title}</h3>
-			<p className="m-0 text-xs text-text-secondary">
-				{dataset.basis} · {rows.length} observations · {dataset.method}
+			<p className="m-0 flex flex-wrap gap-x-3 text-xs text-text-secondary">
+				<span>{dataset.basis}</span> <span>{rows.length} observations</span>{" "}
+				<span>{dataset.method}</span>
 			</p>
 			<div className="flex flex-wrap gap-3">
 				{view.filterColumns.map(key => {

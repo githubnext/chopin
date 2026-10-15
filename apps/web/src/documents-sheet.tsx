@@ -66,7 +66,7 @@ export function DocumentsSheet(
 		activeRepositoryId?: string;
 		catalogueMode: "active" | "archived";
 		currentDocumentId?: string;
-		/** /connect is open, so the Machines row is the current page. */
+		/** /machines is open, so the Machines row is the current page. */
 		machinesCurrent?: boolean;
 		onAddProject: () => void;
 		onCatalogueModeChange: (mode: "active" | "archived") => void;

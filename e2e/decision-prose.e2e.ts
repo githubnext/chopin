@@ -259,7 +259,7 @@ test("Reopen leaves prose, restores the card beneath it, and a re-decision repla
 	let popover = await openPopover(page);
 	await popover.getByRole("button", { name: "Reopen", exact: true }).click();
 	let reopened = card(page);
-	await expect(reopened).toContainText("Previously: Start with a small pilot. · @ana");
+	await expect(reopened).toContainText("Previously chosen by @ana: Start with a small pilot.");
 	let [paragraph, reopenedCard] = await Promise.all([
 		prose(page).boundingBox(),
 		reopened.boundingBox(),
@@ -347,7 +347,7 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	let opening = page.locator(`[data-chat-message-id="${source}"]`);
 	await opening.getByRole("button", { name: /Analysis for message/ }).click();
 	let jobs = page.getByRole("group", { name: "Planner jobs" });
-	await expect(jobs).toContainText("prose · failed");
+	await expect(jobs).toContainText("prose failed");
 	await scriptProse(OPTION);
 	await jobs.getByRole("button", { name: "Retry prose job", exact: true }).click();
 	await waitForProseJob(page, "done");

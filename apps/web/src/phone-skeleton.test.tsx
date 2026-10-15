@@ -43,6 +43,7 @@ test("the static skeleton shows for exactly the document routes", () => {
 			"/channels/not-a-channel",
 			"/repositories/octo-org/score",
 			"/connect",
+			"/machines",
 		]
 	) {
 		let page = hostedRoute(path).page;

@@ -134,13 +134,11 @@ export function machineDetail(machine: ChoosableMachine, now: number): string {
 	if (state === "reauthorize") return "Needs pairing again";
 	if (state === "offline") {
 		let seen = ago(new Date(machine.lastSeenAt).toISOString(), now);
-		return seen ? `Offline · last seen ${seen}` : "Offline";
+		return seen ? `Offline, last seen ${seen}` : "Offline";
 	}
-	return [
-		"Connected",
-		machine.version && `chopin ${machine.version}`,
-		machine.platform && (OS[machine.platform.os] ?? machine.platform.os),
-	].filter(Boolean).join(" · ");
+	let version = machine.version ? ` with chopin ${machine.version}` : "";
+	let os = machine.platform ? ` on ${OS[machine.platform.os] ?? machine.platform.os}` : "";
+	return `Connected${version}${os}`;
 }
 
 export type MachineRow = {
@@ -183,7 +181,7 @@ export function machineRows(
 		? `${favorite.label} is offline`
 		: undefined;
 	let detail = uses
-		? `Uses ${uses.label} now${note ? ` · ${note}` : ""}`
+		? `Uses ${uses.label} now${note ? ` because ${note}` : ""}`
 		: "No machine connected now";
 	return [
 		{

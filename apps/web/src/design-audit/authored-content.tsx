@@ -204,7 +204,7 @@ function TableSpecimens() {
 			<StaticPlanEditor source={table} />
 			<div className="design-audit-table-states">
 				<div>
-					<StateLabel>Selected cell · toolbar</StateLabel>
+					<StateLabel>Selected cell with toolbar</StateLabel>
 					<div className="design-audit-table-toolbar" role="toolbar" aria-label="Table actions">
 						<button className="btn btn-sm btn-secondary" type="button">Add row</button>
 						<button className="btn btn-sm btn-secondary" type="button">Add column</button>

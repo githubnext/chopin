@@ -26,7 +26,7 @@ function person() {
 }
 
 async function addMachine(page: Page, kind: "Your computer" | "Server or VM") {
-	await page.goto("/connect");
+	await page.goto("/machines");
 	await page.getByRole("main").getByRole("button", { name: "Add machine", exact: true }).first()
 		.click();
 	await page.getByRole("menu", { name: "Add machine", exact: true })

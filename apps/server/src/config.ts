@@ -282,8 +282,6 @@ export function describe(config: Config): string {
 		} (restricted: ${users} users, ${organizations} organizations)`
 		: `auth: github${config.auth.local ? " local device flow" : ""} (unrestricted)`;
 	let parts = [
-		"chopin",
-		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent
 			? `agent: ${config.model || "chosen by the attached client"} (on demand)`
@@ -311,5 +309,7 @@ export function describe(config: Config): string {
 		admission,
 		`storage: ${config.storage.driver}`,
 	];
-	return parts.join("  ·  ");
+	// One setting per line, so the log never needs a separator glyph.
+	return [`chopin http://${config.host}:${config.port}`, ...parts.map(part => `  ${part}`)]
+		.join("\n");
 }

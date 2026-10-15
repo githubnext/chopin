@@ -11,7 +11,7 @@ test("a reopened decision says what it replaced", () => {
 		drafts: {},
 		previous: { labels: ["GitHub Apps"], by: "ana" },
 	}));
-	expect(markup).toContain("Previously: GitHub Apps · @ana");
+	expect(markup).toContain("Previously chosen by @ana: GitHub Apps");
 });
 
 test("previous answers remain keyed to their active question", () => {
@@ -38,6 +38,6 @@ test("a legacy multi-card renders the active question's previous answer", () => 
 			scope: { labels: ["Anchors"], by: "ben" },
 		},
 	}));
-	expect(markup).toContain("Previously: GitHub Apps · @ana");
-	expect(markup).not.toContain("Previously: Anchors · @ben");
+	expect(markup).toContain("Previously chosen by @ana: GitHub Apps");
+	expect(markup).not.toContain("Previously chosen by @ben: Anchors");
 });

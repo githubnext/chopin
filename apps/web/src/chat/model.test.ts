@@ -7,10 +7,13 @@ import {
 	summarize,
 	toolGlyph,
 	toolKind,
+	toolKinds,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
 	workPhase,
+	workSummaryLabel,
+	workTime,
 } from "./model";
 
 import type { Chat } from "@chopin/protocol";
@@ -327,8 +330,27 @@ describe("rail copy", () => {
 			.toBe("ask Sam; email me@site.dev");
 	});
 
-	it("formats subsecond and second durations compactly", () => {
-		expect([duration(38), duration(1_200), duration(9_200)]).toEqual(["38ms", "1.2s", "9.2s"]);
+	it("formats durations in whole units", () => {
+		expect([duration(23), duration(999), duration(999.6), duration(1_000)])
+			.toEqual(["23ms", "999ms", "1s", "1s"]);
+		expect([duration(1_499), duration(1_500), duration(9_200), duration(59_400)])
+			.toEqual(["1s", "2s", "9s", "59s"]);
+		expect([duration(59_600), duration(60_000), duration(89_000), duration(90_000)])
+			.toEqual(["1m", "1m", "1m", "2m"]);
+		expect(duration(12 * 60_000 + 20_000)).toBe("12m");
+	});
+
+	it("times a turn from its first start to its last finish", () => {
+		expect(workTime([
+			{ id: "t1", name: "read_plan", status: "done", startedAt: 1_000, took: 40 },
+			{ id: "t2", name: "edit_plan", status: "done", startedAt: 2_500, took: 500 },
+			{ id: "t3", name: "edit_plan", status: "running", startedAt: 3_500 },
+		])).toBe(2_000);
+		expect(workTime([
+			{ id: "t1", name: "read_plan", status: "done", took: 38 },
+			{ id: "t2", name: "edit_plan", status: "done", took: 1_200 },
+		])).toBe(1_238);
+		expect(workTime([{ id: "t1", name: "read_plan", status: "running" }])).toBe(0);
 	});
 });
 
@@ -360,15 +382,38 @@ describe("work progression", () => {
 			finished: 2,
 			failures: 1,
 			interrupted: 0,
-			toolTime: 1_238,
 		});
 		expect(summarize(tools, false)).toEqual({
 			count: 3,
 			finished: 2,
 			failures: 1,
 			interrupted: 1,
-			toolTime: 1_238,
 		});
+	});
+
+	it("groups finished tools into glyph kinds in order of first use", () => {
+		let tools: Chat.Activity[] = [
+			{ id: "t1", name: "read_plan", status: "done" },
+			{ id: "t2", name: "pull_request_read", status: "failed" },
+			{ id: "t3", name: "read_child", status: "done" },
+			{ id: "t4", name: "edit_plan", status: "done" },
+		];
+		expect(toolKinds(tools)).toEqual([
+			{ glyph: "page", failed: false },
+			{ glyph: "pull-request", failed: true },
+			{ glyph: "write", failed: false },
+		]);
+	});
+
+	it("names a finished summary in words its glyphs only show", () => {
+		let base = { count: 3, finished: 3, failures: 0, interrupted: 0 };
+		expect(workSummaryLabel({ ...base, count: 1, finished: 1 }, false)).toBe("Used 1 tool");
+		expect(workSummaryLabel({ ...base, failures: 1 }, false)).toBe("Used 3 tools, 1 failed");
+		expect(workSummaryLabel({ ...base, interrupted: 1 }, false))
+			.toBe("Used 3 tools, 1 interrupted");
+		expect(workSummaryLabel(base, true)).toBe("Used 3 tools, connection lost");
+		expect(workSummaryLabel({ ...base, count: 10, finished: 10, failures: 1 }, false, 3_200))
+			.toBe("Used 10 tools in 3s, 1 failed");
 	});
 });
 

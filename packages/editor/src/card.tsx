@@ -111,8 +111,13 @@ export function Provenance({ at, by, verb }: ProvenanceProps) {
 			<span>
 				{verb} by{" "}
 				<span className="text-brand-ink">{isDemoHandle(by) ? displayName(by) : `@${by}`}</span>
-				{stamp && ` · ${stamp}`}
 			</span>
+			{stamp && (
+				<>
+					{" "}
+					<span>{stamp}</span>
+				</>
+			)}
 		</span>
 	);
 }
