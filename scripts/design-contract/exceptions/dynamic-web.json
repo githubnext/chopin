@@ -129,7 +129,7 @@
 				1
 			]
 		],
-		"sourceHash": "78564f9c8db1eb366ee0d000db433c337cd805b8681807542ed2098459f3bcc2"
+		"sourceHash": "5c3595caba6ee118c5724c6543158030d2e2db757215e4c76241e5c48d5b5c18"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "7ffec1e678371a7321ea60501ee3dcf1f4c68be0e695ade8204a713e81bc09cf"
+		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "7ffec1e678371a7321ea60501ee3dcf1f4c68be0e695ade8204a713e81bc09cf"
+		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "7ffec1e678371a7321ea60501ee3dcf1f4c68be0e695ade8204a713e81bc09cf"
+		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -311,7 +311,7 @@
 				1
 			]
 		],
-		"sourceHash": "f6b56e35f4a84411532e598ef53c893966b496b001d3020a3f470d87bd3efd8e"
+		"sourceHash": "25d5641ba4757668917be319cb5452999354e3f730264d3b1ec8cde48f3c3f44"
 	},
 	{
 		"file": "apps/web/src/machine-button.tsx",
@@ -353,6 +353,6 @@
 				1
 			]
 		],
-		"sourceHash": "3244d108a99bf147030b8411e6197c5889afdb6e0132a631443e3530c179ae0e"
+		"sourceHash": "f45c5ff596aa59bdd003351d8d08c84ce98718df46ab4d430db7d102df663af1"
 	}
 ]

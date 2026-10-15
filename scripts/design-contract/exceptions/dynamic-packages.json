@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "0cf63ba94883e6ce5d0bec5ac069c7bee45606cbca0b69cf5025a443be9dddff"
+		"sourceHash": "b2d6afd54a515be66fed2a6604c2db03d0cf131e0eeaeb704d6f132191c61343"
 	},
 	{
 		"file": "packages/question/src/react/resolved-actions.tsx",
@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "bd0b6b0b4e5b16f71f129dd4a840314d64268da7f640105563c50417a1248df2"
+		"sourceHash": "494719a22c76317c82049b6b5f10832a6b93704fc037db8b9c3521ecb73c2451"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",
@@ -109,7 +109,7 @@
 				1
 			]
 		],
-		"sourceHash": "aec7bbce271af7d0d5a4d382a1d7b45649051ceeef6bc0d5ba0c20b2f75b9081"
+		"sourceHash": "d437ae11044c046716a6df5efcd040835bb6f732aae5d99e7bdefbedebd55c65"
 	},
 	{
 		"file": "packages/icons/src/line.tsx",
@@ -809,7 +809,7 @@
 				1
 			]
 		],
-		"sourceHash": "332e0f7dd19c48d5a89ab024403a47f849d3161b0ed80c4553d279b2dc052512"
+		"sourceHash": "d2a3c24674c1bcddb49e81910059198048a79b0f5536905c86728f699bd2c205"
 	},
 	{
 		"file": "packages/visuals/src/ui/select.tsx",
@@ -844,7 +844,7 @@
 				1
 			]
 		],
-		"sourceHash": "332e0f7dd19c48d5a89ab024403a47f849d3161b0ed80c4553d279b2dc052512"
+		"sourceHash": "d2a3c24674c1bcddb49e81910059198048a79b0f5536905c86728f699bd2c205"
 	},
 	{
 		"file": "packages/dialect/src/nodes/content.ts",
@@ -928,7 +928,7 @@
 				1
 			]
 		],
-		"sourceHash": "5c9709fd97d4f6777205da118ce8b24123537b0ae7e56d3fa4490db8538081bf"
+		"sourceHash": "c66ae2a5f9f5b8e32a95267a1256a7e2258df66aa56bc30235582d723076b517"
 	},
 	{
 		"file": "packages/visuals/src/ui/unfold.tsx",
