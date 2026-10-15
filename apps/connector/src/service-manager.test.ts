@@ -258,7 +258,7 @@ test("install refuses until chopin connect has saved what the service runs", asy
 	});
 	let error = await installService(host, program).catch(error => error);
 	expect(error.message).toBe(
-		"Run chopin connect once in your checkout first, then chopin service install.",
+		"Run chopin connect once first, then chopin service install.",
 	);
 	expect(calls).toEqual([]);
 	expect(existsSync(unitPath(home))).toBe(false);
@@ -268,8 +268,7 @@ test("install refuses until chopin connect has saved what the service runs", asy
 test("install runs only the agent and Planner command connect found, refusing a bare name or one gone since", async () => {
 	let { home, directory, bin, calls, host, program, settings } = await machine("linux", systemd);
 	await writeFile(join(bin, "planner"), "#!/bin/sh\n", { mode: 0o755 });
-	let again = `Nothing was installed. Run \`chopin connect\` again in ${settings.checkout} so `
-		+ "chopin saves the";
+	let again = "Nothing was installed. Run `chopin connect` again so chopin saves the";
 	let planned = {
 		planners: ["https://chopin.example/d/one"],
 		plannerCommand: [join(bin, "planner")],

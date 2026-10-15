@@ -65,10 +65,19 @@ export function createOutput(
 				"",
 			);
 		},
-		connected(repository: string) {
+		/** Connected, with the repositories of the checkouts it registered. */
+		connected(checkouts: string[]) {
 			say(
 				`${s.green("✓ Connected.")}`,
-				s.dim(`  Work you start in any ${repository} document runs here. Ctrl-C disconnects.`),
+				s.dim(
+					"  Work you start in documents of any repository you can push to runs here. Ctrl-C "
+						+ "disconnects.",
+				),
+				s.dim(
+					checkouts.length
+						? `  It uses your checkouts of ${checkouts.join(", ")} and clones any other.`
+						: "  It clones each repository the first time work needs it.",
+				),
 				"",
 			);
 		},

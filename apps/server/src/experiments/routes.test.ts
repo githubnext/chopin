@@ -86,8 +86,18 @@ async function setup(
 		repositoryAccess: async (token: string, owner: string, name: string) => {
 			checked.push(token);
 			let push = name !== "readonly";
-			return { id: name, owner, name, permissions: { pull: true, push, admin: false } };
+			return {
+				id: name,
+				owner,
+				name,
+				fullName: `${owner}/${name}`,
+				defaultBranch: "main",
+				permissions: { pull: true, push, admin: false },
+			};
 		},
+		/** Each repository's default branch is at a commit of its name's first letter. */
+		branchHead: async (_token: string, _owner: string, name: string) =>
+			(/^[a-f]/.test(name) ? name[0]! : "c").repeat(40),
 	} as unknown as GitHub;
 	let config = {
 		origin: "https://chopin.test",
@@ -194,8 +204,15 @@ async function setup(
 	async function mint(cookie: string) {
 		return (await request("/api/connector/pairing-keys", {}, cookie)).json();
 	}
-	/** Register a checkout with a paired machine's token, as `chopin connect` does. */
-	async function open(machineToken: string, repository = "org/repo") {
+	/**
+	 * Register a checkout with a paired machine's token, as `chopin connect` does, speaking
+	 * `protocol`: 5 and up connects the machine for any repository, an older one that checkout's.
+	 */
+	async function open(
+		machineToken: string,
+		repository = "org/repo",
+		protocol = CONNECTOR_PROTOCOLS.max,
+	) {
 		return request(
 			"/api/connector/connections",
 			{
@@ -205,12 +222,14 @@ async function setup(
 			},
 			undefined,
 			machineToken,
+			{ ...CURRENT, [CONNECTOR_PROTOCOL_HEADER]: String(protocol) },
 		);
 	}
 	async function pair(
 		cookie: string,
 		repository = "org/repo",
 		user = cookie === bob.cookie ? "bob" : "alice",
+		protocol = CONNECTOR_PROTOCOLS.max,
 	) {
 		let pending = await (await request("/api/connector/pairings", {
 			repository,
@@ -222,7 +241,7 @@ async function setup(
 		let claimed = await (await request(`/api/connector/pairings/${pending.id}/claim`, {
 			secret: pending.secret,
 		})).json();
-		let opened = await (await open(claimed.token, repository)).json();
+		let opened = await (await open(claimed.token, repository, protocol)).json();
 		return { ...pending, machineToken: claimed.token as string, ...opened };
 	}
 	return {
@@ -384,11 +403,32 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 	).toBe(child);
 });
 
-test("one connection serves every document in its repository and no other", async () => {
+test("a machine runs work in a repository it has no checkout of, from its default branch", async () => {
+	let { alice, document, request, tool, pair } = await setup();
+	let elsewhere = await document("other");
+	let machine = await pair(alice.cookie);
+	expect(machine.connection.checkouts.map((item: { repository: string }) => item.repository))
+		.toEqual(["org/repo"]);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${elsewhere}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	let run = await request(`/api/documents/${elsewhere}/experiments/${id}/run`, {}, alice.cookie);
+	expect(run.status).toBe(200);
+	expect(text(await tool(machine.token, "wait_for_experiment", {}))).toEqual({ id });
+	let claim = text(await tool(machine.token, "claim_experiment", { id }));
+	// The head of org/other's default branch on GitHub, which the connector clones or fetches.
+	expect(claim.input.source).toEqual({
+		repositoryId: "other",
+		repository: "org/other",
+		commit: "c".repeat(40),
+		branch: "main",
+	});
+});
+
+test("an older chopin's connection serves every document in its checkout's repository only", async () => {
 	let { alice, bob, document, documentId, request, tool, pair } = await setup();
 	let second = await document();
 	let elsewhere = await document("other");
-	let connection = await pair(alice.cookie);
+	let connection = await pair(alice.cookie, "org/repo", "alice", 4);
 	for (let target of [documentId, second]) {
 		let id = crypto.randomUUID();
 		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
@@ -532,9 +572,44 @@ test("a failure report delayed past a retry leaves the next attempt running", as
 	});
 });
 
+test("a machine claims work in any repository its owner can push to, and no other", async () => {
+	let { alice, document, tool, pair, runtime } = await setup();
+	let machine = await pair(alice.cookie);
+	let older = await pair(alice.cookie, "org/repo", "alice", 4);
+	let authorize = async (target: string, repository: string, connectionId: string) => {
+		let id = crypto.randomUUID();
+		await runtime.service.create(target, "alice", "Elsewhere", id);
+		await runtime.service.authorize(id, connectionId, {
+			id,
+			documentId: target,
+			requester: "alice",
+			authorizer: "alice",
+			brief: "Elsewhere",
+			source: { repositoryId: repository, repository: `org/${repository}`, commit: "a".repeat(40) },
+			context: "Document revision 0",
+		});
+		return id;
+	};
+	// Its checkout is of org/repo, yet it claims a document in org/other.
+	let other = await authorize(await document("other"), "other", machine.connection.id);
+	let claimed = text(await tool(machine.token, "claim_experiment", { id: other }));
+	expect(claimed.input.source.repository).toBe("org/other");
+	await runtime.service.stop(other, "cancelled");
+	// Not where its owner can't push.
+	let readonly = await authorize(await document("readonly"), "readonly", machine.connection.id);
+	expect(error(await tool(machine.token, "claim_experiment", { id: readonly })))
+		.toStartWith("repository-forbidden");
+	await runtime.service.stop(readonly, "cancelled");
+	// An older chopin's connection serves only its checkout's repository.
+	let foreign = await authorize(await document("third"), "third", older.connection.id);
+	expect(error(await tool(older.token, "claim_experiment", { id: foreign })))
+		.toStartWith("repository-forbidden");
+});
+
 test("a claim refuses a document in another repository and interrupts archived or locked ones", async () => {
 	let { alice, document, documentId, request, tool, pair, lock, runtime, storage } = await setup();
-	let connection = await pair(alice.cookie);
+	// An older chopin's connection, which serves only its checkout's repository.
+	let connection = await pair(alice.cookie, "org/repo", "alice", 4);
 	async function queued(target: string) {
 		let id = crypto.randomUUID();
 		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
@@ -1111,7 +1186,7 @@ test("expired pairing and connections cannot be revived by replay", () => {
 	let result = connections.open(
 		{ id: "machine", owner: "alice", login: "alice", autoRun: false },
 		"Laptop",
-		{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) },
+		[{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) }],
 	);
 	now = 91_000;
 	expect(() => connections.lookup(result.token)).toThrow("connection-unavailable");
@@ -1176,7 +1251,7 @@ test("builds queued behind a connection's build take its place in the order they
 	let { id } = connections.open(
 		{ id: "machine", owner: "alice", login: "alice", autoRun: false },
 		"Laptop",
-		{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) },
+		[{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) }],
 	).connection;
 	connections.assign(id, "one");
 	connections.enqueue(id, "two");
@@ -1214,7 +1289,7 @@ test("a spike runs with an image upload and a structured report, and stays out o
 		requester: "alice",
 		authorizer: "alice",
 		brief: "Spike brief",
-		source: paired.connection.source,
+		source: paired.connection.checkouts[0],
 		context: "# Context",
 	});
 	let listed =
@@ -1346,7 +1421,7 @@ test("a spike uploads at most three images and cites only its own", async () => 
 		requester: "alice",
 		authorizer: "alice",
 		brief: "Spike brief",
-		source: paired.connection.source,
+		source: paired.connection.checkouts[0],
 		context: "# Context",
 	});
 	let claim = text(await tool(paired.token, "claim_experiment", { id }));
@@ -1400,7 +1475,7 @@ test("a spike still running 20 minutes after its claim is interrupted", async ()
 		requester: "alice",
 		authorizer: "alice",
 		brief: "Spike brief",
-		source: paired.connection.source,
+		source: paired.connection.checkouts[0],
 		context: "# Context",
 	});
 	text(await tool(paired.token, "claim_experiment", { id }));
@@ -1577,13 +1652,19 @@ test("a person chooses which of their machines runs a document's work, and back 
 		"build-box",
 	]);
 	expect(shown.machines.every((item: { connected: boolean }) => item.connected)).toBe(true);
-	// Only the caller's own machine, and only one serving the document's repository.
+	// Only the caller's own machines, every one whatever repository its checkouts are of. One an
+	// older chopin connected for another repository's checkout can't take this document's work.
 	let bobs = await pair(bob.cookie);
 	expect((await request(path, { machine: bobs.machine }, alice.cookie)).status).toBe(404);
 	let elsewhere = await pair(alice.cookie, "org/other");
-	let unserved = await request(path, { machine: elsewhere.machine }, alice.cookie);
-	expect(unserved.status).toBe(409);
-	expect((await unserved.json()).error).toBe("repository-unserved");
+	let older = await pair(alice.cookie, "org/other", "alice", 4);
+	let everyone = await (await request(path, undefined, alice.cookie)).json();
+	expect(
+		everyone.machines.map((item: { id: string; connected: boolean }) => [item.id, item.connected]),
+	).toEqual(expect.arrayContaining([[elsewhere.machine, true], [older.machine, false]]));
+	expect((await request(path, { machine: elsewhere.machine }, alice.cookie)).status).toBe(200);
+	await tool(elsewhere.token, "disconnect_workspace", {});
+	await tool(older.token, "disconnect_workspace", {});
 	expect((await request(path, { machine: buildBox.machine }, alice.cookie)).status).toBe(200);
 	let chosen = await (await request(path, undefined, alice.cookie)).json();
 	expect(chosen.choice).toBe(buildBox.machine);
@@ -1748,10 +1829,15 @@ test("Automatic prefers the person's favorite machine where it serves the docume
 	expect((await (await request(path, undefined, alice.cookie)).json()).automatic)
 		.toMatchObject({ id: laptop.machine, favorite: false });
 
-	// A favorite that serves another repository is ignored here.
+	// A favorite an older chopin connected for another repository's checkout is passed over here;
+	// one that serves any repository takes the document's work, whatever its checkouts.
+	let older = await pair(alice.cookie, "org/other", "alice", 4);
+	expect((await favor(older.machine, true)).status).toBe(200);
+	expect(await ranOn(await run())).toBe(laptop.connection.id);
 	let elsewhere = await pair(alice.cookie, "org/other");
 	expect((await favor(elsewhere.machine, true)).status).toBe(200);
-	expect(await ranOn(await run())).toBe(laptop.connection.id);
+	expect(await ranOn(await run())).toBe(elsewhere.connection.id);
+	await tool(elsewhere.token, "disconnect_workspace", {});
 
 	// A choice for the document beats the favorite, and an offline choice never falls back to it.
 	let back = await (await open(desk.machineToken)).json();

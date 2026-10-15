@@ -220,14 +220,16 @@ a Chat reference.
 ## Use your own machine
 
 The `chopin` CLI connects a machine you control to your Chopin server, so
-builds, investigations and Planner work run in your own checkout with your own
-coding agent. Install it, then connect your checkout once with your server's
-origin in `CHOPIN_URL`. `chopin connect` pairs the machine the first time and
-saves the server for later commands.
+builds, investigations and Planner work run there with your own coding agent,
+for documents in any repository you can push to. Install it, then connect once
+with your server's origin in `CHOPIN_URL`, from any folder. `chopin connect`
+pairs the machine the first time and saves the server for later commands. It
+clones each repository the first time work needs it; `--checkout <path>` uses
+a checkout you already have instead.
 
 ```bash
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-CHOPIN_URL=https://your-chopin-instance.example chopin connect . --agent copilot
+CHOPIN_URL=https://your-chopin-instance.example chopin connect --agent copilot
 ```
 
 That runs in your terminal and stops when you close it. On a remote machine or
@@ -243,7 +245,7 @@ agents:
 | [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--agent atomic`  | Yes                |
 
 Any other agent that speaks ACP works too: give its command after `--` instead,
-as in `chopin connect . -- my-agent --acp`.
+as in `chopin connect -- my-agent --acp`.
 
 The **Machines** page, at `/machines` on your server (its former address, `/connect`, redirects there), gives one command that
 installs `chopin` and connects the machine, with your server filled in: your

@@ -92,13 +92,17 @@ export class LiveSyncCoordinator {
 	}
 
 	/**
-	 * A local agent (re)connected to a repository; catch up on rebuilds missed while its owner's
+	 * A local agent (re)connected to a repository, or to every one its owner can push to (no
+	 * `repositoryId`); catch up on rebuilds missed while its owner's
 	 * builder was away. Only documents a check has already seen since startup are known here.
 	 */
-	connected(repositoryId: string, owner: string): void {
+	connected(repositoryId: string | undefined, owner: string): void {
 		if (this.#closed) return;
 		for (let [channelId, builder] of this.#builders) {
-			if (builder.repositoryId !== repositoryId || builder.user !== owner) continue;
+			if (
+				repositoryId !== undefined && builder.repositoryId !== repositoryId
+				|| builder.user !== owner
+			) continue;
 			if (!this.#pending.has(channelId)) void this.check(channelId);
 		}
 	}

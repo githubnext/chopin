@@ -8,7 +8,8 @@ import * as Service from "../plan/service";
 import { calloutDigest, calloutId, calloutIds, placeSpikeCallout } from "./spike-placement";
 import { eligible, renderKey, spikeBrief, spikeCallout, text } from "./spikes";
 
-import type { Connections } from "./connections";
+import type { Connection, Connections } from "./connections";
+import type { Source } from "@chopin/experiment";
 import type { Experiments } from "./service";
 import type { Investigation } from "@chopin/experiment/records";
 import type { SpikeHost } from "./spike-scout";
@@ -19,6 +20,8 @@ type Options = {
 	withPlan: <T>(channelId: string, action: (plan: Service.Plan) => Promise<T>) => Promise<T>;
 	/** A spike's result was just written into its callout; `spike.settle` is persisted. */
 	landed?: (channelId: string, value: Investigation) => void;
+	/** The checkout a connection's work on a document starts from. */
+	sourceFor: (connection: Connection, documentId: string) => Promise<Source>;
 };
 
 /** Digests of a source's eligible passages, as the scout's snapshot computes them. */
@@ -31,7 +34,9 @@ export function blockDigests(source: string): Set<string> {
 }
 
 /** Spike records live with investigations; their callouts are projections placed after commit. */
-export function spikeHost({ service, connections, withPlan, landed }: Options): SpikeHost {
+export function spikeHost(
+	{ service, connections, withPlan, landed, sourceFor }: Options,
+): SpikeHost {
 	let spikes = async (channelId: string) =>
 		(await service.store.list(channelId)).filter(value => value.spike);
 	let dismiss = async (_channelId: string, id: string) => {
@@ -57,7 +62,7 @@ export function spikeHost({ service, connections, withPlan, landed }: Options): 
 				requester: owner,
 				authorizer: owner,
 				brief: value.brief,
-				source: live.source,
+				source: await sourceFor(live, channelId),
 				context: `Document revision ${context.revision}\n${context.source}`.slice(
 					0,
 					limits.context,

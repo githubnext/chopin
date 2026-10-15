@@ -132,6 +132,8 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		lastConnect: null,
 		runs: { kept: 0, running: 0, bytes: 0 },
 		plannerWorktrees: [],
+		checkouts: {},
+		clones: [],
 	});
 	expect(JSON.stringify(report)).not.toContain(TOKEN);
 	let text = formatStatus(report);
@@ -147,22 +149,59 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		`            stale lock for /work/reused: its connector (pid ${process.pid}) has exited; `
 		+ "the next connect replaces it",
 		"Service:    not-installed (systemd)",
+		"Checkouts:  none registered; chopin connect --checkout <path> adds one",
+		"Clones:     none yet; other repositories are cloned when work needs them",
 		`Log:        ${join(directory, "chopin.log")}`,
 		`Base dir:   ${directory}`,
 	]);
 	expect(text.join("\n")).not.toContain(TOKEN);
 });
 
+test("status lists the checkouts the running connector registered and the repositories it cloned", async () => {
+	let { directory, host } = await machine();
+	await writeFile(
+		join(directory, `${"d".repeat(64)}.lock`),
+		JSON.stringify({
+			pid: process.pid,
+			processStart: (await processStart()(process.pid))!.id,
+			checkouts: { "octo-org/score": "/work/score", "octo-org/notes": "/work/notes" },
+			version: "0.0.1",
+		}),
+	);
+	let clone = join(directory, "repos", "octo-org", "site");
+	await mkdir(join(clone, ".git"), { recursive: true });
+	// A clone still being made is not one yet.
+	await mkdir(join(directory, "repos", "octo-org", "docs.1.2.tmp", ".git"), { recursive: true });
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.checkouts).toEqual({
+		"octo-org/score": "/work/score",
+		"octo-org/notes": "/work/notes",
+	});
+	expect(report.clones).toEqual([{ repository: "octo-org/site", path: clone }]);
+	expect(report.connectors[0]).toMatchObject({
+		running: true,
+		checkouts: { "octo-org/score": "/work/score", "octo-org/notes": "/work/notes" },
+	});
+	expect(report.connectors[0]).not.toHaveProperty("checkout");
+	let text = formatStatus(report);
+	expect(text).toContain(`Connector:  running (pid ${process.pid}, chopin 0.0.1)`);
+	expect(text).toContain("Checkouts:  octo-org/score at /work/score");
+	expect(text).toContain("            octo-org/notes at /work/notes");
+	expect(text).toContain(`Clones:     octo-org/site at ${clone}`);
+});
+
 test("status shows what the service runs, and the last connect when it differs", async () => {
 	let { directory, host } = await machine();
 	let runs = {
 		server: "https://chopin.example",
-		checkout: "/work/score",
+		checkouts: { "octo-org/score": "/work/score" },
 		command: ["/usr/bin/agent", "--acp"],
 		planners: [],
 		plannerCommand: [],
 	};
-	let last = { ...runs, checkout: "/work/other" };
+	// What an older chopin saved: its one checkout.
+	let { checkouts: _checkouts, ...older } = runs;
+	let last = { ...older, checkout: "/work/other" };
 	await writeFile(
 		join(directory, "config.json"),
 		JSON.stringify({
@@ -189,12 +228,13 @@ test("status shows what the service runs, and the last connect when it differs",
 		},
 	};
 	expect(formatStatus(installed)).toContain(
-		"            runs /work/score with /usr/bin/agent --acp, on https://chopin.example",
+		"            runs /usr/bin/agent --acp with checkouts /work/score, on https://chopin.example",
 	);
 	expect(formatStatus(installed)).toContain(
-		"            chopin connect last ran /work/other with /usr/bin/agent --acp, on "
+		"            chopin connect last ran /usr/bin/agent --acp with checkouts /work/other, on "
 			+ "https://chopin.example; run chopin service install to use it",
 	);
+	expect(formatStatus(installed)).toContain("Checkouts:  octo-org/score at /work/score");
 	let same = formatStatus({ ...installed, lastConnect: runs }).join("\n");
 	expect(same).not.toContain("last ran");
 });
@@ -241,7 +281,7 @@ test("status says once a connector's machine uses its own GitHub login because t
 		JSON.stringify({ repository: "octo-org/score" }),
 	);
 	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
-	expect(report.connectors[0]?.githubCannotPush).toBe("octo-org/score");
+	expect(report.connectors[0]?.githubCannotPush).toEqual(["octo-org/score"]);
 	expect(formatStatus(report)).toContain(
 		"              The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
 			+ "write), so this machine uses its own GitHub login for it.",
@@ -252,7 +292,7 @@ test("status names a built-in agent by its --agent id, with the command it runs"
 	let { directory, host } = await machine();
 	let runs = {
 		server: "https://chopin.example",
-		checkout: "/work/score",
+		checkouts: { "octo-org/score": "/work/score" },
 		agent: "atomic",
 		command: ["/usr/bin/atomic-acp", "--", "--package", "/x"],
 		planners: [],
@@ -275,8 +315,8 @@ test("status names a built-in agent by its --agent id, with the command it runs"
 	let report = await collectStatus({ directory, server: runs.server, source: "config", host });
 	let service = { state: "running" as const, manager: "systemd" as const, definition: "/u" };
 	expect(formatStatus({ ...report, service: { ...service, log: "/l", notes: [] } })).toContain(
-		"            runs /work/score with --agent atomic (/usr/bin/atomic-acp -- --package /x), on "
-			+ "https://chopin.example",
+		"            runs --agent atomic (/usr/bin/atomic-acp -- --package /x) with checkouts "
+			+ "/work/score, on https://chopin.example",
 	);
 });
 

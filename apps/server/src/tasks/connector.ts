@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { serves } from "../experiments/connections";
 import type { Connection, Connections, Grant } from "../experiments/connections";
 import { ExperimentError } from "@chopin/experiment";
 import { fail } from "../experiments/service";
@@ -235,7 +236,7 @@ export function implementationConnector(
 				let build = plan.builds.at(-1);
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
-					|| build.repositoryId !== connection.source.repositoryId
+					|| !serves(connection, build.repositoryId)
 					|| build.id !== (grant.run?.id ?? args.id)
 				) fail("build-forbidden");
 				if (grant.run) {

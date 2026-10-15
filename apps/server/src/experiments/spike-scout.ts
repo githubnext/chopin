@@ -209,13 +209,16 @@ export class SpikeScout {
 	}
 
 	/**
-	 * A local agent (re)connected to a repository. Rescan its owner's documents whose last scan
+	 * A local agent (re)connected to a repository, or to every one its owner can push to (no
+	 * `repositoryId`). Rescan its owner's documents whose last scan
 	 * stopped for want of one, so a passage written while it was away needs no further edit.
 	 */
-	connected(repositoryId: string, owner: string): void {
+	connected(repositoryId: string | undefined, owner: string): void {
 		if (this.#closed) return;
 		for (let [channelId, away] of this.#offline) {
-			if (away.repositoryId !== repositoryId || !away.owners.has(owner)) continue;
+			if (
+				repositoryId !== undefined && away.repositoryId !== repositoryId || !away.owners.has(owner)
+			) continue;
 			this.#offline.delete(channelId);
 			if (!this.#pending.has(channelId)) void this.check(channelId);
 		}

@@ -107,6 +107,8 @@ describe("a paired machine's Planner", () => {
 		expect(issued.body.document).toEqual({
 			id: channel.id,
 			url: expect.stringContaining("https://chopin.test/"),
+			// Which of the machine's checkouts its Planner runs in.
+			repository: "octo-org/score",
 		});
 		let lifetime = issued.body.expiresAt - Date.now();
 		expect(lifetime).toBeGreaterThan(14 * 60_000);

@@ -19,8 +19,12 @@ import {
 	git,
 	noPushEnvironment,
 	prepareWorkspace,
+	runAttempt,
 	type StartFailures,
 } from "./workspace";
+import type { Checkouts } from "./checkouts";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import {
 	implementationPrompt,
 	liveImplementationPrompt,
@@ -31,7 +35,8 @@ import {
 type Options = {
 	/** Called with the agent's name and version once it has answered ACP initialize. */
 	onAgent?: (info: AgentInfo) => void;
-	root: string;
+	/** The checkout each repository's work runs from: registered, or cloned on demand. */
+	checkouts: Checkouts;
 	directory: string;
 	command: string[];
 	url: string;
@@ -58,7 +63,7 @@ type Options = {
 	/** The machine token, to ask Chopin for the machine's GitHub token for a run that may push. */
 	machine?: string;
 	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string) => void;
+	githubRefused?: (message: string, repository: string) => void;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 
@@ -177,16 +182,42 @@ export async function runWork(
 	let spikeWork: { path: string; branch: string } | undefined;
 	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
 	let prepared: Awaited<ReturnType<typeof prepareWorkspace>> | undefined;
-	/** The machine's GitHub token for this run, where Chopin gives one; spikes never push. */
+	/** The checkout the run's worktree comes from. */
+	let root: string | undefined;
+	/**
+	 * The machine's GitHub token for this run, where Chopin gives one: for the agent, though a
+	 * spike never pushes, and to clone or fetch the repository when it has no registered checkout.
+	 */
+	let issued: Promise<GitHubToken | undefined> | undefined;
 	let github: GitHubToken | undefined;
+	let token = () =>
+		issued ??= options.machine
+			? mkdir(join(options.directory, "runs"), { recursive: true, mode: 0o700 }).then(() =>
+				githubToken({
+					url: options.url,
+					machine: options.machine!,
+					repository: input.source.repository,
+					file: join(
+						options.directory,
+						"runs",
+						`${runAttempt(input.id, implementation ? 1 : claim.generation)}.github-token`,
+					),
+					...(options.githubRefused ? { refused: options.githubRefused } : {}),
+				})
+			)
+			: Promise.resolve(undefined);
 	let secrets = () => [...Object.values(options.env ?? {}), ...github?.secrets() ?? []];
 	let agentStop: string | undefined;
 	try {
+		let checkout = await options.checkouts.resolve(input.source.repository, token);
+		root = checkout.root;
 		prepared = await prepareWorkspace(
-			options.root,
+			root,
 			options.directory,
 			input,
 			implementation ? undefined : claim.generation,
+			undefined,
+			checkout.env,
 		);
 		let path = prepared.path;
 		let worktrees = { root: path, extras: prepared.extras };
@@ -198,15 +229,7 @@ export async function runWork(
 			spikeWork = { path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
 			git(path, "checkout", "-b", spikeWork.branch);
 		}
-		if (options.machine && !claim.spike) {
-			github = await githubToken({
-				url: options.url,
-				machine: options.machine,
-				repository: input.source.repository,
-				file: prepared.journalPath.replace(/\.json$/, ".github-token"),
-				...(options.githubRefused ? { refused: options.githubRefused } : {}),
-			});
-		}
+		if (!claim.spike) github = await token();
 		output.job(
 			rebuild ? "rebuild" : implementation ? "build" : claim.spike ? "spike" : "investigation",
 			implementation
@@ -397,13 +420,13 @@ export async function runWork(
 		}
 		local?.close();
 		await bridgeApi?.then(api => api.close()).catch(() => {});
-		if (spikeWork) {
-			await discardWorkspace(options.root, spikeWork.path, spikeWork.branch).catch(() => {});
+		if (spikeWork && root) {
+			await discardWorkspace(root, spikeWork.path, spikeWork.branch).catch(() => {});
 		}
-		await github?.stop().catch(() => {});
+		await issued?.then(value => value?.stop()).catch(() => {});
 		// Extra worktrees end with the run; the run's own stays for inspection.
-		if (prepared) {
-			await endWorkspace(options.root, prepared).catch(() => {});
+		if (prepared && root) {
+			await endWorkspace(root, prepared).catch(() => {});
 		}
 		beating.abort();
 		await heartbeat;

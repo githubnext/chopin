@@ -158,6 +158,8 @@ export interface GitHub {
 		owner: string,
 		name: string,
 	): Promise<InstalledRepository | undefined>;
+	/** The commit a repository's branch points at; optional for GitHubs that never start work. */
+	branchHead?(token: string, owner: string, name: string, branch: string): Promise<string>;
 	invalidate(token: string): void;
 }
 
@@ -683,6 +685,17 @@ export class GitHubClient implements GitHub, GitHubReferenceSource {
 	async repository(token: string, owner: string, name: string): Promise<Repository> {
 		let path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 		return repository(await this.#api(path, token));
+	}
+
+	async branchHead(token: string, owner: string, name: string, branch: string): Promise<string> {
+		let path = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${
+			encodeURIComponent(branch)
+		}`;
+		let sha = record(await this.#api(path, token))?.sha;
+		if (typeof sha !== "string" || !/^[a-f0-9]{40}([a-f0-9]{24})?$/.test(sha)) {
+			throw new GitHubError("GitHub returned an invalid commit");
+		}
+		return sha;
 	}
 
 	async repositoryAccess(

@@ -2,9 +2,10 @@ declare const CHOPIN_CLI_VERSION: string | undefined;
 
 /**
  * The connector protocol this CLI speaks, for a server to check compatibility against. Protocol 4
- * polls for the Planners its owner chose this machine for.
+ * polls for the Planners its owner chose this machine for. Protocol 5 connects the machine, not
+ * one checkout: it takes work in any repository its owner can push to.
  */
-export const CONNECTOR_PROTOCOL = 4;
+export const CONNECTOR_PROTOCOL = 5;
 
 /** Embedded by the binary build with `--define`; a source or `/connector.js` run has none. */
 export const VERSION = typeof CHOPIN_CLI_VERSION === "string" ? CHOPIN_CLI_VERSION : "dev";

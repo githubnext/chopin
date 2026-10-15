@@ -243,14 +243,14 @@ const CASES: Array<{
 		says: ["GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1"],
 	},
 	{
-		name: "not inside a git checkout",
+		name: "a --checkout isn't inside a git checkout",
 		run: async () => {
 			let empty = await mkdtemp(join(scratch, "plain-"));
 			return connect({ cwd: empty, args: () => [".", "--", "agent"] });
 		},
 		says: [
 			"isn't inside a git checkout",
-			"cd into your repository's folder",
+			"Give --checkout the folder of a clone from GitHub",
 			"run this command again",
 		],
 	},
@@ -276,11 +276,6 @@ const CASES: Array<{
 			"The account that made the pairing key isn't allowed to use this Chopin",
 			"Machines → Add a machine",
 		],
-	},
-	{
-		name: "the key's account can't push to the checkout",
-		run: () => connect({ pairing: refused(403, { error: "repository-forbidden" }) }),
-		says: ["can't push to octo-org/score", "run this command again"],
 	},
 	{
 		name: "the server needs a newer chopin",
@@ -356,6 +351,7 @@ test("the setup guide's troubleshooting table names each of these messages", asy
 			"Chopin refused the pairing key",
 			"isn't allowed to use this Chopin",
 			"can't push to",
+			"has no checkout of",
 			"speaks connector protocol",
 			"didn't answer ACP initialize",
 			"asks for permission in the terminal",
@@ -365,6 +361,9 @@ test("the setup guide's troubleshooting table names each of these messages", asy
 		expect(table).toContain(fragment);
 		expect(
 			CASES.some(item => item.says.some(says => says.includes(fragment))) || [
+				// Said once connected, or when work arrives, rather than stopping connect.
+				"can't push to",
+				"has no checkout of",
 				"speaks connector protocol",
 				"didn't answer ACP initialize",
 				"asks for permission in the terminal",

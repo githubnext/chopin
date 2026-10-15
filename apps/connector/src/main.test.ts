@@ -59,6 +59,8 @@ async function connect(
 	extra: Record<string, string> = {},
 ) {
 	let requests: Array<[string, string | null, string | null]> = [];
+	/** What each registration and pairing sent. */
+	let bodies: Array<[string, unknown]> = [];
 	let interrupted = false;
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
@@ -77,6 +79,9 @@ async function connect(
 				return Response.json({ error: CONNECTOR_UPDATE_REQUIRED, message: MESSAGE }, {
 					status: 409,
 				});
+			}
+			if (path === "/api/connector/pairings" || path === "/api/connector/connections") {
+				bodies.push([path, await request.clone().json()]);
 			}
 			if (path === "/api/connector/pairings") {
 				return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
@@ -120,6 +125,8 @@ async function connect(
 		"connect",
 		...args ?? [await checkout(), "--", "agent"],
 	], {
+		// Outside any checkout: connect registers only the checkouts it is given.
+		cwd: scratch,
 		env: {
 			...process.env,
 			CHOPIN_URL: url,
@@ -137,6 +144,7 @@ async function connect(
 			stdout: await new Response(connector.stdout).text(),
 			stderr: await new Response(connector.stderr).text(),
 			requests,
+			bodies,
 			directory,
 			url,
 		};
@@ -182,7 +190,7 @@ test("connect saves the server, checkout, agent, Planner and --env it ran once i
 	expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
 		connect: {
 			server: started.url,
-			checkout: await realpath(root),
+			checkouts: { "octo-org/score": await realpath(root) },
 			command: [program(programs, "agent"), "--acp"],
 			planners: ["https://chopin.example/d/one"],
 			plannerCommand: [program(programs, "planner"), "--x"],
@@ -190,6 +198,57 @@ test("connect saves the server, checkout, agent, Planner and --env it ran once i
 		},
 	});
 	expect((await stat(file)).mode & 0o777).toBe(0o600);
+	// It connects the machine, naming the checkout it registered.
+	expect(started.bodies.find(([path]) => path === "/api/connector/connections")?.[1]).toEqual({
+		label: expect.any(String),
+		checkouts: [{
+			repository: "octo-org/score",
+			commit: git(root, "rev-parse", "HEAD"),
+			branch: git(root, "branch", "--show-current"),
+		}],
+	});
+});
+
+test("connect outside any checkout connects the machine with no checkout of its own", async () => {
+	let started = await connect("nothing", ["--", "agent"]);
+	expect(started.code, started.stderr).toBe(0);
+	expect(started.stdout).toContain("It clones each repository the first time work needs it.");
+	// Pairing names no repository; the connection names no checkout.
+	expect(started.bodies.map(([path, body]) => [path, Object.keys(body as object).sort()])).toEqual([
+		["/api/connector/pairings", ["label"]],
+		["/api/connector/connections", ["checkouts", "label"]],
+	]);
+	expect(started.bodies[1]![1]).toMatchObject({ checkouts: [] });
+	let saved = JSON.parse(await readFile(join(started.directory, "config.json"), "utf8")).connect;
+	expect(saved.checkouts).toEqual({});
+	expect(saved).not.toHaveProperty("checkout");
+});
+
+test("connect registers each --checkout and a positional one, and refuses a folder that isn't one", async () => {
+	let one = await realpath(await checkout());
+	let two = await realpath(await mkdtemp(join(scratch, "notes-")));
+	git(two, "init");
+	git(two, "config", "user.name", "Fixture");
+	git(two, "config", "user.email", "fixture@example.test");
+	git(two, "remote", "add", "origin", "git@github.com:octo-org/notes.git");
+	await writeFile(join(two, "notes.md"), "notes");
+	git(two, "add", ".");
+	git(two, "commit", "-m", "fixture");
+	let started = await connect("nothing", [one, "--checkout", join(two, "."), "--", "agent"]);
+	expect(started.code, started.stderr).toBe(0);
+	let saved = JSON.parse(await readFile(join(started.directory, "config.json"), "utf8")).connect;
+	expect(saved.checkouts).toEqual({ "octo-org/score": one, "octo-org/notes": two });
+	let registered = started.bodies.find(([path]) => path === "/api/connector/connections")?.[1] as {
+		checkouts: Array<{ repository: string }>;
+	};
+	expect(registered.checkouts.map(item => item.repository)).toEqual([
+		"octo-org/score",
+		"octo-org/notes",
+	]);
+	let refused = await connect("pairing", ["--checkout", scratch, "--", "agent"]);
+	expect(refused.code).toBe(1);
+	expect(refused.stderr).toContain(`${scratch} isn't inside a git checkout`);
+	expect(refused.requests).toEqual([]);
 });
 
 /** Stand-ins for the built-in agents' programs, first on PATH for the --agent connects below. */
@@ -215,7 +274,7 @@ test(
 		expect(JSON.parse(await readFile(join(atomic.directory, "config.json"), "utf8")).connect)
 			.toEqual({
 				server: atomic.url,
-				checkout: await realpath(root),
+				checkouts: { "octo-org/score": await realpath(root) },
 				agent: "atomic",
 				command: [program(builtIns, "atomic-acp"), "--", "--package", "/x"],
 				planners: [],
@@ -370,7 +429,10 @@ test.skipIf(process.platform === "win32")(
 	},
 );
 
-/** The settings `chopin service install` copied for a service that runs `checkout` on `server`. */
+/**
+ * The settings `chopin service install` copied for a service that runs `checkout` on `server`, as
+ * an older chopin saved them.
+ */
 function installed(directory: string, server: string, checkout: string) {
 	let settings = { server, checkout, command: ["old-agent"], planners: [], plannerCommand: [] };
 	let service = {
@@ -387,19 +449,24 @@ function lockPath(directory: string, root: string) {
 	return join(directory, `${new Bun.CryptoHasher("sha256").update(root).digest("hex")}.lock`);
 }
 
-test("connect in another checkout leaves what the running service runs alone", async () => {
+test("connect in another checkout while the service runs saves it and leaves the service alone", async () => {
 	let serviceRoot = await realpath(await checkout());
 	let directory = await mkdtemp(join(scratch, "state-"));
 	await installed(directory, "https://service.example", serviceRoot);
 	let before = JSON.parse(await readFile(join(directory, "config.json"), "utf8")).service;
+	// An older chopin's service, holding its one checkout.
 	let lock = lockPath(directory, serviceRoot);
 	await writeFile(lock, JSON.stringify({ pid: process.pid, root: serviceRoot, service: true }));
 
 	let other = await realpath(await checkout());
 	let started = await connect("nothing", [other, "--", "agent"], directory);
 	expect(started.code).toBe(0);
+	expect(started.requests).toEqual([]);
 	let config = JSON.parse(await readFile(join(directory, "config.json"), "utf8"));
-	expect(config.connect).toMatchObject({ server: started.url, checkout: other });
+	expect(config.connect).toMatchObject({
+		server: started.url,
+		checkouts: { "octo-org/score": other },
+	});
 	expect(config.service).toEqual(before);
 
 	// The service, started again, runs its own settings: the server it was installed with.
@@ -419,7 +486,7 @@ test("connect --service stops until service install has saved what it runs", asy
 	let result = await connect("pairing", ["--service"], directory);
 	expect(result.code).toBe(1);
 	expect(result.stderr).toBe(
-		"Run chopin connect once in your checkout first, then chopin service install.\n",
+		"Run chopin connect once first, then chopin service install.\n",
 	);
 	expect(result.requests).toEqual([]);
 	let planner = ["--planner", "https://chopin.example/d/one", "--planner-command", "planner"];
@@ -432,7 +499,7 @@ test("connect --service stops until service install has saved what it runs", asy
 	}
 });
 
-test("connect on a checkout the running service holds saves it as the last connect only", async () => {
+test("connect while the running service holds a checkout saves it as the last connect only", async () => {
 	let root = await realpath(await checkout());
 	let directory = await mkdtemp(join(scratch, "state-"));
 	let lock = (service: boolean) =>
@@ -440,12 +507,16 @@ test("connect on a checkout the running service holds saves it as the last conne
 			lockPath(directory, root),
 			JSON.stringify({ pid: process.pid, root, ...(service ? { service } : {}) }),
 		);
-	// A terminal's connect holds it: refused as before, and nothing is saved.
-	await lock(false);
+	// A terminal's connect holds the base dir: refused as before, and nothing is saved.
+	await writeFile(
+		lockPath(directory, directory),
+		JSON.stringify({ pid: process.pid, checkouts: {} }),
+	);
 	let refused = await connect("pairing", [root, "--", "agent"], directory);
 	expect(refused.code).toBe(1);
-	expect(refused.stderr).toContain("Workspace already locked");
+	expect(refused.stderr).toContain("is already locked by a running connector");
 	expect(await Bun.file(join(directory, "config.json")).exists()).toBe(false);
+	await rm(lockPath(directory, directory));
 
 	await installed(directory, "https://service.example", root);
 	let before = JSON.parse(await readFile(join(directory, "config.json"), "utf8")).service;
@@ -453,14 +524,14 @@ test("connect on a checkout the running service holds saves it as the last conne
 	let saved = await connect("pairing", [root, "--", "new-agent", "--acp"], directory);
 	expect(saved.code).toBe(0);
 	expect(saved.stdout).toBe(
-		"The chopin service is running this checkout. Saved your settings; run chopin service "
+		"The chopin service is running on this machine. Saved your settings; run chopin service "
 			+ "install to use them.\n",
 	);
 	expect(saved.requests).toEqual([]);
 	let config = JSON.parse(await readFile(join(directory, "config.json"), "utf8"));
 	expect(config.connect).toEqual({
 		server: saved.url,
-		checkout: root,
+		checkouts: { "octo-org/score": root },
 		command: [program(programs, "new-agent"), "--acp"],
 		planners: [],
 		plannerCommand: [],
@@ -513,9 +584,9 @@ test.skipIf(process.platform === "win32")(
 		let report = await collectStatus({ directory, server: saved.url, source: "config", host });
 		let service = { state: "running", manager: "systemd", definition: "/u", log: "/l" } as const;
 		expect(formatStatus({ ...report, service: { ...service, notes: [] } })).toContain(
-			`            chopin connect last ran ${root} with --agent atomic (${
+			`            chopin connect last ran --agent atomic (${
 				join(checked, "atomic-acp")
-			}), on ${saved.url}; run chopin service install to use it`,
+			}) with checkouts ${root}, on ${saved.url}; run chopin service install to use it`,
 		);
 		await installService(host, { executable: "/opt/chopin/bin/chopin", directory });
 		let config = JSON.parse(await readFile(join(directory, "config.json"), "utf8"));

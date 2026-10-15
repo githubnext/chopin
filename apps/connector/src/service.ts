@@ -11,7 +11,7 @@ import { connectors, processStart } from "./workspace";
 
 /**
  * `chopin service`: run `chopin connect` as this user's background service, so the machine keeps
- * serving its checkout after a reboot or logout. Linux uses a systemd user unit, macOS a
+ * serving its owner's repositories after a reboot or logout. Linux uses a systemd user unit, macOS a
  * LaunchAgent and Windows a Task Scheduler task. Every service manager call goes through a
  * runner the caller supplies, and nothing here writes a secret: the service reads machine.json
  * when it starts.
@@ -82,7 +82,7 @@ export type ServiceProgram = {
 	directory: string;
 };
 
-export const CONNECT_FIRST = "Run chopin connect once in your checkout first, then chopin service "
+export const CONNECT_FIRST = "Run chopin connect once first, then chopin service "
 	+ "install.";
 
 export const UNIT = "chopin.service";
@@ -643,14 +643,9 @@ function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: 
  * The program `chopin connect` saved, by the full path it found it at, so install never finds
  * another one by name on its own PATH; refused when it was saved without one or is gone since.
  */
-function savedProgram(
-	host: ServiceHost,
-	word: string,
-	what: "agent" | "Planner command",
-	checkout: string,
-) {
-	let again = `Nothing was installed. Run \`chopin connect\` again in ${checkout} so chopin saves `
-		+ `the ${what}'s full path.`;
+function savedProgram(host: ServiceHost, word: string, what: "agent" | "Planner command") {
+	let again = `Nothing was installed. Run \`chopin connect\` again so chopin saves the ${what}'s `
+		+ "full path.";
 	if (!paths(host.platform).isAbsolute(word)) {
 		throw new ServiceError(`The ${what} ${word} was saved without its full path. ${again}`);
 	}
@@ -678,7 +673,7 @@ async function agentPath(host: ServiceHost, settings: ConnectSettings) {
 	for (let index of new Set([0, at])) {
 		let word = command[index]!;
 		let found = index === at
-			? savedProgram(host, word, "agent", settings.checkout)
+			? savedProgram(host, word, "agent")
 			: which(word, pathVariable(host));
 		if (!found) {
 			throw new ServiceError(
@@ -762,7 +757,7 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 	let command = settings.plannerCommand;
 	let planner = command[programAt(command)];
 	if (!settings.planners.length || !planner) return servicePath;
-	let found = savedProgram(host, planner, "Planner command", settings.checkout);
+	let found = savedProgram(host, planner, "Planner command");
 	let passed = await links(host.platform, found);
 	refuseFleeting(
 		host,
@@ -774,7 +769,7 @@ async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servi
 }
 
 /** What Windows needs in the environment to start a process and find a user's folders. */
-const WINDOWS_START = [
+const WINDOWS_START = new Set([
 	"SYSTEMROOT",
 	"COMSPEC",
 	"PATHEXT",
@@ -783,7 +778,7 @@ const WINDOWS_START = [
 	"USERPROFILE",
 	"APPDATA",
 	"LOCALAPPDATA",
-];
+]);
 
 /**
  * The whole environment the start check gives the agent: the service's PATH, the saved --env,
@@ -794,9 +789,7 @@ export function startEnvironment(host: ServiceHost, env: Env | undefined, path: 
 		return { HOME: host.home, USER: host.user, LOGNAME: host.user, PATH: path, ...env };
 	}
 	let name = Object.keys(host.env).find(item => item.toUpperCase() === "PATH") ?? "Path";
-	let needed = Object.entries(host.env).filter(([key]) =>
-		WINDOWS_START.includes(key.toUpperCase())
-	);
+	let needed = Object.entries(host.env).filter(([key]) => WINDOWS_START.has(key.toUpperCase()));
 	return {
 		...Object.fromEntries(needed),
 		HOME: host.home,

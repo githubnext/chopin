@@ -307,6 +307,56 @@ describe("choosing a machine for a document", () => {
 		expect(await upgrade(server.url, credential)).toBe(401);
 	});
 
+	it("asks one machine for the Planners of documents in several repositories", async () => {
+		let { machine, choose, channel, send, storage, url } = await dispatchServer();
+		let notes = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_notes",
+			repositoryOwner: "octo-org",
+			repositoryName: "notes",
+			title: "Notes document",
+			createdBy: "U_member",
+			now: new Date(),
+		});
+		// Both connected with a checkout of octo-org/score only.
+		let laptop = await machine("member", "U_member", "laptop", { protocol: 5 });
+		let older = await machine("member", "U_member", "older", { protocol: 4 });
+		let chooseNotes = async (machineId: string) => {
+			let response = await send(`/api/documents/${notes.id}/machine`, {
+				login: "member",
+				body: { machine: machineId },
+			});
+			expect(response.status).toBe(200);
+			return response.json();
+		};
+		await choose("member", laptop.id);
+		let chosen = await chooseNotes(laptop.id);
+		expect(chosen.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		let asked = await laptop.poll([]);
+		expect(asked.kind).toBe("planners");
+		expect(asked.planners.map((item: { id: string }) => item.id).sort())
+			.toEqual([channel.id, notes.id].sort());
+		expect(asked.planners).toContainEqual({ id: notes.id, url });
+		// Its credential says which repository's checkout the Planner runs in.
+		let issued = await send("/api/connector/planner", {
+			bearer: laptop.token,
+			headers: {
+				[CONNECTOR_VERSION_HEADER]: "dev",
+				[CONNECTOR_PROTOCOL_HEADER]: "5",
+			},
+			body: { document: notes.id },
+		});
+		expect(issued.status).toBe(200);
+		expect((await issued.json()).document).toMatchObject({
+			id: notes.id,
+			repository: "octo-org/notes",
+		});
+		// An older connector connected for octo-org/score is never asked for octo-org/notes.
+		expect((await chooseNotes(older.id)).planner)
+			.toEqual({ state: "none", login: null, machine: null });
+		expect(await older.poll([])).toEqual({ waiting: true });
+	});
+
 	it("never asks a machine without a Planner command or an older connector", async () => {
 		let { machine, choose } = await dispatchServer();
 		let plain = await machine("member", "U_member", "plain", { plannerCommand: false });

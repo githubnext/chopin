@@ -2386,6 +2386,7 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 	connections: experiments.connections,
 	refuseOffline: experiments.refuseOffline,
 	machineChoices: experiments.machineChoices,
+	sourceFor: experiments.sourceFor,
 	busy: async connectionId =>
 		(await experiments!.service.store.active()).some(item =>
 			item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
@@ -2410,6 +2411,7 @@ if (config.liveSpikes) {
 		host: spikeHost({
 			service: experiments.service,
 			connections: experiments.connections,
+			sourceFor: experiments.sourceFor,
 			withPlan: withImplementationPlan,
 			landed: (channelId, value) => {
 				void spikeSettlement.settle(channelId, value.id).catch(err =>

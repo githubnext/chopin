@@ -4,7 +4,7 @@
 
 The `chopin` CLI connects a machine you control to a Chopin server. Builds,
 investigations and Planner work that you start in Chopin then run there, with
-your own coding agent in your own checkout.
+your own coding agent, for documents in any repository you can push to.
 
 The machine only makes outgoing requests. Chopin never connects in, and the
 browser never reads your files.
@@ -35,8 +35,8 @@ In Chopin, open **Machines** and choose **Add machine**. It offers two ways:
 - **Server or VM**, a remote machine that stays connected in the background.
   It pairs with a single-use key, so nobody opens a browser on it.
 
-Either way you copy one command and run it in a checkout on that machine. The
-installer installs `chopin`, then runs `chopin connect` itself. If the install
+Either way you copy one command and run it in a terminal on that machine, in
+any folder. The installer installs `chopin`, then runs `chopin connect` itself. If the install
 fails, it stops with its own message and runs nothing.
 
 The agent must be installed and signed in first. The page shows its install
@@ -70,7 +70,7 @@ appears on the page.
 **Add machine** → **Server or VM** opens **Add a server**. Name the machine if
 you like (without a name Chopin uses its hostname), choose the agent, whether it
 runs in the background (on by default), and whether Chopin may build and prototype on it automatically (off
-unless you turn it on; see [Connect a checkout](#connect-a-checkout)). Then
+unless you turn it on; see [Connect](#connect)). Then
 press **Generate install script**. The command carries a single-use key:
 
 ```sh
@@ -98,7 +98,7 @@ To pair with a key yourself, pass it as `--key` or in `CHOPIN_PAIRING_KEY`:
 
 ```sh
 chopin pair --key chopin_k_…
-chopin connect . --key chopin_k_… --agent copilot
+chopin connect --key chopin_k_… --agent copilot
 ```
 
 If curl can't download the installer at all, it prints why and sh, given no
@@ -132,15 +132,14 @@ your shell profile. Then check that it works:
 chopin --version
 ```
 
-## Connect a checkout
+## Connect
 
 Install your coding agent and sign in to it, as [Coding agents](#coding-agents)
-shows. Then, from your project folder, run `chopin connect` with your server in
-`CHOPIN_URL` and the agent in `--agent`:
+shows. Then run `chopin connect` with your server in `CHOPIN_URL` and the agent
+in `--agent`. Any folder will do:
 
 ```sh
-cd ~/src/score
-CHOPIN_URL=https://your-chopin-instance.example chopin connect . --agent copilot
+CHOPIN_URL=https://your-chopin-instance.example chopin connect --agent copilot
 ```
 
 Once it connects, `chopin connect` saves the server, so you set `CHOPIN_URL`
@@ -165,15 +164,17 @@ When the connection is up, you see:
 
 ```text
 ✓ Connected.
-  Work you start in any octo-org/score document runs here. Ctrl-C disconnects.
+  Work you start in documents of any repository you can push to runs here. Ctrl-C disconnects.
+  It clones each repository the first time work needs it.
 ```
 
-Work from any document in that repository now runs in this checkout.
+One connection serves every repository you can push to on GitHub. Chopin
+checks that you can push to a document's repository each time its work starts
+here.
 
 - `--agent` takes `copilot` or `atomic`. For any other agent that speaks ACP
   over stdio, give its command after `--` instead, as in
-  `chopin connect . -- my-agent --acp`.
-- The checkout's `origin` must be a github.com repository you can push to.
+  `chopin connect -- my-agent --acp`.
 - Set `CHOPIN_DEBUG=1` to see your agent's own log.
 - Ctrl-C stops running work and disconnects. A second Ctrl-C exits at once.
 
@@ -181,23 +182,50 @@ To give your agent and Planner an environment variable, add `--env`, as often
 as you need:
 
 ```sh
-chopin connect . --env SOME_FLAG=1 --agent copilot
+chopin connect --env SOME_FLAG=1 --agent copilot
 ```
 
 `chopin` saves these values in `config.json`, which only you can read. Keep
 secrets in your agent's own login instead. You can't set `PATH` or a
 `CHOPIN_` variable this way.
 
+### Your checkouts and clones
+
+Work in a repository runs from a checkout of it. By default `chopin` clones the
+repository the first time work needs it, into
+`~/.local/state/chopin/connector/repos/<owner>/<repo>`, and fetches it again
+before each piece of work. It clones over HTTPS with the GitHub token Chopin
+gives the machine. The token reaches Git only through its environment, never a
+command line or the clone's own settings.
+
+To use a checkout you already have, with its branches, dependencies and local
+settings, name it with `--checkout`, as often as you like:
+
+```sh
+chopin connect --checkout ~/src/score --checkout ~/src/site --agent copilot
+```
+
+Each must be a clone of a GitHub repository (its `origin` on github.com) with
+at least one commit, and only one per repository. A path given on its own, as
+in `chopin connect ~/src/score`, counts as one `--checkout`. Work in those
+repositories runs from your checkouts; work in any other repository runs from a
+clone. `chopin status` lists both.
+
+If your server gives machines no GitHub token (`AUTH_MODE=local`), there is
+nothing to clone with, so name a checkout of each repository you work in. Work
+in a repository without one fails with
+`This machine has no checkout of <owner>/<repo>`, followed by the command to
+run.
+
 ### Choose a machine for a document
 
-With more than one machine connected for a repository, Chopin picks one for
-you by default: your default machine when it is connected and free, else the
+With more than one machine connected, Chopin picks one for you by default: your default machine when it is connected and free, else the
 machine that last worked on the document, else the first idle one. Most people
 never need more than that. To pin one document to a machine, open the
 document's title menu and choose **Machine**. It shows the current choice
 (**Default**, or a machine's name) and opens the machine list in place:
-**Default machine** (with the machine it uses now), then your machines that
-serve the repository with their state; offline ones are greyed out. On a phone,
+**Default machine** (with the machine it uses now), then each of your machines
+with its state; offline ones are greyed out. On a phone,
 **Machine** in the title's actions sheet opens the same list as a sheet. The
 choice is yours alone and holds for that document until you change it:
 
@@ -205,7 +233,7 @@ choice is yours alone and holds for that document until you change it:
   document go to the machine you chose, behind any work it is already running.
 - Rebuilds and prototypes Chopin starts for you follow the same choice, and
   still need the machine's consent to automatic work.
-- You can choose only your own machines that serve the document's repository.
+- You can choose only your own machines.
 - If the machine you chose is offline, **Build plan** is greyed out, as offline
   machines are in the list, and starts nothing. It changes within a few seconds
   of the machine going offline or coming back, as does the Machines count in
@@ -225,15 +253,15 @@ listing **Any available** and each of your machines with its state, then **Add
 machine…** and **Manage machines** for the full page. The default is the
 machine marked as your favorite on the **Machines** page too (its star, or **Set
 as favorite** in its menu). Only one machine is your
-default. Chopin uses it first whenever it is connected for the document's
-repository and free, and otherwise picks as before; a machine you chose for a
+default. Chopin uses it first whenever it is connected and free, and otherwise
+picks as before; a machine you chose for a
 document never moves. Your default is yours alone and applies to every document
 left on **Default machine**.
 
 ### Coding agents
 
 The Machines page offers these agents. **Connect with** is what follows
-`chopin connect .`, and **Runs** is the command and variables it starts:
+`chopin connect`, and **Runs** is the command and variables it starts:
 
 | Agent                                                                                               | Install                                              | Sign in                                  | Node.js        | Connect with      | Runs                               | Tested with Chopin |
 | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------- | ----------------- | ---------------------------------- | ------------------ |
@@ -247,7 +275,7 @@ without asking. Atomic doesn't ask, and `ATOMIC_ACP_HEADLESS=1` ends its
 questions at once instead of waiting for an answer.
 
 Arguments after `--` go to the agent. For example,
-`chopin connect . --agent atomic -- --model openai/gpt-5.5` runs
+`chopin connect --agent atomic -- --model openai/gpt-5.5` runs
 `atomic-acp -- --model openai/gpt-5.5`, which passes them on to Atomic. An
 `--env` you give wins over the agent's own variable of the same name.
 
@@ -255,7 +283,7 @@ For any other agent that speaks ACP over stdio, give its command after `--`
 instead of `--agent`, with its approval flag if it has one:
 
 ```sh
-chopin connect . -- my-agent --acp
+chopin connect -- my-agent --acp
 ```
 
 In PowerShell, quote a package name that starts with `@`, for example
@@ -280,7 +308,7 @@ The quickest way is one command. It connects, and once it sees
 `✓ Connected.` it disconnects and installs the service:
 
 ```sh
-chopin connect . --install-service --agent copilot
+chopin connect --install-service --agent copilot
 ```
 
 You can also do it in two steps:
@@ -302,20 +330,19 @@ terminal, pass `--skip-check`.
 The service can't answer permission prompts. The built-in agents already
 approve their own tools; give any other agent its approval flag.
 
-A later `chopin connect`, here or in another checkout, doesn't change what the
-service runs. To change it, connect again with the new arguments, then install
-again:
+A later `chopin connect` doesn't change what the service runs. To change it,
+run `chopin connect` with the new arguments, then install again:
 
 ```sh
-chopin connect ~/src/other-project --agent copilot   # Ctrl-C after ✓ Connected.
+chopin connect --checkout ~/src/other-project --agent copilot
 chopin service install
 ```
 
-If the service is running the checkout you connect, `chopin connect` saves your
-settings without connecting and prints:
+While the service is running, `chopin connect` doesn't connect a second time.
+It saves your settings and prints:
 
 ```text
-The chopin service is running this checkout. Saved your settings; run chopin service install to use them.
+The chopin service is running on this machine. Saved your settings; run chopin service install to use them.
 ```
 
 Each operating system has its own catch:
@@ -345,13 +372,15 @@ chopin status
 You see something like this:
 
 ```text
-chopin 0.0.2 (connector protocol 3)
+chopin 0.0.11 (connector protocol 5)
 Server:     https://your-chopin-instance.example (saved by chopin connect)
 Machine:    paired as build-box (octocat); Chopin accepts it
-Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
+Connector:  running (pid 4242, chopin 0.0.11, the service)
 Service:    running (systemd, pid 4242)
             definition: /home/me/.config/systemd/user/chopin.service
-            runs /home/me/src/score with --agent copilot (/home/me/.local/bin/copilot --acp --allow-all), on https://your-chopin-instance.example
+            runs --agent copilot (/home/me/.local/bin/copilot --acp --allow-all) with checkouts /home/me/src/score, on https://your-chopin-instance.example
+Checkouts:  octo-org/score at /home/me/src/score
+Clones:     octo-org/site at /home/me/.local/state/chopin/connector/repos/octo-org/site
 Runs:       4 finished runs kept (1.2 GB), 1 running
 Planners:   /home/me/.local/state/chopin/connector/planners/octo-org/score/5f0c…e21 (octo-org/score, document 5f0c…e21)
 Log:        /home/me/.local/state/chopin/connector/chopin.log
@@ -369,7 +398,7 @@ and the Planner's credential replaced with `[redacted]`. A line too long to
 mask is left out, with a note in its place:
 
 ```text
-Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
+Connector:  running (pid 4242, chopin 0.0.11, the service)
               Planner for https://your-chopin-instance.example/octo-org/score/plan: failing (exit 127: /usr/bin/env: 'node': No such file or directory), retrying in 22s
 ```
 
@@ -382,7 +411,7 @@ beside the `--planner` ones (`canRunPlanners` and `chosenPlanners` in
 `--json`):
 
 ```text
-Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.6)
+Connector:  running (pid 4242, chopin 0.0.11)
               Can run Planners for documents that choose this machine
               Planner for https://your-chopin-instance.example/octo-org/score/plan (chosen in Chopin)
 ```
@@ -397,12 +426,14 @@ machine can run a document's Planner. Pass the document's URL with `--planner`
 and your Planner backend's command with `--planner-command`:
 
 ```sh
-chopin connect . --planner https://your-chopin-instance.example/octo-org/score/plan \
+chopin connect --planner https://your-chopin-instance.example/octo-org/score/plan \
   --planner-command "my-planner --flag" --agent copilot
 ```
 
-`--planner` can repeat. `chopin` runs the command in the checkout for each
-document and restarts it when it exits. The command connects to Chopin itself,
+`--planner` can repeat. `chopin` runs the command for each document in the
+checkout of the document's repository, yours or a clone (see
+[Your checkouts and clones](#your-checkouts-and-clones)), and restarts it when it
+exits. The command connects to Chopin itself,
 over the [agent connection](agent-connection.md). See
 [Planner backend commands](agent-connection.md#planner-backend-commands) for what
 it must do.
@@ -411,7 +442,7 @@ With `--planner-command` alone, the machine says it can run Planners without
 naming any document:
 
 ```sh
-chopin connect . --planner-command "my-planner --flag" --agent copilot
+chopin connect --planner-command "my-planner --flag" --agent copilot
 ```
 
 Choose this machine for a document under **Machine** in its title menu, and
@@ -423,7 +454,8 @@ Choosing another machine or **Default machine** stops it and prints
 disconnecting or revoking the machine, or losing push access to the repository.
 Chopin then voids the credentials it gave the machine for that document.
 
-This needs a server that speaks connector protocol 4.
+One machine runs the Planners of documents in as many repositories as you
+choose it for.
 
 In the **Machine** list, a machine started without `--planner-command` is
 greyed out.
@@ -431,7 +463,7 @@ greyed out.
 ## Where things live on this machine
 
 `chopin connect` keeps its files in its base dir,
-`~/.local/state/chopin/connector`, never in your checkout.
+`~/.local/state/chopin/connector`, never in your checkouts.
 [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
 lists them all.
 
@@ -440,6 +472,7 @@ lists them all.
 | `runs/<run id>`                         | A job's worktree, for you to inspect                | Once 15 newer runs have finished                |
 | `runs/<run id>-worktrees/`              | Extra worktrees a build adds for more pull requests | When the run ends, uncommitted changes included |
 | `planners/<owner>/<repo>/<document id>` | A Planner command's worktree for one document       | Never                                           |
+| `repos/<owner>/<repo>`                  | A clone of a repository you named no checkout of    | Never                                           |
 
 `--keep-runs <n>` keeps `n` finished runs instead of 15, and `--keep-runs 0`
 keeps them all. `chopin` never removes a run that is going or waiting to start.
@@ -494,13 +527,14 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 | Command                                                     | What it does                                                                                                      |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `chopin connect [checkout] [--key <key>] --agent <id>`      | Runs work from Chopin with a built-in agent in this checkout. Pairs first if needed.                              |
-| `chopin connect [checkout] … -- <command>`                  | Runs any other ACP agent's command instead.                                                                       |
+| `chopin connect [--key <key>] --agent <id>`                 | Runs work from Chopin, in any repository you can push to, with a built-in agent. Pairs first if needed.           |
+| `chopin connect … -- <command>`                             | Runs any other ACP agent's command instead.                                                                       |
+| `chopin connect … --checkout <path>`                        | Uses your checkout for its repository's work instead of a clone. Repeat it for more; a bare path counts as one.   |
 | `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
 | `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                |
 | `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                        |
-| `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log.                         |
+| `chopin status [--json]`                                    | Shows the server, pairing, the connector, the service and what it runs, your checkouts and clones, and the log.   |
 | `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                        |
 | `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                                                |
 | `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.                                       |
@@ -528,12 +562,13 @@ Each message says what to run next. The first line of each:
 | `npm error code EACCES`                             | npm can't write its global folder. Don't use `sudo`: run `npm config set prefix ~/.npm-global`, add `export PATH="$HOME/.npm-global/bin:$PATH"` to your shell profile, open a new terminal and install again. Or install Node.js with a version manager such as [nvm](https://github.com/nvm-sh/nvm), whose npm needs no `sudo`. |
 | `… isn't installed`                                 | Install and sign in to the agent with the commands the message lists, then run the command again.                                                                                                                                                                                                                                |
 | `… needs Node.js … or newer`                        | Install that Node.js (`nvm install 22`, or nodejs.org), reinstall the agent, then run the command again.                                                                                                                                                                                                                         |
-| `… isn't inside a git checkout`                     | `cd` into your repository's folder, then run the command again.                                                                                                                                                                                                                                                                  |
+| `… isn't inside a git checkout`                     | Give `--checkout` the folder of a clone from GitHub, or leave it out and `chopin` clones each repository as work needs it.                                                                                                                                                                                                       |
 | `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                                                                                                                                                                                                                                            |
 | `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                                                                                                                                                                                                                                      |
 | `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Server or VM**, then run it.                                                                                                                                                                                                                                       |
 | `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then generate a new script.                                                                                                                                                                                                                               |
-| `The account that made the key can't push to …`     | Ask an owner for write access, then run the command again.                                                                                                                                                                                                                                                                       |
+| `You can't push to … on GitHub`                     | Chopin won't run that repository's work on this machine. Ask an owner for write access, or drop that `--checkout`.                                                                                                                                                                                                               |
+| `This machine has no checkout of …`                 | Your server gives machines no GitHub token to clone with. Run `chopin connect --checkout <path>` with a clone of that repository, then start the work again.                                                                                                                                                                     |
 | `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                                                                                                                                                                                                                                               |
 | `… didn't answer ACP initialize`                    | Sign in to the agent with the command the message names, then run the command again.                                                                                                                                                                                                                                             |
 | `… asks for permission in the terminal`             | Run the command without `--install-service` and keep the terminal open.                                                                                                                                                                                                                                                          |
@@ -545,9 +580,8 @@ Each message says what to run next. The first line of each:
 `chopin connect` saved. Run `chopin connect` again with the server you want in
 `CHOPIN_URL`, then `chopin service install`.
 
-**"Run chopin connect once in your checkout first, then chopin service
-install."** Run `chopin connect` in your checkout, wait for `✓ Connected.`,
-press Ctrl-C, then install again.
+**"Run chopin connect once first, then chopin service install."** Run
+`chopin connect`, wait for `✓ Connected.`, press Ctrl-C, then install again.
 
 **"This machine is not paired with …"** The service can't pair. Run
 `chopin pair` at a terminal, then the command the message names.
@@ -584,9 +618,10 @@ can't start without a terminal, pass `--skip-check`.
 **"chopin can't reach your systemd user manager."** Run the command in a login
 session as the user who owns the service, not through `su` or `sudo -u`.
 
-**"Workspace already locked."** Another `chopin connect`, or the service, is
-serving this checkout. Stop it, or if `chopin status` shows nothing running
-there, delete the `.lock` file the message names.
+**"… is already locked by a running connector"** Another `chopin connect`, or
+the service, is already connected with this base dir, and one connection serves
+every repository. Stop it, or if `chopin status` shows nothing running, delete
+the `.lock` file the message names.
 
 For files, versions, the server rules, service internals, starting the Windows
 task at boot and status JSON, see the [chopin CLI reference](chopin-cli-reference.md).

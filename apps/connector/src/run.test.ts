@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { serveWork } from "./connection";
 import { createOutput } from "./output";
 import { processesIn } from "./processes";
+import { checkouts } from "./checkouts";
 import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
@@ -67,7 +68,7 @@ async function run(
 			title: "Margin landing page",
 			runToken: "token",
 		}, {
-			root,
+			checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 			directory: state,
 			command: [
 				process.execPath,
@@ -213,7 +214,7 @@ test.each([true, false])(
 					authorizer: "a",
 				},
 			}, {
-				root,
+				checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 				directory: state,
 				command: [
 					process.execPath,
@@ -758,7 +759,7 @@ test("a run whose connection a restarted server forgot stops its agent and the c
 			random: () => 0.01,
 			run: (api, kind, claim) =>
 				runWork(api, kind, claim, {
-					root,
+					checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 					directory: state,
 					command: [
 						process.execPath,

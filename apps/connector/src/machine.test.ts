@@ -252,7 +252,11 @@ test("connect reuses a stored machine token without pairing again", async () => 
 	expect(chopin.calls[0]).toMatchObject({
 		path: "/api/connector/connections",
 		bearer: MACHINE_TOKEN,
-		body: { repository: "octo-org/score" },
+		// The machine, by its host name, with the checkout it registered.
+		body: {
+			label: hostname(),
+			checkouts: [expect.objectContaining({ repository: "octo-org/score" })],
+		},
 	});
 	// It says which machine it is, for its owner's list: no agent yet, as none has run here.
 	expect(chopin.calls[0]!.about).toEqual({
@@ -354,7 +358,8 @@ test("connect pairs first when this machine has no token for the server", async 
 		"/api/connector/pairings/pairing/claim",
 		"/api/connector/connections",
 	]);
-	expect(chopin.calls[0]!.body).toMatchObject({ repository: "octo-org/score" });
+	// It pairs the machine, not a checkout.
+	expect(chopin.calls[0]!.body).toEqual({ label: hostname() });
 	expect(JSON.parse(await readFile(join(home, "machine.json"), "utf8")).servers[chopin.url].token)
 		.toBe(MACHINE_TOKEN);
 });
@@ -401,7 +406,7 @@ test("connect takes the key from CHOPIN_PAIRING_KEY, pairs with no browser, and 
 		"/api/connector/pairings",
 		"/api/connector/connections",
 	]);
-	expect(chopin.calls[0]!.body).toMatchObject({ repository: "octo-org/score", key: PAIRING_KEY });
+	expect(chopin.calls[0]!.body).toEqual({ label: hostname(), key: PAIRING_KEY });
 	expect(await everything(home)).not.toContain(PAIRING_KEY);
 	expect(await everything(home)).toContain(MACHINE_TOKEN);
 });

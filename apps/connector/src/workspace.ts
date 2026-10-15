@@ -34,8 +34,9 @@ export async function workspace(path: string) {
 			);
 		}
 		throw new Error(
-			`${path} isn't inside a git checkout, so nothing was paired or connected. cd into your `
-				+ `repository's folder (a clone from GitHub), ${again}`,
+			`${path} isn't inside a git checkout, so nothing was paired or connected. Give --checkout `
+				+ "the folder of a clone from GitHub, or leave it out to clone each repository as work "
+				+ `needs it; ${again}`,
 			{ cause: error },
 		);
 	}
@@ -77,7 +78,7 @@ export function stateDirectory() {
 }
 
 /** A path segment made only of characters safe in any file system, never `.` or `..`. */
-function segment(value: string) {
+export function segment(value: string) {
 	let safe = value.replace(/[^A-Za-z0-9._-]/g, "_");
 	return /^\.*$/.test(safe) ? `_${safe}` : safe;
 }
@@ -185,19 +186,29 @@ export function processStart(
 }
 
 /**
- * Hold a checkout for this process. The lock names the process, when it started, the checkout
- * and the chopin that holds it, so `chopin status` can list the connectors running for a state
- * directory; `service` marks the one the installed service runs, `planners` names the
- * documents whose Planner backends it runs, and `plannerCommand` says it has a Planner command, so
- * it can run the Planner of a document that chooses this machine. The lock holds no credential.
+ * Hold `root` for this process: the base dir itself for a connector, which connects the machine,
+ * so one connector at a time runs for a base dir. The lock names the process, when it started,
+ * the checkouts it registered (or an older connector's one checkout) and the chopin that holds
+ * it, so `chopin status` can list the connectors running for a state directory; `service` marks
+ * the one the installed service runs, `planners` names the documents whose Planner backends it
+ * runs, and `plannerCommand` says it has a Planner command, so it can run the Planner of a
+ * document that chooses this machine. The lock holds no credential.
  */
 export async function lockWorkspace(
 	root: string,
 	directory: string,
-	{ service = false, planners = [], plannerCommand = false, probe = processStart() }: {
+	{
+		service = false,
+		planners = [],
+		plannerCommand = false,
+		checkouts,
+		probe = processStart(),
+	}: {
 		service?: boolean;
 		planners?: string[];
 		plannerCommand?: boolean;
+		/** The checkouts a machine's connector registered, by repository. */
+		checkouts?: Record<string, string>;
 		probe?: StartProbe;
 	} = {},
 ) {
@@ -210,7 +221,8 @@ export async function lockWorkspace(
 		// A connector that crashed leaves its lock behind; replace it once its process is gone.
 		if (!await staleLock(path, probe)) {
 			throw new Error(
-				`Workspace already locked. After confirming no connector is running, remove ${path}`,
+				`${directory} is already locked by a running connector, which serves every `
+					+ `repository. Stop it first, or after confirming none is running, remove ${path}`,
 			);
 		}
 		await rm(path, { force: true });
@@ -224,7 +236,7 @@ export async function lockWorkspace(
 	await file.writeFile(JSON.stringify({
 		pid: process.pid,
 		...(started ? { processStart: started.id } : {}),
-		root,
+		...(checkouts ? { checkouts } : { root }),
 		version: VERSION,
 		protocol: CONNECTOR_PROTOCOL,
 		started: Date.now(),
@@ -318,21 +330,23 @@ export function chosenPlanners(directory: string, root: string) {
 export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
 
 /**
- * The checkout's repository once Chopin said its GitHub App can't push there, so the machine's
- * processes use its own GitHub login for it, kept for `chopin status` in a file beside the
- * checkout's lock. `record` is true only the first time, so the connector says it once.
+ * The repositories Chopin said its GitHub App can't push to, so the machine's processes use its
+ * own GitHub login for them, kept for `chopin status` in a file beside the connector's lock.
+ * `record` is true only the first time for each, so the connector says it once.
  */
 export function githubFallback(directory: string, root: string) {
 	let path = join(directory, `${lockId(root)}.github.json`);
 	// A connector that crashed may have left its note behind.
 	let writing = rm(path, { force: true }).catch(() => {});
-	let recorded = false;
+	let recorded: string[] = [];
 	return {
 		record(repository: string) {
-			if (recorded) return false;
-			recorded = true;
-			writing = writing.then(() => writeFile(path, JSON.stringify({ repository }), { mode: 0o600 }))
-				.catch(() => {});
+			if (recorded.some(value => value.toLowerCase() === repository.toLowerCase())) return false;
+			recorded.push(repository);
+			let repositories = [...recorded];
+			writing = writing.then(() =>
+				writeFile(path, JSON.stringify({ repositories }), { mode: 0o600 })
+			).catch(() => {});
 			return true;
 		},
 	};
@@ -379,7 +393,10 @@ async function staleLock(path: string, probe: StartProbe): Promise<boolean> {
 /** A connector that holds, or held until it crashed, a checkout's lock in a state directory. */
 export type RunningConnector = {
 	pid: number;
-	root: string;
+	/** An older connector's one checkout. */
+	root?: string;
+	/** The checkouts a machine's connector registered, by repository. */
+	checkouts?: Record<string, string>;
 	/**
 	 * False when the lock is stale: its process is gone, or its pid now belongs to a process that
 	 * started at another time. The next `connect` replaces it.
@@ -399,8 +416,8 @@ export type RunningConnector = {
 	started?: number;
 	/** How its agent or Planner backends last failed to start, while it runs. */
 	failures?: StartFailure[];
-	/** The repository its GitHub App can't push to, so its machine uses its own login there. */
-	githubCannotPush?: string;
+	/** The repositories its GitHub App can't push to, so its machine uses its own login there. */
+	githubCannotPush?: string[];
 };
 
 /**
@@ -420,8 +437,15 @@ export async function connectors(
 		} catch {
 			continue;
 		}
-		let { pid, root, version, protocol, started, planners } = held;
-		if (!Number.isSafeInteger(pid) || (pid as number) <= 0 || typeof root !== "string") continue;
+		let { pid, root, version, protocol, started, planners, checkouts } = held;
+		let registered = checkouts && typeof checkouts === "object" && !Array.isArray(checkouts)
+				&& Object.values(checkouts).every(path => typeof path === "string")
+			? checkouts as Record<string, string>
+			: undefined;
+		if (
+			!Number.isSafeInteger(pid) || (pid as number) <= 0
+			|| typeof root !== "string" && !registered
+		) continue;
 		let running = await holds(held, probe);
 		let failures = running
 			? await readFile(join(directory, name.replace(/\.lock$/, ".failures.json")), "utf8")
@@ -435,12 +459,19 @@ export async function connectors(
 			: undefined;
 		let github: unknown = running
 			? await readFile(join(directory, name.replace(/\.lock$/, ".github.json")), "utf8")
-				.then(text => (JSON.parse(text) as { repository?: unknown }).repository)
+				.then(text => {
+					let value = JSON.parse(text) as { repository?: unknown; repositories?: unknown };
+					return Array.isArray(value.repositories) ? value.repositories : [value.repository];
+				})
 				.catch(() => undefined)
 			: undefined;
+		let refused = Array.isArray(github)
+			? github.filter((value): value is string => typeof value === "string")
+			: [];
 		found.push({
 			pid: pid as number,
-			root,
+			...(typeof root === "string" ? { root } : {}),
+			...(registered ? { checkouts: registered } : {}),
 			running,
 			service: held.service === true,
 			...(Array.isArray(planners) && planners.length
@@ -456,7 +487,7 @@ export async function connectors(
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),
 			...(Array.isArray(failures) && failures.length ? { failures } : {}),
-			...(typeof github === "string" ? { githubCannotPush: github } : {}),
+			...(refused.length ? { githubCannotPush: refused } : {}),
 		});
 	}
 	return found;
@@ -501,14 +532,15 @@ export async function prepareWorkspace(
 	input: Pick<RunInput, "id" | "source">,
 	generation = 1,
 	probe: StartProbe = processStart(),
+	/** Credential configuration for git, through the environment, to fetch the run's commit. */
+	env: Record<string, string> = {},
 ) {
 	let current = await workspace(root);
 	if (current.repository.toLowerCase() !== input.source.repository.toLowerCase()) {
 		throw new Error("Repository differs from the authorized run.");
 	}
 	await mkdir(join(directory, "runs"), { recursive: true, mode: 0o700 });
-	// Retry keeps the investigation ID but claims a new generation. Keep earlier work intact.
-	let attempt = generation === 1 ? input.id : `${input.id}-${generation}`;
+	let attempt = runAttempt(input.id, generation);
 	let journalPath = join(directory, "runs", `${attempt}.json`);
 	let journal;
 	try {
@@ -537,6 +569,7 @@ export async function prepareWorkspace(
 	} catch {
 		await promisify(execFile)("git", ["-C", root, "fetch", "origin", input.source.commit], {
 			timeout: 120_000,
+			env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: "0" },
 		});
 	}
 	let path = join(directory, "runs", attempt);
@@ -552,6 +585,14 @@ export async function prepareWorkspace(
 	let extras = extraWorktrees(path);
 	await mkdir(extras, { recursive: true, mode: 0o700 });
 	return { path, journalPath, extras };
+}
+
+/**
+ * A run's name in `<base>/runs`: a retry keeps the investigation ID but claims a new generation,
+ * so earlier work stays intact.
+ */
+export function runAttempt(id: string, generation = 1) {
+	return generation === 1 ? id : `${id}-${generation}`;
 }
 
 /** The folder for a run's extra worktrees, beside the run's own: `<base>/runs/<run>-worktrees`. */

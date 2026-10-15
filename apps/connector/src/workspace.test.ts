@@ -179,7 +179,7 @@ test("lists the connectors running for a state directory, and those whose proces
 		await writeFile(join(state, "machine.json.lock"), JSON.stringify({ pid: process.pid }));
 		await writeFile(join(state, `${"b".repeat(64)}.lock`), "");
 		let listed = await connectors(state);
-		expect(listed.sort((a, b) => a.root.localeCompare(b.root))).toEqual([
+		expect(listed.sort((a, b) => (a.root ?? "").localeCompare(b.root ?? ""))).toEqual([
 			{ pid: child.pid, root: "/fixture/crashed", running: false, service: false },
 			{
 				pid: process.pid,

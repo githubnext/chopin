@@ -6,7 +6,7 @@ export const RENEW_BEFORE_MS = 25 * 60_000;
 /** How soon a renewal that failed is tried again, until the token expires. */
 const RETRY_MS = 60_000;
 
-/** What the connector says, once, when the GitHub App can't push to the checkout's repository. */
+/** What the connector says, once for each, when the GitHub App can't push to a repository. */
 export function appCannotPush(repository: string) {
 	return `The GitHub App can't push to ${repository} (it needs Contents and Pull requests write), `
 		+ "so this machine uses its own GitHub login for it.";
@@ -35,7 +35,7 @@ export async function githubToken(options: {
 	machine: string;
 	repository: string;
 	file: string;
-	refused?: (message: string) => void;
+	refused?: (message: string, repository: string) => void;
 	renewBeforeMs?: number;
 }): Promise<GitHubToken | undefined> {
 	let { file } = options;
@@ -45,7 +45,7 @@ export async function githubToken(options: {
 		first = await ask();
 	} catch (error) {
 		if (errorCode(error) === "app-cannot-push") {
-			options.refused?.(appCannotPush(options.repository));
+			options.refused?.(appCannotPush(options.repository), options.repository);
 		}
 		return undefined;
 	}
@@ -110,15 +110,22 @@ export async function githubToken(options: {
  * nothing goes into the repository's own configuration.
  */
 export function githubEnvironment(github: GitHubToken): Record<string, string> {
-	let file = `'${github.file.replaceAll("'", "'\\''")}'`;
+	return { GH_TOKEN: github.token, GITHUB_TOKEN: github.token, ...gitCredentials(github.file) };
+}
+
+/**
+ * Git configuration, through the environment, whose only credential helper for github.com reads
+ * the token in `file`, so a renewed token is used as soon as it is written and the token itself is
+ * never on a command line or in a repository's configuration.
+ */
+export function gitCredentials(file: string): Record<string, string> {
+	let quoted = `'${file.replaceAll("'", "'\\''")}'`;
 	return {
-		GH_TOKEN: github.token,
-		GITHUB_TOKEN: github.token,
 		GIT_CONFIG_COUNT: "2",
 		GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
 		GIT_CONFIG_VALUE_0: "",
 		GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
 		GIT_CONFIG_VALUE_1:
-			`!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat ${file}; }; f`,
+			`!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat ${quoted}; }; f`,
 	};
 }

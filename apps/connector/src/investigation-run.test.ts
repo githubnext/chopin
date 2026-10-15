@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConnectorError } from "./mcp";
 import { createOutput } from "./output";
+import { checkouts } from "./checkouts";
 import { runWork } from "./run";
 import { git, prepareWorkspace } from "./workspace";
 
@@ -57,7 +58,7 @@ test("an authorized retry starts despite an older receipt and reports why its ag
 				runToken: "run-token",
 			},
 			{
-				root,
+				checkouts: checkouts({ directory, registered: { "org/repo": root } }),
 				directory,
 				command: [
 					process.execPath,

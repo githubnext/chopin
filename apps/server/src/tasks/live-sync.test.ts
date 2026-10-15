@@ -8,6 +8,7 @@ import { Experiments } from "../experiments/service";
 import { close, implementationActive, open, rewrite, source } from "../plan/service";
 
 import type { Server } from "bun";
+import { serves } from "../experiments/connections";
 import type { Connection } from "../experiments/connections";
 import type { Backend, Plan } from "../plan/service";
 import type { LiveDelta } from "./live-sync";
@@ -50,12 +51,13 @@ function connection(id: string, owner = "octocat", autoRun = true): Connection {
 		login: owner,
 		machineId: "machine",
 		label: "Laptop",
-		source: {
+		checkouts: [{
 			repositoryId: "R_score",
 			repository: "octo-org/score",
 			branch: "main",
 			commit: "b".repeat(40),
-		},
+		}],
+		anyRepository: false,
 		expiresAt: Number.MAX_SAFE_INTEGER,
 	};
 }
@@ -132,7 +134,7 @@ async function harness(
 			get: id => available.find(item => item.id === id),
 			list: (repositoryId, owner) =>
 				available.filter(item =>
-					item.source.repositoryId === repositoryId && (owner === undefined || item.owner === owner)
+					serves(item, repositoryId) && (owner === undefined || item.owner === owner)
 				),
 			assign: (connectionId, documentId) => assignments.set(connectionId, documentId),
 			assigned: connectionId => assignments.get(connectionId),

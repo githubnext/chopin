@@ -18,7 +18,7 @@ function capture(tty: boolean, env: Record<string, string | undefined> = {}) {
 test("connector messages are plain text on stdout when not a terminal", () => {
 	let { output, out, err } = capture(false);
 	output.pairing("org/repo", "https://chopin.test/connect?pairing=abc", "ABCD-EFGH");
-	output.connected("org/repo");
+	output.connected(["org/repo"]);
 	output.job("build", "Ship the thing", "/tmp/runs/1");
 	output.finished();
 	expect(out()).toBe(
@@ -33,7 +33,9 @@ test("connector messages are plain text on stdout when not a terminal", () => {
 			"   ABCD-EFGH",
 			"",
 			"✓ Connected.",
-			"  Work you start in any org/repo document runs here. Ctrl-C disconnects.",
+			"  Work you start in documents of any repository you can push to runs here. Ctrl-C "
+			+ "disconnects.",
+			"  It uses your checkouts of org/repo and clones any other.",
 			"",
 			"› Building Ship the thing",
 			"  /tmp/runs/1",

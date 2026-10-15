@@ -611,7 +611,7 @@ A paired machine can run a document's Planner without a browser sign-in. The
 hands it a credential; the backend attaches over this connection like any client.
 
 ```sh
-chopin connect . --planner https://chopin.example/octo-org/score/plan \
+chopin connect --planner https://chopin.example/octo-org/score/plan \
   --planner-command "my-planner --flag" --agent copilot
 ```
 
@@ -619,8 +619,10 @@ chopin connect . --planner https://chopin.example/octo-org/score/plan \
 shell would, without expanding anything: single and double quotes, also inside
 a word as in `--label="two words"`, and backslash escapes outside single
 quotes; an unmatched quote is refused. `CHOPIN_PLANNER_COMMAND` may hold the
-command as a JSON array of words instead. The command runs in the checkout
-`connect` serves, in its own process group. Its standard output and error go
+command as a JSON array of words instead. The command runs in the checkout of
+the document's repository, in its own process group: the one `--checkout` named,
+else a clone in `<base dir>/repos/<owner>/<repo>` that the connector makes once
+and fetches again before each launch. Its standard output and error go
 to the connector's a line at a time, with its credential, your `--env` values
 and anything that looks like a token replaced with `[redacted]`; a line too
 long to mask is left out, with a note in its place.
@@ -634,7 +636,7 @@ Each launch gets the connector's environment, your `--env` values, and these:
 | `CHOPIN_URL`                     | The server's origin.                                                                     |
 | `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin chose this machine.         |
 | `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                 |
-| `CHOPIN_CHECKOUT`                | The checkout's absolute root.                                                            |
+| `CHOPIN_CHECKOUT`                | The absolute root of the document's repository's checkout or clone.                      |
 | `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.     |
 | `CHOPIN_GITHUB_TOKEN`            | The machine owner's token from Chopin's GitHub App, for pushing and draft pull requests. |
 | `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601.                                                    |

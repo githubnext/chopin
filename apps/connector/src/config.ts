@@ -15,8 +15,13 @@ export type InstalledService = ServiceProgram & {
 export type ConnectSettings = {
 	/** The Chopin origin connect connected to: CHOPIN_URL, or the default. */
 	server: string;
-	/** The checkout's absolute root. */
-	checkout: string;
+	/**
+	 * The checkouts `--checkout` registered, by GitHub repository (`owner/name`) to their absolute
+	 * root. Work in any other repository its owner can push to runs in a clone made on demand.
+	 */
+	checkouts?: Record<string, string>;
+	/** The one checkout an older chopin connected, which this one registers. */
+	checkout?: string;
 	/** The built-in agent `--agent` named, whose command and variables `command` and `env` hold. */
 	agent?: string;
 	/** The agent's ACP command, as `connect` takes it after `--`. */

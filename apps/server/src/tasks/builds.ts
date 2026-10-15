@@ -14,6 +14,7 @@ import { announceImplementation } from "./notifications";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
+import { checkoutOf, serves } from "../experiments/connections";
 import type { Connection } from "../experiments/connections";
 import type { Lifecycle, ProgressEvent } from "./lifecycle";
 import type { Graph, Run } from "./graphs";
@@ -281,6 +282,21 @@ export function stoppedForRevision(plan: Plan, revision = plan.revision): boolea
  * A person who presses Build instead (`by`) builds the edits on their own connection. A connection
  * already holding another document's build is skipped so the rebuild cannot strand that build.
  */
+/** The checkout a connection says it has of a repository, else `fallback`. */
+function checkoutFor(
+	connection: Connection,
+	repositoryId: string,
+	fallback: BuildRequest["checkout"],
+): BuildRequest["checkout"] {
+	let source = checkoutOf(connection, repositoryId);
+	if (!source) return structuredClone(fallback);
+	return {
+		repository: source.repository,
+		commit: source.commit,
+		...(source.branch ? { branch: source.branch } : {}),
+	};
+}
+
 export async function queueRebuild(
 	plan: Plan,
 	connections: RebuildConnections,
@@ -307,7 +323,7 @@ export async function queueRebuild(
 		let usable = (connection: Connection | undefined) => {
 			let assigned = connection && connections.assigned(connection.id);
 			return !!connection && connection.owner === owner
-				&& connection.source.repositoryId === live.repositoryId
+				&& serves(connection, live.repositoryId)
 				&& (!options.automatic || connection.autoRun === true)
 				&& (connections.allows?.(plan.id, connection) ?? true)
 				&& (assigned === undefined || assigned === plan.id);
@@ -341,11 +357,8 @@ export async function queueRebuild(
 			user: owner,
 			connectionId: connection.id,
 			repositoryId: live.repositoryId,
-			checkout: {
-				repository: connection.source.repository,
-				commit: connection.source.commit,
-				...(connection.source.branch ? { branch: connection.source.branch } : {}),
-			},
+			// A machine without a checkout of the repository rebuilds from the first build's.
+			checkout: checkoutFor(connection, live.repositoryId, original.checkout),
 			planRevision: plan.revision,
 			baseRevision: live.baseRevision,
 			targetRevision: plan.revision,
@@ -999,7 +1012,7 @@ export function liveSnapshot(
 			? {
 				checkout: structuredClone(checkout),
 				builderConnected: connections.some(connection =>
-					connection.owner === live.user && connection.source.repositoryId === live.repositoryId
+					connection.owner === live.user && serves(connection, live.repositoryId)
 				),
 			}
 			: {}),

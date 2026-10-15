@@ -5,26 +5,27 @@ machine. The agent uses an exact checkout revision and its normal tools and
 configuration, then returns a report and captured data. Chopin renders native
 tables and charts, shares selections, and records decisions against fixed evidence.
 
-## Connect a checkout
+## Connect a machine
 
-Connect a checkout of the document's repository with the `chopin` CLI, as
-[Use your own machine with Chopin](chopin-cli.md) describes.
+Connect your machine with the `chopin` CLI, as
+[Use your own machine with Chopin](chopin-cli.md) describes. It runs work for
+documents in any repository you can push to, from a checkout you named with
+`--checkout` or a clone it makes when work first needs one.
 
 The command after `--` is your agent's ACP launch command. Chopin uses one ACP
 client implementation; it does not invoke a vendor-specific SDK. The agent must
 support local stdio ACP sessions and MCP tools through either advertised HTTP
 support or the default stdio transport.
 
-One connection serves every document in the checkout's repository; there is no
-per-document pairing. Under `AUTH_MODE=local`, which has no client secret to
+One connection serves every document in every repository its owner can push
+to; there is no per-document or per-repository pairing. Under `AUTH_MODE=local`, which has no client secret to
 authorize a machine with, connector calls use your live browser login instead
 and wait while you are signed out.
 
 `GET /connector.js` serves the connector as one bundled file with no sign-in;
 `bun run build` and the Docker image produce it, and a development server
 bundles it from source. Chopin contributors can still run
-`bun run connector connect /path/to/project --agent copilot` from a Chopin
-checkout.
+`bun run connector connect --agent copilot` from a Chopin checkout.
 
 ## Run chopin as a service
 
@@ -62,17 +63,20 @@ investigation first, so no record is left without its card. A failed, stopped or
 interrupted card can be removed directly. Running and completed investigations
 keep their card.
 
-Several people can connect checkouts of the same repository. Only a
-connection's owner can start or cancel work on it. The server rechecks the
-owner's repository push access on every connector call, and write access and
-archive state on the target document whenever work is claimed or reported. An
+Several people can connect machines for the same repository. Only a
+connection's owner can start or cancel work on it. The server renews the
+machine's GitHub authorization and rechecks its owner's admission on every
+connector call, and the owner's push access and archive state on the target
+document whenever work is claimed or reported. An
 investigation also requires that the document is not locked by an active build,
 both when it is started and when it is claimed; a document archived or locked
 in between interrupts the investigation instead of stalling the connector. A
 build is itself that lock, so builds do not check it. Other document writers can inspect published results,
 change shared selections, and record decisions.
 
-Each new investigation uses the selected connection's checkout commit. Retrying an
+Each new investigation uses the commit of the checkout the selected machine
+named for the document's repository, or else the head of the repository's
+default branch on GitHub, which the machine clones or fetches. Retrying an
 investigation keeps its original source commit, even after the connection changes.
 Other investigations in the document do not choose its baseline. The connector creates a
 detached worktree and preserves existing local edits. Its local state defaults to
@@ -187,13 +191,14 @@ are only ever answered in the connector terminal; a drop never answers one.
 **How pairing works.** An unpaired connector prints a link and an
 eight-character code. Signing in at the link with push access, choosing
 **Connect** after checking the code, and the GitHub authorization that follows
-hand the machine a long-lived token. Each `connect` then registers the
-checkout's repository, commit and branch with that token. One connector process
-serves one checkout, and its connection serves every document in that
-repository. The server forgets a connection 90 seconds after it last heard from
-it; a running connector renews it continuously. Connections live in the server's
-memory, but the machine does not: after a server restart or a deploy, a running
-connector registers its checkout again with the machine token and carries on
+hand the machine a long-lived token. Each `connect` then registers the machine
+with that token, naming the repository, commit and branch of each checkout given
+with `--checkout`. One connector process runs for a state directory, and its
+connection serves every document in every repository its owner can push to. The
+server forgets a connection 90 seconds after it last heard from it; a running
+connector renews it continuously. Connections live in the server's memory, but
+the machine does not: after a server restart or a deploy, a running connector
+registers again with the machine token and carries on
 without pairing, and a stopped one does the same when you start `connect` again.
 A run that was going at the restart cannot go on: Chopin refuses it on the new
 connection, so the connector stops its agent with **Chopin ended this run
@@ -215,30 +220,32 @@ checkout. From your project folder, use `chopin connect` or the `connector.js`
 command in [Run without installing](chopin-cli-reference.md#run-without-installing).
 
 **"Your local agent isn't connected" (HTTP 409 `no-workspace`).** No connector of
-yours is connected for this document's repository. Start the command shown, open
+yours is connected. Start the command shown, open
 its link, choose **Connect**, then press **Run** or **Build on my laptop** again.
 Another person's connector never runs your work.
 
-**Wrong repository, not a Git checkout, or a missing commit.** Run the command
-inside a checkout whose `origin` remote is the document's github.com repository.
-The connector refuses a checkout without a github.com origin, and a run whose
-repository differs from the authorized one. If a run's recorded commit is not in
-your checkout, the connector fetches it from `origin`; push or fetch the commit
-if that fails.
+**Wrong repository, not a Git checkout, or a missing commit.** A `--checkout`
+must be a clone whose `origin` remote is a github.com repository; the connector
+refuses one without, and a run whose repository differs from the authorized one.
+If a run's recorded commit is not in the checkout, the connector fetches it from
+`origin`; push or fetch the commit if that fails. A repository with no checkout
+named is cloned into `repos/<owner>/<repo>` in the state directory, which needs
+the GitHub token Chopin gives machines; without one the run fails with
+`This machine has no checkout of <owner>/<repo>`.
 
 **Connector version mismatch after a deploy.** Run `chopin update`, or rerun the
 whole `connector.js` command, which downloads the connector again so it matches
 the server.
 
-**Stale lock after a crash.** Each checkout has a lock in the connector's state
+**Stale lock after a crash.** The connector holds a lock in its state
 directory, `$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`
 (or `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`). The lock
 records when its connector's process started. A lock whose process has exited
 is replaced automatically, even when another process has since been given the
 same pid: a process with that pid that started at another time is not the
-connector. If the connector still reports _Workspace already locked_, confirm
-no connector is running for that checkout and delete the `.lock` file the error
-names.
+connector. If the connector still reports that the state directory _is already
+locked by a running connector_, confirm no connector is running and delete the
+`.lock` file the error names.
 
 **Permission prompts.** Each prompt names the tool kind and what it will run or
 touch. Choose an "always allow" option to stop prompts for that kind during this

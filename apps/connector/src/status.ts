@@ -5,6 +5,7 @@ import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./
 import { appCannotPush } from "./github-token";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { join } from "node:path";
+import { clones } from "./checkouts";
 import {
 	connectors,
 	diskUsage,
@@ -50,10 +51,16 @@ export type StatusReport = {
 		/** Why the check did not succeed. */
 		detail?: string;
 	};
-	/** Connectors holding a checkout in the base dir; `running: false` is a stale lock. */
+	/**
+	 * Connectors holding the base dir, one at a time, or an older connector its checkout;
+	 * `running: false` is a stale lock.
+	 */
 	connectors: Array<{
 		pid: number;
-		checkout: string;
+		/** An older connector's one checkout. */
+		checkout?: string;
+		/** The checkouts a connector registered, by repository (`owner/name`) to their root. */
+		checkouts?: Record<string, string>;
 		running: boolean;
 		service: boolean;
 		version?: string;
@@ -75,10 +82,10 @@ export type StatusReport = {
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
 		>;
 		/**
-		 * The repository Chopin's GitHub App can't push to, so the machine's Planner commands and
+		 * The repositories Chopin's GitHub App can't push to, so the machine's Planner commands and
 		 * runs use its own GitHub login there.
 		 */
-		githubCannotPush?: string;
+		githubCannotPush?: string[];
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	log: string;
@@ -94,6 +101,13 @@ export type StatusReport = {
 	runs: { kept: number; running: number; bytes?: number };
 	/** The worktrees Planner commands made in `<base>/planners`, with their repository and document. */
 	plannerWorktrees: Array<{ path: string; repository: string; document: string }>;
+	/**
+	 * The checkouts work in their repositories runs from, by repository (`owner/name`) to their
+	 * root: what the running connector registered, else what the next one runs with.
+	 */
+	checkouts: Record<string, string>;
+	/** The clones made on demand in `<base>/repos/<owner>/<repo>` for every other repository. */
+	clones: Array<{ repository: string; path: string }>;
 };
 
 const CHECK_MS = 3000;
@@ -157,7 +171,7 @@ export async function collectStatus(options: {
 		}
 		: { paired: false, label: null, check: "not-paired", accepted: null };
 	let held = (await connectors(directory, processStart(host.platform, host.run))).sort((a, b) =>
-		Number(b.running) - Number(a.running) || a.root.localeCompare(b.root)
+		Number(b.running) - Number(a.running) || (a.root ?? "").localeCompare(b.root ?? "")
 	);
 	let service: StatusReport["service"];
 	try {
@@ -176,7 +190,8 @@ export async function collectStatus(options: {
 		machine,
 		connectors: held.map(item => ({
 			pid: item.pid,
-			checkout: item.root,
+			...(item.root ? { checkout: item.root } : {}),
+			...(item.checkouts ? { checkouts: item.checkouts } : {}),
 			running: item.running,
 			service: item.service,
 			...(item.version ? { version: item.version } : {}),
@@ -206,7 +221,16 @@ export async function collectStatus(options: {
 			...(bytes === undefined ? {} : { bytes }),
 		},
 		plannerWorktrees: await plannerWorktrees(directory),
+		checkouts: held.find(item => item.running && item.checkouts)?.checkouts
+			?? registered(config.service?.settings ?? config.connect),
+		clones: await clones(directory),
 	};
+}
+
+/** The checkouts settings register, an older chopin's one included, which has no repository. */
+function registered(settings: ConnectSettings | undefined): Record<string, string> {
+	if (!settings) return {};
+	return settings.checkouts ?? (settings.checkout ? { "": settings.checkout } : {});
 }
 
 const SOURCES: Record<ServerSource, string> = {
@@ -231,7 +255,9 @@ function describe(settings: ConnectSettings) {
 		: "";
 	let command = settings.command.join(" ");
 	let agent = settings.agent ? `--agent ${settings.agent} (${command})` : command;
-	return `${settings.checkout} with ${agent}${planners}, on ${settings.server}`;
+	let checkouts = Object.values(registered(settings));
+	let from = checkouts.length ? ` with checkouts ${checkouts.join(", ")}` : "";
+	return `${agent}${planners}${from}, on ${settings.server}`;
 }
 
 type Failure = NonNullable<StatusReport["connectors"][number]["failures"]>[number];
@@ -273,11 +299,11 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 			failures.find(failure => failure.kind === "planner" && failure.document === document);
 		return item.running
 			? [
-				`running for ${item.checkout} (pid ${item.pid}${
+				`running${item.checkout ? ` for ${item.checkout}` : ""} (pid ${item.pid}${
 					item.version ? `, chopin ${item.version}` : ""
 				}${item.service ? ", the service" : ""})`,
 				...(agent ? [`  Agent${failing(agent, now)}`] : []),
-				...(item.githubCannotPush ? [`  ${appCannotPush(item.githubCannotPush)}`] : []),
+				...(item.githubCannotPush ?? []).map(repository => `  ${appCannotPush(repository)}`),
 				...(item.canRunPlanners
 					? ["  Can run Planners for documents that choose this machine"]
 					: []),
@@ -293,8 +319,10 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 				}),
 			]
 			: [
-				`stale lock for ${item.checkout}: its connector (pid ${item.pid}) has exited; the next `
-				+ "connect replaces it",
+				`stale lock${
+					item.checkout ? ` for ${item.checkout}` : ""
+				}: its connector (pid ${item.pid}) `
+				+ "has exited; the next connect replaces it",
 			];
 	});
 	let serviceLine = service.state === "unknown"
@@ -305,6 +333,10 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 	let worktrees = report.plannerWorktrees.map(item =>
 		`${item.path} (${item.repository}, document ${item.document})`
 	);
+	let checkouts = Object.entries(report.checkouts).map(([repository, path]) =>
+		repository ? `${repository} at ${path}` : path
+	);
+	let cloned = report.clones.map(item => `${item.repository} at ${item.path}`);
 	return [
 		`chopin ${report.version} (connector protocol ${report.protocol})`,
 		row("Server", `${report.server.origin} (${SOURCES[report.server.source]})`),
@@ -336,6 +368,10 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 				),
 			]
 			: []),
+		row("Checkouts", checkouts[0] ?? "none registered; chopin connect --checkout <path> adds one"),
+		...checkouts.slice(1).map(more),
+		row("Clones", cloned[0] ?? "none yet; other repositories are cloned when work needs them"),
+		...cloned.slice(1).map(more),
 		...(worktrees.length ? [row("Planners", worktrees[0]!), ...worktrees.slice(1).map(more)] : []),
 		row("Log", report.log),
 		row("Base dir", report.baseDir),

@@ -12,6 +12,7 @@ import { registerImplementationRoutes } from "./routes";
 import { queueRebuild, requestBuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import { LiveSyncCoordinator } from "./live-sync";
+import { serves } from "../experiments/connections";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
@@ -804,7 +805,10 @@ test("a committed build wakes the waiting connector and a failed pickup can be r
 	let abort = new AbortController();
 	try {
 		let woken = false;
-		let waiting = context.experiments.connections.wait("R_test", abort.signal)
+		let waiting = context.experiments.connections.wait(
+			context.experiments.connections.get(connection.connection.id)!,
+			abort.signal,
+		)
 			.then(() => woken = true);
 		let review = {
 			planRevision: 0,
@@ -1360,9 +1364,7 @@ test("only the builder's own opted-in connection takes an automatic rebuild", as
 		let only = (connection: typeof base) => ({
 			get: () => undefined,
 			list: (repositoryId: string, owner?: string) =>
-				[connection].filter(item =>
-					item.source.repositoryId === repositoryId && (!owner || item.owner === owner)
-				),
+				[connection].filter(item => serves(item, repositoryId) && (!owner || item.owner === owner)),
 			assign: () => {},
 			assigned: () => undefined,
 		});
@@ -1377,7 +1379,7 @@ test("only the builder's own opted-in connection takes an automatic rebuild", as
 				context.plan,
 				only({
 					...base,
-					source: { ...base.source, repositoryId: "R_elsewhere" },
+					checkouts: [{ ...base.checkouts[0]!, repositoryId: "R_elsewhere" }],
 				}),
 				{ automatic: true },
 			)).kind,

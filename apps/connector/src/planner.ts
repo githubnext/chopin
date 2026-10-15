@@ -7,6 +7,7 @@ import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import { type GitHubToken, githubToken } from "./github-token";
 import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
+import type { Checkouts } from "./checkouts";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -53,8 +54,10 @@ export function commandWords(line: string): string[] {
 /**
  * Run `command` as each document's Planner backend until `signal` aborts. Every launch gets a fresh
  * Planner credential, passed only in its environment as CHOPIN_URL, CHOPIN_DOCUMENT and
- * CHOPIN_PLANNER_TOKEN, beside CHOPIN_CHECKOUT, the checkout `cwd` it runs in, and CHOPIN_WORKTREE,
- * where the backend keeps its own worktree of it (see `plannerWorktree`). A backend that exits, as
+ * CHOPIN_PLANNER_TOKEN, beside CHOPIN_CHECKOUT, the checkout of the document's repository it runs
+ * in (registered, or cloned and fetched again before each launch; see `checkouts`), and
+ * CHOPIN_WORKTREE, where the backend keeps its own worktree of it (see `plannerWorktree`). A
+ * backend that exits, as
  * one whose link closed or whose credential was refused does, is started again on the reconnect
  * backoff. A revoked machine or a document Chopin refuses stops that document's backend. One that
  * exits within `healthyMs` is recorded in `failures` for `chopin status`, until one stays up that
@@ -65,12 +68,10 @@ export async function servePlanners(options: {
 	machine: string;
 	documents: string[];
 	command: string[];
-	/** The checkout's root, which the backends run in. */
-	cwd: string;
+	/** The checkout of each document's repository, which its backend runs in. */
+	checkouts: Checkouts;
 	/** The connector's base dir, which holds the Planners' worktrees. */
 	directory: string;
-	/** The checkout's GitHub repository, `owner/name`. */
-	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
@@ -78,7 +79,7 @@ export async function servePlanners(options: {
 	env?: Record<string, string>;
 	healthyMs?: number;
 	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string) => void;
+	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 }) {
@@ -103,9 +104,8 @@ export function dispatchedPlanners(options: {
 	/** The `--planner` documents, by URL or id, which run on their own. */
 	documents: string[];
 	command: string[];
-	cwd: string;
+	checkouts: Checkouts;
 	directory: string;
-	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
@@ -113,7 +113,7 @@ export function dispatchedPlanners(options: {
 	env?: Record<string, string>;
 	healthyMs?: number;
 	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string) => void;
+	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 }) {
@@ -209,16 +209,15 @@ async function servePlanner(options: {
 	/** The document's id in Chopin, when known before its credential names it. */
 	id?: string;
 	command: string[];
-	cwd: string;
+	checkouts: Checkouts;
 	directory: string;
-	repository: string;
 	output: Output;
 	signal: AbortSignal;
 	failures?: StartFailures;
 	env?: Record<string, string>;
 	healthyMs?: number;
 	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string) => void;
+	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	/**
@@ -261,17 +260,19 @@ async function servePlanner(options: {
 			await delay(wait, signal);
 			continue;
 		}
-		output.say(`› Planner for ${document} started.`);
+		// Chopin names the document's repository, whose checkout the backend runs in.
+		let repository = credential.repository ?? "";
 		let worktree = await plannerWorktree(
 			options.directory,
-			options.repository,
+			repository,
 			credential.document ?? options.id ?? document,
 		);
-		// The machine's own GitHub token, where Chopin gives one; without one the backend still starts.
+		// The machine's own GitHub token, where Chopin gives one; without one the backend still starts
+		// in a registered checkout.
 		let github = await githubToken({
 			url: options.url,
 			machine: options.machine,
-			repository: options.repository,
+			repository,
 			file: `${worktree}.github-token`,
 			...(options.githubRefused ? { refused: options.githubRefused } : {}),
 			...(options.renewGitHubBeforeMs === undefined
@@ -279,9 +280,23 @@ async function servePlanner(options: {
 				: { renewBeforeMs: options.renewGitHubBeforeMs }),
 		});
 		let launched = Date.now();
-		let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
-		let { how, stderr } = await launch(options, credential.token, worktree, github);
-		clearTimeout(healthy);
+		let outcome: { how: string; stderr?: string };
+		let checkout = await options.checkouts.resolve(repository, async () => github).then(
+			value => value.root,
+			(error: unknown) => {
+				outcome = { how: error instanceof Error ? error.message : String(error) };
+				return undefined;
+			},
+		);
+		if (checkout) {
+			output.say(`› Planner for ${document} started.`);
+			let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
+			outcome = await launch({ ...options, cwd: checkout }, credential.token, worktree, github);
+			clearTimeout(healthy);
+		} else {
+			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
+		}
+		let { how, stderr } = outcome!;
 		await github?.stop();
 		if (signal.aborted) return;
 		// What the backend printed may hold its credential, a GitHub token or an --env value.

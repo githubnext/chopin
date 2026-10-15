@@ -211,26 +211,19 @@ export async function pair(options: {
 	directory: string;
 	output: Output;
 	signal: AbortSignal;
-	checkout?: Omit<Checkout, "label">;
 	key?: string;
 }) {
 	try {
 		return await pairOnce(options);
 	} catch (error) {
-		throw pairingFailure(error, options.url, options.checkout?.repository);
+		throw pairingFailure(error, options.url);
 	}
 }
 
 /** What stopped a pairing, in words that say what to do next. */
-function pairingFailure(error: unknown, url: string, repository?: string) {
+function pairingFailure(error: unknown, url: string) {
 	let again = "then run this command again.";
 	let code = errorCode(error);
-	if (code === "repository-forbidden") {
-		return new Error(
-			`The account that made the key can't push to ${repository ?? "this repository"} on GitHub, `
-				+ `so Chopin won't connect this checkout. Ask an owner for write access, ${again}`,
-		);
-	}
 	if (code === "owner-sign-in-required") {
 		return new Error(`Sign in to Chopin at ${url} in a browser, ${again}`);
 	}
@@ -249,7 +242,7 @@ async function pairOnce(options: Parameters<typeof pair>[0]) {
 	if (options.key) {
 		let paired = await post(
 			options.url + "/api/connector/pairings",
-			{ ...options.checkout, label: options.label, key: options.key },
+			{ label: options.label, key: options.key },
 			undefined,
 			options.signal,
 		);
@@ -258,12 +251,12 @@ async function pairOnce(options: Parameters<typeof pair>[0]) {
 	} else {
 		let pairing = await post(
 			options.url + "/api/connector/pairings",
-			{ ...options.checkout, label: options.label },
+			{ label: options.label },
 			undefined,
 			options.signal,
 		) as { id: string; secret: string; url: string; code: string };
 		options.output.pairing(
-			options.checkout?.repository ?? options.label,
+			options.label,
 			pairing.url,
 			pairing.code,
 		);
@@ -286,7 +279,7 @@ async function pairOnce(options: Parameters<typeof pair>[0]) {
 	return token;
 }
 
-/** What a connector tells its owner's Chopin about the machine as it connects a checkout. */
+/** What a connector tells its owner's Chopin about the machine as it connects. */
 export type About = {
 	service?: boolean;
 	planner?: boolean;
@@ -313,23 +306,30 @@ function aboutHeaders(about: About): Record<string, string> {
 	);
 }
 
-/** Connect one checkout with the machine token; the returned token lasts while the server runs. */
+/**
+ * Connect the machine with its token, naming the checkouts it registered; it serves every
+ * repository its owner can push to. The returned token lasts while the server runs; `refused`
+ * names any registered checkout's repository its owner can't push to, which Chopin left out.
+ */
 export async function register(
 	url: string,
 	token: string,
-	checkout: Checkout,
+	machine: { label: string; checkouts: Array<Omit<Checkout, "label">> },
 	signal?: AbortSignal,
 	about: About = {},
 ) {
 	let value = await post(
 		url + "/api/connector/connections",
-		checkout,
+		machine,
 		token,
 		signal,
 		aboutHeaders(about),
 	);
 	if (typeof value.token !== "string") throw new Error("Missing connection token.");
-	return value.token;
+	let refused = Array.isArray(value.refused)
+		? value.refused.filter((item): item is string => typeof item === "string")
+		: [];
+	return { token: value.token, refused };
 }
 
 /** Tell Chopin which agent a connection runs, learned at its first job; best-effort. */
@@ -339,7 +339,7 @@ export async function reportAgent(url: string, token: string, agent: About["agen
 
 /**
  * A short-lived credential for this machine's Planner backend to attach one document, and the
- * document's id in Chopin when Chopin names it.
+ * document's id and repository in Chopin when Chopin names them.
  */
 export async function plannerCredential(
 	url: string,
@@ -351,11 +351,14 @@ export async function plannerCredential(
 	if (typeof value.token !== "string" || typeof value.expiresAt !== "number") {
 		throw new Error("Missing Planner credential.");
 	}
-	let id = (value.document as { id?: unknown } | undefined)?.id;
+	let { id, repository } = (value.document ?? {}) as { id?: unknown; repository?: unknown };
 	return {
 		token: value.token,
 		expiresAt: value.expiresAt,
 		...(typeof id === "string" && id ? { document: id } : {}),
+		...(typeof repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(repository)
+			? { repository }
+			: {}),
 	};
 }
 

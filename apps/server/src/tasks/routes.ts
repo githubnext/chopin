@@ -7,7 +7,9 @@ import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
 import { AdmissionDenied } from "../auth/admission";
 import { implementationConnector } from "./connector";
+import { checkoutOf } from "../experiments/connections";
 import type { Connection, Connections } from "../experiments/connections";
+import type { Source } from "@chopin/experiment";
 import type { HostedAuth } from "../auth/routes";
 import type { Plan } from "../plan/service";
 import type { RouteHandler, Router } from "../http/router";
@@ -26,6 +28,11 @@ type Options = {
 	refuseOffline?: (owner: string, documentId: string) => Promise<never>;
 	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
 	machineChoices?: () => Promise<void>;
+	/**
+	 * The checkout a connection's build of a document starts from; without it, only a checkout the
+	 * connection said it has.
+	 */
+	sourceFor?: (connection: Connection, documentId: string) => Promise<Source>;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -260,10 +267,20 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 					409,
 				);
 			}
+			let source: Source | undefined;
+			try {
+				source = options.sourceFor
+					? await options.sourceFor(connection, id)
+					: checkoutOf(connection, channel.repositoryId);
+			} catch (error) {
+				let code = (error as { code?: unknown } | undefined)?.code;
+				throw new GitHubError(typeof code === "string" ? code : "no-workspace", 409);
+			}
+			if (!source) throw new GitHubError("no-workspace", 409);
 			let checkout = {
-				repository: connection.source.repository,
-				commit: connection.source.commit,
-				...(connection.source.branch ? { branch: connection.source.branch } : {}),
+				repository: source.repository,
+				commit: source.commit,
+				...(source.branch ? { branch: source.branch } : {}),
 			};
 			connector.track(id);
 			return options.connections.locked(connection.id, async () => {

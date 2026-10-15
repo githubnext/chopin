@@ -46,9 +46,10 @@ function machineAccount(token: string) {
 	return Object.values(ACCOUNTS).find(value => token.startsWith(`${value.login}-machine-`));
 }
 
+/** octo-org/score, or another repository of the same accounts' by its own node ID. */
 function scoreRepository(owner: string, name: string, push: boolean): Repository {
 	return {
-		id: "R_score",
+		id: name === "score" ? "R_score" : `R_${name}`,
 		owner,
 		name,
 		fullName: `${owner}/${name}`,

@@ -8,6 +8,8 @@ import { commandWords, dispatchedPlanners, servePlanners, stopBackend } from "./
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { git, lockWorkspace, startFailures } from "./workspace";
+import { checkouts } from "./checkouts";
+import { CONNECTOR_PROTOCOL } from "./version";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -88,7 +90,11 @@ test(
 					return Response.json({
 						token,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: { id: "D_1", url: `${origin}/octo-org/score/plan` },
+						document: {
+							id: "D_1",
+							repository: "octo-org/score",
+							url: `${origin}/octo-org/score/plan`,
+						},
 					});
 				}
 				// Chopin is out of reach for the build channel; the Planner keeps going regardless.
@@ -230,7 +236,7 @@ test(
 					return Response.json({
 						token,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: { id: "D_1", url: document },
+						document: { id: "D_1", repository: "octo-org/score", url: document },
 					});
 				}
 				// Chopin is out of reach for the build channel; the Planner keeps going regardless.
@@ -335,7 +341,7 @@ test.skipIf(process.platform === "win32")(
 				Response.json({
 					token: `chopin_p_${"P".repeat(43)}`,
 					expiresAt: Date.now() + 15 * 60_000,
-					document: { id: "D_1", url: "http://x" },
+					document: { id: "D_1", repository: "octo-org/score", url: "http://x" },
 				}),
 		});
 		let directory = await mkdtemp(join(scratch, "forking-"));
@@ -349,9 +355,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 		});
@@ -404,7 +409,7 @@ test.skipIf(process.platform === "win32")(
 				Response.json({
 					token: `chopin_p_${"P".repeat(43)}`,
 					expiresAt: Date.now() + 15 * 60_000,
-					document: { id: "D_1", url: "http://x" },
+					document: { id: "D_1", repository: "octo-org/score", url: "http://x" },
 				}),
 		});
 		let directory = await mkdtemp(join(scratch, "failing-"));
@@ -429,9 +434,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -475,7 +479,11 @@ test.skipIf(process.platform === "win32")(
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
-				Response.json({ token, expiresAt: Date.now() + 15 * 60_000, document: { id: "D_1" } }),
+				Response.json({
+					token,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", repository: "octo-org/score" },
+				}),
 		});
 		let directory = await mkdtemp(join(scratch, "leaking-"));
 		let script = join(directory, "backend.ts");
@@ -511,9 +519,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: ["D_1"],
 			command: [process.execPath, script],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -565,7 +572,11 @@ test.skipIf(process.platform === "win32")(
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
-				Response.json({ token, expiresAt: Date.now() + 15 * 60_000, document: { id: "D_1" } }),
+				Response.json({
+					token,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", repository: "octo-org/score" },
+				}),
 		});
 		let directory = await mkdtemp(join(scratch, "long-line-"));
 		let script = join(directory, "backend.ts");
@@ -608,9 +619,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: ["D_1"],
 			command: [process.execPath, script],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -679,9 +689,8 @@ test.skipIf(process.platform === "win32")(
 				machine: MACHINE,
 				documents: ["D_1"],
 				command: [process.execPath, script],
-				cwd: directory,
+				checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 				directory,
-				repository: "octo-org/score",
 				output: createOutput(quiet, quiet, {}),
 				signal: new AbortController().signal,
 				failures: startFailures(directory, directory),
@@ -773,7 +782,7 @@ test.skipIf(process.platform === "win32")(
 					return Response.json({
 						token: `chopin_p_${String(asked.length).padStart(43, "P")}`,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: { id: "D_1", url: document },
+						document: { id: "D_1", repository: "octo-org/score", url: document },
 					});
 				}
 				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
@@ -852,7 +861,11 @@ test.skipIf(process.platform === "win32")(
 		try {
 			await until(async () => (await entries(log)).length >= 1, 15_000);
 			// It said it can run Planners, without running any of its own.
-			expect(registered[0]).toEqual({ protocol: "4", planner: null, plannerCommand: "1" });
+			expect(registered[0]).toEqual({
+				protocol: String(CONNECTOR_PROTOCOL),
+				planner: null,
+				plannerCommand: "1",
+			});
 			expect(asked).toEqual([{ document }]);
 			let [launched] = await entries(log);
 			// A dispatched Planner gets its checkout and its own stable worktree path as well.
@@ -957,7 +970,7 @@ test.skipIf(process.platform === "win32")(
 					return Response.json({
 						token: `chopin_p_${"P".repeat(43)}`,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: { id: "D_1", url: document },
+						document: { id: "D_1", repository: "octo-org/score", url: document },
 					});
 				}
 				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
@@ -1049,7 +1062,7 @@ test.skipIf(process.platform === "win32")(
 					? Response.json({
 						token: `chopin_p_${"P".repeat(43)}`,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: { id: "D_1", url: "http://x/plan" },
+						document: { id: "D_1", repository: "octo-org/score", url: "http://x/plan" },
 					})
 					: new Response(null, { status: 404 }),
 		});
@@ -1070,9 +1083,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: [],
 			command: [process.execPath, script, log],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(sink, sink, {}),
 			signal: abort.signal,
 		});
@@ -1101,6 +1113,101 @@ test.skipIf(process.platform === "win32")(
 			expect(said).toContain(
 				"Stopped the Planner for http://x/plan: the document chose another machine.",
 			);
+		} finally {
+			abort.abort();
+			await planners.stop();
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"one machine runs the Planners of documents in several repositories, each in its repository's checkout",
+	async () => {
+		let repositories: Record<string, string> = {
+			D_score: "octo-org/score",
+			D_notes: "octo-org/notes",
+			D_site: "octo-org/site",
+		};
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				let path = new URL(request.url).pathname;
+				if (path !== "/api/connector/planner") return new Response(null, { status: 404 });
+				let { document } = await request.json() as { document: string };
+				let id = document.split("/").at(-1)!;
+				return Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id, repository: repositories[id], url: document },
+				});
+			},
+		});
+		let directory = await realpath(await mkdtemp(join(scratch, "repositories-")));
+		let score = await realpath(await mkdtemp(join(scratch, "score-")));
+		let notes = await realpath(await mkdtemp(join(scratch, "notes-")));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		let planners = dispatchedPlanners({
+			url: origin,
+			machine: MACHINE,
+			documents: [],
+			command: [process.execPath, script, log],
+			checkouts: checkouts({
+				directory,
+				registered: { "octo-org/score": score, "Octo-Org/Notes": notes },
+			}),
+			directory,
+			output: createOutput(sink, sink, {}),
+			signal: abort.signal,
+		});
+		try {
+			planners.assign(
+				Object.keys(repositories).map(id => ({ id, url: `${origin}/documents/${id}` })),
+			);
+			await until(async () => (await entries(log)).filter(entry => entry.pid).length >= 2, 10_000);
+			let launched = new Map(
+				(await entries(log)).filter(entry => entry.pid).map(entry => [
+					entry.env.CHOPIN_DOCUMENT.split("/").at(-1),
+					entry,
+				]),
+			);
+			// Each in its own repository's checkout, its worktree beside the others of that repository.
+			expect(launched.get("D_score")).toMatchObject({
+				cwd: score,
+				env: {
+					CHOPIN_CHECKOUT: score,
+					CHOPIN_WORKTREE: join(directory, "planners", "octo-org", "score", "D_score"),
+				},
+			});
+			expect(launched.get("D_notes")).toMatchObject({
+				cwd: notes,
+				env: {
+					CHOPIN_CHECKOUT: notes,
+					CHOPIN_WORKTREE: join(directory, "planners", "octo-org", "notes", "D_notes"),
+				},
+			});
+			// A repository with no checkout here, and no GitHub token from Chopin to clone it with,
+			// never starts; it says how to give it one.
+			expect(launched.has("D_site")).toBe(false);
+			await until(async () => said.includes("D_site"), 5_000);
+			expect(said).toContain(
+				`Can't start the Planner for ${origin}/documents/D_site: This machine has no checkout of `
+					+ "octo-org/site",
+			);
+			expect(said).toContain("chopin connect --checkout <path>");
 		} finally {
 			abort.abort();
 			await planners.stop();
@@ -1164,7 +1271,9 @@ test.skipIf(process.platform === "win32")(
 					return Response.json({
 						token,
 						expiresAt: Date.now() + 15 * 60_000,
-						document: document === own ? { id: "D_1", url: own } : { id: "D_2", url: assigned },
+						document: document === own
+							? { id: "D_1", url: own, repository: "octo-org/score" }
+							: { id: "D_2", url: assigned, repository: "octo-org/score" },
 					});
 				}
 				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
@@ -1310,7 +1419,7 @@ function githubChopin(github: (asked: number) => Response) {
 			return Response.json({
 				token: `chopin_p_${"P".repeat(43)}`,
 				expiresAt: Date.now() + 15 * 60_000,
-				document: { id: "D_1" },
+				document: { id: "D_1", repository: "octo-org/score" },
 			});
 		},
 	});
@@ -1348,9 +1457,8 @@ test.skipIf(process.platform === "win32")(
 			machine: MACHINE,
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
-			cwd: directory,
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 			directory,
-			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			renewGitHubBeforeMs: 1_000,
@@ -1406,9 +1514,8 @@ test.skipIf(process.platform === "win32")(
 				machine: MACHINE,
 				documents: ["D_1"],
 				command: [process.execPath, script, log],
-				cwd: directory,
+				checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 				directory,
-				repository: "octo-org/score",
 				output: createOutput({ write: () => true }, { write: () => true }, {}),
 				signal: abort.signal,
 				githubRefused: message => said.push(message),

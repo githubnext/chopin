@@ -1,5 +1,5 @@
 import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:fs";
-import { hostname } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
@@ -43,6 +43,7 @@ import {
 } from "./service";
 import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
+import { checkouts as machineCheckouts, registerCheckouts } from "./checkouts";
 import { VERSION } from "./version";
 import {
 	chosenPlanners,
@@ -370,7 +371,7 @@ export async function connect(
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check"],
 		options: ["planner-command", "key", "name", "keep-runs", "agent"],
-		lists: ["planner", "env"],
+		lists: ["planner", "env", "checkout"],
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
@@ -428,23 +429,38 @@ export async function connect(
 	let keepRuns = saved ? saved.keepRuns : runsToKeep(parsed.options.get("keep-runs"));
 	if (!service) {
 		requireProgram(command, process.cwd());
-		if (plannerCommand.length) requireProgram(plannerCommand, resolve(parsed.positional[0] ?? "."));
+		if (plannerCommand.length) requireProgram(plannerCommand, process.cwd());
 	}
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
-	let info = await workspace(resolve(saved?.checkout ?? parsed.positional[0] ?? "."));
+	// The checkouts its work in their repositories runs from: `--checkout` and any positional path,
+	// each a GitHub checkout. Work in any other repository runs in a clone made on demand.
+	let registered = saved
+		? saved.checkouts ?? (saved.checkout ? await registerCheckouts([saved.checkout]) : {})
+		: await registerCheckouts(
+			[...parsed.positional, ...parsed.lists.get("checkout") ?? []].map(path => resolve(path)),
+		);
+	// What it tells Chopin about each as it connects.
+	let advertised = await Promise.all(
+		Object.values(registered).map(async root => {
+			let { root: _root, ...checkout } = await workspace(root);
+			return checkout;
+		}),
+	);
+	/** Where the agent's start check runs: a registered checkout, else the home folder. */
+	let cwd = Object.values(registered)[0] ?? homedir();
 	// The service runs what a terminal's connect saves, by the full paths this shell found.
 	let saving = service ? { command, plannerCommand } : {
 		command: await savedCommand(command, process.cwd()),
 		plannerCommand: plannerCommand.length
-			? await savedCommand(plannerCommand, info.root)
+			? await savedCommand(plannerCommand, process.cwd())
 			: plannerCommand,
 	};
 	let save = () =>
 		updateConfig(directory, value => {
 			value.connect = {
 				server: url,
-				checkout: info.root,
+				checkouts: registered,
 				...(agentId === undefined ? {} : { agent: agentId }),
 				command: saving.command,
 				planners: plannerDocuments,
@@ -453,15 +469,10 @@ export async function connect(
 				...(keepRuns === undefined ? {} : { keepRuns }),
 			};
 		});
-	if (
-		!service
-		&& (await connectors(directory)).some(item =>
-			item.service && item.running && item.root === info.root
-		)
-	) {
+	if (!service && (await connectors(directory)).some(item => item.service && item.running)) {
 		await save();
 		createOutput().say(
-			"The chopin service is running this checkout. Saved your settings; run chopin service "
+			"The chopin service is running on this machine. Saved your settings; run chopin service "
 				+ "install to use them.",
 		);
 		return;
@@ -492,7 +503,7 @@ export async function connect(
 		let at = programAt(started);
 		started[at] = which(started[at]!) ?? started[at]!;
 		void checkAgent(started, {
-			cwd: info.root,
+			cwd,
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 			signal,
@@ -515,7 +526,7 @@ export async function connect(
 		let at = programAt(started);
 		started[at] = which(started[at]!) ?? started[at]!;
 		let failed = await checkAgent(started, {
-			cwd: info.root,
+			cwd,
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 			onInfo: agent => void rememberAgent(agent),
@@ -538,18 +549,21 @@ export async function connect(
 			);
 		}
 	}
-	let release = await lockWorkspace(info.root, directory, {
+	// One connector runs for a base dir: it is the machine, serving every repository.
+	let release = await lockWorkspace(directory, directory, {
 		service,
 		planners: plannerDocuments,
 		plannerCommand: plannerCommand.length > 0,
+		checkouts: registered,
 	});
-	let failures = startFailures(directory, info.root);
+	let failures = startFailures(directory, directory);
 	let keep = keepRuns ?? KEEP_RUNS;
 	// Older finished runs go as the connector starts and after each run; never one still going.
 	let prune = () => pruneRuns(directory, keep).then(() => {}, () => {});
 	await prune();
-	let chosen = chosenPlanners(directory, info.root);
-	let fallback = githubFallback(directory, info.root);
+	let chosen = chosenPlanners(directory, directory);
+	let fallback = githubFallback(directory, directory);
+	let checkouts = machineCheckouts({ directory, registered });
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -563,13 +577,11 @@ export async function connect(
 	let unwatch = service ? onStopRequest(directory, stop) : () => {};
 	let output = createOutput();
 	let permissions = permissionMemory();
-	// Said once a connector, and kept for chopin status, when the GitHub App can't push here.
-	let githubRefused = (message: string) => {
-		if (fallback.record(info.repository)) output.say(output.style.dim(message));
+	// Said once for each repository, and kept for chopin status, when the GitHub App can't push there.
+	let githubRefused = (message: string, repository: string) => {
+		if (fallback.record(repository)) output.say(output.style.dim(message));
 	};
 	try {
-		let { root: _root, ...source } = info;
-		let checkout = { ...source, label: basename(info.root) };
 		for (;;) {
 			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
 			let stored = await machineToken(directory, url);
@@ -599,7 +611,6 @@ export async function connect(
 					directory,
 					output,
 					signal: abort.signal,
-					checkout: source,
 					key,
 				});
 			if (!machine) return;
@@ -615,9 +626,8 @@ export async function connect(
 				machine,
 				documents: plannerDocuments,
 				command: plannerCommand,
-				cwd: info.root,
+				checkouts,
 				directory,
-				repository: info.repository,
 				output,
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
@@ -634,16 +644,28 @@ export async function connect(
 					// Every connection registers anew with the machine token: a connection token lasts only
 					// while the server runs, so after a restart Chopin refuses the old one for good.
 					connect: async signal => {
-						connectionToken = await register(url, machine, checkout, signal, {
-							service,
-							planner: plannerDocuments.length > 0,
-							plannerCommand: plannerCommand.length > 0,
-							agent: (await readConfig(directory)).agents?.[program],
-						});
+						let registration = await register(
+							url,
+							machine,
+							{ label: hostname(), checkouts: advertised },
+							signal,
+							{
+								service,
+								planner: plannerDocuments.length > 0,
+								plannerCommand: plannerCommand.length > 0,
+								agent: (await readConfig(directory)).agents?.[program],
+							},
+						);
+						connectionToken = registration.token;
 						let api = await remote(url, connectionToken, signal);
 						probeAgent(connectionToken, AbortSignal.any([abort.signal, signal]));
 						if (!announced) {
-							output.connected(info.repository);
+							output.connected(Object.keys(registered));
+							for (let repository of registration.refused) {
+								output.error(
+									`You can't push to ${repository} on GitHub, so Chopin won't run its work here.`,
+								);
+							}
 							// Only a connect that got this far saves its settings for service install.
 							if (!service) await save();
 							// The connection disconnects once it is serving, then the service installs.
@@ -661,7 +683,7 @@ export async function connect(
 					run: (api, kind, claim) =>
 						runWork(api, kind, claim, {
 							onAgent: agent => void rememberAgent(agent, connectionToken),
-							root: info.root,
+							checkouts,
 							directory,
 							command,
 							url,
@@ -750,7 +772,7 @@ async function installCommand(options: {
 	});
 	output.say(
 		`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
-			+ `It connects ${saved.checkout} to ${url} as chopin connect last did.`,
+			+ `It connects this machine to ${url} as chopin connect last did.`,
 		output.style.dim(
 			"  To change what it runs, run chopin connect again with new arguments, then chopin "
 				+ "service install again.",

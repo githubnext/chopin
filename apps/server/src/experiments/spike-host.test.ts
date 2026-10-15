@@ -30,6 +30,7 @@ async function hosted(source = `# Plan\n\n${PASSAGE}\n\nAnother paragraph.\n`) {
 		connections,
 		withPlan: (_id, action) => action(context.plan),
 		landed: (_channelId, value) => landed.push(value.id),
+		sourceFor: async connection => connection.checkouts[0]!,
 	});
 	return { ...context, service, host, landed, connections, clock };
 }
@@ -40,11 +41,11 @@ function pair(context: Awaited<ReturnType<typeof hosted>>) {
 	return context.connections.open(
 		{ id: "M_1", owner: "U_test", login: "maggie", autoRun: true },
 		"laptop",
-		{
+		[{
 			repository: "org/repo",
 			repositoryId: context.plan.persistence.repositoryId,
 			commit: "a".repeat(40),
-		},
+		}],
 	).connection;
 }
 
@@ -394,6 +395,7 @@ test("a callout placement that throws gives its spike slot back", async () => {
 		withPlan: async () => {
 			throw new Error("document closing");
 		},
+		sourceFor: async connection => connection.checkouts[0]!,
 	});
 	try {
 		await expect(host.start(context.plan.id, {
@@ -415,7 +417,7 @@ test("a spike runs only on a laptop whose owner allowed automatic work at pairin
 		return connections.open(
 			{ id: crypto.randomUUID(), owner: "U_test", login: "maggie", autoRun },
 			autoRun ? "Allowed" : "Asked",
-			{ repository: "owner/repository", repositoryId: "R_test", commit: "a".repeat(40) },
+			[{ repository: "owner/repository", repositoryId: "R_test", commit: "a".repeat(40) }],
 		).connection;
 	};
 	let context = await openPlan("# Plan\n");
@@ -423,6 +425,7 @@ test("a spike runs only on a laptop whose owner allowed automatic work at pairin
 		service: new Experiments(context.storage.experiments, () => context.lease),
 		connections,
 		withPlan: (_id, action) => action(context.plan),
+		sourceFor: async connection => connection.checkouts[0]!,
 	});
 	try {
 		pair(false);

@@ -5,7 +5,7 @@ to an external coding agent. It persists a versioned dependency graph, lets a
 coding agent claim an approved version, records task and pull-request progress,
 and requires graph-wide verification before releasing a successful run. The
 ordinary MCP read-before-claim path accepts MCP-created documents. Browser plans
-run on the clicker's own repository-scoped ACP connector and its run-scoped
+run on the clicker's own ACP connector, which serves every repository they can push to, and its run-scoped
 bridge; see the
 [local implementation tracer](local-launcher.md).
 

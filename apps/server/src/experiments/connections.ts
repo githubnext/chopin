@@ -4,15 +4,22 @@ import { fail, fingerprint } from "./service";
 
 /** What a connector says about itself when it asks to pair; a checkout is optional. */
 export type PairingInput = Partial<Omit<Source, "repositoryId">> & { label: string };
-/** One owner's checkout of one repository; it serves every document in that repository. */
+/**
+ * One owner's paired machine, connected. Connector protocol 5 and up serves every repository its
+ * owner can push to, checked per document as its work is claimed; an older connector connects
+ * exactly one checkout and serves only that repository.
+ */
 export type Connection = {
 	id: string;
 	owner: string;
 	login: string;
-	/** The paired machine this checkout connected through; revoking it ends the connection. */
+	/** The paired machine that connected; revoking it ends the connection. */
 	machineId: string;
 	label: string;
-	source: Source;
+	/** The checkouts it said it has, one per repository; an older connector's only one. */
+	checkouts: Source[];
+	/** Whether it takes work in any repository, cloning one it has no checkout of. */
+	anyRepository: boolean;
 	expiresAt: number;
 	/**
 	 * The owner let Chopin start work on this laptop by itself (rebuilds and prototypes), when
@@ -22,7 +29,10 @@ export type Connection = {
 	autoRun?: boolean;
 	/** The chopin release that opened it, when it said; known only while it is connected. */
 	version?: string;
-	/** The connector protocol it spoke as it connected; 4 and up can run Planners on request. */
+	/**
+	 * The connector protocol it spoke as it connected; 4 and up can run Planners on request, 5 and
+	 * up serve any repository.
+	 */
 	protocol?: number;
 	/** What the connector said about its machine as it connected. */
 	about?: About;
@@ -66,6 +76,26 @@ export type Grant = {
 const CONNECTION_MS = 90_000;
 /** Connectors poll at least every 20 seconds while idle and heartbeat every 10 while working. */
 const FRESH_MS = 45_000;
+
+/** The first connector protocol whose connection is the machine rather than one checkout. */
+export const ANY_REPOSITORY_PROTOCOL = 5;
+
+/** Whether a connection may take work in a repository. */
+export function serves(connection: Connection, repositoryId: string) {
+	return connection.anyRepository
+		|| connection.checkouts.some(value => value.repositoryId === repositoryId);
+}
+
+/** The checkout a connection said it has of a repository, if any. */
+export function checkoutOf(connection: Connection, repositoryId: string) {
+	return connection.checkouts.find(value => value.repositoryId === repositoryId);
+}
+
+/** Every repository's connector waits on this key too, when it serves any repository. */
+const ANY = "*";
+
+/** How many live connections one owner may have at once. */
+const OWNER_CONNECTIONS = 32;
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function confirmation() {
@@ -136,7 +166,11 @@ export class Connections {
 		if (value.proof !== fingerprint(secret)) fail("pairing-forbidden");
 		return value.token ? { token: value.token } : { waiting: true as const };
 	}
-	/** A paired machine's checkout comes online; its token lives only in this process. */
+	/**
+	 * A paired machine comes online with the checkouts it has: protocol 5 and up for any repository
+	 * its owner can push to, an older connector for its one checkout's. Its token lives only in this
+	 * process.
+	 */
 	open(
 		machine: {
 			id: string;
@@ -147,18 +181,29 @@ export class Connections {
 			protocol?: number;
 		},
 		label: string,
-		source: Source,
+		checkouts: Source[],
 		about: About = {},
 	) {
 		this.sweep();
-		if (this.list(source.repositoryId, machine.owner).length >= 8) fail("connection-limit");
+		let anyRepository = (machine.protocol ?? 1) >= ANY_REPOSITORY_PROTOCOL;
+		let owned = [...this.#connections.values()].filter(value =>
+			value.owner === machine.owner && value.expiresAt > this.now()
+		);
+		if (
+			owned.length >= OWNER_CONNECTIONS
+			|| !anyRepository
+				&& checkouts.some(checkout =>
+					owned.filter(value => serves(value, checkout.repositoryId)).length >= 8
+				)
+		) fail("connection-limit");
 		let connection: Connection = {
 			id: crypto.randomUUID(),
 			owner: machine.owner,
 			login: machine.login,
 			machineId: machine.id,
 			label,
-			source,
+			checkouts,
+			anyRepository,
 			expiresAt: this.now() + CONNECTION_MS,
 			autoRun: machine.autoRun,
 			...(machine.version ? { version: machine.version } : {}),
@@ -207,10 +252,10 @@ export class Connections {
 	fresh(connection: Connection) {
 		return connection.expiresAt - CONNECTION_MS > this.now() - FRESH_MS;
 	}
-	/** Live connections for a repository, most recently heard from first. */
+	/** Live connections that serve a repository, most recently heard from first. */
 	list(repositoryId: string, owner?: string) {
 		return [...this.#connections.values()].filter(value =>
-			value.source.repositoryId === repositoryId && value.expiresAt > this.now()
+			serves(value, repositoryId) && value.expiresAt > this.now()
 			&& (owner === undefined || value.owner === owner)
 		).sort((a, b) => b.expiresAt - a.expiresAt);
 	}
@@ -249,7 +294,7 @@ export class Connections {
 			if (rest.length) this.#queued.set(connectionId, rest);
 			else this.#queued.delete(connectionId);
 			let connection = this.#connections.get(connectionId);
-			if (connection) this.wake(connection.source.repositoryId);
+			if (connection) this.wakeConnection(connection);
 			return;
 		}
 		let rest = queue.filter(id => id !== documentId);
@@ -261,7 +306,10 @@ export class Connections {
 		this.#used.set(documentId, connectionId);
 	}
 	/**
-	 * Live connections for a repository that may take `owner`'s work on `documentId`. A chosen
+	 * `owner`'s live connections that serve a repository and may take their work on `documentId`:
+	 * every machine of theirs on connector protocol 5 and up, whatever checkouts it has, and an
+	 * older one connected for this repository. Whether the machine's owner can push to it is
+	 * checked as the work is claimed. A chosen
 	 * machine's connections only, so an offline choice leaves none rather than falling back to
 	 * another machine. Automatic offers all of them: the owner's favorite machine first, then the
 	 * one last used for the document.
@@ -369,7 +417,7 @@ export class Connections {
 		}
 		for (let [key, grant] of this.#tokens) if (grant.connectionId === id) this.#tokens.delete(key);
 		if (connection) {
-			this.wake(connection.source.repositoryId);
+			this.wakeConnection(connection);
 			this.onEnded?.(connection);
 		}
 	}
@@ -390,23 +438,39 @@ export class Connections {
 			if (connection.expiresAt <= this.now()) this.revoke(id);
 		}
 	}
-	/** Wake every connector waiting for work in a repository. */
+	/** Wake every connector waiting for work in a repository, and every one serving any. */
 	wake(repositoryId: string) {
-		for (let resolve of this.#waiters.get(repositoryId) ?? []) resolve();
+		for (let key of new Set([repositoryId, ANY])) {
+			for (let resolve of this.#waiters.get(key) ?? []) resolve();
+		}
 	}
-	wait(repositoryId: string, signal: AbortSignal) {
+	/** Wake the connectors that wait on what this connection serves. */
+	wakeConnection(connection: Connection) {
+		if (connection.anyRepository) this.wake(ANY);
+		for (let checkout of connection.checkouts) this.wake(checkout.repositoryId);
+	}
+	/** Wait, at most 20 seconds, for work this connection may take. */
+	wait(connection: Connection, signal: AbortSignal) {
+		let keys = connection.anyRepository
+			? [ANY]
+			: connection.checkouts.map(checkout => checkout.repositoryId);
 		return new Promise<void>(resolve => {
-			let set = this.#waiters.get(repositoryId) ?? new Set();
-			this.#waiters.set(repositoryId, set);
 			let finish = () => {
 				clearTimeout(timer);
-				set.delete(finish);
-				if (!set.size) this.#waiters.delete(repositoryId);
+				for (let key of keys) {
+					let set = this.#waiters.get(key);
+					set?.delete(finish);
+					if (set && !set.size) this.#waiters.delete(key);
+				}
 				signal.removeEventListener("abort", finish);
 				resolve();
 			};
 			let timer = setTimeout(finish, 20_000);
-			set.add(finish);
+			for (let key of keys) {
+				let set = this.#waiters.get(key) ?? new Set();
+				this.#waiters.set(key, set);
+				set.add(finish);
+			}
 			signal.addEventListener("abort", finish, { once: true });
 			if (signal.aborted) finish();
 		});
