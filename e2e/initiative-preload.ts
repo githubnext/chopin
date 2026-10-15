@@ -25,13 +25,17 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	}
 	let state = request.state as {
 		sourceId: string;
+		turn: { group: boolean; quiet: boolean; paused: boolean; focused?: boolean };
 		messages: Array<{ id: string; author: string; text: string }>;
 	};
 	let source = state.messages.find(message => message.id === state.sourceId);
-	let answer = source?.author === "member" && (source.text.startsWith("INITIATIVE-USEFUL")
-			|| source.text === "Can you compare the export approaches for this small pilot?")
-		? "recommend"
-		: "wait";
+	let answer = source?.text.startsWith("Chopin, can you")
+		? "direct"
+		: state.turn.paused || state.turn.focused || source?.text.startsWith("Please wait")
+		? "wait"
+		: state.turn.group && !state.turn.quiet
+		? "yield"
+		: "respond";
 	return Response.json({
 		model: "jev-e2e-initiative",
 		answers: { initiative: choice(question, answer) },

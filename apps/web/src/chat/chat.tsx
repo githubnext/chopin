@@ -11,7 +11,6 @@ import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from 
 import type { ReactNode } from "react";
 
 import {
-	ChopinMark,
 	CONNECTION_GRACE,
 	isDemoHandle,
 	MAX_RESEARCH_BRIEF,
@@ -19,13 +18,11 @@ import {
 	useConnectionNotice,
 	usePopoverDismissal,
 } from "@chopin/editor";
-import { usePhone } from "@chopin/editor/pointer";
-import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { ArchiveIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
 import { DraftInput } from "./draft-input";
 import type { DraftInputHandle } from "./draft-input";
-import { ModeSwitch } from "./mode-switch";
 import { PlannerAttachment } from "./planner-attachment";
 import { Participation } from "./participation";
 import { TypingReporter } from "./typing";
@@ -60,7 +57,6 @@ import {
 } from "./reference-picker";
 import {
 	acknowledgeDraft,
-	addressedOutsideReferences,
 	addressesPlanner,
 	boundedChatError,
 	insertReference,
@@ -262,10 +258,6 @@ export function Chat(
 	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
-	let [mode, setMode] = useState(() =>
-		draft.submission?.to === "planner" && !addressedOutsideReferences(draft.text, draft.references)
-	);
-	let phone = usePhone();
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -305,8 +297,6 @@ export function Chat(
 		: wire?.status === "connecting"
 		? "Connecting…"
 		: "Reconnecting…";
-	let effectiveMode = agent && (mode || draft.submission?.to === "planner"
-		|| addressedOutsideReferences(draft.text, draft.references));
 	let workingTurn = transcriptReady ? turn : undefined;
 	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
 		? {
@@ -523,7 +513,6 @@ export function Chat(
 		}
 		let submitted = prepareDraftSubmission(current, undefined, {
 			planner: agent,
-			mode: effectiveMode,
 			referencesEnabled,
 			focus,
 		});
@@ -598,48 +587,6 @@ export function Chat(
 		}
 	});
 
-	let toggleMode = () => {
-		if (!draftable || sending || !agent) return;
-		let current = draftRef.current;
-		let at = selection.start;
-		let end = selection.end;
-		if (effectiveMode) {
-			let removals = [...current.text.matchAll(/(^|[^\w@])@chopin\b/gi)]
-				.map(match => {
-					let start = match.index + match[1]!.length;
-					let end = match.index + match[0].length;
-					// Take one following space too where the mention began the text or followed one,
-					// so removing it leaves no doubled or leading space.
-					let before = current.text[start - 1];
-					if (current.text[end] === " " && (start === 0 || before === " ")) end += 1;
-					return { start, end };
-				})
-				.filter(edit =>
-					!current.references.some(reference =>
-						edit.start < reference.end && edit.end > reference.start
-					)
-				);
-			let next = current.text;
-			let references = current.references;
-			for (let edit of removals.toReversed()) {
-				let revised = next.slice(0, edit.start) + next.slice(edit.end);
-				references = reconcileReferenceDrafts(next, revised, references, edit);
-				if (edit.start < at) at -= Math.min(edit.end - edit.start, at - edit.start);
-				if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
-				next = revised;
-			}
-			setDraft({ text: next, references });
-			setSelection({ start: at, end });
-			setMode(false);
-		} else {
-			setMode(true);
-			setDraft({ text: current.text, references: current.references });
-		}
-		setSendError(undefined);
-		setDismissedPicker(triggerKey ?? mentionKey);
-		pendingCaret.current = { start: at, end };
-	};
-
 	let chooseReference = (target: ReferenceTarget) => {
 		if (!trigger) return;
 		let next = insertReference(draft.text, draft.references, trigger, target);
@@ -653,7 +600,6 @@ export function Chat(
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!mention) return;
 		let next = insertMention(draft.text, mention, candidate);
-		if (candidate.kind === "planner") setMode(true);
 		setDraft(current =>
 			reviseComposerDraft(
 				current,
@@ -691,7 +637,11 @@ export function Chat(
 			canEdit={composerReady}
 			emptyHint={readonly || archived
 				? undefined
-				: { planner: !!agent, references: referencesEnabled }}
+				: {
+					planner: !!agent,
+					references: referencesEnabled,
+					automatic: participationState?.enabled,
+				}}
 			conversationPlanJobs={conversationPlanJobs}
 			onCardLink={onCardLink}
 			onAddExcerpt={onAddExcerpt}
@@ -732,6 +682,14 @@ export function Chat(
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
+			{agent && wire && participationState?.enabled && (
+				<Participation
+					key={`${room}:${participationKey}`}
+					state={participationState}
+					wire={wire}
+					disabled={!composerReady}
+				/>
+			)}
 			{transcriptView}
 
 			{agent && !!runs?.length && (
@@ -802,7 +760,6 @@ export function Chat(
 				<div
 					aria-busy={sending}
 					className="composer-surface field"
-					data-mode={effectiveMode ? "chopin" : "chat"}
 					data-error={!!sendError || undefined}
 				>
 					{pickerOpen && trigger && (
@@ -848,23 +805,6 @@ export function Chat(
 						)
 						: (
 							<>
-								{/* A phone's switch shows only an icon; the chip says where the message goes. */}
-								{phone && effectiveMode && (
-									<span className="composer-chopin-row">
-										<button
-											aria-label="Remove Chopin"
-											className="composer-chopin-chip"
-											data-press="none"
-											disabled={!draftable || sending}
-											onClick={toggleMode}
-											type="button"
-										>
-											<ChopinMark />
-											<span aria-hidden="true">Chopin</span>
-											<CloseIcon aria-hidden="true" size={12} />
-										</button>
-									</span>
-								)}
 								<DraftInput
 									aria-label="Message"
 									aria-activedescendant={commandOpen
@@ -895,7 +835,7 @@ export function Chat(
 									readOnly={!draftable || sending}
 									role="combobox"
 									resetKey={historyKey}
-									historyGroupKey={mode}
+									historyGroupKey={false}
 									onSubmit={submit}
 									references={draft.references}
 									mentions={[
@@ -954,14 +894,6 @@ export function Chat(
 										}
 										if (!composing && event.key === "Tab" && !event.shiftKey) {
 											setDismissedPicker(mentionKey ?? triggerKey);
-											return;
-										}
-										if (
-											!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
-											&& !event.ctrlKey && !event.altKey && agent && draftable && !sending
-										) {
-											event.preventDefault();
-											if (!event.repeat) toggleMode();
 											return;
 										}
 										let mentionAction = mentionOpen
@@ -1031,19 +963,13 @@ export function Chat(
 											start: event.currentTarget.selectionStart,
 											end: event.currentTarget.selectionEnd,
 										})}
-									placeholder={effectiveMode ? "Ask Chopin…" : "Message your collaborators…"}
+									placeholder="Message…"
 									ref={textarea}
 									value={draft.text}
 								/>
 
 								<div className="composer-footer">
 									<div className="composer-left">
-										<ModeSwitch
-											effectiveMode={effectiveMode}
-											disabled={!draftable || sending || !agent}
-											onToggle={toggleMode}
-										/>
-
 										{referencesEnabled && (
 											<button
 												type="button"
@@ -1133,14 +1059,7 @@ export function Chat(
 							</>
 						)}
 				</div>
-				{agent && wire && participationState?.enabled && (
-					<Participation
-						key={`${room}:${participationKey}`}
-						state={participationState}
-						wire={wire}
-						disabled={!composerReady}
-					/>
-				)}
+
 				<PlannerAttachment planner={planner} />
 			</div>
 		</div>

@@ -31,7 +31,7 @@ context:
   maintain a short document title and enter the Planner's bounded context;
   `@chopin` asks Chopin to act on the document. The opt-in
   [automatic participation experiment](docs/conversation-initiative.md) lets
-  Chopin join useful openings in ordinary conversation, with a shared pause control.
+  Chopin reply in solo conversation and wait its turn in group discussion, with a shared pause control.
 - **Document** is a multiplayer rich-text artifact backed by readable, restricted
   MDX. The current interface labels this view **Plan**. People and the agent edit
   the same document, with presence, cursors, and transient markers for recent

@@ -3,6 +3,8 @@ import {
 	createInitiativeSchedule,
 	type InitiativeClock,
 	type InitiativeSchedule,
+	type TurnContext,
+	type TurnDecision,
 	TYPING_LEASE_MS,
 } from "./initiative-schedule";
 
@@ -68,7 +70,7 @@ function setup(overrides: {
 	soloMs?: number;
 	groupMs?: number;
 	admit?: (value: string) => "ready" | "wait" | "drop";
-	judge?: (value: string, signal: AbortSignal) => Promise<string | undefined>;
+	judge?: (value: string, signal: AbortSignal, turn: TurnContext) => Promise<TurnDecision>;
 	dispatch?: (
 		value: string,
 		move: string,
@@ -83,7 +85,7 @@ function setup(overrides: {
 	let dispatches: string[] = [];
 	let dispatchSignals: AbortSignal[] = [];
 	let dispatchLifecycles: DispatchLifecycle[] = [];
-	let schedule: InitiativeSchedule<string> = createInitiativeSchedule<string, string>({
+	let schedule: InitiativeSchedule<string> = createInitiativeSchedule<string>({
 		clock,
 		soloMs: overrides.soloMs,
 		groupMs: overrides.groupMs,
@@ -91,12 +93,12 @@ function setup(overrides: {
 			admissions.push(value);
 			return overrides.admit?.(value) ?? "ready";
 		},
-		judge(value, signal) {
+		judge(value, signal, turn) {
 			judgments.push(value);
 			judgmentSignals.push(signal);
 			return overrides.judge
-				? overrides.judge(value, signal)
-				: Promise.resolve("clarify");
+				? overrides.judge(value, signal, turn)
+				: Promise.resolve("respond");
 		},
 		dispatch(value, move, signal, lifecycle) {
 			dispatches.push(`${value}:${move}`);
@@ -137,21 +139,66 @@ function receive(
 	h.schedule.receive({ id, actor, value });
 }
 
-test("uses contributor identities across tabs to choose solo or group silence", async () => {
-	let solo = setup({ soloMs: 10, groupMs: 40 });
-	receive(solo, "ana-tab-one", "ana", "first tab");
-	receive(solo, "ana-tab-two", "ana", "second tab");
-	await solo.clock.advance(10);
-	expect(solo.judgments).toEqual(["second tab"]);
+test("group turn judgment can answer an invitation quickly or yield until quiet", async () => {
+	let phases: TurnContext[] = [];
+	let h = setup({
+		soloMs: 10,
+		groupMs: 40,
+		judge: async (_value, _signal, turn) => {
+			phases.push(turn);
+			return turn.quiet ? "respond" : "yield";
+		},
+	});
+	receive(h, "ana-message", "ana");
+	await h.clock.advance(5);
+	receive(h, "bo-message", "bo");
+	await h.clock.advance(10);
+	expect(phases).toEqual([{ group: true, quiet: false, paused: false }]);
+	expect(h.dispatches).toEqual([]);
+	await h.clock.advance(29);
+	expect(phases).toHaveLength(1);
+	await h.clock.advance(1);
+	expect(phases[1]).toEqual({ group: true, quiet: true, paused: false });
+	expect(h.dispatches).toEqual(["bo-message:respond"]);
+});
 
-	let group = setup({ soloMs: 10, groupMs: 40 });
-	receive(group, "ana-message", "ana");
-	await group.clock.advance(5);
-	receive(group, "bo-message", "bo");
-	await group.clock.advance(39);
-	expect(group.judgments).toEqual([]);
-	await group.clock.advance(1);
-	expect(group.judgments).toEqual(["bo-message"]);
+test("a direct group request does not wait for group silence", async () => {
+	let h = setup({ soloMs: 10, groupMs: 40, judge: async () => "direct" });
+	receive(h, "ana-message", "ana");
+	receive(h, "bo-message", "bo");
+	await h.clock.advance(10);
+	expect(h.dispatches).toEqual(["bo-message:direct"]);
+});
+
+test("replying clears earlier speakers so the next human gets a solo turn", async () => {
+	let phases: TurnContext[] = [];
+	let h = setup({
+		soloMs: 10,
+		judge: async (_value, _signal, turn) => {
+			phases.push(turn);
+			return "respond";
+		},
+	});
+	receive(h, "ana-message", "ana");
+	receive(h, "bo-message", "bo");
+	await h.clock.advance(10);
+	h.schedule.replied();
+	receive(h, "ana-reply", "ana");
+	await h.clock.advance(10);
+	expect(phases.map(phase => phase.group)).toEqual([true, false]);
+});
+
+test("pause permits only a new direct request and never retries a yielded judgment", async () => {
+	let h = setup({ soloMs: 10, judge: async value => value === "direct" ? "direct" : "respond" });
+	h.schedule.pause(true);
+	receive(h, "ordinary", "ana");
+	await h.clock.advance(10);
+	expect(h.dispatches).toEqual([]);
+	receive(h, "direct", "ana");
+	await h.clock.advance(10);
+	expect(h.dispatches).toEqual(["direct:direct"]);
+	await h.clock.advance(60_000);
+	expect(h.dispatches).toHaveLength(1);
 });
 
 test("coalesces a burst into a judgment of only the latest message", async () => {
@@ -163,7 +210,7 @@ test("coalesces a burst into a judgment of only the latest message", async () =>
 	expect(h.judgments).toEqual([]);
 	await h.clock.advance(1);
 	expect(h.judgments).toEqual(["latest message"]);
-	expect(h.dispatches).toEqual(["latest message:clarify"]);
+	expect(h.dispatches).toEqual(["latest message:respond"]);
 });
 
 test("typing leases extend silence and stopping typing starts a fresh quiet window", async () => {
@@ -187,23 +234,23 @@ test("typing leases extend silence and stopping typing starts a fresh quiet wind
 });
 
 test("a newer message aborts a stale judgment before it can dispatch", async () => {
-	let stale = deferred<string | undefined>();
+	let stale = deferred<TurnDecision>();
 	let h = setup({
 		soloMs: 10,
 		groupMs: 10,
-		judge: (value) => value === "old" ? stale.promise : Promise.resolve("clarify"),
+		judge: (value) => value === "old" ? stale.promise : Promise.resolve("respond"),
 	});
 	receive(h, "old-id", "ana", "old");
 	await h.clock.advance(10);
 	expect(h.judgments).toEqual(["old"]);
 	receive(h, "new-id", "bo", "new");
 	expect(h.judgmentSignals[0]?.aborted).toBe(true);
-	stale.resolve("recommend");
+	stale.resolve("direct");
 	await settlePromises();
 	expect(h.dispatches).toEqual([]);
 	await h.clock.advance(10);
 	expect(h.judgments).toEqual(["old", "new"]);
-	expect(h.dispatches).toEqual(["new:clarify"]);
+	expect(h.dispatches).toEqual(["new:respond"]);
 });
 
 test("a new human message cancels a dispatch that has not started and gets a fresh judgment", async () => {
@@ -219,25 +266,25 @@ test("a new human message cancels a dispatch that has not started and gets a fre
 	});
 	receive(h, "old-id", "ana", "old");
 	await h.clock.advance(10);
-	expect(h.dispatches).toEqual(["old:clarify"]);
+	expect(h.dispatches).toEqual(["old:respond"]);
 	receive(h, "new-id", "bo", "new");
 	expect(h.dispatchSignals[0]?.aborted).toBe(true);
 	firstDispatch.resolve(true);
 	await settlePromises();
 	await h.clock.advance(10);
 	expect(h.judgments).toEqual(["old", "new"]);
-	expect(h.dispatches).toEqual(["old:clarify", "new:clarify"]);
+	expect(h.dispatches).toEqual(["old:respond", "new:respond"]);
 });
 
 test("a stale judgment cannot clear a newer dispatch running on the same opportunity", async () => {
-	let staleJudgment = deferred<string | undefined>();
+	let staleJudgment = deferred<TurnDecision>();
 	let runningDispatch = deferred<boolean>();
 	let judgmentCalls = 0;
 	let h = setup({
 		soloMs: 10,
 		judge: async () => {
 			judgmentCalls++;
-			return judgmentCalls === 1 ? staleJudgment.promise : "clarify";
+			return judgmentCalls === 1 ? staleJudgment.promise : "respond";
 		},
 		dispatch: (_value, _move, _signal, lifecycle) => {
 			lifecycle.started();
@@ -252,7 +299,7 @@ test("a stale judgment cannot clear a newer dispatch running on the same opportu
 	expect(h.judgments).toEqual(["source", "source"]);
 	expect(h.dispatchLifecycles[0]?.current()).toBe(true);
 
-	staleJudgment.resolve("recommend");
+	staleJudgment.resolve("direct");
 	await settlePromises();
 	h.schedule.typing("bo-tab", "bo", true);
 	expect(h.dispatchSignals[0]?.aborted).toBe(false);
@@ -308,13 +355,13 @@ test("pause clears pending work and requires new input after resume", async () =
 });
 
 test("close aborts judgment, clears timers, and ignores future input", async () => {
-	let judgment = deferred<string | undefined>();
+	let judgment = deferred<TurnDecision>();
 	let h = setup({ soloMs: 10, judge: () => judgment.promise });
 	receive(h, "source", "ana");
 	await h.clock.advance(10);
 	h.schedule.close();
 	expect(h.judgmentSignals[0]?.aborted).toBe(true);
-	judgment.resolve("clarify");
+	judgment.resolve("respond");
 	await settlePromises();
 	receive(h, "later", "bo");
 	h.schedule.typing("bo-tab", "bo", true);
@@ -340,12 +387,12 @@ test("an opportunity expires after five minutes while admission remains busy", a
 });
 
 test("a judgment that finishes after five minutes cannot dispatch", async () => {
-	let judgment = deferred<string | undefined>();
+	let judgment = deferred<TurnDecision>();
 	let h = setup({ soloMs: 10, judge: () => judgment.promise });
 	receive(h, "expired", "ana");
 	await h.clock.advance(10);
 	await h.clock.advance(5 * 60 * 1_000 - 10);
-	judgment.resolve("recommend");
+	judgment.resolve("direct");
 	await settlePromises();
 	expect(h.dispatches).toEqual([]);
 	await h.clock.advance(1);
@@ -384,7 +431,7 @@ test("waits for turn admission, then judges against the newly available state", 
 	await h.clock.advance(1_000);
 	expect(h.admissions.length).toBeGreaterThan(1);
 	expect(h.judgments).toEqual(["source"]);
-	expect(h.dispatches).toEqual(["source:clarify"]);
+	expect(h.dispatches).toEqual(["source:respond"]);
 });
 
 test("rechecks admission after judgment and discards a move when a turn starts meanwhile", async () => {
@@ -392,7 +439,7 @@ test("rechecks admission after judgment and discards a move when a turn starts m
 	let h = setup({
 		soloMs: 10,
 		admit: () => ++admissionCalls === 2 ? "wait" : "ready",
-		judge: async (_value, _signal) => admissionCalls === 1 ? "recommend" : "clarify",
+		judge: async (_value, _signal) => admissionCalls === 1 ? "direct" : "respond",
 	});
 	receive(h, "source", "ana");
 	await h.clock.advance(10);
@@ -401,7 +448,7 @@ test("rechecks admission after judgment and discards a move when a turn starts m
 	await h.clock.advance(1);
 	await h.clock.advance(1_000);
 	expect(h.judgments).toEqual(["source", "source"]);
-	expect(h.dispatches).toEqual(["source:clarify"]);
+	expect(h.dispatches).toEqual(["source:respond"]);
 });
 
 test("duplicate source IDs do not replace or restart an opportunity", async () => {
@@ -414,5 +461,5 @@ test("duplicate source IDs do not replace or restart an opportunity", async () =
 	receive(h, "same-source", "bo", "duplicate after completion");
 	await h.clock.advance(60_000);
 	expect(h.judgments).toEqual(["original"]);
-	expect(h.dispatches).toEqual(["original:clarify"]);
+	expect(h.dispatches).toEqual(["original:respond"]);
 });

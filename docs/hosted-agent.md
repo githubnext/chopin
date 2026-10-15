@@ -474,9 +474,10 @@ using that revision. The next turn creates a fresh session with the new token.
 ## Chat context
 
 The opt-in [automatic participation experiment](conversation-initiative.md) lets
-Chopin join ordinary saved human discussion after a quiet window and a relevance
-check. It uses this same Planner lifecycle, with a shared durable pause control;
-explicit `@chopin` requests remain immediate.
+Chopin reply promptly in solo conversation and yield during human exchanges.
+Group turns use a bounded turn-taking judgment and a quiet window. Natural-language
+requests can invite Chopin without `@`. It uses this same Planner lifecycle, with
+a shared durable pause control; explicit `@chopin` requests remain immediate.
 
 The channel chat transcript is durable, but not every historical message is sent to
 every turn.

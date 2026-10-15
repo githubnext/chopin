@@ -60,20 +60,15 @@ async function enablePlanner(page: Page): Promise<void> {
 	});
 }
 
-test("Shift+Tab preserves the draft and sends in persistent Chopin mode after acknowledgement", async ({ join, page }) => {
+test("addressing Chopin applies to one message and Shift+Tab preserves normal navigation", async ({ join, page }) => {
 	await enablePlanner(page);
 	let sent: Chat.Send[] = [];
-	let release: (() => void) | undefined;
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
 			if (typeof message === "string") {
 				let frame = JSON.parse(message) as Chat.Send;
-				if (frame.kind === "chat:send") {
-					sent.push(frame);
-					release = () => server.send(message);
-					return;
-				}
+				if (frame.kind === "chat:send") sent.push(frame);
 			}
 			server.send(message);
 		});
@@ -81,39 +76,25 @@ test("Shift+Tab preserves the draft and sends in persistent Chopin mode after ac
 	});
 	let chat = chatPane(await join("ana"));
 	let input = chatInput(chat);
-	let toggle = chat.getByRole("button", { name: "Talk to Chopin", exact: true });
-	await expect(toggle).toHaveAttribute("aria-pressed", "false");
-	await input.fill("Outline export options");
-	await input.press("ArrowLeft");
-	let caret = await chatCaret(input);
+	await expect(chat.getByRole("button", { name: "Talk to Chopin", exact: true })).toHaveCount(0);
+	await input.fill("@chopin Outline export options");
 	await input.press("Shift+Tab");
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
-	await expectChatValue(input, "Outline export options");
-	expect(await chatCaret(input)).toBe(caret);
+	await expect(input).not.toBeFocused();
+	await expectChatValue(input, "@chopin Outline export options");
+	await input.focus();
 	await input.evaluate(element => {
 		let event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
 		Object.defineProperty(event, "keyCode", { value: 229 });
 		element.dispatchEvent(event);
 	});
-	await expectChatValue(input, "Outline export options");
 	expect(sent).toHaveLength(0);
 	await input.press("Enter");
-	await expect.poll(() => sent.length).toBe(1);
-	expect(sent[0]).toMatchObject({ text: "@chopin Outline export options", to: "planner" });
-	await expect(input).toHaveAttribute("contenteditable", "false");
-	await expectChatValue(input, "Outline export options");
-	await expect(toggle).toBeDisabled();
-	release!();
 	await expectChatValue(input, "");
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
-	await expect(input).toBeFocused();
-	await input.press("Tab");
-	await page.evaluate(() =>
-		new Promise<void>(resolve =>
-			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-		)
-	);
-	await expect(input).not.toBeFocused();
+	expect(sent[0]).toMatchObject({ text: "@chopin Outline export options", to: "planner" });
+	await input.fill("Thanks for looking");
+	await input.press("Enter");
+	await expectChatValue(input, "");
+	expect(sent[1]).toMatchObject({ text: "Thanks for looking", to: "room" });
 });
 
 test("wrapped document mentions keep caret placement, edits and undo aligned", async ({ baseURL, join, page, room, seed }) => {
@@ -160,7 +141,6 @@ test("wrapped document mentions keep caret placement, edits and undo aligned", a
 	await expect(reference).toHaveAttribute("data-document-id", target);
 	await input.press("Meta+Shift+z");
 	await expectChatValue(input, before + " and PDF");
-	await input.press("Shift+Tab");
 	await expectChatValue(input, before + " and PDF");
 	await expect.poll(() => chatCaret(input)).toBe(before!.length + 8);
 	await input.press("Shift+Enter");
@@ -201,31 +181,6 @@ test("read-only and archived notices replace the composer input", async ({ join,
 	await expect(chat.getByText("Archived. Restore it to keep chatting.", { exact: true }))
 		.toBeVisible();
 	await expect(chatInput(chat)).toHaveCount(0);
-});
-
-test("switching to Chat removes multiple addresses while preserving a document mention between them", async ({ baseURL, join, page, room }) => {
-	let target = crypto.randomUUID();
-	let title = `Export @chopin ${target.slice(0, 8)}`;
-	await seedChildChannel(Number(new URL(baseURL!).port), room, target, title, "# Export formats\n");
-	await enablePlanner(page);
-	await page.setViewportSize({ width: 1600, height: 1000 });
-	let chat = chatPane(await join("ana"));
-	let input = chatInput(chat);
-	await input.fill(`@chopin See #${target.slice(0, 8)}`);
-	await chat.getByRole("option", { name: title, exact: true }).click();
-	await page.keyboard.insertText(" @chopin");
-	let reference = input.locator(".draft-reference");
-	await expect(reference).toHaveAttribute("data-document-id", target);
-	await input.press("Shift+Tab");
-	await expect(chat.getByRole("button", { name: "Talk to Chopin", exact: true })).toHaveAttribute(
-		"aria-pressed",
-		"false",
-	);
-	await expect(reference).toHaveAttribute("data-document-id", target);
-	await expect(reference).toHaveText(`#${title}`);
-	expect((await input.textContent())!.match(/@chopin/g)).toHaveLength(1);
-	await page.keyboard.insertText(" after");
-	await expect(reference).toHaveAttribute("data-document-id", target);
 });
 
 test("context-menu paste undo restores the replaced native selection", async ({ join, page }) => {

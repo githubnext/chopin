@@ -458,13 +458,6 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	);
 
 	await expectChatValue(draft, "");
-	if (
-		await chat.getByRole("button", { name: "Talk to Chopin", exact: true }).getAttribute(
-			"aria-pressed",
-		) === "true"
-	) {
-		await draft.press("Shift+Tab");
-	}
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();
 	await send.click();

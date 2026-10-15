@@ -95,6 +95,10 @@ export function createFakeHarness(
 				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
 					let available = new Set(turn.tools.map(spec => spec.name));
 					let prompt = promptText(turn.prompt);
+					// Automatic turns carry the latest human message in the session bootstrap.
+					let requested = prompt.includes("Respond to the current source message")
+						? turn.instructions?.split("\n").findLast(line => line.startsWith("@")) ?? prompt
+						: prompt;
 					let heading = prompt.startsWith("[Background job: heading]\n");
 					if (heading && available.size !== HEADING_TOOL_NAMES.length) {
 						throw new Error("e2e-fake heading job received tools outside its scope");
@@ -277,7 +281,7 @@ export function createFakeHarness(
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}
 						})();
-					} else if (prompt.includes(CHILD_PROMPT)) {
+					} else if (requested.includes(CHILD_PROMPT)) {
 						void (async () => {
 							try {
 								for (let toolName of CHILD_TOOLS) {

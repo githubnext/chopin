@@ -107,7 +107,7 @@ async function pausedInStorage(room: string) {
 }
 
 test(
-	"a solo substantive message gets one real Planner contribution; social text stays quiet",
+	"every solo human turn gets one reply, including a brief acknowledgment",
 	async ({ join, page, seed }, info) => {
 		await seed("# Conversational initiative\n\nCompare export formats for a small pilot.\n");
 		let frames = await record(page);
@@ -117,16 +117,17 @@ test(
 		)
 			.toBeVisible();
 		await send(page, "Thanks, that is clear.");
-		// Observe longer than the production solo silence interval.
-		await page.waitForTimeout(1800);
-		expect(frames.starts()).toHaveLength(0);
-		await send(page, "Can you compare the export approaches for this small pilot?");
 		await reply(page);
 		await expect.poll(() => frames.starts().length).toBe(1);
+		await expect.poll(() => frames.seen.findLast(item => item.frame.kind === "chat:state")?.frame)
+			.toMatchObject({ busy: false });
+		await send(page, "Can you compare the export approaches for this small pilot?");
+		await reply(page);
+		await expect.poll(() => frames.starts().length).toBe(2);
 		expect(frames.starts()[0]!.turn.handle).toBe("Chopin");
 		await page.screenshot({ path: info.outputPath("initiative-contribution.png"), fullPage: true });
 		await page.waitForTimeout(1800);
-		expect(frames.starts()).toHaveLength(1);
+		expect(frames.starts()).toHaveLength(2);
 	},
 );
 
@@ -158,7 +159,7 @@ test("two active humans get a silence window, renewed typing holds it, and blur 
 		let stopped = peerFrames!.typing().at(-1)!.at;
 		await reply(page);
 		expect(frames.starts()).toHaveLength(1);
-		expect(frames.starts()[0]!.at - stopped).toBeGreaterThanOrEqual(850);
+		expect(frames.starts()[0]!.at - stopped).toBeGreaterThanOrEqual(2850);
 		await expectChatValue(input, "I am still considering this");
 	} finally {
 		await peer.close();
@@ -202,7 +203,9 @@ test("losing a send acknowledgement and retrying after reconnect never duplicate
 	await expectChatValue(chatInput(pane(page)), "");
 	expect(frames.sends()).toHaveLength(2);
 	expect(frames.sends()[1]!.requestId).toBe(frames.sends()[0]!.requestId);
-	await expect(pane(page).getByText(text, { exact: true })).toHaveCount(1);
+	await expect(pane(page).getByText(text.replace(/^@chopin\s*/, ""), { exact: true })).toHaveCount(
+		1,
+	);
 	await page.waitForTimeout(2200);
 	expect(frames.starts().length).toBeLessThanOrEqual(1);
 	let count = frames.starts().length;
@@ -252,7 +255,9 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	expect(frames.sends()).toHaveLength(2);
 	expect(frames.sends()[1]!.requestId).toBe(frames.sends()[0]!.requestId);
 	expect(frames.sends().every(frame => frame.focus === child.id)).toBe(true);
-	await expect(pane(page).getByText(text, { exact: true })).toHaveCount(1);
+	await expect(pane(page).getByText(text.replace(/^@chopin\s*/, ""), { exact: true })).toHaveCount(
+		1,
+	);
 	await page.waitForTimeout(2200);
 	expect(frames.starts()).toHaveLength(0);
 	let count = frames.starts().length;
@@ -272,28 +277,24 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	).toHaveLength(0);
 });
 
-test("a Planner-mode send keeps its prepared destination and text after a lost acknowledgement and reload", async ({ join, page, seed }) => {
-	await seed("# Retried Planner mode\n\nCompare export formats for a small pilot.\n");
+test("a mentioned request keeps its prepared destination after a lost acknowledgement and reload", async ({ join, page, seed }) => {
+	await seed("# Retried direct request\n\nCompare export formats for a small pilot.\n");
 	let frames = await record(page, true);
 	await join("ana");
 	let input = chatInput(pane(page));
-	let toggle = pane(page).getByRole("button", { name: "Talk to Chopin", exact: true });
-	let text = "Compare the document and latest pull request";
+	let text = "@chopin Compare the document and latest pull request";
 	await input.fill(text);
-	await input.press("Shift+Tab");
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	await input.press("Enter");
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(2);
 	await page.reload();
 	await ready(page);
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(3);
 	await expectChatValue(input, text);
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	await input.press("Enter");
 	await expectChatValue(input, "");
 	expect(frames.sends()).toHaveLength(2);
 	let [first, retry] = frames.sends();
-	expect(first).toMatchObject({ text: `@chopin ${text}`, to: "planner" });
+	expect(first).toMatchObject({ text, to: "planner" });
 	expect(retry).toMatchObject({
 		requestId: first!.requestId,
 		text: first!.text,
@@ -301,7 +302,9 @@ test("a Planner-mode send keeps its prepared destination and text after a lost a
 	});
 	expect(retry!.focus).toBe(first!.focus);
 	expect(retry!.references).toEqual(first!.references);
-	await expect(pane(page).getByText(text, { exact: true })).toHaveCount(1);
+	await expect(pane(page).getByText(text.replace(/^@chopin\s*/, ""), { exact: true })).toHaveCount(
+		1,
+	);
 	await reply(page);
 	await page.waitForTimeout(1800);
 	expect(frames.starts().length).toBeLessThanOrEqual(1);
@@ -315,16 +318,15 @@ test("a Planner-mode send keeps its prepared destination and text after a lost a
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(5);
 	await expectChatValue(input, next);
 	await input.fill(`${next}, including Markdown`);
-	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	await input.press("Enter");
 	await expectChatValue(input, "");
 	expect(frames.sends()).toHaveLength(4);
 	let [interrupted, edited] = frames.sends().slice(2);
-	expect(edited).toMatchObject({ text: `@chopin ${next}, including Markdown`, to: "planner" });
+	expect(edited).toMatchObject({ text: `${next}, including Markdown`, to: "room" });
 	expect(edited!.requestId).not.toBe(interrupted!.requestId);
 });
 
-test("a room contribution arriving during an active turn waits until that turn finishes", async ({ join, page, seed }) => {
+test("a Planner reply after a pending human message prevents a second automatic turn", async ({ join, page, seed }) => {
 	await seed("# Racing initiative\n\nCompare export formats for a small pilot.\n");
 	let frames = await record(page);
 	await join("ana");
@@ -338,19 +340,12 @@ test("a room contribution arriving during an active turn waits until that turn f
 		)
 	).toBe(true);
 	expect(frames.starts()).toHaveLength(1);
-	await expect.poll(() => frames.starts().length, { timeout: 20000 }).toBe(2);
-	let [first, automatic] = frames.starts();
-	let ended = frames.seen.find(item =>
-		item.frame.kind === "chat:state" && !item.frame.busy && item.at > first!.at
-	)!;
-	expect(automatic!.turn.handle).toBe("Chopin");
-	expect(automatic!.at).toBeGreaterThanOrEqual(ended.at);
 	await expect.poll(
 		() => frames.seen.findLast(item => item.frame.kind === "chat:state")?.frame,
-		{
-			timeout: 20000,
-		},
+		{ timeout: 20000 },
 	).toMatchObject({ busy: false });
+	await page.waitForTimeout(3500);
+	expect(frames.starts()).toHaveLength(1);
 });
 
 test(
@@ -374,15 +369,15 @@ test(
 				}),
 			).toBeVisible();
 			await expect(pause).toBeDisabled();
-			await expect(pause).toHaveText("Chopin joins in");
+			await expect(pause).toHaveText("Chopin participates");
 			await expect.poll(() => pausedInStorage(room)).toBe(true);
 			frames.release();
 			let enable = pane(page).getByRole("button", {
 				name: "Enable automatic participation",
 				exact: true,
 			});
-			await expect(enable).toHaveText("Chopin is listening");
-			await expect(enable).toHaveAttribute("data-tooltip", /@chopin still works/);
+			await expect(enable).toHaveText("Automatic replies paused");
+			await expect(enable).toHaveAttribute("data-tooltip", /ask Chopin directly/);
 			await page.screenshot({ path: info.outputPath("initiative-paused.png"), fullPage: true });
 			await send(peer.page, "INITIATIVE-USEFUL paused: compare the export approaches.");
 			await page.waitForTimeout(1800);
@@ -412,7 +407,7 @@ test(
 	},
 );
 
-test("ordinary discussion focused on a child stays quiet, while direct child requests still work", async ({ baseURL, join, page, room, seed }) => {
+test("ordinary child discussion stays quiet while natural direct requests preserve focus", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Focused initiative root\n\nCompare export formats for a small pilot.\n");
 	let title = `Focused child ${room.slice(0, 8)}`;
 	let port = Number(new URL(baseURL!).port);
@@ -433,10 +428,10 @@ test("ordinary discussion focused on a child stays quiet, while direct child req
 	expect(frames.sends().at(-1)).toMatchObject({ to: "room", focus: child.id });
 	await page.waitForTimeout(2200);
 	expect(frames.starts()).toHaveLength(0);
-	await send(page, "@chopin CHILD-EDIT add a note to this report");
+	await send(page, "Chopin, can you CHILD-EDIT add a note to this report?");
 	await expect(surface.getByText("Planner note from the root Chat.", { exact: true }))
 		.toBeVisible();
-	expect(frames.sends().at(-1)).toMatchObject({ to: "planner", focus: child.id });
+	expect(frames.sends().at(-1)).toMatchObject({ to: "room", focus: child.id });
 	await expect.poll(() => readSource(port, child.id)).toContain("Planner note from the root Chat.");
 	expect(await readSource(port, room)).not.toContain("Planner note");
 	await page.getByRole("button", { name: "Back to Focused initiative root", exact: true }).click();
@@ -447,3 +442,28 @@ test("ordinary discussion focused on a child stays quiet, while direct child req
 	expect(frames.starts()).toHaveLength(2);
 	expect(frames.starts().at(-1)!.turn.handle).toBe("Chopin");
 });
+
+for (let paused of [false, true]) {
+	test(`plain-language direct requests get a prompt reply with participation paused=${paused}`, async ({ baseURL, browser, join, page, room, seed }) => {
+		await seed("# Direct conversation\n\nCompare export formats.\n");
+		let frames = await record(page);
+		await join("ana");
+		let peer = await openIsolatedRoom(browser, baseURL!, room, "bo", {});
+		try {
+			if (paused) {
+				await pane(page).getByRole("button", { name: "Pause automatic participation", exact: true })
+					.click();
+			}
+			await send(peer.page, "We are discussing export formats.");
+			let sent = Date.now();
+			await send(page, "Chopin, can you compare the export approaches?");
+			await expect.poll(() => frames.starts().length).toBe(1);
+			expect(frames.starts()[0]!.at - sent).toBeLessThan(2850);
+			await reply(page);
+			await page.waitForTimeout(3500);
+			expect(frames.starts()).toHaveLength(1);
+		} finally {
+			await peer.close();
+		}
+	});
+}

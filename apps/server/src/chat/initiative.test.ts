@@ -50,10 +50,10 @@ test("a failed ordinary save creates no initiative opportunity", async () => {
 });
 
 test.each(["pending", "active"] as const)(
-	"an ordinary child-focused message cancels %s root initiative without replacing it",
+	"an ordinary child-focused message cancels %s root initiative and only permits direct requests",
 	async phase => {
 		let h = await setup.harness();
-		h.judge.mockResolvedValue("clarify");
+		h.judge.mockResolvedValue("respond");
 		await Chat.send(h.context, h.ws, message("An unresolved root question"));
 		if (phase === "active") {
 			await h.clock.advance(1500);
@@ -83,7 +83,7 @@ test.each(["pending", "active"] as const)(
 			});
 			expect(typing).toHaveBeenCalledWith("ana-tab", "U_ana", false);
 			await h.clock.advance(12_000);
-			expect(h.judge).toHaveBeenCalledTimes(phase === "active" ? 1 : 0);
+			expect(h.judge).toHaveBeenCalledTimes(phase === "active" ? 2 : 1);
 			expect(h.prompts).toHaveLength(phase === "active" ? 1 : 0);
 			expect(h.aborts()).toBe(phase === "active" ? 1 : 0);
 			expect(h.chat.waiting).toEqual([]);
@@ -95,13 +95,13 @@ test.each(["pending", "active"] as const)(
 
 test("a committed move starts an ordinary Planner turn and never repeats without new input", async () => {
 	let h = await setup.harness();
-	h.judge.mockResolvedValue("clarify");
+	h.judge.mockResolvedValue("respond");
 	let source = message();
 	await Chat.send(h.context, h.ws, source);
 	await h.clock.advance(1500);
 	await until(() => h.prompts.length === 1);
 	expect(h.prompts[0]).toContain(source.requestId);
-	expect(h.prompts[0]).toContain("one useful next move");
+	expect(h.prompts[0]).toContain("one concise final conversational reply");
 	expect(h.chat.entries.some(entry =>
 		entry.author.kind === "system"
 		&& entry.text === "Chopin is joining the conversation."
@@ -118,7 +118,7 @@ test.each(["permission", "owner", "unattached", "implementation", "departed"] as
 	"a %s denial stays quiet",
 	async denial => {
 		let h = await setup.harness();
-		h.judge.mockResolvedValue("clarify");
+		h.judge.mockResolvedValue("respond");
 		if (denial === "permission") h.context.initiativeAuthorize = async () => false;
 		if (denial === "owner") h.setOwnerAvailable(false);
 		if (denial === "unattached") h.context.plannerNotAttached = async () => "not attached";
@@ -133,13 +133,13 @@ test.each(["permission", "owner", "unattached", "implementation", "departed"] as
 
 test("permission is checked again after a judgment completes", async () => {
 	let h = await setup.harness();
-	let result = Promise.withResolvers<"clarify">();
+	let result = Promise.withResolvers<"respond">();
 	h.judge.mockImplementation(() => result.promise);
 	await Chat.send(h.context, h.ws, message());
 	await h.clock.advance(1500);
 	expect(h.judge).toHaveBeenCalledTimes(1);
 	h.context.initiativeAuthorize = async () => false;
-	result.resolve("clarify");
+	result.resolve("respond");
 	await flush();
 	expect(h.prompts).toEqual([]);
 	expect(h.chat.entries.every(entry => entry.author.kind === "member")).toBe(true);
@@ -149,7 +149,7 @@ test.each(["document", "transcript"] as const)(
 	"a changed %s invalidates the judgment before dispatch",
 	async target => {
 		let h = await setup.harness();
-		let result = Promise.withResolvers<"clarify">();
+		let result = Promise.withResolvers<"respond">();
 		h.judge.mockImplementationOnce(() => result.promise);
 		await Chat.send(h.context, h.ws, message());
 		await h.clock.advance(1500);
@@ -162,7 +162,7 @@ test.each(["document", "transcript"] as const)(
 				ts: 1,
 			});
 		}
-		result.resolve("clarify");
+		result.resolve("respond");
 		await flush();
 		expect(h.prompts).toEqual([]);
 		expect(h.chat.waiting).toEqual([]);
@@ -171,14 +171,14 @@ test.each(["document", "transcript"] as const)(
 
 test("a new saved source cancels a stale judgment before its instruction can queue", async () => {
 	let h = await setup.harness();
-	let result = Promise.withResolvers<"clarify">();
+	let result = Promise.withResolvers<"respond">();
 	h.judge.mockImplementationOnce(() => result.promise);
 	await Chat.send(h.context, h.ws, message("Old question"));
 	await h.clock.advance(1500);
 	let stale = h.judge.mock.calls[0]?.[1]?.signal;
 	await Chat.send(h.context, h.ws, message("New direction"));
 	expect(stale?.aborted).toBe(true);
-	result.resolve("clarify");
+	result.resolve("respond");
 	await flush();
 	expect(h.chat.waiting).toEqual([]);
 	expect(h.prompts).toEqual([]);
@@ -188,7 +188,7 @@ test("a new saved source cancels a stale judgment before its instruction can que
 
 test("new ordinary input aborts an active initiative and explicit instructions remain possible", async () => {
 	let h = await setup.harness();
-	h.judge.mockResolvedValueOnce("clarify");
+	h.judge.mockResolvedValueOnce("respond");
 	await Chat.send(h.context, h.ws, message());
 	await h.clock.advance(1500);
 	await until(() => h.prompts.length === 1);
@@ -204,7 +204,7 @@ test("new ordinary input aborts an active initiative and explicit instructions r
 
 test("manual stop records the active initiative interruption once", async () => {
 	let h = await setup.harness();
-	h.judge.mockResolvedValueOnce("clarify");
+	h.judge.mockResolvedValueOnce("respond");
 	await Chat.send(h.context, h.ws, message());
 	await h.clock.advance(1500);
 	await until(() => h.prompts.length === 1);
@@ -224,7 +224,7 @@ test("manual stop records the active initiative interruption once", async () => 
 
 test("a newer message being saved prevents an older judgment from dispatching", async () => {
 	let h = await setup.harness();
-	let result = Promise.withResolvers<"clarify">();
+	let result = Promise.withResolvers<"respond">();
 	h.judge.mockImplementationOnce(() => result.promise);
 	await Chat.send(h.context, h.ws, message("Old source"));
 	await h.clock.advance(1500);
@@ -236,7 +236,7 @@ test("a newer message being saved prevents an older judgment from dispatching", 
 	};
 	let newer = Chat.send(h.context, h.ws, message("New source still committing"));
 	await entered.promise;
-	result.resolve("clarify");
+	result.resolve("respond");
 	await flush();
 	expect(h.prompts).toEqual([]);
 	expect(h.chat.waiting).toEqual([]);
@@ -271,7 +271,7 @@ test("a stale queued initiative instruction leaves the active explicit turn inta
 
 test("stale input while a Planner session opens cannot reach the stream", async () => {
 	let h = await setup.harness();
-	h.judge.mockResolvedValueOnce("clarify");
+	h.judge.mockResolvedValueOnce("respond");
 	let entered = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
 	let open = h.context.openPlannerSession!;
@@ -292,7 +292,7 @@ test("stale input while a Planner session opens cannot reach the stream", async 
 
 test("a document changed while a Planner session opens cannot reach the stream", async () => {
 	let h = await setup.harness();
-	h.judge.mockResolvedValueOnce("clarify");
+	h.judge.mockResolvedValueOnce("respond");
 	let entered = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
 	let open = h.context.openPlannerSession!;
@@ -319,7 +319,7 @@ test.each(["document", "agent answer"] as const)(
 	"a changed %s during the initiative notice save prevents its turn",
 	async target => {
 		let h = await setup.harness();
-		h.judge.mockResolvedValueOnce("clarify");
+		h.judge.mockResolvedValueOnce("respond");
 		await Chat.send(h.context, h.ws, message());
 		let entered = Promise.withResolvers<void>();
 		let release = Promise.withResolvers<void>();
@@ -432,4 +432,61 @@ test("contribution identities distinguish principals rather than tabs", async ()
 	scheduler.typing("another-tab", "U_ana", false);
 	await h.clock.advance(1500);
 	expect(h.judge).toHaveBeenCalledTimes(1);
+});
+
+test("tool-only agent entries do not consume a human's pending conversational turn", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValue("respond");
+	await Chat.send(h.context, h.ws, message());
+	h.chat.entries.push({ id: "tool-only", author: { kind: "agent" }, text: "", ts: 1 });
+	await h.clock.advance(1500);
+	await until(() => h.prompts.length === 1);
+	expect(h.prompts).toHaveLength(1);
+});
+
+test("a natural direct child request resolves and preserves its child focus", async () => {
+	let h = await setup.harness();
+	let childId = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+	h.judge.mockResolvedValue("direct");
+	h.context.children = {
+		resolve: async () => ({ id: childId, title: "Child report" }),
+	} as unknown as Chat.Room["children"];
+	await Chat.send(h.context, h.ws, {
+		...message("Chopin, can you investigate this?"),
+		focus: childId,
+	});
+	await h.clock.advance(1500);
+	await until(() => h.prompts.length === 1);
+	expect(h.prompts[0]).toContain(childId);
+	expect(h.prompts[0]).toContain("Child report");
+	expect(Chat.documentRoom(h.context).focusedChild?.()).toBe(childId);
+	await Chat.close(h.chat);
+	expect(Chat.documentRoom(h.context).focusedChild?.()).toBeUndefined();
+});
+
+test("an unavailable focused child consumes its direct request without a retry loop", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValue("direct");
+	h.context.children = { resolve: async () => undefined } as unknown as Chat.Room["children"];
+	await Chat.send(h.context, h.ws, {
+		...message("Chopin, can you investigate this?"),
+		focus: "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b",
+	});
+	await h.clock.advance(60_000);
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	expect(h.prompts).toEqual([]);
+});
+
+test("later chunks of an existing reply preserve new human contributors", async () => {
+	let h = await setup.harness();
+	await Chat.send(h.context, h.ws, message("Initial message"));
+	Chat.translate(h.context, { type: "text-start", id: "reply" });
+	Chat.translate(h.context, { type: "text-delta", id: "reply", text: "First answer." });
+	await Chat.send(h.context, h.ws, message("I prefer Markdown"));
+	Chat.translate(h.context, { type: "text-delta", id: "reply", text: " More of that answer." });
+	h.ws.data.principalId = "U_bo";
+	h.ws.data.handle = "bo";
+	await Chat.send(h.context, h.ws, message("I prefer PDF"));
+	await h.clock.advance(1500);
+	expect(h.judge.mock.calls.at(-1)?.[0].turn.group).toBe(true);
 });

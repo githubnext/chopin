@@ -20,8 +20,8 @@ export function Participation(
 	if (!state.enabled) return null;
 	let label = state.paused ? "Enable automatic participation" : "Pause automatic participation";
 	let description = state.paused
-		? "Automatic participation is paused for everyone. @chopin still works."
-		: "Chopin can join this conversation. Pause for everyone; @chopin still works.";
+		? "Automatic replies are paused for everyone. You can still ask Chopin directly."
+		: "Chopin replies to you and waits its turn in group conversation. Pause automatic replies for everyone.";
 	let toggle = () => {
 		if (disabled || request.current || !wire.connected) return;
 		let token = {};
@@ -38,7 +38,10 @@ export function Participation(
 			});
 	};
 	return (
-		<div className="mt-1 flex flex-col items-start gap-1" data-chat-participation="">
+		<div
+			className="flex shrink-0 flex-col items-start gap-1 px-2.5 py-1"
+			data-chat-participation=""
+		>
 			<button
 				type="button"
 				className="btn btn-sm btn-ghost px-2 text-text-tertiary"
@@ -51,7 +54,7 @@ export function Participation(
 				disabled={disabled || pending}
 				onClick={toggle}
 			>
-				{state.paused ? "Chopin is listening" : "Chopin joins in"}
+				{state.paused ? "Automatic replies paused" : "Chopin participates"}
 			</button>
 			{error && (
 				<p className="composer-notice" data-error="" role="alert">

@@ -157,6 +157,8 @@ export type DocumentRoom = {
 	jobs?: JobService;
 	/** The same verified member request that owns the current live turn. */
 	currentMemberRequest?: () => ActiveMemberRequest | undefined;
+	/** Child context of the live turn, including server-authored instructions. */
+	focusedChild?: () => string | undefined;
 	/** A server readiness review or live Build task draft may propose using its existing owner. */
 	readinessInvestigationRequest?: () => Promise<{ userId: string; entryId: string } | undefined>;
 	/** Starts the exact research request represented by the current member turn. */

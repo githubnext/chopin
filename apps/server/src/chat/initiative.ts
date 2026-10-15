@@ -16,6 +16,7 @@ export type Source = {
 	id: string;
 	actor: string;
 	sessionId: string;
+	focus?: string;
 	reviewed?: { revision: number; entry: Wire.Entry | undefined };
 };
 
@@ -31,8 +32,12 @@ function available(source: Source): "ready" | "wait" | "drop" {
 	let { context } = source;
 	let { chat } = context;
 	if (
-		!participation(context).enabled || chat.initiativePaused || chat.closed
+		!participation(context).enabled || chat.closed
 		|| !context.initiativePresent?.(source.sessionId, source.actor)
+		|| chat.entries.findLast(entry =>
+				entry.author.kind === "member"
+				|| (entry.author.kind === "agent" && !!entry.text.trim())
+			)?.id !== source.id
 		|| Service.implementationActive(context.plan)
 		|| chat.runs?.some(run => ["running", "waiting", "paused"].includes(run.status))
 	) return "drop";
@@ -43,11 +48,11 @@ export function initiative(context: Room) {
 	let { chat } = context;
 	if (chat.initiative) return chat.initiative;
 	if (!participation(context).enabled) return;
-	chat.initiative = createInitiativeSchedule<Source, Awaited<ReturnType<typeof judgeInitiative>>>({
+	chat.initiative = createInitiativeSchedule<Source>({
 		paused: chat.initiativePaused,
 		groupMs: context.config.conversationInitiativeSilenceMs,
 		admit: available,
-		async judge(source, signal) {
+		async judge(source, signal, turn) {
 			let { context } = source;
 			if (
 				!await context.initiativeAuthorize?.(source.sessionId, source.actor)
@@ -59,6 +64,7 @@ export function initiative(context: Room) {
 			};
 			return judgeInitiative({
 				sourceId: source.id,
+				turn: { ...turn, focused: !!source.focus },
 				messages: context.chat.entries.flatMap(entry =>
 					entry.author.kind === "system" ? [] : [{
 						id: entry.id,
@@ -80,17 +86,23 @@ export function initiative(context: Room) {
 			});
 		},
 		async dispatch(source, move, signal, lifecycle) {
-			if (!move || signal.aborted) return true;
+			if (!move || signal.aborted || (source.focus && move !== "direct")) return true;
 			let { context } = source;
 			let { chat } = context;
 			let ended!: () => void;
 			let finished = new Promise<void>(resolve => ended = resolve);
 			let started = false;
+			let unavailable = false;
 			let fresh = () =>
 				source.reviewed?.revision === context.plan.revision
 				&& source.reviewed.entry === chat.entries.findLast(entry => entry.author.kind !== "system");
 			let accept = async () => {
 				if (signal.aborted || available(source) !== "ready" || !fresh()) return;
+				let child = source.focus ? await context.children?.resolve(source.focus) : undefined;
+				if (source.focus && !child) {
+					unavailable = true;
+					return;
+				}
 				if (!await context.initiativeAuthorize?.(source.sessionId, source.actor)) return;
 				if (signal.aborted || !await jobReady(context, source.sessionId)) return;
 				if (signal.aborted || available(source) !== "ready" || !fresh()) return;
@@ -102,6 +114,7 @@ export function initiative(context: Room) {
 					"Chopin is joining the conversation.",
 					{
 						signal,
+						...(child ? { focus: { channelId: child.id, title: child.title } } : {}),
 						spent: () => !lifecycle.current() || !fresh() || available(source) === "drop",
 						started: lifecycle.started,
 						ended,
@@ -113,19 +126,14 @@ export function initiative(context: Room) {
 			chat.sending = accepted.then(() => {}, () => {});
 			await accepted;
 			if (started) await finished;
-			return started || signal.aborted || available(source) === "drop";
+			return started || unavailable || signal.aborted || available(source) === "drop";
 		},
 	});
 	return chat.initiative;
 }
 
 /** Only newly committed room messages reach here. Delivery replay and agent text never do. */
-export function contributed(context: Room, ws: Socket, entry: Wire.Entry, focused = false) {
-	if (focused) {
-		context.chat.initiative?.typing(ws.data.client, actor(ws), false);
-		context.chat.initiative?.cancel();
-		return;
-	}
+export function contributed(context: Room, ws: Socket, entry: Wire.Entry, focus?: string) {
 	if (!context.claimantSessionId) return;
 	let scheduler = initiative(context);
 	if (!scheduler) return;
@@ -134,7 +142,7 @@ export function contributed(context: Room, ws: Socket, entry: Wire.Entry, focuse
 	scheduler.receive({
 		id: entry.id,
 		actor: author,
-		value: { context, id: entry.id, actor: author, sessionId: context.claimantSessionId },
+		value: { context, id: entry.id, actor: author, sessionId: context.claimantSessionId, focus },
 	});
 }
 

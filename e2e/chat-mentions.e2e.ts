@@ -114,7 +114,6 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	expect(sent.at(-1)?.to).toBe("planner");
 
 	await expectChatValue(draft, "");
-	await draft.press("Shift+Tab");
 	await draft.fill("Thanks @cy");
 	await draft.press("Enter");
 	await expectChatValue(draft, "Thanks @cy ");

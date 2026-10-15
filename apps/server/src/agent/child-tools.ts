@@ -89,7 +89,7 @@ export const childTools = {
 		execute: (_raw, { context: { room, owner } }) =>
 			respond("list_children", async () => {
 				let children = await permitted(room, owner);
-				let focus = room.currentMemberRequest?.()?.focus?.channelId;
+				let focus = room.focusedChild?.();
 				return {
 					children: (await children.list()).map(child => ({
 						...child,

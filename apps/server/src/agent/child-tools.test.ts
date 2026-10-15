@@ -46,19 +46,7 @@ async function rooted(options: { access?: () => Promise<boolean>; focus?: boolea
 		anchors() {},
 		changes() {},
 		children,
-		currentMemberRequest: () =>
-			options.focus
-				? {
-					entryId: "e",
-					userId: "U_ana",
-					handle: "ana",
-					text: "t",
-					claimantSessionId: undefined,
-					turnId: "turn",
-					lifecycle: 0,
-					focus: { channelId: child.channel.id, title: "Test plan" },
-				}
-				: undefined,
+		focusedChild: () => options.focus ? child.channel.id : undefined,
 	};
 	let owner = {
 		signal: new AbortController().signal,
@@ -83,7 +71,7 @@ test("list_children lists the root's children without focus", async () => {
 	]);
 });
 
-test("list_children marks the child the current member request is focused on", async () => {
+test("list_children marks the child the current turn is focused on", async () => {
 	let { call } = await rooted({ focus: true });
 	expect((await call("list_children", {})).children[0].focused).toBe(true);
 });

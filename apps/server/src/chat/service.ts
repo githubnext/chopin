@@ -272,6 +272,8 @@ export type Chat = {
 	turn?: Wire.Turn;
 	/** Private provenance for the member message driving only the current turn. */
 	activeRequest?: ActiveMemberRequest;
+	/** Child context shared by member requests and server-authored turns. */
+	focus?: Focus;
 	/**
 	 * The comment thread the running turn is acting on.
 	 *
@@ -872,7 +874,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text,
 			...(references?.length ? { references } : {}),
 		});
-		contributed(context, ws, entry, suppliedFocus !== undefined);
+		contributed(context, ws, entry, suppliedFocus as string | undefined);
 		return;
 	}
 	if (!context.config.agent) {
@@ -1619,6 +1621,10 @@ export function documentRoom(context: Room): DocumentRoom {
 		jobs: context.jobs,
 		children: context.children,
 		currentMemberRequest: () => currentMemberRequest(chat),
+		focusedChild: () =>
+			!chat.closed && chat.busy && chat.turnController && !chat.turnController.signal.aborted
+				? chat.focus?.channelId
+				: undefined,
 		readinessInvestigationRequest: async () => {
 			let eligible = () =>
 				chat.readiness || context.draft && chat.draft?.id === context.draft
@@ -2008,6 +2014,7 @@ async function run(
 	}
 
 	chat.readiness = about?.readiness;
+	chat.focus = about?.focus ?? member?.focus;
 	chat.activeRequest = member && chat.turn
 		? {
 			entryId: member.entryId,
@@ -2066,7 +2073,7 @@ async function run(
 			retainReferences(chat, promptReferences);
 			let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
-			let focus = about?.focus ?? member?.focus;
+			let focus = chat.focus;
 			if (focus) prompt = `${focusContext(focus)}\n\n${prompt}`;
 		}
 		sendStarted = true;
@@ -2119,6 +2126,7 @@ async function run(
 		about?.signal?.removeEventListener("abort", invalidate);
 		releaseJobAbort?.();
 		chat.activeRequest = undefined;
+		chat.focus = undefined;
 		chat.readiness = undefined;
 		chat.turnController = undefined;
 		chat.toolFinished = undefined;
@@ -2373,6 +2381,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				ids.set(part.id, id);
 			}
 			let entry = chat.entries.find(item => item.id === id);
+			if (part.text.trim() && !entry?.text.trim()) chat.initiative?.replied();
 			if (!entry) {
 				chat.writing = id;
 				chat.tooling = undefined;
@@ -2630,6 +2639,7 @@ export async function resetAgent(
 	) return;
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
+	chat.focus = undefined;
 	if (reason && chat.turnController) chat.interruption = reason;
 	if (chat.job) {
 		chat.job = undefined;
@@ -2649,6 +2659,7 @@ export async function close(chat: Chat): Promise<void> {
 	chat.jobOutput = undefined;
 	chat.lifecycle++;
 	chat.activeRequest = undefined;
+	chat.focus = undefined;
 	for (let waiting of chat.waiting) {
 		if (waiting.job) finishJob(waiting.job, { status: "failed", reason: "The document closed." });
 		// Whoever is waiting on a dropped turn, such as a child's comment, hears it will not run.

@@ -81,7 +81,7 @@ function harnessServer(port: number, database: string) {
 			HARNESS: "e2e-fake",
 			CONVERSATION_INITIATIVE: "on",
 			CONVERSATION_INITIATIVE_MODEL: "jev-e2e",
-			CONVERSATION_INITIATIVE_SILENCE_MS: "1000",
+			CONVERSATION_INITIATIVE_SILENCE_MS: "3000",
 			JEV_API_KEY: "e2e-jev-only",
 			JEV_MODEL: "jev-e2e",
 			BACKGROUND_JOBS: "off",

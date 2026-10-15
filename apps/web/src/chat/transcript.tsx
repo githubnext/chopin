@@ -408,7 +408,7 @@ export function Transcript(
 		onRetryJob?: (jobId: string) => Promise<void>;
 		decisions?: TranscriptDecisions;
 		empty?: string;
-		emptyHint?: { planner: boolean; references: boolean };
+		emptyHint?: { planner: boolean; references: boolean; automatic?: boolean };
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
@@ -731,8 +731,10 @@ export function Transcript(
 							measure="short"
 							description={
 								<>
-									Talk it through with your collaborators.
-									{emptyHint.planner && (
+									{emptyHint.automatic
+										? "Talk it through with your collaborators and Chopin."
+										: "Talk it through with your collaborators."}
+									{emptyHint.planner && !emptyHint.automatic && (
 										<>
 											{" "}Mention{" "}
 											<strong className="font-medium text-text-secondary">@chopin</strong>{" "}
@@ -742,7 +744,7 @@ export function Transcript(
 									)}
 									{emptyHint.references && (
 										<>
-											{emptyHint.planner ? "" : " Use "}
+											{emptyHint.planner && !emptyHint.automatic ? "" : " Use "}
 											<strong className="font-medium text-text-secondary">#</strong>{" "}
 											to point at a document.
 										</>

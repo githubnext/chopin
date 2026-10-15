@@ -19,10 +19,14 @@ export const TYPING_LEASE_MS = 6_000;
 const PARTICIPANT_WINDOW_MS = 120_000;
 const OPPORTUNITY_LIFETIME_MS = 300_000;
 
+export type TurnContext = { group: boolean; quiet: boolean; paused: boolean };
+export type TurnDecision = "respond" | "direct" | "yield" | undefined;
+
 type Opportunity<T> = {
 	contribution: Contribution<T>;
 	at: number;
 	quietSince: number;
+	yielded?: boolean;
 	controller?: AbortController;
 	running?: boolean;
 };
@@ -31,20 +35,21 @@ export type InitiativeSchedule<T> = {
 	receive(contribution: Contribution<T>): void;
 	typing(client: string, actor: string, active: boolean): void;
 	depart(client: string): void;
+	replied(): void;
 	cancel(): void;
 	pause(paused: boolean): void;
 	close(): void;
 };
 
-export function createInitiativeSchedule<T, Move>(options: {
+export function createInitiativeSchedule<T>(options: {
 	clock?: InitiativeClock;
 	soloMs?: number;
 	groupMs?: number;
 	paused?: boolean;
 	admit(value: T): "ready" | "wait" | "drop";
-	judge(value: T, signal: AbortSignal): Promise<Move | undefined>;
+	judge(value: T, signal: AbortSignal, turn: TurnContext): Promise<TurnDecision>;
 	/** Resolves after the normal Planner turn ends; false means admission raced with other work. */
-	dispatch(value: T, move: Move, signal: AbortSignal, lifecycle: {
+	dispatch(value: T, move: "respond" | "direct", signal: AbortSignal, lifecycle: {
 		started(): void;
 		current(): boolean;
 	}): Promise<boolean>;
@@ -68,10 +73,14 @@ export function createInitiativeSchedule<T, Move>(options: {
 		}
 	}
 
-	function due(opportunity: Opportunity<T>, now: number) {
+	function group(now: number) {
 		prune(now);
-		let people = new Set([...participants.keys(), ...[...typing.values()].map(x => x.actor)]);
-		let silence = people.size > 1
+		return new Set([...participants.keys(), ...[...typing.values()].map(x => x.actor)]).size > 1;
+	}
+
+	function due(opportunity: Opportunity<T>, now: number, quiet = opportunity.yielded) {
+		prune(now);
+		let silence = quiet && !paused
 			? options.groupMs ?? GROUP_SILENCE_MS
 			: options.soloMs ?? SOLO_SILENCE_MS;
 		let at = opportunity.quietSince + silence;
@@ -86,7 +95,7 @@ export function createInitiativeSchedule<T, Move>(options: {
 
 	function arm(delay?: number) {
 		clearTimer();
-		if (closed || paused || !pending || pending.controller) return;
+		if (closed || !pending || pending.controller) return;
 		let now = time.now();
 		let expires = pending.at + OPPORTUNITY_LIFETIME_MS;
 		let at = Math.min(expires, delay === undefined ? due(pending, now) : now + delay);
@@ -97,14 +106,14 @@ export function createInitiativeSchedule<T, Move>(options: {
 	}
 
 	function current(opportunity: Opportunity<T>, controller: AbortController) {
-		return !closed && !paused && pending === opportunity
+		return !closed && pending === opportunity
 			&& opportunity.controller === controller && !controller.signal.aborted
 			&& time.now() - opportunity.at < OPPORTUNITY_LIFETIME_MS;
 	}
 
 	async function check() {
 		let opportunity = pending;
-		if (!opportunity || closed || paused || opportunity.controller) return;
+		if (!opportunity || closed || opportunity.controller) return;
 		let now = time.now();
 		if (now - opportunity.at >= OPPORTUNITY_LIFETIME_MS) {
 			pending = undefined;
@@ -120,9 +129,14 @@ export function createInitiativeSchedule<T, Move>(options: {
 		let controller = new AbortController();
 		opportunity.controller = controller;
 		try {
-			let move = await options.judge(opportunity.contribution.value, controller.signal);
+			let turn = { group: group(now), quiet: due(opportunity, now, true) <= now, paused };
+			let move = await options.judge(opportunity.contribution.value, controller.signal, turn);
 			if (!current(opportunity, controller)) return;
-			if (move === undefined) {
+			if (move === "yield" && turn.group && !turn.quiet && !paused) {
+				opportunity.yielded = true;
+				return;
+			}
+			if (move === undefined || move === "yield" || (paused && move !== "direct")) {
 				pending = undefined;
 				return;
 			}
@@ -178,7 +192,6 @@ export function createInitiativeSchedule<T, Move>(options: {
 			participants.set(contribution.actor, now);
 			if (participants.size > 32) participants.delete(participants.keys().next().value!);
 			cancel();
-			if (paused) return;
 			pending = { contribution, at: now, quietSince: now };
 			arm();
 		},
@@ -200,6 +213,9 @@ export function createInitiativeSchedule<T, Move>(options: {
 		depart(client) {
 			typing.delete(client);
 			arm();
+		},
+		replied() {
+			participants.clear();
 		},
 		cancel,
 		pause(value) {
