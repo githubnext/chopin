@@ -619,7 +619,7 @@ Planner commands and GitHub-token attach until PR 8 removes them.
 4. **Version skew.** The server asks for one Atomic version, and the
    connector's compiled adapter glue was built against one too. A connector
    from another release may not handle the version asked for; `hello`,
-   `welcome` and `chopin harness check` catch it (open question 2). A machine's
+   `welcome` and `chopin harness check` catch it (decision 11). A machine's
    Copilot CLI is whatever the user installed; the connector checks its version
    at `hello` and refuses with a message naming the version it needs.
 5. **One socket for many documents.** A 2 MiB frame for one document delays the
@@ -651,18 +651,15 @@ Planner commands and GitHub-token attach until PR 8 removes them.
    the adapter is tested against.
 6. **Extension tools reach Planner turns only with `--planner-tools`.** The
    machine owner chose that code, so they opt in to it.
-7. **Default cap of 2 Planner sessions per machine; live workflow runs counted
-   separately.** A run should not block a new conversation.
+7. **Default cap of 2 Planner sessions per machine.** Live workflow runs don't
+   take a slot, so a run never blocks a new conversation.
 8. **One `HARNESS` adapter per server under `PLANNER_ON=machine`.** One adapter
    to test and support per deployment.
 9. **A connector restart keeps ownership through the grace period**, like a
    dropped socket. A quick restart should not hand the document to someone else.
-
-## Open questions
-
-1. **A cap for live workflow runs?** They no longer use session slots, so
-   nothing bounds how many one machine runs at once.
-2. **Connector and server from different releases.** When the server asks for
-   an Atomic version the connector's adapter glue does not support, should the
-   connector refuse with `harness-unsupported` naming the `chopin` release to
-   install, or should the glue support a range of Atomic versions?
+10. **No limit on live workflow runs per machine.** The machine's owner decides
+    how much work it takes on.
+11. **Each `chopin` release declares the Atomic versions its adapter supports.**
+    When the server asks for one outside that range, the connector refuses with
+    `harness-unsupported`, and `chopin status` and the log name the `chopin`
+    release to install (`chopin update`).
