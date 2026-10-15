@@ -950,3 +950,61 @@ for (let width of [1280, 600, 390]) {
 		await page.keyboard.press("Escape");
 	});
 }
+
+test("the machine choice shows only while the person has a paired machine, appearing and going live", async ({ seed, join: enter }) => {
+	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
+	let page = await enter(person(), DESKTOP);
+	let chat = composer(page).getByRole("button", { name: /^Machine: / });
+	let header = page.locator(".machine-button:not(.composer-machine .machine-button)");
+	let send = composer(page).getByRole("button", { name: "Send message" });
+	let build = page.getByRole("button", { name: "Build plan", exact: true });
+	let machineItem = async () => {
+		await titleActions(page).click();
+		let menu = page.getByRole("menu", { name: /^Actions for / });
+		await expect(menu.getByRole("menuitem").first()).toBeVisible();
+		let count = await menu.getByRole("menuitem", { name: /^Machine\b/ }).count();
+		await page.keyboard.press("Escape");
+		return count;
+	};
+	// No machine paired: no selector in Chat, beside Build plan or in the title's menu, and no
+	// prompt to add one there either.
+	await expect(build).toBeVisible();
+	await expect(chat).toHaveCount(0);
+	await expect(header).toHaveCount(0);
+	expect(await machineItem()).toBe(0);
+	await expect(page.getByRole("main").getByText("Add machine", { exact: false })).toHaveCount(0);
+	let before = { send: (await send.boundingBox())!, build: (await build.boundingBox())! };
+
+	// The first machine pairs in another tab: the selector appears here, with no reload, and Send
+	// stays where it was.
+	let other = await page.context().newPage();
+	await other.goto(page.url());
+	await connected(other, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
+	let live = { timeout: 10_000 };
+	await expect(chat).toBeVisible(live);
+	await expect(header).toBeVisible(live);
+	expect(await machineItem()).toBe(1);
+	let after = { send: (await send.boundingBox())!, build: (await build.boundingBox())! };
+	expect(after.send.x).toBeCloseTo(before.send.x, 0);
+	expect(after.send.y).toBeCloseTo(before.send.y, 0);
+	expect(after.build.width).toBeCloseTo(before.build.width, 0);
+	expect(after.build.height).toBeCloseTo(before.build.height, 0);
+	await shoot(page, "selector-appears");
+
+	// Removing the last machine takes the selector away again, live.
+	let { machines } = await (await page.request.get("/api/connector/machines")).json() as {
+		machines: Array<{ id: string }>;
+	};
+	let origin = new URL(page.url()).origin;
+	for (let { id } of machines) {
+		let revoked = await page.request.post(`/api/connector/machines/${id}/revoke`, {
+			data: {},
+			headers: { origin },
+		});
+		expect(revoked.status()).toBe(200);
+	}
+	await expect(chat).toHaveCount(0, live);
+	await expect(header).toHaveCount(0, live);
+	expect(await machineItem()).toBe(0);
+	await other.close();
+});

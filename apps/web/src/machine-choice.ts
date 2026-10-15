@@ -82,6 +82,15 @@ function automaticLabel(state: MachineChoiceState) {
 		&& (automatic.label ?? state.machines.find(machine => machine.id === automatic.id)?.label);
 }
 
+/**
+ * Whether a document offers the machine choice: its buttons beside Build plan and in Chat, and
+ * Machine in its title's menu. Only once the person has paired a machine, connected or not, and
+ * whatever repositories its checkouts are of; before that the Machines page is the way to add one.
+ */
+export function showsMachineChoice(machines: readonly Pick<Machine, "id">[] | undefined): boolean {
+	return !!machines?.length;
+}
+
 /** Why Build can't start: the chosen machine is offline, named. Automatic never is. */
 export function offlineChoice(state: MachineChoiceState | undefined): string | undefined {
 	let chosen = chosenMachine(state);

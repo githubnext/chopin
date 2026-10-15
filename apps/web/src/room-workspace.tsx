@@ -52,7 +52,8 @@ import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import { MachineButton } from "./machine-button";
-import { offlineChoice, useMachineChoice } from "./machine-choice";
+import { offlineChoice, showsMachineChoice, useMachineChoice } from "./machine-choice";
+import { useLiveMachines } from "./machine-summary";
 import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
@@ -638,6 +639,9 @@ export function RoomWorkspace(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
 	);
+	// The choice shows only while the person has a paired machine, live: it appears with their
+	// first and goes with their last.
+	let ownsMachine = showsMachineChoice(useLiveMachines().machines);
 	// Who runs the Planner changed: Chat's machine button says so at once.
 	let refreshMachine = machineChoice.refresh;
 	useEffect(() => {
@@ -1449,7 +1453,7 @@ export function RoomWorkspace(
 		canManage: effectiveCanManage,
 		editing: titleEdit,
 		label: metadata.title,
-		machine: machineChoice.state && workspaceCanEdit && status === "connected"
+		machine: ownsMachine && machineChoice.state && workspaceCanEdit && status === "connected"
 			? machineChoice
 			: undefined,
 		onAction: action => onDocumentAction(room, action),
@@ -1554,7 +1558,7 @@ export function RoomWorkspace(
 		: undefined;
 	// A phone's top bar has no room for it; there it is Chat's alone.
 	let machineButton = (place: "build" | "chat") =>
-		machineChoice.state && !!workspaceCanEdit && status === "connected" && (
+		ownsMachine && machineChoice.state && !!workspaceCanEdit && status === "connected" && (
 			<MachineButton
 				choice={machineChoice}
 				compact={phone && place === "chat"}

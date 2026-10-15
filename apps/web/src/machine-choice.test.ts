@@ -8,6 +8,7 @@ import {
 	offlineChoice,
 	plannerButton,
 	presence,
+	showsMachineChoice,
 } from "./machine-choice";
 
 import type { ChoosableMachine, MachineChoiceState } from "./machine-choice";
@@ -179,4 +180,14 @@ test("the choice is read again when a machine goes offline, comes back or needs 
 	expect(presence([box])).not.toBe(presence([box, laptop]));
 	// What changes nothing a document shows doesn't read it again.
 	expect(presence([box])).toBe(presence([{ ...box, label: "renamed", lastSeenAt: 5 }]));
+});
+
+test("the machine choice shows only once the person has a paired machine, connected or not", () => {
+	let paired = { id: "M_box", connected: false } as Machine;
+	// Not known yet, or none paired: no button and no Machine item anywhere.
+	expect(showsMachineChoice(undefined)).toBe(false);
+	expect(showsMachineChoice([])).toBe(false);
+	// One paired machine, even offline, whatever repositories its checkouts are of.
+	expect(showsMachineChoice([paired])).toBe(true);
+	expect(showsMachineChoice([paired, { ...paired, id: "M_two", connected: true }])).toBe(true);
 });
