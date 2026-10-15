@@ -1,7 +1,6 @@
 /**
- * Chat's machine button says who runs the document's Planner under `HARNESS=remote`: the person's
- * own machine, "Starting…" while its backend has yet to attach, an offline machine, or "Held by
- * @someone" (read-only); a machine without a Planner command can't be chosen in Chat's menu.
+ * Run on, in a document's title menu, starts the document's Planner on the machine chosen under
+ * `HARNESS=remote`; a machine without a Planner command can't be chosen there.
  * `HARNESS=remote` needs its own server, so this file starts one against a database of its own.
  */
 import { spawn } from "node:child_process";
@@ -227,7 +226,17 @@ async function shoot(page: Page, name: string, target?: ReturnType<Page["locator
 	await (target ?? page).screenshot({ path: `${SHOTS}/${name}.png` });
 }
 
-test("Chat's machine button says who runs the Planner, and starts it on the machine chosen", async ({ browser }) => {
+/** Open the title's menu and swap it to Run on's machine list. */
+async function runOn(page: Page) {
+	await page.getByRole("group", { name: /^Document: / })
+		.getByRole("button", { name: /^Actions for / }).click();
+	let menu = page.getByRole("menu", { name: /^Actions for / });
+	await menu.getByRole("menuitem", { name: /^Run on/ }).click();
+	await expect(menu.getByRole("menuitemradio").first()).toBeVisible();
+	return menu;
+}
+
+test("Run on starts the document's Planner on the machine chosen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP);
@@ -235,67 +244,44 @@ test("Chat's machine button says who runs the Planner, and starts it on the mach
 	await machine(page, "desk", false);
 	await page.reload();
 	await ready(page);
-	let composer = page.locator(".chat-composer");
-	let chat = composer.getByRole("button", { name: /^Machine: / });
-	await expect(chat).toHaveAccessibleName(/^Machine: Automatic/);
 
-	// In Chat's menu, a machine without a Planner command can't be chosen, and says why.
-	await chat.click();
-	let menu = page.getByRole("menu", { name: "Machine for this document" });
-	let desk = menu.getByRole("menuitemradio", { name: /^desk/ });
-	await expect(desk).toHaveAttribute("aria-disabled", "true");
-	await expect(desk).toContainText("Can't run a Planner");
+	// A machine without a Planner command can't be chosen.
+	let menu = await runOn(page);
+	await expect(menu.getByRole("menuitemradio", { name: /^Your default/ }))
+		.toHaveAttribute("aria-checked", "true");
+	await expect(menu.getByRole("menuitemradio", { name: /^desk/ }))
+		.toHaveAttribute("aria-disabled", "true");
 	await expect(menu.getByRole("menuitemradio", { name: /^studio/ })).not.toHaveAttribute(
 		"aria-disabled",
 		"true",
 	);
-	await shoot(page, "planner-chat-menu");
+	await shoot(page, "planner-run-on");
 
-	// Choosing studio asks its connector to start the Planner: Starting…, then studio.
+	// Choosing studio asks its connector to start the Planner, which then attaches.
 	await menu.getByRole("menuitemradio", { name: /^studio/ }).click();
-	await expect(chat).toHaveAccessibleName("Machine: studio, starting the Planner");
-	await expect(chat).toContainText("Starting…");
-	await shoot(page, "planner-chat-starting", composer);
-	// studio's connector is told to start it.
+	await expect(menu).toBeHidden();
 	expect(await studio.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	let link = await studio.backend(room);
-	await expect(chat).toHaveAccessibleName("Machine: studio, runs the Planner");
-	await expect(chat).toContainText("studio");
-	await shoot(page, "planner-chat-attached", composer);
+	menu = await runOn(page);
+	await expect(menu.getByRole("menuitemradio", { name: /^studio/ }))
+		.toHaveAttribute("aria-checked", "true");
+	await page.keyboard.press("Escape");
 
-	// studio goes offline: its Planner stops, and the button dims as an offline machine's does.
+	// studio goes offline: its row stays chosen but can't be chosen again.
 	await studio.disconnect();
-	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-	await expect(chat).toHaveAccessibleName("Machine: studio, offline");
-	await expect(chat).toHaveClass(/\bmachine-offline\b/);
-	await shoot(page, "planner-chat-offline", composer);
+	await page.reload();
+	await ready(page);
+	menu = await runOn(page);
+	let offline = menu.getByRole("menuitemradio", { name: /^studio/ });
+	await expect(offline).toHaveAttribute("aria-disabled", "true");
+	await expect(offline).toContainText("Offline");
 	await link.detach().catch(() => {});
-
-	// Another account attaches its own Planner: Chat's button says who, and opens nothing.
-	await authenticate(await (await browser.newContext()).newPage(), "rival", ORIGIN);
-	let rival = await connectAgent({
-		url: ORIGIN,
-		token: "ghu_e2e_rival_1",
-		document: room,
-		handlers: { turn() {} },
-	});
-	try {
-		let held = composer.getByRole("button", { name: "Planner held by @rival" });
-		await expect(held).toHaveAttribute("aria-disabled", "true");
-		await expect(held).toContainText("Held by @rival");
-		await held.click({ force: true });
-		await expect(menu).toHaveCount(0);
-		await shoot(page, "planner-chat-held", composer);
-		await shoot(page, "planner-desktop-held");
-	} finally {
-		await rival.detach();
-	}
 });
 
-test("on a phone, Chat's machine icon names who runs the Planner", async ({ browser }) => {
+test("on a phone, Run on's sheet starts the Planner on the machine chosen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
@@ -303,24 +289,16 @@ test("on a phone, Chat's machine icon names who runs the Planner", async ({ brow
 	await machine(page, "desk", false);
 	await page.reload();
 	await ready(page);
-	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: "Chat", exact: true }).tap();
-	let composer = page.locator(".chat-composer");
-	let button = composer.getByRole("button", { name: /^Machine: / });
-	await button.tap();
-	let sheet = page.getByRole("dialog", { name: "Machine for this document" });
-	await expect(sheet.getByRole("menuitemradio", { name: /^desk/ })).toContainText(
-		"Can't run a Planner",
-	);
+	await page.locator(".phone-top-bar").getByRole("button", { name: /^Actions for / }).tap();
+	await page.getByRole("dialog", { name: /^Actions for / })
+		.getByRole("button", { name: /^Run on: / }).tap();
+	let sheet = page.getByRole("dialog", { name: "Run on", exact: true });
+	await expect(sheet.getByRole("menuitemradio", { name: /^desk/ }))
+		.toHaveAttribute("aria-disabled", "true");
 	await shoot(page, "planner-phone-sheet");
 	await sheet.getByRole("menuitemradio", { name: /^studio/ }).tap();
 	await expect(sheet).toBeHidden();
-	await expect(button).toHaveAccessibleName("Machine: studio, starting the Planner");
-	await page.waitForTimeout(800);
-	await shoot(page, "planner-phone-starting");
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let link = await studio.backend(room);
-	await expect(button).toHaveAccessibleName("Machine: studio, runs the Planner");
-	await shoot(page, "planner-phone-attached");
 	await link.detach();
 });
