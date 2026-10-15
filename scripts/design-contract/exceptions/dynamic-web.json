@@ -101,7 +101,7 @@
 				1
 			]
 		],
-		"sourceHash": "dc0835f878857c203bc4fd70c81050bd8991d014247d28abbaf40397589157b2"
+		"sourceHash": "6fbb39dc0afed34f11e3bc4977df42a7fc611dada902fee0806e11ec6287a588"
 	},
 	{
 		"file": "apps/web/src/account-menu.tsx",
@@ -115,7 +115,7 @@
 				1
 			]
 		],
-		"sourceHash": "3f2d2e63d78f1809a61134400f369c1933fbbab1afbc26ac0763005484f8d2b4"
+		"sourceHash": "6ec411bac9f554b6eb13f280217a66ad83f4f1e8f8e0e2d50666d1fb603ea9e0"
 	},
 	{
 		"file": "apps/web/src/design-audit/icons.tsx",
@@ -143,7 +143,7 @@
 				1
 			]
 		],
-		"sourceHash": "98e6ed04d4c3d4b9d4708a28c6332f4c1534782ebc9bf85475e00ff281e1ae41"
+		"sourceHash": "a43b4e1c0d41e8380de75cedeaf26cd6c2207d748fa5b675ff22d88c6db0b344"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
