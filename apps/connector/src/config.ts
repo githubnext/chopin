@@ -17,6 +17,8 @@ export type ConnectSettings = {
 	server: string;
 	/** The checkout's absolute root. */
 	checkout: string;
+	/** The built-in agent `--agent` named, whose command and variables `command` and `env` hold. */
+	agent?: string;
 	/** The agent's ACP command, as `connect` takes it after `--`. */
 	command: string[];
 	/** Documents whose Planner backend connect runs, and the backend's command words. */

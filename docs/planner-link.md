@@ -567,7 +567,7 @@ hands it a credential; the backend attaches over this link like any client.
 
 ```sh
 chopin connect . --planner https://chopin.example/octo-org/score/plan \
-  --planner-command "my-planner --flag" -- copilot --acp
+  --planner-command "my-planner --flag" --agent copilot
 ```
 
 `--planner` may repeat. `--planner-command` is split into words as a POSIX

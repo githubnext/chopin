@@ -185,6 +185,75 @@ test("connect saves the server, checkout, agent, Planner and --env it ran once i
 	expect((await stat(file)).mode & 0o777).toBe(0o600);
 });
 
+/** Stand-ins for the built-in agents' programs, first on PATH for the --agent connects below. */
+let builtIns = join(scratch, "built-ins");
+await mkdir(builtIns);
+for (let name of ["copilot", "atomic-acp"]) {
+	let file = process.platform === "win32" ? `${name}.cmd` : name;
+	await writeFile(join(builtIns, file), "#!/bin/sh\n", { mode: 0o755 });
+}
+let withBuiltIns = { PATH: [builtIns, process.env.PATH].join(delimiter) };
+
+test(
+	"connect --agent runs a built-in agent's command and variables, extra arguments after its separator",
+	async () => {
+		let root = await checkout();
+		let atomic = await connect(
+			"nothing",
+			[root, "--agent", "atomic", "--env", "SOME_FLAG=1", "--", "--package", "/x"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(atomic.code, atomic.stderr).toBe(0);
+		expect(JSON.parse(await readFile(join(atomic.directory, "config.json"), "utf8")).connect)
+			.toEqual({
+				server: atomic.url,
+				checkout: await realpath(root),
+				agent: "atomic",
+				command: ["atomic-acp", "--", "--package", "/x"],
+				planners: [],
+				plannerCommand: [],
+				env: { ATOMIC_ACP_HEADLESS: "1", SOME_FLAG: "1" },
+			});
+
+		// An --env given for one of the agent's own variables wins; copilot takes extras directly.
+		let copilot = await connect(
+			"nothing",
+			[root, "--agent", "copilot", "--env", "ATOMIC_ACP_HEADLESS=0", "--", "--model", "m"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(copilot.code, copilot.stderr).toBe(0);
+		let saved = JSON.parse(await readFile(join(copilot.directory, "config.json"), "utf8")).connect;
+		expect(saved).toMatchObject({
+			agent: "copilot",
+			command: ["copilot", "--acp", "--allow-all", "--model", "m"],
+			env: { ATOMIC_ACP_HEADLESS: "0" },
+		});
+		let headless = await connect(
+			"nothing",
+			[root, "--agent", "atomic", "--env", "ATOMIC_ACP_HEADLESS=0"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(headless.code, headless.stderr).toBe(0);
+		expect(JSON.parse(await readFile(join(headless.directory, "config.json"), "utf8")).connect)
+			.toMatchObject({ command: ["atomic-acp"], env: { ATOMIC_ACP_HEADLESS: "0" } });
+	},
+	60_000,
+);
+
+test("connect --agent with an id it doesn't know lists the ones it does, before it pairs", async () => {
+	let root = await checkout();
+	let unknown = await connect("pairing", [root, "--agent", "claude-code"]);
+	expect(unknown.code).toBe(2);
+	expect(unknown.stderr).toBe(
+		"There is no built-in agent claude-code. Use --agent with one of: copilot, atomic; or "
+			+ "give any other ACP agent's command after --.\n",
+	);
+	expect(unknown.requests).toEqual([]);
+});
+
 test("connect refuses an --env it can't pass on, before it pairs", async () => {
 	let root = await checkout();
 	for (let bad of ["CHOPIN_URL=https://x", "PATH=/opt/bin", "1FLAG=x", "FLAG", "A-B=1"]) {

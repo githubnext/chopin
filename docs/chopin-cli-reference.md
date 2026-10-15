@@ -75,7 +75,7 @@ mkdir -p ~/.chopin \
   && curl -fsSL https://your-chopin-instance.example/connector.js -o ~/.chopin/connector.js \
   && CHOPIN_URL=https://your-chopin-instance.example \
     bun --no-env-file --config=/dev/null \
-      ~/.chopin/connector.js connect . -- copilot --acp --allow-all
+      ~/.chopin/connector.js connect . --agent copilot
 ```
 
 `--no-env-file` and `--config=/dev/null` stop Bun from reading the folder's

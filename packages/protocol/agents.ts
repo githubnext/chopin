@@ -20,8 +20,10 @@ export interface CodingAgent {
 	 * checked by `bun run verify:agents`.
 	 */
 	node: string;
-	/** The ACP command `chopin connect` starts, after `--`. */
+	/** The ACP command `chopin connect --agent <id>` starts. */
 	acp: string[];
+	/** Words between `acp` and extra arguments given after `--`, when the adapter wants a separator. */
+	passthrough?: string[];
 	/** `--env KEY=VALUE` variables the agent needs under Chopin. */
 	env: string[];
 	/**
@@ -83,6 +85,8 @@ export const AGENTS: readonly CodingAgent[] = [
 		install: [["npm", "install", "-g", "@bastani/atomic", "@bastani/atomic-acp"]],
 		signIn: { command: ["atomic"], afterward: "sign in with /login, then quit" },
 		acp: ["atomic-acp"],
+		// atomic-acp passes the arguments after its own -- to every Atomic it starts.
+		passthrough: ["--"],
 		// Atomic asks no permission for its tools; this ends its questions at once instead of waiting.
 		env: ["ATOMIC_ACP_HEADLESS=1"],
 		unattended: true,
@@ -92,6 +96,11 @@ export const AGENTS: readonly CodingAgent[] = [
 ];
 
 export const DEFAULT_AGENT = AGENTS[0]!;
+
+/** The agent's ACP command with `extra` arguments, after its passthrough separator if it has one. */
+export function acpCommand(agent: CodingAgent, extra: readonly string[]): string[] {
+	return extra.length ? [...agent.acp, ...agent.passthrough ?? [], ...extra] : [...agent.acp];
+}
 
 /** The major version of a Node.js version like `22.19` or `v22.19.0`. */
 export function nodeMajor(version: string): number {

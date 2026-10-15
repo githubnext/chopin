@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AGENTS, DEFAULT_AGENT, findAgent, nodeMajor, nodeOlder } from "./agents";
+import { acpCommand, AGENTS, DEFAULT_AGENT, findAgent, nodeMajor, nodeOlder } from "./agents";
 
 test("every agent names itself, how to install it, sign in and start it, and where its docs are", () => {
 	let ids = AGENTS.map(agent => agent.id);
@@ -51,4 +51,14 @@ test("a Node.js version is older than an agent's minimum only below it", () => {
 	expect(nodeOlder("v20.0.0", "20")).toBe(false);
 	expect(nodeMajor("22.19")).toBe(22);
 	for (let agent of AGENTS) expect(agent.node).toMatch(/^\d+(\.\d+)?$/);
+});
+
+test("extra arguments follow an agent's ACP command, after the separator its adapter wants", () => {
+	expect(acpCommand(findAgent("copilot"), [])).toEqual(["copilot", "--acp", "--allow-all"]);
+	expect(acpCommand(findAgent("copilot"), ["--model", "gpt-6-luna"]))
+		.toEqual(["copilot", "--acp", "--allow-all", "--model", "gpt-6-luna"]);
+	// atomic-acp passes what follows its own -- on to Atomic.
+	expect(acpCommand(findAgent("atomic"), [])).toEqual(["atomic-acp"]);
+	expect(acpCommand(findAgent("atomic"), ["--package", "/x"]))
+		.toEqual(["atomic-acp", "--", "--package", "/x"]);
 });

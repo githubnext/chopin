@@ -24,9 +24,9 @@ function words(list: string[], shell: SetupShell): string {
 	return list.map(word => quote(word, shell)).join(" ");
 }
 
-/** What follows `chopin connect` for this agent, short of the service: its `--env`, then `--`. */
+/** What follows `chopin connect` for this agent, short of the service: `--agent` and its id. */
 export function agentArguments(agent: CodingAgent): string[] {
-	return [...agent.env.flatMap(variable => ["--env", variable]), "--", ...agent.acp];
+	return ["--agent", agent.id];
 }
 
 /**
@@ -41,8 +41,7 @@ export function runsAsService(agent: CodingAgent): boolean {
 /**
  * `connect` and its arguments, as the installer is given them: the machine's `name` in Chopin if
  * one is given (blank leaves chopin to use the hostname), as the background service if
- * `background`, the agent's variables, then the agent it starts. PowerShell takes a bare -- as the
- * end of a script block's own parameters and passes nothing for it, so there it goes in quotes.
+ * `background`, then the agent it starts, which brings its own command and variables.
  */
 export function connectArguments(
 	agent: CodingAgent,
@@ -55,9 +54,7 @@ export function connectArguments(
 		"connect",
 		...(label ? [`--name ${quote(label, shell)}`] : []),
 		...(background ? ["--install-service"] : []),
-		...agent.env.map(variable => `--env ${quote(variable, shell)}`),
-		shell === "powershell" ? "'--'" : "--",
-		words(agent.acp, shell),
+		words(agentArguments(agent), shell),
 	].join(" ");
 }
 

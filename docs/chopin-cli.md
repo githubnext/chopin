@@ -51,22 +51,19 @@ this:
 
 ```sh
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | \
-  CHOPIN_URL=https://your-chopin-instance.example sh -s -- connect --install-service -- copilot --acp --allow-all
+  CHOPIN_URL=https://your-chopin-instance.example sh -s -- connect --install-service --agent copilot
 ```
 
 In PowerShell on Windows:
 
 ```powershell
 $env:CHOPIN_URL = 'https://your-chopin-instance.example'
-& ([scriptblock]::Create((irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1))) connect --install-service '--' copilot --acp --allow-all
+& ([scriptblock]::Create((irm https://github.com/githubnext/chopin/releases/latest/download/install.ps1))) connect --install-service --agent copilot
 ```
 
 It prints a link and a code. Open the link in the browser you're signed in to,
 check the code and approve. The machine connects, installs the service and
 appears on the page.
-
-PowerShell takes a bare `--` as the end of its own arguments and drops it, so
-the command puts chopin's `--` in quotes.
 
 ### Server or VM
 
@@ -78,7 +75,7 @@ press **Generate install script**. The command carries a single-use key:
 
 ```sh
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | \
-  CHOPIN_URL=https://your-chopin-instance.example CHOPIN_PAIRING_KEY=chopin_k_… sh -s -- connect --install-service -- copilot --acp --allow-all
+  CHOPIN_URL=https://your-chopin-instance.example CHOPIN_PAIRING_KEY=chopin_k_… sh -s -- connect --install-service --agent copilot
 ```
 
 A name adds `--name <name>` after `connect`. It pairs at once, with no browser,
@@ -101,7 +98,7 @@ To pair with a key yourself, pass it as `--key` or in `CHOPIN_PAIRING_KEY`:
 
 ```sh
 chopin pair --key chopin_k_…
-chopin connect . --key chopin_k_… -- copilot --acp --allow-all
+chopin connect . --key chopin_k_… --agent copilot
 ```
 
 If curl can't download the installer at all, it prints why and sh, given no
@@ -139,11 +136,11 @@ chopin --version
 
 Install your coding agent and sign in to it, as [Coding agents](#coding-agents)
 shows. Then, from your project folder, run `chopin connect` with your server in
-`CHOPIN_URL` and the agent's ACP command after `--`:
+`CHOPIN_URL` and the agent in `--agent`:
 
 ```sh
 cd ~/src/score
-CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
+CHOPIN_URL=https://your-chopin-instance.example chopin connect . --agent copilot
 ```
 
 Once it connects, `chopin connect` saves the server, so you set `CHOPIN_URL`
@@ -173,8 +170,9 @@ When the connection is up, you see:
 
 Work from any document in that repository now runs in this checkout.
 
-- Any agent that speaks ACP over stdio works. `--allow-all` is Copilot CLI's
-  flag for approving its tools.
+- `--agent` takes `copilot` or `atomic`. For any other agent that speaks ACP
+  over stdio, give its command after `--` instead, as in
+  `chopin connect . -- my-agent --acp`.
 - The checkout's `origin` must be a github.com repository you can push to.
 - Set `CHOPIN_DEBUG=1` to see your agent's own log.
 - Ctrl-C stops running work and disconnects. A second Ctrl-C exits at once.
@@ -183,7 +181,7 @@ To give your agent and Planner an environment variable, add `--env`, as often
 as you need:
 
 ```sh
-chopin connect . --env SOME_FLAG=1 -- copilot --acp --allow-all
+chopin connect . --env SOME_FLAG=1 --agent copilot
 ```
 
 `chopin` saves these values in `config.json`, which only you can read. Keep
@@ -236,18 +234,30 @@ or that your favorite is offline.
 ### Coding agents
 
 The Machines page offers these agents. **Connect with** is what follows
-`chopin connect .`:
+`chopin connect .`, and **Runs** is the command and variables it starts:
 
-| Agent                                                                                               | Install                                              | Sign in                                  | Node.js        | Connect with                                | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------- | ------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `copilot login`                          | 22 or newer    | `-- copilot --acp --allow-all`              | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `atomic`, sign in with /login, then quit | 22.19 or newer | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp` | Yes                |
+| Agent                                                                                               | Install                                              | Sign in                                  | Node.js        | Connect with      | Runs                               | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------- | ----------------- | ---------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `copilot login`                          | 22 or newer    | `--agent copilot` | `copilot --acp --allow-all`        | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `atomic`, sign in with /login, then quit | 22.19 or newer | `--agent atomic`  | `ATOMIC_ACP_HEADLESS=1 atomic-acp` | Yes                |
 
 Install the agent globally, as the table does, not through `npx`, so the
 service finds the same program each time. The service can't answer a
-permission prompt, so Copilot CLI connects with `--allow-all` to approve its
-tools without asking. Atomic doesn't ask, and `ATOMIC_ACP_HEADLESS=1` ends its
+permission prompt, so Copilot CLI runs with `--allow-all` to approve its tools
+without asking. Atomic doesn't ask, and `ATOMIC_ACP_HEADLESS=1` ends its
 questions at once instead of waiting for an answer.
+
+Arguments after `--` go to the agent. For example,
+`chopin connect . --agent atomic -- --model openai/gpt-5.5` runs
+`atomic-acp -- --model openai/gpt-5.5`, which passes them on to Atomic. An
+`--env` you give wins over the agent's own variable of the same name.
+
+For any other agent that speaks ACP over stdio, give its command after `--`
+instead of `--agent`, with its approval flag if it has one:
+
+```sh
+chopin connect . -- my-agent --acp
+```
 
 In PowerShell, quote a package name that starts with `@`, for example
 `npm install -g '@github/copilot'`. PowerShell would read the bare name as a
@@ -269,7 +279,7 @@ The quickest way is one command. It connects, and once it sees
 `✓ Connected.` it disconnects and installs the service:
 
 ```sh
-chopin connect . --install-service -- copilot --acp --allow-all
+chopin connect . --install-service --agent copilot
 ```
 
 You can also do it in two steps:
@@ -288,15 +298,15 @@ for it to answer. If it doesn't, nothing is installed, and the message shows
 the first line your agent printed. For an agent that can't start without a
 terminal, pass `--skip-check`.
 
-The service can't answer permission prompts, so give your agent its approval
-flag, such as `--allow-all`.
+The service can't answer permission prompts. The built-in agents already
+approve their own tools; give any other agent its approval flag.
 
 A later `chopin connect`, here or in another checkout, doesn't change what the
 service runs. To change it, connect again with the new arguments, then install
 again:
 
 ```sh
-chopin connect ~/src/other-project -- copilot --acp --allow-all   # Ctrl-C after ✓ Connected.
+chopin connect ~/src/other-project --agent copilot   # Ctrl-C after ✓ Connected.
 chopin service install
 ```
 
@@ -340,7 +350,7 @@ Machine:    paired as build-box (octocat); Chopin accepts it
 Connector:  running for /home/me/src/score (pid 4242, chopin 0.0.2, the service)
 Service:    running (systemd, pid 4242)
             definition: /home/me/.config/systemd/user/chopin.service
-            runs /home/me/src/score with /home/me/.local/bin/copilot --acp --allow-all, on https://your-chopin-instance.example
+            runs /home/me/src/score with --agent copilot (/home/me/.local/bin/copilot --acp --allow-all), on https://your-chopin-instance.example
 Runs:       4 finished runs kept (1.2 GB), 1 running
 Planners:   /home/me/.local/state/chopin/connector/planners/octo-org/score/5f0c…e21 (octo-org/score, document 5f0c…e21)
 Log:        /home/me/.local/state/chopin/connector/chopin.log
@@ -387,7 +397,7 @@ and your Planner backend's command with `--planner-command`:
 
 ```sh
 chopin connect . --planner https://your-chopin-instance.example/octo-org/score/plan \
-  --planner-command "my-planner --flag" -- copilot --acp --allow-all
+  --planner-command "my-planner --flag" --agent copilot
 ```
 
 `--planner` can repeat. `chopin` runs the command in the checkout for each
@@ -399,7 +409,7 @@ With `--planner-command` alone, the machine says it can run Planners without
 naming any document:
 
 ```sh
-chopin connect . --planner-command "my-planner --flag" -- copilot --acp --allow-all
+chopin connect . --planner-command "my-planner --flag" --agent copilot
 ```
 
 Choose this machine for a document with the machine button, and Chopin asks it
@@ -486,7 +496,8 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 | Command                                                     | What it does                                                                                                      |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.                                    |
+| `chopin connect [checkout] [--key <key>] --agent <id>`      | Runs work from Chopin with a built-in agent in this checkout. Pairs first if needed.                              |
+| `chopin connect [checkout] … -- <command>`                  | Runs any other ACP agent's command instead.                                                                       |
 | `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
 | `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                |

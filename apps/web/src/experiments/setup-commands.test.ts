@@ -28,27 +28,27 @@ test("one sh command: the installer runs chopin connect itself, with a key only 
 	expect(setupCommand(ORIGIN, "sh", copilot)).toBe(
 		[
 			`curl -fsSL ${RELEASES}/install.sh | \\`,
-			"  CHOPIN_URL=https://chopin.example sh -s -- connect --install-service -- copilot --acp --allow-all",
+			"  CHOPIN_URL=https://chopin.example sh -s -- connect --install-service --agent copilot",
 		].join("\n"),
 	);
 	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY })).toBe(
 		[
 			`curl -fsSL ${RELEASES}/install.sh | \\`,
-			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --install-service -- copilot --acp --allow-all`,
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --install-service --agent copilot`,
 		].join("\n"),
 	);
-	// Run in the terminal instead, and the agent's own variables.
+	// Run in the terminal instead, and another agent.
 	expect(setupCommand(ORIGIN, "sh", copilot, { background: false }).split("\n")[1])
-		.toBe("  CHOPIN_URL=https://chopin.example sh -s -- connect -- copilot --acp --allow-all");
+		.toBe("  CHOPIN_URL=https://chopin.example sh -s -- connect --agent copilot");
 	expect(setupCommand(ORIGIN, "sh", findAgent("atomic")).split("\n")[1]).toEndWith(
-		"sh -s -- connect --install-service --env ATOMIC_ACP_HEADLESS=1 -- atomic-acp",
+		"sh -s -- connect --install-service --agent atomic",
 	);
 });
 
 test("one PowerShell command: the key in the session only, on a line PSReadLine keeps out of its history file", () => {
 	let copilot = findAgent("copilot");
 	let installer =
-		`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) connect --install-service '--' copilot --acp --allow-all`;
+		`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) connect --install-service --agent copilot`;
 	expect(setupCommand(ORIGIN, "powershell", copilot)).toBe(
 		["$env:CHOPIN_URL = 'https://chopin.example'", installer].join("\n"),
 	);
@@ -62,19 +62,19 @@ test("one PowerShell command: the key in the session only, on a line PSReadLine 
 	// Never on chopin's command line, where other programs on the machine can read it.
 	expect(keyed).not.toContain("--key");
 	expect(setupCommand(ORIGIN, "powershell", copilot, { background: false }).split("\n")[1])
-		.toEndWith("connect '--' copilot --acp --allow-all");
+		.toEndWith("connect --agent copilot");
 });
 
 test("a machine name goes to chopin connect as --name, quoted for the shell", () => {
 	let copilot = findAgent("copilot");
 	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY, name: "build-box" }).split("\n")[1])
 		.toBe(
-			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --name build-box --install-service -- copilot --acp --allow-all`,
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --name build-box --install-service --agent copilot`,
 		);
 	expect(setupCommand(ORIGIN, "sh", copilot, { name: "Jo's box" }).split("\n")[1])
 		.toContain("connect --name 'Jo'\\''s box' --install-service");
 	expect(setupCommand(ORIGIN, "powershell", copilot, { name: "Jo's box" }).split("\n")[1])
-		.toEndWith("connect --name 'Jo''s box' --install-service '--' copilot --acp --allow-all");
+		.toEndWith("connect --name 'Jo''s box' --install-service --agent copilot");
 	// A blank name leaves it out, so chopin uses the hostname.
 	expect(setupCommand(ORIGIN, "sh", copilot, { name: "  " }))
 		.toBe(setupCommand(ORIGIN, "sh", copilot));
@@ -131,9 +131,8 @@ test.skipIf(process.platform === "win32")(
 							"connect",
 							...name ? ["--name", name] : [],
 							...runsAsService(agent) ? ["--install-service"] : [],
-							...agent.env.flatMap(variable => ["--env", variable]),
-							"--",
-							...agent.acp,
+							"--agent",
+							agent.id,
 						]);
 					}
 				}
@@ -194,7 +193,7 @@ async function pasted(installer: string, key?: string) {
 }
 
 test.skipIf(!PWSH)(
-	"pasted into PowerShell, install.ps1 gets every argument, -- included, and the key, which goes",
+	"pasted into PowerShell, install.ps1 gets every argument and the key, which goes",
 	async () => {
 		let recording = [
 			'$lines = @("$env:CHOPIN_URL", "$env:CHOPIN_PAIRING_KEY") + $args',
@@ -208,10 +207,8 @@ test.skipIf(!PWSH)(
 				key ?? "",
 				"connect",
 				"--install-service",
-				"--env",
-				"ATOMIC_ACP_HEADLESS=1",
-				"--",
-				"atomic-acp",
+				"--agent",
+				"atomic",
 			]);
 			expect(result.output).toContain("after: [] []");
 		}
@@ -269,7 +266,7 @@ test("every agent that can run unattended connects as the service, in either she
 	// One that would wait on a permission prompt runs in the terminal.
 	let asks = { ...findAgent("copilot"), unattended: { setting: "approve its tools" } };
 	expect(runsAsService(asks)).toBe(false);
-	expect(connectArguments(asks, "sh")).toBe("connect -- copilot --acp --allow-all");
+	expect(connectArguments(asks, "sh")).toBe("connect --agent copilot");
 });
 
 test("installing an agent and signing in is one copyable block, @-scoped packages quoted for PowerShell", () => {

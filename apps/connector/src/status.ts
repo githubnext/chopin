@@ -229,9 +229,9 @@ function describe(settings: ConnectSettings) {
 		: settings.plannerCommand?.length
 		? " and the Planners of documents that choose this machine"
 		: "";
-	return `${settings.checkout} with ${
-		settings.command.join(" ")
-	}${planners}, on ${settings.server}`;
+	let command = settings.command.join(" ");
+	let agent = settings.agent ? `--agent ${settings.agent} (${command})` : command;
+	return `${settings.checkout} with ${agent}${planners}, on ${settings.server}`;
 }
 
 type Failure = NonNullable<StatusReport["connectors"][number]["failures"]>[number];

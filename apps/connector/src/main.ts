@@ -2,7 +2,7 @@ import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:
 import { hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
+import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
 import type { CodingAgent } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
 import type { AgentInfo } from "./acp";
@@ -328,6 +328,21 @@ function environment(words: string[]) {
 	return env;
 }
 
+/** A mistake in how a command was called, which exits 2. */
+class UsageError extends Error {}
+
+/** The built-in agent `--agent` names, or a refusal listing the ids it may name. */
+function builtInAgent(id: string) {
+	let agent = AGENTS.find(item => item.id === id);
+	if (agent) return agent;
+	throw new UsageError(
+		`There is no built-in agent ${id}. Use --agent with one of: `
+			+ `${
+				AGENTS.map(item => item.id).join(", ")
+			}; or give any other ACP agent's command after --.`,
+	);
+}
+
 /** How many finished runs' worktrees connect keeps without --keep-runs. */
 const KEEP_RUNS = 15;
 
@@ -353,7 +368,7 @@ export async function connect(
 ) {
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check"],
-		options: ["planner-command", "key", "name", "keep-runs"],
+		options: ["planner-command", "key", "name", "keep-runs", "agent"],
 		lists: ["planner", "env"],
 	});
 	let service = parsed.flags.has("service");
@@ -364,7 +379,8 @@ export async function connect(
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
 			|| parsed.options.has("name") || parsed.options.has("keep-runs")
-			|| parsed.flags.has("install-service") || parsed.flags.has("skip-check"))
+			|| parsed.options.has("agent") || parsed.flags.has("install-service")
+			|| parsed.flags.has("skip-check"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
@@ -380,7 +396,12 @@ export async function connect(
 	if (installing && !executable) throw new ServiceError(NOT_INSTALLED);
 	/** Set once connected under --install-service, which then stops to install. */
 	let install = false;
-	let command = saved?.command ?? parsed.rest ?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
+	/** `--agent <id>`: a built-in agent, whose command takes what follows `--` as extra arguments. */
+	let agentId = saved ? saved.agent : parsed.options.get("agent");
+	let builtIn = !saved && agentId !== undefined ? builtInAgent(agentId) : undefined;
+	let command = saved?.command
+		?? (builtIn ? acpCommand(builtIn, parsed.rest ?? []) : parsed.rest)
+		?? JSON.parse(process.env.CHOPIN_ACP_COMMAND ?? "[]");
 	if (
 		!Array.isArray(command) || !command.length
 		|| command.some(item => typeof item !== "string" || !item)
@@ -401,7 +422,8 @@ export async function connect(
 	) {
 		throw new Error(`--planner <document URL> needs --planner-command <command>.\n\n${USAGE}`);
 	}
-	let env = saved?.env ?? environment(parsed.lists.get("env") ?? []);
+	// A built-in agent's own variables come first, so an --env for one of them wins.
+	let env = saved?.env ?? environment([...builtIn?.env ?? [], ...parsed.lists.get("env") ?? []]);
 	let keepRuns = saved ? saved.keepRuns : runsToKeep(parsed.options.get("keep-runs"));
 	if (!service) {
 		requireProgram(command, process.cwd());
@@ -429,6 +451,7 @@ export async function connect(
 			value.connect = {
 				server: url,
 				checkout: info.root,
+				...(agentId === undefined ? {} : { agent: agentId }),
 				command: saving.command,
 				planners: plannerDocuments,
 				plannerCommand: saving.plannerCommand,
@@ -796,7 +819,7 @@ const USAGE =
 	+ "[--name <label>] "
 	+ "[--planner <document URL>]... [--planner-command <command>] [--env KEY=VALUE]... "
 	+ "[--keep-runs <n>] "
-	+ "[--install-service [--skip-check]] -- agent [ACP arguments]";
+	+ "[--install-service [--skip-check]] (--agent <id> [-- <extra arguments>] | -- <ACP command>)";
 
 const HELP = [
 	`Usage: ${SELF} <command> [--base-dir <dir>]`,
@@ -809,8 +832,13 @@ const HELP = [
 	"      machine, with no browser; without one you approve the pairing in a browser.",
 	"  unpair",
 	"      Revoke this machine's token in Chopin and delete it here.",
-	"  connect [checkout] [--key <pairing key>] [--name <label>] -- <agent> [ACP arguments]",
+	"  connect [checkout] [--key <pairing key>] [--name <label>] --agent <id> [-- <arguments>]",
 	"      Run the work you start in the checkout's documents with a local ACP agent.",
+	`      --agent names a built-in agent (${
+		AGENTS.map(agent => agent.id).join(", ")
+	}) and runs its ACP command with the`,
+	"      variables it needs; arguments after -- are added to its command. For any other ACP",
+	"      agent, give its command after -- instead of --agent.",
 	"      Pairs this machine first if it isn't paired yet, with --key or CHOPIN_PAIRING_KEY as",
 	"      pair does. --name <label> names it in Chopin as it pairs (default: the hostname); a",
 	"      machine paired already keeps its name, which its menu on the Machines page changes.",
@@ -887,7 +915,7 @@ if (import.meta.main) {
 			createOutput().error(
 				connectorMessage(error) ?? (error instanceof Error ? error.message : "Connector failed"),
 			);
-			process.exitCode = 1;
+			process.exitCode = error instanceof UsageError ? 2 : 1;
 		}
 	}
 }

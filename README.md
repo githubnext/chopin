@@ -223,20 +223,23 @@ saves the server for later commands.
 
 ```bash
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
+CHOPIN_URL=https://your-chopin-instance.example chopin connect . --agent copilot
 ```
 
 That runs in your terminal and stops when you close it. On a remote machine or
 server, add `--install-service` so a background service keeps it running after
 you close SSH.
 
-To use Atomic instead, install it, sign in, and put its **Connect with**
-arguments in place of `-- copilot --acp --allow-all`:
+Install the agent and sign in to it first. `--agent` names one of the built-in
+agents:
 
-| Agent                                                                                               | Install                                              | Connect with                                | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `-- copilot --acp --allow-all`              | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp` | Yes                |
+| Agent                                                                                               | Install                                              | Connect with      | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `--agent copilot` | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--agent atomic`  | Yes                |
+
+Any other agent that speaks ACP works too: give its command after `--` instead,
+as in `chopin connect . -- my-agent --acp`.
 
 The **Machines** page, at `/connect` on your server, gives one command that
 installs `chopin` and connects the machine, with your server filled in: your

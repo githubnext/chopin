@@ -248,6 +248,38 @@ test("status says once a connector's machine uses its own GitHub login because t
 	);
 });
 
+test("status names a built-in agent by its --agent id, with the command it runs", async () => {
+	let { directory, host } = await machine();
+	let runs = {
+		server: "https://chopin.example",
+		checkout: "/work/score",
+		agent: "atomic",
+		command: ["/usr/bin/atomic-acp", "--", "--package", "/x"],
+		planners: [],
+		plannerCommand: [],
+		env: { ATOMIC_ACP_HEADLESS: "1" },
+	};
+	await writeFile(
+		join(directory, "config.json"),
+		JSON.stringify({
+			connect: runs,
+			service: {
+				executable: "/opt/chopin",
+				directory,
+				version: VERSION,
+				installedAt: 1,
+				settings: runs,
+			},
+		}),
+	);
+	let report = await collectStatus({ directory, server: runs.server, source: "config", host });
+	let service = { state: "running" as const, manager: "systemd" as const, definition: "/u" };
+	expect(formatStatus({ ...report, service: { ...service, log: "/l", notes: [] } })).toContain(
+		"            runs /work/score with --agent atomic (/usr/bin/atomic-acp -- --package /x), on "
+			+ "https://chopin.example",
+	);
+});
+
 test("status lists the Planners' worktrees and the finished runs kept, with their size", async () => {
 	let { directory, host } = await machine();
 	let runs = join(directory, "runs");

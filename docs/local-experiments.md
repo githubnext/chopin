@@ -23,7 +23,7 @@ and wait while you are signed out.
 `GET /connector.js` serves the connector as one bundled file with no sign-in;
 `bun run build` and the Docker image produce it, and a development server
 bundles it from source. Chopin contributors can still run
-`bun run connector connect /path/to/project -- copilot --acp` from a Chopin
+`bun run connector connect /path/to/project --agent copilot` from a Chopin
 checkout.
 
 ## Run chopin as a service
