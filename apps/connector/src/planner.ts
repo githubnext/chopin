@@ -127,13 +127,16 @@ export function dispatchedPlanners(options: {
 	};
 	let running = new Map<string, Backend>();
 	let own = new Set(options.documents);
-	let withdraw = (id: string, backend: Backend) => {
+	let withdraw = (id: string, backend: Backend, reason?: string) => {
 		running.delete(id);
 		backend.stop.abort();
-		// Chopin stops asking once the document's owner chooses another machine or Automatic.
 		if (!backend.own && !options.signal.aborted) {
 			options.output.say(
-				`Stopped the Planner for ${backend.url}: the document chose another machine.`,
+				`Stopped the Planner for ${backend.url}: ${
+					typeof reason === "string" && reason.trim()
+						? reason.trim()
+						: "Chopin no longer asks this machine to run it."
+				}`,
 			);
 		}
 	};
@@ -143,11 +146,11 @@ export function dispatchedPlanners(options: {
 		);
 	return {
 		running: () => [...running].filter(([, backend]) => !backend.exited).map(([id]) => id),
-		assign(planners: PlannerAssignment[]) {
+		assign(planners: PlannerAssignment[], stopped?: Record<string, string>) {
 			let wanted = new Map(planners.map(value => [value.id, value]));
 			for (let [id, backend] of running) {
 				if (wanted.has(id)) backend.exited?.(true);
-				else withdraw(id, backend);
+				else withdraw(id, backend, stopped?.[id]);
 			}
 			for (let [id, planner] of wanted) {
 				if (running.has(id) || options.signal.aborted) continue;

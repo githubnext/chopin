@@ -29,7 +29,12 @@ export type PlannerAssignment = { id: string; url: string };
  * the documents whose Planners it should run differ from the ones it named: every one it should
  * run now. It carries no `id`, so a connector that knows no `kind: "planners"` waits again.
  */
-export type PlannerControl = { kind: "planners"; planners: PlannerAssignment[] };
+export type PlannerControl = {
+	kind: "planners";
+	planners: PlannerAssignment[];
+	/** Why Chopin stopped asking for a document it no longer lists, by id, when it knows. */
+	stopped?: Record<string, string>;
+};
 /** The coding agent's name and version from its ACP initialize answer, when it has given one. */
 export const CONNECTOR_AGENT_HEADER = "chopin-connector-agent";
 export const CONNECTOR_AGENT_VERSION_HEADER = "chopin-connector-agent-version";

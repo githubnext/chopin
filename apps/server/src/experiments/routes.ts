@@ -390,6 +390,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * every credential and releases every Planner.
 	 */
 	let dispatched = new Map<string, Map<string, string>>();
+	/** Why each machine stopped running a document's Planner, told to its connector once. */
+	let stopReasons = new Map<string, Map<string, string>>();
 	/**
 	 * Whether a connection can run its owner's Planners on request: it has a Planner command, speaks
 	 * protocol 4, and this server runs the remote Planner with machines' own GitHub authorization.
@@ -602,7 +604,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (keep(documentId, repositoryId)) continue;
 			options.planners?.withdraw(machineId, documentId);
 			told.delete(documentId);
-			await options.attachments?.()?.stopMachine(documentId, machineId, message(label));
+			let reason = message(label);
+			let reasons = stopReasons.get(machineId) ?? new Map<string, string>();
+			reasons.set(documentId, reason);
+			stopReasons.set(machineId, reasons);
+			await options.attachments?.()?.stopMachine(documentId, machineId, reason);
 		}
 		if (!told.size) dispatched.delete(machineId);
 	}
@@ -1629,8 +1635,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				let running = new Set(args.planners as string[]);
 				let changed = async (): Promise<PlannerControl | undefined> => {
 					let planners = await plannerDocuments(connection);
-					return planners.length === running.size && planners.every(value => running.has(value.id))
-						? undefined
+					if (planners.length === running.size && planners.every(value => running.has(value.id))) {
+						return undefined;
+					}
+					let listed = new Set(planners.map(value => value.id));
+					let reasons = stopReasons.get(connection.machineId);
+					let stopped: Record<string, string> = {};
+					for (let id of running) {
+						let reason = reasons?.get(id);
+						if (listed.has(id) || !reason) continue;
+						stopped[id] = reason;
+						reasons!.delete(id);
+					}
+					return Object.keys(stopped).length
+						? { kind: "planners", planners, stopped }
 						: { kind: "planners", planners };
 				};
 				value = await changed();

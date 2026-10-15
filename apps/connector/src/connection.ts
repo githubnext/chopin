@@ -257,7 +257,7 @@ export type Planners = {
 	/** The documents whose Planners it runs because Chopin asked, by id. */
 	running(): string[];
 	/** Run exactly these, starting the new ones and stopping the others. */
-	assign(planners: PlannerAssignment[]): void;
+	assign(planners: PlannerAssignment[], stopped?: Record<string, string>): void;
 	/** Chopin answered a poll that named `asked` without a change, so it wants exactly those. */
 	unchanged?(asked: string[]): void;
 };
@@ -326,7 +326,10 @@ async function pollPlanners(
 		}
 		if (signal.aborted) return;
 		if (answer.kind === "planners" && Array.isArray(answer.planners)) {
-			planners.assign(answer.planners);
+			let stopped = answer.stopped && typeof answer.stopped === "object"
+				? answer.stopped
+				: undefined;
+			planners.assign(answer.planners, stopped);
 		} else planners.unchanged?.(asked);
 	}
 }

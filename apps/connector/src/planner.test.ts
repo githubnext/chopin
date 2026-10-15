@@ -799,9 +799,16 @@ test.skipIf(process.platform === "win32")(
 						if (polls.length === 1) {
 							value = { kind: "planners", planners: [{ id: "D_1", url: document }] };
 						} else if (polls.length === 2) {
-							// Its owner chooses another machine for the document.
+							// Its owner chooses another machine for the document, and Chopin says why.
 							await release.promise;
-							value = { kind: "planners", planners: [] };
+							value = {
+								kind: "planners",
+								planners: [],
+								stopped: {
+									D_1:
+										"octocat chose studio for this document, so build-box stopped running its Planner.",
+								},
+							};
 						} else await new Promise(() => {});
 					} else if (call.params.name === "wait_for_work") {
 						// No work for this checkout; the work poll waits.
@@ -911,7 +918,7 @@ test.skipIf(process.platform === "win32")(
 			// Its own output says why the Planner stopped, once.
 			expect(stdout.split(`Stopped the Planner for ${document}`)).toHaveLength(2);
 			expect(stdout).toContain(
-				`Stopped the Planner for ${document}: the document chose another machine.`,
+				`Stopped the Planner for ${document}: octocat chose studio for this document, so build-box stopped running its Planner.`,
 			);
 		} finally {
 			connector.kill("SIGKILL");
@@ -1041,7 +1048,7 @@ test.skipIf(process.platform === "win32")(
 			expect(stdout).not.toContain("starting it again");
 			expect(stdout.split(`Stopped the Planner for ${document}`)).toHaveLength(2);
 			expect(stdout).toContain(
-				`Stopped the Planner for ${document}: the document chose another machine.`,
+				`Stopped the Planner for ${document}: Chopin no longer asks this machine to run it.`,
 			);
 		} finally {
 			connector.kill("SIGKILL");
@@ -1111,7 +1118,7 @@ test.skipIf(process.platform === "win32")(
 			await Bun.sleep(1_500);
 			expect(await launches()).toBe(2);
 			expect(said).toContain(
-				"Stopped the Planner for http://x/plan: the document chose another machine.",
+				"Stopped the Planner for http://x/plan: Chopin no longer asks this machine to run it.",
 			);
 		} finally {
 			abort.abort();
