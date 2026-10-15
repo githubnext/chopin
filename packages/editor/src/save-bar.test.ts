@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { decidedBy, newlyDecided } from "./decisions";
 import {
@@ -6,6 +8,7 @@ import {
 	incompleteLabel,
 	newlyFailed,
 	PendingAnswersStore,
+	SaveBar,
 	summarize,
 	unsavedLabel,
 } from "./save-bar";
@@ -41,6 +44,28 @@ test("a failed card is reported once it stops saving", () => {
 	expect(summary.failedAnswers).toBe(2);
 	expect(newlyFailed(new Set(), cards)).toEqual(["a"]);
 	expect(newlyFailed(new Set(["a"]), cards)).toEqual([]);
+});
+
+function barMarkup(cards: PendingAnswers[]) {
+	let store = new PendingAnswersStore();
+	for (let [index, card] of cards.entries()) store.set(String(index), card);
+	return renderToStaticMarkup(createElement(SaveBar, {
+		store,
+		onFailed() {},
+		onIncomplete() {},
+	}));
+}
+
+test("the phone uses Save for individual answers and batches", () => {
+	expect(barMarkup([pending()])).toContain(">Save<");
+	expect(barMarkup([pending(), pending()])).toContain(">Save<");
+	expect(barMarkup([pending({ complete: false }), pending()])).toContain(">Save<");
+});
+
+test("the save bar shows retry, progress and incomplete states", () => {
+	expect(barMarkup([pending({ error: "Review the shared answer." })])).toContain(">Try again<");
+	expect(barMarkup([pending({ submitting: true })])).toContain(">Saving…<");
+	expect(barMarkup([pending({ complete: false })])).toContain(">Show<");
 });
 
 test("the bar's words read naturally", () => {

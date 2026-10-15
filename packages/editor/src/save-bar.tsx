@@ -131,6 +131,8 @@ export function SaveBar(
 	if (open) shown.current = summary;
 	let { answered, failed, failedAnswers, incomplete, saveable, submitting } = shown.current;
 	let waiting = saveable === 0 && incomplete.length > 0 && !submitting;
+	let action = failed.length > 0 ? "Try again" : "Save";
+	if (submitting) action = "Saving…";
 
 	useEffect(() => {
 		let failedNow = newlyFailed(reported.current, cards);
@@ -197,7 +199,7 @@ export function SaveBar(
 						}}
 						type="button"
 					>
-						{submitting ? "Saving…" : failed.length > 0 ? "Try again" : "Save"}
+						{action}
 					</button>
 				)}
 		</div>

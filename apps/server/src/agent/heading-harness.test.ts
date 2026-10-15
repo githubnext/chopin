@@ -54,6 +54,7 @@ test("current Harness executes heading against durable memory before returning i
 		for (
 			let name of [
 				"edit_plan",
+				"open_decision",
 				"ask",
 				"anchor_plan",
 				"reply_comment",

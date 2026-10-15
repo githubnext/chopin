@@ -253,6 +253,7 @@ export type PositionedQuestion = {
 	header: string;
 	question: string;
 	description?: string;
+	response?: "text";
 	options: Array<{ label: string; description: string }>;
 	multiple: boolean;
 	blocks: BlockAddress[];
@@ -268,7 +269,15 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 		.map((raw, index) => {
 			let name = `questions[${index}]`;
 			let question = record(raw, name);
-			fields(question, ["header", "question", "description", "options", "multiple", "blocks"], [
+			fields(question, [
+				"header",
+				"question",
+				"description",
+				"response",
+				"options",
+				"multiple",
+				"blocks",
+			], [
 				"header",
 				"question",
 				"options",
@@ -283,6 +292,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 					header: question.header,
 					question: question.question,
 					...(Object.hasOwn(question, "description") ? { description: question.description } : {}),
+					...(Object.hasOwn(question, "response") ? { response: question.response } : {}),
 					options: question.options,
 					multiple: question.multiple,
 				}],
@@ -292,6 +302,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 				header: normalized.header,
 				question: normalized.question,
 				...(normalized.description === undefined ? {} : { description: normalized.description }),
+				...(normalized.response ? { response: normalized.response } : {}),
 				options: normalized.options.map(option => ({
 					label: option.label,
 					description: option.description,
@@ -302,6 +313,24 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 		});
 
 	return { revision, questions };
+}
+
+export function openDecision(raw: unknown) {
+	let args = record(raw, "open_decision arguments");
+	fields(
+		args,
+		["revision", "key", "question", "description"],
+		["revision", "key", "question"],
+		"open_decision arguments",
+	);
+	return {
+		revision: integer(args.revision, "revision"),
+		key: text(args.key, "key"),
+		question: text(args.question, "question"),
+		...(Object.hasOwn(args, "description")
+			? { description: args.description === "" ? "" : text(args.description, "description", 300) }
+			: {}),
+	};
 }
 
 const GRAPH_OPERATION_FIELDS = ["op", "id", "task", "ids"];

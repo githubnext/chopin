@@ -19,6 +19,7 @@ import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { cardRelation, RelationNote } from "./relation-note";
 import { ResolvedActions } from "./resolved-actions";
+import { TextAnswer } from "./text-answer";
 import type { VisibleSuggestion } from "./project-suggestion";
 import type { Relation } from "../relation";
 
@@ -315,6 +316,7 @@ export function chooseAdded(
 	option: string,
 	mine: string | null | undefined,
 ): Partial<Draft> | undefined {
+	if (question.response === "text") return undefined;
 	if (question.multiple) {
 		return { mode: "choices", options: { ...draft?.options, [option]: true } };
 	}
@@ -403,7 +405,10 @@ function AddOption(
 		try {
 			result = await onAdd(label);
 		} catch {
-			result = { ok: false, message: "Could not add this option." };
+			result = {
+				ok: false,
+				message: "Could not add this option.",
+			};
 		}
 		setPending(null);
 		if (edit.current !== submittedEdit) return;
@@ -414,8 +419,9 @@ function AddOption(
 		if (result.ok) {
 			onCommitEdit?.();
 			setText(null);
-			if (result.option) onAdded(result.option, label, ownsFocus);
-			else if (ownsFocus) focus.current = "trigger";
+			if (result.option) {
+				onAdded(result.option, label, ownsFocus);
+			} else if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
 			if (ownsFocus) focus.current = "field";
@@ -509,7 +515,11 @@ function AddOption(
 					rows={1}
 					value={text}
 				/>
-				{pending !== null && <span className="sr-only" role="status">Adding option</span>}
+				{pending !== null && (
+					<span className="sr-only" role="status">
+						Adding option
+					</span>
+				)}
 			</div>
 			<p
 				className="question-add-hint"
@@ -649,53 +659,60 @@ function Resolved(
 										</p>
 									)}
 								</div>
+								{question?.response === "text" && (
+									<span className="question-response-state">Decided</span>
+								)}
 							</header>
-							<div className="question-options">
-								{options.map((option, optionIndex) => {
-									let isSelected = selected.includes(option);
-									return (
-										<div
-											className="question-choice-row question-option"
-											data-selected={isSelected ? "" : undefined}
-											key={option.id}
-										>
-											<Key>{letter(optionIndex)}</Key>
-											<span className="question-text">
-												<span className="question-label">
-													{isSelected && <span className="sr-only">{"Selected: "}</span>}
-													<InlineCode text={option.label} />
-												</span>
-												{option.description && (
-													<span className="question-desc">
-														<InlineCode text={option.description} />
+							{question?.response === "text"
+								? <p className="question-written-answer">{answer.custom}</p>
+								: (
+									<div className="question-options">
+										{options.map((option, optionIndex) => {
+											let isSelected = selected.includes(option);
+											return (
+												<div
+													className="question-choice-row question-option"
+													data-selected={isSelected ? "" : undefined}
+													key={option.id}
+												>
+													<Key>{letter(optionIndex)}</Key>
+													<span className="question-text">
+														<span className="question-label">
+															{isSelected && <span className="sr-only">{"Selected: "}</span>}
+															<InlineCode text={option.label} />
+														</span>
+														{option.description && (
+															<span className="question-desc">
+																<InlineCode text={option.description} />
+															</span>
+														)}
 													</span>
-												)}
-											</span>
-											<span aria-hidden="true" className="question-check">
-												<CheckIcon />
-											</span>
-										</div>
-									);
-								})}
-								{unmatched.map((label, unmatchedIndex) => (
-									<div
-										className="question-choice-row question-option"
-										data-selected=""
-										key={`${label}-${unmatchedIndex}`}
-									>
-										<Key>{letter(options.length + unmatchedIndex)}</Key>
-										<span className="question-text">
-											<span className="question-label">
-												<span className="sr-only">{"Selected: "}</span>
-												<InlineCode text={label} />
-											</span>
-										</span>
-										<span aria-hidden="true" className="question-check">
-											<CheckIcon />
-										</span>
+													<span aria-hidden="true" className="question-check">
+														<CheckIcon />
+													</span>
+												</div>
+											);
+										})}
+										{unmatched.map((label, unmatchedIndex) => (
+											<div
+												className="question-choice-row question-option"
+												data-selected=""
+												key={`${label}-${unmatchedIndex}`}
+											>
+												<Key>{letter(options.length + unmatchedIndex)}</Key>
+												<span className="question-text">
+													<span className="question-label">
+														<span className="sr-only">{"Selected: "}</span>
+														<InlineCode text={label} />
+													</span>
+												</span>
+												<span aria-hidden="true" className="question-check">
+													<CheckIcon />
+												</span>
+											</div>
+										))}
 									</div>
-								))}
-							</div>
+								)}
 						</section>
 					);
 				})}
@@ -931,7 +948,9 @@ export function QuestionView(props: QuestionViewProps) {
 					if (!draft || !answered(question, draft)) continue;
 					onChange?.(
 						question.id,
-						question.multiple
+						question.response === "text"
+							? { mode: "custom", custom: "" }
+							: question.multiple
 							? {
 								mode: "choices",
 								options: Object.fromEntries(
@@ -1052,6 +1071,7 @@ export function QuestionView(props: QuestionViewProps) {
 		else if (arrived === total - 1) refocus.current = "previous";
 	};
 	let titleId = `${base}-title-${active}`;
+	let written = current.response === "text";
 	let choose = (question: string, change: Partial<Draft>) => {
 		if (change.choice !== undefined) picks.current[question] = change.choice;
 		markHumanEdit();
@@ -1075,7 +1095,7 @@ export function QuestionView(props: QuestionViewProps) {
 			picks.current[question],
 		);
 		if (change) choose(question, change);
-		if (focus) focusOption.current = option;
+		if (focus && item.response !== "text") focusOption.current = option;
 		setAnnouncement(change ? `Added and selected ${label}` : `Added ${label}`);
 	};
 
@@ -1151,29 +1171,40 @@ export function QuestionView(props: QuestionViewProps) {
 
 						<fieldset disabled={disabled} className="question-options" ref={options}>
 							<legend className="sr-only">{current.header}</legend>
-							<Choices
-								question={current}
-								draft={projection.draft}
-								disabled={disabled}
-								name={`${base}-${current.id}`}
-								onChange={change =>
-									choose(current.id, change)}
-								suggestedOptionId={projection.suggestion?.optionId}
-							/>
-							{drafts[current.id]?.mode === "custom" && drafts[current.id]!.custom.trim() && (
+							{written
+								? (
+									<TextAnswer
+										disabled={disabled}
+										onChange={custom => choose(current.id, { mode: "custom", custom })}
+										value={drafts[current.id]?.custom ?? ""}
+									/>
+								)
+								: (
+									<Choices
+										question={current}
+										draft={projection.draft}
+										disabled={disabled}
+										name={`${base}-${current.id}`}
+										onChange={change => choose(current.id, change)}
+										suggestedOptionId={projection.suggestion?.optionId}
+									/>
+								)}
+							{!written && drafts[current.id]?.mode === "custom"
+								&& drafts[current.id]!.custom.trim() && (
 								<LegacyCustom
 									question={current}
 									draft={drafts[current.id]!}
 									name={`${base}-${current.id}`}
 								/>
 							)}
-							{onAddOption && current.options.length < MAX_SHARED_OPTIONS && (
+							{!written && onAddOption && current.options.length < MAX_SHARED_OPTIONS && (
 								<AddOption
 									key={current.id}
 									question={current}
 									disabled={disabled}
 									onAdd={label => onAddOption(current.id, label)}
-									onAdded={(option, label, focus) => added(current.id, option, label, focus)}
+									onAdded={(option, label, focus) =>
+										added(current.id, option, label, focus)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}
@@ -1188,7 +1219,12 @@ export function QuestionView(props: QuestionViewProps) {
 			})()}
 
 			<span aria-live="polite" className="sr-only">{announcement}</span>
-			{addError && <Callout title="Couldn’t add option" message={addError} />}
+			{addError && (
+				<Callout
+					title="Couldn’t add option"
+					message={addError}
+				/>
+			)}
 			{error && (
 				<Callout
 					feedback={errorClassName}
@@ -1288,7 +1324,11 @@ export function QuestionView(props: QuestionViewProps) {
 										className="btn btn-sm btn-primary"
 										ref={primary}
 									>
-										{submitting ? "Saving…" : error ? "Try again" : "Save"}
+										{submitting
+											? "Saving…"
+											: error
+											? "Try again"
+											: "Save"}
 									</button>
 								)}
 								{deferSave && onSubmit && !suggestion && !touched && answeredCount > 0
@@ -1300,7 +1340,11 @@ export function QuestionView(props: QuestionViewProps) {
 											disabled={disabled || submitting || !ready}
 											className="btn btn-sm btn-primary"
 										>
-											{submitting ? "Saving…" : error ? "Try again" : "Save"}
+											{submitting
+												? "Saving…"
+												: error
+												? "Try again"
+												: "Save"}
 										</button>
 									)}
 								{deferSave && onSubmit && suggestion && (

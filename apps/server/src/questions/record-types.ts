@@ -10,7 +10,7 @@ export type OptionOrigin = {
 
 export type DecisionEntry = {
 	choices: string[];
-	/** Text for older answers without durable option IDs, keyed by question. */
+	/** Written answers, including legacy custom answers, keyed by question. */
 	answers?: { [questionId: string]: string };
 	owner: string;
 	at: number;
@@ -25,7 +25,7 @@ export type Record = {
 	resolver?: string;
 	at?: number;
 	anchors?: Wired.WidgetAnchors;
-	origin: "planner" | "conversation";
+	origin: "planner" | "conversation" | "human";
 	threadId?: string;
 	owner?: string;
 	decidedAt?: number;
