@@ -314,25 +314,30 @@ Callback URL: <APP_ORIGIN>/auth/github/callback
 Setup URL:    <APP_ORIGIN>/auth/github/setup
 ```
 
-Enable expiring user authorization tokens, leave OAuth during installation
-disabled, disable webhooks, and make the App installable on any account. Leave
-device flow disabled unless this deployment also uses local device-flow
-sign-in (below), which requires enabling it instead. The complete product
-uses these read-only repository permissions:
+Then set up the App:
+
+1. Enable expiring user authorization tokens.
+2. Leave OAuth during installation disabled.
+3. Disable webhooks.
+4. Make the App installable on any account.
+5. Leave device flow disabled, unless this deployment uses
+   [local device-flow sign-in](#local-device-flow-sign-in).
+6. Give it these repository permissions:
 
 ```text
-Contents:        Read-only
-Pull requests:   Read-only
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
 Checks:          Read-only
 Commit statuses: Read-only
 Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Organization admission additionally requires organization Members read access
-and owner approval on every admitted organization. See
-[Authentication](authentication.md) for the complete identity, installation,
-session, and authorization model.
+Machines push and open draft pull requests as their owner, so Contents, Pull
+requests and Workflows can write; the server itself never writes.
+[Authentication](authentication.md#repository-permissions) explains each
+permission, and organization admission's extra one.
 
 ## Runtime configuration
 
@@ -375,52 +380,6 @@ the image.
 | `JEV_API_KEY`                  | required when enabled   | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on` or `PLANNER_VISUALS=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `CONNECTOR_VERSION`            | the bundled connector's | The `chopin` release this server recommends: `chopin update` installs it by default, and a refused connector is told to run `chopin update <version>` with it. Defaults to the version in `apps/connector/package.json`. A `cli-v` or `v` prefix is dropped; anything but a version like `0.2.0` fails startup.                                                                                                                                                                                                                                                                                                                                          |
 | `CHOPIN_SETUP_AGENTS`          | unset                   | Setups the Machines page offers before the built-in coding agents, as a JSON array; see [Setup agents](#setup-agents). Malformed JSON or fields fail startup. The supplied Compose file forwards it.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-
-### Setup agents
-
-`CHOPIN_SETUP_AGENTS` lets a deployment offer its own way to set up a machine,
-such as a tool that installs `chopin` with its own agent and Planner command.
-The Machines page lists these entries first in its **Coding agent** picker, and
-preselects the one marked `default` for anyone who hasn't picked an agent in
-that browser before. Only signed-in people get the list.
-
-```json
-[
-	{
-		"id": "acme-planner",
-		"name": "Acme Planner",
-		"install": {
-			"linux": [
-				"# Sign in once with acme login, then quit.",
-				"curl -fsSL https://acme.example/install.sh | sh"
-			],
-			"macos": ["brew install acme-example/tap/acme"],
-			"windows": ["winget install AcmeExample.Planner"]
-		},
-		"command": "acme connect --server {origin} --key {key} --name {name}",
-		"keyless": "acme connect --server {origin}",
-		"default": true
-	}
-]
-```
-
-| Field     | Meaning                                                                                                                                                                            |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`      | Up to 40 lowercase letters, digits and dashes. It can't be a built-in agent's id, and each entry needs its own.                                                                    |
-| `name`    | What the picker shows, up to 60 characters.                                                                                                                                        |
-| `install` | Up to 20 lines shown as they are under **Show install steps**, comment lines included. One list, or an object with a list for each of `linux`, `macos` and `windows`.              |
-| `command` | What **Server or VM** shows once it has made a single-use key. It must contain `{key}`; `{name}` and `{origin}` are optional. One string, or one for each system as for `install`. |
-| `keyless` | Optional. What **Your computer** shows, without `{key}`. Without it, the entry is offered only for a server.                                                                       |
-| `default` | Optional. `true` on at most one entry preselects it.                                                                                                                               |
-
-The page fills `{origin}`, `{key}` and `{name}` (the machine name), quoted for
-the shell: `sh` on Linux and macOS, PowerShell on Windows. With no machine
-name, `{name}` goes, together with a flag right before it, as in
-`--name {name}`.
-
-The entry's command decides how the machine connects, so the page hides **Run
-in the background** for it. **Build and prototype automatically** still
-travels with the key.
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
@@ -467,6 +426,52 @@ openssl rand -hex 32
 
 The image expects to listen on internal port 8787. Do not override `PORT` in the
 supplied image without also replacing its health check and container routing.
+
+### Setup agents
+
+`CHOPIN_SETUP_AGENTS` lets a deployment offer its own way to set up a machine,
+such as a tool that installs `chopin` with its own agent and Planner command.
+The Machines page lists these entries first in its **Coding agent** picker, and
+preselects the one marked `default` for anyone who hasn't picked an agent in
+that browser before. Only signed-in people get the list.
+
+```json
+[
+	{
+		"id": "acme-planner",
+		"name": "Acme Planner",
+		"install": {
+			"linux": [
+				"# Sign in once with acme login, then quit.",
+				"curl -fsSL https://acme.example/install.sh | sh"
+			],
+			"macos": ["brew install acme-example/tap/acme"],
+			"windows": ["winget install AcmeExample.Planner"]
+		},
+		"command": "acme connect --server {origin} --key {key} --name {name}",
+		"keyless": "acme connect --server {origin}",
+		"default": true
+	}
+]
+```
+
+| Field     | Meaning                                                                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`      | Up to 40 lowercase letters, digits and dashes. It can't be a built-in agent's id, and each entry needs its own.                                                                    |
+| `name`    | What the picker shows, up to 60 characters.                                                                                                                                        |
+| `install` | Up to 20 lines shown as they are under **Show install steps**, comment lines included. One list, or an object with a list for each of `linux`, `macos` and `windows`.              |
+| `command` | What **Server or VM** shows once it has made a single-use key. It must contain `{key}`; `{name}` and `{origin}` are optional. One string, or one for each system as for `install`. |
+| `keyless` | Optional. What **Your computer** shows, without `{key}`. Without it, the entry is offered only for a server.                                                                       |
+| `default` | Optional. `true` on at most one entry preselects it.                                                                                                                               |
+
+The page fills `{origin}`, `{key}` and `{name}` (the machine name), quoted for
+the shell: `sh` on Linux and macOS, PowerShell on Windows. With no machine
+name, `{name}` goes, together with a flag right before it, as in
+`--name {name}`.
+
+The entry's command decides how the machine connects, so the page hides **Run
+in the background** for it. **Build and prototype automatically** still
+travels with the key.
 
 ## Deploy the Docker image
 

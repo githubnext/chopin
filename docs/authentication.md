@@ -26,37 +26,58 @@ Setup URL:    <APP_ORIGIN>/auth/github/setup
 - Select **Any account** so personal accounts and organizations can install it.
 - Prefer **Only select repositories** while installing it.
 
-Repository permissions for the complete product are:
+### Repository permissions
+
+Give the App these repository permissions:
 
 ```text
-Contents:        Read-only
-Pull requests:   Read-only
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
 Checks:          Read-only
 Commit statuses: Read-only
 Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Contents backs file, tree, code-search, and commit-history tools. Pull requests
-and Issues also back the summaries behind pull request and issue links in a
-document; without Issues, issue links stay plain links. The other read-only
-permissions back the hosted GitHub MCP pull-request toolset. Existing
-installations must approve the added Issues permission before issue summaries
-appear. Chopin
-does not request repository, organization, or account write permission. An
-`AGENT=off` deployment only needs Contents and automatic Metadata access unless
-organization admission is enabled.
+| Permission      | Why                                                                                                            |
+| --------------- | -------------------------------------------------------------------------------------------------------------- |
+| Contents        | Chopin reads files, trees, code search and history. Machines push branches.                                    |
+| Pull requests   | Pull request link summaries and the Planner's pull request tools read them. Machines open draft pull requests. |
+| Workflows       | GitHub refuses a push that changes `.github/workflows` without it.                                             |
+| Checks          | The Planner's pull request tools read check runs.                                                              |
+| Commit statuses | The Planner's pull request tools read commit statuses.                                                         |
+| Issues          | Issue link summaries. Without it, issue links stay plain links.                                                |
+| Metadata        | GitHub grants it to every App.                                                                                 |
 
-Organization admission additionally requires:
+Whoever installs the App approves these permissions. An `AGENT=off` deployment
+needs only Contents and Metadata, plus organization admission's permission
+below.
+
+### Who writes to repositories
+
+The server never writes to a repository. Machines connected with
+[`chopin connect`](chopin-cli.md) push branches and open draft pull requests as
+their owner, with the owner's App user token.
+
+GitHub limits that token to repositories where the App is installed and the
+owner can push. **Only select repositories** narrows it further.
+
+Machines use their owner's own `gh` and Git login instead when the App can
+only read a repository, and always under `AUTH_MODE=local`, where machines hold
+no GitHub token. In the first case `chopin status` says the App can't push.
+
+### Organization admission
+
+Organization admission also needs:
 
 ```text
 Organization permissions:
 Members: Read-only
 ```
 
-The App must be installed on every allowed organization, and an organization
-owner must approve this permission. Existing installations continue with their
-old permissions until the owner approves the update.
+Install the App on every allowed organization. An organization owner approves
+this permission.
 
 No App ID, private key, JWT, installation access token, or webhook secret is
 used. Chopin acts on behalf of each signed-in user with a GitHub App user access

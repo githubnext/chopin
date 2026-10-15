@@ -126,9 +126,11 @@ Chopin's tools available to the Planner under every harness are:
 - repository-scoped code search, post-filtered by repository node ID; and
 - bounded reads of document and historical research references attached to the
   current Chat context; and
-- repository-bound, read-only pull-request tools reached through
-  `createMCPClient` against GitHub's remote MCP server, bound to the channel's
-  repository.
+- pull-request tools that only read, reached through `createMCPClient` against
+  GitHub's remote MCP server and bound to the channel's repository. This is the
+  Planner's own tool set; machines, not the Planner, use the App's write
+  permissions (see
+  [Authentication](authentication.md#who-writes-to-repositories)).
 
 A comment note sent to Chopin (`to: "planner"` on `comment:start` or
 `comment:reply`; the server never looks for a mention in the text) starts or

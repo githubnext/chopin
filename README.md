@@ -137,10 +137,22 @@ Then, on the App:
 - enable expiring user authorization tokens;
 - disable OAuth during installation;
 - disable webhooks; and
-- grant read access to Contents, Pull requests, Checks, and Commit statuses.
+- give it these repository permissions:
 
-See [Authentication](docs/authentication.md) for the exact App settings and the
-additional permission needed for organization admission.
+```text
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
+Checks:          Read-only
+Commit statuses: Read-only
+Issues:          Read-only
+Metadata:        Read-only (automatic)
+```
+
+The write permissions let machines push and open draft pull requests as their
+owner. With a read-only App, machines use their owner's own `gh` and Git login
+instead. See [Authentication](docs/authentication.md#repository-permissions)
+for why each permission is needed.
 
 Install, configure, and start Chopin:
 
