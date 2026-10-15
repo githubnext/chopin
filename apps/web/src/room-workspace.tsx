@@ -51,8 +51,8 @@ import {
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
-import { MachineButton } from "./machine-button";
 import { offlineChoice, useMachineChoice } from "./machine-choice";
+import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
@@ -191,6 +191,8 @@ type TitleProps = {
 	canManage: boolean;
 	editing?: TitleEdit;
 	label: string;
+	/** The person's machine choice for this document, offered as Run on in the title's menu. */
+	machine?: MachineChoice;
 	onAction: (action: DocumentAction) => void;
 	onEditingChange: (editing?: TitleEdit) => void;
 	onRenamed: (channel: DocumentMetadata) => void;
@@ -221,6 +223,7 @@ export function DocumentTitle(
 		editing,
 		icon,
 		label,
+		machine,
 		onAction,
 		onEditingChange,
 		onRenamed,
@@ -337,6 +340,7 @@ export function DocumentTitle(
 						align="start"
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
+						machine={machine}
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={
 							<ChevronIcon
@@ -635,16 +639,11 @@ export function RoomWorkspace(
 	let typing = useDocumentEditing(room);
 	let plannerDetached = plannerAttachment.wire === wire && !!plannerAttachment.planner
 		&& plannerAttachment.planner.state !== "attached";
-	// Which of the person's machines works here; Build plan's button and Chat's share it.
+	// Which of the person's machines works here, so Build plan can say when it is offline.
 	let machineChoice = useMachineChoice(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
 	);
-	// Who runs the Planner changed: Chat's machine button says so at once.
-	let refreshMachine = machineChoice.refresh;
-	useEffect(() => {
-		refreshMachine();
-	}, [plannerAttachment.planner, refreshMachine]);
 	let build = useBuildPlan({
 		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && status === "connected",
 		connected: status === "connected",
@@ -1488,6 +1487,9 @@ export function RoomWorkspace(
 		canManage: effectiveCanManage,
 		editing: titleEdit,
 		label: metadata.title,
+		machine: machineChoice.state && workspaceCanEdit && status === "connected"
+			? machineChoice
+			: undefined,
 		onAction: action => onDocumentAction(room, action),
 		onEditingChange: setTitleEdit,
 		onRenamed: updateMetadata,
@@ -1588,16 +1590,6 @@ export function RoomWorkspace(
 		: presentation.type === "parent-with-child" && mode === "split"
 		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
 		: undefined;
-	// A phone's top bar has no room for it; there it is Chat's alone.
-	let machineButton = (place: "build" | "chat") =>
-		machineChoice.state && !!workspaceCanEdit && status === "connected" && (
-			<MachineButton
-				choice={machineChoice}
-				compact={phone && place === "chat"}
-				phone={phone}
-				planner={place === "chat"}
-			/>
-		);
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
 	// has no build of its own. A phone shows this room's bar only off Document, so it keeps it.
 	let buildSlot = profile.implementation && (presentation.type !== "parent-with-child" || phone)
@@ -1608,7 +1600,6 @@ export function RoomWorkspace(
 				build={build}
 				documentURL={new URL(documentPath(repository.owner, repository.name, slug), location.origin)
 					.href}
-				machine={phone ? undefined : machineButton("build")}
 				machineOffline={offlineChoice(machineChoice.state)}
 				canEdit={!!workspaceCanEdit && status === "connected"}
 				compact={mode !== "split"}
@@ -1706,7 +1697,6 @@ export function RoomWorkspace(
 							sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
 							planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
 							wire={wire}
-							machine={profile.implementation ? machineButton("chat") : undefined}
 						/>
 					}
 					chatActivity={chatActivity}
@@ -1729,6 +1719,7 @@ export function RoomWorkspace(
 									editing={titleEdit}
 									editingDocument={!childOpen && !!barEdit?.editing}
 									label={metadata.title}
+									machine={titleProps.machine}
 									members={members}
 									onAction={action => onDocumentAction(room, action)}
 									onComments={() => {

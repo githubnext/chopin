@@ -19,6 +19,7 @@ import { SidebarTrigger } from "./project-sidebar-chrome";
 import type { Session } from "@chopin/protocol";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
+import type { MachineChoice } from "./machine-choice";
 import type { TitleEdit } from "./title-edit";
 import type { WorkspacePresentation } from "./workspace-model";
 
@@ -37,6 +38,8 @@ function prefetchDocumentsSheet() {
 /** The phone bar's own room: its title, subtitle and trailing controls. */
 type PhoneHeaderDocument = {
 	archivedAt?: string;
+	/** The person's machine choice for this document, offered as Run on in the actions sheet. */
+	machine?: MachineChoice;
 	canManage: boolean;
 	/** Open comment threads in the document; the bar offers a list of them when there are any. */
 	comments?: number;
@@ -125,6 +128,7 @@ export function PhoneHeaderContent(
 		editing,
 		editingDocument,
 		label,
+		machine,
 		members,
 		onAction,
 		onComments,
@@ -248,6 +252,7 @@ export function PhoneHeaderContent(
 					<DocumentActionsMenu
 						openDocument
 						channel={{ archivedAt, title: label }}
+						machine={machine}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={<EllipsisIcon aria-hidden="true" size={18} />}

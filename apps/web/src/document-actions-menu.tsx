@@ -12,18 +12,29 @@ import {
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { Face } from "@chopin/editor/face";
-import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
+import {
+	ArchiveIcon,
+	ArrowUpIcon,
+	ChevronIcon,
+	CloseIcon,
+	LinkIcon,
+	PencilIcon,
+	ServerIcon,
+} from "@chopin/icons";
 
 import { activeActorRoster, launchUrl } from "./demo-actor";
 import { motionContract } from "./motion-contract";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
-import { MenuItem } from "./menu-item";
+import { MenuItem, MenuSeparator } from "./menu-item";
 import { IconButton } from "./icon-button";
+import { MachineGlyph } from "./machine-button";
+import { chosenMachine, machineRows, machineState } from "./machine-choice";
 
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DemoActor } from "./demo-actor";
+import type { MachineChoice, MachineRow } from "./machine-choice";
 import type { ComponentProps, ComponentType, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 // Once prefetched, the sheet renders directly: lazy() would still suspend its first render.
@@ -66,6 +77,24 @@ export function documentMenuItems(
 		];
 }
 
+/** Run on is the title menu's alone: it opens the machine list rather than acting. */
+type MenuEntry = Omit<DocumentMenuItem, "action"> & {
+	action: DocumentMenuItem["action"] | "run-on";
+};
+
+const DEFAULT_MACHINE = "default";
+
+function rowLabel(row: MachineRow) {
+	return row.id === null ? "Your default" : row.label;
+}
+
+/** One quiet word or two beside the name: what the default uses now, or the machine's state. */
+function rowDetail(row: MachineRow) {
+	if (!row.machine) return row.uses?.label ?? "None connected";
+	let state = machineState(row.machine);
+	return state === "connected" ? "Connected" : state === "offline" ? "Offline" : "Needs pairing";
+}
+
 export type DocumentMenuKeyAction = "close" | "first" | "last" | "next" | "previous";
 
 export function documentMenuKeyAction(key: string): DocumentMenuKeyAction | undefined {
@@ -84,6 +113,7 @@ export function DocumentActionsMenu(
 		className = "",
 		iconButton = false,
 		onAction,
+		machine,
 		openDocument = false,
 		trigger,
 	}: {
@@ -92,6 +122,11 @@ export function DocumentActionsMenu(
 		className?: string;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
+		/**
+		 * The person's machine choice for this document: adds Run on, which opens the machine list in
+		 * place of the actions. A rare override; the sidebar's Machines sets the default.
+		 */
+		machine?: MachineChoice;
 		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
 		openDocument?: boolean;
 		trigger: ReactNode;
@@ -110,8 +145,29 @@ export function DocumentActionsMenu(
 	let [open, setOpen] = useState(false);
 	let [sheetOpen, setSheetOpen] = useState(false);
 	let [position, setPosition] = useState<CSSProperties>();
-	let items = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
-	let select = (action: DocumentMenuItem["action"]) => {
+	let [view, setView] = useState<"actions" | "machines">("actions");
+	let [machineSheet, setMachineSheet] = useState(false);
+	let choice = machine?.state;
+	let chosen = chosenMachine(choice);
+	let rows = choice ? machineRows(choice, Date.now()) : [];
+	let runOn = chosen?.label ?? "Default";
+	let base = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
+	let items: MenuEntry[] = choice && !channel.archivedAt
+		? base.flatMap(item =>
+			item.action === "rename"
+				? [item, { action: "run-on" as const, label: `Run on: ${runOn}`, icon: ServerIcon }]
+				: [item]
+		)
+		: base;
+	let pickMachine = (row: MachineRow) => {
+		if (row.disabled || !machine) return;
+		if (row.id !== (chosen?.id ?? null)) void machine.choose(row.id);
+	};
+	let select = (action: MenuEntry["action"]) => {
+		if (action === "run-on") {
+			setMachineSheet(true);
+			return;
+		}
 		if (action.startsWith("collaborator:")) {
 			window.open(
 				launchUrl(location.href, action.slice("collaborator:".length)),
@@ -149,7 +205,10 @@ export function DocumentActionsMenu(
 			}
 			let margin = 8;
 			let gap = 4;
-			let width = Math.min(208, document.documentElement.clientWidth - margin * 2);
+			let width = Math.min(
+				view === "machines" ? 272 : 208,
+				document.documentElement.clientWidth - margin * 2,
+			);
 			let height = menu.offsetHeight;
 			if (width <= 0 || height <= 0) {
 				fail();
@@ -188,28 +247,53 @@ export function DocumentActionsMenu(
 			window.removeEventListener("resize", place);
 			document.removeEventListener("scroll", place, true);
 		};
-	}, [align, closeMenu, open]);
+	}, [align, closeMenu, open, view]);
 
 	useEffect(() => {
 		if (!open) return;
 		let frame = requestAnimationFrame(() => {
-			panel.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]")[initialItem.current]
-				?.focus();
+			let controls = panel.current?.querySelectorAll<HTMLButtonElement>("[role^=menuitem]");
+			// The machine list starts on the chosen row, after Back.
+			let checked = view === "machines"
+				? panel.current?.querySelector<HTMLButtonElement>("[aria-checked=true]")
+				: undefined;
+			(checked ?? controls?.[initialItem.current])?.focus();
 		});
 		return () => {
 			cancelAnimationFrame(frame);
 		};
-	}, [open]);
+	}, [open, view]);
 	useMenuDismissal(open, [button, panel], closeMenu);
 
 	let openAt = (index: number) => {
 		initialItem.current = index;
+		setView("actions");
 		setPosition(undefined);
 		setOpen(true);
+	};
+	let showMachines = () => {
+		machine?.refresh();
+		initialItem.current = 0;
+		setView("machines");
+	};
+	let showActions = () => {
+		initialItem.current = items.findIndex(item => item.action === "run-on");
+		setView("actions");
 	};
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Tab") {
 			closeMenu();
+			return;
+		}
+		let focused = document.activeElement as HTMLElement | null;
+		if (event.key === "ArrowRight" && focused?.dataset.action === "run-on") {
+			event.preventDefault();
+			showMachines();
+			return;
+		}
+		if (event.key === "ArrowLeft" && view === "machines") {
+			event.preventDefault();
+			showActions();
 			return;
 		}
 		let action = documentMenuKeyAction(event.key);
@@ -219,7 +303,9 @@ export function DocumentActionsMenu(
 			closeMenu(true);
 			return;
 		}
-		let controls = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+		let controls = [
+			...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role^=menuitem]"),
+		].filter(control => control.getAttribute("aria-disabled") !== "true");
 		if (controls.length === 0) return;
 		let current = Math.max(0, controls.indexOf(document.activeElement as HTMLButtonElement));
 		let next = action === "first"
@@ -296,8 +382,28 @@ export function DocumentActionsMenu(
 						items={items}
 						label={`Actions for ${channel.title}`}
 						onClose={() => setSheetOpen(false)}
-						onSelect={action => select(action as DocumentMenuItem["action"])}
+						onSelect={action => select(action as MenuEntry["action"])}
 						title={channel.title}
+					/>
+				</Suspense>
+			)}
+			{machineSheet && (
+				<Suspense fallback={null}>
+					<Sheet
+						items={rows.map(row => ({
+							action: row.id ?? DEFAULT_MACHINE,
+							checked: row.checked,
+							detail: rowDetail(row),
+							disabled: row.disabled,
+							label: rowLabel(row),
+						}))}
+						label="Run on"
+						onClose={() => setMachineSheet(false)}
+						onSelect={action => {
+							let row = rows.find(value => (value.id ?? DEFAULT_MACHINE) === action);
+							if (row) pickMachine(row);
+						}}
+						title="Run this document on"
 					/>
 				</Suspense>
 			)}
@@ -314,19 +420,68 @@ export function DocumentActionsMenu(
 					role="menu"
 					style={presence.value ?? { visibility: "hidden" }}
 				>
-					{items.map(item => (
-						<MenuItem
-							key={item.action}
-							onClick={() => {
-								closeMenu(true);
-								select(item.action);
-							}}
-							tone={item.destructive ? "destructive" : "normal"}
-						>
-							<item.icon aria-hidden="true" size={14} />
-							{item.label}
-						</MenuItem>
-					))}
+					{view === "machines"
+						? (
+							<>
+								<MenuItem onClick={showActions}>
+									<ChevronIcon aria-hidden="true" className="rotate-180" />
+									Run on
+								</MenuItem>
+								<MenuSeparator />
+								{rows.map(row => (
+									<button
+										aria-checked={row.checked}
+										aria-disabled={row.disabled || undefined}
+										className="app-menu-item"
+										data-density="normal"
+										key={row.id ?? DEFAULT_MACHINE}
+										onClick={() => {
+											if (row.disabled) return;
+											closeMenu(true);
+											pickMachine(row);
+										}}
+										role="menuitemradio"
+										type="button"
+									>
+										<MachineGlyph machine={row.machine} />
+										<span className="truncate">{rowLabel(row)}</span>
+										<span className="app-menu-item-meta">{rowDetail(row)}</span>
+									</button>
+								))}
+							</>
+						)
+						: items.map(item =>
+							item.action === "run-on"
+								? (
+									<button
+										className="app-menu-item"
+										data-action="run-on"
+										data-density="normal"
+										key={item.action}
+										onClick={showMachines}
+										role="menuitem"
+										type="button"
+									>
+										<item.icon aria-hidden="true" />
+										Run on
+										<span className="app-menu-item-meta">{runOn}</span>
+										<ChevronIcon aria-hidden="true" className="app-menu-item-chevron" size={12} />
+									</button>
+								)
+								: (
+									<MenuItem
+										key={item.action}
+										onClick={() => {
+											closeMenu(true);
+											select(item.action);
+										}}
+										tone={item.destructive ? "destructive" : "normal"}
+									>
+										<item.icon aria-hidden="true" size={14} />
+										{item.label}
+									</MenuItem>
+								)
+						)}
 				</div>,
 				document.body,
 			)}

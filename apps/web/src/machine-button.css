@@ -100,35 +100,6 @@
 	}
 }
 
-/* Beside Build plan, a quarter of the bar at most, so the document's title keeps the rest. */
-.room-header .machine-button {
-	max-width: min(14rem, 25vw);
-}
-
-.document-title-status .machine-button {
-	max-width: min(14rem, 25cqi);
-}
-
-@container document-title-bar (max-width: 26rem) {
-	.document-title-status .machine-button {
-		padding-inline: calc(var(--spacing) * 1.5);
-	}
-
-	.document-title-status :is(.machine-button-name, .machine-button-chevron) {
-		display: none;
-	}
-}
-
-@container composer-footer (width < 24rem) {
-	.composer-machine .machine-button {
-		padding-inline: calc(var(--spacing) * 1.5);
-	}
-
-	.composer-machine :is(.machine-button-name, .machine-button-chevron) {
-		display: none;
-	}
-}
-
 .machine-menu {
 	position: fixed;
 	z-index: 60;

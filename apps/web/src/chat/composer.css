@@ -524,11 +524,3 @@
 .chat-composer :is(.composer-left, .composer-connection, .composer-reconnect, .send-action) {
 	flex: none;
 }
-.chat-composer .composer-machine {
-	display: inline-flex;
-	min-width: 0;
-	align-items: center;
-}
-:root[data-phone] .chat-composer .composer-machine {
-	order: 4;
-}
