@@ -13,11 +13,11 @@
 			"row": 1,
 			"col": 0
 		},
-		{ "id": "edge", "label": "Edge cache", "sub": "CDN · WAF", "row": 1, "col": 1 },
+		{ "id": "edge", "label": "Edge cache", "sub": "CDN and WAF", "row": 1, "col": 1 },
 		{
 			"id": "api",
 			"label": "Checkout API",
-			"sub": "Go · :8080",
+			"sub": "Go on :8080",
 			"tag": "API",
 			"focal": true,
 			"row": 1,

@@ -200,7 +200,7 @@ export function BuildView(
 				? look.tip
 				: who && `started by ${who === "you" ? who : `@${who}`}`;
 		} else if (look.kind === "built") {
-			label = `Built · ${plural(look.pullRequests, "pull request", "pull requests")}`;
+			label = `Built ${plural(look.pullRequests, "pull request", "pull requests")}`;
 			let commits = snapshot?.live?.commits.length ?? 0;
 			detail = commits > 0
 				? `${plural(commits, "commit", "commits")} since first build`
@@ -219,9 +219,14 @@ export function BuildView(
 		status = (
 			<>
 				<BuildGlyph look={look} />
-				<span className="min-w-0 flex-1">
+				<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
 					{label}
-					{detail && <span className="text-text-tertiary">{` · ${detail}`}</span>}
+					{detail && (
+						<>
+							{" "}
+							<span className="text-text-tertiary">{detail}</span>
+						</>
+					)}
 				</span>
 			</>
 		);
@@ -423,9 +428,9 @@ export function BuildView(
 							{noChange.map(item => (
 								<li className="build-no-change" key={item.buildId}>
 									<CheckIcon aria-hidden="true" className="build-status-icon" size={12} />
-									<span className="min-w-0 flex-1">
-										No code change needed
-										<span className="build-status-detail">{` · ${item.summary}`}</span>
+									<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+										No code change needed{" "}
+										<span className="build-status-detail">{item.summary}</span>
 									</span>
 									<span className="build-elapsed">{ago(item.at, now)}</span>
 								</li>

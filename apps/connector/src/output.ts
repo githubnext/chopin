@@ -55,7 +55,7 @@ export function createOutput(
 		pairing(repository: string, url: string, code: string) {
 			say(
 				"",
-				s.bold(`Chopin connector · ${repository}`),
+				s.bold(`Chopin connector for ${repository}`),
 				"",
 				"1. Open this link and sign in:",
 				`   ${s.underline(s.cyan(url))}`,

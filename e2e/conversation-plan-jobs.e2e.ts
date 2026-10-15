@@ -36,7 +36,7 @@ async function waitForRefine(page: Page, messageId: string, status: string) {
 	let popoverId = await marker.getAttribute("aria-controls");
 	if (!popoverId) throw new Error("analysis marker did not identify its popover");
 	await expect(page.locator(`[id="${popoverId}"]`).getByRole("group", { name: "Planner jobs" }))
-		.toContainText(`refine · ${status}`);
+		.toContainText(`refine ${status}`);
 }
 
 async function job(page: Page, messageId: string) {
@@ -202,7 +202,7 @@ test("failed jobs survive reload, keep diagnostics in place, and retry with the 
 	await waitForJob(page, messageId, "failed");
 	await refineScript();
 	await jobs(page).getByRole("button", { name: "Retry refine job", exact: true }).click();
-	await expect(jobs(page)).toContainText("refine · done");
+	await expect(jobs(page)).toContainText("refine done");
 	await expect(card(page, REFINED)).toBeVisible();
 });
 
@@ -230,7 +230,7 @@ test("an archived held job becomes interrupted and retries only after the docume
 
 		await refineScript();
 		await jobs(page).getByRole("button", { name: "Retry refine job", exact: true }).click();
-		await expect(jobs(page)).toContainText("refine · done");
+		await expect(jobs(page)).toContainText("refine done");
 		await expect(card(page, REFINED)).toBeVisible();
 	} finally {
 		if (messageId) await releaseHeldRefine(page, messageId);

@@ -36,10 +36,15 @@ export function ResearchDiagnostics({ analysis, pending, canEdit, onRetry }: {
 			{pending ? <p className="m-0 text-sm">Waiting for research analysis</p> : (
 				<>
 					<p className="m-0 text-sm">{analysis!.policyGate}</p>
-					<p className="m-0 text-xs text-text-tertiary">
-						Model {analysis!.modelVersion} · Questions {analysis!.questionSetVersion} ·{" "}
-						{analysis!.policyVersion && <>Policy {analysis!.policyVersion} ·{" "}</>}
-						{analysis!.latencyMs} ms
+					<p className="m-0 flex flex-wrap gap-x-3 text-xs text-text-tertiary">
+						<span>Model {analysis!.modelVersion}</span>{" "}
+						<span>Questions {analysis!.questionSetVersion}</span> {analysis!.policyVersion && (
+							<>
+								<span>Policy {analysis!.policyVersion}</span>
+								{" "}
+							</>
+						)}
+						<span>{analysis!.latencyMs} ms</span>
 					</p>
 					{analysis!.admission && (
 						<section className="mt-2" aria-label="Research admission policy">

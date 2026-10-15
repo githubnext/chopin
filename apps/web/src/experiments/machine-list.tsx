@@ -330,9 +330,12 @@ function MachineTable(
 											/>
 										)}
 									</span>
-									<span className="machines-secondary machines-truncate">
-										{[owner, machine.repositories.join(", ")].filter(Boolean).join(" · ")}
-									</span>
+									{owner && <span className="machines-secondary machines-truncate">{owner}</span>}
+									{machine.repositories.length > 0 && (
+										<span className="machines-secondary machines-truncate">
+											{machine.repositories.join(", ")}
+										</span>
+									)}
 								</span>
 							</TableCell>
 							<TableCell>
@@ -428,14 +431,21 @@ function MachineRows(
 			<ul>
 				{list.map(machine => {
 					let state = machineState(machine);
-					let detail = state === "connected"
-						? [
-							machine.hostname,
-							machine.version && `chopin ${machine.version}`,
-							OS[machine.platform?.os ?? ""],
-						]
-							.filter(Boolean).join(" · ") || machine.repositories[0] || "Connected"
-						: statusWords(machine, now);
+					let parts = [
+						machine.hostname,
+						machine.version && `chopin ${machine.version}`,
+						OS[machine.platform?.os ?? ""],
+					].filter(Boolean);
+					let detail = state !== "connected"
+						? statusWords(machine, now)
+						: parts.length
+						? parts.map((part, index) => (
+							<span className="machines-detail-part" key={index}>
+								{index > 0 && " "}
+								{part}
+							</span>
+						))
+						: machine.repositories[0] || "Connected";
 					return (
 						<li className="machines-row-item" key={machine.id}>
 							<FavoriteStar

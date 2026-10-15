@@ -4360,16 +4360,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 .plan-content .plan-error-message {
 	display: inline;
 	margin: 0;
+	margin-inline-start: calc(var(--spacing) * 2);
 	font-size: var(--text-sm);
 	color: var(--color-text-tertiary);
 	overflow-wrap: anywhere;
 	line-height: var(--text-sm--line-height);
-}
-
-.plan-content .plan-error-message::before {
-	content: "·";
-	margin-inline: 0.375rem;
-	color: var(--color-text-quaternary);
 }
 
 .plan-content .plan-error-detail {
@@ -4388,14 +4383,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	margin-inline-end: calc(var(--spacing) * 1.5);
 	font-size: var(--text-xs);
 	color: var(--color-text-secondary);
-}
-
-.plan-content .plan-code-title::after {
-	content: "·";
-	margin-inline: 0.375rem 0.125rem;
-	color: var(--color-text-quaternary);
 }
 
 /* Columns ---------------------------------------------------------------- */
@@ -5286,6 +5276,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 :is(.plan-decision-pop, .plan-resolved-comment-sheet) .plan-resolved-comment-meta {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: calc(var(--spacing) * 1.5);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 	color: var(--color-text-tertiary);

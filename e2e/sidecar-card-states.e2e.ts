@@ -166,7 +166,7 @@ test("reopening a decision shares a fresh draft and a later Save survives reload
 	await bringForward(ben, "Where should room state live?");
 
 	for (let page of [ana, ben]) {
-		await expect(card(page).getByText("Previously: In SQLite · @ana")).toBeVisible();
+		await expect(card(page).getByText("Previously chosen by @ana: In SQLite")).toBeVisible();
 		await expect(card(page).getByRole("radio", { name: "In SQLite" })).not.toBeChecked();
 	}
 	await card(ben).getByText("On disk as MDX", { exact: true }).click();
@@ -318,12 +318,12 @@ test("a legacy multi card reopens with its text-only previous answer", async ({ 
 	await expect(card.locator(".question-option[data-selected]").first())
 		.toContainText("Only collaborative anchors");
 	await card.getByRole("button", { name: "Reopen" }).click();
-	await expect(card).toContainText("Previously: Only collaborative anchors · @ana");
+	await expect(card).toContainText("Previously chosen by @ana: Only collaborative anchors");
 	await expect(card.getByRole("radio", { name: "Canary" })).not.toBeChecked();
 	await card.getByRole("button", { name: "Next question", exact: true }).click();
 	await expect(card.getByRole("heading", { name: "What belongs in the first cut?" }))
 		.toBeVisible();
-	await expect(card).toContainText("Previously: Anchors · @ana");
+	await expect(card).toContainText("Previously chosen by @ana: Anchors");
 	await expect(card.getByRole("radio", { name: "Anchors" })).not.toBeChecked();
 });
 
@@ -462,8 +462,8 @@ for (let { width, touch } of [{ width: 1280 }, { width: 390 }, { width: 390, tou
 				await expect(reopen).toBeVisible();
 				let sizes = await card.evaluate(element => {
 					let attribution = element.querySelector(".question-resolved-meta > span")!;
-					let person = attribution.lastElementChild!;
 					let avatar = attribution.firstElementChild!;
+					let person = avatar.nextElementSibling!;
 					let footer = element.querySelector(".question-actions")!;
 					let link = footer.querySelector('[data-relation="linked"]')!;
 					let label = link.querySelector("span")!;

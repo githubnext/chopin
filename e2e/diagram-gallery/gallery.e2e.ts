@@ -66,10 +66,10 @@ test("document views use separate SVG resources and survive source changes", asy
 	expect(future.every(tabIndex => tabIndex === "-1")).toBe(true);
 
 	await page.getByRole("button", { name: "Replace first source" }).click();
-	await expect(first).toContainText("State · first instance");
+	await expect(first).toContainText("State first instance");
 	// A new source opens fresh, on its whole diagram.
 	await expect(first.locator(".ch-diagram__status")).toHaveText(/^Step (\d+) of \1$/);
-	await expect(second).toContainText("Sequence · second instance");
+	await expect(second).toContainText("Sequence second instance");
 	await page.getByRole("button", { name: "Unmount second diagram" }).click();
 	await expect(second).toHaveCount(0);
 	await expect(page.getByText("Second diagram unmounted.", { exact: true })).toBeVisible();

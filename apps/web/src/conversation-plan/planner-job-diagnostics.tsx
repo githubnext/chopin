@@ -30,7 +30,7 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 			{jobs.map(job => (
 				<div className="mt-1" key={job.id}>
 					<p className="m-0">
-						{job.kind} · {job.status}
+						{job.kind} {job.status}
 						{job.reason ? ` — ${job.reason}` : ""}
 					</p>
 					{job.output && (

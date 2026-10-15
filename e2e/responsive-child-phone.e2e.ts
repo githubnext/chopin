@@ -139,7 +139,7 @@ test("a child opens for reading on a phone and the tab bar's pencil edits it", a
 		await expect(page.locator(".phone-top-bar-mode")).toHaveText("Editing");
 		// Editing joins the child's place rather than replacing it.
 		await expect(page.locator(".phone-top-bar-subtitle")).toHaveText(
-			new RegExp(`^in Test ${room.slice(0, 8)}\\s*·\\s*Editing$`),
+			new RegExp(`^in Test ${room.slice(0, 8)}\\s*Editing$`),
 		);
 		// The parent beneath keeps reading.
 		await expect(parentText(page)).toHaveAttribute("contenteditable", "false");

@@ -22,7 +22,7 @@
 		},
 		{
 			"label": "Renderers",
-			"sub": "layout · routing · motion",
+			"sub": "layout, routing and motion",
 			"items": [
 				"graph",
 				"lanes",
@@ -32,7 +32,7 @@
 		},
 		{
 			"label": "Viewer + export",
-			"sub": "HTML · PNG · GIF · MP4",
+			"sub": "HTML, PNG, GIF and MP4",
 			"items": [
 				"focus",
 				"route",

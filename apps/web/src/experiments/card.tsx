@@ -106,8 +106,10 @@ export function InvestigationReference(
 					{current?.buildBlocker && (
 						<p className="m-0 text-sm text-text-secondary">
 							<strong>Required before building:</strong> {current.buildBlocker}
-							{state === "completed" && " · Apply the findings before building."}
 						</p>
+					)}
+					{current?.buildBlocker && state === "completed" && (
+						<p className="m-0 text-sm text-text-secondary">Apply the findings before building.</p>
 					)}
 					{state === "completed" && current?.buildBlocker && onApply && canEdit && (
 						<div>

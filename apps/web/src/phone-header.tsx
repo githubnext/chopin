@@ -202,7 +202,6 @@ export function PhoneHeaderContent(
 				{(lead || status) && (
 					<div className="phone-top-bar-subtitle">
 						{lead && <span className="phone-top-bar-lead truncate">{lead}</span>}
-						{lead && status && <span aria-hidden="true">·</span>}
 						{status}
 					</div>
 				)}

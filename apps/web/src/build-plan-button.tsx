@@ -553,7 +553,7 @@ export function BuildPlanButton(
 					data-tooltip={connectAgent
 						? "Local agent disconnected"
 						: compact
-						? `${label} · ${look.tip}`
+						? `${label}. ${look.tip}`
 						: look.tip}
 					data-tooltip-detail=""
 					data-tooltip-verbatim=""
@@ -600,7 +600,6 @@ export function BuildPlanButton(
 					)
 					: action && (
 						<>
-							{phone && <span aria-hidden="true">·</span>}
 							{/* Stays focusable while blocked or busy; aria-disabled and aria-busy say why. */}
 							<button
 								aria-busy={busy || undefined}

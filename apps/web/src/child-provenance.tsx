@@ -97,9 +97,9 @@ export function ChildProvenance({ channelId, parent }: { channelId: string; pare
 						{origin.startedBy && (
 							<>
 								{" "}
-								<span className="child-provenance-segment">· by {origin.startedBy}</span>
+								<span className="child-provenance-segment">by {origin.startedBy}</span>
 							</>
-						)} <span className="child-provenance-segment">· {origin.detail}</span>
+						)} <span className="child-provenance-segment ms-2">{origin.detail}</span>
 					</span>
 				</span>
 				<UnfoldToggle className="child-provenance-toggle btn btn-sm btn-ghost" unfold={brief}>

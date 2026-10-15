@@ -24,7 +24,7 @@ test("connector messages are plain text on stdout when not a terminal", () => {
 	expect(out()).toBe(
 		[
 			"",
-			"Chopin connector · org/repo",
+			"Chopin connector for org/repo",
 			"",
 			"1. Open this link and sign in:",
 			"   https://chopin.test/connect?pairing=abc",
@@ -47,7 +47,7 @@ test("connector messages are plain text on stdout when not a terminal", () => {
 test("a terminal gets ANSI styling unless NO_COLOR is set", () => {
 	let styled = capture(true);
 	styled.output.pairing("org/repo", "https://chopin.test/x", "ABCD-EFGH");
-	expect(styled.out()).toContain("\x1b[1mChopin connector · org/repo\x1b[22m");
+	expect(styled.out()).toContain("\x1b[1mChopin connector for org/repo\x1b[22m");
 	expect(styled.out()).toContain("\x1b[4m\x1b[36mhttps://chopin.test/x\x1b[39m\x1b[24m");
 	let plain = capture(true, { NO_COLOR: "1" });
 	plain.output.pairing("org/repo", "https://chopin.test/x", "ABCD-EFGH");

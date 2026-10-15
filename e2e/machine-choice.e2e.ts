@@ -159,7 +159,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(automatic).toBeFocused();
 	await expect(automatic).toContainText(/Uses (build-box|laptop) now/);
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toContainText(`Connected · chopin ${RELEASE} · Linux`);
+		.toContainText(`Connected with chopin ${RELEASE} on Linux`);
 	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeVisible();
 	// Opened upward from the composer, inside the window.
 	let panel = (await menu.boundingBox())!;
@@ -280,7 +280,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
 	// The favorite is offline, so Automatic says so and uses the laptop.
 	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
-		.toContainText("Uses laptop now · build-box is offline");
+		.toContainText("Uses laptop now because build-box is offline");
 	await expect(menu.getByRole("button", { name: /favorite/i })).toHaveCount(2);
 	await expect(menu.locator("[data-star][aria-pressed=true]")).toHaveCount(1);
 	await page.keyboard.press("Escape");

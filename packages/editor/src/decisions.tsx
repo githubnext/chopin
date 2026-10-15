@@ -169,7 +169,7 @@ function Confirmed(
 	{ by, closing, entry }: { by?: string; closing: Closing; entry: QuestionnaireEntry },
 ) {
 	let chosen = labels(entry.value);
-	let question = entry.value.questions.map(item => item.prompt).join(" · ");
+	let question = entry.value.questions.map(item => item.prompt).join(" ");
 	return (
 		<div
 			aria-hidden={closing.mine ? undefined : true}
@@ -186,7 +186,7 @@ function Confirmed(
 					</span>
 					<span className="decision-confirmed-text">
 						<span className="decision-confirmed-label">
-							{by ? `Decided · ${by}` : "Decided"}
+							{by ? `Decided by ${by === "You" ? "you" : by}` : "Decided"}
 						</span>
 						<span className="decision-confirmed-question">{question}</span>
 						<span className="decision-confirmed-answer">

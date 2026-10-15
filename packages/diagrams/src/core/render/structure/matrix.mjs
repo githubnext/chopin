@@ -81,7 +81,7 @@ export function render(spec) {
 		];
 		spec.cells[i].forEach((lv, j) => {
 			parts.push(
-				el("g", { "data-sc-tip": `${r} · ${cols[j]}: ${LEVELS[lv]}` }, [
+				el("g", { "data-sc-tip": `${r}, ${cols[j]}: ${LEVELS[lv]}` }, [
 					el("rect", { x: rowW + j * colW, y, width: colW, height: RH, fill: "transparent" }),
 					glyph(lv, rowW + j * colW + colW / 2, y + RH / 2),
 				]),

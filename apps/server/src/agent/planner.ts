@@ -102,7 +102,7 @@ another part. A refused edit names the line to fix, counted inside the fence.
 panel "Implementation"
   header
     button "Approve and build this plan" primary
-  text "Build on Laptop · 4f2a9c01" muted
+  text "Build 4f2a9c01 on Laptop" muted
   disclosure "0 of 2 tasks complete" open
     card
       badge "queued"

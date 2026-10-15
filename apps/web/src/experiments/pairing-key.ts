@@ -10,7 +10,7 @@ const RETURNING_KEY = "chopin:machines:generate";
 /** How long a key has left, in the whole minutes a person reads at a glance. */
 export function expiryLabel(expiresAt: number, now: number): string {
 	let left = expiresAt - now;
-	return left > 0 ? `Single use · expires in ${Math.ceil(left / 60_000)} min` : "Expired";
+	return left > 0 ? `Works once and expires in ${Math.ceil(left / 60_000)} min` : "Expired";
 }
 
 export type PairingKey =

@@ -470,7 +470,7 @@ describe("living document sync", () => {
 		let edited = live({ outstandingTasks, outOfSync: true });
 		expect(syncStatus(edited)).toEqual({ kind: "out-of-sync", reason: "pending", outstanding: 2 });
 		expect(syncHint(syncStatus(edited), edited, "me"))
-			.toBe("Changes will build shortly · will also retry 2 blocked tasks");
+			.toBe("Changes will build shortly. 2 blocked tasks will retry too");
 		// Syncing beats needing attention.
 		expect(syncStatus(live({ outstandingTasks, rebuild: rebuild("running") })))
 			.toEqual({ kind: "building" });
@@ -723,7 +723,7 @@ describe("build status", () => {
 		});
 		let building = look(running);
 		expect(building).toMatchObject({ kind: "building", done: 1, total: 3 });
-		expect(buildLabel(building)).toBe("Building · 1 of 3");
+		expect(buildLabel(building)).toBe("Building 1 of 3");
 	});
 
 	it("reads a delivered build as built, and a stopped first build as stopped with Retry", () => {
@@ -743,7 +743,7 @@ describe("build status", () => {
 			snapshot({ lifecycle: { execution: { state: "idle" }, history: [reported] } }),
 		);
 		expect(early).toEqual({ kind: "building", done: 0, total: 1, tip: "0 of 1 tasks built" });
-		expect(buildLabel(early)).toBe("Building · 0 of 1");
+		expect(buildLabel(early)).toBe("Building 0 of 1");
 		let failed = look(snapshot({ build: build("failed") }));
 		expect(failed).toMatchObject({ kind: "stopped", retry: true });
 		expect(buildLabel(failed)).toBe("Build stopped");
@@ -840,7 +840,7 @@ describe("build status", () => {
 		expect(failed).toMatchObject({ retry: true });
 		expect(buildLabel(look(live()))).toBe("Built");
 		expect(look({ ...live(), builtBy: "maggie" }, { userId: "other" }))
-			.toMatchObject({ tip: "Every pull request matches the document · built by @maggie" });
+			.toMatchObject({ tip: "Built by @maggie. Every pull request matches the document" });
 		// An unknown builder is left unnamed rather than called “the builder”.
 		expect(look(live(), { userId: "other" }))
 			.toMatchObject({ tip: "Every pull request matches the document" });

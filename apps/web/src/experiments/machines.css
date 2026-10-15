@@ -611,6 +611,11 @@
 	line-height: var(--text-xs--line-height);
 }
 
+/* Space, not a separator glyph, keeps a row's hostname, release and system apart. */
+.machines-detail-part + .machines-detail-part {
+	margin-inline-start: calc(var(--spacing) * 1.5);
+}
+
 .machines-truncate {
 	max-width: 22rem;
 	overflow: hidden;

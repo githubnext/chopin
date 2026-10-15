@@ -274,7 +274,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await expect(copy).toBeVisible({ timeout: 30_000 });
 	await expect(page).toHaveURL(/\/machines\?server$/);
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
-	await expect(page.getByText(/^Single use · expires in 10 min$/)).toBeVisible();
+	await expect(page.getByText(/^Works once and expires in 10 min$/)).toBeVisible();
 	let shown = async () => {
 		let text = await page.locator(".machines-run pre code").innerText();
 		return { text, key: text.match(KEY)?.[0] };
@@ -476,7 +476,7 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
 	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
 	await expect(rows.locator(".machines-row").filter({ hasText: "build-box" }))
-		.toContainText(`build-box.internal · chopin ${RELEASE} · Linux`);
+		.toContainText(`build-box.internal chopin ${RELEASE} Linux`);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
 	await expect(rows.locator(".machines-row")).toHaveCount(1);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
