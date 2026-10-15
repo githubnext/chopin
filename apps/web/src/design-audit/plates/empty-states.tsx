@@ -1,11 +1,28 @@
-import { MessageIcon, SearchIcon } from "@chopin/icons";
+import { MessageIcon } from "@chopin/icons";
+import { useRef } from "react";
 
-import { AuditPlate } from "../frame";
+import { DocumentSearchResults } from "../../document-search-dialog";
+import { AuditPlate, StateLabel } from "../frame";
+import { auditProject, AuditSidebarProject } from "./document-fixtures";
+
+function EmptySearch() {
+	let input = useRef<HTMLInputElement>(null);
+	return (
+		<DocumentSearchResults
+			input={input}
+			manyProjects={false}
+			onChoose={() => {}}
+			onRetry={() => {}}
+			query="Typography"
+			search={{ failedProjectIds: [], results: [], status: "ready" }}
+		/>
+	);
+}
 
 export function EmptyStatesPlate() {
 	return (
 		<AuditPlate
-			description="First-use, no-results, and unavailable states provide a next step."
+			description="First-use, no-results, and unavailable states."
 			item="empty"
 			title="Empty states"
 		>
@@ -15,15 +32,24 @@ export function EmptyStatesPlate() {
 					<span>Pick one from the sidebar or start a new one.</span>
 					<button className="btn btn-sm btn-secondary" type="button">New document</button>
 				</div>
-				<div>
-					<span className="design-audit-empty-sidebar-row">No documents</span>
-					<span className="design-audit-empty-sidebar-row">No archived documents</span>
+				<div className="design-audit-empty-live">
+					{[false, true].map(archiveMode => (
+						<div key={String(archiveMode)}>
+							<StateLabel>{archiveMode ? "Sidebar, archived" : "Sidebar"}</StateLabel>
+							<AuditSidebarProject
+								archiveMode={archiveMode}
+								entry={auditProject({ channels: [], status: "ready" })}
+							/>
+						</div>
+					))}
 				</div>
-				<div>
-					<SearchIcon size={24} />
-					<strong>No results</strong>
-					<span>Try a shorter search or clear the filters.</span>
-					<button className="btn btn-md btn-secondary" type="button">Clear search</button>
+				<div className="design-audit-empty-live">
+					<div>
+						<StateLabel>Document search</StateLabel>
+						<div className="navigation-modal-content navigation-palette">
+							<EmptySearch />
+						</div>
+					</div>
 				</div>
 				<div>
 					<MessageIcon size={24} />

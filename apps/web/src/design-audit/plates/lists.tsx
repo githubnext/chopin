@@ -1,28 +1,42 @@
-import { CheckIcon, DocumentIcon, SearchIcon } from "@chopin/icons";
+import { useRef } from "react";
 
+import { DocumentSearchField, DocumentSearchResults } from "../../document-search-dialog";
 import { AuditPlate } from "../frame";
+import { AUDIT_PROJECT, auditChannel } from "./document-fixtures";
 
+import type { DocumentSearchState } from "../../document-search-dialog";
+
+export const AUDIT_SEARCH: DocumentSearchState = {
+	failedProjectIds: [],
+	results: [
+		auditChannel("design-notes", "Design notes"),
+		auditChannel("design-system-audit", "Design system audit", {
+			description: "Every foundation, control and surface in one place",
+		}),
+		auditChannel("design-review", "Design review", { archivedAt: "2026-09-01T09:00:00.000Z" }),
+	].map(channel => ({ channel, project: AUDIT_PROJECT })),
+	status: "ready",
+};
+
+/** The live document search palette, outside its modal so the plate can show it in place. */
 export function ListsPlate() {
+	let input = useRef<HTMLInputElement>(null);
 	return (
 		<AuditPlate
-			description="Rows share one inset, target height, and selected treatment."
+			description="The document search palette's result list. Typing highlights the first match; arrows, Home, End, and the pointer move the highlight."
 			item="lists"
 			title="Lists"
 		>
-			<div className="design-audit-surface-list" role="listbox" aria-label="Documents">
-				<div role="option" aria-selected="false">
-					<DocumentIcon size={14} />Design notes
-				</div>
-				<div role="option" aria-selected="true">
-					<DocumentIcon size={14} />Design system audit<CheckIcon size={14} />
-				</div>
-				<div role="option" aria-selected="false" data-audit-state="hover">
-					<DocumentIcon size={14} />Editor architecture
-				</div>
-			</div>
-			<div className="design-audit-empty-row">
-				<SearchIcon size={14} />
-				<span>No matching documents</span>
+			<div className="navigation-modal-content navigation-palette">
+				<DocumentSearchField input={input} onQuery={() => {}} query="Design" />
+				<DocumentSearchResults
+					input={input}
+					manyProjects={false}
+					onChoose={() => {}}
+					onRetry={() => {}}
+					query="Design"
+					search={AUDIT_SEARCH}
+				/>
 			</div>
 		</AuditPlate>
 	);

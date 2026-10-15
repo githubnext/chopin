@@ -220,8 +220,17 @@ describe("design audit specimens", () => {
 		}
 		expect(markup).toContain('aria-label="Add document"');
 		expect(markup).toContain("disabled");
-		expect(markup).toContain('aria-selected="true"');
+		expect(plate(markup, "selections")).toContain(
+			'aria-disabled="true" aria-label="githubnext/design-notes, added"',
+		);
+		expect(plate(markup, "selections")).toContain('class="navigation-palette-option"');
+		expect(markup).not.toContain("design-audit-selection-list");
 		expect(markup).toContain('role="menu"');
+		expect(plate(markup, "dropdowns")).toContain(
+			'class="navigation-account-menu motion-dropdown is-open"',
+		);
+		expect(plate(markup, "dropdowns")).toContain("Manage repository access");
+		expect(markup).not.toContain("design-audit-dropdown-trigger");
 		expect(markup).toContain('data-slot="select-trigger"');
 		expect(markup).toContain('data-slot="select-value"');
 		expect(markup).not.toContain('<select class="field"');
@@ -264,6 +273,19 @@ describe("design audit specimens", () => {
 		expect(plate(markup, "dialogs")).not.toContain('aria-modal="true"');
 		expect(markup).toContain('aria-current="page"');
 		expect(markup).toContain('aria-label="Workspace view"');
+		let navigation = plate(markup, "navigation");
+		expect(navigation).toContain("project-sidebar-document-current");
+		expect(navigation).toContain("project-sidebar-document-ancestor");
+		expect(navigation).toContain("project-sidebar-child-current");
+		expect(navigation).toContain('data-sidebar-decision-count=""');
+		expect(navigation).toContain("Loading documents…");
+		expect(navigation).not.toContain("Archived draft");
+		expect(plate(markup, "lists")).toContain('class="navigation-palette-option"');
+		expect(plate(markup, "lists")).toContain('class="document-status-badge">Archived<');
+		let empty = plate(markup, "empty");
+		expect(empty).toContain('<p class="project-sidebar-empty">No documents</p>');
+		expect(empty).toContain('<p class="project-sidebar-empty">No archived documents</p>');
+		expect(empty).toContain("No matching documents");
 		expect(markup).toContain('data-chat-entry="true"');
 		let chat = plate(markup, "chat");
 		expect(chat).toContain('class="workspace-root');

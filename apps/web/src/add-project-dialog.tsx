@@ -15,6 +15,7 @@ import { TerminalAlert } from "./terminal-alert";
 
 import type { RepositorySnapshot } from "./repository-snapshot";
 import type { NavigationDialogMotion } from "./navigation-dialog";
+import type { RefObject } from "react";
 
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : "Could not load repositories.";
@@ -146,46 +147,13 @@ export function AddProjectDialog(
 						)
 				)}
 				{visible.length > 0 && (
-					<PaletteListbox
-						enabled={repository => !addedIds.has(repository.id)}
+					<RepositoryOptions
+						addedIds={addedIds}
+						adding={adding}
 						input={input}
-						itemKey={repository => repository.id}
-						itemLabel={repository =>
-							`${repository.owner}/${repository.name}${
-								addedIds.has(repository.id) ? ", added" : ""
-							}`}
-						items={visible}
-						label="Repositories"
 						onChoose={repository => void select(repository)}
 						query={query}
-						renderItem={repository => {
-							let alreadyAdded = addedIds.has(repository.id);
-							let busy = adding === repository.id;
-							return (
-								<>
-									<span
-										className={`min-w-0 flex-1 truncate ${
-											alreadyAdded ? "text-text-tertiary" : "text-text-primary"
-										}`}
-									>
-										<span className="text-text-tertiary">{repository.owner}/</span>
-										{repository.name}
-									</span>
-									{alreadyAdded
-										? (
-											<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
-												<CheckIcon aria-hidden="true" />
-												Added
-											</span>
-										)
-										: (
-											<span className="navigation-palette-hint" data-busy={busy || undefined}>
-												{busy ? "Adding…" : "Add"}
-											</span>
-										)}
-								</>
-							);
-						}}
+						repositories={visible}
 					/>
 				)}
 			</div>
@@ -193,5 +161,59 @@ export function AddProjectDialog(
 				<a href="/auth/github/install">Manage repository access</a>
 			</div>
 		</NavigationDialog>
+	);
+}
+
+/** The repositories a person can add, with ones already added shown but not offered. */
+export function RepositoryOptions(
+	{ addedIds, adding, input, onChoose, query, repositories }: {
+		addedIds: ReadonlySet<string>;
+		adding?: string;
+		input: RefObject<HTMLInputElement | null>;
+		onChoose: (repository: Api.Repository) => void;
+		query: string;
+		repositories: Api.Repository[];
+	},
+) {
+	return (
+		<PaletteListbox
+			enabled={repository => !addedIds.has(repository.id)}
+			input={input}
+			itemKey={repository => repository.id}
+			itemLabel={repository =>
+				`${repository.owner}/${repository.name}${addedIds.has(repository.id) ? ", added" : ""}`}
+			items={repositories}
+			label="Repositories"
+			onChoose={onChoose}
+			query={query}
+			renderItem={repository => {
+				let alreadyAdded = addedIds.has(repository.id);
+				let busy = adding === repository.id;
+				return (
+					<>
+						<span
+							className={`min-w-0 flex-1 truncate ${
+								alreadyAdded ? "text-text-tertiary" : "text-text-primary"
+							}`}
+						>
+							<span className="text-text-tertiary">{repository.owner}/</span>
+							{repository.name}
+						</span>
+						{alreadyAdded
+							? (
+								<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
+									<CheckIcon aria-hidden="true" />
+									Added
+								</span>
+							)
+							: (
+								<span className="navigation-palette-hint" data-busy={busy || undefined}>
+									{busy ? "Adding…" : "Add"}
+								</span>
+							)}
+					</>
+				);
+			}}
+		/>
 	);
 }

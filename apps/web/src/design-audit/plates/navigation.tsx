@@ -1,5 +1,3 @@
-import { ArchiveIcon, ChevronIcon, DocumentIcon, LoaderIcon, PlusIcon } from "@chopin/icons";
-
 import { useId } from "react";
 
 import { BuildGlyph } from "../../build-plan-button";
@@ -7,8 +5,42 @@ import { BUILD_UNAVAILABLE } from "../../decision-view-control";
 import { workspaceDestinations } from "../../workspace-model";
 import { WorkspaceViewNavigation } from "../../workspace-navigation";
 import { AuditPlate, StateLabel } from "../frame";
+import { auditChannel, auditProject, AuditSidebarProject } from "./document-fixtures";
 
 import type { ComponentProps } from "react";
+
+const DOCUMENTS = [
+	auditChannel("product-direction", "Product direction", {
+		description: "Where the collaborative editor goes next",
+		unansweredDecisions: 3,
+	}),
+	auditChannel("design-system-audit", "Design system audit"),
+	auditChannel("typography-research", "Typography research", {
+		parentChannelId: "design-system-audit",
+	}),
+	auditChannel("editor-architecture", "Editor architecture"),
+];
+
+// The sidebar Project in the states the live rail gives it.
+const SIDEBAR_SPECIMENS: { label: string; project: ComponentProps<typeof AuditSidebarProject> }[] =
+	[
+		{
+			label: "Current document, unanswered decisions",
+			project: {
+				currentDocumentId: "design-system-audit",
+				entry: auditProject({ channels: DOCUMENTS, status: "ready", unansweredDecisions: 3 }),
+			},
+		},
+		{
+			label: "Current child, ancestor highlighted",
+			project: {
+				currentDocumentId: "typography-research",
+				entry: auditProject({ channels: DOCUMENTS, status: "ready", unansweredDecisions: 3 }),
+			},
+		},
+		{ label: "Loading", project: { entry: auditProject({ channels: [], status: "loading" }) } },
+		{ label: "Empty", project: { entry: auditProject({ channels: [], status: "ready" }) } },
+	];
 
 type CompactState = Partial<ComponentProps<typeof WorkspaceViewNavigation>>;
 
@@ -31,39 +63,22 @@ export function NavigationPlate() {
 	let reason = useId();
 	return (
 		<AuditPlate
-			description="Current, ancestor, archived, and loading rows in one compact rail. Descriptions appear on hover or focus. Below, the compact workspace's view navigation."
+			description="The live sidebar Project with current, ancestor, unanswered, loading, and empty rows. Descriptions appear on hover or focus. Below, the compact workspace's view navigation."
 			item="navigation"
 			title="Navigation"
 		>
-			<nav aria-label="Audit navigation" className="design-audit-sidebar" data-tooltip-edge="">
-				<div className="design-audit-sidebar-heading">
-					<span>Chopin</span>
-					<button aria-label="Add document" className="btn btn-icon btn-ghost" type="button">
-						<PlusIcon size={14} />
-					</button>
-				</div>
-				<a
-					aria-description="Where the collaborative editor goes next"
-					data-tooltip="Where the collaborative editor goes next"
-					data-tooltip-side="right"
-					data-tooltip-verbatim=""
-					href="#surfaces"
-				>
-					<DocumentIcon size={14} />Product direction
-				</a>
-				<a aria-current="page" href="#surfaces">
-					<DocumentIcon size={14} />Design system audit
-				</a>
-				<a data-navigation-state="ancestor" href="#surfaces">
-					<ChevronIcon size={14} />Research notes
-				</a>
-				<a data-navigation-state="archived" href="#surfaces">
-					<ArchiveIcon size={14} />Archived draft
-				</a>
-				<div className="design-audit-navigation-loading">
-					<LoaderIcon size={14} />Loading more…
-				</div>
-			</nav>
+			<div className="design-audit-sidebar-specimens">
+				{SIDEBAR_SPECIMENS.map(({ label, project }) => (
+					<div key={label}>
+						<StateLabel>{label}</StateLabel>
+						<AuditSidebarProject
+							archiveMode={project.archiveMode}
+							currentDocumentId={project.currentDocumentId}
+							entry={project.entry}
+						/>
+					</div>
+				))}
+			</div>
 			<div className="design-audit-compact-navigation">
 				{COMPACT_SPECIMENS.map(({ label, state }, index) => (
 					<div key={label}>

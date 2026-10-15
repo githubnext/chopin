@@ -1,3 +1,4 @@
+import { SidebarAccount } from "./account-menu";
 import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
@@ -5,7 +6,6 @@ import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { IconButton } from "./icon-button";
 import { MachinesEntry } from "./machines-entry";
-import { MenuItem, MenuSeparator } from "./menu-item";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
 import { motionImmediately } from "./motion-input";
@@ -13,24 +13,15 @@ import { documentGroups } from "./documents-sheet-model";
 import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { Count } from "@chopin/editor/count";
-import { Face } from "@chopin/editor/face";
 import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor/disclosure-motion";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
 import { useEffect, useId, useRef, useState } from "react";
-import {
-	ArchiveIcon,
-	ChevronIcon,
-	DocumentIcon,
-	KeyboardIcon,
-	LockIcon,
-	PlusIcon,
-	SearchIcon,
-	SignInIcon,
-} from "@chopin/icons";
+import { ArchiveIcon, ChevronIcon, DocumentIcon, PlusIcon, SearchIcon } from "@chopin/icons";
 import type * as Api from "./api";
 
+import type { AccountMenuState } from "./account-menu";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";
@@ -143,15 +134,9 @@ function DocumentRow(
 	);
 }
 
-export function menuItemTarget(key: string, current: number, count: number): number {
-	if (key === "Home") return 0;
-	if (key === "End") return count - 1;
-	return (current + (key === "ArrowDown" ? 1 : -1) + count) % count;
-}
-
 function noop() {}
 
-function Project(
+export function ProjectSidebarProject(
 	{
 		archiveMode,
 		pendingCreations,
@@ -455,13 +440,7 @@ export function ProjectSidebar(
 		reveal,
 		user,
 	}: {
-		accountMenu?: false | {
-			className: string;
-			closing: boolean;
-			onDismiss: () => void;
-			onShortcuts: () => void;
-			onSignOut: () => void;
-		};
+		accountMenu?: false | AccountMenuState;
 		accountMenuOpen?: boolean;
 		accountMenuId?: string;
 		accountTriggerRef?: Ref<HTMLButtonElement>;
@@ -698,7 +677,7 @@ export function ProjectSidebar(
 					<ul className="project-sidebar-projects gap-2">
 						{[...projects].sort((first, second) => first.project.position - second.project.position)
 							.map(entry => (
-								<Project
+								<ProjectSidebarProject
 									archiveMode={archiveMode}
 									pendingCreations={pendingCreations}
 									currentDocumentId={currentDocumentId}
@@ -721,59 +700,15 @@ export function ProjectSidebar(
 				</nav>
 			</div>
 			{footer}
-			<div className="project-sidebar-account-wrap" ref={accountWrapRef}>
-				<button
-					aria-controls={accountMenu ? accountMenuId : undefined}
-					aria-haspopup="menu"
-					ref={accountTriggerRef}
-					className="project-sidebar-account"
-					aria-expanded={accountMenuOpen ?? !!accountMenu}
-					onClick={onAccount}
-					type="button"
-				>
-					<Face decorative handle={user.login} size={20} titled={false} />
-					<span className="truncate">{user.login}</span>
-				</button>
-				{accountMenu && (
-					<div
-						aria-hidden={accountMenu.closing ? "true" : undefined}
-						className={`navigation-account-menu motion-dropdown ${accountMenu.className}`}
-						id={accountMenuId}
-						inert={accountMenu.closing}
-						onKeyDown={event => {
-							if (event.key === "Tab") return accountMenu.onDismiss();
-							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-							event.preventDefault();
-							let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
-							items[
-								menuItemTarget(
-									event.key,
-									items.indexOf(document.activeElement as HTMLElement),
-									items.length,
-								)
-							]
-								?.focus();
-						}}
-						role="menu"
-					>
-						<MenuItem density="compact" href="/auth/github/install" rel="noopener" target="_blank">
-							<LockIcon aria-hidden="true" size={14} />
-							Manage repository access
-						</MenuItem>
-						<MenuItem
-							density="compact"
-							onClick={accountMenu.onShortcuts}
-						>
-							<KeyboardIcon aria-hidden="true" size={14} />Keyboard shortcuts
-						</MenuItem>
-						<MenuSeparator />
-						<MenuItem density="compact" onClick={accountMenu.onSignOut}>
-							<SignInIcon aria-hidden="true" className="-scale-x-100" size={14} />
-							Sign out
-						</MenuItem>
-					</div>
-				)}
-			</div>
+			<SidebarAccount
+				menu={accountMenu}
+				menuId={accountMenuId}
+				onAccount={onAccount}
+				open={accountMenuOpen}
+				triggerRef={accountTriggerRef}
+				user={user}
+				wrapRef={accountWrapRef}
+			/>
 		</aside>
 	);
 }

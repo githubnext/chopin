@@ -121,8 +121,8 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 			{
 				id: "dropdowns",
 				label: "Dropdowns",
-				source: "apps/web/src/document-picker.tsx",
-				states: ["closed", "open", "selected", "loading", "error"],
+				source: "apps/web/src/account-menu.tsx",
+				states: ["closed", "open"],
 			},
 		],
 	},
@@ -151,14 +151,14 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 			{
 				id: "lists",
 				label: "Lists",
-				source: "apps/web/src/document-picker.tsx",
-				states: ["default", "hover", "selected", "empty"],
+				source: "apps/web/src/document-search-dialog.tsx",
+				states: ["default", "highlighted", "archived"],
 			},
 			{
 				id: "navigation",
 				label: "Navigation",
 				source: "apps/web/src/project-sidebar.tsx",
-				states: ["default", "current", "ancestor", "archived", "loading"],
+				states: ["current", "ancestor", "unanswered", "loading", "empty"],
 			},
 			{
 				id: "chat",
@@ -194,8 +194,8 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 			{
 				id: "empty",
 				label: "Empty states",
-				source: "apps/web/src/repository-picker.tsx",
-				states: ["first-use", "no-results", "unavailable"],
+				source: "apps/web/src/project-sidebar.tsx",
+				states: ["first-use", "no-documents", "no-results", "unavailable"],
 			},
 			{
 				id: "errors",

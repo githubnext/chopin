@@ -3,12 +3,8 @@ import { DocumentIcon } from "@chopin/icons";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import {
-	menuItemTarget,
-	NavigationIcon,
-	ProjectSidebar,
-	toggleCollapsedProjectIds,
-} from "./project-sidebar";
+import { menuItemTarget } from "./account-menu";
+import { NavigationIcon, ProjectSidebar, toggleCollapsedProjectIds } from "./project-sidebar";
 import { ProjectSidebarExpandButton } from "./project-sidebar-chrome";
 import { Header, RoomMembers } from "./room-workspace";
 

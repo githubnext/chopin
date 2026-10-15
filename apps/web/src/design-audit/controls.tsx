@@ -1,11 +1,15 @@
-import { CheckIcon, ChevronIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { LoaderIcon, PlusIcon } from "@chopin/icons";
+import { useRef } from "react";
 import { StaticPlanEditor } from "@chopin/editor/static";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@chopin/visuals";
 
+import { SidebarAccount } from "../account-menu";
+import { RepositoryOptions } from "../add-project-dialog";
 import { BuildGlyph } from "../build-plan-button";
 import { DecisionViewControl } from "../decision-view-control";
 import { AuditPlate, StateLabel } from "./frame";
 
+import type * as Api from "../api";
 import type { ComponentProps, ReactNode } from "react";
 
 const TABS = [
@@ -56,6 +60,37 @@ const VIEW_SPECIMENS: {
 		props: { buildEnabled: true, buildGlyph: BUILDING, buildHot: true },
 	},
 ];
+
+const AUDIT_USER = { avatarUrl: "", id: "audit-user", login: "MaggieAppleton" };
+
+const AUDIT_REPOSITORIES: Api.Repository[] = ["chopin", "design-notes", "editor-lab"].map(name => ({
+	defaultBranch: "main",
+	fullName: `githubnext/${name}`,
+	id: `R_${name}`,
+	name,
+	owner: "githubnext",
+	permissions: { admin: false, pull: true, push: true },
+	private: false,
+	url: `https://github.com/githubnext/${name}`,
+}));
+
+/** The live palette listbox as Add project shows it: one repository already added and not offered. */
+function SelectionList() {
+	let input = useRef<HTMLInputElement>(null);
+	return (
+		<div className="navigation-modal-content navigation-palette">
+			<div className="navigation-palette-list">
+				<RepositoryOptions
+					addedIds={new Set(["R_design-notes"])}
+					input={input}
+					onChoose={() => {}}
+					query="githubnext"
+					repositories={AUDIT_REPOSITORIES}
+				/>
+			</div>
+		</div>
+	);
+}
 
 function StateSample({ children, state }: { children: ReactNode; state: string }) {
 	return (
@@ -252,33 +287,35 @@ export function Controls() {
 			>
 				<div className="design-audit-choice-row">
 					<label>
-						<input className="choice-control" type="checkbox" />Unchecked
-					</label>
-					<label>
-						<input className="choice-control" defaultChecked type="checkbox" />Checked
-					</label>
-					<label>
-						<input className="choice-control" disabled type="checkbox" />Disabled
+						<input className="choice-control size-4 shrink-0" type="checkbox" />Unchecked
 					</label>
 					<label>
 						<input
-							className="choice-control"
+							className="choice-control size-4 shrink-0"
+							defaultChecked
+							type="checkbox"
+						/>Checked
+					</label>
+					<label>
+						<input className="choice-control size-4 shrink-0" disabled type="checkbox" />Disabled
+					</label>
+					<label>
+						<input
+							className="choice-control size-4 shrink-0"
 							defaultChecked
 							name="audit-radio"
 							type="radio"
 						/>Selected
 					</label>
 					<label>
-						<input className="choice-control" name="audit-radio" type="radio" />Unselected
+						<input
+							className="choice-control size-4 shrink-0"
+							name="audit-radio"
+							type="radio"
+						/>Unselected
 					</label>
 				</div>
-				<div aria-label="Documents" className="design-audit-selection-list" role="listbox">
-					<div role="option">Architecture notes</div>
-					<div aria-selected="true" role="option">
-						<CheckIcon aria-hidden="true" size={14} />Design system audit
-					</div>
-					<div aria-disabled="true" role="option">Archived proposal</div>
-				</div>
+				<SelectionList />
 			</AuditPlate>
 
 			<AuditPlate
@@ -339,60 +376,35 @@ export function Controls() {
 			</AuditPlate>
 
 			<AuditPlate
-				description="Closed trigger and open list selection."
+				description="The sidebar account menu, closed and open."
 				item="dropdowns"
 				title="Dropdowns"
 			>
 				<div className="design-audit-dropdown-row">
-					<button
-						aria-expanded="false"
-						className="field design-audit-dropdown-trigger"
-						type="button"
-					>
-						Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />
-					</button>
-					<div className="design-audit-dropdown-open">
-						<button
-							aria-expanded="true"
-							className="field design-audit-dropdown-trigger"
-							type="button"
-						>
-							Active documents<ChevronIcon aria-hidden="true" className="rotate-90" size={14} />
-						</button>
-						<div
-							aria-label="Document collection"
-							className="design-audit-dropdown-list"
-							role="listbox"
-						>
-							<div aria-selected="true" role="option">
-								<CheckIcon aria-hidden="true" size={14} />Active documents
-							</div>
-							<div role="option">Archived documents</div>
+					<div>
+						<StateLabel>Closed</StateLabel>
+						<div className="project-sidebar">
+							<SidebarAccount onAccount={() => {}} user={AUDIT_USER} />
 						</div>
 					</div>
-					<div className="design-audit-dropdown-open">
-						<StateLabel>Loading</StateLabel>
-						<button
-							aria-busy="true"
-							className="field design-audit-dropdown-trigger"
-							disabled
-							type="button"
-						>
-							Loading documents<LoaderIcon aria-hidden="true" />
-						</button>
-					</div>
-					<div className="design-audit-dropdown-open">
-						<StateLabel>Error</StateLabel>
-						<button
-							aria-invalid="true"
-							className="field design-audit-dropdown-trigger"
-							type="button"
-						>
-							Documents unavailable<WarningIcon aria-hidden="true" />
-						</button>
-						<span className="design-audit-dropdown-error" role="alert">
-							Could not load documents.
-						</span>
+					<div>
+						<StateLabel>Open</StateLabel>
+						<div className="design-audit-account-open">
+							<div className="project-sidebar">
+								<SidebarAccount
+									menu={{
+										className: "is-open",
+										closing: false,
+										onDismiss() {},
+										onShortcuts() {},
+										onSignOut() {},
+									}}
+									menuId="design-audit-account-menu"
+									onAccount={() => {}}
+									user={AUDIT_USER}
+								/>
+							</div>
+						</div>
 					</div>
 				</div>
 			</AuditPlate>

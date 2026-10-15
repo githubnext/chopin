@@ -17,19 +17,23 @@
 	text-align: center;
 }
 
-.design-audit-empty-grid strong {
+.design-audit-empty-grid > div > strong {
 	font-size: var(--text-lg);
 }
 
-.design-audit-empty-grid span {
+.design-audit-empty-grid > div > span {
 	max-width: 18rem;
 	font-size: var(--text-sm);
 	color: var(--color-text-secondary);
 }
 
-.design-audit-empty-grid .design-audit-empty-sidebar-row {
-	align-self: stretch;
-	padding-inline-start: 2rem;
+.design-audit-empty-grid > .design-audit-empty-live {
+	align-items: stretch;
+	justify-content: flex-start;
 	text-align: start;
-	color: var(--color-text-tertiary);
+}
+
+.design-audit-empty-live > div {
+	display: grid;
+	gap: 0.5rem;
 }
