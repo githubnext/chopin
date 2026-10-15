@@ -175,7 +175,7 @@ async function connector(baseURL: string, command: string[], env: Record<string,
 		let timer = setTimeout(() => reject(new Error(`Pairing timed out: ${output}`)), 15_000);
 		let read = (chunk: Buffer) => {
 			output += String(chunk);
-			let match = output.match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/);
+			let match = output.match(/http:\/\/[^\s]+\/machines\?pairing=[\w-]+/);
 			if (match) {
 				clearTimeout(timer);
 				resolve(match[0]);

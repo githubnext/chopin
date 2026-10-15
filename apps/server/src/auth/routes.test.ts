@@ -442,7 +442,7 @@ describe("hosted authentication routes", () => {
 		let completed: Array<{ pairing: string; userId: string; accessToken: string }> = [];
 		auth.pairings.complete = async (pairing, userId, grant) => {
 			completed.push({ pairing, userId, accessToken: grant.accessToken });
-			return `/connect?pairing=${pairing}`;
+			return `/machines?pairing=${pairing}`;
 		};
 		let pairing = crypto.randomUUID();
 		let start = await router.handle(
@@ -452,7 +452,7 @@ describe("hosted authentication routes", () => {
 		expect(github.authorized?.redirectUri).toBe("https://chopin.test/auth/github/callback");
 		let response = await complete(router, start!);
 		expect(response.status).toBe(303);
-		expect(response.headers.get("location")).toBe(`/connect?pairing=${pairing}`);
+		expect(response.headers.get("location")).toBe(`/machines?pairing=${pairing}`);
 		expect(completed).toEqual([{ pairing, userId: "U_octocat", accessToken: "ghu_route_secret" }]);
 		expect(cookies(response).some(value => value.includes("chopin_session="))).toBe(false);
 
@@ -494,7 +494,7 @@ describe("hosted authentication routes", () => {
 
 		let response = await authorize(session);
 		expect(response.status).toBe(303);
-		expect(response.headers.get("location")).toBe("/connect?server");
+		expect(response.headers.get("location")).toBe("/machines?server");
 		expect(held).toEqual([{ userId: "U_octocat", accessToken: "ghu_route_secret" }]);
 		expect(cookies(response).some(value => value.includes("chopin_session="))).toBe(false);
 
@@ -547,7 +547,7 @@ describe("hosted authentication routes", () => {
 			let response = (await router.handle(
 				new Request(back, { headers: { cookie: `${pair(cookies(start)[0]!)}; ${cookie}` } }),
 			))!;
-			expect(response.headers.get("location")).toBe("/connect?server");
+			expect(response.headers.get("location")).toBe("/machines?server");
 		};
 		let mint = async (cookie: string) =>
 			(await router.handle(

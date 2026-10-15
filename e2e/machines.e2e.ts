@@ -151,7 +151,7 @@ function keyRequests(page: Page) {
 	return made;
 }
 
-const PAIRING_LINK = /http:\/\/[^\s]+\/connect\?pairing=[\w-]+/;
+const PAIRING_LINK = /http:\/\/[^\s]+\/machines\?pairing=[\w-]+/;
 
 test("your computer: one copied command installs chopin, prints a link, and pairs once approved here", async ({ baseURL, join: enter }) => {
 	test.setTimeout(240_000);
@@ -160,7 +160,7 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 	let minted = keyRequests(page);
 	let entry = machinesEntry(page, "Machines, none connected");
 	await entry.click();
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 	await expect(entry).toHaveAttribute("aria-current", "page");
 	await expect(page.getByRole("link", { name: "Learn more", exact: true }))
 		.toHaveAttribute("href", /docs\/chopin-cli\.md$/);
@@ -245,9 +245,9 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	test.setTimeout(240_000);
 	let page = await enter(person());
 	let minted = keyRequests(page);
-	await page.goto("/connect");
+	await page.goto("/machines");
 	await addMachine(page, "Server or VM");
-	await expect(page).toHaveURL(/\/connect\?server$/);
+	await expect(page).toHaveURL(/\/machines\?server$/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a server");
 	await expect(page.getByText("Choose settings, then generate an install script.")).toBeVisible();
 	// Opening the page makes no key; Generate does.
@@ -272,7 +272,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await page.getByRole("button", { name: "Generate install script", exact: true }).click();
 	let copy = page.getByRole("button", { name: "Copy install script", exact: true });
 	await expect(copy).toBeVisible({ timeout: 30_000 });
-	await expect(page).toHaveURL(/\/connect\?server$/);
+	await expect(page).toHaveURL(/\/machines\?server$/);
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
 	await expect(page.getByText(/^Single use · expires in 10 min$/)).toBeVisible();
 	let shown = async () => {
@@ -307,7 +307,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		// Pasted on the machine as it is: it pairs at once, with nothing opened in a browser.
 		expect(await server.run(command), server.output()).toBe(0);
 		expect(server.output()).not.toContain(key!);
-		expect(server.output()).not.toContain("/connect?pairing=");
+		expect(server.output()).not.toContain("?pairing=");
 		expect(server.output()).toContain("Installed the chopin service");
 
 		await expect(page.getByText(hostname())).toHaveCount(0);
@@ -318,7 +318,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 
 		// Back on Machines, the machine is in the table.
 		await page.getByRole("link", { name: "Back to Machines", exact: true }).click();
-		await expect(page).toHaveURL(/\/connect$/);
+		await expect(page).toHaveURL(/\/machines$/);
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: /ci-runner/ });
 		await expect(row).toContainText("Connected", { timeout: 30_000 });
@@ -335,7 +335,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 
 test("a phone wraps every command in view", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
-	await page.goto("/connect");
+	await page.goto("/machines");
 	await addMachine(page, "Your computer", true);
 	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
 	await expect(dialog.getByRole("button", { name: "Copy setup command", exact: true }))
@@ -368,7 +368,7 @@ const CONNECTOR = {
 async function pairedMachine(page: Page, label: string, about?: Record<string, string>) {
 	let origin = new URL(page.url()).origin;
 	await page.goto("/auth/github/connector?key");
-	await expect(page).toHaveURL(/\/connect\?server$/);
+	await expect(page).toHaveURL(/\/machines\?server$/);
 	let minted = await (await page.request.post("/api/connector/pairing-keys", {
 		data: {},
 		headers: { origin },
@@ -408,7 +408,7 @@ async function threeMachines(page: Page) {
 		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
 	});
 	await pairedMachine(page, "old-laptop");
-	await page.goto("/connect");
+	await page.goto("/machines");
 }
 
 test("the machines table: search, Tailscale's columns, a row's menu and renaming", async ({ join: enter }) => {
@@ -466,7 +466,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 
 test("on a phone, machines are rows that open their own view, where they rename", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
-	await page.goto("/connect");
+	await page.goto("/machines");
 	await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
 		.toBeVisible();
 	await expect(page.getByRole("searchbox", { name: "Search machines" })).toHaveCount(0);
@@ -482,7 +482,7 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
 
 	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
-	await expect(page).toHaveURL(/\/connect\?machine=/);
+	await expect(page).toHaveURL(/\/machines\?machine=/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
 	// The state shows once, in the Status row, not again under the name.
 	await expect(page.locator(".machines-description")).toHaveCount(0);
@@ -497,7 +497,7 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Build box");
 
 	await page.getByRole("button", { name: "Machines", exact: true }).click();
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 	await expect(rows.locator(".machines-row").filter({ hasText: "Build box" })).toBeVisible();
 });
 
@@ -557,10 +557,10 @@ test("on a phone, a machine's row has its star, and its view sets the favorite",
 	await star.tap();
 	await expect(rows.getByRole("button", { name: "Remove studio as favorite" }))
 		.toHaveAttribute("aria-pressed", "true");
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 	await shot(page, "phone-machines-favorite");
 	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
-	await expect(page).toHaveURL(/\/connect\?machine=/);
+	await expect(page).toHaveURL(/\/machines\?machine=/);
 	let set = page.getByRole("button", { name: "Set as favorite" });
 	await expect(set).toHaveAttribute("aria-pressed", "false");
 	await set.click();
@@ -576,7 +576,7 @@ test("on a phone, a machine's row has its star, and its view sets the favorite",
 
 test("a narrow window without touch lists machines as a phone does, not as a table", async ({ join: enter }) => {
 	let page = await enter(person(), { viewport: { width: 390, height: 844 } });
-	await page.goto("/connect");
+	await page.goto("/machines");
 	await threeMachines(page);
 	let rows = page.getByRole("region", { name: /^@mia-/ });
 	let table = page.getByRole("table", { name: "Your machines" });
@@ -596,10 +596,10 @@ test("a narrow window without touch lists machines as a phone does, not as a tab
 	await shot(page, "narrow-machines-list");
 	// A row opens the machine's own view there too.
 	await rows.locator(".machines-row").filter({ hasText: "build-box" }).click();
-	await expect(page).toHaveURL(/\/connect\?machine=/);
+	await expect(page).toHaveURL(/\/machines\?machine=/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("build-box");
 	await page.getByRole("button", { name: "Machines", exact: true }).click();
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 
 	// Wider than a phone, the table returns.
 	await page.setViewportSize({ width: 1024, height: 844 });

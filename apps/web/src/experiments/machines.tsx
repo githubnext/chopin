@@ -107,7 +107,7 @@ export function useLogin() {
 	return login;
 }
 
-/** Move within /connect as the navigation shell does for a link, so it renders the new view. */
+/** Move within /machines as the navigation shell does for a link, so it renders the new view. */
 export function goTo(path: string) {
 	history.pushState(null, "", path);
 	window.dispatchEvent(new PopStateEvent("popstate"));

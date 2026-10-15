@@ -488,7 +488,7 @@ chopin unpair
 ```
 
 This revokes the machine in Chopin and deletes its token. You can also open
-**Machines** in Chopin's sidebar, which goes to `/connect` on your server, and
+**Machines** in Chopin's sidebar, which goes to `/machines` on your server, and
 choose **Disconnect machine…** from the machine's **…** menu (on a phone, tap
 the machine).
 

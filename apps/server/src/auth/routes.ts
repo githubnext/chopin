@@ -7,6 +7,7 @@ import { Machines } from "./machines";
 import { DeviceAuthorization } from "./device";
 import { LocalAuth } from "./local";
 import { LocalCredentials } from "./local-store";
+import { MACHINES_PATH } from "../http/machines-path";
 
 import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AuthConfig } from "./config";
@@ -400,7 +401,7 @@ export function registerAuthRoutes(
 					let authorized = context.pairings.authorized;
 					if (!authorized) return json({ error: "pairing is unavailable" }, 404, clear);
 					authorized(profile.id, session.session.id, grant);
-					return redirected("/connect?server", 303, [clear]);
+					return redirected(`${MACHINES_PATH}?server`, 303, [clear]);
 				}
 				if (stored.pairing) {
 					let complete = context.pairings.complete;

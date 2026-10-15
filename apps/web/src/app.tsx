@@ -80,6 +80,6 @@ export function App() {
 			</Suspense>
 		);
 	}
-	// Signed in, /connect is a page inside the navigation like any other (hosted.tsx).
+	// Signed in, /machines is a page inside the navigation like any other (hosted.tsx).
 	return <HostedApp agent={session.agent} user={session.user} />;
 }

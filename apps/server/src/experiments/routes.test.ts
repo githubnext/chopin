@@ -257,6 +257,10 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 		commit: "a".repeat(40),
 		label: "Laptop",
 	})).json();
+	// The link the connector prints opens the Machines page, at its canonical address.
+	expect(new URL(pair.url).pathname + new URL(pair.url).search).toBe(
+		`/machines?pairing=${pair.id}`,
+	);
 	expect(
 		(await request(`/api/connector/pairings/${pair.id}/claim`, { secret: "x".repeat(32) })).status,
 	).toBe(403);
@@ -267,7 +271,7 @@ test("work runs on the clicker's own connection; scoped claims publish", async (
 		await (await request(`/api/connector/pairings/${pair.id}/claim`, { secret: pair.secret }))
 			.json(),
 	).toEqual({ waiting: true });
-	expect(await authorized(pair.id, "alice")).toBe(`/connect?pairing=${pair.id}`);
+	expect(await authorized(pair.id, "alice")).toBe(`/machines?pairing=${pair.id}`);
 	let shown = await (await request(`/api/connector/pairings/${pair.id}`, undefined, alice.cookie))
 		.json();
 	expect(shown.connected).toBe("/documents/org/repo");
@@ -736,7 +740,7 @@ test(
 			expect(claimed?.connectionId).not.toBe(paired.connection.id);
 			expect(paths).toContain("/api/connector/connections");
 			expect(paths.filter(path => path.startsWith("/api/connector/pairings"))).toEqual([]);
-			expect(output).not.toContain("/connect?pairing=");
+			expect(output).not.toContain("?pairing=");
 		} finally {
 			connector.kill("SIGKILL");
 			await connector.exited;

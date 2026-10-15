@@ -143,7 +143,7 @@ test.afterEach(async () => {
 async function machine(page: Page, label: string, planner: boolean) {
 	let back = page.url();
 	await page.goto(`${ORIGIN}/auth/github/connector?key`);
-	await expect(page).toHaveURL(/\/connect\?server$/);
+	await expect(page).toHaveURL(/\/machines\?server$/);
 	let minted = await (await page.request.post(`${ORIGIN}/api/connector/pairing-keys`, {
 		data: {},
 		headers: { origin: ORIGIN },
