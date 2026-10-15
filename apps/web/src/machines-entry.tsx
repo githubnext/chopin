@@ -100,7 +100,7 @@ export function MachinesEntry(
 							onValueChange={value => void choose(value as string)}
 							value={favorite?.id ?? ANY}
 						>
-							<Menu.GroupLabel className="app-menu-label">Run my work on</Menu.GroupLabel>
+							<Menu.GroupLabel className="app-menu-label">Default machine</Menu.GroupLabel>
 							<Menu.RadioItem className="app-menu-item" closeOnClick value={ANY}>
 								<span aria-hidden="true" className="machines-menu-glyph">
 									<ServerIcon />
@@ -160,5 +160,5 @@ function state(machine: Machine) {
 	if (machine.reauthorize) return "Needs pairing";
 	if (machine.connected) return "Connected";
 	let seen = ago(new Date(machine.lastSeenAt).toISOString(), Date.now());
-	return seen ? `Offline · ${seen}` : "Offline";
+	return seen ? `Last seen ${seen}` : "Offline";
 }

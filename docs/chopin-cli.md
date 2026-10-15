@@ -220,8 +220,11 @@ choice is yours alone and holds for that document until you change it:
 Disconnecting a machine clears every choice of it, and clears it as your
 default.
 
-Your default machine is the one marked as your favorite on the **Machines**
-page (its star, or **Set as favorite** in its menu). Only one machine is your
+Choose your default machine from **Machines** in the sidebar: it opens a menu
+listing **Any available** and each of your machines with its state, then **Add
+machine…** and **Manage machines** for the full page. The default is the
+machine marked as your favorite on the **Machines** page too (its star, or **Set
+as favorite** in its menu). Only one machine is your
 default. Chopin uses it first whenever it is connected for the document's
 repository and free, and otherwise picks as before; a machine you chose for a
 document never moves. Your default is yours alone and applies to every document

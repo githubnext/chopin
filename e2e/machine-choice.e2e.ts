@@ -337,7 +337,7 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 	let build = page.getByRole("button", { name: "Build plan", exact: true });
 	let plan = page.locator(".build-plan");
 	let entry = page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: /^Machines/ });
+		.getByRole("button", { name: /^Machines/ });
 	await (await runOn(page)).getByRole("menuitemradio", { name: /^build-box/ }).click();
 	await expect(build).not.toHaveAttribute("aria-disabled", "true");
 	await expect(entry).toHaveAccessibleName("Machines, 2 connected");
@@ -363,6 +363,7 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 
 	// On the Machines page, the sidebar's count follows the table.
 	await entry.click();
+	await page.getByRole("menuitem", { name: "Manage machines", exact: true }).click();
 	await expect(page).toHaveURL(/\/machines$/);
 	let rows = page.getByRole("table", { name: "Your machines" });
 	await expect(rows.getByRole("row", { name: /laptop/ })).toContainText("Connected");
