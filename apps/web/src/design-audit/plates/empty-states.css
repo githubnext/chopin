@@ -1,0 +1,35 @@
+.design-audit-empty-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+	gap: 1rem;
+}
+
+.design-audit-empty-grid > div {
+	display: flex;
+	min-height: 13rem;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 1.25rem;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	text-align: center;
+}
+
+.design-audit-empty-grid strong {
+	font-size: var(--text-lg);
+}
+
+.design-audit-empty-grid span {
+	max-width: 18rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.design-audit-empty-grid .design-audit-empty-sidebar-row {
+	align-self: stretch;
+	padding-inline-start: 2rem;
+	text-align: start;
+	color: var(--color-text-tertiary);
+}

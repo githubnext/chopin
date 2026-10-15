@@ -538,6 +538,34 @@ test("a favorite machine: its star in the table and the row menu, one at a time"
 	await shot(page, "machines-table-favorite");
 });
 
+test("the sidebar's Machines menu sets the default machine and leads to the page", async ({ join: enter }) => {
+	let page = await enter(person());
+	await threeMachines(page);
+	let sidebar = page.getByRole("complementary", { name: "Projects" });
+	let entry = sidebar.getByRole("button", { name: /^Machines/ });
+	await entry.click();
+	let menu = page.getByRole("menu");
+	let option = (name: string) => menu.getByRole("menuitemradio", { name: new RegExp(`^${name}`) });
+	// Nothing is the default yet: any available machine runs the work.
+	await expect(option("Any available")).toHaveAttribute("aria-checked", "true");
+	await expect(option("studio")).toHaveAttribute("aria-checked", "false");
+	await option("studio").click();
+	await expect(menu).toBeHidden();
+	// The page's star agrees: the menu set the favorite, which Automatic prefers.
+	let table = page.getByRole("table", { name: "Your machines" });
+	await expect(table.getByRole("button", { name: "Remove studio as favorite" }))
+		.toHaveAttribute("aria-pressed", "true");
+	await entry.click();
+	await expect(option("studio")).toHaveAttribute("aria-checked", "true");
+	await option("Any available").click();
+	await expect(table.locator(".favorite-star[aria-pressed=true]")).toHaveCount(0);
+	// Manage machines is the way to the full page.
+	await page.goto("/");
+	await entry.click();
+	await menu.getByRole("menuitem", { name: "Manage machines" }).click();
+	await expect(page).toHaveURL(/\/machines$/);
+});
+
 test("on a phone, a machine's row has its star, and its view sets the favorite", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	await threeMachines(page);

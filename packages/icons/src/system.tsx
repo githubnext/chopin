@@ -29,13 +29,12 @@ export function DocumentIcon(props: IconProps) {
 	);
 }
 
-/** A computer screen on a stand, for a paired machine. */
+/** A laptop, for a paired machine. */
 export function MachineIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
-			<rect height="9.5" rx="2" width="14.5" x="1.75" y="2.75" />
-			<line x1="9" x2="9" y1="12.25" y2="15.25" />
-			<line x1="5.75" x2="12.25" y1="15.25" y2="15.25" />
+			<path d="M4.25 12.25C3.145 12.25 2.25 11.355 2.25 10.25V4.75C2.25 3.645 3.145 2.75 4.25 2.75H13.75C14.855 2.75 15.75 3.645 15.75 4.75V10.25C15.75 11.355 14.855 12.25 13.75 12.25" />
+			<path d="M17.25 12.25H0.75C0.75 13.9069 2.0931 15.25 3.75 15.25H14.25C15.9069 15.25 17.25 13.9069 17.25 12.25Z" />
 		</LineIcon>
 	);
 }

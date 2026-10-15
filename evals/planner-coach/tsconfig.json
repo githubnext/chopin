@@ -1,0 +1,5 @@
+{
+	"extends": "../../apps/server/tsconfig.json",
+	"include": ["./*.ts"],
+	"compilerOptions": { "noUnusedLocals": true }
+}

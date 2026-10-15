@@ -1373,9 +1373,33 @@
 	align-items: flex-start;
 }
 
-.app-menu-item:is(:hover:not(:disabled), :focus-visible) {
+.app-menu-item:is(:hover:not(:disabled, [aria-disabled="true"]), :focus-visible) {
 	background: var(--color-hover);
 	color: var(--color-text-primary);
+}
+
+/* A chosen row of a choice is tinted, never checked. */
+.app-menu-item[aria-checked="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+.app-menu-item[aria-disabled="true"] {
+	opacity: 0.55;
+	cursor: default;
+}
+
+/* Secondary detail on the item's own line, right-aligned in tertiary ink. */
+.app-menu-item-meta {
+	margin-inline-start: auto;
+	flex: none;
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+.app-menu-item-chevron {
+	flex: none;
+	color: var(--color-text-tertiary);
 }
 
 .app-menu-item[data-tone="destructive"],

@@ -321,7 +321,7 @@ describe("Planner workspaces", () => {
 			expect({ attempt, cwd: registered?.cwd }).toEqual({ attempt, cwd: path });
 			expect(registered?.humanInput.questionnaire).toBeFunction();
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
-			expect(instructions).toContain("proceed on your best judgement");
+			expect(instructions).toContain("Expiry is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("`intercom` tool can reach other sessions");
@@ -356,7 +356,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin keeps`);
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
-			expect(instructions).toContain("proceed on your best judgement");
+			expect(instructions).toContain("Expiry is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("one working in a checkout of owner/repo");
@@ -381,7 +381,7 @@ describe("Planner workspaces", () => {
 			let { registered, instructions } = await open("channel", harness);
 			expect(registered).toBeUndefined();
 			expect(instructions).toContain("You have no shell");
-			expect(instructions).not.toContain("proceed on your best judgement");
+			expect(instructions).not.toContain("Expiry is not an answer or approval");
 			expect(instructions).not.toContain("/workflow connect");
 			expect(instructions).not.toContain("intercom");
 		}

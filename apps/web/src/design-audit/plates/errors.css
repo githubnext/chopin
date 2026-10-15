@@ -1,0 +1,19 @@
+.design-audit-error-stack {
+	display: grid;
+	gap: 0.75rem;
+	font-size: var(--text-sm);
+}
+
+.design-audit-error-stack [role="alert"] {
+	color: var(--color-destructive-ink);
+}
+
+.design-audit-recoverable-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.75rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-destructive-wash);
+}

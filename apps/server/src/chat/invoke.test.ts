@@ -472,7 +472,7 @@ test("HARNESS=atomic runs every Planner session full in hosted and local configu
 			let harness = context.config.harness;
 			expect({ harness, full: !!turn.full }).toEqual({ harness, full });
 			expect(!!turn.full?.humanInput).toBe(full);
-			expect(turn.instructions.includes("proceed on your best judgement")).toBe(full);
+			expect(turn.instructions.includes("Expiry is not an answer or approval")).toBe(full);
 		}
 	}
 });

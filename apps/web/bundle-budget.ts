@@ -22,9 +22,11 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // Titled inline notices and the entry's connected-of-paired count add a further 500 B raw.
 // Early document-route code loading measures 82,050 B gzip on Linux; allow its preload wrapper
 // while retaining the raw limit and keeping the editor out of project-only navigation.
+// A document's Machine, in the title menu every sidebar row shares, adds 500 B raw.
+// The sidebar's Machines menu, on Base UI Menu, adds about 50 B gzip on Linux; allow 200 B.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 82_128,
-	raw: 257_500,
+	gzip: 82_328,
+	raw: 258_000,
 };
 
 export function enforceInitialJavaScript(

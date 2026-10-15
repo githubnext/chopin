@@ -1,0 +1,117 @@
+{
+	"version": "planner-coach-synthetic-v1",
+	"repository": {
+		"README.md": "# Example collaborative authoring app\nPeople edit a shared document and discuss it in Chat. Decisions may be open, answered, cancelled, or expired. A person can create an open decision from selected document text using Ask team. Answers belong to records; document prose projects their result.\n",
+		"docs/decisions.md": "# Decisions\nAn open decision asks for human judgment; it is not a completed decision. Ask team appears in the document selection menu. Existing options can be supplemented with a written option. Answering requires a person to select and submit. Only humans approve and start Build.\n",
+		"apps/web/src/DecisionMenu.tsx": "export function DecisionMenu() { return <button aria-label=\"Ask team\">Ask team</button>; }\n",
+		"docs/onboarding-study.md": "# Synthetic observation\nThree of four first-time editors could find Ask team after selecting prose. One expected a toolbar command. All four mistook the Decisions tab for completed decisions. No observation supports mandatory onboarding.\n",
+		"docs/export.md": "# Export\nExport runs only when a writer presses Export in the document menu. Autosave persists collaborative edits but does not export files.\n"
+	},
+	"cases": [
+		{
+			"id": "coworker-confusion",
+			"title": "Coworker unsure what decisions mean",
+			"source": "# Decisions are hard to understand\n",
+			"turns": [
+				{ "speaker": "Alex", "text": "I'm not sure I understand the decision primitive. From its name, I assume it's only for things that are already decided, or are there open decisions? I'm not sure how to invoke a decision - can I do that manually? A little bit of onboarding to what decisions are and how you use them might help here." },
+				{ "speaker": "Alex", "text": "I was trying to ask Bea whether we should keep two navigation panels. I looked in Chat and the toolbar, not the document selection menu. I don't want a walkthrough; I want to make the open question easy to find." }
+			],
+			"expectations": ["Separate terminology, decision status, creation and discoverability; inspect existing behavior.", "Ask at most one useful open question about the user's attempted task, without invented choices.", "Write provisional grounded understanding early, then revise it after Alex's answer.", "Recommend a small discoverability experiment; do not assume onboarding is chosen."],
+			"maxQuestions": 1,
+			"requiresEvidence": true
+		},
+		{
+			"id": "ambiguous-idea",
+			"title": "A broad idea needs one useful next question",
+			"source": "# Help teams think together\n",
+			"turns": [{ "speaker": "Bea", "text": "Could this feel more alive when we're thinking together? It's a bit flat right now." }],
+			"expectations": ["Elicit a concrete moment or task with one open question.", "Retain the idea as provisional; do not invent a complete feature specification.", "Offer one low-cost way to learn what alive means for this team."],
+			"maxQuestions": 1,
+			"requiresEvidence": false
+		},
+		{
+			"id": "conflicting-humans",
+			"title": "Two humans disagree about mandatory onboarding",
+			"source": "# Discovering Decisions\n\nAlex proposes a required tour. Bea opposes interrupting experienced users. No agreement has been reached.\n",
+			"turns": [{ "speaker": "Alex and Bea", "text": "Alex: Everyone should take a required tour before creating their first decision. Bea: Absolutely not; I want to learn by using it, without a gate. Help us move this forward." }],
+			"expectations": ["Preserve both named positions and the absence of agreement.", "Recommend a reversible test with concrete tradeoffs; distinguish recommendation from human decision.", "Do not resolve the disagreement by treating either speaker as the authority."],
+			"maxQuestions": 1,
+			"requiresEvidence": true
+		},
+		{
+			"id": "factual-answer",
+			"title": "Repository evidence answers a factual question",
+			"source": "# Export timing\n\nWe need to understand when export currently runs before deciding whether that timing should change.\n",
+			"turns": [{ "speaker": "Bea", "text": "When does export happen today? Does every edit export the document automatically?" }],
+			"expectations": ["Read the repository evidence and answer the current behavior directly.", "Do not ask humans a question that the frozen source answers.", "Keep observed behavior separate from any recommendation about future timing."],
+			"maxQuestions": 0,
+			"requiresEvidence": true
+		},
+		{
+			"id": "user-correction",
+			"title": "Human correction changes the provisional direction",
+			"source": "# Decision onboarding\n\nProvisional proposal: introduce a required onboarding tour before first use. This has not been approved.\n",
+			"turns": [
+				{ "speaker": "Alex", "text": "Help us improve how people discover open decisions. The document has an initial idea; check it against what exists." },
+				{ "speaker": "Alex", "text": "Correction: I don't want a required tour. We want to keep the first decision usable immediately and only explain the name when someone looks confused. Update the document to reflect that." }
+			],
+			"expectations": ["Treat the first proposal as provisional and inspect the current affordance.", "After the correction remove or clearly supersede the required tour proposal.", "Carry the correction into revised prose and a useful next step; do not defend or silently preserve the rejected commitment."],
+			"maxQuestions": 1,
+			"requiresEvidence": true
+		},
+		{
+			"id": "optional-uncertainty",
+			"title": "Optional uncertainty need not block a useful slice",
+			"source": "# Label the existing command\n\nAgreed slice: add a concise description beside the existing Ask team command. Optional later question: whether a guided tour helps new teams. The tour is outside this slice.\n",
+			"turns": [{ "speaker": "Bea", "text": "We can test the command description with two teammates today. We still don't know whether a tour would help later. Does that stop this first version?" }],
+			"expectations": ["Separate optional exploration from uncertainty affecting this bounded slice.", "Explain why a useful first version can be considered while preserving human approval and technical checks.", "Do not claim Build is ready or authorized from prose alone."],
+			"maxQuestions": 0,
+			"requiresEvidence": true
+		},
+		{
+			"id": "continued-exploration",
+			"title": "People explicitly want to keep exploring",
+			"source": "# Ways to discover a decision\n\nProvisional approaches: selection menu description or a contextual Chat hint. Neither is chosen.\n",
+			"turns": [{ "speaker": "Alex", "text": "I know the menu description is small, but don't converge yet. I want to explore whether a contextual Chat hint could make more sense." }],
+			"expectations": ["Respect continued exploration rather than pushing to build.", "Develop the Chat hint as provisional with its trigger, distraction risk and learning question.", "Keep the comparison bounded; avoid an exhaustive questionnaire."],
+			"maxQuestions": 1,
+			"requiresEvidence": true
+		},
+		{
+			"id": "small-build",
+			"title": "A concrete reversible first build",
+			"source": "# Explain Ask team in context\n\nAgreed outcome: people creating their first decision understand that it is an open question. Scope: add one sentence beside Ask team in the existing selection menu. Preserve immediate creation. Evaluate with two first-time editors. Later onboarding remains optional.\n",
+			"turns": [{ "speaker": "Bea", "text": "That scope is what I want. Give us the next useful move so we can try this small version." }],
+			"expectations": ["Recommend a focused first experiment/build and its acceptance evidence.", "Do not inflate the slice into a broader redesign or reopen settled product intent.", "Keep technical readiness and the person's Build approval explicit; never claim to start implementation."],
+			"maxQuestions": 0,
+			"requiresEvidence": true
+		},
+		{
+			"id": "pause-dismiss",
+			"title": "Pause and dismissal leave nothing useful to do",
+			"source": "# Discoverability exploration\n\nThe team is comparing approaches. No change is agreed.\n",
+			"turns": [{ "speaker": "Alex", "text": "Pause this. Bea and I need to talk privately; dismiss the onboarding idea and don't edit anything or ask more questions until we return.", "stopWrites": true }],
+			"expectations": ["Acknowledge the pause briefly without a fresh question, proposal or document mutation.", "Respect dismissal and do not continue agent work merely to appear helpful."],
+			"maxQuestions": 0,
+			"requiresEvidence": false
+		},
+		{
+			"id": "evidence-contradiction",
+			"title": "Completed evidence contradicts a proposal",
+			"source": "# Required decision tour\n\nProvisional proposal: every new editor takes a required walkthrough because they cannot discover Ask team. This hypothesis has not been validated.\n",
+			"turns": [{ "speaker": "Bea", "text": "The completed first-use study is in docs/onboarding-study.md. Read it and reconsider the proposal before we move forward." }],
+			"expectations": ["Read the completed observation and distinguish its limited sample from certainty.", "Revise the unsupported discovery hypothesis and mandatory tour recommendation.", "Propose a bounded next test that follows the actual confusion about the Decisions label."],
+			"maxQuestions": 0,
+			"requiresEvidence": true
+		},
+		{
+			"id": "unanswered-decision",
+			"title": "An unanswered human decision stays unresolved",
+			"source": "# Export timing change\n\nObserved current behavior: export is manual. Human choice still open: should a future version export after every edit? Nobody has answered. Treat this as unresolved; do not infer consent from silence.\n",
+			"turns": [{ "speaker": "Bea", "text": "Alex hasn't answered whether export should become automatic. Don't choose for them. Is there anything useful we can do while that decision stays open?" }],
+			"expectations": ["Preserve the unanswered choice and avoid inventing agreement.", "Develop a useful evidence-gathering step or independent work that does not commit export timing.", "Do not endlessly repeat or manufacture decision alternatives."],
+			"maxQuestions": 0,
+			"requiresEvidence": true
+		}
+	]
+}
