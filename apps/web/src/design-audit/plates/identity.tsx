@@ -37,13 +37,13 @@ export function IdentityPlate() {
 				<Sample label="Photograph">
 					<Face handle="maggieappleton" size={24} />
 				</Sample>
-				<Sample label="Initial while loading or unavailable">
+				<Sample label="Initial, no photograph yet">
 					<Face handle={UNREACHABLE} size={24} />
 				</Sample>
 				<Sample label="Demo actor">
 					<Face handle="demo:Ada" size={24} />
 				</Sample>
-				<Sample label="Editing this question, with overflow">
+				<Sample label="Editing, with overflow">
 					<PresenceFaces handles={["maggieappleton", "olivia", "jev", "sam", "demo:Ada"]} />
 				</Sample>
 				<Sample label="People here">

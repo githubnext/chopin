@@ -17,3 +17,11 @@
 	flex-direction: column;
 	gap: 0.75rem;
 }
+
+/* A bounded rail, as the workspace gives the pane; its trailing space scrolls inside. */
+.design-audit-decisions-pane {
+	height: 30rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-ground);
+	box-shadow: var(--shadow-resting);
+}

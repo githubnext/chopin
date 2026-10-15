@@ -56,12 +56,14 @@ let QUESTION_MOTION = { contract: motionContract("content-swap"), immediately: (
 function Pane({ label, store }: { label: string; store: typeof DECK }) {
 	return (
 		<Sample label={label}>
-			<Decisions
-				motion={MOTION}
-				questionMotion={QUESTION_MOTION}
-				self="maggieappleton"
-				store={store}
-			/>
+			<div className="design-audit-decisions-pane">
+				<Decisions
+					motion={MOTION}
+					questionMotion={QUESTION_MOTION}
+					self="maggieappleton"
+					store={store}
+				/>
+			</div>
 		</Sample>
 	);
 }
