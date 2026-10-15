@@ -74,7 +74,21 @@
 				1
 			]
 		],
-		"sourceHash": "5a578d3960aca2da3da87c7c80757b338402221713687734a4249d53eb7e2529"
+		"sourceHash": "366a82590508a11c0582b1704748398f0ce66ec5b1e84add381e630c50120a4e"
+	},
+	{
+		"file": "packages/editor/src/static-plan-editor.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > StaticPlanEditor > <section>",
+				1
+			]
+		],
+		"sourceHash": "366a82590508a11c0582b1704748398f0ce66ec5b1e84add381e630c50120a4e"
 	},
 	{
 		"file": "packages/editor/src/toolbar/slash.tsx",
