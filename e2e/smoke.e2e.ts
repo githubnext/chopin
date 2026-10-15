@@ -555,7 +555,7 @@ test("chat clears the Planner working row when a turn stops or fails", async ({ 
 	planner.fail();
 	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	await expect(chat.getByText("Planner unavailable.")).toBeVisible();
-	await chat.getByRole("button", { name: /Used 1 tool, 1 interrupted/ }).click();
+	await chat.getByRole("button", { name: /Used 1 tool\b.*, 1 interrupted/ }).click();
 	await expect(chat.getByRole("button", { name: /Read plan.*Interrupted/ })).toBeVisible();
 
 	await page.reload();
@@ -752,7 +752,7 @@ test("chat keeps opened work details on their prose anchor through a disconnect"
 	await sockets[0]!.close();
 	await reconnecting.promise;
 	await expect(prose).toHaveAttribute("data-chat-state", "disconnected");
-	let offline = prose.getByRole("button", { name: /Used 2 tools, connection lost/ });
+	let offline = prose.getByRole("button", { name: /Used 2 tools\b.*, connection lost/ });
 	await expect(offline).toHaveAttribute("data-open-node", "retained");
 	await expect(offline).toHaveAttribute("aria-expanded", "true");
 	await expect(prose.locator('[data-work-active="false"][data-work-disconnected="true"]'))
@@ -1048,7 +1048,7 @@ test(
 		await expect(chat.getByText("Read file", { exact: true })).toHaveCount(0);
 
 		let run = chat.getByRole("button", {
-			name: /^Used 4 tools, 1 failed$/,
+			name: /^Used 4 tools in 1s, 1 failed$/,
 		});
 		await expect(run).toBeVisible();
 		let controlled = await run.getAttribute("aria-controls");

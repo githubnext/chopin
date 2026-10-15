@@ -1,4 +1,4 @@
-/* A finished turn: a face pile of the kinds of tool it used, then a bare count. */
+/* A finished turn: a face pile of the kinds of tool it used, then how long they took. */
 .work-summary {
 	display: contents;
 }

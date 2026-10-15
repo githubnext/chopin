@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react";
 import { DecisionIcon } from "@chopin/icons";
 
 import {
-	duration,
 	summarize,
 	toolCopy,
 	toolGlyph,
@@ -71,7 +70,6 @@ function ToolCall(
 			{status === "Running" || status === "Done"
 				? <span className="sr-only">{status}</span>
 				: <TraceDescription>{status}</TraceDescription>}
-			{tool.took !== undefined && <TraceDescription>{duration(tool.took)}</TraceDescription>}
 		</TraceLine>
 	);
 	let toolStatus = active || disconnected ? tool.status : status.toLowerCase();

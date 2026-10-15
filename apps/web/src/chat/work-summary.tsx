@@ -11,7 +11,7 @@ import {
 	WrenchIcon,
 } from "@chopin/icons";
 
-import { toolKinds, workSummaryLabel } from "./model";
+import { duration, toolKinds, workSummaryLabel, workTime } from "./model";
 import { TraceLine, TraceTitle } from "../trace";
 
 import "./work-summary.css";
@@ -30,7 +30,7 @@ export const TOOL_ICONS: Record<ToolGlyph, typeof PageIcon> = {
 	write: PencilIcon,
 };
 
-/** A finished turn's line: up to four tool-kind chips and a count, spoken as a sentence. */
+/** A finished turn's line: up to four tool-kind chips and how long they took, spoken as a sentence. */
 export function WorkSummary(
 	{ disconnected, summary, tools }: {
 		disconnected: boolean;
@@ -38,9 +38,13 @@ export function WorkSummary(
 		tools: Chat.Activity[];
 	},
 ) {
+	let time = workTime(tools);
+	let title = disconnected ? "Connection lost" : time > 0 ? duration(time) : undefined;
 	return (
 		<TraceLine>
-			<span className="sr-only">{workSummaryLabel(summary, disconnected)}</span>
+			<span className="sr-only">
+				{workSummaryLabel(summary, disconnected, disconnected ? 0 : time)}
+			</span>
 			<span aria-hidden="true" className="work-summary">
 				<span className="work-summary-pile">
 					{toolKinds(tools).slice(0, 4).map(kind => {
@@ -56,7 +60,7 @@ export function WorkSummary(
 						);
 					})}
 				</span>
-				<TraceTitle enter>{disconnected ? "Connection lost" : summary.count}</TraceTitle>
+				{title && <TraceTitle enter>{title}</TraceTitle>}
 				{!disconnected && summary.interrupted > 0 && (
 					<span className="work-summary-stopped">
 						<CircleCloseIcon size={14} />

@@ -23,7 +23,7 @@ test("active work exposes a stage and keeps tool details collapsed", () => {
 	expect(markup).not.toContain("&lt;unsafe&gt;");
 });
 
-test("completed work names its tool count and failures for screen readers", () => {
+test("completed work shows its time and names its tools and failures for screen readers", () => {
 	let markup = renderToStaticMarkup(createElement(WorkProgress, {
 		active: false,
 		responseSeen: true,
@@ -34,7 +34,9 @@ test("completed work names its tool count and failures for screen readers", () =
 		],
 	}));
 
-	expect(markup).toContain('<span class="sr-only">Used 2 tools, 1 failed</span>');
+	expect(markup).toContain('<span class="sr-only">Used 2 tools in 1s, 1 failed</span>');
+	expect(markup).toMatch(/data-slot="trace-title"[^>]*>1s</);
+	expect(markup).not.toContain("38ms");
 	expect(markup).toContain('aria-hidden="true" class="work-summary"');
 	expect(markup).not.toContain("Work details");
 	expect(markup).not.toContain("tool time");
