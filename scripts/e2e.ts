@@ -46,6 +46,7 @@ try {
 	}
 	for (let [index, url] of databases.entries()) {
 		await run(["bun", "apps/server/src/storage/migrate.ts"], {
+			AGENT: "off",
 			DATABASE_URL: supplied[index] || url,
 			STORAGE_DRIVER: "postgres",
 			APP_ORIGIN: `http://127.0.0.1:${appOrigins[index]}`,

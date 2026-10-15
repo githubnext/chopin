@@ -29,6 +29,7 @@ function spawn(
 		env: {
 			...process.env,
 			AGENT: "off",
+			JEV_API_KEY: "synthetic-test-key",
 			APP_ORIGIN: `http://127.0.0.1:${port}`,
 			DATABASE_URL: database!,
 			GITHUB_APP_SLUG: "chopin-test",
