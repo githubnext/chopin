@@ -1,6 +1,16 @@
 import { expect, spyOn, test } from "bun:test";
 import * as Permission from "./permission";
-import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { serveWork } from "./connection";
@@ -477,6 +487,13 @@ test.each([
 						+ "`git worktree add`",
 				);
 				expect(prompt).not.toContain("sub-worktree");
+				// Pull requests it opens are drafts; it never merges.
+				expect(prompt).toContain(
+					flags.includes("--rebuild")
+						? "open one draft pull request (`gh pr create --draft`) only for an outstanding task"
+						: "Open small reviewable draft pull requests (`gh pr create --draft`)",
+				);
+				expect(prompt).toMatch(/Never merge/);
 			});
 		});
 	},
@@ -764,3 +781,108 @@ test("a run whose connection a restarted server forgot stops its agent and the c
 		await rm(state, { recursive: true, force: true });
 	}
 });
+
+test.skipIf(process.platform === "win32")(
+	"a build's agent pushes and opens draft pull requests with the machine's GitHub token, gone when the run ends",
+	async () => {
+		let token = `ghu_${"R".repeat(36)}`;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				if (new URL(request.url).pathname !== "/api/connector/github-token") {
+					return new Response(null, { status: 404 });
+				}
+				expect(await request.json()).toEqual({ repository: "org/repo" });
+				return Response.json({ token, expiresAt: Date.now() + 8 * 3_600_000 });
+			},
+		});
+		let scratch = await mkdtemp(join(tmpdir(), "chopin-github-run-"));
+		let bin = join(scratch, "bin");
+		await mkdir(bin);
+		// gh as the agent runs it: it records the token it was given and its arguments.
+		await writeFile(
+			join(bin, "gh"),
+			`#!/bin/sh\nprintf '%s\\n' "$GH_TOKEN" "$@" > "${join(scratch, "gh")}"\n`,
+		);
+		await chmod(join(bin, "gh"), 0o755);
+		let seen = join(scratch, "github.json");
+		let path = process.env.PATH;
+		process.env.PATH = `${bin}:${path}`;
+		process.env.CHOPIN_TEST_GITHUB = seen;
+		let written = "";
+		let capture = {
+			write: (chunk: string | Uint8Array) => {
+				written += String(chunk);
+				return true;
+			},
+		};
+		try {
+			await run({}, ["--github"], undefined, undefined, {
+				url: `http://127.0.0.1:${chopin.port}`,
+				machine: `chopin_m_${"M".repeat(43)}`,
+				output: createOutput(capture, capture, {}),
+			}, async ({ state, id }) => {
+				// The token file was the run's alone, and goes with it.
+				let runs = join(state, "runs");
+				expect((await readdir(runs)).filter(name => name.includes("github"))).toEqual([]);
+				expect(id).toBeTruthy();
+			});
+			let github = JSON.parse(await readFile(seen, "utf8"));
+			expect(github).toEqual({
+				GH_TOKEN: token,
+				GITHUB_TOKEN: token,
+				credential: `protocol=https\nhost=github.com\nusername=x-access-token\npassword=${token}\n`,
+				gh: 0,
+			});
+			expect((await readFile(join(scratch, "gh"), "utf8")).split("\n")).toEqual([
+				token,
+				"pr",
+				"create",
+				"--draft",
+				"--title",
+				"Task one",
+				"",
+			]);
+			expect(written).not.toContain(token);
+		} finally {
+			process.env.PATH = path;
+			delete process.env.CHOPIN_TEST_GITHUB;
+			await chopin.stop(true);
+			await rm(scratch, { recursive: true, force: true });
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"without a GitHub token from Chopin, a build's agent keeps its own login",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: () => Response.json({ error: "not-found" }, { status: 404 }),
+		});
+		let scratch = await mkdtemp(join(tmpdir(), "chopin-github-none-"));
+		let seen = join(scratch, "github.json");
+		process.env.CHOPIN_TEST_GITHUB = seen;
+		let { GH_TOKEN, GITHUB_TOKEN } = process.env;
+		delete process.env.GH_TOKEN;
+		delete process.env.GITHUB_TOKEN;
+		try {
+			await run({}, ["--github"], undefined, undefined, {
+				url: `http://127.0.0.1:${chopin.port}`,
+				machine: `chopin_m_${"M".repeat(43)}`,
+			});
+			expect(JSON.parse(await readFile(seen, "utf8"))).toMatchObject({
+				GH_TOKEN: null,
+				GITHUB_TOKEN: null,
+			});
+		} finally {
+			if (GH_TOKEN !== undefined) process.env.GH_TOKEN = GH_TOKEN;
+			if (GITHUB_TOKEN !== undefined) process.env.GITHUB_TOKEN = GITHUB_TOKEN;
+			delete process.env.CHOPIN_TEST_GITHUB;
+			await chopin.stop(true);
+			await rm(scratch, { recursive: true, force: true });
+		}
+	},
+);

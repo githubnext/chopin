@@ -35,31 +35,34 @@ it connects.
 | `config.json`     | What `chopin connect` last ran, and the service with its own copy of that. Only you can read it (mode `0600`). It holds your `--env` values, so keep secrets in your agent's own login. |
 | `*.failures.json` | The latest failure to start of a running connector's agent and Planners, for `chopin status`.                                                                                           |
 | `*.chosen.json`   | The documents whose Planners a running connector runs because they chose this machine in Chopin, for `chopin status`.                                                                   |
+| `*.github.json`   | The repository Chopin's GitHub App can't push to, for `chopin status`.                                                                                                                  |
 | `chopin.log`      | The service's output.                                                                                                                                                                   |
 | `*.lock`          | One lock for each checkout that a connector is serving.                                                                                                                                 |
-| `runs/`           | A Git worktree for each job, kept for you to inspect, and its journal. See [Runs and worktrees](#runs-and-worktrees).                                                                   |
-| `planners/`       | `<owner>/<repo>/<document id>`: the Git worktree a Planner command keeps for a document. `chopin` makes the folders above it and never removes one.                                     |
+| `runs/`           | Each job's worktree and journal. See [Runs](#runs).                                                                                                                                     |
+| `planners/`       | Each Planner command's own worktree, at `<owner>/<repo>/<document id>`. `chopin` never removes one.                                                                                     |
 
 Chopin stores only a hash of the machine token, plus the machine's own GitHub
 authorization, encrypted like a browser login.
 
-### Runs and worktrees
+### Runs
 
-Each job gets a detached worktree at `runs/<run id>`, and its journal at
-`runs/<run id>.json`. A retried investigation adds `-<generation>` to the id. A
-build's agent is told its worktree and `runs/<run id>-worktrees`, also in
-`$CHOPIN_RUN_WORKTREES`, the only place to add extra worktrees with
-`git worktree add`. When the run ends, the connector stops what still runs in
-them and removes them, uncommitted changes included, since their pull requests
-were pushed; their branches stay. The run's own worktree stays for you to
-inspect.
+| Path                         | Holds                                                                                              |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `runs/<run id>`              | The job's detached worktree. A retried investigation adds `-<generation>` to the id.               |
+| `runs/<run id>.json`         | Its journal: when it was accepted and finished, and the process that ran it.                       |
+| `runs/<run id>-worktrees/`   | Extra worktrees a build adds. The agent finds this path in its prompt and `$CHOPIN_RUN_WORKTREES`. |
+| `runs/<run id>.github-token` | The machine's GitHub token for the job (mode `0600`), while it runs.                               |
 
-`chopin connect --keep-runs <n>` keeps the worktrees of the `n` most recently
-finished runs, 15 by default, and 0 keeps them all. It saves `n` with its other
-settings. As it starts and after each run, the connector removes older runs:
-their worktrees, any extra worktrees left in them, and their journals. A run
-still going or waiting to start, in this connector or another one on the same
-base dir, is never removed. Neither is anything in `planners/`.
+When a run ends, the connector stops what still runs in its extra worktrees and
+removes them, uncommitted changes included, since their pull requests were
+pushed. Their branches stay, and so does the run's own worktree.
+
+`chopin connect --keep-runs <n>` keeps the `n` most recently finished runs (15
+by default, 0 for all) and saves `n` with its settings. When it starts and after
+each run, it removes older runs: worktrees, extra worktrees and journals.
+
+It never removes a run that is going or waiting to start, in this connector or
+another one on the same base dir. It never touches `planners/`.
 
 ## Install a particular version
 
@@ -189,18 +192,18 @@ Scheduler then refuses `restart` or `uninstall`, run them as administrator too.
 
 `chopin status --json` prints one object. Later releases only add keys.
 
-| Key                     | Value                                                                                                                                                                                                                                                                                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `version`               | The CLI version, `dev` from source.                                                                                                                                                                                                                                                                                                        |
-| `protocol`              | The connector protocol it speaks.                                                                                                                                                                                                                                                                                                          |
-| `server`                | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                                                                                                                                   |
-| `machine`               | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`.                                                                                                       |
-| `connectors`            | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601), `planners`, `canRunPlanners` (`true` with a Planner command), `chosenPlanners` (the documents, by URL, whose Planners it runs because they chose this machine) and `failures`.            |
-| `connectors[].failures` | For a running connector, the latest failure to start of its agent and of each Planner: `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`, `signal SIGKILL`), the first `stderr` line, and `at` and `retryAt` (ISO 8601). A Planner Chopin refused for good has `stopped: true` and the refusal as `how`. |
-| `service`               | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                                                                                                                         |
-| `log`                   | The service's log file.                                                                                                                                                                                                                                                                                                                    |
-| `baseDir`               | The state directory the report is for.                                                                                                                                                                                                                                                                                                     |
-| `serviceRuns`           | What the service runs: `server`, `checkout`, `command`, `planners`, `plannerCommand` and optionally `env` and `keepRuns`, or `null` before an install.                                                                                                                                                                                     |
-| `lastConnect`           | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                                                                                                                                 |
-| `runs`                  | `kept`, the finished runs whose worktrees are kept, `running`, the runs going or waiting to start, and `bytes`, the kept worktrees' size, absent where `du` can't measure it (on Windows).                                                                                                                                                 |
-| `plannerWorktrees`      | One entry per worktree a Planner command made in `planners/`: `path`, `repository` (`owner/repo`) and `document` (its id).                                                                                                                                                                                                                 |
+| Key                     | Value                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`               | The CLI version, `dev` from source.                                                                                                                                                                                                                                                                                                                                                                    |
+| `protocol`              | The connector protocol it speaks.                                                                                                                                                                                                                                                                                                                                                                      |
+| `server`                | `origin`, and `source`: `CHOPIN_URL`, `config` (saved by `chopin connect`) or `default`.                                                                                                                                                                                                                                                                                                               |
+| `machine`               | `paired`, `label` (or `null`), `check` (`accepted`, `revoked`, `reauthorize`, `update-required`, `unreachable`, `error` or `not-paired`), `accepted` (`true`, `false`, or `null` when unknown), and optionally `login` and `detail`.                                                                                                                                                                   |
+| `connectors`            | One entry per checkout lock: `pid`, `checkout`, `running` (`false` for a stale lock), `service`, and optionally `version`, `started` (ISO 8601), `planners`, `canRunPlanners` (`true` with a Planner command), `chosenPlanners` (the documents, by URL, whose Planners it runs because they chose this machine), `failures` and `githubCannotPush` (the repository Chopin's GitHub App can't push to). |
+| `connectors[].failures` | For a running connector, the latest failure to start of its agent and of each Planner: `kind` (`agent` or `planner`), `document` for a Planner, `how` it ended (`exit 127`, `signal SIGKILL`), the first `stderr` line, and `at` and `retryAt` (ISO 8601). A Planner Chopin refused for good has `stopped: true` and the refusal as `how`.                                                             |
+| `service`               | `state` (`running`, `stopped`, `restart-pending`, `not-installed`, or `unknown` with `detail`), `manager`, `definition`, `log`, `notes`, and optionally `pid`, `running` and `installed` versions.                                                                                                                                                                                                     |
+| `log`                   | The service's log file.                                                                                                                                                                                                                                                                                                                                                                                |
+| `baseDir`               | The state directory the report is for.                                                                                                                                                                                                                                                                                                                                                                 |
+| `serviceRuns`           | What the service runs: `server`, `checkout`, `command`, `planners`, `plannerCommand` and optionally `env` and `keepRuns`, or `null` before an install.                                                                                                                                                                                                                                                 |
+| `lastConnect`           | The same settings for the last `chopin connect` that connected, or `null`.                                                                                                                                                                                                                                                                                                                             |
+| `runs`                  | `kept`, the finished runs whose worktrees are kept, `running`, the runs going or waiting to start, and `bytes`, the kept worktrees' size, absent where `du` can't measure it (on Windows).                                                                                                                                                                                                             |
+| `plannerWorktrees`      | One entry per worktree a Planner command made in `planners/`: `path`, `repository` (`owner/repo`) and `document` (its id).                                                                                                                                                                                                                                                                             |

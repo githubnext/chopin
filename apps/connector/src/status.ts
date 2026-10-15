@@ -2,6 +2,7 @@ import { type ConnectSettings, readConfig } from "./config";
 import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
+import { appCannotPush } from "./github-token";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { join } from "node:path";
 import {
@@ -73,6 +74,11 @@ export type StatusReport = {
 		failures?: Array<
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
 		>;
+		/**
+		 * The repository Chopin's GitHub App can't push to, so the machine's Planner commands and
+		 * runs use its own GitHub login there.
+		 */
+		githubCannotPush?: string;
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	log: string;
@@ -178,6 +184,7 @@ export async function collectStatus(options: {
 			...(item.planners ? { planners: item.planners } : {}),
 			...(item.plannerCommand ? { canRunPlanners: true as const } : {}),
 			...(item.chosen ? { chosenPlanners: item.chosen } : {}),
+			...(item.githubCannotPush ? { githubCannotPush: item.githubCannotPush } : {}),
 			...(item.failures
 				? {
 					failures: item.failures.map(({ at, retryAt, ...failure }) => ({
@@ -270,6 +277,7 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					item.version ? `, chopin ${item.version}` : ""
 				}${item.service ? ", the service" : ""})`,
 				...(agent ? [`  Agent${failing(agent, now)}`] : []),
+				...(item.githubCannotPush ? [`  ${appCannotPush(item.githubCannotPush)}`] : []),
 				...(item.canRunPlanners
 					? ["  Can run Planners for documents that choose this machine"]
 					: []),

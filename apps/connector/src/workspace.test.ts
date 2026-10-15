@@ -262,6 +262,8 @@ test("retention keeps the most recent finished runs, never one running or queued
 		await gone.exited;
 		let journal = JSON.parse(await readFile(crashed.journalPath, "utf8"));
 		await writeFile(crashed.journalPath, JSON.stringify({ ...journal, pid: gone.pid }));
+		// Its GitHub token file, which a run that ended would have deleted.
+		await writeFile(join(runs, "crashed.github-token"), "ghu_left\n", { mode: 0o600 });
 		// This connector's run in progress, then one it accepted but has yet to start.
 		await prepare("running");
 		await writeFile(

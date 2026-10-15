@@ -127,6 +127,16 @@ export async function linkAuth(channelId?: string) {
 				if (!account) throw new GitHubError("Not Found", 404);
 				return scoreRepository(owner, name, account.push);
 			},
+			/** The App is installed on octo-org/score and may write contents and pull requests. */
+			async installedRepository(token: string, owner: string, name: string) {
+				let account = machineAccount(token);
+				return account
+					? {
+						repository: scoreRepository(owner, name, account.push),
+						installation: { id: "1", writable: { contents: true, pullRequests: true } },
+					}
+					: undefined;
+			},
 			async repositoryAccess(token: string, owner: string, name: string) {
 				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
 					?? machineAccount(token);

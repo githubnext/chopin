@@ -414,19 +414,19 @@ naming any document:
 chopin connect . --planner-command "my-planner --flag" -- copilot --acp --allow-all
 ```
 
-Then, when you choose this machine for a document with the machine button,
-Chopin asks it to start that document's Planner, as long as the Planner is
-free or already yours; it never takes over a Planner another account holds.
-The backend gets its credential just as with `--planner`. Choosing another
-machine or **Automatic**, disconnecting or revoking the machine, or losing push
-access to the repository stops it. When you choose another machine or
-**Automatic**, `chopin` prints
+Choose this machine for a document with the machine button, and Chopin asks it
+to start that document's Planner. It does so only when the Planner is free or
+already yours, never taking over another account's. The backend gets its
+credential just as with `--planner`.
+
+These stop it: choosing another machine or **Automatic**, disconnecting or
+revoking the machine, or losing push access to the repository. Choosing another
+machine or **Automatic** prints
 `Stopped the Planner for <document>: the document chose another machine.`
-Whenever Chopin stops asking the machine,
-another account taking the Planner first included, the credentials it got for
-that document stop working, so a backend that had yet to attach never does.
-Older `chopin` releases are never asked.
-This needs a server that speaks connector protocol 4.
+
+Once Chopin stops asking, the credentials the machine got for that document
+stop working, so a backend that hasn't attached yet never does. This needs a
+server that speaks connector protocol 4.
 
 The machine button in the document's Chat box shows who runs its Planner:
 your machine's name once its Planner is attached, **Starting…** until then,
@@ -437,22 +437,49 @@ Planner**.
 
 ## Where things live on this machine
 
-Everything `chopin connect` does on a machine stays in its base dir,
-`~/.local/state/chopin/connector` unless `--base-dir` or `CHOPIN_HOME` moves
-it, never beside your checkout:
+`chopin connect` keeps everything in its base dir,
+`~/.local/state/chopin/connector`, never beside your checkout. `--base-dir` or
+`CHOPIN_HOME` moves it.
 
-- `runs/<run id>` is each job's own worktree, kept for you to inspect. A build
-  that needs more worktrees, for pull requests at once, makes them in
-  `runs/<run id>-worktrees/`, and they go when the run ends, uncommitted
-  changes included, since their pull requests were pushed.
-- The 15 most recently finished runs are kept; older ones go as `chopin connect`
-  starts and after each run. `--keep-runs <n>` keeps `n` instead, and
-  `--keep-runs 0` keeps every run. A run still going is never removed.
-- `planners/<owner>/<repo>/<document id>` is where a Planner command keeps its
-  own worktree for a document. `chopin` never removes it.
+| Path                                    | Holds                                                  | Removed                                                                                |
+| --------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `runs/<run id>`                         | Each job's worktree, for you to inspect                | With older runs, below                                                                 |
+| `runs/<run id>-worktrees/`              | Extra worktrees a build adds for pull requests at once | When the run ends, uncommitted changes included, since their pull requests were pushed |
+| `planners/<owner>/<repo>/<document id>` | A Planner command's own worktree for one document      | Never                                                                                  |
 
-See [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
-for the rest.
+`chopin connect` keeps the 15 most recently finished runs. It removes older ones
+when it starts and after each run, but never a run that is still going.
+`--keep-runs <n>` keeps `n` runs instead, and `--keep-runs 0` keeps them all.
+
+[Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
+lists everything else in the base dir.
+
+## Which GitHub account pushes
+
+Builds and Planner commands push branches and open draft pull requests as you,
+the machine's owner. Chopin hands them your token from its GitHub App:
+
+- A build's or investigation's agent gets it as `GH_TOKEN` and `GITHUB_TOKEN`,
+  and Git uses it for github.com.
+- A Planner command gets it as `CHOPIN_GITHUB_TOKEN`; see
+  [the Planner's environment](planner-link.md#environment).
+
+The token is renewed before it expires and its file goes when the work ends.
+Prototypes never push.
+
+The machine uses your own `gh` and Git login instead when:
+
+- the server runs `AUTH_MODE=local`, where machines hold no GitHub token;
+- you can't push to the repository; or
+- the App can only read the repository. The connector and `chopin status` then
+  say so once:
+
+```text
+The GitHub App can't push to octo-org/score (it needs Contents and Pull requests write), so this machine uses its own GitHub login for it.
+```
+
+[Authentication](authentication.md#repository-permissions) lists the App's
+permissions.
 
 ## Update
 

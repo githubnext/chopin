@@ -225,6 +225,29 @@ test("status shows an agent that failed to start under its connector", async () 
 	);
 });
 
+test("status says once a connector's machine uses its own GitHub login because the App can't push", async () => {
+	let { directory, host } = await machine();
+	let lock = "f".repeat(64);
+	await writeFile(
+		join(directory, `${lock}.lock`),
+		JSON.stringify({
+			pid: process.pid,
+			processStart: (await processStart()(process.pid))!.id,
+			root: "/work/score",
+		}),
+	);
+	await writeFile(
+		join(directory, `${lock}.github.json`),
+		JSON.stringify({ repository: "octo-org/score" }),
+	);
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.connectors[0]?.githubCannotPush).toBe("octo-org/score");
+	expect(formatStatus(report)).toContain(
+		"              The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
+			+ "write), so this machine uses its own GitHub login for it.",
+	);
+});
+
 test("status lists the Planners' worktrees and the finished runs kept, with their size", async () => {
 	let { directory, host } = await machine();
 	let runs = join(directory, "runs");

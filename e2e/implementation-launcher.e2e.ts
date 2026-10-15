@@ -1,6 +1,6 @@
 import { content, expect, roomPath, test } from "./room";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { failedBuild } from "./build-seed";
@@ -147,7 +147,7 @@ test("Build shares the document pane beside Chat and a task link reopens it afte
 		.toBeInViewport();
 });
 
-async function connector(baseURL: string, command: string[]) {
+async function connector(baseURL: string, command: string[], env: Record<string, string> = {}) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-implementation-checkout-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-implementation-state-"));
 	let git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { stdio: "pipe" });
@@ -167,7 +167,7 @@ async function connector(baseURL: string, command: string[]) {
 		...command,
 	], {
 		cwd: ROOT,
-		env: { ...process.env, CHOPIN_URL: baseURL, CHOPIN_CONNECTOR_STATE_DIR: state },
+		env: { ...process.env, CHOPIN_URL: baseURL, CHOPIN_CONNECTOR_STATE_DIR: state, ...env },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	let output = "";
@@ -396,6 +396,56 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 		}
 	});
 }
+
+test("a build's agent opens draft pull requests with the machine's own GitHub token", async ({ seed, join: enter, room, baseURL }) => {
+	test.setTimeout(60_000);
+	await seed("# Draft pull requests\n\nOpen them as the machine's owner.\n", {
+		graph: preparedGraph(),
+	});
+	let scratch = await mkdtemp(join(tmpdir(), "chopin-implementation-github-"));
+	let bin = join(scratch, "bin");
+	await mkdir(bin);
+	// gh, as the agent finds it: it records the token it was given and its arguments.
+	await writeFile(
+		join(bin, "gh"),
+		`#!/bin/sh\nprintf '%s\\n' "$GH_TOKEN" "$@" > "${join(scratch, "gh")}"\n`,
+	);
+	await chmod(join(bin, "gh"), 0o755);
+	let handle = person();
+	let local = await connector(baseURL!, [
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+		"--github",
+	], {
+		PATH: `${bin}:${process.env.PATH}`,
+		CHOPIN_TEST_GITHUB: join(scratch, "github.json"),
+	});
+	try {
+		let page = await enter(handle);
+		await page.goto(await local.pairing);
+		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
+			"Connected",
+		);
+		await page.goto(testChannelPath(room));
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+		await expect.poll(
+			() => readFile(join(scratch, "gh"), "utf8").catch(() => ""),
+			{ timeout: 30_000 },
+		).not.toBe("");
+		let [token, ...args] = (await readFile(join(scratch, "gh"), "utf8")).split("\n");
+		// The machine's own GitHub authorization, which its owner approved when it paired.
+		expect(token).toMatch(new RegExp(`^ghu_e2e_${handle}_\\d+$`));
+		expect(args).toEqual(["pr", "create", "--draft", "--title", "Task one", ""]);
+		let seen = JSON.parse(await readFile(join(scratch, "github.json"), "utf8"));
+		expect(seen).toMatchObject({ GH_TOKEN: token, GITHUB_TOKEN: token });
+		expect(seen.credential).toContain(`password=${token}\n`);
+		expect(local.output()).not.toContain(token);
+	} finally {
+		await local.close();
+		await rm(scratch, { recursive: true, force: true });
+	}
+});
 
 function buildView(page: import("@playwright/test").Page) {
 	return page.getByRole("region", { name: "Build", exact: true });

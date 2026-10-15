@@ -237,6 +237,7 @@ export async function lockWorkspace(
 		await rm(path, { force: true });
 		await rm(path.replace(/\.lock$/, ".failures.json"), { force: true });
 		await rm(path.replace(/\.lock$/, ".chosen.json"), { force: true });
+		await rm(path.replace(/\.lock$/, ".github.json"), { force: true });
 	};
 }
 
@@ -316,6 +317,27 @@ export function chosenPlanners(directory: string, root: string) {
 
 export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
 
+/**
+ * The checkout's repository once Chopin said its GitHub App can't push there, so the machine's
+ * processes use its own GitHub login for it, kept for `chopin status` in a file beside the
+ * checkout's lock. `record` is true only the first time, so the connector says it once.
+ */
+export function githubFallback(directory: string, root: string) {
+	let path = join(directory, `${lockId(root)}.github.json`);
+	// A connector that crashed may have left its note behind.
+	let writing = rm(path, { force: true }).catch(() => {});
+	let recorded = false;
+	return {
+		record(repository: string) {
+			if (recorded) return false;
+			recorded = true;
+			writing = writing.then(() => writeFile(path, JSON.stringify({ repository }), { mode: 0o600 }))
+				.catch(() => {});
+			return true;
+		},
+	};
+}
+
 /** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
 function gone(pid: number) {
 	try {
@@ -377,6 +399,8 @@ export type RunningConnector = {
 	started?: number;
 	/** How its agent or Planner backends last failed to start, while it runs. */
 	failures?: StartFailure[];
+	/** The repository its GitHub App can't push to, so its machine uses its own login there. */
+	githubCannotPush?: string;
 };
 
 /**
@@ -409,6 +433,11 @@ export async function connectors(
 				.then(text => JSON.parse(text))
 				.catch(() => undefined)
 			: undefined;
+		let github: unknown = running
+			? await readFile(join(directory, name.replace(/\.lock$/, ".github.json")), "utf8")
+				.then(text => (JSON.parse(text) as { repository?: unknown }).repository)
+				.catch(() => undefined)
+			: undefined;
 		found.push({
 			pid: pid as number,
 			root,
@@ -427,6 +456,7 @@ export async function connectors(
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),
 			...(Array.isArray(failures) && failures.length ? { failures } : {}),
+			...(typeof github === "string" ? { githubCannotPush: github } : {}),
 		});
 	}
 	return found;
@@ -651,6 +681,7 @@ export async function pruneRuns(
 		await rm(extras, { recursive: true, force: true });
 		await rm(path, { recursive: true, force: true });
 		if (repository) await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
+		await rm(join(folder, `${entry.attempt}.github-token`), { force: true });
 		await rm(join(folder, `${entry.attempt}.json`), { force: true });
 		removed.push(entry.attempt);
 	}

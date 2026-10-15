@@ -47,6 +47,7 @@ import { VERSION } from "./version";
 import {
 	chosenPlanners,
 	connectors,
+	githubFallback,
 	lockWorkspace,
 	pruneRuns,
 	startFailures,
@@ -531,6 +532,7 @@ export async function connect(
 	let prune = () => pruneRuns(directory, keep).then(() => {}, () => {});
 	await prune();
 	let chosen = chosenPlanners(directory, info.root);
+	let fallback = githubFallback(directory, info.root);
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
 	let stop = () => {
@@ -544,6 +546,10 @@ export async function connect(
 	let unwatch = service ? onStopRequest(directory, stop) : () => {};
 	let output = createOutput();
 	let permissions = permissionMemory();
+	// Said once a connector, and kept for chopin status, when the GitHub App can't push here.
+	let githubRefused = (message: string) => {
+		if (fallback.record(info.repository)) output.say(output.style.dim(message));
+	};
 	try {
 		let { root: _root, ...source } = info;
 		let checkout = { ...source, label: basename(info.root) };
@@ -599,6 +605,7 @@ export async function connect(
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
 				env,
+				githubRefused,
 			};
 			let planning = servePlanners(backends);
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.
@@ -647,6 +654,8 @@ export async function connect(
 							interrupt: stop,
 							failures,
 							env,
+							machine,
+							githubRefused,
 						}).finally(prune),
 				});
 				break;

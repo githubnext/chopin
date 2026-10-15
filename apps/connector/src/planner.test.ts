@@ -1074,3 +1074,160 @@ test.skipIf(process.platform === "win32")(
 	},
 	40_000,
 );
+
+/** A Planner backend that records what it was given for GitHub, then reads its token file again. */
+const GITHUB_BACKEND = `
+import { appendFileSync, readFileSync, statSync } from "node:fs";
+let log = process.argv[2];
+let file = process.env.CHOPIN_GITHUB_TOKEN_FILE;
+let seen = () => file ? { content: readFileSync(file, "utf8"), mode: (statSync(file).mode & 0o777).toString(8) } : null;
+appendFileSync(log, JSON.stringify({
+	token: process.env.CHOPIN_GITHUB_TOKEN ?? null,
+	expiresAt: process.env.CHOPIN_GITHUB_TOKEN_EXPIRES_AT ?? null,
+	file: file ?? null,
+	argv: process.argv,
+	seen: seen(),
+}) + "\\n");
+process.on("SIGTERM", () => process.exit(0));
+setInterval(() => appendFileSync(log, JSON.stringify({ later: seen() }) + "\\n"), 200);
+`;
+
+/** A fake Chopin that issues Planner credentials and answers GitHub token requests with `github`. */
+function githubChopin(github: (asked: number) => Response) {
+	let asked = 0;
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let path = new URL(request.url).pathname;
+			if (path === "/api/connector/github-token") {
+				expect(await request.json()).toEqual({ repository: "octo-org/score" });
+				expect(request.headers.get("authorization")).toBe(`Bearer ${MACHINE}`);
+				return github(asked++);
+			}
+			return Response.json({
+				token: `chopin_p_${"P".repeat(43)}`,
+				expiresAt: Date.now() + 15 * 60_000,
+				document: { id: "D_1" },
+			});
+		},
+	});
+	return {
+		url: `http://127.0.0.1:${server.port}`,
+		asked: () => asked,
+		stop: () => server.stop(true),
+	};
+}
+
+test.skipIf(process.platform === "win32")(
+	"a Planner command gets the machine's GitHub token and a private file kept fresh, removed when it stops",
+	async () => {
+		let tokens = [`ghu_${"A".repeat(36)}`, `ghu_${"B".repeat(36)}`];
+		let expiries: number[] = [];
+		let chopin = githubChopin(asked => {
+			// Short-lived, so the connector replaces it before it expires.
+			expiries.push(Date.now() + 1_500);
+			return Response.json({ token: tokens[Math.min(asked, 1)], expiresAt: expiries.at(-1) });
+		});
+		let directory = await mkdtemp(join(scratch, "github-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, GITHUB_BACKEND);
+		let written = "";
+		let capture = {
+			write: (chunk: string | Uint8Array) => {
+				written += String(chunk);
+				return true;
+			},
+		};
+		let abort = new AbortController();
+		let serving = servePlanners({
+			url: chopin.url,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			directory,
+			repository: "octo-org/score",
+			output: createOutput(capture, capture, {}),
+			signal: abort.signal,
+			renewGitHubBeforeMs: 1_000,
+		});
+		try {
+			await until(async () => (await entries(log)).some(entry => entry.token), 10_000);
+			let [first] = await entries(log);
+			let file = join(directory, "planners", "octo-org", "score", "D_1.github-token");
+			expect(first).toMatchObject({
+				token: tokens[0],
+				expiresAt: new Date(expiries[0]!).toISOString(),
+				file,
+				seen: { content: `${tokens[0]}\n`, mode: "600" },
+			});
+			// Never in its arguments.
+			expect(JSON.stringify(first.argv)).not.toContain("ghu_");
+			// Replaced before it expires, without restarting the command.
+			await until(
+				async () => (await entries(log)).some(entry => entry.later?.content === `${tokens[1]}\n`),
+				10_000,
+			);
+			expect((await entries(log)).filter(entry => entry.token)).toHaveLength(1);
+			expect((await entries(log)).at(-1).later.mode).toBe("600");
+			abort.abort();
+			await serving;
+			expect(await stat(file).catch(() => "missing")).toBe("missing");
+			for (let token of tokens) expect(written).not.toContain(token);
+		} finally {
+			abort.abort();
+			await chopin.stop();
+		}
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"without a token from Chopin a Planner command gets none, and an App that can't push is said once",
+	async () => {
+		for (let answer of ["app-cannot-push", "not-found", "unavailable"]) {
+			let chopin = githubChopin(() =>
+				Response.json({ error: answer }, {
+					status: answer === "not-found" ? 404 : answer === "unavailable" ? 503 : 409,
+				})
+			);
+			let directory = await mkdtemp(join(scratch, "github-refused-"));
+			let script = join(directory, "backend.ts");
+			let log = join(directory, "launches.jsonl");
+			await writeFile(script, GITHUB_BACKEND);
+			let said: string[] = [];
+			let abort = new AbortController();
+			let serving = servePlanners({
+				url: chopin.url,
+				machine: MACHINE,
+				documents: ["D_1"],
+				command: [process.execPath, script, log],
+				cwd: directory,
+				directory,
+				repository: "octo-org/score",
+				output: createOutput({ write: () => true }, { write: () => true }, {}),
+				signal: abort.signal,
+				githubRefused: message => said.push(message),
+			});
+			try {
+				await until(async () => (await entries(log)).length > 0, 10_000);
+				expect((await entries(log))[0]).toMatchObject({ token: null, expiresAt: null, file: null });
+				expect(said).toEqual(
+					answer === "app-cannot-push"
+						? [
+							"The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
+							+ "write), so this machine uses its own GitHub login for it.",
+						]
+						: [],
+				);
+			} finally {
+				abort.abort();
+				await serving;
+				await chopin.stop();
+			}
+		}
+	},
+	30_000,
+);

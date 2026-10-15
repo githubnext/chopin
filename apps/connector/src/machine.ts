@@ -359,6 +359,24 @@ export async function plannerCredential(
 	};
 }
 
+/**
+ * The machine's GitHub token for its processes to push to `repository` (`owner/name`) and open
+ * draft pull requests as its owner, and when it expires (ms). Chopin refuses when it holds no such
+ * token, the owner can't push there, or its GitHub App can't write there.
+ */
+export async function machineGitHubToken(
+	url: string,
+	token: string,
+	repository: string,
+	signal?: AbortSignal,
+) {
+	let value = await post(url + "/api/connector/github-token", { repository }, token, signal);
+	if (typeof value.token !== "string" || typeof value.expiresAt !== "number") {
+		throw new Error("Missing GitHub token.");
+	}
+	return { token: value.token, expiresAt: value.expiresAt };
+}
+
 /** Revoke this machine on the server and forget its token, even if the server already had. */
 export async function unpair(url: string, directory: string): Promise<"unpaired" | "not-paired"> {
 	let token = (await stored(directory)).servers[url]?.token;

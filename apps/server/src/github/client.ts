@@ -54,6 +54,8 @@ export type GitHubInstallation = {
 		statuses: boolean;
 		issues: boolean;
 	};
+	/** Whether it may write contents and pull requests, so its users' tokens can push and open PRs. */
+	writable?: { contents: boolean; pullRequests: boolean };
 };
 
 export type InstallationPage = {
@@ -150,6 +152,12 @@ export interface GitHub {
 	repository(token: string, owner: string, name: string): Promise<Repository>;
 	/** Resolve the repository role within this GitHub App's active installations. */
 	repositoryAccess(token: string, owner: string, name: string): Promise<Repository | undefined>;
+	/** The repository and the installation that covers it; a GitHub without it covers none. */
+	installedRepository?(
+		token: string,
+		owner: string,
+		name: string,
+	): Promise<InstalledRepository | undefined>;
 	invalidate(token: string): void;
 }
 
@@ -311,6 +319,10 @@ function installation(value: unknown): GitHubInstallation {
 			checks: allowed("checks"),
 			statuses: allowed("statuses"),
 			issues: allowed("issues"),
+		},
+		writable: {
+			contents: permissions.contents === "write",
+			pullRequests: permissions.pull_requests === "write",
 		},
 	};
 }

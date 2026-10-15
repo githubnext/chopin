@@ -43,6 +43,28 @@ let app = new AgentApp()
 				JSON.stringify({ prompt, worktrees: process.env.CHOPIN_RUN_WORKTREES ?? null }),
 			);
 		}
+		if (process.argv.includes("--github")) {
+			// What a build's agent pushes and opens pull requests with: gh's token, and Git's
+			// credentials for github.com, asked as `git push` would.
+			let fill = spawnSync("git", ["-C", cwd, "credential", "fill"], {
+				input: "protocol=https\nhost=github.com\n\n",
+				encoding: "utf8",
+			});
+			let gh = spawnSync("gh", ["pr", "create", "--draft", "--title", "Task one"], {
+				cwd,
+				encoding: "utf8",
+			});
+			await writeFile(
+				process.env.CHOPIN_TEST_GITHUB!,
+				JSON.stringify({
+					GH_TOKEN: process.env.GH_TOKEN ?? null,
+					GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? null,
+					credential: fill.status === 0 ? fill.stdout : null,
+					gh: gh.status,
+				}),
+			);
+			return { stopReason: "end_turn" as const };
+		}
 		if (process.argv.includes("--worktrees")) {
 			// Two pull requests at once in extra worktrees where the prompt says, one left with
 			// uncommitted changes and a dev server running in it.

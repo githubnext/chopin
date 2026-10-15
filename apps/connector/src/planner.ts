@@ -5,6 +5,7 @@ import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
+import { type GitHubToken, githubToken } from "./github-token";
 import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
@@ -76,6 +77,10 @@ export async function servePlanners(options: {
 	/** The `--env` variables connect saved, added to each backend's environment. */
 	env?: Record<string, string>;
 	healthyMs?: number;
+	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
+	githubRefused?: (message: string) => void;
+	/** How long before it expires the GitHub token is replaced; for tests. */
+	renewGitHubBeforeMs?: number;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
 }
@@ -102,6 +107,10 @@ export function dispatchedPlanners(options: {
 	chosen?: ChosenPlanners;
 	env?: Record<string, string>;
 	healthyMs?: number;
+	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
+	githubRefused?: (message: string) => void;
+	/** How long before it expires the GitHub token is replaced; for tests. */
+	renewGitHubBeforeMs?: number;
 }) {
 	let running = new Map<
 		string,
@@ -165,6 +174,10 @@ async function servePlanner(options: {
 	failures?: StartFailures;
 	env?: Record<string, string>;
 	healthyMs?: number;
+	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
+	githubRefused?: (message: string) => void;
+	/** How long before it expires the GitHub token is replaced; for tests. */
+	renewGitHubBeforeMs?: number;
 }) {
 	let { output, signal, document } = options;
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
@@ -206,13 +219,25 @@ async function servePlanner(options: {
 			options.repository,
 			credential.document ?? options.id ?? document,
 		);
+		// The machine's own GitHub token, where Chopin gives one; without one the backend still starts.
+		let github = await githubToken({
+			url: options.url,
+			machine: options.machine,
+			repository: options.repository,
+			file: `${worktree}.github-token`,
+			...(options.githubRefused ? { refused: options.githubRefused } : {}),
+			...(options.renewGitHubBeforeMs === undefined
+				? {}
+				: { renewBeforeMs: options.renewGitHubBeforeMs }),
+		});
 		let launched = Date.now();
 		let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
-		let { how, stderr } = await launch(options, credential.token, worktree);
+		let { how, stderr } = await launch(options, credential.token, worktree, github);
 		clearTimeout(healthy);
+		await github?.stop();
 		if (signal.aborted) return;
-		// What the backend printed may hold its credential or an --env value.
-		let secrets = [credential.token, ...values];
+		// What the backend printed may hold its credential, a GitHub token or an --env value.
+		let secrets = [credential.token, ...github?.secrets() ?? [], ...values];
 		if (Date.now() - started >= HEALTHY_MS) attempt = 0;
 		let wait = backoff(attempt++);
 		if (Date.now() - launched < healthyMs) {
@@ -249,13 +274,13 @@ const LONGEST_LINE = 65_536;
 function passMasked(
 	stream: Readable,
 	name: "stdout" | "stderr",
-	secrets: string[],
+	secrets: () => string[],
 	heard?: (text: string) => void,
 ): Promise<unknown> {
 	let dropped = `[chopin: dropped a ${name} line longer than ${LONGEST_LINE} characters]`;
 	let pass = (text: string) => {
 		heard?.(text);
-		if (text) process[name].write(redacted(text, secrets));
+		if (text) process[name].write(redacted(text, secrets()));
 	};
 	let pending = "";
 	let dropping = false;
@@ -297,6 +322,7 @@ async function launch(
 	},
 	token: string,
 	worktree: string,
+	github?: GitHubToken,
 ): Promise<{ how: string; stderr?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
@@ -308,12 +334,20 @@ async function launch(
 			CHOPIN_PLANNER_TOKEN: token,
 			CHOPIN_CHECKOUT: options.cwd,
 			CHOPIN_WORKTREE: worktree,
+			...(github
+				? {
+					CHOPIN_GITHUB_TOKEN: github.token,
+					CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
+					CHOPIN_GITHUB_TOKEN_FILE: github.file,
+				}
+				: {}),
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.
 		detached: process.platform !== "win32",
 	});
-	let secrets = [token, ...Object.values(options.env ?? {})];
+	// Read as each line is passed on, so a GitHub token renewed meanwhile is masked too.
+	let secrets = () => [token, ...github?.secrets() ?? [], ...Object.values(options.env ?? {})];
 	let first: string | undefined;
 	let drained = Promise.all([
 		passMasked(child.stdout!, "stdout", secrets),
