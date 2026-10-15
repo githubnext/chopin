@@ -138,7 +138,7 @@
 	box-shadow: var(--shadow-raised);
 }
 
-.diagram-gallery-document .design-audit-static-plan,
+.diagram-gallery-document .plan,
 .diagram-gallery-document .plan-document {
 	min-height: 0;
 	height: auto;

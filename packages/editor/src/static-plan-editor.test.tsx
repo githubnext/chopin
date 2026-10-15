@@ -15,5 +15,14 @@ describe("StaticPlanEditor", () => {
 		expect(markup).toContain('data-read-only="true"');
 		expect(markup).not.toContain("Not connected");
 		expect(markup).not.toContain("plan-status");
+		expect(markup).toContain('class="plan"');
+	});
+
+	it("adds a host's class beside the document class", () => {
+		let markup = renderToStaticMarkup(
+			createElement(StaticPlanEditor, { className: "host-specimen", source: "Text\n" }),
+		);
+
+		expect(markup).toContain('class="plan host-specimen"');
 	});
 });

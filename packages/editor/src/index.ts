@@ -98,5 +98,9 @@ export {
 	ResearchComposer,
 	ResearchReference,
 } from "./widgets";
+export { ResearchDraftShell } from "./toolbar/research";
 export type { InvestigationCardProps } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
+export { TableActionToolbarView } from "./table/action-toolbar";
+export type { TableActionDockPlacement, TableActionGroup } from "./table/action-toolbar";
+export type { Table as TableDescription } from "./table/ops";

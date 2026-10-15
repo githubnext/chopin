@@ -26,20 +26,21 @@ import {
 import { alignmentLabel, nextAlign } from "./alignment";
 import { touchAvailability } from "./touch-actions";
 
+import type { Ref } from "react";
 import type { LexicalEditor, NodeKey } from "lexical";
 import type { SurfacePlacement } from "../toolbar/placement";
 import type { Table } from "./ops";
 
 type SelectedCell = { cell: NodeKey; column: number; row: number; table: Table };
-type DockPlacement = SurfacePlacement & { width: number };
-type ActionGroup = "add" | "move" | "remove";
+export type TableActionDockPlacement = SurfacePlacement & { width: number };
+export type TableActionGroup = "add" | "move" | "remove";
 
 export function TableActionToolbar(
 	{ editor, disabled }: { editor: LexicalEditor; disabled?: boolean },
 ) {
 	let [selected, setSelected] = useState<SelectedCell>();
-	let [position, setPosition] = useState<DockPlacement>();
-	let [group, setGroup] = useState<ActionGroup>("add");
+	let [position, setPosition] = useState<TableActionDockPlacement>();
+	let [group, setGroup] = useState<TableActionGroup>("add");
 	let surface = useRef<HTMLDivElement>(null);
 
 	let sync = useCallback(() => {
@@ -130,12 +131,37 @@ export function TableActionToolbar(
 
 	if (disabled || !selected) return null;
 
-	let { column, row, table } = selected;
-	let act = (op: () => void) => editor.update(op);
+	return (
+		<TableActionToolbarView
+			act={op => editor.update(op)}
+			column={selected.column}
+			group={group}
+			onGroup={setGroup}
+			position={position}
+			row={selected.row}
+			surfaceRef={surface}
+			table={selected.table}
+		/>
+	);
+}
+
+/** The docked actions for one selected cell, without the Lexical selection that finds it. */
+export function TableActionToolbarView(
+	{ act, column, group, onGroup, position, row, surfaceRef, table }: {
+		act: (op: () => void) => void;
+		column: number;
+		group: TableActionGroup;
+		onGroup: (group: TableActionGroup) => void;
+		position?: TableActionDockPlacement;
+		row: number;
+		surfaceRef?: Ref<HTMLDivElement>;
+		table: Table;
+	},
+) {
 	let align = table.align[column] ?? null;
 	let button = "plan-table-action";
 	let available = touchAvailability(table.shape, row, column);
-	let show = (next: ActionGroup) => setGroup(next);
+	let show = (next: TableActionGroup) => onGroup(next);
 
 	return (
 		<div
@@ -143,7 +169,7 @@ export function TableActionToolbar(
 			className="plan-table-action-toolbar"
 			contentEditable={false}
 			onMouseDown={event => event.preventDefault()}
-			ref={surface}
+			ref={surfaceRef}
 			role="toolbar"
 			style={position
 				? {

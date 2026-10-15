@@ -1,8 +1,14 @@
-import { ResearchCard, ResearchComposer } from "@chopin/editor";
+import {
+	ResearchCard,
+	ResearchComposer,
+	ResearchDraftShell,
+	TableActionToolbarView,
+} from "@chopin/editor";
 import { StaticPlanEditor } from "@chopin/editor/static";
 
 import { AuditPlate, StateLabel } from "./frame";
 
+import type { TableDescription } from "@chopin/editor";
 import type { Research } from "@chopin/protocol";
 
 export let callouts = [
@@ -102,7 +108,16 @@ let table = [
 	"| Row | Page | Selected wash |",
 ].join("\n") + "\n";
 
-let timestamp = "2026-08-28T10:00:00.000Z";
+/** The phone dock's selection: the "Button" body cell of the default table. */
+let selectedTable: TableDescription = {
+	align: [null, null, null],
+	cells: [["h0", "h1", "h2"], ["b0", "b1", "b2"], ["i0", "i1", "i2"], ["r0", "r1", "r2"]],
+	key: "audit-table",
+	rows: ["header", "button", "icon", "row"],
+	shape: { columns: 3, rows: 4, simple: true },
+};
+
+let timestamp ="2026-08-28T10:00:00.000Z";
 
 function request(
 	stage: Research.RequestStage,
@@ -146,7 +161,7 @@ function EditorPlate(
 ) {
 	return (
 		<AuditPlate description={description} item={item} title={title}>
-			<StaticPlanEditor source={source} />
+			<StaticPlanEditor className="design-audit-document" source={source} />
 		</AuditPlate>
 	);
 }
@@ -162,33 +177,41 @@ function ResearchSpecimens() {
 	];
 	return (
 		<AuditPlate
-			description="Question entry and every durable request lifecycle state."
+			description="The composer a writer opens at the caret and every durable request state, in the document column."
 			item="research"
 			title="Research"
 		>
-			<div className="design-audit-research-composer">
-				<StateLabel>Question</StateLabel>
-				<ResearchComposer
-					onCancel={() => {}}
-					onChange={() => {}}
-					onSubmit={() => {}}
-					question="Where does the current interface drift from its shared tokens?"
-				/>
-			</div>
-			<div className="design-audit-research-grid">
-				{stages.map(stage => (
-					<div key={stage}>
-						<StateLabel>{stage}</StateLabel>
-						<ResearchCard
-							onCancel={() => {}}
-							onOpen={() => {}}
-							onRemove={() => {}}
-							onRetry={() => {}}
-							request={request(stage)}
-						/>
+			<StaticPlanEditor
+				className="design-audit-document"
+				source={"Research opens at the caret and settles into a card.\n"}
+			>
+				<div className="plan-content design-audit-research-stack">
+					<div>
+						<StateLabel>Question</StateLabel>
+						<ResearchDraftShell motion="is-open">
+							<ResearchComposer
+								onCancel={() => {}}
+								onChange={() => {}}
+								onEscape={() => {}}
+								onSubmit={() => {}}
+								question="Where does the current interface drift from its shared tokens?"
+							/>
+						</ResearchDraftShell>
 					</div>
-				))}
-			</div>
+					{stages.map(stage => (
+						<div key={stage}>
+							<StateLabel>{stage}</StateLabel>
+							<ResearchCard
+								onCancel={() => {}}
+								onOpen={() => {}}
+								onRemove={() => {}}
+								onRetry={() => {}}
+								request={request(stage)}
+							/>
+						</div>
+					))}
+				</div>
+			</StaticPlanEditor>
 		</AuditPlate>
 	);
 }
@@ -196,51 +219,30 @@ function ResearchSpecimens() {
 function TableSpecimens() {
 	return (
 		<AuditPlate
-			description="The editor table plus selected-cell, toolbar, and overflow interaction states."
+			description="The editor table at document size, and on a phone its overflow lane and the action dock for a selected cell."
 			item="table"
 			title="Tables"
 		>
-			<StateLabel>Default</StateLabel>
-			<StaticPlanEditor source={table} />
 			<div className="design-audit-table-states">
 				<div>
-					<StateLabel>Selected cell with toolbar</StateLabel>
-					<div className="design-audit-table-toolbar" role="toolbar" aria-label="Table actions">
-						<button className="btn btn-sm btn-secondary" type="button">Add row</button>
-						<button className="btn btn-sm btn-secondary" type="button">Add column</button>
-					</div>
-					<table>
-						<tbody>
-							<tr>
-								<th>Component</th>
-								<th>State</th>
-							</tr>
-							<tr>
-								<td data-selected="true">Button</td>
-								<td>Selected</td>
-							</tr>
-						</tbody>
-					</table>
+					<StateLabel>Default</StateLabel>
+					<StaticPlanEditor className="design-audit-document" source={table} />
 				</div>
 				<div>
-					<StateLabel>Overflow</StateLabel>
-					<div className="design-audit-table-overflow" tabIndex={0}>
-						<table>
-							<tbody>
-								<tr>
-									<th>Component</th>
-									<th>Default</th>
-									<th>Hover</th>
-									<th>Active</th>
-								</tr>
-								<tr>
-									<td>Button</td>
-									<td>Secondary</td>
-									<td>Raised</td>
-									<td>Brand</td>
-								</tr>
-							</tbody>
-						</table>
+					<StateLabel>Phone: overflow lane and selected cell actions</StateLabel>
+					<div className="design-audit-phone-table">
+						<StaticPlanEditor className="design-audit-document" source={table} />
+						<div className="design-audit-phone-dock">
+							<TableActionToolbarView
+								act={() => {}}
+								column={0}
+								group="add"
+								onGroup={() => {}}
+								position={{ left: 8, maxHeight: 320, top: 8, width: 344 }}
+								row={1}
+								table={selectedTable}
+							/>
+						</div>
 					</div>
 				</div>
 			</div>

@@ -39,8 +39,9 @@ let staticSourcePlugin = realmPlugin<{ onError: (error: Error) => void; source: 
 });
 
 export function StaticPlanEditor(
-	{ children, questions, research, source }: {
+	{ children, className, questions, research, source }: {
 		children?: ReactNode;
+		className?: string;
 		questions?: QuestionnaireStore;
 		research?: ResearchStore;
 		source: string;
@@ -60,7 +61,7 @@ export function StaticPlanEditor(
 	return (
 		<section
 			aria-label="Authored content specimen"
-			className="plan design-audit-static-plan"
+			className={`plan ${className ?? ""}`.trim()}
 			data-read-only="true"
 			data-source-length={source.length}
 			role="document"
