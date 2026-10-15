@@ -82,7 +82,10 @@ export function parse(value: unknown): Questionnaire {
 	let questions = Array.isArray(raw.questions) ? raw.questions : [];
 	for (let question of questions) {
 		if (question && typeof question === "object" && Object.hasOwn(question, "response")) {
-			if (question.response !== "text" || question.multiple !== false) {
+			if (
+				question.response !== "text" || question.multiple !== false
+				|| !Array.isArray(question.options) || question.options.length > 0
+			) {
 				throw new Error("invalid questionnaire text response");
 			}
 			if (question.choices?.length || question.previous?.choices.length) {

@@ -19,7 +19,7 @@ import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { cardRelation, RelationNote } from "./relation-note";
 import { ResolvedActions } from "./resolved-actions";
-import { CandidateApproaches, TextAnswer } from "./text-answer";
+import { TextAnswer } from "./text-answer";
 import type { VisibleSuggestion } from "./project-suggestion";
 import type { Relation } from "../relation";
 
@@ -54,8 +54,6 @@ export type PendingAnswers = {
 	submitting: boolean;
 	/** Why the last save or edit failed, shown on the card itself. */
 	error?: string;
-	/** The host must name the human confirmation when submitting a written answer. */
-	confirmation?: "decision";
 	save: () => void;
 	/** Deselect the unsaved answers in the shared draft. */
 	clear: () => void;
@@ -358,7 +356,6 @@ function AddOption(
 	let focus = useRef<"field" | "trigger">(undefined);
 	let edit = useRef(0);
 	let label = text?.trim() ?? "";
-	let approach = question.response === "text";
 	let duplicate = label ? duplicateOf(question, label) : undefined;
 	let ready = !!label && !duplicate && !disabled;
 
@@ -410,7 +407,7 @@ function AddOption(
 		} catch {
 			result = {
 				ok: false,
-				message: approach ? "Could not add this approach." : "Could not add this option.",
+				message: "Could not add this option.",
 			};
 		}
 		setPending(null);
@@ -424,7 +421,6 @@ function AddOption(
 			setText(null);
 			if (result.option) {
 				onAdded(result.option, label, ownsFocus);
-				if (approach && ownsFocus) focus.current = "trigger";
 			} else if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
@@ -449,7 +445,7 @@ function AddOption(
 				<Key>
 					<PlusIcon />
 				</Key>
-				<span className="question-text">{approach ? "Add an approach" : "Add an option"}</span>
+				<span className="question-text">Add an option</span>
 			</button>
 		);
 	}
@@ -463,7 +459,7 @@ function AddOption(
 				<span className="question-key">
 					<button
 						aria-disabled={pending !== null || undefined}
-						aria-label={approach ? "Add approach" : "Add option"}
+						aria-label="Add option"
 						className="question-add-confirm"
 						data-ready={ready || pending !== null ? "" : undefined}
 						disabled={!ready && pending === null}
@@ -478,7 +474,7 @@ function AddOption(
 					aria-disabled={pending !== null || undefined}
 					aria-describedby={hintId}
 					aria-invalid={duplicate ? true : undefined}
-					aria-label={approach ? "New approach" : "New option"}
+					aria-label="New option"
 					autoComplete="off"
 					className="question-field"
 					disabled={disabled}
@@ -513,7 +509,7 @@ function AddOption(
 							void add();
 						}
 					}}
-					placeholder={approach ? "Add an approach" : "Add an option"}
+					placeholder="Add an option"
 					readOnly={pending !== null}
 					ref={input}
 					rows={1}
@@ -521,7 +517,7 @@ function AddOption(
 				/>
 				{pending !== null && (
 					<span className="sr-only" role="status">
-						{approach ? "Adding approach" : "Adding option"}
+						Adding option
 					</span>
 				)}
 			</div>
@@ -530,7 +526,7 @@ function AddOption(
 				id={hintId}
 				role="status"
 			>
-				{duplicate ? `Already an ${approach ? "approach" : "option"}: ${duplicate.label}` : ""}
+				{duplicate ? `Already an option: ${duplicate.label}` : ""}
 			</p>
 		</div>
 	);
@@ -917,9 +913,6 @@ export function QuestionView(props: QuestionViewProps) {
 	let answeredCount =
 		definition.questions.filter(question => answered(question, drafts[question.id])).length;
 	let complete = answeredCount === definition.questions.length;
-	let writtenAnswer = definition.questions.some(question =>
-		question.response === "text" && answered(question, drafts[question.id])
-	);
 	let pendingEnabled = status === "open" && !disabled && !!onSubmit && !!onChange && touched;
 	let mounted = useRef(true);
 	let latest = useRef({ onChange, onSubmit, markHumanEdit, drafts, definition, active, status });
@@ -936,7 +929,6 @@ export function QuestionView(props: QuestionViewProps) {
 		report({
 			answered: answeredCount,
 			complete,
-			...(writtenAnswer ? { confirmation: "decision" as const } : {}),
 			submitting,
 			error,
 			save: () => latest.current.onSubmit?.(),
@@ -963,7 +955,7 @@ export function QuestionView(props: QuestionViewProps) {
 				}
 			},
 		});
-	}, [answeredCount, complete, error, pendingEnabled, submitting, writtenAnswer]);
+	}, [answeredCount, complete, error, pendingEnabled, submitting]);
 	useEffect(() => {
 		mounted.current = true;
 		return () => {
@@ -1174,14 +1166,11 @@ export function QuestionView(props: QuestionViewProps) {
 							<legend className="sr-only">{current.header}</legend>
 							{written
 								? (
-									<>
-										<TextAnswer
-											disabled={disabled}
-											onChange={custom => choose(current.id, { mode: "custom", custom })}
-											value={drafts[current.id]?.custom ?? ""}
-										/>
-										<CandidateApproaches question={current} />
-									</>
+									<TextAnswer
+										disabled={disabled}
+										onChange={custom => choose(current.id, { mode: "custom", custom })}
+										value={drafts[current.id]?.custom ?? ""}
+									/>
 								)
 								: (
 									<Choices
@@ -1201,7 +1190,7 @@ export function QuestionView(props: QuestionViewProps) {
 									name={`${base}-${current.id}`}
 								/>
 							)}
-							{onAddOption && current.options.length < MAX_SHARED_OPTIONS && (
+							{!written && onAddOption && current.options.length < MAX_SHARED_OPTIONS && (
 								<AddOption
 									key={current.id}
 									question={current}
@@ -1225,7 +1214,7 @@ export function QuestionView(props: QuestionViewProps) {
 			<span aria-live="polite" className="sr-only">{announcement}</span>
 			{addError && (
 				<Callout
-					title={written ? "Couldn’t add approach" : "Couldn’t add option"}
+					title="Couldn’t add option"
 					message={addError}
 				/>
 			)}
@@ -1332,8 +1321,6 @@ export function QuestionView(props: QuestionViewProps) {
 											? "Saving…"
 											: error
 											? "Try again"
-											: written
-											? "Record decision"
 											: "Save"}
 									</button>
 								)}
@@ -1350,8 +1337,6 @@ export function QuestionView(props: QuestionViewProps) {
 												? "Saving…"
 												: error
 												? "Try again"
-												: written
-												? "Record decision"
 												: "Save"}
 										</button>
 									)}

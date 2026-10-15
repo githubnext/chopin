@@ -13,7 +13,7 @@ let definition: Definition = {
 		description: "Help people capture their first unresolved question.",
 		response: "text",
 		multiple: false,
-		options: [{ id: "guided", label: "A guided first decision", description: "" }],
+		options: [],
 	}],
 };
 let draft: Draft = {
@@ -23,7 +23,7 @@ let draft: Draft = {
 	custom: "Start with a real question.",
 };
 
-test("written decisions keep approaches separate from the explicit human record action", () => {
+test("written decisions use one answer field and the existing Save action", () => {
 	let html = renderToStaticMarkup(createElement(QuestionView, {
 		definition,
 		drafts: { onboarding: draft },
@@ -31,12 +31,13 @@ test("written decisions keep approaches separate from the explicit human record 
 		onSubmit() {},
 		onAddOption: async () => ({ ok: true as const }),
 	}));
-	expect(html).toContain("Working answer");
-	expect(html).toContain("Shared draft until someone records it");
+	expect(html).toContain(">Answer<");
+	expect(html).not.toContain("Shared draft");
 	expect(html).toContain("Start with a real question.");
-	expect(html).toContain("A guided first decision");
-	expect(html).toContain("Add an approach");
-	expect(html).toContain(">Record decision<");
+	expect(html).not.toContain("question-key");
+	expect(html).not.toContain("Add an approach");
+	expect(html).not.toContain("Add an option");
+	expect(html).toContain(">Save<");
 	expect(html).toContain(">Open<");
 	expect(html).not.toContain('type="radio"');
 	expect(html).not.toContain('type="checkbox"');
@@ -62,7 +63,7 @@ test("recorded prose preserves newlines and context instead of showing a selecte
 	expect(html).not.toContain("<textarea");
 });
 
-test("adding a candidate or receiving a choice suggestion cannot become a text answer", () => {
+test("choice suggestions cannot become a written answer", () => {
 	let question = definition.questions[0]!;
 	expect(chooseAdded(question, draft, "guided", undefined)).toBeUndefined();
 	expect(projectSuggestion(question, undefined, { optionId: "guided", revision: 1 })).toEqual({

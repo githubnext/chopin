@@ -37,10 +37,6 @@ try {
  if (!id) throw new Error("decision was not restored");
  let before = plan.records.get(id);
  if (phase === "write") {
-  let added = await Questions.addServerOption(plan, server, plan.id, id, {
-   label: "Guided task", origin: "planner", rationale: "People can learn through a small action."
-  });
-  if (!added.ok) throw new Error("candidate addition failed");
   let entry = Store.get(plan.questions, id);
   let model = entry.model.fork();
   model.api.str([entry.definition.questions[0].id, "custom"]).ins(0, "Start with a task.");
@@ -116,7 +112,7 @@ if (database) {
 				expect(first.record).toMatchObject({
 					origin: "human",
 					status: "open",
-					definition: { questions: [{ response: "text", options: [{ label: "Guided task" }] }] },
+					definition: { questions: [{ response: "text", options: [] }] },
 				});
 				expect(first.drafts[questionId]).toMatchObject({
 					mode: "custom",

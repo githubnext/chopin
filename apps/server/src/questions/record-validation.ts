@@ -29,6 +29,7 @@ export function options(definition: unknown, pending: boolean): Known {
 			|| !Array.isArray(question.options)
 			|| question.options.length === 0 && !verbatim && question.response !== "text"
 				&& !(pending && source.questions.length === 1 && question.multiple === false)
+			|| question.response === "text" && question.options.length > 0
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) invalid();
 		questions.set(id, {

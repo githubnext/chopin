@@ -439,7 +439,7 @@ export const documentTools = {
 			+ "Creates an open card with a shared working answer and returns immediately. "
 			+ "Use for choices such as how onboarding should work, not factual questions the "
 			+ "repository or research can settle. A recommendation is not agreement: only a "
-			+ "person pressing Record decision resolves this card. Reuse the same key when "
+			+ "person pressing Save resolves this card. Reuse the same key when "
 			+ "retrying the same capture. Do not use ask for the same decision as well.",
 		inputSchema: jsonSchema({
 			type: "object",
@@ -472,8 +472,8 @@ export const documentTools = {
 	ask: tool({
 		contextSchema: ownerContext,
 		description: "Ask the people in the room one or more decisions and wait for "
-			+ "their shared answer. Use response: text for a written answer with optional candidate "
-			+ "approaches; omit response for existing multiple-choice questions. Use open_decision "
+			+ "their shared answer. Use response: text with options: [] for a written answer; "
+			+ "omit response for existing multiple-choice questions. Use open_decision "
 			+ "to capture a decision without waiting. Batch related "
 			+ "questions into one call. The questionnaire is recorded in the plan and the "
 			+ "answer is attributed to whoever gave it. If current_plan is present after "

@@ -29,9 +29,8 @@ test("an empty written decision round trips through MDX, Lexical and JSON", () =
 	expect(exportPlan(restored, { registry: REGISTRY })).toBe(out);
 });
 
-test("candidate approaches and current and previous prose survive a round trip", () => {
-	let children = `<Option id="${CANARY}" label="Guided task" />\n`
-		+ '<Answer value="Start with a task; offer help when needed." />\n'
+test("current and previous prose survive a round trip", () => {
+	let children = '<Answer value="Start with a task; offer help when needed." />\n'
 		+ '<Previous value="Begin with a tour." by="ana" at="2026-10-14T20:00:00.000Z" />';
 	let out = through(source(children, "", "decided"));
 	expect(through(out)).toBe(out);
@@ -51,7 +50,8 @@ test("written projections reject choices, empty answers and invalid response mod
 			'<Answer value=" " />',
 			`<Answer value="${"x".repeat(4001)}" />`,
 		]
-	) expect(() => through(source(option + child))).toThrow();
+	) expect(() => through(source(child))).toThrow();
+	expect(() => through(source(option))).toThrow();
 	expect(() => through(source().replace('multiple="false"', 'multiple="true"'))).toThrow();
 	expect(() => through(source().replace('response="text"', 'response="choices"'))).toThrow();
 });

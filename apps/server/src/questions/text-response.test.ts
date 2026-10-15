@@ -7,10 +7,10 @@ import * as Store from "./store";
 import { normalizeRecord } from "./records";
 import { member, opened, restart, seed } from "./text-response.test-fixtures";
 
-test("text records restore candidate approaches and reject selected candidates or missing prose", () => {
+test("text records restore prose and reject options, selections or missing answers", () => {
 	let value = seed();
 	let option = { id: "approach", label: "Guided task", description: "Try a small action" };
-	let definition = { questions: [{ ...value.definition.questions[0], options: [option] }] };
+	let definition = value.definition;
 	let record = {
 		...value.record,
 		definition,
@@ -22,6 +22,7 @@ test("text records restore candidate approaches and reject selected candidates o
 	expect(normalizeRecord(record)).toMatchObject({ origin: "human", history: record.history });
 	for (
 		let invalid of [
+			{ ...record, definition: { questions: [{ ...definition.questions[0], options: [option] }] } },
 			{ ...record, choices: [option.id] },
 			{ ...record, answers: {} },
 			{ ...record, answers: { [value.questionId]: " " } },
@@ -80,26 +81,27 @@ test("restore rejects a response mismatch between authoritative record and share
 	})).rejects.toThrow(/records disagree with their drafts/);
 });
 
-test("Planner revisions and candidate appends preserve the written response and draft", async () => {
+test("Planner option additions are refused without changing a written card", async () => {
 	let context = await opened();
 	let result = await Questions.addServerOption(context.plan, context.server, "test", context.id, {
 		label: "Guided task",
 		origin: "planner",
 		rationale: "People learn with a small action.",
 	});
-	expect(result.ok).toBe(true);
-	await Questions.revisePlannerCard(context.plan, context.server, "test", context.id, {
+	expect(result).toEqual({ ok: false, reason: "invalid" });
+	await expect(Questions.revisePlannerCard(context.plan, context.server, "test", context.id, {
 		title: "How should people learn the first action?",
 		addOptions: [{
 			label: "Contextual help",
 			rationale: "Explain an action at the moment of use.",
 		}],
-	});
+	})).rejects.toThrow(/option addition was refused/);
 	let plan = await restart(context);
 	let entry = Store.get(plan.questions, context.id)!;
 	expect(entry.definition.questions[0]).toMatchObject({
 		response: "text",
-		options: [{ label: "Guided task" }, { label: "Contextual help" }],
+		question: "How should onboarding work?",
+		options: [],
 	});
 	expect(Question.read(entry.model, entry.definition)[context.questionId]).toMatchObject({
 		mode: "custom",

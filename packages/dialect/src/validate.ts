@@ -216,6 +216,9 @@ class Validator {
 			elements.filter(item => item.name === "Option")
 				.map(item => stringAttribute(item, "id")),
 		);
+		if (written && options.size > 0) {
+			this.add("text-question-options", "A written response cannot have options", path, node);
+		}
 		for (let answer of elements.filter(item => item.name === "Answer")) {
 			let value = stringAttribute(answer, "value");
 			if (written && (!value?.trim() || value.length > limits.MAX_CUSTOM_ANSWER)) {

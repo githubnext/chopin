@@ -24,6 +24,9 @@ export function addOption(
 	label: string,
 ): Added {
 	let question = definition.questions[0]!;
+	if (question.response === "text") {
+		return { ok: false, reason: "invalid", message: "Written answers do not have options" };
+	}
 	let text = label.trim();
 	if (!text) return { ok: false, reason: "invalid", message: "An option needs a label" };
 	if (text.length > limits.MAX_NEW_LABEL) {

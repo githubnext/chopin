@@ -53,42 +53,39 @@ test("written decisions reject invalid modes and preserve the existing bounds", 
 	expect(() => Question.read(model, definition)).toThrow(/exceeds/);
 });
 
-test("candidate approaches grow without changing the prose draft or becoming selectable", () => {
+test("written answers reject options at creation and through either addition path", () => {
+	let option = { label: "Guided task", description: "Try it immediately" };
+	expect(() => Question.normalize(input({ options: [option] }))).toThrow(/cannot have options/);
 	let definition = Question.decision(Question.normalize(input()));
+	expect(() =>
+		Question.identified({
+			questions: [{
+				...definition.questions[0],
+				options: [{ ...option, id: "o1" }],
+			}],
+		})
+	).toThrow(/invalid options/);
 	let model = Question.create(definition);
 	model.api.str(["q0", "custom"]).ins(0, "Use a small task.");
 	model.api.flush();
-	let appended = Question.appendOption(definition, {
+	expect(Question.appendOption(definition, {
 		question: "q0",
-		key: "candidate-once",
-		label: "Guided task",
-		description: "Try it immediately",
-	}, "o1");
-	if (!appended.ok) throw new Error("candidate append failed");
-	expect(Question.read(model, appended.definition).q0).toMatchObject({
+		key: "option-once",
+		...option,
+	}, "o1")).toMatchObject({ ok: false, reason: "invalid" });
+	expect(Question.addOption(definition, model, "o1", option.label))
+		.toMatchObject({ ok: false, reason: "invalid" });
+	expect(Question.read(model, definition).q0).toMatchObject({
 		mode: "custom",
 		custom: "Use a small task.",
-		options: { o1: false },
+		options: {},
 	});
-	let grown = Question.addOption(appended.definition, model, "o2", "Optional tour");
-	if (!grown.ok) throw new Error("candidate growth failed");
-	expect(Question.derive(grown.definition, Question.read(grown.model, grown.definition)))
-		.toMatchObject({ ok: true, answers: [{ custom: "Use a small task." }] });
-	for (
-		let update of [
-			(fork: Question.Model) => fork.api.val(["q0", "mode"]).set("choices"),
-			(fork: Question.Model) => fork.api.val(["q0", "choice"]).set("o2"),
-			(fork: Question.Model) => fork.api.val(["q0", "options", "o2"]).set(true),
-		]
-	) {
-		let fork = grown.model.fork() as Question.Model;
-		update(fork);
-		expect(Question.apply(grown.model, grown.definition, [...fork.api.flush().toBinary()]).ok)
-			.toBe(false);
-	}
+	let fork = model.fork() as Question.Model;
+	fork.api.val(["q0", "mode"]).set("choices");
+	expect(Question.apply(model, definition, [...fork.api.flush().toBinary()]).ok).toBe(false);
 	expect(
-		Question.derive(grown.definition, {
-			q0: { mode: "choices", choice: "o2", options: {}, custom: "Use a small task." },
+		Question.derive(definition, {
+			q0: { mode: "choices", choice: null, options: {}, custom: "Use a small task." },
 		}).ok,
 	).toBe(false);
 });

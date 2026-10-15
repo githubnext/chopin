@@ -31,7 +31,6 @@ test("the bar saves only complete cards that are not already saving", () => {
 		failed: [],
 		failedAnswers: 0,
 		incomplete: ["b"],
-		confirmation: false,
 	});
 });
 
@@ -57,26 +56,16 @@ function barMarkup(cards: PendingAnswers[]) {
 	}));
 }
 
-test("the phone names human confirmation for written decisions and mixed batches", () => {
-	expect(barMarkup([pending({ confirmation: "decision" })])).toContain(">Record decision<");
-	expect(barMarkup([pending({ confirmation: "decision" }), pending()])).toContain(
-		">Record decisions<",
-	);
+test("the phone uses Save for individual answers and batches", () => {
+	expect(barMarkup([pending()])).toContain(">Save<");
 	expect(barMarkup([pending(), pending()])).toContain(">Save<");
-	expect(barMarkup([
-		pending({ confirmation: "decision", complete: false }),
-		pending(),
-	])).toContain(">Save<");
+	expect(barMarkup([pending({ complete: false }), pending()])).toContain(">Save<");
 });
 
-test("written-answer retry and progress keep the confirmation action explicit", () => {
-	expect(barMarkup([pending({ confirmation: "decision", error: "Review the shared answer." })]))
-		.toContain(">Record decision<");
-	expect(barMarkup([pending({ confirmation: "decision", submitting: true })]))
-		.toContain(">Recording…<");
-	expect(barMarkup([pending({ error: "Review the choice." })])).toContain(">Try again<");
+test("the save bar shows retry, progress and incomplete states", () => {
+	expect(barMarkup([pending({ error: "Review the shared answer." })])).toContain(">Try again<");
 	expect(barMarkup([pending({ submitting: true })])).toContain(">Saving…<");
-	expect(barMarkup([pending({ confirmation: "decision", complete: false })])).toContain(">Show<");
+	expect(barMarkup([pending({ complete: false })])).toContain(">Show<");
 });
 
 test("the bar's words read naturally", () => {
