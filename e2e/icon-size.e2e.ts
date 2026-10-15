@@ -12,8 +12,9 @@ import { CHOSEN, SOURCE, STATE } from "./source/icon-size.fixture";
 import type { Locator, Page } from "@playwright/test";
 
 /**
- * Icons whose rendered box differs from their intended size: the size a button
- * sets for its icons through `--btn-icon-size`, or else the declared width.
+ * Icons whose rendered box differs from their intended size. A container such as
+ * a button may size its icons in CSS, so the intended size is measured from an
+ * out-of-flow copy of the icon that no flex row can squeeze.
  */
 function squeezed(scope: Locator) {
 	return scope.evaluateAll(roots =>
@@ -21,21 +22,19 @@ function squeezed(scope: Locator) {
 			[...root.querySelectorAll("svg[width]")].flatMap(icon => {
 				let box = icon.getBoundingClientRect();
 				if (box.width === 0 && box.height === 0) return [];
-				let size = Number(icon.getAttribute("width"));
-				let button = icon.closest(".btn");
-				if (button) {
-					let probe = document.createElement("span");
-					probe.style.cssText =
-						"position:absolute;width:var(--btn-icon-size, var(--icon-size-default))";
-					button.append(probe);
-					size = probe.getBoundingClientRect().width;
-					probe.remove();
-				}
-				return Math.abs(box.width - size) > 0.5 || Math.abs(box.height - size) > 0.5
+				let probe = icon.cloneNode(false) as SVGSVGElement;
+				probe.style.position = "absolute";
+				probe.style.visibility = "hidden";
+				icon.after(probe);
+				let intended = probe.getBoundingClientRect();
+				probe.remove();
+				return Math.abs(box.width - intended.width) > 0.5
+						|| Math.abs(box.height - intended.height) > 0.5
+						|| Math.abs(intended.width - intended.height) > 0.5
 					? [
-						`${box.width.toFixed(1)}×${box.height.toFixed(1)}, declared ${size}: ${
-							root.textContent?.slice(0, 60)
-						}`,
+						`${box.width.toFixed(1)}×${box.height.toFixed(1)}, intended ${
+							intended.width.toFixed(1)
+						}×${intended.height.toFixed(1)}: ${root.textContent?.slice(0, 60)}`,
 					]
 					: [];
 			})

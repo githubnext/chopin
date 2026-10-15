@@ -1944,8 +1944,12 @@ button.question-add:disabled {
 	}
 }
 
-/* Keep resolved actions close to the attribution row. */
+/* Keep resolved actions close to the attribution row. Nova's button gap keeps the link and
+   both actions on one line at phone width; a narrower card wraps them rather than
+   squeezing the link off the attribution's edge. */
 .question-actions[data-resolved-actions] {
+	flex-wrap: wrap;
+	gap: var(--spacing);
 	margin-block-start: var(--spacing);
 	padding-block-end: 0;
 }

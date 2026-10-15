@@ -39,7 +39,7 @@ export function RelationNote(
 		return (
 			<button
 				aria-label={count > 1 ? `Show in document, ${count} places` : "Show in document"}
-				className={`btn btn-sm btn-ghost -mx-2 ${ROW} text-text-secondary`}
+				className={`btn btn-sm btn-ghost -mx-2.5 ${ROW} text-text-secondary`}
 				data-relation="linked"
 				onBlur={event => !event.currentTarget.matches(":hover") && onLeave?.(question)}
 				onClick={() => onSelect(question)}
