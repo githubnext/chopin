@@ -1,21 +1,22 @@
 import { describe, expect, it } from "bun:test";
 
-import { plannerLinkUrl, WIRE } from "./client";
+import { agentUrl, WIRE } from "./client";
 import {
+	AGENT_PATH,
+	AGENT_SUBPROTOCOL,
+	AGENT_VERSION,
 	encodeMessage,
 	MAX_LINK_MESSAGE_BYTES,
 	MAX_LINK_NOTE_LENGTH,
 	parseClientMessage,
 	parseServerMessage,
-	PLANNER_LINK_PATH,
-	PLANNER_LINK_VERSION,
 	toolErrorSchema,
 } from "./protocol";
 
-describe("Planner link messages", () => {
+describe("Agent connection messages", () => {
 	it("accepts each client message the protocol declares", () => {
 		let messages = [
-			{ type: "attach", version: PLANNER_LINK_VERSION, document: "https://chopin.test/o/r/d" },
+			{ type: "attach", version: AGENT_VERSION, document: "https://chopin.test/o/r/d" },
 			{ type: "started", session: "s" },
 			{ type: "tools", session: "s", turn: "t", names: ["read"] },
 			{ type: "part", session: "s", turn: "t", part: { type: "text-delta", id: "a", delta: "hi" } },
@@ -130,7 +131,7 @@ describe("Planner link messages", () => {
 		expect(parseServerMessage(encodeMessage(message))).toEqual({ ok: true, message });
 		expect(parseServerMessage(encodeMessage({
 			type: "attached",
-			version: PLANNER_LINK_VERSION,
+			version: AGENT_VERSION,
 			document: { id: "d", title: "T", repository: "o/r" },
 		}))).toMatchObject({ ok: true });
 	});
@@ -199,9 +200,12 @@ describe("Planner link messages", () => {
 	});
 
 	it("gives the wire-only client the same constants the server enforces", async () => {
+		expect([AGENT_PATH, AGENT_SUBPROTOCOL]).toEqual(["/api/v1/agent", "chopin.agent.v1"]);
+		expect(AGENT_SUBPROTOCOL).toBe(`chopin.agent.v${AGENT_VERSION}`);
 		expect(WIRE).toEqual({
-			path: PLANNER_LINK_PATH,
-			version: PLANNER_LINK_VERSION,
+			path: AGENT_PATH,
+			subprotocol: AGENT_SUBPROTOCOL,
+			version: AGENT_VERSION,
 			maxMessageBytes: MAX_LINK_MESSAGE_BYTES,
 			maxNoteLength: MAX_LINK_NOTE_LENGTH,
 			malformedClose: 4400,
@@ -212,10 +216,10 @@ describe("Planner link messages", () => {
 	});
 
 	it("derives the link URL from a Chopin origin", () => {
-		expect(plannerLinkUrl("https://chopin.test/some/doc?x=1").href)
-			.toBe("wss://chopin.test/planner-link");
-		expect(plannerLinkUrl("http://127.0.0.1:8787").href).toBe("ws://127.0.0.1:8787/planner-link");
-		expect(plannerLinkUrl("ws://127.0.0.1:1/custom").href).toBe("ws://127.0.0.1:1/custom");
-		expect(() => plannerLinkUrl("ftp://chopin.test")).toThrow("http(s) or ws(s)");
+		expect(agentUrl("https://chopin.test/some/doc?x=1").href)
+			.toBe("wss://chopin.test/api/v1/agent");
+		expect(agentUrl("http://127.0.0.1:8787").href).toBe("ws://127.0.0.1:8787/api/v1/agent");
+		expect(agentUrl("ws://127.0.0.1:1/custom").href).toBe("ws://127.0.0.1:1/custom");
+		expect(() => agentUrl("ftp://chopin.test")).toThrow("http(s) or ws(s)");
 	});
 });

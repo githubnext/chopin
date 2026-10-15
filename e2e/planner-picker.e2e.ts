@@ -9,7 +9,7 @@ import { mkdir } from "node:fs/promises";
 
 import { SQL } from "bun";
 
-import { connectPlannerLink } from "../packages/planner-link/src/client";
+import { connectAgent } from "../packages/agent-link/src/client";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
@@ -178,7 +178,7 @@ async function machine(page: Page, label: string, planner: boolean) {
 			});
 			expect(issued.status, await issued.clone().text()).toBe(200);
 			let { token: credential } = await issued.json() as { token: string };
-			return connectPlannerLink({
+			return connectAgent({
 				url: ORIGIN,
 				token: credential,
 				document,
@@ -276,7 +276,7 @@ test("Chat's machine button says who runs the Planner, and starts it on the mach
 
 	// Another account attaches its own Planner: Chat's button says who, and opens nothing.
 	await authenticate(await (await browser.newContext()).newPage(), "rival", ORIGIN);
-	let rival = await connectPlannerLink({
+	let rival = await connectAgent({
 		url: ORIGIN,
 		token: "ghu_e2e_rival_1",
 		document: room,

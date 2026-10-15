@@ -1,25 +1,22 @@
 import { createConnection, createServer } from "node:net";
 
-import { connectPlannerLink, linkSocket, plannerLinkUrl } from "@chopin/planner-link/client";
+import { AGENT_PATH, AGENT_SUBPROTOCOL } from "@chopin/agent-link";
+import { agentUrl, connectAgent, linkSocket } from "@chopin/agent-link/client";
 
 import { AdmissionDenied } from "../auth/admission";
 import { GitHubError } from "../github/client";
 import { Sessions } from "../auth/session";
 import { PlannerAttachments } from "../harness/remote/attachments";
-import { admitPlannerLink, openPlannerLinkSocket } from "../harness/remote/endpoint";
+import { admitAgent, AGENT_UPGRADE_HEADERS, openAgentSocket } from "../harness/remote/endpoint";
 import { MemoryStorage } from "../storage/memory/adapter";
 
-import type {
-	PlannerLinkClient,
-	PlannerLinkHandlers,
-	TurnContext,
-} from "@chopin/planner-link/client";
+import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { AddressInfo, Socket } from "node:net";
 import type { ServerWebSocket } from "bun";
 import type { Repository } from "../github/client";
 import type { AttachmentAuth } from "../harness/remote/attachments";
-import type { PlannerLinkAuth, PlannerLinkSocketData } from "../harness/remote/endpoint";
-import type { PlannerLink } from "../harness/remote/link";
+import type { AgentAuth, AgentSocketData } from "../harness/remote/endpoint";
+import type { AgentLink } from "../harness/remote/link";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 
 export const MEMBER_TOKEN = "member-token";
@@ -145,7 +142,7 @@ export async function linkAuth(channelId?: string) {
 		},
 	};
 	return {
-		auth: auth as unknown as PlannerLinkAuth & AttachmentAuth & { github: typeof auth.github },
+		auth: auth as unknown as AgentAuth & AttachmentAuth & { github: typeof auth.github },
 		storage,
 		sessions,
 		logins,
@@ -165,34 +162,37 @@ export async function linkAuth(channelId?: string) {
 }
 
 /**
- * A Bun server that serves only the Planner link, as the Chopin server does under HARNESS=remote.
+ * A Bun server that serves only the agent connection, as the Chopin server does under HARNESS=remote.
  * `liveness` shortens how often the server pings the link and how long it waits to hear back.
  */
 export function linkServer(
-	auth: PlannerLinkAuth & AttachmentAuth,
+	auth: AgentAuth & AttachmentAuth,
 	timeoutMs = 2_000,
 	revalidateEveryMs?: number,
 	graceMs = 2_000,
 	liveness?: { pingEveryMs: number; pongTimeoutMs: number; maxSilenceMs?: number },
 	planners?: MachinePlanners,
 ) {
-	let links: PlannerLink[] = [];
-	let sockets = new Set<ServerWebSocket<PlannerLinkSocketData>>();
+	let links: AgentLink[] = [];
+	let sockets = new Set<ServerWebSocket<AgentSocketData>>();
 	let attachments = new PlannerAttachments(auth, graceMs);
-	let server = Bun.serve<PlannerLinkSocketData>({
+	let server = Bun.serve<AgentSocketData>({
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request, self) {
-			let outcome = await admitPlannerLink(request, auth, true, planners);
+			if (new URL(request.url).pathname !== AGENT_PATH) {
+				return new Response("not found", { status: 404 });
+			}
+			let outcome = await admitAgent(request, auth, true, planners);
 			if (outcome instanceof Response) return outcome;
-			return self.upgrade(request, { data: outcome })
+			return self.upgrade(request, { data: outcome, headers: AGENT_UPGRADE_HEADERS })
 				? undefined
 				: new Response("upgrade failed", { status: 400 });
 		},
 		websocket: {
 			open(ws) {
 				sockets.add(ws);
-				openPlannerLinkSocket(ws, auth, {
+				openAgentSocket(ws, auth, {
 					attachments,
 					timeoutMs,
 					revalidateEveryMs,
@@ -236,9 +236,31 @@ export function linkServer(
 	};
 }
 
+/**
+ * A bare upgrade request to the agent connection, offering its subprotocol, so a test reads the
+ * HTTP answer itself. A header given as "" is left out.
+ */
+export function upgradeRequest(
+	url: string,
+	headers: Record<string, string> = {},
+	path = AGENT_PATH,
+): Promise<Response> {
+	let sent = {
+		connection: "Upgrade",
+		upgrade: "websocket",
+		"sec-websocket-version": "13",
+		"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+		"sec-websocket-protocol": AGENT_SUBPROTOCOL,
+		...headers,
+	};
+	return fetch(`${url}${path}`, {
+		headers: Object.fromEntries(Object.entries(sent).filter(([, value]) => value !== "")),
+	});
+}
+
 /** Raw frames over a socket that authenticated as the member, for protocol violations. */
 export async function rawLink(url: string, token = MEMBER_TOKEN) {
-	let socket = linkSocket(plannerLinkUrl(url), token);
+	let socket = linkSocket(agentUrl(url), token);
 	let messages: any[] = [];
 	let arrivals = new Set<() => void>();
 	let closed = Promise.withResolvers<{ code: number; reason: string }>();
@@ -289,7 +311,7 @@ export async function rawLink(url: string, token = MEMBER_TOKEN) {
  * `closed` is the server's close frame, or 1006 when the socket ends without one.
  */
 export async function silentLink(url: string, token = MEMBER_TOKEN) {
-	let target = plannerLinkUrl(url);
+	let target = agentUrl(url);
 	let messages: any[] = [];
 	let pings = 0;
 	let pending = Buffer.alloc(0);
@@ -346,6 +368,7 @@ export async function silentLink(url: string, token = MEMBER_TOKEN) {
 		"Connection: Upgrade",
 		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
 		"Sec-WebSocket-Version: 13",
+		`Sec-WebSocket-Protocol: ${AGENT_SUBPROTOCOL}`,
 		`Authorization: Bearer ${token}`,
 		"",
 		"",
@@ -483,10 +506,10 @@ export function finishTurn(context: TurnContext): void {
  * The scripted test client: a fake model that answers the prompts the harness
  * contract and the link tests send.
  */
-export function scriptedPlanner(overrides: Partial<PlannerLinkHandlers> = {}) {
+export function scriptedPlanner(overrides: Partial<AgentHandlers> = {}) {
 	let turns: TurnContext["message"][] = [];
 	let destroyed: string[] = [];
-	let handlers: PlannerLinkHandlers = {
+	let handlers: AgentHandlers = {
 		async turn(context) {
 			turns.push(context.message);
 			context.emit({ type: "stream-start", modelId: "scripted" });
@@ -520,10 +543,10 @@ export function scriptedPlanner(overrides: Partial<PlannerLinkHandlers> = {}) {
 export function attach(
 	url: string,
 	document: string,
-	handlers: PlannerLinkHandlers,
+	handlers: AgentHandlers,
 	token = MEMBER_TOKEN,
-): Promise<PlannerLinkClient> {
-	return connectPlannerLink({ url, token, document, handlers });
+): Promise<AgentClient> {
+	return connectAgent({ url, token, document, handlers });
 }
 
 /**
@@ -537,7 +560,7 @@ export async function nodeClient(url: string, document: string) {
 	if (probe.stdout.toString().trim() !== "true") return undefined;
 	let child = Bun.spawn([
 		node,
-		new URL("./planner-link-node-client.mjs", import.meta.url).pathname,
+		new URL("./agent-link-node-client.mjs", import.meta.url).pathname,
 		url,
 		MEMBER_TOKEN,
 		document,

@@ -1,9 +1,9 @@
-import { connectPlannerLink } from "../../../../packages/planner-link/src/client.ts";
+import { connectAgent } from "../../../../packages/agent-link/src/client.ts";
 
 let [url, token, document] = process.argv.slice(2);
 let usage = { inputTokens: {}, outputTokens: {} };
 
-let client = await connectPlannerLink({
+let client = await connectAgent({
 	url,
 	token,
 	document,

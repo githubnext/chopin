@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { LINK_CLOSE, PLANNER_LINK_VERSION } from "@chopin/planner-link";
+import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
@@ -9,7 +9,13 @@ import {
 import { Machines } from "../../auth/machines";
 import { registerExperimentRoutes } from "../../experiments/routes";
 import { Router } from "../../http/router";
-import { linkAuth, linkServer, machineToken, rawLink } from "../../testing/planner-link";
+import {
+	linkAuth,
+	linkServer,
+	machineToken,
+	rawLink,
+	upgradeRequest,
+} from "../../testing/agent-link";
 import { MachinePlanners } from "./machine-planners";
 
 let cleanups: Array<() => unknown> = [];
@@ -19,7 +25,7 @@ afterEach(async () => {
 
 /**
  * A HARNESS=remote server whose accounts pair machines that connect checkouts of octo-org/score,
- * choose them for the linked document, and run its Planner on them over the Planner link.
+ * choose them for the linked document, and run its Planner on them over the agent connection.
  */
 async function dispatchServer() {
 	let linked = await linkAuth();
@@ -156,7 +162,7 @@ async function dispatchServer() {
 		/** The backend the connector starts: a credential for the document, then a link that attaches. */
 		async function backend() {
 			let raw = await rawLink(server.url, await credential());
-			raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			return raw;
 		}
 		let disconnect = () =>
@@ -186,17 +192,9 @@ async function dispatchServer() {
 	return { ...linked, machines, planners, server, send, machine, choose, choice, url };
 }
 
-/** The status a Planner link's upgrade gets with `credential`: 101 when it opens. */
+/** The status an agent connection's upgrade gets with `credential`: 101 when it opens. */
 async function upgrade(url: string, credential: string) {
-	let response = await fetch(`${url}/planner-link`, {
-		headers: {
-			connection: "Upgrade",
-			upgrade: "websocket",
-			"sec-websocket-version": "13",
-			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-			authorization: `Bearer ${credential}`,
-		},
-	});
+	let response = await upgradeRequest(url, { authorization: `Bearer ${credential}` });
 	return response.status;
 }
 

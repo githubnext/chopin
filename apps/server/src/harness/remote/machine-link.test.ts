@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { LINK_CLOSE, PLANNER_LINK_VERSION } from "@chopin/planner-link";
+import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import { CONNECTOR_PROTOCOL_HEADER, CONNECTOR_VERSION_HEADER } from "@chopin/protocol/connector";
 
 import { ActiveOwnerBindings } from "../../agent/active-owner";
@@ -15,8 +15,9 @@ import {
 	MEMBER_TOKEN,
 	rawLink,
 	scriptedPlanner,
-} from "../../testing/planner-link";
-import { plannerLink } from "./endpoint";
+	upgradeRequest,
+} from "../../testing/agent-link";
+import { agentLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
 
 let cleanups: Array<() => unknown> = [];
@@ -26,7 +27,7 @@ afterEach(async () => {
 
 /**
  * A server running HARNESS=remote whose accounts can pair machines: the connector routes, the
- * Planner link, and the machines' own GitHub tokens, which GitHub knows as their account's. With
+ * agent connection, and the machines' own GitHub tokens, which GitHub knows as their account's. With
  * `local`, as under AUTH_MODE=local, there is no machine key, so machines keep no GitHub tokens.
  */
 async function machineServer(options: { revalidateEveryMs?: number; local?: boolean } = {}) {
@@ -198,7 +199,7 @@ describe("a paired machine's Planner", () => {
 			now: new Date(),
 		});
 		let raw = await rawLink(server.url, GUEST_TOKEN);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: other.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: other.id });
 		expect(await raw.next("refused")).toMatchObject({ code: "sign-in-required" });
 	});
 
@@ -209,7 +210,7 @@ describe("a paired machine's Planner", () => {
 		let member = await pair("member", "U_member");
 		let { body } = await credential(member.token, channel.id);
 		let raw = await rawLink(server.url, body.token);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 		await raw.next("attached");
 		expect(await signOut("member")).toBe(logins.get("member"));
 		await Bun.sleep(200);
@@ -223,7 +224,7 @@ describe("a paired machine's Planner", () => {
 		let member = await pair("member", "U_member");
 		let { body } = await credential(member.token, channel.id);
 		let raw = await rawLink(server.url, body.token);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 		await raw.next("attached");
 		await machines.revoke(member.machine.id, "U_member");
 		expect(await raw.next("refused")).toEqual({
@@ -237,15 +238,7 @@ describe("a paired machine's Planner", () => {
 		expect(server.attachments.attached(channel.id)).toBe(false);
 		expect((await owner(channel.id))?.ownerSessionId).toBeUndefined();
 		// The credential it still holds no longer opens a link.
-		let upgrade = await fetch(`${server.url}/planner-link`, {
-			headers: {
-				connection: "Upgrade",
-				upgrade: "websocket",
-				"sec-websocket-version": "13",
-				"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-				authorization: `Bearer ${body.token}`,
-			},
-		});
+		let upgrade = await upgradeRequest(server.url, { authorization: `Bearer ${body.token}` });
 		expect(upgrade.status).toBe(401);
 	});
 
@@ -263,7 +256,7 @@ describe("a paired machine's Planner", () => {
 		let member = await pair("member", "U_member");
 		let { body } = await credential(member.token, channel.id);
 		let raw = await rawLink(server.url, body.token);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: other.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: other.id });
 		expect(await raw.next("refused")).toMatchObject({ code: "repository-forbidden" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(other.id)).toBe(false);
@@ -278,15 +271,7 @@ describe("a paired machine's Planner", () => {
 		let member = await pair("member", "U_member");
 		let { body } = await credential(member.token, channel.id);
 		let upgrade = (token: string) =>
-			fetch(`${server.url}/planner-link`, {
-				headers: {
-					connection: "Upgrade",
-					upgrade: "websocket",
-					"sec-websocket-version": "13",
-					"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-					authorization: `Bearer ${token}`,
-				},
-			});
+			upgradeRequest(server.url, { authorization: `Bearer ${token}` });
 		expect((await upgrade("chopin_p_" + "x".repeat(43))).status).toBe(401);
 		// A backend whose socket dropped reattaches with the same credential.
 		expect(await planners.redeem(body.token)).toMatchObject({ channelId: channel.id });
@@ -327,7 +312,7 @@ describe("a paired machine's Planner", () => {
 				let grant = await planners.redeem(body.token);
 				let frames: Array<Record<string, any>> = [];
 				let closes: number[] = [];
-				let link = plannerLink(
+				let link = agentLink(
 					{ oauthToken: "", user: { id: "U_member", login: "member", avatarUrl: "" } },
 					auth,
 					{
@@ -341,7 +326,7 @@ describe("a paired machine's Planner", () => {
 			}));
 			for (let { id, link } of links) {
 				link.receive(
-					JSON.stringify({ type: "attach", version: PLANNER_LINK_VERSION, document: id }),
+					JSON.stringify({ type: "attach", version: AGENT_VERSION, document: id }),
 				);
 			}
 			for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(10)) {

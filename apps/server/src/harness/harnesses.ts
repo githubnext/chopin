@@ -25,7 +25,7 @@ function createAtomicHarness(
 	});
 }
 
-/** The model runs in a client attached over the Planner link, so the server holds no credential. */
+/** The model runs in a client attached over the agent connection, so the server holds no credential. */
 function createRemoteHarness(): HarnessV1 & { shutdown(): Promise<void> } {
 	return createRemoteAdapter();
 }

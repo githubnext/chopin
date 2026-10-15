@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { ulid } from "@chopin/dialect";
-import { MAX_LINK_NOTE_LENGTH } from "@chopin/planner-link";
+import { MAX_LINK_NOTE_LENGTH } from "@chopin/agent-link";
 
 import {
 	consumeBootstrapBackscroll,

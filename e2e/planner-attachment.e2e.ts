@@ -1,6 +1,6 @@
 /**
  * The document's Chat says who holds its remote Planner, live, as a client
- * attaches over the real Planner link, detaches into its grace period, and the
+ * attaches over the real agent connection, detaches into its grace period, and the
  * grace period ends. `HARNESS=remote` needs its own server, so this file starts
  * one against a database of its own, created beside local-auth's.
  */
@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 
 import { SQL } from "bun";
 
-import { connectPlannerLink } from "../packages/planner-link/src/client";
+import { connectAgent } from "../packages/agent-link/src/client";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { HARNESS, HOST, ROOT } from "./servers";
@@ -146,7 +146,7 @@ test("Chat says live who holds the document's remote Planner", async ({ page }) 
 	await expect(status).toHaveAttribute("data-planner-state", "none");
 	await shoot(page, "none");
 
-	let client = await connectPlannerLink({
+	let client = await connectAgent({
 		url: ORIGIN,
 		token: `ghu_e2e_${HANDLE}_1`,
 		document: room,
@@ -210,7 +210,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	await page.keyboard.press("Escape");
 	await expect(card).toHaveCount(0);
 
-	let client = await connectPlannerLink({
+	let client = await connectAgent({
 		url: ORIGIN,
 		token: `ghu_e2e_${HANDLE}_1`,
 		document: room,
@@ -294,7 +294,7 @@ test("signing out closes that login's sockets at once, and the Planner is never 
 	}
 	let heard = (await probe(page, "room")).frames.length;
 
-	let client = await connectPlannerLink({
+	let client = await connectAgent({
 		url: ORIGIN,
 		token: "ghu_e2e_review-b_1",
 		document: room,
@@ -305,6 +305,42 @@ test("signing out closes that login's sockets at once, and the Planner is never 
 	await client.detach();
 	await other.close();
 	await leaving.close();
+});
+
+/** A bare WebSocket upgrade request as the member, offering `subprotocol` when given. */
+function handshake(path: string, subprotocol?: string): Promise<Response> {
+	return fetch(`${ORIGIN}${path}`, {
+		headers: {
+			connection: "Upgrade",
+			upgrade: "websocket",
+			"sec-websocket-version": "13",
+			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+			authorization: `Bearer ghu_e2e_${HANDLE}_1`,
+			...(subprotocol ? { "sec-websocket-protocol": subprotocol } : {}),
+		},
+	});
+}
+
+test("the agent connection opens only at /api/v1/agent, offering chopin.agent.v1", async () => {
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	for (let offered of [undefined, "chopin.agent.v2, graphql-ws"]) {
+		let refused = await handshake("/api/v1/agent", offered);
+		expect(refused.status).toBe(426);
+		expect(refused.headers.get("sec-websocket-protocol")).toBeNull();
+		expect(await refused.json()).toEqual({
+			code: "subprotocol-required",
+			supported: ["chopin.agent.v1"],
+		});
+	}
+	let accepted = await handshake("/api/v1/agent", "chopin.agent.v2, chopin.agent.v1");
+	expect(accepted.status).toBe(101);
+	expect(accepted.headers.get("sec-websocket-protocol")).toBe("chopin.agent.v1");
+	// The old path is gone: no WebSocket opens there, and the web client is no answer.
+	let old = await handshake("/planner-link", "chopin.agent.v1");
+	expect(old.status).toBe(404);
+	expect(await old.text()).not.toContain("<html");
 });
 
 test("Chat says nothing about attachments where the Planner runs on the server", async ({ page }) => {

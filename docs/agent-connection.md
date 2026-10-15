@@ -1,56 +1,102 @@
-# Planner link
+# Agent connection
 
-The Planner link is the wire contract between a Chopin server running
-`HARNESS=remote` and the client that runs its Planner's model, usually a
-member's own Atomic session. This page is complete enough to implement a client
-from: it states the endpoint, authentication, version handshake, every message,
-its limits, and how the link ends. [Hosted agent](hosted-agent.md#remote-planner)
-describes what the server does with it, and
-[Self-hosting](self-hosting.md#the-remote-planner) how to deploy it.
+The agent connection is the WebSocket that lets an agent running outside a
+Chopin server act as a document's Planner. Chopin uses it when it runs
+`HARNESS=remote`: the server keeps the document and its tools, and the client
+runs the model.
 
-`@chopin/planner-link` (`packages/planner-link`) holds the server's schemas.
-Its client, `@chopin/planner-link/client`, uses nothing at runtime but this
-format, JSON, and the platform `WebSocket`; the remote harness contract suite
-runs it in Bun and as a separate Node.js process against a real socket.
+This page is enough to write a client. It covers the endpoint, the handshake,
+every message, the limits, and how a connection ends.
+[Hosted agent](hosted-agent.md#remote-planner) says what the server does with
+a connection, and [Self-hosting](self-hosting.md#the-remote-planner) how to
+deploy it.
+
+`@chopin/agent-link` (`packages/agent-link`) holds the server's schemas. Its
+client, `@chopin/agent-link/client`, uses nothing at runtime but this format,
+JSON, and the platform `WebSocket`. The remote harness contract suite runs it in
+Bun and as a separate Node.js process against a real socket.
 
 ## Endpoint and authentication
 
-Open a WebSocket to `wss://<chopin origin>/planner-link` (`ws:` only for a
+Open a WebSocket to `wss://<chopin origin>/api/v1/agent` (`ws:` only for a
 loopback development server). It shares the application's origin and port with
 `/ws` and `/mcp`, behind the same TLS-terminating proxy. The route exists only
-when the server runs with `AGENT` on and `HARNESS=remote`; otherwise every
-request to it, upgrade or not, gets HTTP 404 before the bearer is checked.
+when the server runs with `AGENT` on and `HARNESS=remote`. Otherwise every
+request to it, upgrade or not, gets HTTP 404 before anything else is checked.
 
-The upgrade request must carry `Authorization: Bearer <GitHub token>`, the same
-bearer [local agent MCP](local-agent-mcp.md) uses. Bun's and Node.js's built-in
-`WebSocket` accept it as a `headers` option (`new WebSocket(url, { headers })`;
-checked on Node.js 24); browsers cannot send it. A client should not send an
-`Origin` header; if it does, it must be the server's own origin.
+The upgrade request needs two headers:
+
+- `Sec-WebSocket-Protocol` must offer `chopin.agent.v1`, the
+  [subprotocol](https://www.rfc-editor.org/rfc/rfc6455#section-1.9) this page
+  describes. It may offer others too. The server always answers with
+  `chopin.agent.v1`.
+- `Authorization: Bearer <GitHub token>`, the same bearer
+  [local agent MCP](local-agent-mcp.md) uses.
+
+```http
+GET /api/v1/agent HTTP/1.1
+Host: chopin.example
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Protocol: chopin.agent.v1
+Authorization: Bearer <token>
+
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+Sec-WebSocket-Protocol: chopin.agent.v1
+```
+
+Bun's and Node.js's built-in `WebSocket` take both as options:
+`new WebSocket(url, { protocols: ["chopin.agent.v1"], headers })` (checked on
+Node.js 24). Browsers cannot send the bearer. A client should not send an
+`Origin` header. If it does, it must be the server's own origin.
 
 The bearer may instead be a paired machine's Planner credential (see
 [Planner backend commands](#planner-backend-commands)): `chopin_p_` followed by
 43 base64url characters. It attaches only the document it was issued for, and
 the account it attaches as is the machine's owner.
 
-The server checks the bearer before upgrading and answers a refusal over HTTP,
-so nothing is opened:
+The server checks the request before upgrading and refuses over HTTP, so
+nothing opens. It checks in this order:
 
 | Status | Meaning                                                                                                                        |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | 404    | The server does not run `HARNESS=remote` with `AGENT` on                                                                       |
+| 426    | The request does not offer `chopin.agent.v1`                                                                                   |
+| 403    | A foreign `Origin`                                                                                                             |
 | 401    | Missing or malformed bearer, GitHub rejected the token, or an unknown or expired Planner credential, or its machine is revoked |
-| 403    | The account fails instance admission, or a foreign `Origin`                                                                    |
+| 403    | The account fails instance admission                                                                                           |
 | 503    | GitHub is unavailable or rate limiting; retry later                                                                            |
 | 500    | Any other admission failure                                                                                                    |
 
+A 426 has a JSON body naming the subprotocols the server speaks:
+
+```json
+{ "code": "subprotocol-required", "supported": ["chopin.agent.v1"] }
+```
+
+### Versions
+
+The subprotocol is the version. A breaking change to the messages gets a new
+subprotocol, `chopin.agent.v2`, instead of changing `chopin.agent.v1`, and a
+server lists every subprotocol it speaks in `supported`. A client offers the
+ones it speaks.
+
+The `version` in [`attach`](#handshake) is the same number: `1` for
+`chopin.agent.v1`.
+
 ### Pings
 
-The server sends the link a WebSocket ping control frame (RFC 6455) every
+The server sends the connection a WebSocket ping control frame (RFC 6455) every
 **15 seconds** from the moment it opens. The client must answer each with a
 pong. Standard clients do this on their own, including Bun's and Node.js's
 built-in `WebSocket` and the `ws` package; pings are control frames, not
 messages, and carry no JSON. Any frame from the client, a pong or a message,
-shows the link is alive.
+shows the connection is alive.
 
 A client that is slow to read leaves the server's frames to it queued. While
 anything is queued the server sends no ping, since a ping can be dropped from a
@@ -60,15 +106,15 @@ front of the client can drain it while the client reads nothing. A client that
 has stopped reading entirely keeps a queue that never shrinks, and counts as
 silent.
 
-A link the server hears nothing from for **120 seconds** is treated as dropped,
+A connection the server hears nothing from for **120 seconds** is treated as dropped,
 such as one whose network silently went away. However much of its queue drains
-meanwhile, a link that sends nothing at all, not even a pong, for **15
+meanwhile, a connection that sends nothing at all, not even a pong, for **15
 minutes** is dropped too. The server closes it with 1001 and reason
 `unresponsive`, without an `error` or `refused` message, and releases it exactly
-as any dropped link (see [Closing](#closing)): its account keeps the document's
+as any dropped connection (see [Closing](#closing)): its account keeps the document's
 Planner for the grace period in [Ownership](#ownership). The operator sets the
-interval, the timeout and the longest silence with `PLANNER_LINK_PING_MS`,
-`PLANNER_LINK_TIMEOUT_MS` and `PLANNER_LINK_MAX_SILENCE_MS`.
+interval, the timeout and the longest silence with `AGENT_CONNECTION_PING_MS`,
+`AGENT_CONNECTION_TIMEOUT_MS` and `AGENT_CONNECTION_MAX_SILENCE_MS`.
 
 So a client working through a large backlog must still send something within
 the longest silence. A client that answers pings needs nothing more: once it has
@@ -82,9 +128,9 @@ a trade-off:
   released after 15 minutes at the latest, and usually much sooner: once the
   proxy's and the kernel's buffers fill, the queue stops shrinking and the
   120-second timeout applies.
-- An operator can lower `PLANNER_LINK_MAX_SILENCE_MS` to release such a client
+- An operator can lower `AGENT_CONNECTION_MAX_SILENCE_MS` to release such a client
   sooner, at the cost of closing slower readers, or raise it, up to an hour, for
-  slower links.
+  slower connections.
 
 The server cannot see a frame until it has arrived whole, and a client's pongs
 wait behind a frame it is still sending. So every frame must arrive within the
@@ -92,7 +138,7 @@ timeout of the last frame heard before it. With the defaults, a 2 MiB frame
 needs a sustained client upload of about **17 KiB/s** (2 MiB in 120 seconds),
 or about 20 KiB/s if it starts just before a ping is due (2 MiB in the 105
 seconds left). A client on a slower uplink is closed as unresponsive while it
-uploads its largest frames; raise `PLANNER_LINK_TIMEOUT_MS` for it.
+uploads its largest frames; raise `AGENT_CONNECTION_TIMEOUT_MS` for it.
 
 ## Frames
 
@@ -137,7 +183,7 @@ The server answers:
 ```
 
 `attached.document.repository` is `owner/name`, at most 257 characters, and
-`url` at most 2048. After `refused` the server closes the link.
+`url` at most 2048. After `refused` the server closes the connection.
 
 ### Ownership
 
@@ -149,7 +195,7 @@ document's Planner owner. `attach` succeeds when all of these hold:
   `repository-forbidden`.
 - The same account is signed in to Chopin in a browser, on this server, since
   the server last started. Chopin's repository tools run with that sign-in's
-  GitHub App token, never with the link's bearer. Without one, `attach` is
+  GitHub App token, never with the connection's bearer. Without one, `attach` is
   refused with `sign-in-required`; sign in at the server's origin and attach
   again.
 - That sign-in also passes instance admission and has push or administration
@@ -171,7 +217,7 @@ refused with `planner-attached`, including one from the same account, and the
 octocat is attached as this document's Planner. A document has one Planner at a time.
 ```
 
-When the link closes, whether by `detach` or a dropped socket, its account keeps
+When the connection closes, whether by `detach` or a dropped socket, its account keeps
 the ownership for a grace period, 2 minutes unless the operator sets
 `PLANNER_ATTACH_GRACE_MS`. During it the same account can attach again and keeps
 the ownership; another account is refused with `planner-attached`, and the
@@ -186,15 +232,15 @@ can attach. A server restart releases every attachment and ownership at once;
 reattach after it.
 
 The server checks the account's admission and push or administration access
-again before every `start` and every `turn`, and every 5 minutes while the link
+again before every `start` and every `turn`, and every 5 minutes while the connection
 is attached. Once either is lost, or the document is archived or deleted, it
-sends `refused` with `access-revoked` and closes the link with 4403; the turn
+sends `refused` with `access-revoked` and closes the connection with 4403; the turn
 that triggered the check fails. A GitHub outage during a periodic check leaves
-the link open.
+the connection open.
 
 The ownership also ends, without a grace period, when the browser sign-in it
 rests on ends or the document's Planner is reset. The server then sends
-`refused` and closes an attached link at once, and any eligible account,
+`refused` and closes an attached connection at once, and any eligible account,
 including the same one, can attach again immediately:
 
 | Cause                                                                                                                                     | Refusal code       | Close code |
@@ -209,7 +255,7 @@ The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an
 expired sign-in is reported as `sign-in-required` even when the stored
 ownership already reads as released. An `@chopin` message or `invoke_planner`
-call makes the same check first, so a link it finds stale is closed this way and
+call makes the same check first, so a connection it finds stale is closed this way and
 the request is refused as [without an attached Planner](#without-an-attached-planner).
 An `attach` that is still in progress when one of these causes lands, including
 a reattach within the grace period, is refused with the same code and close code
@@ -239,17 +285,17 @@ On a server running `HARNESS=remote`, an `@chopin` message in the browser and
 an MCP `invoke_planner` call for a document with no attached client are refused
 with the code `planner-not-attached`, and nothing is posted or queued. A
 document whose Planner is within its grace period counts as unattached, and so
-does one whose attached link the request finds stale: its owner's browser
+does one whose attached connection the request finds stale: its owner's browser
 sign-in has ended or the stored ownership no longer names it. The request closes
-that link before it is refused. The refusal's message names the document URL:
+that connection before it is refused. The refusal's message names the document URL:
 
 ```text
-No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the Planner link from a session in a checkout of <owner/name>; that session becomes this document's Planner.
+No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the agent connection from a session in a checkout of <owner/name>; that session becomes this document's Planner.
 ```
 
 [Local agent MCP](local-agent-mcp.md#hand-an-instruction-to-the-planner) shows
 how `invoke_planner` returns it. Once a client is attached, both arrive as
-`turn`s on its link.
+`turn`s on its connection.
 
 ## Server to client
 
@@ -313,7 +359,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 
 - `started` or `start-failed` answers `start`. Cut `message` here, in
   `turn-end`, `control-result`, and an `error` part to 4000 characters: a longer
-  one is a malformed message and closes the link.
+  one is a malformed message and closes the connection.
 - `tools` declares, before calling any of them, the client's own tools this turn
   may call (at most 256). A name may not repeat a host tool's name. An isolated
   session must declare none.
@@ -329,15 +375,15 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   in the server when the turn ends is stopped, and a Decision it opened is
   withdrawn.
 - `input-request` and `input-cancel` ask and withdraw questions. A `request` id
-  may not repeat on the link, even after its question has its `input-result`.
+  may not repeat on the connection, even after its question has its `input-result`.
   The server remembers every open id and the last 1,024 ids it received; a
-  remembered id sent again is a `protocol` violation that closes the link. Use
+  remembered id sent again is a `protocol` violation that closes the connection. Use
   fresh ids, such as UUIDs.
 - `runs` reports the session's workflow runs whenever they change. Report them
   before `turn-end` so the server keeps the session while runs are live. Reports
   only change run cards and Chat notices; they never start a Planner turn.
 - `control-result` answers `stop` or `resume`.
-- `detach` closes the link with code 1000. The account keeps the document's
+- `detach` closes the connection with code 1000. The account keeps the document's
   Planner for the grace period in [Ownership](#ownership).
 
 Messages for a session or turn that has ended are ignored, except a
@@ -402,7 +448,7 @@ JSON text:
 letter or digit, then ASCII letters, digits, `.`, `_` or `-`. They cannot hold
 spaces, quotes, `:` or `=`.
 
-The envelope has exactly these fields. `@chopin/planner-link` exports it as
+The envelope has exactly these fields. `@chopin/agent-link` exports it as
 `toolErrorSchema` and `ToolError`. It is a convention, not a new wire shape:
 `result` remains any JSON, and an envelope that does not match is shown as an
 ordinary result. Chopin recognises the envelope only on a failed, final
@@ -442,14 +488,14 @@ the character itself, a Python named escape such as `\N{COMMERCIAL AT}`, or
 percent-encoding of an escape's own characters, such as `%25%34%30` for `%40`.
 
 This masking applies only to what Chat stores and shows. It does not change
-what crosses the link: `host-tool-result.output` reaches the client exactly as
+what crosses the connection: `host-tool-result.output` reaches the client exactly as
 the host tool returned it, and a failed host call keeps its
 `{ "error": "<message>" }` output.
 
 ## Questions
 
-An `input-request` carries one Atomic `HostInput` call in `input`, and becomes
-Decisions in the document:
+An `input-request` carries one question call in `input`, and becomes Decisions
+in the document:
 
 ```text
 { "method": "questionnaire", "params": { "questions": [{ "question": "", "header": "", "options": [{ "label": "", "description": "", "preview?": "" }], "multiSelect?": true }] } }
@@ -479,18 +525,17 @@ still apply. Text is shown verbatim.
 - `expired`: nobody answered within 30 minutes. The cards stay in Decisions
   marked expired and no partial answers are returned.
 - `cancelled`: a member cancelled a question, the client sent `input-cancel`,
-  the question was withdrawn before it was asked, the session ended, or the link
+  the question was withdrawn before it was asked, the session ended, or the connection
   closed. Open cards are withdrawn. When a member cancelled one question of a
   questionnaire after others were answered, `answers` keeps those others; it is
   empty in every other case. The package client settles a question withdrawn
-  before it was sent, or one still open when the link closes, with a local
+  before it was sent, or one still open when the connection closes, with a local
   `cancelled` result that has a `message` and no `value`.
 - `failed`: the request could not become Decisions, for example in an isolated
-  session or with 16 requests already open on the link.
+  session or with 16 requests already open on the connection.
 
 A questionnaire `answers` array lists only answered questions, in question
-order; an unanswered question has no entry. Each entry is Atomic's
-`QuestionAnswer`:
+order; an unanswered question has no entry. Each entry is one of:
 
 ```text
 { "questionIndex": 0, "question": "", "kind": "option", "answer": "", "preview?": "" }
@@ -529,7 +574,7 @@ open questions. Up to 64 `stages` are
 `{ "id": "", "name": "", "kind?": "tool", "status": "", "started?": 0, "ended?": 0 }`
 with `status` one of `pending`, `running`, `awaiting_input`, `paused`, `blocked`,
 `completed`, `failed`, `skipped`. `active` and `paused` list at most 64 root run
-ids. When the link closes, the server shows the reported live runs as stopped.
+ids. When the connection closes, the server shows the reported live runs as stopped.
 
 ## Closing
 
@@ -547,23 +592,23 @@ ids. When the link closes, the server shows the reported live runs as stopped.
 | 4426       | `refused`                                      | `unsupported-version`                           |
 
 `protocol` covers a message before `attach` is answered, a second `attach`, and
-a repeated `input-request` id the server remembers. When the link closes for
+a repeated `input-request` id the server remembers. When the connection closes for
 any reason, the server ends a running turn with an error, stops the turn's host
 tools still running, withdraws open questions and the Decisions those tools
-opened, and forgets the link; reattaching starts new sessions. The account keeps
+opened, and forgets the connection; reattaching starts new sessions. The account keeps
 the document's Planner ownership for the grace period described in
 [Ownership](#ownership). A server never replays an interrupted turn.
 
 A client that receives a frame it cannot parse should close with 4400 and reason
 `malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or
 3000 to 4999, so a client cannot answer with 1008. The package client does
-this and settles everything still waiting on the link at once.
+this and settles everything still waiting on the connection at once.
 
 ## Planner backend commands
 
 A paired machine can run a document's Planner without a browser sign-in. The
 `chopin` CLI starts a Planner backend command for each document it is given and
-hands it a credential; the backend attaches over this link like any client.
+hands it a credential; the backend attaches over this connection like any client.
 
 ```sh
 chopin connect . --planner https://chopin.example/octo-org/score/plan \
@@ -627,7 +672,7 @@ Chopin issues it only when it runs `HARNESS=remote` with `AGENT` on and not
 with the machine's own GitHub authorization, can push to or administer the
 document's repository (otherwise 403 `repository-forbidden`; 404 `not-found`
 for no such document, 409 `document-archived` for an archived one). The
-credential can open links to that one document for **15 minutes**. A link it
+credential can open connections to that one document for **15 minutes**. A connection it
 opened does not depend on it afterwards: the server rechecks the machine as it
 rechecks any owner. Chopin keeps only its hash, in memory, so a server restart
 forgets it as it releases every attachment.
@@ -642,10 +687,10 @@ repository tools act with it.
   [environment](#environment). The token is never in its arguments; do not log
   it.
 - Keep any worktree of its own at `CHOPIN_WORKTREE`.
-- Open `/planner-link` on `CHOPIN_URL` with
-  `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach` to
-  `CHOPIN_DOCUMENT`.
-- On HTTP 401 at the upgrade, or when the link closes for any reason other than
+- Open `/api/v1/agent` on `CHOPIN_URL` offering the `chopin.agent.v1`
+  subprotocol, with `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach`
+  to `CHOPIN_DOCUMENT`.
+- On HTTP 401 at the upgrade, or when the connection closes for any reason other than
   its own `detach`, exit. Until the credential's 15 minutes have passed a
   backend may instead reattach with it after 1001 or a dropped socket; after
   that the credential is refused and it must exit. Chopin forgets a credential
@@ -662,7 +707,7 @@ minutes, and starting over after a backend ran for a minute). When the
 credential request is refused because the machine was revoked or must be paired
 again, or Chopin refuses the document, the connector stops that document's
 backend and says why. A backend refused with `planner-attached` (4409) because
-an earlier link of the same machine still counts as attached is started again
-on that backoff until the server notices that link is gone (up to the
-120-second timeout in [Pings](#pings)); a closed link's grace period does not
+an earlier connection of the same machine still counts as attached is started again
+on that backoff until the server notices that connection is gone (up to the
+120-second timeout in [Pings](#pings)); a closed connection's grace period does not
 block the same machine.

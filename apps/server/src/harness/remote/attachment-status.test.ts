@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { PLANNER_LINK_VERSION } from "@chopin/planner-link";
+import { AGENT_VERSION } from "@chopin/agent-link";
 
-import { attach, linkAuth, linkServer, rawLink, scriptedPlanner } from "../../testing/planner-link";
+import { attach, linkAuth, linkServer, rawLink, scriptedPlanner } from "../../testing/agent-link";
 
 import type { PlannerAttachment } from "./attachments";
 
@@ -33,7 +33,7 @@ async function until(condition: () => boolean, timeoutMs = 3_000): Promise<void>
 
 async function attachedRaw(url: string, channelId: string) {
 	let raw = await rawLink(url);
-	raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channelId });
+	raw.send({ type: "attach", version: AGENT_VERSION, document: channelId });
 	await raw.next("attached");
 	return raw;
 }
@@ -135,7 +135,7 @@ describe("Planner attachment status", () => {
 		let raw = await rawLink(server.url);
 		raw.send({
 			type: "attach",
-			version: PLANNER_LINK_VERSION,
+			version: AGENT_VERSION,
 			document: channel.id,
 			checkout: { origin: "git@github.com:octo-org/score.git", branch: "laptop-7", head: "abc123" },
 		});

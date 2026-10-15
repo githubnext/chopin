@@ -124,7 +124,7 @@ describe("configuration", () => {
 		expect(config).toMatchObject({ harness: "remote", host: "0.0.0.0", model: "" });
 		expect(description(config)).toContain("agent: chosen by the attached client");
 		expect(description(config)).toContain(
-			"Planner: attached client over /planner-link (model and client tools run on its machine)",
+			"Planner: attached client over /api/v1/agent (model and client tools run on its machine)",
 		);
 		expect(configured({ ...remote, MODEL: "openai/gpt-6" }).model).toBe("openai/gpt-6");
 		expect(() => configured({ HARNESS: "remote" }))
@@ -143,43 +143,59 @@ describe("configuration", () => {
 		}
 	});
 
-	it("pings a remote Planner link every 15 seconds and drops it after 120 silent seconds unless configured", () => {
+	it("pings a remote agent connection every 15 seconds and drops it after 120 silent seconds unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
 		expect(configured(remote)).toMatchObject({
-			plannerLinkPingMs: 15_000,
-			plannerLinkTimeoutMs: 120_000,
+			agentConnectionPingMs: 15_000,
+			agentConnectionTimeoutMs: 120_000,
 		});
-		expect(configured({ ...remote, PLANNER_LINK_PING_MS: "1000", PLANNER_LINK_TIMEOUT_MS: "1001" }))
-			.toMatchObject({ plannerLinkPingMs: 1_000, plannerLinkTimeoutMs: 1_001 });
+		expect(
+			configured({
+				...remote,
+				AGENT_CONNECTION_PING_MS: "1000",
+				AGENT_CONNECTION_TIMEOUT_MS: "1001",
+			}),
+		)
+			.toMatchObject({ agentConnectionPingMs: 1_000, agentConnectionTimeoutMs: 1_001 });
 		for (let value of ["", "999", "1.5", "600001", "soon"]) {
-			expect(() => configured({ ...remote, PLANNER_LINK_PING_MS: value }))
-				.toThrow("PLANNER_LINK_PING_MS must be an integer between 1000 and 600000 milliseconds");
-			expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: value }))
-				.toThrow("PLANNER_LINK_TIMEOUT_MS must be an integer between 1000 and 600000 milliseconds");
+			expect(() => configured({ ...remote, AGENT_CONNECTION_PING_MS: value }))
+				.toThrow(
+					"AGENT_CONNECTION_PING_MS must be an integer between 1000 and 600000 milliseconds",
+				);
+			expect(() => configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: value }))
+				.toThrow(
+					"AGENT_CONNECTION_TIMEOUT_MS must be an integer between 1000 and 600000 milliseconds",
+				);
 		}
-		expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "15000" }))
-			.toThrow("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
+		expect(() => configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: "15000" }))
+			.toThrow("AGENT_CONNECTION_TIMEOUT_MS must be longer than AGENT_CONNECTION_PING_MS");
 	});
 
-	it("caps a remote Planner link's silence at 15 minutes, however its queue drains, unless configured", () => {
+	it("caps a remote agent connection's silence at 15 minutes, however its queue drains, unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
-		expect(configured(remote).plannerLinkMaxSilenceMs).toBe(900_000);
-		expect(configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "600000" }).plannerLinkMaxSilenceMs)
+		expect(configured(remote).agentConnectionMaxSilenceMs).toBe(900_000);
+		expect(
+			configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: "600000" }).agentConnectionMaxSilenceMs,
+		)
 			.toBe(900_000);
-		expect(configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "120000" }).plannerLinkMaxSilenceMs)
+		expect(
+			configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "120000" })
+				.agentConnectionMaxSilenceMs,
+		)
 			.toBe(120_000);
 		expect(
-			configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "3600000" }).plannerLinkMaxSilenceMs,
+			configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "3600000" })
+				.agentConnectionMaxSilenceMs,
 		)
 			.toBe(3_600_000);
 		for (let value of ["", "999", "1.5", "3600001", "soon"]) {
-			expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: value }))
+			expect(() => configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: value }))
 				.toThrow(
-					"PLANNER_LINK_MAX_SILENCE_MS must be an integer between 1000 and 3600000 milliseconds",
+					"AGENT_CONNECTION_MAX_SILENCE_MS must be an integer between 1000 and 3600000 milliseconds",
 				);
 		}
-		expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "119999" }))
-			.toThrow("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
+		expect(() => configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "119999" }))
+			.toThrow("AGENT_CONNECTION_MAX_SILENCE_MS must be at least AGENT_CONNECTION_TIMEOUT_MS");
 	});
 
 	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {

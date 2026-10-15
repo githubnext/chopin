@@ -5,7 +5,7 @@ import { PlannerAttachments } from "../harness/remote/attachments";
 import { contractId as id, openedStorage } from "./contract-support";
 
 import type { AttachmentAuth } from "../harness/remote/attachments";
-import type { PlannerLink } from "../harness/remote/link";
+import type { AgentLink } from "../harness/remote/link";
 import type { StorageFactory } from "./contract-support";
 import type { StorageAdapter } from "./port";
 
@@ -55,14 +55,14 @@ async function attachable(storage: StorageAdapter) {
 	return { auth, sessions, member, rival, logins, channelId, owner, request, skew };
 }
 
-function link(): PlannerLink {
-	return {} as PlannerLink;
+function link(): AgentLink {
+	return {} as AgentLink;
 }
 
 function revocable() {
 	let refusals: { code: string; message: string }[] = [];
 	let revocable = { revoke: (code: string, message: string) => refusals.push({ code, message }) };
-	return { link: revocable as unknown as PlannerLink, refusals };
+	return { link: revocable as unknown as AgentLink, refusals };
 }
 
 async function released(owner: () => Promise<{ ownerSessionId?: string } | undefined>) {

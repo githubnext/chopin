@@ -101,7 +101,7 @@ browser `@chopin` message would:
   nothing is posted.
 
 A server running `HARNESS=remote` claims no ownership here. Its Planner runs in
-a client attached to the document over the [Planner link](planner-link.md), and
+a client attached to the document over the [agent connection](agent-connection.md), and
 only attaching makes an account the owner. With a client attached the turn goes
 to it and runs under its owner, whoever invoked it. Without one, including
 while a detached Planner's grace period runs and once the attached Planner's
@@ -112,7 +112,7 @@ the call is refused with
 ```json
 {
 	"code": "planner-not-attached",
-	"message": "No Planner is attached to this document. To attach one, connect a Planner client to https://chopin.example/documents/octo-org/score/release-readiness over the Planner link from a session in a checkout of octo-org/score; that session becomes this document's Planner."
+	"message": "No Planner is attached to this document. To attach one, connect a Planner client to https://chopin.example/documents/octo-org/score/release-readiness over the agent connection from a session in a checkout of octo-org/score; that session becomes this document's Planner."
 }
 ```
 
@@ -160,7 +160,7 @@ Refusals return an object with `code`, and `planner-not-attached` also a
 
 - `planner-not-attached`: under `HARNESS=remote`, no client is attached as the
   document's Planner. `message` names the document URL and says to connect a
-  Planner client to it over the Planner link from a session in a checkout of
+  Planner client to it over the agent connection from a session in a checkout of
   the repository, which attaches that session as the Planner.
 - `planner-owner-unavailable`: the document has no usable Planner owner and the
   caller has no live browser login to claim it; sign in to Chopin in a browser

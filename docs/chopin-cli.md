@@ -401,9 +401,10 @@ chopin connect . --planner https://your-chopin-instance.example/octo-org/score/p
 ```
 
 `--planner` can repeat. `chopin` runs the command in the checkout for each
-document and restarts it when it exits. See
-[Planner backend commands](planner-link.md#planner-backend-commands) for what
-the backend must do.
+document and restarts it when it exits. The command connects to Chopin itself,
+over the [agent connection](agent-connection.md). See
+[Planner backend commands](agent-connection.md#planner-backend-commands) for what
+it must do.
 
 With `--planner-command` alone, the machine says it can run Planners without
 naming any document:
@@ -452,10 +453,10 @@ Builds and Planner commands push branches and open draft pull requests as you,
 with your token from Chopin's GitHub App. Investigations get the token too;
 prototypes never do.
 
-| What runs                          | Gets your token as                                                                   |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| A build's or investigation's agent | `GH_TOKEN` and `GITHUB_TOKEN`. Git uses it for github.com.                           |
-| A Planner command                  | `CHOPIN_GITHUB_TOKEN`; see [the Planner's environment](planner-link.md#environment). |
+| What runs                          | Gets your token as                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| A build's or investigation's agent | `GH_TOKEN` and `GITHUB_TOKEN`. Git uses it for github.com.                               |
+| A Planner command                  | `CHOPIN_GITHUB_TOKEN`; see [the Planner's environment](agent-connection.md#environment). |
 
 The machine uses your own `gh` and Git login instead when:
 

@@ -17,7 +17,7 @@ from a code-owned map, defaulting to `copilot-sdk`, a host-process adapter over
 `@github/copilot-sdk`. `atomic`, which embeds Atomic's headless SDK
 (`@bastani/atomic`) in the server process, is a further reviewed adapter and
 requires an explicit `HARNESS_AUTH`. `remote` runs no model in the server at
-all: each turn goes to a client attached over the Planner link. The harness owns
+all: each turn goes to a client attached over the agent connection. The harness owns
 the agent loop and model. Under `copilot-sdk`, Chopin owns every tool the
 Planner can call.
 
@@ -73,8 +73,8 @@ and is refused as not ready.
 
 An attachment lasts only as long as its owner. Signing that browser login out,
 its expiry, or a repository writer's reset of the document's Planner closes the
-attached link at once and frees the document for any eligible account to attach;
-see [Planner link ownership](planner-link.md#ownership).
+attached connection at once and frees the document for any eligible account to
+attach; see [Agent connection ownership](agent-connection.md#ownership).
 
 Planner ownership stores only the owner session ID, referring to a login loaded
 in this process. Hosted logins separately persist encrypted credentials in
@@ -299,19 +299,19 @@ Harnesses other than `atomic` ignore its `checkout`.
 ## Remote Planner
 
 Under `HARNESS=remote` the Planner's model runs in a client attached to the
-document over the Planner link, usually a member's own Atomic session on their
-machine. The server keeps the document, Decisions, room writes, and anchors; the
+document over the agent connection, usually an agent on a member's own machine. The server keeps the document, Decisions, room writes, and anchors; the
 client keeps its code, model credentials, and its own tools. The adapter
 (`apps/server/src/harness/remote`) forwards each Planner session as `start` and
 each turn as `turn`, and re-emits the parts the client streams back.
 
-The link is a WebSocket at `/planner-link`, on the application's own origin.
-[Planner link](planner-link.md) is its complete wire format, written for
+The agent connection is a WebSocket at `/api/v1/agent`, on the application's own
+origin, with the `chopin.agent.v1` subprotocol.
+[Agent connection](agent-connection.md) is its complete wire format, written for
 clients that cannot import Chopin's packages. Its messages are declared and
-validated by `@chopin/planner-link` (`packages/planner-link`), whose minimal
-client in `@chopin/planner-link/client` uses only that wire format at runtime. Every message is a JSON text frame of at most
+validated by `@chopin/agent-link` (`packages/agent-link`), whose minimal
+client in `@chopin/agent-link/client` uses only that wire format at runtime. Every message is a JSON text frame of at most
 2 MiB, checked against a strict schema; a binary, malformed, out-of-order, or
-oversized message ends the link (close codes 1008 or 1009) after an `error`
+oversized message ends the connection (close codes 1008 or 1009) after an `error`
 message naming the problem.
 
 | Server to client                                      | Client to server                                                                       |
@@ -325,7 +325,8 @@ message naming the problem.
 | `stop`, `resume` (Stop and Resume Planner)            | `control-result`, `runs` (run cards for Chat)                                          |
 | `destroy`                                             | `turn-end`, `detach`                                                                   |
 
-**Attaching.** The upgrade request carries `Authorization: Bearer <GitHub token>`,
+**Attaching.** The upgrade request offers the `chopin.agent.v1` subprotocol, or
+is refused with HTTP 426. It carries `Authorization: Bearer <GitHub token>`,
 checked exactly as hosted MCP checks it: the token must resolve through instance
 admission, a bad or missing token gets HTTP 401, a refused account 403, a foreign
 `Origin` 403, and GitHub outages 503, all before anything is upgraded. The first
@@ -335,27 +336,27 @@ administration access to the document's repository. An unsupported version, a
 repository it cannot write, or a missing or archived document is refused with a
 `refused` message and close code 4426, 4403, or 4404. Neither attaching nor a
 refusal posts anything to the document. The account and repository access are
-checked again before every session and every turn the link starts, including
-turns of a session kept for its runs, and every 5 minutes while the link stays
-attached; losing either fails that session or turn and closes the link with
+checked again before every session and every turn the connection starts, including
+turns of a session kept for its runs, and every 5 minutes while the connection stays
+attached; losing either fails that session or turn and closes the connection with
 `access-revoked`.
 
 A paired machine can attach instead with a document-scoped Planner credential
 from `POST /api/connector/planner`, which `chopin connect --planner` hands to a
 Planner backend command it starts per document
-([Planner backend commands](planner-link.md#planner-backend-commands)). Its
+([Planner backend commands](agent-connection.md#planner-backend-commands)). Its
 access is checked with the machine's own GitHub authorization, and it owns the
 document through a delegated login of the machine's owner that no browser holds
 (`apps/server/src/harness/remote/machine-planners.ts`), so no browser sign-in is
 needed and signing out does not release it. Revoking the machine, or GitHub
-refusing its authorization, ends that login and closes its links with
+refusing its authorization, ends that login and closes its connections with
 `access-revoked`.
 
 **Ownership.** Attaching makes the account the document's Planner owner through
 the same generation-guarded storage claim as any other owner
 (`apps/server/src/harness/remote/attachments.ts`). The owner record names the
-account's live browser login, not the link, because Chopin's repository tools
-run with that login's GitHub App token and never with the link's bearer; an
+account's live browser login, not the connection, because Chopin's repository tools
+run with that login's GitHub App token and never with the connection's bearer; an
 account with no live sign-in since the server started is refused with
 `sign-in-required` (4401). The login must pass the same eligibility as every
 Planner owner: instance admission and push or administration access. This is
@@ -366,10 +367,10 @@ produce, is cleared under its generation and the document is claimed again.
 
 One client holds a document's Planner. While it is attached, every other
 `attach` for that document is refused with `planner-attached` (4409) and a
-message naming its GitHub login. A link that detaches or drops keeps the
-ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A link that
-answers none of the server's [protocol pings](planner-link.md#pings) for
-`PLANNER_LINK_TIMEOUT_MS` (2 minutes by default) is closed as dropped, so a
+message naming its GitHub login. A connection that detaches or drops keeps the
+ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A connection that
+answers none of the server's [protocol pings](agent-connection.md#pings) for
+`AGENT_CONNECTION_TIMEOUT_MS` (2 minutes by default) is closed as dropped, so a
 client whose network silently went away does not keep the document attached.
 Within the grace period the same account can attach again and keeps the same
 ownership generation, and anyone
@@ -377,14 +378,14 @@ else is refused. When it ends, the ownership is cleared under its generation, so
 a newer owner is never released by an old timer. An attach, including a grace
 reattach, binds only if no sign-out, expiry, or Planner reset of its ownership
 landed while it was checking, including the eligibility checks of the sign-in
-it is about to claim with; otherwise it is refused like an attached link would
+it is about to claim with; otherwise it is refused like an attached connection would
 be closed. Attachments live in the server process; startup already clears
 every owner reference, which releases every attachment.
 
 **Who is attached.** Each room socket hears `session:planner` after
 `session:hello`, and the whole room hears it again whenever an attachment
 changes: an attach, a detach into the grace period with the time it ends, the
-grace period ending, a sign-out, a Planner reset, or the server closing a link
+grace period ending, a sign-out, a Planner reset, or the server closing a connection
 whose ownership was released. It names only the holder's GitHub login and
 state, never a machine, checkout, or token. Chat shows it as one line under the
 composer. Other harnesses never send it, and Chat then shows nothing.
@@ -393,15 +394,15 @@ composer. Other harnesses never send it, and Chat then shows nothing.
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period,
 is refused with `planner-not-attached` before anything is posted or queued.
-Before accepting either, the server rechecks an attached link as its periodic
+Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
-assigns that owner, it closes the link, releases the ownership, and refuses the
+assigns that owner, it closes the connection, releases the ownership, and refuses the
 request the same way. The
 refusal names the document URL and says to connect a Planner client to it over
-the Planner link from a session in a checkout of the repository, which attaches
+the agent connection from a session in a checkout of the repository, which attaches
 that session as the Planner; the browser shows that text on the `@chopin`
 request. Room messages are unaffected. Once a client is attached, both arrive as
-turns on its link and run under its ownership whoever sent them.
+turns on its connection and run under its ownership whoever sent them.
 
 **Turns and tools.** Chopin's host tools (document, repository, and job tools)
 still run in the server against the room, under the document's Planner owner and
@@ -414,7 +415,7 @@ sessions start in `isolated` mode, where the client may offer no tools of its ow
 and ask nothing. A turn ends with `turn-end`. An abort waits briefly for the
 client's `turn-end`, then ends the turn anyway. A turn that ends while one of
 its host tools still runs, such as an `ask` waiting on Decisions, stops that tool
-and withdraws the cards it opened. A link that closes mid-turn ends the turn
+and withdraws the cards it opened. A connection that closes mid-turn ends the turn
 with an error rather than as a stop, its open questions are withdrawn, and runs
 it reported are shown stopped; nothing waits on a client that has gone. A
 session the client refuses or does not start in time is destroyed, and any

@@ -29,19 +29,19 @@ export type Config = {
 	 */
 	harnessExtensions: string[];
 	/**
-	 * Under `HARNESS=remote`, how long a detached or dropped Planner link keeps
+	 * Under `HARNESS=remote`, how long a detached or dropped agent connection keeps
 	 * the document's Planner ownership for the same account to reattach.
 	 */
 	plannerAttachGraceMs: number;
-	/** How often the server sends a Planner link a WebSocket protocol ping. */
-	plannerLinkPingMs: number;
-	/** How long a Planner link may go without a pong or message before it counts as dropped. */
-	plannerLinkTimeoutMs: number;
+	/** How often the server sends an agent connection a WebSocket protocol ping. */
+	agentConnectionPingMs: number;
+	/** How long an agent connection may go without a pong or message before it counts as dropped. */
+	agentConnectionTimeoutMs: number;
 	/**
-	 * How long a Planner link may send nothing at all, however much of what the
+	 * How long an agent connection may send nothing at all, however much of what the
 	 * server queued for it drains meanwhile, before it counts as dropped.
 	 */
-	plannerLinkMaxSilenceMs: number;
+	agentConnectionMaxSilenceMs: number;
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -134,7 +134,7 @@ function port(): number {
 	return value;
 }
 
-/** A Planner link liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
+/** An agent connection liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
 function milliseconds(name: string, fallback: number, max = 600_000): number {
 	let raw = process.env[name];
 	if (raw === undefined) return fallback;
@@ -217,18 +217,21 @@ export function load(): Config {
 			"PLANNER_ATTACH_GRACE_MS must be an integer between 0 and 3600000 milliseconds",
 		);
 	}
-	let plannerLinkPingMs = milliseconds("PLANNER_LINK_PING_MS", DEFAULT_LINK_PING_MS);
-	let plannerLinkTimeoutMs = milliseconds("PLANNER_LINK_TIMEOUT_MS", DEFAULT_LINK_TIMEOUT_MS);
-	if (plannerLinkTimeoutMs <= plannerLinkPingMs) {
-		throw new Error("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
+	let agentConnectionPingMs = milliseconds("AGENT_CONNECTION_PING_MS", DEFAULT_LINK_PING_MS);
+	let agentConnectionTimeoutMs = milliseconds(
+		"AGENT_CONNECTION_TIMEOUT_MS",
+		DEFAULT_LINK_TIMEOUT_MS,
+	);
+	if (agentConnectionTimeoutMs <= agentConnectionPingMs) {
+		throw new Error("AGENT_CONNECTION_TIMEOUT_MS must be longer than AGENT_CONNECTION_PING_MS");
 	}
-	let plannerLinkMaxSilenceMs = milliseconds(
-		"PLANNER_LINK_MAX_SILENCE_MS",
+	let agentConnectionMaxSilenceMs = milliseconds(
+		"AGENT_CONNECTION_MAX_SILENCE_MS",
 		DEFAULT_LINK_MAX_SILENCE_MS,
 		3_600_000,
 	);
-	if (plannerLinkMaxSilenceMs < plannerLinkTimeoutMs) {
-		throw new Error("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
+	if (agentConnectionMaxSilenceMs < agentConnectionTimeoutMs) {
+		throw new Error("AGENT_CONNECTION_MAX_SILENCE_MS must be at least AGENT_CONNECTION_TIMEOUT_MS");
 	}
 	let selection = harnessSelection();
 	if (selection.harness === "remote" && backgroundJobs) {
@@ -242,9 +245,9 @@ export function load(): Config {
 		port: serverPort,
 		model: model(selection.harness),
 		plannerAttachGraceMs,
-		plannerLinkPingMs,
-		plannerLinkTimeoutMs,
-		plannerLinkMaxSilenceMs,
+		agentConnectionPingMs,
+		agentConnectionTimeoutMs,
+		agentConnectionMaxSilenceMs,
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
@@ -290,7 +293,7 @@ export function describe(config: Config): string {
 			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
 			: []),
 		...(config.harness === "remote"
-			? ["Planner: attached client over /planner-link (model and client tools run on its machine)"]
+			? ["Planner: attached client over /api/v1/agent (model and client tools run on its machine)"]
 			: []),
 		...(config.harnessExtensions.length
 			? [`Planner extensions: ${config.harnessExtensions.join(", ")}`]

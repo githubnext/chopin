@@ -17,9 +17,10 @@ import { parse, ulid } from "@chopin/dialect";
 
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import {
-	admitPlannerLink,
-	isPlannerLinkSocket,
-	openPlannerLinkSocket,
+	admitAgent,
+	AGENT_UPGRADE_HEADERS,
+	isAgentSocket,
+	openAgentSocket,
 } from "./harness/remote/endpoint";
 import { notAttachedMessage, PlannerAttachments } from "./harness/remote/attachments";
 import { MachinePlanners } from "./harness/remote/machine-planners";
@@ -104,10 +105,10 @@ import { createStorage } from "./storage/registry";
 import { WriterLease } from "./storage/writer-lease";
 import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
 
-import { LINK_CLOSE, PLANNER_LINK_PATH } from "@chopin/planner-link";
+import { AGENT_PATH, LINK_CLOSE } from "@chopin/agent-link";
 
 import type { Server, ServerWebSocket } from "bun";
-import type { PlannerLinkSocketData } from "./harness/remote/endpoint";
+import type { AgentSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
@@ -1208,7 +1209,7 @@ const VIEWER_ALLOWED = new Set([
 	"conversation-plan:research-link",
 ]);
 
-type AnySocket = ServerWebSocket<SocketData | SidebarSocketData | PlannerLinkSocketData>;
+type AnySocket = ServerWebSocket<SocketData | SidebarSocketData | AgentSocketData>;
 
 function isSidebarSocket(ws: AnySocket): ws is SidebarSocket {
 	return ws.data.sidebar === true;
@@ -1527,19 +1528,20 @@ function closeSidebarSocket(ws: SidebarSocket): void {
 
 function upgraded(
 	req: Request,
-	self: Server<SocketData | SidebarSocketData | PlannerLinkSocketData>,
-	data: SocketData | SidebarSocketData | PlannerLinkSocketData,
+	self: Server<SocketData | SidebarSocketData | AgentSocketData>,
+	data: SocketData | SidebarSocketData | AgentSocketData,
+	headers?: HeadersInit,
 ): Response | undefined {
 	if (
 		req.headers.get("x-chopin-socket-probe") === "1"
 		&& req.headers.get("upgrade")?.toLowerCase() !== "websocket"
 	) return new Response(null, { status: 204 });
-	if (self.upgrade(req, { data })) return undefined;
+	if (self.upgrade(req, { data, headers })) return undefined;
 	return new Response("upgrade failed", { status: 400 });
 }
 
 function listen(): Server<SocketData> {
-	return Bun.serve<SocketData | SidebarSocketData | PlannerLinkSocketData>({
+	return Bun.serve<SocketData | SidebarSocketData | AgentSocketData>({
 		hostname: config.host,
 		port: config.port,
 
@@ -1556,15 +1558,15 @@ function listen(): Server<SocketData> {
 				}
 				return upgraded(req, self, outcome.data);
 			}
-			if (url.pathname === PLANNER_LINK_PATH) {
-				let outcome = await admitPlannerLink(
+			if (url.pathname === AGENT_PATH) {
+				let outcome = await admitAgent(
 					req,
 					hostedAuth,
 					!!plannerAttachments,
 					machinePlanners,
 				);
 				if (outcome instanceof Response) return outcome;
-				return upgraded(req, self, outcome);
+				return upgraded(req, self, outcome, AGENT_UPGRADE_HEADERS);
 			}
 			if (url.pathname === "/ws/sidebar") {
 				let outcome = await admitSidebar(req, hostedAuth);
@@ -1575,20 +1577,24 @@ function listen(): Server<SocketData> {
 			}
 			let routed = await router.handle(req, url);
 			if (routed) return routed;
+			// No other path takes a WebSocket; the web client's fallback page is no answer to one.
+			if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+				return new Response("not found", { status: 404 });
+			}
 
 			return config.devClient ? proxy(req, url, config.devClient) : serve(url, CLIENT);
 		},
 
 		websocket: {
 			open(ws: AnySocket) {
-				if (isPlannerLinkSocket(ws)) {
+				if (isAgentSocket(ws)) {
 					if (!plannerAttachments) return ws.close(LINK_CLOSE.failed, "unavailable");
-					openPlannerLinkSocket(ws, hostedAuth, {
+					openAgentSocket(ws, hostedAuth, {
 						attachments: plannerAttachments,
 						unavailable: channelId => deletingChannels.has(channelId),
-						pingEveryMs: config.plannerLinkPingMs,
-						pongTimeoutMs: config.plannerLinkTimeoutMs,
-						maxSilenceMs: config.plannerLinkMaxSilenceMs,
+						pingEveryMs: config.agentConnectionPingMs,
+						pongTimeoutMs: config.agentConnectionTimeoutMs,
+						maxSilenceMs: config.agentConnectionMaxSilenceMs,
 					});
 					return;
 				}
@@ -1599,7 +1605,7 @@ function listen(): Server<SocketData> {
 			},
 
 			message(ws: AnySocket, raw) {
-				if (isPlannerLinkSocket(ws)) {
+				if (isAgentSocket(ws)) {
 					ws.data.alive?.heard();
 					return ws.data.link?.receive(raw);
 				}
@@ -1610,13 +1616,13 @@ function listen(): Server<SocketData> {
 				});
 			},
 
-			// Only Planner links are pinged by the server itself; see openPlannerLinkSocket.
+			// Only agent connections are pinged by the server itself; see openAgentSocket.
 			pong(ws: AnySocket) {
-				if (isPlannerLinkSocket(ws)) ws.data.alive?.heard();
+				if (isAgentSocket(ws)) ws.data.alive?.heard();
 			},
 
 			close(ws: AnySocket) {
-				if (isPlannerLinkSocket(ws)) {
+				if (isAgentSocket(ws)) {
 					ws.data.alive?.stop();
 					return ws.data.link?.disconnected();
 				}

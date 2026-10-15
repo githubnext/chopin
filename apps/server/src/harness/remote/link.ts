@@ -1,17 +1,12 @@
 /**
- * The server end of one Planner link: a client attached to a document whose
+ * The server end of one agent connection: a client attached to a document whose
  * model runs Planner turns. Each Planner session Chopin opens becomes a
  * `start`, each turn a `turn`; the client streams parts back and calls
  * Chopin's host tools, which still run here against the room.
  */
 
 import { HarnessCapabilityUnsupportedError } from "@ai-sdk/harness";
-import {
-	encodeMessage,
-	LINK_CLOSE,
-	parseClientMessage,
-	PLANNER_LINK_VERSION,
-} from "@chopin/planner-link";
+import { AGENT_VERSION, encodeMessage, LINK_CLOSE, parseClientMessage } from "@chopin/agent-link";
 
 import type {
 	HarnessV1PromptControl,
@@ -27,7 +22,7 @@ import type {
 	RefusalCode,
 	ServerMessage,
 	ServerMessageOf,
-} from "@chopin/planner-link";
+} from "@chopin/agent-link";
 import type { HumanInputStatus } from "../atomic/human-input";
 import type { RemotePlanner } from "./registry";
 
@@ -58,7 +53,7 @@ export type LinkOptions = {
 	/** Rechecks the caller's access; false closes the link. */
 	revalidate?(): Promise<boolean>;
 	/** Records the attached link and returns how to forget it. */
-	register?(channelId: string, link: PlannerLink): () => void;
+	register?(channelId: string, link: AgentLink): () => void;
 	timeoutMs?: number;
 	/** How often an attached link's access is rechecked while it stays open. */
 	revalidateEveryMs?: number;
@@ -185,7 +180,7 @@ class RemoteSession {
 	async start(): Promise<HarnessV1Session> {
 		let mode = this.planner.isolated ? "isolated" as const : "planner" as const;
 		if (!this.#port.send({ type: "start", session: this.id, mode })) {
-			throw new Error("The Planner link is closed.");
+			throw new Error("The agent connection is closed.");
 		}
 		await within(
 			this.#started.promise,
@@ -218,7 +213,7 @@ class RemoteSession {
 
 	/** The link is gone: nothing more will arrive for this session. */
 	linkClosed(): void {
-		this.#started.reject(new Error("The Planner link closed."));
+		this.#started.reject(new Error("The agent connection closed."));
 		let reported = this.planner.runs;
 		if (reported) {
 			this.reportRuns({
@@ -431,7 +426,7 @@ class RemoteSession {
 				if (!encodeMessage(carried)) {
 					carried = {
 						...carried,
-						output: hostError(`${toolName} returned more than the Planner link can carry.`),
+						output: hostError(`${toolName} returned more than the agent connection can carry.`),
 						isError: true,
 					};
 				}
@@ -493,7 +488,7 @@ class RemoteSession {
 				? { responseFormat: options.responseFormat as ServerMessageOf<"turn">["responseFormat"] }
 				: {}),
 		});
-		if (!sent) throw new Error("The Planner link could not carry this turn.");
+		if (!sent) throw new Error("The agent connection could not carry this turn.");
 		this.planner.activeTools = hostNames;
 		this.#current = turn;
 		this.#listen(turn, options.abortSignal);
@@ -553,7 +548,7 @@ class RemoteSession {
 }
 
 /** One attached client, from its `attach` until its socket closes. */
-export class PlannerLink {
+export class AgentLink {
 	#socket: LinkSocket;
 	#options: LinkOptions;
 	#state: "waiting" | "attaching" | "attached" | "closed" = "waiting";
@@ -592,7 +587,7 @@ export class PlannerLink {
 
 	/** Opens a Planner session on the client; throws when it cannot. */
 	async startSession(sessionId: string, planner: RemotePlanner): Promise<HarnessV1Session> {
-		if (this.#state !== "attached") throw new Error("The Planner link is not attached.");
+		if (this.#state !== "attached") throw new Error("The agent connection is not attached.");
 		if (this.#sessions.has(sessionId)) {
 			throw new Error("The remote Planner session is already open.");
 		}
@@ -617,14 +612,14 @@ export class PlannerLink {
 			);
 			throw new Error("The attached Planner can no longer act for this document.");
 		}
-		if (this.#state !== "attached") throw new Error("The Planner link closed.");
+		if (this.#state !== "attached") throw new Error("The agent connection closed.");
 	}
 
 	async #recheckAttached(): Promise<void> {
 		try {
 			await this.#recheck();
 		} catch (error) {
-			if (this.#state === "attached") console.error("[planner-link] access recheck failed:", error);
+			if (this.#state === "attached") console.error("[agent] access recheck failed:", error);
 		}
 	}
 
@@ -671,7 +666,7 @@ export class PlannerLink {
 		for (let input of this.#inputs.values()) input.controller.abort();
 		this.#inputs.clear();
 		for (let control of this.#controls.values()) {
-			control.reject(new Error("The Planner link closed."));
+			control.reject(new Error("The agent connection closed."));
 		}
 		this.#controls.clear();
 	}
@@ -696,17 +691,17 @@ export class PlannerLink {
 
 	async #attach(message: ClientMessageOf<"attach">): Promise<void> {
 		this.#state = "attaching";
-		if (message.version !== PLANNER_LINK_VERSION) {
+		if (message.version !== AGENT_VERSION) {
 			return this.#refuse(
 				"unsupported-version",
-				`This Chopin speaks Planner link version ${PLANNER_LINK_VERSION}, not ${message.version}.`,
+				`This Chopin speaks agent connection version ${AGENT_VERSION}, not ${message.version}.`,
 			);
 		}
 		let outcome: AttachOutcome;
 		try {
 			outcome = await this.#options.attach(message);
 		} catch (error) {
-			console.error("[planner-link] attach failed:", error);
+			console.error("[agent] attach failed:", error);
 			outcome = { ok: false, code: "unavailable", message: "The document could not be checked." };
 		}
 		if (this.#state !== "attaching") {
@@ -716,7 +711,7 @@ export class PlannerLink {
 		if (!outcome.ok) return this.#refuse(outcome.code, outcome.message);
 		this.#channelId = outcome.document.id;
 		this.#state = "attached";
-		this.#send({ type: "attached", version: PLANNER_LINK_VERSION, document: outcome.document });
+		this.#send({ type: "attached", version: AGENT_VERSION, document: outcome.document });
 		let unregister = this.#options.register?.(outcome.document.id, this);
 		let detach = outcome.detach;
 		this.#forget = () => {
@@ -777,7 +772,7 @@ export class PlannerLink {
 		this.#controls.set(request, pending);
 		if (!this.#send({ type: action, request, session, ...(runId ? { run: runId } : {}) })) {
 			this.#controls.delete(request);
-			throw new Error("The Planner link is closed.");
+			throw new Error("The agent connection is closed.");
 		}
 		try {
 			await within(

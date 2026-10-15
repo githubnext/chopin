@@ -1,6 +1,6 @@
 /**
- * A minimal Planner link client. At runtime it uses only the documented wire
- * format (docs/planner-link.md), JSON and the platform WebSocket, so it runs in
+ * A minimal agent connection client. At runtime it uses only the documented wire
+ * format (docs/agent-connection.md), JSON and the platform WebSocket, so it runs in
  * Bun or Node.js and shows what an external client needs.
  */
 
@@ -15,21 +15,22 @@ import type {
 	StreamPart,
 } from "./protocol";
 
-/** The wire constants a client needs, as docs/planner-link.md states them. */
+/** The wire constants a client needs, as docs/agent-connection.md states them. */
 export const WIRE = {
-	path: "/planner-link",
+	path: "/api/v1/agent",
+	subprotocol: "chopin.agent.v1",
 	version: 1,
 	maxMessageBytes: 2 * 1024 * 1024,
 	maxNoteLength: 4_000,
 	malformedClose: 4400,
 } as const;
 
-export class PlannerLinkRefused extends Error {
+export class AgentRefused extends Error {
 	readonly code: RefusalCode;
 
 	constructor(code: RefusalCode, message: string) {
 		super(message);
-		this.name = "PlannerLinkRefused";
+		this.name = "AgentRefused";
 		this.code = code;
 	}
 }
@@ -54,7 +55,7 @@ export type TurnContext = {
 
 export type HostToolResult = { output: unknown; isError: boolean };
 
-export type PlannerLinkHandlers = {
+export type AgentHandlers = {
 	/** Throw to refuse the session. */
 	start?(message: ServerMessageOf<"start">): void | Promise<void>;
 	/** Ends the turn as finished when it resolves without calling `end`, failed when it rejects. */
@@ -64,7 +65,7 @@ export type PlannerLinkHandlers = {
 	control?(message: ServerMessageOf<"stop"> | ServerMessageOf<"resume">): void | Promise<void>;
 };
 
-export type PlannerLinkOptions = {
+export type AgentOptions = {
 	/** The Chopin origin, or the link's own `ws:`/`wss:` URL. */
 	url: string | URL;
 	/** A GitHub token whose account can push to or administer the document's repository. */
@@ -72,7 +73,7 @@ export type PlannerLinkOptions = {
 	/** The document's id or URL. */
 	document: string;
 	checkout?: ClientMessageOf<"attach">["checkout"];
-	handlers: PlannerLinkHandlers;
+	handlers: AgentHandlers;
 	version?: number;
 };
 
@@ -85,7 +86,7 @@ export type InputOptions = {
 	signal?: AbortSignal;
 };
 
-export type PlannerLinkClient = {
+export type AgentClient = {
 	readonly document: ServerMessageOf<"attached">["document"];
 	/** Asks the document's members through Decisions. */
 	ask(
@@ -100,11 +101,11 @@ export type PlannerLinkClient = {
 	readonly closed: Promise<LinkClosed>;
 };
 
-export function plannerLinkUrl(url: string | URL): URL {
+export function agentUrl(url: string | URL): URL {
 	let target = new URL(url);
 	if (target.protocol === "ws:" || target.protocol === "wss:") return target;
 	if (target.protocol !== "http:" && target.protocol !== "https:") {
-		throw new Error("The Planner link URL must be http(s) or ws(s).");
+		throw new Error("The agent connection URL must be http(s) or ws(s).");
 	}
 	target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
 	target.pathname = WIRE.path;
@@ -127,16 +128,23 @@ function serverMessage(data: unknown): ServerMessage | undefined {
 }
 
 /** Bun's and Node's WebSocket accept request headers; the DOM declaration does not say so. */
-type HeaderWebSocket = new(url: URL, init: { headers: Record<string, string> }) => WebSocket;
+type HeaderWebSocket = new(
+	url: URL,
+	init: { headers: Record<string, string>; protocols: string[] },
+) => WebSocket;
 
-/** A socket to the link URL carrying the bearer; browsers cannot send one. */
+/**
+ * A socket to the link URL offering the subprotocol and carrying the bearer; browsers cannot
+ * send one. The socket fails to open unless the server echoes the subprotocol.
+ */
 export function linkSocket(url: URL, token: string): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: { authorization: `Bearer ${token}` },
+		protocols: [WIRE.subprotocol],
 	});
 }
 
-const LINK_CLOSED = "The Planner link closed.";
+const LINK_CLOSED = "The agent connection closed.";
 
 type TurnState = {
 	controller: AbortController;
@@ -163,18 +171,18 @@ function settleCalls(turn: TurnState, message: string): void {
 }
 
 /** Attaches to one document as its Planner and serves the server's requests. */
-export function connectPlannerLink(options: PlannerLinkOptions): Promise<PlannerLinkClient> {
-	let socket = linkSocket(plannerLinkUrl(options.url), options.token);
+export function connectAgent(options: AgentOptions): Promise<AgentClient> {
+	let socket = linkSocket(agentUrl(options.url), options.token);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, (message: ServerMessageOf<"input-result">) => void>();
 	let closing = Promise.withResolvers<LinkClosed>();
-	let attaching = Promise.withResolvers<PlannerLinkClient>();
+	let attaching = Promise.withResolvers<AgentClient>();
 	let attached = false;
 
 	function send(message: ClientMessage): boolean {
 		let encoded = JSON.stringify(message);
 		if (new TextEncoder().encode(encoded).byteLength > WIRE.maxMessageBytes) {
-			throw new Error("The message exceeds the Planner link's size limit.");
+			throw new Error("The message exceeds the agent connection's size limit.");
 		}
 		if (socket.readyState !== WebSocket.OPEN) return false;
 		socket.send(encoded);
@@ -320,7 +328,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 	}
 
 	let attachedDocument: ServerMessageOf<"attached">["document"] | undefined;
-	let client: PlannerLinkClient = {
+	let client: AgentClient = {
 		get document() {
 			return attachedDocument!;
 		},
@@ -384,7 +392,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 		}
 		asks.clear();
 		attaching.reject(
-			new Error(`The Planner link closed before attaching (${closed.code} ${closed.reason}).`),
+			new Error(`The agent connection closed before attaching (${closed.code} ${closed.reason}).`),
 		);
 		closing.resolve(closed);
 	}
@@ -403,7 +411,7 @@ export function connectPlannerLink(options: PlannerLinkOptions): Promise<Planner
 				attachedDocument = message.document;
 				attaching.resolve(client);
 			} else if (message.type === "refused") {
-				attaching.reject(new PlannerLinkRefused(message.code, message.message));
+				attaching.reject(new AgentRefused(message.code, message.message));
 			}
 			return;
 		}

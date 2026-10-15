@@ -2,7 +2,7 @@ import { afterAll, expect, it } from "bun:test";
 
 import { harnessContract } from "./contract";
 import { createRemoteAdapter } from "./remote/adapter";
-import { attach, linkAuth, linkServer, nodeClient, scriptedPlanner } from "../testing/planner-link";
+import { attach, linkAuth, linkServer, nodeClient, scriptedPlanner } from "../testing/agent-link";
 
 let { auth, channel } = await linkAuth();
 let server = linkServer(auth);

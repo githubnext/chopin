@@ -298,8 +298,8 @@ describe("the hosted MCP adapter", () => {
 				code: "planner-not-attached",
 				message:
 					"No Planner is attached to this document. To attach one, connect a Planner client to "
-					+ "https://chopin.test/documents/octo-org/score/release-readiness over the Planner "
-					+ "link from a session in a checkout of octo-org/score; that session becomes this "
+					+ "https://chopin.test/documents/octo-org/score/release-readiness over the agent "
+					+ "connection from a session in a checkout of octo-org/score; that session becomes this "
 					+ "document's Planner.",
 			});
 		} finally {
