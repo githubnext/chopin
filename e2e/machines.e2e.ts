@@ -2,7 +2,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { findAgent } from "../packages/protocol/agents";
+import { AGENTS, findAgent } from "../packages/protocol/agents";
 import {
 	CONNECTOR_AGENT_HEADER,
 	CONNECTOR_AGENT_VERSION_HEADER,
@@ -180,12 +180,13 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 	await dialog.getByRole("button", { name: "Linux", exact: true }).click();
 	let picker = dialog.getByRole("combobox", { name: "Coding agent", exact: true });
 	await expect(picker).toHaveValue("copilot");
+	// The built-in agents, Copilot CLI first.
+	await expect(picker.locator("option")).toHaveText(["GitHub Copilot CLI", "Atomic"]);
 	await expect.poll(command).toBe(setupCommand(origin, "sh", findAgent("copilot")));
 	await dialog.getByRole("button", { name: "Windows", exact: true }).click();
 	await expect.poll(command).toBe(setupCommand(origin, "powershell", findAgent("copilot")));
-	await picker.selectOption({ label: "Claude Code" });
-	await expect(dialog.getByText(/Keep the terminal open\./)).toBeVisible();
-	await expect.poll(command).toBe(setupCommand(origin, "powershell", findAgent("claude-code")));
+	await picker.selectOption({ label: "Atomic" });
+	await expect.poll(command).toBe(setupCommand(origin, "powershell", findAgent("atomic")));
 	await picker.selectOption({ label: "GitHub Copilot CLI" });
 	await dialog.getByRole("button", { name: "macOS", exact: true }).click();
 	await expect.poll(command).toBe(setupCommand(origin, "sh", findAgent("copilot")));
@@ -258,14 +259,6 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	});
 	await expect(background).toHaveAttribute("aria-checked", "true");
 	await expect(automatic).toHaveAttribute("aria-checked", "false");
-	// An agent that asks permission in the terminal runs there.
-	let picker = page.getByRole("combobox", { name: "Coding agent", exact: true });
-	await picker.selectOption({ label: "Claude Code" });
-	await expect(background).toBeDisabled();
-	await expect(background).toHaveAttribute("aria-checked", "false");
-	await expect(page.getByText(/^Claude Code asks for permission in the terminal/)).toBeVisible();
-	await picker.selectOption({ label: "GitHub Copilot CLI" });
-	await expect(background).toHaveAttribute("aria-checked", "true");
 	await automatic.click();
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
 	// The machine's name is optional; the field says the hostname stands in without one.
@@ -352,7 +345,7 @@ test("a phone wraps every command in view", async ({ join: enter }) => {
 	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();
 	for (let system of ["Linux", "Windows"]) {
 		await dialog.getByRole("button", { name: system, exact: true }).click();
-		for (let id of ["copilot", "atomic", "claude-code", "codex", "gemini"]) {
+		for (let { id } of AGENTS) {
 			await dialog.getByRole("combobox", { name: "Coding agent", exact: true }).selectOption(id);
 			for (let well of await dialog.locator(".machines-command pre").all()) {
 				expect(await well.evaluate(pre => pre.scrollWidth - pre.clientWidth)).toBe(0);
@@ -411,7 +404,7 @@ async function threeMachines(page: Page) {
 	await pairedMachine(page, "studio", {
 		[CONNECTOR_HOST_HEADER]: "studio.local",
 		[CONNECTOR_PLATFORM_HEADER]: "darwin arm64",
-		[CONNECTOR_AGENT_HEADER]: "Claude Code",
+		[CONNECTOR_AGENT_HEADER]: "Atomic",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
 	});
 	await pairedMachine(page, "old-laptop");
@@ -442,7 +435,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 
 	// Search narrows the table, by name, repository, system or agent alike.
 	let search = page.getByRole("searchbox", { name: "Search machines" });
-	await search.fill("claude");
+	await search.fill("atomic");
 	await expect(page.getByText("1 of 3 machines", { exact: true })).toBeVisible();
 	await expect(table.getByRole("row")).toHaveCount(2);
 	await search.fill("");

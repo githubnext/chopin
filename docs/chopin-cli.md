@@ -63,8 +63,7 @@ $env:CHOPIN_URL = 'https://your-chopin-instance.example'
 
 It prints a link and a code. Open the link in the browser you're signed in to,
 check the code and approve. The machine connects, installs the service and
-appears on the page. An agent that asks permission in the terminal, such as
-Claude Code, runs in that terminal instead of as the service, so keep it open.
+appears on the page.
 
 PowerShell takes a bare `--` as the end of its own arguments and drops it, so
 the command puts chopin's `--` in quotes.
@@ -73,8 +72,7 @@ the command puts chopin's `--` in quotes.
 
 **Add machine** → **Server or VM** opens **Add a server**. Name the machine if
 you like (without a name Chopin uses its hostname), choose the agent, whether it
-runs in the background (on unless the agent asks permission in the
-terminal), and whether Chopin may build and prototype on it automatically (off
+runs in the background (on by default), and whether Chopin may build and prototype on it automatically (off
 unless you turn it on; see [Connect a checkout](#connect-a-checkout)). Then
 press **Generate install script**. The command carries a single-use key:
 
@@ -240,26 +238,16 @@ or that your favorite is offline.
 The Machines page offers these agents. **Connect with** is what follows
 `chopin connect .`:
 
-| Agent                                                                                               | Install                                                       | Sign in                                                  | Node.js        | Connect with                                              | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | -------------- | --------------------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `copilot login`                                          | 22 or newer    | `-- copilot --acp --allow-all`                            | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `atomic`, sign in with /login, then quit                 | 22.19 or newer | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
-| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `claude-agent-acp --cli`, sign in with /login, then quit | 22 or newer    | `-- claude-agent-acp`                                     | No                 |
-| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `codex login`                                            | 20 or newer    | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `gemini`, sign in, then quit                             | 20 or newer    | `-- gemini --acp --yolo`                                  | No                 |
+| Agent                                                                                               | Install                                              | Sign in                                  | Node.js        | Connect with                                | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------- | ------------------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `copilot login`                          | 22 or newer    | `-- copilot --acp --allow-all`              | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `atomic`, sign in with /login, then quit | 22.19 or newer | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp` | Yes                |
 
 Install the agent globally, as the table does, not through `npx`, so the
-service finds the same program each time. Each **Connect with** approves the agent's tools
-without asking, because the service can't answer a permission prompt:
-`--allow-all` for Copilot CLI, `--yolo` for Gemini CLI, and
-`INITIAL_AGENT_MODE=agent-full-access` for Codex. Atomic doesn't ask, and
-`ATOMIC_ACP_HEADLESS=1` ends its questions at once instead of waiting for an
-answer.
-
-Claude Code asks for permission in the terminal, so connect it without
-`--install-service` and keep `chopin connect` open. To run it as the service,
-set `"defaultMode": "bypassPermissions"` under `"permissions"` in
-`~/.claude/settings.json` first.
+service finds the same program each time. The service can't answer a
+permission prompt, so Copilot CLI connects with `--allow-all` to approve its
+tools without asking. Atomic doesn't ask, and `ATOMIC_ACP_HEADLESS=1` ends its
+questions at once instead of waiting for an answer.
 
 In PowerShell, quote a package name that starts with `@`, for example
 `npm install -g '@github/copilot'`. PowerShell would read the bare name as a

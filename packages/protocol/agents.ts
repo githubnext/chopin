@@ -89,47 +89,6 @@ export const AGENTS: readonly CodingAgent[] = [
 		docs: "https://github.com/bastani-inc/atomic-acp",
 		testedWithChopin: true,
 	},
-	{
-		id: "claude-code",
-		node: "22",
-		name: "Claude Code",
-		install: [["npm", "install", "-g", "@agentclientprotocol/claude-agent-acp"]],
-		// `--cli` opens the Claude Code the adapter bundles; ANTHROPIC_API_KEY works instead.
-		signIn: { command: ["claude-agent-acp", "--cli"], afterward: "sign in with /login, then quit" },
-		acp: ["claude-agent-acp"],
-		env: [],
-		unattended: {
-			setting:
-				'set "defaultMode": "bypassPermissions" under "permissions" in ~/.claude/settings.json',
-		},
-		docs: "https://github.com/agentclientprotocol/claude-agent-acp",
-		testedWithChopin: false,
-	},
-	{
-		id: "codex",
-		node: "20",
-		name: "OpenAI Codex",
-		// The adapter bundles its own Codex; the CLI is for signing in.
-		install: [["npm", "install", "-g", "@openai/codex", "@agentclientprotocol/codex-acp"]],
-		signIn: { command: ["codex", "login"] },
-		acp: ["codex-acp"],
-		env: ["INITIAL_AGENT_MODE=agent-full-access"],
-		unattended: true,
-		docs: "https://github.com/agentclientprotocol/codex-acp",
-		testedWithChopin: false,
-	},
-	{
-		id: "gemini",
-		node: "20",
-		name: "Gemini CLI",
-		install: [["npm", "install", "-g", "@google/gemini-cli"]],
-		signIn: { command: ["gemini"], afterward: "sign in, then quit" },
-		acp: ["gemini", "--acp", "--yolo"],
-		env: [],
-		unattended: true,
-		docs: "https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md",
-		testedWithChopin: false,
-	},
 ];
 
 export const DEFAULT_AGENT = AGENTS[0]!;

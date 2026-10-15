@@ -230,16 +230,13 @@ That runs in your terminal and stops when you close it. On a remote machine or
 server, add `--install-service` so a background service keeps it running after
 you close SSH.
 
-For another coding agent, install it, sign in, and put its **Connect with**
+To use Atomic instead, install it, sign in, and put its **Connect with**
 arguments in place of `-- copilot --acp --allow-all`:
 
-| Agent                                                                                               | Install                                                       | Connect with                                              | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `-- copilot --acp --allow-all`                            | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
-| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `-- claude-agent-acp`                                     | No                 |
-| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `-- gemini --acp --yolo`                                  | No                 |
+| Agent                                                                                               | Install                                              | Connect with                                | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `-- copilot --acp --allow-all`              | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp` | Yes                |
 
 The **Machines** page, at `/connect` on your server, gives one command that
 installs `chopin` and connects the machine, with your server filled in: your

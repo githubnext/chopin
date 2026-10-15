@@ -441,7 +441,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
 			let result = await run(at, release.env, [
 				"script",
 				"-qec",
-				`cat '${script}' | sh -s -- connect -- claude-agent-acp`,
+				`cat '${script}' | sh -s -- connect -- copilot --acp`,
 				"/dev/null",
 			]);
 			expect(result.code, result.stdout).toBe(0);

@@ -23,11 +23,16 @@ test("every agent names itself, how to install it, sign in and start it, and whe
 	}
 });
 
+test("the built-in agents are GitHub Copilot CLI and Atomic, in that order", () => {
+	expect(AGENTS.map(agent => agent.name)).toEqual(["GitHub Copilot CLI", "Atomic"]);
+});
+
 test("GitHub Copilot CLI is the default, and an unknown choice falls back to it", () => {
 	expect(DEFAULT_AGENT.name).toBe("GitHub Copilot CLI");
 	expect(AGENTS[0]).toBe(DEFAULT_AGENT);
 	expect(findAgent("atomic").name).toBe("Atomic");
 	expect(findAgent("gone")).toBe(DEFAULT_AGENT);
+	expect(findAgent("claude-code")).toBe(DEFAULT_AGENT);
 	expect(findAgent(null)).toBe(DEFAULT_AGENT);
 });
 

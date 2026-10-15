@@ -1,5 +1,4 @@
 import { mkdir } from "node:fs/promises";
-import { AGENTS } from "../packages/protocol/agents";
 import { setupAgentCommand, setupAgentInstall } from "../apps/web/src/experiments/setup-commands";
 import { expect, test } from "./room";
 import { SETUP_AGENTS } from "./servers";
@@ -56,7 +55,8 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 		expect(await options(page)).toEqual([
 			"Acme Planner",
 			"Acme Runner",
-			...AGENTS.map(agent => agent.name),
+			"GitHub Copilot CLI",
+			"Atomic",
 		]);
 		// Its own command installs whatever runs in the background; automatic work travels with the key.
 		await expect(page.getByRole("switch", { name: "Run in the background", exact: true }))
@@ -119,7 +119,7 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 		let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
 		await expect(dialog.getByRole("combobox", { name: "Coding agent", exact: true }))
 			.toHaveValue("acme-planner");
-		expect(await options(page)).toEqual(["Acme Planner", ...AGENTS.map(agent => agent.name)]);
+		expect(await options(page)).toEqual(["Acme Planner", "GitHub Copilot CLI", "Atomic"]);
 		await dialog.getByRole("button", { name: "Linux", exact: true }).click();
 		await expect(dialog.locator(".machines-run pre code"))
 			.toHaveText(setupAgentCommand(ACME, "linux", { origin: new URL(baseURL!).origin })!);

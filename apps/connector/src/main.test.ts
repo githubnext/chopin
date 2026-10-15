@@ -428,18 +428,16 @@ test.skipIf(process.platform === "win32")(
 		expect(copilot.requests).toEqual([]);
 
 		// Behind env, the program env starts is the one looked for.
-		let codex = await connect(
+		let atomic = await connect(
 			"nothing",
-			[root, "--", "env", "INITIAL_AGENT_MODE=agent-full-access", "codex-acp"],
+			[root, "--", "env", "ATOMIC_ACP_HEADLESS=1", "atomic-acp"],
 			undefined,
 			{ PATH: [tools, dirname(Bun.which("env")!)].join(delimiter) },
 		);
-		expect(codex.code).toBe(1);
-		expect(codex.stderr).toContain("codex-acp isn't installed");
-		expect(codex.stderr).toContain(
-			"  npm install -g @openai/codex @agentclientprotocol/codex-acp\n",
-		);
-		expect(codex.requests).toEqual([]);
+		expect(atomic.code).toBe(1);
+		expect(atomic.stderr).toContain("atomic-acp isn't installed");
+		expect(atomic.stderr).toContain("  npm install -g @bastani/atomic @bastani/atomic-acp\n");
+		expect(atomic.requests).toEqual([]);
 
 		let unknown = await connect("nothing", [root, "--", "my-agent"], undefined, only);
 		expect(unknown.code).toBe(1);

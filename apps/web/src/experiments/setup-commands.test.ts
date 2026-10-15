@@ -43,8 +43,6 @@ test("one sh command: the installer runs chopin connect itself, with a key only 
 	expect(setupCommand(ORIGIN, "sh", findAgent("atomic")).split("\n")[1]).toEndWith(
 		"sh -s -- connect --install-service --env ATOMIC_ACP_HEADLESS=1 -- atomic-acp",
 	);
-	expect(setupCommand(ORIGIN, "sh", findAgent("claude-code")).split("\n")[1])
-		.toEndWith("sh -s -- connect -- claude-agent-acp");
 });
 
 test("one PowerShell command: the key in the session only, on a line PSReadLine keeps out of its history file", () => {
@@ -63,8 +61,8 @@ test("one PowerShell command: the key in the session only, on a line PSReadLine 
 	);
 	// Never on chopin's command line, where other programs on the machine can read it.
 	expect(keyed).not.toContain("--key");
-	expect(setupCommand(ORIGIN, "powershell", findAgent("claude-code")).split("\n")[1])
-		.toEndWith("connect '--' claude-agent-acp");
+	expect(setupCommand(ORIGIN, "powershell", copilot, { background: false }).split("\n")[1])
+		.toEndWith("connect '--' copilot --acp --allow-all");
 });
 
 test("a machine name goes to chopin connect as --name, quoted for the shell", () => {
@@ -267,7 +265,11 @@ test("every agent that can run unattended connects as the service, in either she
 		}
 	}
 	expect(AGENTS.filter(runsAsService).map(agent => agent.id))
-		.toEqual(["copilot", "atomic", "codex", "gemini"]);
+		.toEqual(["copilot", "atomic"]);
+	// One that would wait on a permission prompt runs in the terminal.
+	let asks = { ...findAgent("copilot"), unattended: { setting: "approve its tools" } };
+	expect(runsAsService(asks)).toBe(false);
+	expect(connectArguments(asks, "sh")).toBe("connect -- copilot --acp --allow-all");
 });
 
 test("installing an agent and signing in is one copyable block, @-scoped packages quoted for PowerShell", () => {
@@ -402,7 +404,7 @@ test("the picker lists setup agents first, preselects the default, and keeps a p
 	// Your computer offers only the setup agents that have a keyless command.
 	expect(ids("computer")).toEqual(["acme-planner", ...AGENTS.map(agent => agent.id)]);
 	expect(chosenAgent(null, [OTHER, ACME], "server").id).toBe("acme-planner");
-	expect(chosenAgent("claude-code", [OTHER, ACME], "server").id).toBe("claude-code");
+	expect(chosenAgent("atomic", [OTHER, ACME], "server").id).toBe("atomic");
 	expect(chosenAgent("other", [OTHER, ACME], "server").id).toBe("other");
 	// A pick this page doesn't offer falls back as if there were none.
 	expect(chosenAgent("other", [OTHER, ACME], "computer").id).toBe("acme-planner");
@@ -410,5 +412,5 @@ test("the picker lists setup agents first, preselects the default, and keeps a p
 	// Without setup agents nothing changes.
 	expect(agentOptions([], "server")).toEqual([...AGENTS]);
 	expect(chosenAgent(null, [], "server")).toBe(findAgent(null));
-	expect(chosenAgent("claude-code", [], "computer")).toBe(findAgent("claude-code"));
+	expect(chosenAgent("atomic", [], "computer")).toBe(findAgent("atomic"));
 });
