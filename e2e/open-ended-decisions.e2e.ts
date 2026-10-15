@@ -26,50 +26,55 @@ async function create(page: Page) {
 	await view.getByRole("textbox", { name: "Decision question" }).fill(QUESTION);
 	await view.getByRole("textbox", { name: "Context (optional)" }).fill(CONTEXT);
 	await view.getByRole("button", { name: "Create decision", exact: true }).click();
-	await expect(card(page).getByRole("textbox", { name: "Working answer" })).toBeVisible();
+	await expect(card(page).getByRole("textbox", { name: "Answer" })).toBeVisible();
 }
 
 test(
-	"people create, collaborate on and explicitly record a written decision, then reopen with history",
+	"people create, collaborate on and save a written answer, then reopen with history",
 	async ({ join, room }, info) => {
 		let ana = await join("ana");
 		let ben = await join("ben");
-		await create(ana);
+		let view = await decisions(ana);
+		await view.getByRole("button", { name: "New decision", exact: true }).click();
+		await expect(view.getByRole("textbox", { name: "Decision question" })).toBeFocused();
+		await view.getByRole("textbox", { name: "Decision question" }).fill(QUESTION);
+		await view.getByRole("textbox", { name: "Context (optional)" }).fill(CONTEXT);
+		await ana.screenshot({ path: info.outputPath("create-decision.png") });
+		await view.getByRole("button", { name: "Create decision", exact: true }).click();
+		await expect(card(ana).getByRole("textbox", { name: "Answer", exact: true })).toHaveValue("");
 		await decisions(ben);
 		let first = card(ana);
 		let second = card(ben);
 		await expect(second).toContainText(CONTEXT);
-		await expect(first.getByRole("button", { name: "Record decision", exact: true }))
+		await expect(first.getByRole("button", { name: "Save", exact: true }))
 			.toBeDisabled();
-		await first.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
-		await expect(second.getByRole("textbox", { name: "Working answer" })).toHaveValue(ANSWER);
+		await first.getByRole("textbox", { name: "Answer" }).fill(ANSWER);
+		await expect(second.getByRole("textbox", { name: "Answer" })).toHaveValue(ANSWER);
 		await expect(second).toContainText("Open");
-		await first.getByRole("button", { name: "Add an approach", exact: true }).click();
-		await first.getByRole("textbox", { name: "New approach" }).fill("A guided walkthrough");
-		await first.getByRole("button", { name: "Add approach", exact: true }).click();
-		await expect(second).toContainText("A guided walkthrough");
-		await expect(second.getByRole("textbox", { name: "Working answer" })).toHaveValue(ANSWER);
+		await expect(first.getByRole("button", { name: "Add an approach" })).toHaveCount(0);
+		await expect(first.getByRole("button", { name: "Add an option" })).toHaveCount(0);
+		await expect(first.getByText("Shared draft until someone records it")).toHaveCount(0);
 		await expect(first.getByRole("radio")).toHaveCount(0);
 		await first.screenshot({ path: info.outputPath("open-decision.png") });
 
 		await ana.reload();
 		await ready(ana);
 		await decisions(ana);
-		await expect(first.getByRole("textbox", { name: "Working answer" })).toHaveValue(ANSWER);
-		await first.getByRole("button", { name: "Record decision", exact: true }).click();
+		await expect(first.getByRole("textbox", { name: "Answer" })).toHaveValue(ANSWER);
+		await first.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(second).toContainText("Decided");
 		await expect(second).toContainText("Decided by @ana");
-		await expect(second.getByRole("textbox", { name: "Working answer" })).toHaveCount(0);
+		await expect(second.getByRole("textbox", { name: "Answer" })).toHaveCount(0);
 		await expect(second).toContainText("Offer a tour only when someone asks for help.");
 		await written(ana, room, /response="text"/);
 		await first.screenshot({ path: info.outputPath("decided-decision.png") });
 		await second.getByRole("button", { name: "Reopen", exact: true }).click();
-		await expect(first.getByRole("textbox", { name: "Working answer" })).toBeVisible();
+		await expect(first.getByRole("textbox", { name: "Answer" })).toBeVisible();
 		await expect(first).toContainText("Start with a short example");
-		await second.getByRole("textbox", { name: "Working answer" }).fill(
+		await second.getByRole("textbox", { name: "Answer" }).fill(
 			"Use contextual hints after the first decision.",
 		);
-		await second.getByRole("button", { name: "Record decision", exact: true }).click();
+		await second.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(first).toContainText("Decided by @ben");
 		await expect(first).toContainText("Use contextual hints after the first decision.");
 		await ben.reload();
@@ -95,17 +100,17 @@ test(
 		});
 		await create(page);
 		let decision = card(page);
-		await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
+		await decision.getByRole("textbox", { name: "Answer" }).fill(ANSWER);
 		let pending = page.getByRole("region", { name: "Unsaved answers" });
 		await expect(pending).toBeVisible();
-		await pending.getByRole("button", { name: "Record decision", exact: true }).click({
+		await pending.getByRole("button", { name: "Save", exact: true }).click({
 			trial: true,
 		});
 		await page.screenshot({ path: info.outputPath("phone-decision.png"), animations: "disabled" });
 		await pending.getByRole("button", { name: "Clear", exact: true }).click();
-		await expect(decision.getByRole("textbox", { name: "Working answer" })).toHaveValue("");
-		await decision.getByRole("textbox", { name: "Working answer" }).fill(ANSWER);
-		await pending.getByRole("button", { name: "Record decision", exact: true }).click();
+		await expect(decision.getByRole("textbox", { name: "Answer" })).toHaveValue("");
+		await decision.getByRole("textbox", { name: "Answer" }).fill(ANSWER);
+		await pending.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(decision).toContainText("Decided by @ana");
 		let overflowing = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 		expect(overflowing).toBe(false);
@@ -122,8 +127,8 @@ test("readers see an open decision but cannot create or record one", async ({ jo
 		await reader.goto(roomPath(room));
 		let view = await decisions(reader);
 		await expect(view.getByRole("button", { name: "New decision", exact: true })).toHaveCount(0);
-		await expect(card(reader).getByRole("textbox", { name: "Working answer" })).toBeDisabled();
-		await expect(card(reader).getByRole("button", { name: "Record decision", exact: true }))
+		await expect(card(reader).getByRole("textbox", { name: "Answer" })).toBeDisabled();
+		await expect(card(reader).getByRole("button", { name: "Save", exact: true }))
 			.toHaveCount(0);
 	} finally {
 		await context.close();

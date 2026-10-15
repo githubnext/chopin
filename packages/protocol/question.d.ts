@@ -58,7 +58,7 @@ export declare namespace Question {
 		question: string;
 		/** Supporting context, shown only in the full decision card. */
 		description?: string;
-		/** Written resolution; options hold candidate approaches rather than answer choices. */
+		/** Written response; options must be empty. */
 		response?: "text";
 		options: Option[];
 		multiple: boolean;

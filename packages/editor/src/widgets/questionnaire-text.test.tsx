@@ -23,9 +23,9 @@ test("native card preserves written response mode and stays disabled without a w
 		presentation: "list",
 		canEdit: false,
 	}));
-	expect(html).toContain("Working answer");
+	expect(html).toContain(">Answer<");
 	expect(html).toMatch(/<textarea[^>]*disabled=""/);
-	expect(html).not.toContain("Record decision");
+	expect(html).not.toContain(">Save<");
 });
 
 test("native decided card preserves the authored prose and attribution", () => {
@@ -65,6 +65,6 @@ test("reopening a native written card shows the previous prose without confirmin
 		presentation: "list",
 	}));
 	expect(html).toContain("Previously: A guided tour.");
-	expect(html).toContain("Working answer");
+	expect(html).toContain(">Answer<");
 	expect(html).not.toContain("question-written-answer");
 });

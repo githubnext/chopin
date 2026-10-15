@@ -117,6 +117,9 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 		if (!Array.isArray(raw.options) || (!verbatim && !written && raw.options.length === 0)) {
 			fail(`Question ${index + 1} requires at least one option`);
 		}
+		if (written && raw.options.length > 0) {
+			fail(`Question ${index + 1} text response cannot have options`);
+		}
 		if (!verbatim && raw.options.length > limits.MAX_OPTIONS) {
 			fail(`Question ${index + 1} can contain at most ${limits.MAX_OPTIONS} options`);
 		}
@@ -246,6 +249,7 @@ export function identified(raw: unknown): Definition {
 			|| !Array.isArray(question.options)
 			|| question.options.length === 0 && !verbatim && question.response !== "text"
 				&& (source.questions.length !== 1 || question.multiple)
+			|| question.response === "text" && question.options.length > 0
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) {
 			fail(`Question ${index + 1} has invalid options or multiple value`);
@@ -309,6 +313,9 @@ export function appendOption(
 	let [item] = definition.questions;
 	if (!item || item.id !== input.question) {
 		return { ok: false, reason: "invalid", message: "Unknown question" };
+	}
+	if (item.response === "text") {
+		return { ok: false, reason: "invalid", message: "Written answers do not have options" };
 	}
 	if (typeof input.key !== "string" || !KEY.test(input.key)) {
 		return { ok: false, reason: "invalid", message: "Option request key is invalid" };

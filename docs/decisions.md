@@ -6,13 +6,12 @@ inspection or research for factual questions such as “When does onboarding run
 
 In **Decisions**, choose **New decision**, write the question and optionally add
 context. The new card starts open. Everyone with write access shares its working
-answer and can add candidate approaches. A candidate is something to consider;
-adding it does not decide the question.
+answer. Written decisions have one answer field; choice decisions have selectable
+options.
 
-Press **Record decision** to confirm the current written answer. On a phone,
-the shared bar offers **Record decision** (or **Record decisions** for a batch)
-when it includes a written answer you edited. The card records the person who
-confirmed it. A draft, a recommendation and a casual agreement in Chat do not
+Press **Save** to submit the written answer, just like a choice decision. On a
+phone, the shared **Save** bar submits the answers you edited. The card records
+the person who saved it. A draft, a recommendation and a casual agreement in Chat do not
 resolve a written decision.
 
 Choose **Reopen** to reconsider an answer. The previous decision remains visible
@@ -32,7 +31,7 @@ can continue inspecting or developing the document while the choice remains
 open. This tool cannot confirm an answer.
 
 `ask` also accepts `response: "text"` when the Planner needs to wait for a
-person's answer. Its `options` may be empty or contain candidate approaches;
+person's answer. Set `options` to an empty array;
 `multiple` must be false. Omitting `response` keeps the existing choice mode.
 
 ## Collaboration and persistence
