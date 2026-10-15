@@ -61,8 +61,8 @@ function RowContent({ row }: { row: MachineRow }) {
 		<>
 			<MachineGlyph machine={row.machine} size={18} />
 			<span className="machine-menu-option">
-				<span className="machine-menu-title">{row.label}</span>
-				<span className="machine-menu-detail">{row.detail}</span>
+				<span className="machine-menu-title" title={row.label}>{row.label}</span>
+				<span className="machine-menu-detail" title={row.detail}>{row.detail}</span>
 			</span>
 			<span className="machine-menu-check">
 				{row.checked && <CheckIcon aria-hidden="true" size={14} />}
@@ -133,9 +133,15 @@ export function MachineButton(
 				? anchor.left
 				: anchor.right - width;
 			let left = Math.max(margin, Math.min(start, viewport - width - margin));
-			// Below the button where it fits, as in the header; else above, as from the composer.
-			let below = anchor.bottom + 4 + panel.offsetHeight <= height - margin
-				|| anchor.top - 4 - panel.offsetHeight < margin;
+			// Below the button where it fits, as in the header; else above, as from the composer;
+			// else on the side with more room. It never leaves the window: the rows that don't fit
+			// scroll inside it.
+			let natural = panel.scrollHeight;
+			let roomBelow = height - margin - anchor.bottom - 4;
+			let roomAbove = anchor.top - 4 - margin;
+			let below = natural <= roomBelow
+				|| natural > roomAbove && roomBelow >= roomAbove;
+			panel.style.maxHeight = `min(28rem, ${Math.max(0, below ? roomBelow : roomAbove)}px)`;
 			panel.style.left = `${left}px`;
 			panel.style.top = below ? `${anchor.bottom + 4}px` : "";
 			panel.style.bottom = below ? "" : `${height - anchor.top + 4}px`;
@@ -158,7 +164,9 @@ export function MachineButton(
 		let items = [...(menu.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])]
 			.filter(item => item.getAttribute("aria-disabled") !== "true");
 		let checked = items.find(item => item.getAttribute("aria-checked") === "true");
-		(initialItem.current === "last" ? items.at(-1) : checked ?? items[0])?.focus();
+		let first = initialItem.current === "last" ? items.at(-1) : checked ?? items[0];
+		first?.focus();
+		first?.scrollIntoView({ block: "nearest" });
 	}, [open, mounted]);
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Tab") {
@@ -197,6 +205,8 @@ export function MachineButton(
 			? (current + 1) % items.length
 			: (current - 1 + items.length) % items.length;
 		items[next]?.focus();
+		// A row scrolled out of the panel comes into view as it takes focus.
+		items[next]?.scrollIntoView({ block: "nearest" });
 	};
 	let name = runner?.name ?? chosen?.label ?? "Automatic";
 	let label = runner?.label ?? machineButtonLabel(state);
@@ -305,7 +315,7 @@ export function MachineButton(
 				type="button"
 			>
 				<MachineGlyph machine={chosen} />
-				{!compact && <span className="machine-button-name">{name}</span>}
+				{!compact && <span className="machine-button-name" title={name}>{name}</span>}
 				{!compact && (
 					<ChevronIcon
 						aria-hidden="true"

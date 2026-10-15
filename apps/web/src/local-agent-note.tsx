@@ -5,20 +5,20 @@ const TROUBLESHOOTING =
 	"https://github.com/githubnext/chopin/blob/main/docs/local-experiments.md#trouble-connecting";
 
 /**
- * Download the connector this server serves and connect the current folder's checkout. Bun must
- * not load that folder's .env (it could redirect pairing) or bunfig.toml (it could run code).
+ * Download the connector this server serves and connect this machine. Bun must not load the
+ * current folder's .env (it could redirect pairing) or bunfig.toml (it could run code).
  */
 export function connectorCommand(origin: string): string {
 	return `mkdir -p ~/.chopin && curl -fsSL ${origin}/connector.js -o ~/.chopin/connector.js`
 		+ ` && CHOPIN_URL=${origin} bun --no-env-file --config=/dev/null`
-		+ " ~/.chopin/connector.js connect . --agent copilot";
+		+ " ~/.chopin/connector.js connect --agent copilot";
 }
 
 /** What the note asks for; it names `action` only when that button is there to press. */
 export function localAgentNoteText(action?: string): string {
 	return action
-		? `Your local agent isn’t connected. Run this in your project folder, then press ${action} again.`
-		: "Your local agent isn’t connected. Run this in your project folder to connect it.";
+		? `Your local agent isn’t connected. Run this in a terminal, then press ${action} again.`
+		: "Your local agent isn’t connected. Run this in a terminal to connect it.";
 }
 
 /**

@@ -592,6 +592,11 @@
 	}
 }
 
+/* A long machine name ends in an ellipsis, whole in its title, so the other columns keep room. */
+.machines-table .machines-name {
+	max-width: 16rem;
+}
+
 /* Each cell keeps to two lines: its first never wraps, so the table widens or the page scrolls. */
 .machines-table .cv-table-cell > .machines-stack > :first-child {
 	white-space: nowrap;
@@ -611,7 +616,24 @@
 	line-height: var(--text-xs--line-height);
 }
 
-/* Space, not a separator glyph, keeps a row's hostname, release and system apart. */
+/* The owner's avatar, where GitHub has one, before their login. */
+.machines-owner {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 100%;
+	align-items: center;
+	vertical-align: top;
+	gap: calc(var(--spacing) * 1.5);
+}
+
+.machines-owner-avatar {
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+	flex: none;
+	border-radius: var(--radius-full);
+}
+
+/* Space, not a separator glyph, keeps a row's owner, hostname and release apart. */
 .machines-detail-part + .machines-detail-part {
 	margin-inline-start: calc(var(--spacing) * 1.5);
 }

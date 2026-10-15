@@ -4,7 +4,6 @@ import { useEffect, useSyncExternalStore } from "react";
 export type Machine = {
 	id: string;
 	label: string;
-	repositories: string[];
 	autoRun: boolean;
 	createdAt: number;
 	lastSeenAt: number;

@@ -130,7 +130,7 @@ test("an offline agent offers connection guidance instead of an unexplained retr
 	await specimen.getByRole("button", { name: "Connect agent", exact: true }).click();
 	let popup = page.getByRole("dialog", { name: "Connect agent", exact: true });
 	await expect(popup).toContainText(
-		"Run this in your project folder, then approve the pairing page.",
+		"Run this in a terminal, then approve the pairing page.",
 	);
 	await expect(popup.getByRole("button", { name: "Copy command", exact: true })).toBeEnabled();
 	await expect(popup.locator("pre code")).toContainText("CHOPIN_URL=http://localhost:8787");

@@ -44,7 +44,7 @@ import type { ReactNode } from "react";
 import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 import type { MachineKind } from "./machine-setup";
-import type { CopyItem, useMachines } from "./machines";
+import type { CopyItem, Owner, useMachines } from "./machines";
 
 export type MachineState = "connected" | "offline" | "reauthorize";
 
@@ -70,19 +70,40 @@ function agentName(agent: Machine["agent"]): string | undefined {
 	return agent ? [agent.name, agent.version].filter(Boolean).join(" ") : undefined;
 }
 
-/** Whether a search finds the machine, by anything the list shows about it. */
+/**
+ * Whether a search finds the machine, by anything the list shows about it: its name, owner, host,
+ * version, agent and system. A machine serves every repository its owner can push to, so no
+ * repository identifies it.
+ */
 export function machineMatches(machine: Machine, query: string, login: string | undefined) {
 	let words = query.trim().toLowerCase();
 	if (!words) return true;
 	return [
 		machine.label,
-		login && `${login}@github`,
-		...machine.repositories,
+		login,
 		machine.version,
 		machine.hostname,
 		agentName(machine.agent),
 		platformName(machine.platform),
 	].some(value => value?.toLowerCase().includes(words));
+}
+
+/** The owner's GitHub login, after their avatar where GitHub has one. */
+function OwnerName({ owner }: { owner: Owner }) {
+	return (
+		<span className="machines-owner">
+			{owner.avatarUrl && (
+				<img
+					alt=""
+					className="machines-owner-avatar"
+					height={16}
+					src={owner.avatarUrl}
+					width={16}
+				/>
+			)}
+			<span className="machines-truncate" title={owner.login}>{owner.login}</span>
+		</span>
+	);
 }
 
 /**
@@ -266,12 +287,15 @@ function useMachineDialogs(machines: ReturnType<typeof useMachines>, onDisconnec
 	return { dialogs, rename: setRenaming, disconnect: setConfirming };
 }
 
-/** The desktop table, as Tailscale's: machine, host, version, agent, last seen, and actions. */
+/**
+ * The desktop table, as Tailscale's: machine, owner, host, version, agent, last seen, and actions.
+ * A machine is its name and badges alone: it serves every repository its owner can push to.
+ */
 function MachineTable(
-	{ labelledBy, list, login, machines, onRename, onDisconnect }: {
+	{ labelledBy, list, owner, machines, onRename, onDisconnect }: {
 		labelledBy: string;
 		list: Machine[];
-		login: string | undefined;
+		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 		onRename: (machine: Machine) => void;
 		onDisconnect: (machine: Machine) => void;
@@ -283,6 +307,7 @@ function MachineTable(
 			<TableHeader>
 				<TableRow>
 					<TableHead>Machine</TableHead>
+					<TableHead>Owner</TableHead>
 					<TableHead>Host</TableHead>
 					<TableHead>Version</TableHead>
 					<TableHead>Agent</TableHead>
@@ -295,11 +320,10 @@ function MachineTable(
 			<TableBody>
 				{!list.length && (
 					<TableRow>
-						<TableCell className="machines-empty" colSpan={6}>No machines match.</TableCell>
+						<TableCell className="machines-empty" colSpan={7}>No machines match.</TableCell>
 					</TableRow>
 				)}
 				{list.map(machine => {
-					let owner = login ? `${login}@github` : undefined;
 					return (
 						<TableRow key={machine.id}>
 							<TableCell>
@@ -310,7 +334,7 @@ function MachineTable(
 											label={machine.label}
 											onToggle={() => void machines.favor(machine.id, !machine.favorite)}
 										/>
-										<span className="machines-name">{machine.label}</span>
+										<span className="machines-name" title={machine.label}>{machine.label}</span>
 										{machine.service && (
 											<Badge
 												icon={ServerIcon}
@@ -330,12 +354,11 @@ function MachineTable(
 											/>
 										)}
 									</span>
-									{owner && <span className="machines-secondary machines-truncate">{owner}</span>}
-									{machine.repositories.length > 0 && (
-										<span className="machines-secondary machines-truncate">
-											{machine.repositories.join(", ")}
-										</span>
-									)}
+								</span>
+							</TableCell>
+							<TableCell>
+								<span className="machines-stack">
+									{owner ? <OwnerName owner={owner} /> : <Dash label="Owner unknown" />}
 								</span>
 							</TableCell>
 							<TableCell>
@@ -406,9 +429,9 @@ function page() {
  * a quiet second line, and a chevron to its own view.
  */
 function MachineRows(
-	{ list, login, machines }: {
+	{ list, owner, machines }: {
 		list: Machine[];
-		login: string | undefined;
+		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 	},
 ) {
@@ -425,27 +448,27 @@ function MachineRows(
 	return (
 		<section aria-labelledby={headingId} className="machines-rows">
 			<h3 className="machines-rows-heading" id={headingId}>
-				{login ? `@${login}` : "Your machines"}
+				{owner ? `@${owner.login}` : "Your machines"}
 			</h3>
 			{!list.length && <p className="machines-empty">No machines match.</p>}
 			<ul>
 				{list.map(machine => {
 					let state = machineState(machine);
+					// Who owns it, where it runs and which chopin; its state is the dot's.
 					let parts = [
+						owner?.login,
 						machine.hostname,
 						machine.version && `chopin ${machine.version}`,
-						OS[machine.platform?.os ?? ""],
 					].filter(Boolean);
-					let detail = state !== "connected"
-						? statusWords(machine, now)
-						: parts.length
+					// Space, never a separator glyph, keeps the parts apart (see DESIGN.md).
+					let detail = parts.length
 						? parts.map((part, index) => (
 							<span className="machines-detail-part" key={index}>
 								{index > 0 && " "}
 								{part}
 							</span>
 						))
-						: machine.repositories[0] || "Connected";
+						: statusWords(machine, now);
 					return (
 						<li className="machines-row-item" key={machine.id}>
 							<FavoriteStar
@@ -465,7 +488,7 @@ function MachineRows(
 								<span className="machines-row-text">
 									<span className="machines-row-name">
 										<StatusDot label={statusWords(machine, now)} state={state} />
-										<span className="machines-name">{machine.label}</span>
+										<span className="machines-name" title={machine.label}>{machine.label}</span>
 										<MachineIcon aria-hidden="true" className="machines-row-icon" size={16} />
 									</span>
 									<span className="machines-secondary machines-truncate">{detail}</span>
@@ -486,8 +509,8 @@ function MachineRows(
  * first. The table asks again every few seconds, so a machine appears as it connects.
  */
 export function YourMachines(
-	{ login, machines, onChoose }: {
-		login: string | undefined;
+	{ owner, machines, onChoose }: {
+		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 		onChoose: (kind: MachineKind) => void;
 	},
@@ -507,7 +530,7 @@ export function YourMachines(
 			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
 			: null;
 	}
-	let list = all.filter(machine => machineMatches(machine, query, login));
+	let list = all.filter(machine => machineMatches(machine, query, owner?.login));
 	return (
 		<section aria-labelledby={headingId} className="machines-section">
 			<h2 className="sr-only" id={headingId}>Your machines</h2>
@@ -518,7 +541,7 @@ export function YourMachines(
 				<input
 					className="field"
 					onChange={event => setQuery(event.currentTarget.value)}
-					placeholder={phone ? "Search" : "Search by name, owner, repository, version…"}
+					placeholder={phone ? "Search" : "Search by name, owner, host, version, agent…"}
 					type="search"
 					value={query}
 				/>
@@ -530,12 +553,12 @@ export function YourMachines(
 				</span>
 			)}
 			{phone
-				? <MachineRows list={list} login={login} machines={machines} />
+				? <MachineRows list={list} machines={machines} owner={owner} />
 				: (
 					<MachineTable
 						labelledBy={headingId}
 						list={list}
-						login={login}
+						owner={owner}
 						machines={machines}
 						onDisconnect={disconnect}
 						onRename={rename}
@@ -554,9 +577,9 @@ export function YourMachines(
  * actions as full-width rows. Back returns to the list where it was.
  */
 export function MachineDetail(
-	{ id, login, machines }: {
+	{ id, owner, machines }: {
 		id: string;
-		login: string | undefined;
+		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 	},
 ) {
@@ -577,7 +600,7 @@ export function MachineDetail(
 	let now = Date.now();
 	let facts: [string, ReactNode][] = [
 		["Status", <Status key="status" machine={machine} now={now} />],
-		["Owner", login ? `${login}@github` : undefined],
+		["Owner", owner && <OwnerName key="owner" owner={owner} />],
 		["Hostname", machine.hostname],
 		["System", platformName(machine.platform)],
 		[
@@ -595,7 +618,6 @@ export function MachineDetail(
 			"Agent",
 			[agentName(machine.agent), machine.planner && "runs Planners"].filter(Boolean).join(", "),
 		],
-		["Repositories", machine.repositories.join(", ")],
 		[
 			"Runs",
 			[machine.service && "as the service", machine.autoRun && "builds automatically"].filter(

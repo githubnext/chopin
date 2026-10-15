@@ -1390,10 +1390,19 @@
 }
 
 /* Secondary detail on the item's own line, right-aligned in tertiary ink. */
+/*
+ * A row's quiet detail at its end. A long one, such as a long machine name, gives way with the
+ * row's name: each ends in an ellipsis rather than pushing the other out of the menu.
+ */
 .app-menu-item-meta {
+	min-width: 0;
+	max-width: 50%;
 	margin-inline-start: auto;
-	flex: none;
+	flex: 0 1 auto;
+	overflow: hidden;
 	font-size: var(--text-xs);
+	text-overflow: ellipsis;
+	white-space: nowrap;
 	color: var(--color-text-tertiary);
 }
 
@@ -1430,11 +1439,19 @@
 	}
 }
 
+/* A machine's name gives way before its state in the Machine list. */
+.document-actions-menu .app-menu-item > .truncate {
+	flex: 1 1 0;
+}
+
+/* A long machine list scrolls inside the menu, whose height place() fits to the window. */
 .document-actions-menu {
 	position: fixed;
 	z-index: 60;
 	display: flex;
 	flex-direction: column;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 	border-radius: var(--radius-md);
 	background: var(--color-page);
 	padding: var(--menu-padding);

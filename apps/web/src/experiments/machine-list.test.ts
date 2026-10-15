@@ -7,7 +7,6 @@ const NOW = Date.UTC(2026, 9, 14, 12);
 const base: Machine = {
 	id: "m1",
 	label: "build-box",
-	repositories: ["octo-org/score", "octo-org/site"],
 	autoRun: false,
 	createdAt: NOW - 86_400_000,
 	lastSeenAt: NOW - 3 * 3_600_000,
@@ -38,7 +37,7 @@ test("platforms read as people name them", () => {
 	expect(platformName(null)).toBeUndefined();
 });
 
-test("search finds a machine by name, owner, repository, version, host, agent or system", () => {
+test("search finds a machine by name, owner, host, version, agent or system", () => {
 	let machine: Machine = {
 		...base,
 		version: "0.0.5",
@@ -46,9 +45,18 @@ test("search finds a machine by name, owner, repository, version, host, agent or
 		platform: { os: "darwin", arch: "arm64" },
 		agent: { name: "GitHub Copilot CLI", version: "1.0.97" },
 	};
-	for (let query of ["BUILD", "ada", "site", "0.0.5", ".local", "copilot", "macos", ""]) {
+	for (let query of ["BUILD", "ada", "0.0.5", ".local", "copilot", "macos", ""]) {
 		expect(machineMatches(machine, query, "ada"), query).toBe(true);
 	}
 	expect(machineMatches(machine, "windows", "ada")).toBe(false);
 	expect(machineMatches(machine, "nobody", "ada")).toBe(false);
+	// The owner is their login, with no suffix.
+	expect(machineMatches(machine, "@github", "ada")).toBe(false);
+});
+
+test("search never matches a repository a machine has a checkout of; machines serve them all", () => {
+	let listed = { ...base, repositories: ["octo-org/score", "octo-org/site"] } as Machine;
+	for (let query of ["site", "octo-org/score", "score"]) {
+		expect(machineMatches(listed, query, "ada"), query).toBe(false);
+	}
 });

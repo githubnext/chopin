@@ -437,7 +437,7 @@ export function AddComputerDialog(
 					<Needs agent={agent} system={system} />
 				</div>
 				<div className="machines-run">
-					<p className="machines-run-lead">In a terminal in your repository, run:</p>
+					<p className="machines-run-lead">In a terminal, run:</p>
 					<Command
 						label="setup command"
 						place={shellPlace(shell)}

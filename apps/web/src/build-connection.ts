@@ -8,7 +8,6 @@ export function plannerConnectCommand(documentURL: string, backend: string): str
 	let arguments_ = [
 		"chopin",
 		"connect",
-		".",
 		"--planner",
 		documentURL,
 		"--planner-command",

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import {
 	CONNECTION_GRACE,
@@ -84,6 +85,8 @@ import type { ComposerDraft, ReferenceTarget } from "./references";
 import type { Wire as Socket } from "../wire";
 
 export type ChatProps = {
+	/** The machine button: which of the person's machines works on this document. */
+	machine?: ReactNode;
 	/** The child document open beside this Chat, sent with a Planner message as its focus. */
 	focus?: string;
 	/** Open a child document and settle once it has synced. */
@@ -219,6 +222,7 @@ export function Chat(
 		room,
 		sendAcknowledgements,
 		wire,
+		machine,
 	}: ChatProps,
 ) {
 	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
@@ -834,6 +838,7 @@ export function Chat(
 					</>
 				}
 				attachment={<PlannerAttachment planner={planner} />}
+				machine={machine}
 				input={{
 					"aria-activedescendant": commandOpen
 						? referenceOptionId(commandPickerId, commandActive)

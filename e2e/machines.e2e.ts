@@ -412,16 +412,35 @@ async function threeMachines(page: Page) {
 }
 
 test("the machines table: search, Tailscale's columns, a row's menu and renaming", async ({ join: enter }) => {
-	let page = await enter(person());
+	let login = person();
+	let page = await enter(login);
 	await threeMachines(page);
 	let table = page.getByRole("table", { name: "Your machines" });
-	await expect(page.getByText("3 machines", { exact: true })).toBeVisible();
-	for (let heading of ["Machine", "Host", "Version", "Agent", "Last seen"]) {
-		await expect(table.getByRole("columnheader", { name: heading, exact: true })).toBeVisible();
-	}
 	// A row's name starts with its favorite star's.
 	let row = (name: string) =>
 		table.getByRole("row", { name: new RegExp(`^(Favorite |Remove )?${name}`) });
+	await expect(page.getByText("3 machines", { exact: true })).toBeVisible();
+	await expect(table.getByRole("columnheader")).toHaveText([
+		"Machine",
+		"Owner",
+		"Host",
+		"Version",
+		"Agent",
+		"Last seen",
+		"Actions",
+	]);
+	// A machine is its name, star and badges: no owner or repository under the name. Its owner is
+	// their GitHub login in a column of its own.
+	let cells = (name: string) => row(name).getByRole("cell");
+	await expect(cells("build-box").nth(0)).toHaveText(/^\s*build-box\s*Service\s*$/);
+	await expect(cells("build-box").nth(1)).toHaveText(login);
+	// Every machine connected with a checkout of octo-org/score, yet no repository shows anywhere.
+	await expect(table).not.toContainText("octo-org");
+	await expect(table).not.toContainText("score");
+	await expect(table).not.toContainText("@github");
+	await expect(page.getByRole("searchbox", { name: "Search machines" }))
+		.toHaveAttribute("placeholder", "Search by name, owner, host, version, agent…");
+	await shot(page, "machines-table");
 	await expect(row("build-box")).toContainText("Service");
 	await expect(row("build-box")).toContainText("build-box.internal");
 	await expect(row("build-box")).toContainText(`chopin ${RELEASE}`);
@@ -433,11 +452,15 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(row("studio")).toContainText("macOS arm64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
 
-	// Search narrows the table, by name, repository, system or agent alike.
+	// Search narrows the table, by name, owner, host, version or agent alike; never by repository.
 	let search = page.getByRole("searchbox", { name: "Search machines" });
 	await search.fill("atomic");
 	await expect(page.getByText("1 of 3 machines", { exact: true })).toBeVisible();
 	await expect(table.getByRole("row")).toHaveCount(2);
+	await search.fill(login);
+	await expect(page.getByText("3 of 3 machines", { exact: true })).toBeVisible();
+	await search.fill("octo-org/score");
+	await expect(page.getByText("0 of 3 machines", { exact: true })).toBeVisible();
 	await search.fill("");
 
 	// The row menu renames the machine.
@@ -451,6 +474,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await menu.getByRole("menuitem", { name: "Edit machine name…" }).click();
 	let dialog = page.getByRole("dialog", { name: "Edit machine name for build-box" });
 	await expect(dialog).toContainText("This name is shown in Chopin and in chopin status.");
+	await expect(dialog).not.toContainText("octo-org");
 	let field = dialog.getByRole("textbox", { name: "Machine name" });
 	await expect(field).toBeFocused();
 	await field.fill("Build box");
@@ -465,7 +489,8 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 });
 
 test("on a phone, machines are rows that open their own view, where they rename", async ({ join: enter }) => {
-	let page = await enter(person(), PHONE);
+	let login = person();
+	let page = await enter(login, PHONE);
 	await page.goto("/machines");
 	await expect(page.getByRole("region", { name: "Add your first machine", exact: true }))
 		.toBeVisible();
@@ -475,8 +500,14 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(rows.locator(".machines-row")).toHaveCount(3);
 	await expect(rows.getByRole("img", { name: "Connected" })).toHaveCount(2);
 	await expect(rows.getByRole("img", { name: /^Last seen/ })).toHaveCount(1);
-	await expect(rows.locator(".machines-row").filter({ hasText: "build-box" }))
-		.toContainText(`build-box.internal chopin ${RELEASE} Linux`);
+	// Each row's second line: who owns it, where it runs and which chopin; never a repository.
+	await expect(
+		rows.locator(".machines-row").filter({ hasText: "build-box" }).locator(".machines-secondary"),
+	).toHaveText(`${login} build-box.internal chopin ${RELEASE}`);
+	await expect(rows.locator(".machines-row").filter({ hasText: "old-laptop" }))
+		.toContainText(login);
+	await expect(rows).not.toContainText("octo-org");
+	await shot(page, "phone-machines-list");
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("studio");
 	await expect(rows.locator(".machines-row")).toHaveCount(1);
 	await page.getByRole("searchbox", { name: "Search machines" }).fill("");
@@ -490,6 +521,11 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.getByRole("main")).toContainText("build-box.internal");
 	await expect(page.getByRole("main")).toContainText("Linux arm64");
 	await expect(page.getByRole("main")).not.toContainText("Address");
+	// Its owner, and no repository: a machine serves every repository its owner can push to.
+	await expect(page.locator(".machines-facts")).toContainText(`Owner${login}`);
+	await expect(page.locator(".machines-facts")).not.toContainText("Repositor");
+	await expect(page.getByRole("main")).not.toContainText("octo-org");
+	await shot(page, "phone-machine-detail");
 	await page.getByRole("button", { name: "Edit machine name…" }).click();
 	let dialog = page.getByRole("dialog", { name: "Edit machine name for build-box" });
 	await dialog.getByRole("textbox", { name: "Machine name" }).fill("Build box");

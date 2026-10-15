@@ -465,14 +465,21 @@ function capsuleBuild(page: import("@playwright/test").Page) {
 }
 
 /**
- * Build stays 12px from the faces, with the rule as far from Build as from the first face; the faces
- * sit as far from the rule as from the bar's end, top and bottom.
+ * Build, with the machine button right after it, stays 12px from the faces, with the rule as far
+ * from the last of them as from the first face; the faces sit as far from the rule as from the
+ * bar's end, top and bottom.
  */
 async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 	let people = build.page().getByRole("group", { name: /^People here/ });
 	await expect(build).toBeVisible();
 	await expect(people.locator(":scope > [data-tooltip]").first()).toBeVisible();
-	let control = await build.evaluate(element => element.getBoundingClientRect().right);
+	let control = await build.evaluate(element => {
+		let machine = element.closest("[data-document-title-bar]")?.querySelector(".machine-button");
+		return Math.max(
+			element.getBoundingClientRect().right,
+			machine?.getBoundingClientRect().right ?? 0,
+		);
+	});
 	let gaps = await people.evaluate(group => {
 		let rule = parseFloat(getComputedStyle(group).borderInlineStartWidth);
 		let bar = group.closest("[data-document-title-bar]")!;
@@ -583,7 +590,7 @@ test(
 		await capsule.click();
 		let view = buildView(page);
 		let note = view.getByText(
-			"Your local agent isn’t connected. Run this in your project folder, then press Retry again.",
+			"Your local agent isn’t connected. Run this in a terminal, then press Retry again.",
 			{ exact: true },
 		);
 		await expect(note).toBeVisible();

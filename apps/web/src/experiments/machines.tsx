@@ -94,17 +94,32 @@ export function MachinesProblem({ code, onRetry }: { code: string; onRetry: () =
 	);
 }
 
-/** The signed-in person's GitHub login, asked for here so the first page load needn't carry it. */
-export function useLogin() {
-	let [login, setLogin] = useState<string>();
+/**
+ * The signed-in person, who owns every machine the page lists: their GitHub login and avatar,
+ * asked for here so the first page load needn't carry them.
+ */
+export function useOwner() {
+	let [owner, setOwner] = useState<Owner>();
 	useEffect(() => {
 		let current = true;
-		session().then(value => current && setLogin(value.user?.login), () => {});
+		session().then(value => {
+			if (current && value.user) {
+				setOwner({ login: value.user.login, avatarUrl: value.user.avatarUrl || undefined });
+			}
+		}, () => {});
 		return () => {
 			current = false;
 		};
 	}, []);
-	return login;
+	return owner;
+}
+
+/** A machine's owner, as the Machines page shows them. */
+export type Owner = { login: string; avatarUrl?: string | undefined };
+
+/** The signed-in person's GitHub login. */
+export function useLogin() {
+	return useOwner()?.login;
 }
 
 /** Move within /machines as the navigation shell does for a link, so it renders the new view. */

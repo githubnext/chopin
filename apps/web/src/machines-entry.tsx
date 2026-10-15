@@ -106,7 +106,7 @@ export function MachinesEntry(
 									<ServerIcon />
 								</span>
 								<span className="truncate">Any available</span>
-								<span className="app-menu-item-meta">
+								<span className="app-menu-item-meta" title={uses ? `Uses ${uses}` : undefined}>
 									{uses ? `Uses ${uses}` : "None connected"}
 								</span>
 							</Menu.RadioItem>
@@ -118,7 +118,7 @@ export function MachinesEntry(
 									value={machine.id}
 								>
 									<MachineMark machine={machine} />
-									<span className="truncate">{machine.label}</span>
+									<span className="truncate" title={machine.label}>{machine.label}</span>
 									<span className="app-menu-item-meta">{state(machine)}</span>
 								</Menu.RadioItem>
 							))}

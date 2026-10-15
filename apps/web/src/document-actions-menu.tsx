@@ -213,15 +213,19 @@ export function DocumentActionsMenu(
 				view === "machines" ? 272 : 208,
 				document.documentElement.clientWidth - margin * 2,
 			);
-			let height = menu.offsetHeight;
-			if (width <= 0 || height <= 0) {
+			// Its whole height, however much of it scrolls; it opens below the button where that
+			// fits, else above, else on the side with more room, and scrolls inside past that.
+			let natural = menu.scrollHeight;
+			if (width <= 0 || natural <= 0) {
 				fail();
 				return false;
 			}
-			let below = window.innerHeight - anchor.bottom - margin;
-			let top = below >= height || anchor.top < height + margin
-				? anchor.bottom + gap
-				: anchor.top - height - gap;
+			let roomBelow = window.innerHeight - anchor.bottom - gap - margin;
+			let roomAbove = anchor.top - gap - margin;
+			let fitsBelow = natural <= roomBelow
+				|| natural > roomAbove && roomBelow >= roomAbove;
+			let height = Math.min(natural, Math.max(0, fitsBelow ? roomBelow : roomAbove));
+			let top = fitsBelow ? anchor.bottom + gap : anchor.top - height - gap;
 			let left = Math.max(
 				margin,
 				Math.min(
@@ -239,6 +243,7 @@ export function DocumentActionsMenu(
 				}px`,
 				left,
 				top: placedTop,
+				maxHeight: height,
 				visibility: "visible",
 				width,
 			} as CSSProperties);
@@ -320,6 +325,8 @@ export function DocumentActionsMenu(
 			? (current + 1) % controls.length
 			: (current - 1 + controls.length) % controls.length;
 		controls[next]?.focus();
+		// A row scrolled out of the menu comes into view as it takes focus.
+		controls[next]?.scrollIntoView({ block: "nearest" });
 	};
 	let toggleMenu = () => {
 		if (phone) {
@@ -448,8 +455,10 @@ export function DocumentActionsMenu(
 										type="button"
 									>
 										<MachineGlyph machine={row.machine} />
-										<span className="truncate">{rowLabel(row)}</span>
-										<span className="app-menu-item-meta">{rowDetail(row)}</span>
+										<span className="truncate" title={rowLabel(row)}>{rowLabel(row)}</span>
+										<span className="app-menu-item-meta" title={rowDetail(row)}>
+											{rowDetail(row)}
+										</span>
 									</button>
 								))}
 							</>

@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
+		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
+		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "c1ecadf88088db5d0e53b75fb8ccb0e92abbd16e6c6904ed7a9e70387f07e892"
+		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -325,7 +325,7 @@
 				1
 			]
 		],
-		"sourceHash": "2aff63785d3f7c08cb3a0a28a855ad68e9984646a795b5ab5724685b17fb5532"
+		"sourceHash": "49e792aff414d2622df09f2d85d3de153d363c7cae035511dfdba32ee3d880df"
 	},
 	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
@@ -339,7 +339,7 @@
 				1
 			]
 		],
-		"sourceHash": "8224c37fda1a747fb9c560b5c22b4e83dac334d7ba46cb7c4aa4d8c07c233aff"
+		"sourceHash": "0087b20231abe81d2c46e3c3becfd4a9babe56d749b7508146fabe7754fda5c1"
 	},
 	{
 		"file": "apps/web/src/experiments/machines.tsx",
@@ -353,6 +353,6 @@
 				1
 			]
 		],
-		"sourceHash": "f45c5ff596aa59bdd003351d8d08c84ce98718df46ab4d430db7d102df663af1"
+		"sourceHash": "e69dc4c457e0086475f52c65fc2ee9b7da9df740bbfb5fd05acffb0c8a87cda9"
 	}
 ]

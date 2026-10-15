@@ -3,9 +3,13 @@
 	z-index: 60;
 }
 
+/* Never taller than the room above the entry: more machines than fit scroll inside the menu. */
 .machines-menu {
 	width: max(var(--anchor-width, 18rem), 18rem);
 	max-width: calc(100vw - var(--spacing) * 4);
+	max-height: var(--available-height, calc(100dvh - var(--spacing) * 4));
+	overflow-y: auto;
+	overscroll-behavior: contain;
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	padding: var(--menu-padding);
@@ -52,9 +56,13 @@
 	color: var(--color-text-primary);
 }
 
+/* A row's name gives way first; its state stays whole, and a long Uses line ends in an ellipsis. */
+.machines-menu .app-menu-item > .truncate {
+	flex: 1 1 0;
+}
+
 .machines-menu .app-menu-item-meta {
 	margin-inline-start: auto;
-	flex: none;
 	font-size: var(--text-xs);
 	color: var(--color-text-tertiary);
 }

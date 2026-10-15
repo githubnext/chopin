@@ -30,6 +30,7 @@ import { buildBlockerSummary } from "./build-blockers";
 import "./build-plan-button.css";
 import "./build-blocker-popover.css";
 
+import type { ReactNode } from "react";
 import type { Implementation, ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { BuildLook, FirstBuild } from "./build-model";
 import type { Wire } from "./wire";
@@ -365,6 +366,7 @@ export function BuildPlanButton(
 		compact,
 		documentURL,
 		hot,
+		machine,
 		machineOffline,
 		onBlockerSelect,
 		onExplain,
@@ -375,6 +377,8 @@ export function BuildPlanButton(
 	}: {
 		blockers?: readonly BuildBlocker[];
 		build: BuildPlan;
+		/** The machine button, beside Build plan or its capsule. */
+		machine?: ReactNode;
 		/**
 		 * The machine the person chose is offline, named: Build plan is dimmed and starts nothing, and
 		 * this is its accessible description.
@@ -461,6 +465,7 @@ export function BuildPlanButton(
 						phone={phone}
 					/>
 				</Suspense>
+				{machine}
 				{live}
 			</span>
 		);
@@ -473,6 +478,7 @@ export function BuildPlanButton(
 				<Suspense fallback={<span className="text-sm text-text-secondary">Connect Chopin</span>}>
 					<BuildConnectionPopover documentURL={documentURL} kind="planner" phone={phone} />
 				</Suspense>
+				{machine}
 				{live}
 			</>
 		);
@@ -480,7 +486,7 @@ export function BuildPlanButton(
 	if (look.kind === "plan") {
 		if (!canEdit) return null;
 		let blocked = look.blocked;
-		// The chosen machine is offline: dimmed, still focusable,
+		// The chosen machine is offline: dimmed as the machine button beside it is, still focusable,
 		// with the reason only in its accessible description. Pressing it does nothing.
 		let offline = blocked ? undefined : machineOffline;
 		return (
@@ -512,6 +518,7 @@ export function BuildPlanButton(
 					Build plan
 				</button>
 				{(blocked || offline) && <span className="sr-only" id={reason}>{blocked ?? offline}</span>}
+				{machine}
 				{live}
 			</>
 		);
@@ -615,6 +622,7 @@ export function BuildPlanButton(
 							{blocked && <span className="sr-only" id={actionReason}>{blocked}</span>}
 						</>
 					)}
+				{machine}
 				{/* On a phone the refusal is read in Build's headline, which opens with it. */}
 				{refused && !connectAgent && (
 					<span className={compact ? "sr-only" : "build-capsule-refusal"} role="alert">

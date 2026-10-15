@@ -61,7 +61,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 			</div>
 			{planner && (
 				<p className="build-connection-note">
-					Run in your project folder and keep the terminal open.
+					Run in a terminal and keep it open.
 				</p>
 			)}
 		</>
@@ -85,7 +85,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 						<p className="m-0">
 							{planner
 								? "Open your Planner and attach this document."
-								: "Run this in your project folder, then approve the pairing page."}
+								: "Run this in a terminal, then approve the pairing page."}
 						</p>
 						{planner
 							? (

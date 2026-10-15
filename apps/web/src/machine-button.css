@@ -100,6 +100,35 @@
 	}
 }
 
+/* Beside Build plan, a quarter of the bar at most, so the document's title keeps the rest. */
+.room-header .machine-button {
+	max-width: min(14rem, 25vw);
+}
+
+.document-title-status .machine-button {
+	max-width: min(14rem, 25cqi);
+}
+
+@container document-title-bar (max-width: 26rem) {
+	.document-title-status .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.document-title-status :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
+@container composer-footer (width < 24rem) {
+	.composer-machine .machine-button {
+		padding-inline: calc(var(--spacing) * 1.5);
+	}
+
+	.composer-machine :is(.machine-button-name, .machine-button-chevron) {
+		display: none;
+	}
+}
+
 .machine-menu {
 	position: fixed;
 	z-index: 60;
@@ -213,7 +242,13 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
 	overflow: hidden auto;
-	max-height: calc(100dvh * var(--sheet-large-detent));
+	/* The sheet, Cancel and the gaps between them, the safe areas included, fit the large detent. */
+	max-height: calc(
+		100dvh * var(--sheet-large-detent) - var(--action-sheet-row-height) - var(--sheet-gap) * 2 -
+			env(safe-area-inset-bottom) -
+			env(safe-area-inset-top)
+	);
+	overscroll-behavior: contain;
 	border-radius: var(--radius-sheet);
 	background: var(--color-page);
 	padding-block: var(--spacing);
