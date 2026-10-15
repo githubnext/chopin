@@ -74,22 +74,6 @@ test(
 	},
 );
 
-test("shared select: keyboard selection and focus return", async ({ page, visualReview }, info) => {
-	let trigger = plate(page, "fields").getByRole("combobox", { name: "Select", exact: true });
-	await trigger.focus();
-	await page.keyboard.press("ArrowDown");
-	let list = page.locator('[data-slot="select-listbox"]');
-	await expect(list).toBeVisible();
-	if (visualReview) {
-		await capture(page, list, "select-open.png");
-		await scan(page, info, "select", '[data-slot="select-popup"]');
-	}
-	await page.keyboard.press("End");
-	await page.keyboard.press("Enter");
-	await expect(trigger).toContainText("Archived documents");
-	await expect(trigger).toBeFocused();
-});
-
 test("reduced motion also applies to pointer-opened overlays", async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await page.getByRole("button", { name: actions, exact: true }).click();

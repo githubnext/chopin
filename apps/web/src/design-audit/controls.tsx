@@ -140,6 +140,10 @@ const ICON_BUTTONS = [
 	tone?: "nested";
 }[];
 
+function forceState(state: string) {
+	return (element: HTMLElement | null) => element?.setAttribute("data-force-state", state);
+}
+
 /** Icon buttons have no pressed fill; hover and focus share one. */
 const ICON_STATES = STATES.filter(state => state.label !== "Active");
 
@@ -209,8 +213,9 @@ export function Controls() {
 									<StateSample key={state.label} state={state.label}>
 										<IconButton
 											aria-label="Add document"
-											data-force-state={"force" in state ? state.force : undefined}
 											disabled={"disabled" in state}
+											// IconButton's props stay closed; the audit sets its seam after mount.
+											ref={"force" in state ? forceState(state.force) : undefined}
 											glyph={"glyph" in recipe ? recipe.glyph : undefined}
 											size={"size" in recipe ? recipe.size : undefined}
 											tone={"tone" in recipe ? recipe.tone : undefined}

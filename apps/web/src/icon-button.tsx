@@ -15,8 +15,6 @@ type IconButtonProps = IconButtonRecipe & {
 	"aria-haspopup"?: "menu";
 	"aria-label": string;
 	children: ReactNode;
-	/** The design audit's seam onto the hover and focus rules; the app never sets it. */
-	"data-force-state"?: "active" | "focus" | "hover";
 	"data-tooltip"?: string;
 	"data-tooltip-shortcut"?: string;
 	disabled?: boolean;
@@ -41,7 +39,6 @@ export function IconButton(props: IconButtonProps) {
 					? "project-sidebar-action"
 					: ""
 			} ${props.pending ? "project-sidebar-action-pending" : ""}`}
-			data-force-state={props["data-force-state"]}
 			data-glyph={props.glyph ?? "default"}
 			data-press="small"
 			data-size={props.size ?? "normal"}
