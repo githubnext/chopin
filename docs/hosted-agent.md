@@ -26,6 +26,43 @@ server process's user, on hosted instances as well as local ones.** No other fla
 turns this on or off. Operators who do not want it should use `copilot-sdk`. See [Self-hosting](self-hosting.md#choose-and-trust-a-harness) for
 `HARNESS`/`HARNESS_AUTH` selection and adapter trust.
 
+## Coaching in an invoked turn
+
+The Planner is instructed to develop a small, provisional account of the problem
+early, using the current document and relevant repository evidence. It distinguishes reported
+experience, verified behavior, hypotheses, its own recommendations, and human
+decisions. A suggested remedy, such as onboarding, does not become an agreed
+requirement merely because someone mentioned it.
+
+When intent is missing, it asks one useful open question in Chat. Concrete human
+choices with grounded alternatives use the existing `ask` decision tool; the
+Planner must not invent alternatives just to fit that tool. A factual question
+that repository evidence answers needs an answer, not a decision card. Optional
+exploration can remain provisional without becoming a Build blocker.
+
+An answer, correction, or contradictory finding should change the affected
+prose and its anchors, followed by the next useful authorized action. Disagreement
+stays attributed rather than becoming artificial consensus. Pauses, dismissals,
+and requests to continue exploring remain meaningful. An unanswered, cancelled,
+or expired question is not consent.
+
+The Planner can recommend a small first build and explain what it would teach,
+while leaving broader questions open. This is advice about scope, not technical
+readiness or approval. Graph preparation retains its separate read/edit workflow
+and does not edit prose; only people approve and start implementation.
+
+This policy changes behavior **inside an invoked turn**. It does not schedule
+turns, start background research without an explicit current request, or change
+tool authority. An open question in Chat ends the turn; a later invoked turn can
+follow the reply through. The `ask` tool instead keeps its current turn waiting
+for a shared answer or cancellation. Ordinary unaddressed Chat still follows the
+existing addressing and title-maintenance behavior.
+
+The [coaching evaluation suite](../evals/planner-coach/README.md) separates live
+model transcripts and independent rubric review from deterministic tool-boundary
+tests. Its synthetic repository is an evaluation fixture, not a description of
+Chopin's current interface.
+
 ## Ownership
 
 The first eligible editor whose saved Chat message starts title maintenance, who
