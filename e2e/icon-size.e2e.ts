@@ -11,7 +11,10 @@ import { CHOSEN, SOURCE, STATE } from "./source/icon-size.fixture";
 
 import type { Locator, Page } from "@playwright/test";
 
-/** Icons whose rendered box differs from the size they were declared at. */
+/**
+ * Icons whose rendered box differs from their intended size: the size a button
+ * sets for its icons through `--btn-icon-size`, or else the declared width.
+ */
 function squeezed(scope: Locator) {
 	return scope.evaluateAll(roots =>
 		roots.flatMap(root =>
@@ -19,6 +22,15 @@ function squeezed(scope: Locator) {
 				let box = icon.getBoundingClientRect();
 				if (box.width === 0 && box.height === 0) return [];
 				let size = Number(icon.getAttribute("width"));
+				let button = icon.closest(".btn");
+				if (button) {
+					let probe = document.createElement("span");
+					probe.style.cssText =
+						"position:absolute;width:var(--btn-icon-size, var(--icon-size-default))";
+					button.append(probe);
+					size = probe.getBoundingClientRect().width;
+					probe.remove();
+				}
 				return Math.abs(box.width - size) > 0.5 || Math.abs(box.height - size) > 0.5
 					? [
 						`${box.width.toFixed(1)}×${box.height.toFixed(1)}, declared ${size}: ${
