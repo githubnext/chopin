@@ -128,7 +128,6 @@ export function ResearchAgendaDialog(
 							Up to {snapshot.limits.maxInvestigations} investigations ·{" "}
 							{snapshot.limits.durationMs / 3600000} hours
 						</p>
-						<p className="agenda-meta">{snapshot.limits.maxAiCredits} AI credits maximum</p>
 						{!snapshot.available && (
 							<p className="agenda-meta" role="status">
 								{snapshot.unavailableReason
@@ -219,7 +218,11 @@ export function ResearchAgendaDialog(
 								At least {snapshot.limits.minIntervalMs / 60000}{" "}
 								minutes between investigations. You can pause at any time.
 							</p>
-							{agenda && <p>{agenda.reservedAiCredits} AI credits reserved in this allowance.</p>}
+							<p>
+								Up to {snapshot.limits.maxSessions}{" "}
+								AI sessions, including planning and retries. AI usage and costs vary by provider.
+							</p>
+							{agenda && <p>{agenda.reservedSessions} sessions reserved. Failed attempts count.</p>}
 						</UnfoldSection>
 						{canEdit && (
 							<div className="agenda-actions">

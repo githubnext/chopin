@@ -13,7 +13,7 @@ declare global {
 export let limits: Agenda.Limits = {
 	maxQuestions: 6,
 	maxInvestigations: 3,
-	maxAiCredits: 420,
+	maxSessions: 14,
 	maxAssessments: 5,
 	minIntervalMs: 300_000,
 	durationMs: 86_400_000,
@@ -41,7 +41,7 @@ export function response(state: Agenda.State | null = "active"): Agenda.Response
 			}],
 			expiresAt: state === "active" ? "2026-10-15T06:00:00.000Z" : undefined,
 			investigations: state === "active" ? 1 : 0,
-			reservedAiCredits: state === "active" ? 140 : 0,
+			reservedSessions: state === "active" ? 4 : 0,
 			assessments: 1,
 			updatedAt: "2026-10-14T06:00:00.000Z",
 		},

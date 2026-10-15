@@ -5,12 +5,13 @@ import type { AgendaOwner, AgendaRecord } from "../storage/agenda";
 export const AGENDA_LIMITS: Agenda.Limits = Object.freeze({
 	maxQuestions: 6,
 	maxInvestigations: 3,
-	maxAiCredits: 420,
+	maxSessions: 14,
 	maxAssessments: 5,
 	minIntervalMs: 5 * 60_000,
 	durationMs: 24 * 60 * 60_000,
 	requestTimeoutMs: 15 * 60_000,
 });
+/** Copilot additionally enforces a credit ceiling within each isolated session. */
 export const MODEL_CREDITS = 30;
 export const MODEL_TIMEOUT_MS = 60_000;
 export const questionSchema = z.object({
@@ -37,6 +38,10 @@ export class AgendaError extends Error {
 		super(message);
 		this.name = "AgendaError";
 	}
+}
+
+export function supportsAgendaHarness(harness: string): boolean {
+	return harness === "copilot-sdk" || harness === "atomic";
 }
 
 export function normalizedQuestion(value: string): string {

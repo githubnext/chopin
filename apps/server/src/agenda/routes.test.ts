@@ -134,7 +134,7 @@ describe("agenda HTTP consent boundary", () => {
 	it("rejects cross-origin controls and model-supplied authority fields", async () => {
 		let context = await fixture();
 		expect((await context.request("PUT", "", save, "https://attacker.test")).status).toBe(403);
-		expect((await context.request("PUT", "", { ...save, maxAiCredits: 999999 })).status).toBe(400);
+		expect((await context.request("PUT", "", { ...save, maxSessions: 999999 })).status).toBe(400);
 		expect((await context.request("PUT", "", save)).status).toBe(200);
 		expect(
 			(await context.request("POST", "/activate", { expectedRevision: 1, owner: "model" })).status,

@@ -17,7 +17,7 @@ export function agendaContract(name: string, factory: StorageFactory) {
 					state: "active",
 					questions: [],
 					investigations: 1,
-					reservedAiCredits: 30,
+					reservedSessions: 1,
 					assessments: 1,
 					updatedAt: new Date().toISOString(),
 				};
@@ -91,7 +91,7 @@ export function agendaContract(name: string, factory: StorageFactory) {
 					state: "paused",
 					questions: [],
 					investigations: 0,
-					reservedAiCredits: 0,
+					reservedSessions: 0,
 					assessments: 0,
 					updatedAt: new Date().toISOString(),
 				};

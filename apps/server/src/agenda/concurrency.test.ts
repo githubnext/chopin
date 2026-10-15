@@ -88,7 +88,7 @@ it("bounds model work to two global and one per owner without reserving waiting 
 	}
 	expect(started).toBe(2);
 	let records = await Promise.all(channels.map(id => context.agenda.get(id)));
-	expect(records.map(item => item?.reservedAiCredits)).toEqual([30, 0, 30, 0]);
+	expect(records.map(item => item?.reservedSessions)).toEqual([1, 0, 1, 0]);
 	finish.resolve();
 	await Promise.all(pending);
 });

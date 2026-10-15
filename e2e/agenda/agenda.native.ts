@@ -26,7 +26,9 @@ test("empty scope is saved before one explicit bounded allowance", async ({ page
 	let scope = "Explore public examples of discovering and learning open decisions.";
 	await page.getByRole("textbox", { name: "Public research scope", exact: true }).fill(scope);
 	await page.getByRole("button", { name: "What is allowed", exact: true }).click();
-	await expect(page.getByText(/420 AI credits maximum/)).toBeVisible();
+	await expect(page.getByText(/Up to 14 AI sessions, including planning and retries/))
+		.toBeVisible();
+	await expect(page.getByText(/AI credits/)).toHaveCount(0);
 	await expect(page.getByText("Document text and repository files stay outside that worker."))
 		.toBeVisible();
 	await allow.click();
@@ -56,10 +58,22 @@ test(
 		await expect(page.getByText("Help people find the next useful choice.", { exact: true }))
 			.toBeVisible();
 		await expect(page.getByText("High priority", { exact: true })).toBeVisible();
-		await page.getByRole("button", { name: "What is allowed", exact: true }).click();
+		let disclosure = page.getByRole("button", { name: "What is allowed", exact: true });
+		await disclosure.click();
+		await expect(page.getByText(/Up to 14 AI sessions, including planning and retries/))
+			.toBeVisible();
+		await expect(page.getByText("4 sessions reserved. Failed attempts count.", { exact: true }))
+			.toBeVisible();
 		await page.evaluate(() => document.fonts.ready);
+		let panelId = await disclosure.getAttribute("aria-controls");
+		let panel = page.locator(`[id="${panelId}"]`);
+		await expect(panel).not.toHaveAttribute("data-starting-style", "");
+		await expect.poll(() =>
+			panel.evaluate(element => element.getAnimations({ subtree: true }).length)
+		)
+			.toBe(0);
 		let screenshot = testInfo.outputPath("agenda-desktop.png");
-		await page.screenshot({ path: screenshot });
+		await page.screenshot({ path: screenshot, animations: "disabled" });
 		await testInfo.attach("Research agenda desktop", {
 			path: screenshot,
 			contentType: "image/png",
@@ -119,7 +133,7 @@ test("readers inspect linked reports and cannot change the agenda", async ({ pag
 test("unavailable research names the reason and prevents activation", async ({ page }) => {
 	let unavailable = response("paused");
 	unavailable.available = false;
-	unavailable.unavailableReason = "Bounded research needs the Copilot SDK harness.";
+	unavailable.unavailableReason = "Research agendas are unavailable with the remote Planner.";
 	let fixture = await load(page, unavailable);
 	await expect(page.getByText(unavailable.unavailableReason, { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Allow public research", exact: true }))

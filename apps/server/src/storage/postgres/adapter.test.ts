@@ -1011,6 +1011,7 @@ if (url) {
 				"022_machine_choices",
 				"023_machine_favorites",
 				"024_research_agendas",
+				"025_agenda_sessions",
 			]);
 			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
 				.toEqual([

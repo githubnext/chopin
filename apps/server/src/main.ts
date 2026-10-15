@@ -28,6 +28,7 @@ import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { AgendaError, AgendaService } from "./agenda/service";
 import { createAgendaAssessor } from "./agenda/assessor";
+import { supportsAgendaHarness } from "./agenda/domain";
 import { registerAgendaRoutes } from "./agenda/routes";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
@@ -2221,7 +2222,7 @@ agendaService = new AgendaService({
 	},
 	available: () =>
 		!draining && config.agent && config.backgroundJobs && config.webResearch
-		&& config.harness === "copilot-sdk",
+		&& supportsAgendaHarness(config.harness),
 	current: currentDocumentTarget,
 	assessor: createAgendaAssessor(config.model),
 	async resolveOwner(channelId, expected) {

@@ -2,7 +2,7 @@ import { expect, it } from "bun:test";
 import { AGENDA_LIMITS } from "./service";
 import { agendaFixture } from "./test-support";
 import type { JobExecution } from "../jobs/registry";
-import type { ResearchEvidenceInput } from "../jobs/research-workspace";
+import type { ResearchAnswerInput, ResearchEvidenceInput } from "../jobs/research-workspace";
 
 async function claimedFixture() {
 	let context = await agendaFixture();
@@ -31,13 +31,58 @@ async function claimedFixture() {
 it("reserves every repeated execution including owner-loss reclaims before model work", async () => {
 	let context = await claimedFixture();
 	for (let index = 0; index < 13; index++) await context.evidence.execute(context.execution);
-	expect((await context.agenda.get(context.channelId))?.reservedAiCredits).toBe(
-		AGENDA_LIMITS.maxAiCredits,
+	expect((await context.agenda.get(context.channelId))?.reservedSessions).toBe(
+		AGENDA_LIMITS.maxSessions,
 	);
 	await expect(context.evidence.execute(context.execution)).rejects.toThrow(
 		"agenda-budget-exhausted",
 	);
 	expect(context.seen.worker).toHaveLength(13);
+	expect((await context.agenda.get(context.channelId))?.stopReason).toBe("budget-exhausted");
+});
+
+it("reserves two sessions before each failed answer retry without refunding earlier attempts", async () => {
+	let context = await agendaFixture();
+	await context.activate();
+	await context.agenda.tick(context.channelId);
+	await context.complete("research-evidence");
+	await context.agenda.tick(context.channelId);
+	let [job] = await context.storage.jobs.claim({
+		channelId: context.channelId,
+		claimOwner: "worker",
+		count: 1,
+		ttlMs: 30_000,
+		now: context.clock(),
+		lease: context.lease,
+	});
+	if (!job || job.type !== "research-answer") throw new Error("Missing answer job");
+	let execution: JobExecution<ResearchAnswerInput> = {
+		job,
+		input: job.input as ResearchAnswerInput,
+		credential: context.credential,
+		signal: new AbortController().signal,
+		deadline: new Date(context.clock().getTime() + 300_000),
+		progress: async () => {},
+	};
+	let attempts = 0;
+	let answer = context.agenda.wrapResearchDefinition({
+		...context.answer,
+		async execute() {
+			attempts++;
+			expect((await context.agenda.get(context.channelId))?.reservedSessions).toBe(
+				2 + 2 * attempts,
+			);
+			throw new Error("answer provider failed");
+		},
+	});
+	for (let index = 0; index < 6; index++) {
+		await expect(answer.execute(execution)).rejects.toThrow("answer provider failed");
+	}
+	expect((await context.agenda.get(context.channelId))?.reservedSessions).toBe(
+		AGENDA_LIMITS.maxSessions,
+	);
+	await expect(answer.execute(execution)).rejects.toThrow("agenda-budget-exhausted");
+	expect(attempts).toBe(6);
 	expect((await context.agenda.get(context.channelId))?.stopReason).toBe("budget-exhausted");
 });
 
@@ -51,7 +96,7 @@ it("rejects execution under a replacement owner without charging the delegation"
 		}),
 	).rejects.toThrow("agenda-not-authorized");
 	expect(context.seen.worker).toHaveLength(0);
-	expect((await context.agenda.get(context.channelId))?.reservedAiCredits).toBe(30);
+	expect((await context.agenda.get(context.channelId))?.reservedSessions).toBe(1);
 });
 
 it("blocks late artifact settlement after pause even when a worker ignores abort", async () => {
@@ -111,5 +156,5 @@ it("does not spend delegation on an altered public query or a continuation turn"
 		}),
 	).rejects.toThrow("agenda-request-invalid");
 	expect(context.seen.worker).toHaveLength(0);
-	expect((await context.agenda.get(context.channelId))?.reservedAiCredits).toBe(30);
+	expect((await context.agenda.get(context.channelId))?.reservedSessions).toBe(1);
 });

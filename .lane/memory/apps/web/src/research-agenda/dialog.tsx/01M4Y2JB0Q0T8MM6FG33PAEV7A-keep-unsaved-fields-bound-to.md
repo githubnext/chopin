@@ -4,8 +4,9 @@ anchor: function ResearchAgendaDialog
 created: 2026-10-14T20:44:53Z
 norm: '1'
 sig: bd506343e62ba9bf
-body_hash: 5df249b092b880c4
-raw_hash: a5a3429a4f8b0be9
+body_hash: 909d7928282220f6
+raw_hash: 00362bd23509629b
+vouched: 2026-10-15T07:33:10Z
 lines: 15-282
 ---
 

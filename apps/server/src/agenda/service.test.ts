@@ -25,7 +25,7 @@ describe("research agenda", () => {
 		expect(seen.private[0]).toContain("PRIVATE_MARKER");
 		let view = await agenda.get(channelId);
 		expect(view?.investigations).toBe(1);
-		expect(view?.reservedAiCredits).toBe(60);
+		expect(view?.reservedSessions).toBe(2);
 		expect(view?.questions[0]?.request?.question).toContain(QUESTIONS[0]!.question);
 		expect(view?.questions[0]?.request?.question).not.toContain("PRIVATE_MARKER");
 		expect(JSON.stringify(view)).not.toContain("owner-session");
@@ -90,7 +90,7 @@ describe("research agenda", () => {
 		let completed = (await agenda.get(channelId))!;
 		expect(completed.questions[0]!.state).toBe("completed");
 		expect(completed.questions[0]!.request?.state).toBe("completed");
-		expect(completed.reservedAiCredits).toBe(120);
+		expect(completed.reservedSessions).toBe(4);
 		await agenda.tick(channelId);
 		expect((await agenda.get(channelId))?.investigations).toBe(1);
 		context.advance(AGENDA_LIMITS.minIntervalMs);

@@ -11,7 +11,7 @@ export type AgendaOptions = {
 	storage: StorageAdapter;
 	research: ResearchWorkspaceService;
 	lease: () => Lease;
-	/** Return false unless the configured harness enforces per-session credit ceilings. */
+	/** Return false unless isolated workers and public research are available. */
 	available: () => boolean;
 	resolveOwner: (channelId: string, expected: AgendaOwner) => Promise<AgendaCredential | undefined>;
 	current: (channelId: string) => Promise<{ source: string } | undefined>;

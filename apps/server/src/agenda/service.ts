@@ -85,7 +85,7 @@ export class AgendaService {
 				stopReason: "scope-changed",
 				questions,
 				investigations: 0,
-				reservedAiCredits: 0,
+				reservedSessions: 0,
 				assessments: 0,
 				updatedAt: this.#state.clock().toISOString(),
 			});
@@ -114,7 +114,7 @@ export class AgendaService {
 			if (
 				record.expiresAt && Date.parse(record.expiresAt) <= now.getTime()
 				|| record.investigations >= AGENDA_LIMITS.maxInvestigations
-				|| record.reservedAiCredits >= AGENDA_LIMITS.maxAiCredits
+				|| record.reservedSessions >= AGENDA_LIMITS.maxSessions
 			) {
 				throw new AgendaError(
 					"conflict",

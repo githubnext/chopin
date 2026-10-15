@@ -86,12 +86,12 @@ export function wrapResearchDefinition<Input extends JsonValue, Artifact extends
 				) {
 					throw new JobExecutionError("agenda-not-authorized");
 				}
-				let credits = definition.type === "research-evidence" ? 30 : 60;
-				if (record.reservedAiCredits + credits > AGENDA_LIMITS.maxAiCredits) {
+				let sessions = definition.type === "research-evidence" ? 1 : 2;
+				if (record.reservedSessions + sessions > AGENDA_LIMITS.maxSessions) {
 					await state.park(record, "budget-exhausted");
 					throw new JobExecutionError("agenda-budget-exhausted");
 				}
-				await state.store({ ...record, reservedAiCredits: record.reservedAiCredits + credits });
+				await state.store({ ...record, reservedSessions: record.reservedSessions + sessions });
 				return state.track(run.channelId);
 			});
 			try {

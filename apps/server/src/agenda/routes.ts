@@ -160,7 +160,7 @@ export function registerAgendaRoutes(
 							? {
 								unavailableReason: channel.archivedAt
 									? "Restore this document to delegate research."
-									: "Public research requires enabled background workers and a harness with enforced AI credit limits.",
+									: "Public research requires enabled background workers and the Copilot SDK or Atomic harness.",
 							}
 							: {}),
 					});

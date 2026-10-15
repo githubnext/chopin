@@ -28,10 +28,10 @@ and open from the agenda's question rows. Agenda work does not edit the parent
 prose, resolve decisions, build code, or start local experiments.
 
 The initial experiment requires `AGENT=on`, `BACKGROUND_JOBS=on`,
-`WEB_RESEARCH=on`, and `HARNESS=copilot-sdk`. Other harnesses cannot activate an
-agenda because this path requires enforced per-session AI credit limits. Paused
-scopes remain readable and editable while execution is unavailable. Explicit
-one-off `/research` requests retain their existing behavior.
+`WEB_RESEARCH=on`, and `HARNESS=copilot-sdk` or `HARNESS=atomic`.
+The remote Planner does not support agenda execution. Paused scopes
+remain readable and editable while execution is unavailable. Explicit one-off
+`/research` requests retain their existing behavior.
 
 ## Bounds and stopping
 
@@ -45,15 +45,21 @@ One saved scope has the following allowance:
 | Time between investigation starts | At least five minutes                 |
 | Individual request deadline       | 15 minutes, within the grant lifetime |
 | Planning/assessment sessions      | Five, including question generation   |
-| Reserved AI credits               | 420 total                             |
+| Reserved AI sessions              | 14 total                              |
 
-Each assessment reserves 30 credits before opening its session. Public evidence
-reserves 30; a private answer attempt reserves 60 for its two stages. Actual
-worker retries reserve again. Reservations are conservative ceilings, not a
-measurement of billed usage, and are never refunded. A retry may exhaust the
-allowance before all three investigations finish. Model assessments permit at
-most two concurrent sessions globally and one per delegating person. Research
-execution also uses the existing background job runner's concurrency limits.
+Each question generation or assessment reserves one session before starting.
+Each public evidence attempt reserves one; each private answer attempt reserves
+two for its two stages. Every actual attempt, retry, and reclaimed job reserves
+again before opening sessions. Reservations are conservative and never refunded,
+even after failure or cancellation. A retry may exhaust the allowance before all
+three investigations finish.
+
+These bounds limit workload and time, not billed usage. Copilot also enforces a
+30 AI credit cap on each individual session. Atomic has no enforced
+monetary or token allowance on this path; its usage and costs depend on the
+provider. Model assessments permit at most two concurrent sessions globally and
+one per delegating person. Research execution also uses the existing background
+job runner's concurrency limits.
 
 **Pause research** revokes the durable permission, cancels in-flight work, and
 blocks late publication. Expiry, unavailable ownership, changed capabilities,
@@ -61,7 +67,8 @@ archiving, failed work, exhausted limits, sufficient evidence, and unhelpful
 remaining questions stop further scheduling. Failed investigations do not loop
 through automatic agenda retries. A server restart pauses every active agenda;
 a person must explicitly allow it again. Resuming preserves the original expiry
-and counters. Save a new scope to establish a new allowance.
+and counters; pausing and reactivating never reset them. Save a new scope to
+establish a new allowance.
 
 A changed document or completed report invalidates an assessment made from its
 previous content. The next bounded assessment may stop or choose another queued

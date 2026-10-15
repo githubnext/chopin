@@ -2,7 +2,6 @@ import { digest } from "../research/start-identity";
 import {
 	AGENDA_LIMITS,
 	assessmentSchema,
-	MODEL_CREDITS,
 	publicBrief,
 	questionSchema,
 	runnable,
@@ -206,7 +205,7 @@ export class AgendaCoordinator {
 			) return;
 			if (
 				latest.assessments >= AGENDA_LIMITS.maxAssessments
-				|| latest.reservedAiCredits + MODEL_CREDITS > AGENDA_LIMITS.maxAiCredits
+				|| latest.reservedSessions + 1 > AGENDA_LIMITS.maxSessions
 			) {
 				await this.state.park(latest, "budget-exhausted");
 				return;
@@ -215,7 +214,7 @@ export class AgendaCoordinator {
 				...latest,
 				assessment: { id: this.state.id(), kind: latest.questions.length ? "assess" : "generate" },
 				assessments: latest.assessments + 1,
-				reservedAiCredits: latest.reservedAiCredits + MODEL_CREDITS,
+				reservedSessions: latest.reservedSessions + 1,
 			});
 		});
 		if (!reserved?.assessment) return;
@@ -290,7 +289,7 @@ export class AgendaCoordinator {
 					item.id === assessment.questionId && item.state === "queued"
 				);
 				if (!question) throw new Error("assessment selected an unknown question");
-				if (latest.reservedAiCredits + 90 > AGENDA_LIMITS.maxAiCredits) {
+				if (latest.reservedSessions + 3 > AGENDA_LIMITS.maxSessions) {
 					await this.state.park(latest, "budget-exhausted");
 					return;
 				}

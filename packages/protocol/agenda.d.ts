@@ -34,7 +34,7 @@ export declare namespace Agenda {
 	export type Limits = {
 		maxQuestions: number;
 		maxInvestigations: number;
-		maxAiCredits: number;
+		maxSessions: number;
 		maxAssessments: number;
 		minIntervalMs: number;
 		durationMs: number;
@@ -52,7 +52,7 @@ export declare namespace Agenda {
 		expiresAt?: string;
 		nextRunAt?: string;
 		investigations: number;
-		reservedAiCredits: number;
+		reservedSessions: number;
 		assessments: number;
 		updatedAt: string;
 	};
