@@ -130,10 +130,15 @@ function ButtonRow(
 }
 
 const ICON_BUTTONS = [
-	{ label: "Ghost", recipe: {} },
-	{ label: "Nested in a hovered row", recipe: { tone: "nested" } },
-	{ label: "Compact", recipe: { glyph: "compact", size: "compact" } },
-] as const;
+	{ label: "Ghost" },
+	{ label: "Nested in a hovered row", tone: "nested" },
+	{ glyph: "compact", label: "Compact", size: "compact" },
+] as const satisfies readonly {
+	glyph?: "compact";
+	label: string;
+	size?: "compact";
+	tone?: "nested";
+}[];
 
 /** Icon buttons have no pressed fill; hover and focus share one. */
 const ICON_STATES = STATES.filter(state => state.label !== "Active");
@@ -196,17 +201,19 @@ export function Controls() {
 				title="Icon buttons"
 			>
 				<div className="design-audit-button-families">
-					{ICON_BUTTONS.map(({ label, recipe }) => (
-						<div key={label}>
-							<h4>{label}</h4>
+					{ICON_BUTTONS.map(recipe => (
+						<div key={recipe.label}>
+							<h4>{recipe.label}</h4>
 							<div className="design-audit-control-grid">
 								{ICON_STATES.map(state => (
 									<StateSample key={state.label} state={state.label}>
 										<IconButton
-											{...recipe}
 											aria-label="Add document"
 											data-force-state={"force" in state ? state.force : undefined}
 											disabled={"disabled" in state}
+											glyph={"glyph" in recipe ? recipe.glyph : undefined}
+											size={"size" in recipe ? recipe.size : undefined}
+											tone={"tone" in recipe ? recipe.tone : undefined}
 										>
 											<PlusIcon aria-hidden="true" />
 										</IconButton>
