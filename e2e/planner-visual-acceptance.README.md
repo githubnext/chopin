@@ -84,8 +84,8 @@ released budget. Do not send Jev calls from the native five-case mode.
 The [separate frozen subset](../evals/planner-visual/jev-three-v1.json.freeze)
 selects R1, E1, and D1 in that order. It uses the same Chat, Planner, database,
 and browser reopen path, with `PLANNER_VISUALS=on`. It requires an explicit
-`jev-candidate` phase, `gpt-6-luna`, `jev-1.13.0`, a Jev API key, and no
-`E2E_VISUAL_QUESTION_ANSWER`. The run configuration records the actual routed
+`jev-candidate` phase, `gpt-6-luna`, `DECISIONS_MODEL=typesafe/jev-latest`
+resolving to `jev-1.13.0`, a Jev API key, and no `E2E_VISUAL_QUESTION_ANSWER`. The run configuration records the actual routed
 Planner instructions and tool names, visual code hashes, thresholds, and caps.
 
 This mode reserves each Jev HTTP call before network dispatch, including calls
