@@ -48,6 +48,7 @@ const ENV = {
 	PORT: String(PORT),
 	APP_ORIGIN: ORIGIN,
 	STORAGE_DRIVER: "postgres",
+	JEV_API_KEY: "e2e-jev-only",
 	GITHUB_APP_SLUG: "chopin-e2e",
 	GITHUB_APP_CLIENT_ID: "e2e",
 	GITHUB_APP_CLIENT_SECRET: "e2e",
