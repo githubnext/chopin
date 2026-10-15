@@ -471,7 +471,7 @@ using that revision. The next turn creates a fresh session with the new token.
 
 ## Chat context
 
-The opt-in [automatic participation experiment](conversation-initiative.md) lets
+[Automatic participation](conversation-initiative.md) is enabled with the Planner and lets
 Chopin reply promptly in solo conversation and yield during human exchanges.
 Group turns use a bounded turn-taking judgment and a quiet window. Natural-language
 requests can invite Chopin without `@`. It uses this same Planner lifecycle, with

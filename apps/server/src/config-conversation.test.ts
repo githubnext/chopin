@@ -6,7 +6,9 @@ describe("conversation configuration", () => {
 		expect(configured({ JEV_API_KEY: "present" }).conversationPlan).toBe(false);
 		expect(configured({ CONVERSATION_PLAN: "on", AGENT: "off", JEV_API_KEY: "present" }))
 			.toMatchObject({ agent: false, conversationPlan: true, conversationPlanModel: "jev-latest" });
-		expect(() => configured({ CONVERSATION_PLAN: "on" })).toThrow("JEV_API_KEY");
+		expect(() => configured({ CONVERSATION_PLAN: "on", JEV_API_KEY: undefined })).toThrow(
+			"JEV_API_KEY",
+		);
 		expect(() =>
 			configured({ CONVERSATION_PLAN: "on", JEV_API_KEY: "present", JEV_MODEL: "bad name" })
 		)

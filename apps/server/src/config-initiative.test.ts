@@ -1,18 +1,16 @@
 import { expect, test } from "bun:test";
 import { configured } from "./config-conversation.test-fixtures";
 
-test("automatic participation is independent, opt-in, and disabled with the Planner", () => {
-	expect(configured().conversationInitiative).toBe(false);
-	expect(configured({ CONVERSATION_INITIATIVE: "on", AGENT: "off" }))
-		.toMatchObject({ agent: false, conversationInitiative: false });
-	expect(() => configured({ CONVERSATION_INITIATIVE: "on" })).toThrow("JEV_API_KEY");
-	expect(configured({ CONVERSATION_INITIATIVE: "on", JEV_API_KEY: "present" }))
-		.toMatchObject({
-			conversationPlan: false,
-			conversationInitiative: true,
-			conversationInitiativeSilenceMs: 15_000,
-			conversationInitiativeModel: "jev-1.13.0",
-		});
+test("automatic participation uses the enabled Planner without an opt-in", () => {
+	expect(configured({ JEV_API_KEY: "present" })).toMatchObject({
+		agent: true,
+		conversationPlan: false,
+		conversationInitiativeSilenceMs: 15_000,
+		conversationInitiativeModel: "jev-1.13.0",
+	});
+	expect(() => configured({ JEV_API_KEY: undefined }))
+		.toThrow("JEV_API_KEY is required when AGENT is enabled");
+	expect(configured({ AGENT: "off", JEV_API_KEY: undefined }).agent).toBe(false);
 });
 
 test("automatic participation pacing and model settings are bounded", () => {
@@ -24,7 +22,6 @@ test("automatic participation pacing and model settings are bounded", () => {
 		.toMatchObject({ conversationInitiativeSilenceMs: 1000 });
 	expect(() =>
 		configured({
-			CONVERSATION_INITIATIVE: "on",
 			CONVERSATION_INITIATIVE_MODEL: "bad model",
 			JEV_API_KEY: "present",
 		})

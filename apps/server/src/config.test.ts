@@ -27,7 +27,7 @@ describe("configuration", () => {
 		expect(configured({ JEV_API_KEY: "test-key" }).plannerVisuals).toBe(false);
 		expect(configured({ PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" }).plannerVisuals)
 			.toBe(true);
-		expect(() => configured({ PLANNER_VISUALS: "on" }))
+		expect(() => configured({ PLANNER_VISUALS: "on", JEV_API_KEY: undefined }))
 			.toThrow("JEV_API_KEY is required when PLANNER_VISUALS=on");
 		expect(
 			configured({ AGENT: "off", PLANNER_VISUALS: "on", JEV_API_KEY: "test-key" })

@@ -29,9 +29,9 @@ context:
 
 - **Chat** is shared by the team and the hosted agent. Saved messages help
   maintain a short document title and enter the Planner's bounded context;
-  `@chopin` asks Chopin to act on the document. The opt-in
-  [automatic participation experiment](docs/conversation-initiative.md) lets
-  Chopin reply in solo conversation and wait its turn in group discussion, with a shared pause control.
+  `@chopin` asks Chopin to act on the document.
+  [Automatic participation](docs/conversation-initiative.md) lets Chopin reply in
+  solo conversation and wait its turn in group discussion, with a shared pause control.
 - **Document** is a multiplayer rich-text artifact backed by readable, restricted
   MDX. The current interface labels this view **Plan**. People and the agent edit
   the same document, with presence, cursors, and transient markers for recent
@@ -158,7 +158,7 @@ Install, configure, and start Chopin:
 bun install
 cp .env.example .env
 openssl rand -hex 32
-# Fill in the GitHub App values and generated session key in .env.
+# Fill in the GitHub App values, generated session key, and JEV_API_KEY in .env.
 bun run db:up
 bun run migrate
 bun run dev

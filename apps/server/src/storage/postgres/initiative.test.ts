@@ -53,7 +53,7 @@ if (database) {
 						plan: opened,
 						chat: opened.chat,
 						server,
-						config: { agent: true, conversationInitiative: true } as Config,
+						config: { agent: true } as Config,
 						persist: view => Plan.persist(opened, view),
 					} as Room;
 					await setParticipation(context, { send() {} } as unknown as Socket, {

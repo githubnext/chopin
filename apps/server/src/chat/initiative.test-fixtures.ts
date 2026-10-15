@@ -77,7 +77,6 @@ export function installInitiativeCleanup() {
 			documents.push(document);
 			Object.assign(h.context.plan, { document, builds: [], records: new Map() });
 			Object.assign(h.context.config, {
-				conversationInitiative: true,
 				conversationInitiativeSilenceMs: 15_000,
 				conversationPlanTimeoutMs: 1000,
 			});

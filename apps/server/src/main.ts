@@ -492,8 +492,7 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	});
 	try {
 		let opened = await opening;
-		opened.chat.initiativeEnabled = config.agent && !!config.conversationInitiative
-			&& !opened.parentChannelId;
+		opened.chat.initiativeEnabled = config.agent && !opened.parentChannelId;
 		conversationRuntime.wake(opened);
 		return opened;
 	} finally {

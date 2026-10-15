@@ -10,7 +10,9 @@ test("only the exact opt-in enables analysis and a generic transport key is insu
 			conversationPlanTimeoutMs: 30_000,
 		});
 	}
-	expect(() => configured({ CONVERSATION_PLAN: "on", TYPESAFE_API_KEY: "synthetic" }))
+	expect(() =>
+		configured({ CONVERSATION_PLAN: "on", JEV_API_KEY: undefined, TYPESAFE_API_KEY: "synthetic" })
+	)
 		.toThrow("JEV_API_KEY is required when CONVERSATION_PLAN=on");
 	expect(() => configured({ CONVERSATION_PLAN: "on", JEV_API_KEY: "" })).toThrow("JEV_API_KEY");
 });

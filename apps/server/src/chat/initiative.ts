@@ -22,8 +22,7 @@ export type Source = {
 
 export function participation(context: Room): Wire.Participation {
 	return {
-		enabled: !!context.config.agent && !!context.config.conversationInitiative
-			&& !context.rootChannelId,
+		enabled: !!context.config.agent && !context.rootChannelId,
 		paused: !!context.chat.initiativePaused,
 	};
 }

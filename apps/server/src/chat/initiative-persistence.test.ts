@@ -11,7 +11,7 @@ function context(h: Awaited<ReturnType<typeof hosted>>, plan: Plan.Plan): Chat.R
 		plan,
 		server: h.server,
 		room: h.channel.id,
-		config: { agent: true, conversationInitiative: true } as Chat.Room["config"],
+		config: { agent: true } as Chat.Room["config"],
 		auth: {} as Chat.Room["auth"],
 		claimantSessionId: undefined,
 		repository: { id: "R_score", owner: "octo-org", name: "score", defaultBranch: "main" },

@@ -1,9 +1,9 @@
 # Automatic participation in Chat
 
-With `CONVERSATION_INITIATIVE=on`, Chopin can join ordinary saved conversation without an
-`@chopin` mention. This experimental setting is off by default and requires `AGENT=on` and
-a server-side `JEV_API_KEY`. It is independent of conversation-derived decision and
-research cards (`CONVERSATION_PLAN`).
+Chopin joins ordinary saved conversation without an `@chopin` mention whenever the
+Planner is enabled. There is no separate feature flag. A server-side `JEV_API_KEY` is
+required at startup for group turn-taking judgments. Participation is independent of
+conversation-derived decision and research cards (`CONVERSATION_PLAN`).
 
 One human's saved message normally hands the turn to Chopin. After a short 1.5-second
 window that combines rapid messages, Chopin replies without needing Jev to approve the
@@ -47,7 +47,6 @@ enabling waits for a new saved contribution; it never replays earlier conversati
 
 | Setting                              | Default      | Meaning                                                         |
 | ------------------------------------ | ------------ | --------------------------------------------------------------- |
-| `CONVERSATION_INITIATIVE`            | `off`        | Enable automatic participation when the Planner is enabled.     |
 | `CONVERSATION_INITIATIVE_SILENCE_MS` | `15000`      | Group silence window, from 1,000 to 60,000 milliseconds.        |
 | `CONVERSATION_INITIATIVE_MODEL`      | `jev-1.13.0` | Jev model for turn-taking judgment, independent of `JEV_MODEL`. |
 | `JEV_TIMEOUT_MS`                     | `30000`      | Shared timeout for a Jev request.                               |
@@ -86,7 +85,7 @@ explains each admitted intervention.
 
 The scheduler lives in `apps/server/src/chat/initiative-schedule.ts`; its runtime adapter
 and semantic judgment are adjacent. Other event sources can eventually use the same Chat
-instruction lifecycle, but this experiment deliberately admits only saved human
+instruction lifecycle, but participation deliberately admits only saved human
 conversation.
 
 ## Development evidence

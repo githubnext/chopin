@@ -6,6 +6,17 @@ import { until } from "./job.test-fixtures";
 
 let setup = installInitiativeCleanup();
 
+test("automatic participation is available by default and respects AGENT=off", async () => {
+	let h = await setup.harness();
+	expect(participation(h.context)).toEqual({ enabled: true, paused: false });
+	h.context.config.agent = false;
+	expect(participation(h.context).enabled).toBe(false);
+	await Chat.send(h.context, h.ws, message());
+	await h.clock.advance(30_000);
+	expect(h.judge).not.toHaveBeenCalled();
+	expect(h.prompts).toEqual([]);
+});
+
 test("a saved ordinary message reaches the judge once after persistence and backscroll", async () => {
 	let h = await setup.harness();
 	let committed = Promise.withResolvers<void>();
