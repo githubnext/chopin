@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { machineFile } from "./machine";
 import { createOutput } from "./output";
-import { commandWords, servePlanners, stopBackend } from "./planner";
+import { commandWords, dispatchedPlanners, servePlanners, stopBackend } from "./planner";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { git, lockWorkspace, startFailures } from "./workspace";
@@ -902,6 +902,208 @@ test.skipIf(process.platform === "win32")(
 			);
 		} finally {
 			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+/**
+ * A Planner backend that exits 0 by itself shortly after it starts, as one does once Chopin closes
+ * its link on a deliberate stop. Each launch is logged, and its exit before it happens.
+ */
+const LEAVING_BACKEND = `
+import { appendFileSync } from "node:fs";
+let log = process.argv[2];
+appendFileSync(log, JSON.stringify({ pid: process.pid }) + "\\n");
+process.on("SIGTERM", () => process.exit(0));
+setTimeout(() => {
+	appendFileSync(log, JSON.stringify({ exited: process.pid }) + "\\n");
+	process.exit(0);
+}, 300);
+`;
+
+test.skipIf(process.platform === "win32")(
+	"connect --planner-command does not start again a Planner whose link Chopin closed as it stopped asking for it",
+	async () => {
+		let { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+		let { WebStandardStreamableHTTPServerTransport } = await import(
+			"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+		);
+		let { CallToolRequestSchema, ListToolsRequestSchema } = await import(
+			"@modelcontextprotocol/sdk/types.js"
+		);
+		let polls: string[][] = [];
+		let document = "";
+		let directory = await mkdtemp(join(scratch, "withdrawn-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, LEAVING_BACKEND);
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					return Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: document },
+					});
+				}
+				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
+				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				mcp.setRequestHandler(CallToolRequestSchema, async call => {
+					let args = (call.params.arguments ?? {}) as { planners?: string[] };
+					let value: unknown = {};
+					if (call.params.name === "wait_for_work" && args.planners) {
+						polls.push(args.planners);
+						if (polls.length === 1) {
+							value = { kind: "planners", planners: [{ id: "D_1", url: document }] };
+						} else if (polls.length === 2) {
+							// Its owner chooses Automatic: Chopin closes the backend's link, which exits 0, and
+							// this answer, later than a restart's first backoff, stops asking for it.
+							await until(async () => (await entries(log)).some(entry => entry.exited), 10_000);
+							await Bun.sleep(1_500);
+							value = { kind: "planners", planners: [] };
+						} else await new Promise(() => {});
+					} else if (call.params.name === "wait_for_work") await new Promise(() => {});
+					return { content: [{ type: "text", text: JSON.stringify(value) }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await mcp.connect(transport);
+				return transport.handleRequest(request);
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		document = `${origin}/octo-org/score/plan`;
+		let root = await checkout();
+		let state = await mkdtemp(join(scratch, "state-"));
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			root,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--",
+			process.execPath,
+		], {
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = Promise.all([
+			new Response(connector.stdout).text(),
+			new Response(connector.stderr).text(),
+		]);
+		try {
+			await until(async () => polls.length >= 3, 20_000);
+			expect(polls[2]).toEqual([]);
+			await Bun.sleep(1_500);
+			// Launched once: never started again between its exit and Chopin's answer.
+			expect((await entries(log)).filter(entry => entry.pid)).toHaveLength(1);
+
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			let [stdout] = await output;
+			expect(stdout).not.toContain("starting it again");
+			expect(stdout.split(`Stopped the Planner for ${document}`)).toHaveLength(2);
+			expect(stdout).toContain(
+				`Stopped the Planner for ${document}: the document chose another machine.`,
+			);
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a dispatched Planner that exits by itself starts again only once Chopin's Planner poll still asks for it",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: request =>
+				new URL(request.url).pathname === "/api/connector/planner"
+					? Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: "http://x/plan" },
+					})
+					: new Response(null, { status: 404 }),
+		});
+		let directory = await mkdtemp(join(scratch, "confirm-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, LEAVING_BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let planners = dispatchedPlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: [],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			directory,
+			repository: "octo-org/score",
+			output: createOutput(sink, sink, {}),
+			signal: abort.signal,
+		});
+		let launches = async () => (await entries(log)).filter(entry => entry.pid).length;
+		let exits = async () => (await entries(log)).filter(entry => entry.exited).length;
+		try {
+			planners.assign([{ id: "D_1", url: "http://x/plan" }]);
+			expect(planners.running()).toEqual(["D_1"]);
+			await until(async () => await exits() === 1, 10_000);
+			// Until Chopin answers, the Planner poll no longer names it, and it waits.
+			await until(async () => planners.running().length === 0, 5_000);
+			await Bun.sleep(1_500);
+			expect(await launches()).toBe(1);
+
+			// Chopin still asks for it: it starts again, on the reconnect backoff.
+			planners.assign([{ id: "D_1", url: "http://x/plan" }]);
+			await until(async () => await launches() === 2, 5_000);
+			expect(said).toContain("Planner for http://x/plan exited (exit 0); starting it again in");
+			await until(async () => await exits() === 2, 10_000);
+			await until(async () => planners.running().length === 0, 5_000);
+
+			// Chopin answered a poll that no longer named it without a change: it was withdrawn.
+			planners.unchanged([]);
+			await Bun.sleep(1_500);
+			expect(await launches()).toBe(2);
+			expect(said).toContain(
+				"Stopped the Planner for http://x/plan: the document chose another machine.",
+			);
+		} finally {
+			abort.abort();
+			await planners.stop();
 			await chopin.stop(true);
 		}
 	},

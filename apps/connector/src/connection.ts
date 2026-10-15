@@ -258,6 +258,8 @@ export type Planners = {
 	running(): string[];
 	/** Run exactly these, starting the new ones and stopping the others. */
 	assign(planners: PlannerAssignment[]): void;
+	/** Chopin answered a poll that named `asked` without a change, so it wants exactly those. */
+	unchanged?(asked: string[]): void;
 };
 
 /**
@@ -296,8 +298,9 @@ async function serveBoth(
 
 /**
  * The Planner poll (protocol 4): `wait_for_work` naming the Planners this connector runs, which
- * Chopin answers with the ones it should run once they differ. A transient failure is retried on
- * the reconnect backoff; another is thrown. It returns when `signal` aborts.
+ * Chopin answers with the ones it should run once they differ, or else, when the wait ends, says
+ * it is still waiting: it wants exactly the ones named. A transient failure is retried on the
+ * reconnect backoff; another is thrown. It returns when `signal` aborts.
  */
 async function pollPlanners(
 	api: Link,
@@ -309,8 +312,9 @@ async function pollPlanners(
 	let attempt = 0;
 	while (!signal.aborted) {
 		let answer: Partial<PlannerControl>;
+		let asked = planners.running();
 		try {
-			answer = await api.call("wait_for_work", { planners: planners.running() }, signal) as Partial<
+			answer = await api.call("wait_for_work", { planners: asked }, signal) as Partial<
 				PlannerControl
 			>;
 			attempt = 0;
@@ -323,7 +327,7 @@ async function pollPlanners(
 		if (signal.aborted) return;
 		if (answer.kind === "planners" && Array.isArray(answer.planners)) {
 			planners.assign(answer.planners);
-		}
+		} else planners.unchanged?.(asked);
 	}
 }
 

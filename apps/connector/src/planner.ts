@@ -91,6 +91,11 @@ export async function servePlanners(options: {
  * one no longer on it, saying so in chopin's output. `running` names the documents asked for, by
  * id, for the next Planner poll. A document `--planner` already runs is never started twice.
  * `chosen` keeps the documents it started, for `chopin status`. `stop` stops them all.
+ *
+ * A backend that exits by itself starts again only once Chopin still asks for it: Chopin closes
+ * the link of a Planner it stops asking for, so the exit can come before the poll's answer. Until
+ * an answer, `running` leaves the document out, which Chopin answers at once if it still wants it;
+ * `unchanged` hears an answer that changed nothing, so one that leaves it out withdraws it.
  */
 export function dispatchedPlanners(options: {
 	url: string;
@@ -112,43 +117,81 @@ export function dispatchedPlanners(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 }) {
-	let running = new Map<
-		string,
-		{ url: string; own: boolean; stop: AbortController; served: Promise<void> }
-	>();
+	type Backend = {
+		url: string;
+		own: boolean;
+		stop: AbortController;
+		served: Promise<void>;
+		/** Set while it exited by itself and waits on Chopin's answer: whether to start it again. */
+		exited?: (again: boolean) => void;
+	};
+	let running = new Map<string, Backend>();
 	let own = new Set(options.documents);
+	let withdraw = (id: string, backend: Backend) => {
+		running.delete(id);
+		backend.stop.abort();
+		// Chopin stops asking once the document's owner chooses another machine or Automatic.
+		if (!backend.own && !options.signal.aborted) {
+			options.output.say(
+				`Stopped the Planner for ${backend.url}: the document chose another machine.`,
+			);
+		}
+	};
+	let record = () =>
+		void options.chosen?.record(
+			[...running.values()].filter(backend => !backend.own).map(backend => backend.url),
+		);
 	return {
-		running: () => [...running.keys()],
+		running: () => [...running].filter(([, backend]) => !backend.exited).map(([id]) => id),
 		assign(planners: PlannerAssignment[]) {
 			let wanted = new Map(planners.map(value => [value.id, value]));
 			for (let [id, backend] of running) {
-				if (wanted.has(id)) continue;
-				running.delete(id);
-				backend.stop.abort();
-				// Chopin stops asking once the document's owner chooses another machine or Automatic.
-				if (!backend.own && !options.signal.aborted) {
-					options.output.say(
-						`Stopped the Planner for ${backend.url}: the document chose another machine.`,
-					);
-				}
+				if (wanted.has(id)) backend.exited?.(true);
+				else withdraw(id, backend);
 			}
 			for (let [id, planner] of wanted) {
 				if (running.has(id) || options.signal.aborted) continue;
 				let stop = new AbortController();
 				let mine = own.has(id) || own.has(planner.url);
-				let served = mine
-					? Promise.resolve()
-					: servePlanner({
+				let backend: Backend = { url: planner.url, own: mine, stop, served: Promise.resolve() };
+				let signal = AbortSignal.any([options.signal, stop.signal]);
+				if (!mine) {
+					backend.served = servePlanner({
 						...options,
 						document: planner.url,
 						id: planner.id,
-						signal: AbortSignal.any([options.signal, stop.signal]),
+						signal,
+						again: () =>
+							new Promise<boolean>(resolve => {
+								let answer = (again: boolean) => {
+									backend.exited = undefined;
+									signal.removeEventListener("abort", stopped);
+									resolve(again);
+								};
+								let stopped = () => answer(false);
+								backend.exited = answer;
+								signal.addEventListener("abort", stopped, { once: true });
+								if (signal.aborted) stopped();
+							}),
 					});
-				running.set(id, { url: planner.url, own: mine, stop, served });
+				}
+				running.set(id, backend);
 			}
-			void options.chosen?.record(
-				[...running.values()].filter(backend => !backend.own).map(backend => backend.url),
-			);
+			record();
+		},
+		/** Chopin answered a Planner poll naming `asked` with no change: it wants exactly those. */
+		unchanged(asked: string[]) {
+			let wanted = new Set(asked);
+			let withdrawn = false;
+			for (let [id, backend] of running) {
+				if (!backend.exited) continue;
+				if (wanted.has(id)) backend.exited(true);
+				else {
+					withdraw(id, backend);
+					withdrawn = true;
+				}
+			}
+			if (withdrawn) record();
 		},
 		async stop() {
 			for (let backend of running.values()) backend.stop.abort();
@@ -178,6 +221,11 @@ async function servePlanner(options: {
 	githubRefused?: (message: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
+	/**
+	 * For a dispatched Planner: once the backend exits by itself, whether Chopin still asks for it,
+	 * so it starts again. Without it, a backend that exits is always started again.
+	 */
+	again?: () => Promise<boolean>;
 }) {
 	let { output, signal, document } = options;
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
@@ -238,18 +286,27 @@ async function servePlanner(options: {
 		if (signal.aborted) return;
 		// What the backend printed may hold its credential, a GitHub token or an --env value.
 		let secrets = [credential.token, ...github?.secrets() ?? [], ...values];
-		if (Date.now() - started >= HEALTHY_MS) attempt = 0;
-		let wait = backoff(attempt++);
-		if (Date.now() - launched < healthyMs) {
-			let at = Date.now();
-			await options.failures?.failed({
+		let ended = Date.now();
+		let early = ended - launched < healthyMs;
+		let failed = (at: number, retryAt?: number) =>
+			options.failures?.failed({
 				kind: "planner",
 				document,
 				how,
 				...(stderr ? { stderr } : {}),
 				at,
-				retryAt: at + wait,
+				...(retryAt === undefined ? {} : { retryAt }),
 			}, secrets);
+		if (options.again) {
+			// Status shows a failed start while Chopin is asked whether it still wants this Planner.
+			if (early) await failed(ended);
+			if (!(await options.again())) return;
+		}
+		if (ended - started >= HEALTHY_MS) attempt = 0;
+		let wait = backoff(attempt++);
+		if (early) {
+			let at = Date.now();
+			await failed(at, at + wait);
 		}
 		output.say(
 			output.style.dim(
