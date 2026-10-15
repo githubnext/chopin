@@ -263,7 +263,7 @@ describe("design audit specimens", () => {
 		expect(plate(markup, "dialogs")).toContain('role="group"');
 		expect(plate(markup, "dialogs")).not.toContain('aria-modal="true"');
 		expect(markup).toContain('aria-current="page"');
-		expect(markup).toContain('aria-label="Compact workspace view"');
+		expect(markup).toContain('aria-label="Workspace view"');
 		expect(markup).toContain('data-chat-entry="true"');
 		expect(markup).toContain("Avatar image loading");
 		expect(markup).toContain("Editing this question");

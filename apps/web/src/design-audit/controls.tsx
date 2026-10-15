@@ -2,10 +2,11 @@ import { CheckIcon, ChevronIcon, LoaderIcon, PlusIcon, WarningIcon } from "@chop
 import { StaticPlanEditor } from "@chopin/editor/static";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@chopin/visuals";
 
+import { BuildGlyph } from "../build-plan-button";
 import { DecisionViewControl } from "../decision-view-control";
 import { AuditPlate, StateLabel } from "./frame";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 const TABS = [
 	'<Tabs id="01K0N4W3B7P27CBAEC7A8C8WF0">',
@@ -28,6 +29,33 @@ const TABS = [
 ].join("\n") + "\n";
 
 const STATES = ["Default", "Hover", "Active", "Focus", "Disabled"] as const;
+
+const BUILDING = <BuildGlyph look={{ done: 2, kind: "building", total: 5 }} />;
+
+// The document view switcher in the states the live title bar gives it.
+const VIEW_SPECIMENS: {
+	label: string;
+	props: Partial<ComponentProps<typeof DecisionViewControl>>;
+}[] = [
+	{ label: "Document selected, 3 unanswered", props: { unanswered: 3 } },
+	{ label: "Decisions selected", props: { unanswered: 3, view: "decisions" } },
+	{ label: "No unanswered decisions", props: {} },
+	{
+		label: "Planner writing the document",
+		props: { documentActivity: "writing", view: "decisions" },
+	},
+	{ label: "New document changes", props: { documentActivity: "unseen", view: "decisions" } },
+	{ label: "Build not ready", props: { buildEnabled: false } },
+	{ label: "Build ready, building", props: { buildEnabled: true, buildGlyph: BUILDING } },
+	{
+		label: "Build selected",
+		props: { buildEnabled: true, buildGlyph: BUILDING, view: "build" },
+	},
+	{
+		label: "Build linked to the hovered capsule",
+		props: { buildEnabled: true, buildGlyph: BUILDING, buildHot: true },
+	},
+];
 
 function StateSample({ children, state }: { children: ReactNode; state: string }) {
 	return (
@@ -260,18 +288,20 @@ export function Controls() {
 			>
 				<div className="flex flex-col gap-4">
 					<div className="design-audit-tab-specimens">
-						<div>
-							<StateLabel>Document view switcher with Document selected</StateLabel>
-							<DecisionViewControl onView={() => {}} unanswered={3} view="plan" />
-						</div>
-						<div>
-							<StateLabel>Document view switcher with Decisions selected</StateLabel>
-							<DecisionViewControl onView={() => {}} unanswered={3} view="decisions" />
-						</div>
-						<div>
-							<StateLabel>Document view switcher with no unanswered decisions</StateLabel>
-							<DecisionViewControl onView={() => {}} unanswered={0} view="plan" />
-						</div>
+						{VIEW_SPECIMENS.map(({ label, props }) => (
+							<div key={label}>
+								<StateLabel>{label}</StateLabel>
+								<DecisionViewControl
+									buildEnabled={props.buildEnabled}
+									buildGlyph={props.buildGlyph}
+									buildHot={props.buildHot}
+									documentActivity={props.documentActivity}
+									onView={() => {}}
+									unanswered={props.unanswered ?? 0}
+									view={props.view ?? "plan"}
+								/>
+							</div>
+						))}
 					</div>
 					<div>
 						<StateLabel>Authored tabs with the first tab selected</StateLabel>

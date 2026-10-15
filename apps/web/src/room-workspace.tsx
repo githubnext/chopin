@@ -85,6 +85,7 @@ import {
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { DocumentRename } from "./document-rename";
+import { LostEditsNotice, UNDO_REFUSALS, UndoRefusedNotice } from "./document-status-notices";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader, PhoneHeaderContent } from "./phone-header";
 import { DocumentSkeleton } from "./phone-skeleton";
@@ -110,7 +111,6 @@ import type {
 	ExperimentResources,
 	InvestigationResources,
 	PlanState,
-	Refusal,
 	ResearchLaunchResult,
 } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
@@ -421,14 +421,6 @@ export function Header(
 		</header>
 	);
 }
-
-const LOST_EDITS =
-	"Your last edits couldn't be saved because the document changed while you were offline.";
-
-const UNDO_REFUSALS: Record<Refusal, string> = {
-	others: "Others have edited this since.",
-	change: "This change can't be reversed here.",
-};
 
 /** Reconnect attempts a person can make in one outage before Reload is offered. */
 const RECONNECTS_BEFORE_RELOAD = 3;
@@ -1378,47 +1370,10 @@ export function RoomWorkspace(
 	let statusNotices = (
 		<>
 			{!!planState.lost && planState.lost !== lostSeen && (
-				<div className="plan-status" data-level="alert" role="alert">
-					<span className="plan-status-text">
-						<span
-							aria-hidden="true"
-							className="plan-status-label"
-							data-tooltip={LOST_EDITS}
-							data-tooltip-verbatim=""
-						>
-							Edits not saved
-						</span>
-						<span aria-hidden="true" className="plan-status-detail">{LOST_EDITS}</span>
-						<span className="sr-only">{LOST_EDITS}</span>
-					</span>
-					<button
-						className="btn btn-sm btn-ghost"
-						onClick={() =>
-							setLostSeen(planState.lost ?? 0)}
-						type="button"
-					>
-						Dismiss
-					</button>
-				</div>
+				<LostEditsNotice onDismiss={() => setLostSeen(planState.lost ?? 0)} />
 			)}
 			{/* Apart from PlanStatus, which would announce its end as "Reconnected". */}
-			{planState.refused && (
-				<div className="plan-status" data-level="notice">
-					<span aria-hidden="true" className="plan-status-dot" />
-					<span aria-hidden="true" className="plan-status-text">
-						<span
-							className="plan-status-label"
-							data-tooltip={UNDO_REFUSALS[planState.refused.reason]}
-							data-tooltip-verbatim=""
-						>
-							Can't undo
-						</span>
-						<span className="plan-status-detail">
-							{UNDO_REFUSALS[planState.refused.reason]}
-						</span>
-					</span>
-				</div>
-			)}
+			{planState.refused && <UndoRefusedNotice reason={planState.refused.reason} />}
 			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
 				{planState.refused && `Can't undo. ${UNDO_REFUSALS[planState.refused.reason]}`}
 			</span>

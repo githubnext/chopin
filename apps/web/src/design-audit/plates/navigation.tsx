@@ -1,11 +1,37 @@
 import { ArchiveIcon, ChevronIcon, DocumentIcon, LoaderIcon, PlusIcon } from "@chopin/icons";
 
-import { AuditPlate } from "../frame";
+import { useId } from "react";
+
+import { BuildGlyph } from "../../build-plan-button";
+import { BUILD_UNAVAILABLE } from "../../decision-view-control";
+import { workspaceDestinations } from "../../workspace-model";
+import { WorkspaceViewNavigation } from "../../workspace-navigation";
+import { AuditPlate, StateLabel } from "../frame";
+
+import type { ComponentProps } from "react";
+
+type CompactState = Partial<ComponentProps<typeof WorkspaceViewNavigation>>;
+
+// The compact workspace's destinations, in the states the live app gives them.
+let COMPACT_SPECIMENS: { label: string; state: CompactState }[] = [
+	{
+		label: "Chat current, Planner working with 2 unread",
+		state: { chatActivity: { busy: true, unread: 2 }, chatVisible: true },
+	},
+	{ label: "Document current", state: { unanswered: 3 } },
+	{
+		label: "Decisions current, new document changes",
+		state: { documentActivity: "unseen", unanswered: 3, view: "decisions" },
+	},
+	{ label: "Build current, building", state: { view: "build" } },
+	{ label: "Build not ready", state: { buildEnabled: false } },
+];
 
 export function NavigationPlate() {
+	let reason = useId();
 	return (
 		<AuditPlate
-			description="Current, ancestor, archived, and loading rows in one compact rail. Descriptions appear on hover or focus."
+			description="Current, ancestor, archived, and loading rows in one compact rail. Descriptions appear on hover or focus. Below, the compact workspace's view navigation."
 			item="navigation"
 			title="Navigation"
 		>
@@ -38,17 +64,27 @@ export function NavigationPlate() {
 					<LoaderIcon size={14} />Loading more…
 				</div>
 			</nav>
-			<nav
-				aria-label="Compact workspace view"
-				className="workspace-navigation design-audit-compact-navigation"
-			>
-				<button className="btn btn-md btn-ghost min-h-11" type="button">Conversation</button>
-				<button className="btn btn-md btn-ghost min-h-11" type="button">Document</button>
-				<button aria-current="page" className="btn btn-md btn-ghost min-h-11" type="button">
-					Decisions
-				</button>
-				<button className="btn btn-md btn-ghost min-h-11" type="button">Background</button>
-			</nav>
+			<div className="design-audit-compact-navigation">
+				{COMPACT_SPECIMENS.map(({ label, state }, index) => (
+					<div key={label}>
+						<StateLabel>{label}</StateLabel>
+						<WorkspaceViewNavigation
+							buildEnabled={state.buildEnabled ?? true}
+							buildGlyph={<BuildGlyph look={{ done: 2, kind: "building", total: 5 }} />}
+							buildReason={`${reason}-${index}`}
+							buildUnavailable={BUILD_UNAVAILABLE}
+							chatActivity={state.chatActivity ?? { busy: false, unread: 0 }}
+							chatVisible={state.chatVisible ?? false}
+							destinations={workspaceDestinations(true)}
+							documentActivity={state.documentActivity}
+							implementation
+							onNavigate={() => {}}
+							unanswered={state.unanswered ?? 0}
+							view={state.view ?? "plan"}
+						/>
+					</div>
+				))}
+			</div>
 		</AuditPlate>
 	);
 }
