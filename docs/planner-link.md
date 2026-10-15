@@ -582,46 +582,31 @@ long to mask is left out, with a note in its place.
 
 ### Environment
 
-Each launch gets these variables, beside the connector's own environment and
-your `--env` values. This holds for `--planner` documents and for documents
-Chopin asked the machine to run.
+Each launch gets the connector's environment, your `--env` values, and these:
 
-| Variable                         | Value                                                                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `CHOPIN_URL`                     | The server's origin.                                                                                                            |
-| `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin asked for it.                                                      |
-| `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                                                        |
-| `CHOPIN_CHECKOUT`                | The absolute root of the checkout `chopin connect` serves. It is also the working directory.                                    |
-| `CHOPIN_WORKTREE`                | An absolute path for the command's own worktree of that checkout: `<base>/planners/<owner>/<repo>/<document id>`.               |
-| `CHOPIN_GITHUB_TOKEN`            | The machine owner's GitHub token from Chopin's App, for pushing and opening draft pull requests. Absent when Chopin gives none. |
-| `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601 UTC.                                                                                       |
-| `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) holding the current token and a newline.                                                                   |
+| Variable                         | Value                                                                                    |
+| -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `CHOPIN_URL`                     | The server's origin.                                                                     |
+| `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin chose this machine.         |
+| `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                 |
+| `CHOPIN_CHECKOUT`                | The checkout's absolute root.                                                            |
+| `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.     |
+| `CHOPIN_GITHUB_TOKEN`            | The machine owner's token from Chopin's GitHub App, for pushing and draft pull requests. |
+| `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601.                                                    |
+| `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) that always holds the current token.                                |
 
-#### The worktree
-
-`<owner>/<repo>` is the checkout's GitHub repository in lower case, and
-`<document id>` the document's id in Chopin. The path is the same at every
-launch, so a restarted command finds its worktree.
-
-The connector makes the folders above it (mode `0700`) and never removes the
-worktree. The command creates it and picks the branch, for example:
+`CHOPIN_WORKTREE` stays the same across launches. The connector makes its
+parent folders but never creates or removes the worktree itself. The command
+does, for example:
 
 ```sh
 git -C "$CHOPIN_CHECKOUT" worktree add "$CHOPIN_WORKTREE" -b <branch>
 ```
 
-#### The GitHub token
-
-The token is the machine owner's user token for Chopin's GitHub App. It can do
-what the App's [permissions](authentication.md#repository-permissions) allow,
-in repositories where the App is installed and the owner can push.
-
-The connector replaces the file's token 25 minutes before it expires; the
-variable keeps the first one, so re-read the file before using GitHub. The file
-goes when the command stops.
-
-Chopin gives no token when the server runs `AUTH_MODE=local`, when the owner
-can't push to the checkout's repository, or when the App can only read it.
+The connector renews the GitHub token in the file 25 minutes before it expires,
+so read the file before each use. The three `CHOPIN_GITHUB_TOKEN` variables are
+absent when Chopin gives no token; see
+[Which GitHub account pushes](chopin-cli.md#which-github-account-pushes).
 
 ### Credential
 
@@ -656,7 +641,7 @@ repository tools act with it.
 - Read `CHOPIN_URL`, `CHOPIN_DOCUMENT` and `CHOPIN_PLANNER_TOKEN` from its
   [environment](#environment). The token is never in its arguments; do not log
   it.
-- Keep any checkout of its own at `CHOPIN_WORKTREE`, not beside the checkout.
+- Keep any worktree of its own at `CHOPIN_WORKTREE`.
 - Open `/planner-link` on `CHOPIN_URL` with
   `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach` to
   `CHOPIN_DOCUMENT`.

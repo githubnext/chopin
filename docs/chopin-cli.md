@@ -37,12 +37,12 @@ In Chopin, open **Machines** and choose **Add machine**. It offers two ways:
 
 Either way you copy one command and run it in a checkout on that machine. The
 installer installs `chopin`, then runs `chopin connect` itself. If the install
-fails, it stops with its own message and runs nothing. The agent must be
-installed and signed in first: the page shows its install command under **Show
-install command**, and [Coding agents](#coding-agents) lists them all.
-Your Chopin server may list its own setups first in the **Coding agent** picker
-([setup agents](self-hosting.md#setup-agents)); for one of those, the page
-shows its install steps and its own command instead.
+fails, it stops with its own message and runs nothing.
+
+The agent must be installed and signed in first. The page shows its install
+command under **Show install command**, and [Coding agents](#coding-agents)
+lists them all. Your server may list its own
+[setup agents](self-hosting.md#setup-agents) first, each with its own steps.
 
 ### Your computer
 
@@ -415,18 +415,15 @@ chopin connect . --planner-command "my-planner --flag" -- copilot --acp --allow-
 ```
 
 Choose this machine for a document with the machine button, and Chopin asks it
-to start that document's Planner. It does so only when the Planner is free or
-already yours, never taking over another account's. The backend gets its
-credential just as with `--planner`.
+to start that document's Planner, unless another account holds it. The backend
+gets its credential as with `--planner`.
 
-These stop it: choosing another machine or **Automatic**, disconnecting or
-revoking the machine, or losing push access to the repository. Choosing another
-machine or **Automatic** prints
-`Stopped the Planner for <document>: the document chose another machine.`
+Choosing another machine or **Automatic** stops it and prints
+`Stopped the Planner for <document>: the document chose another machine.` So do
+disconnecting or revoking the machine, or losing push access to the repository.
+Chopin then voids the credentials it gave the machine for that document.
 
-Once Chopin stops asking, the credentials the machine got for that document
-stop working, so a backend that hasn't attached yet never does. This needs a
-server that speaks connector protocol 4.
+This needs a server that speaks connector protocol 4.
 
 The machine button in the document's Chat box shows who runs its Planner:
 your machine's name once its Planner is attached, **Starting…** until then,
@@ -437,49 +434,41 @@ Planner**.
 
 ## Where things live on this machine
 
-`chopin connect` keeps everything in its base dir,
-`~/.local/state/chopin/connector`, never beside your checkout. `--base-dir` or
-`CHOPIN_HOME` moves it.
-
-| Path                                    | Holds                                                  | Removed                                                                                |
-| --------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `runs/<run id>`                         | Each job's worktree, for you to inspect                | With older runs, below                                                                 |
-| `runs/<run id>-worktrees/`              | Extra worktrees a build adds for pull requests at once | When the run ends, uncommitted changes included, since their pull requests were pushed |
-| `planners/<owner>/<repo>/<document id>` | A Planner command's own worktree for one document      | Never                                                                                  |
-
-`chopin connect` keeps the 15 most recently finished runs. It removes older ones
-when it starts and after each run, but never a run that is still going.
-`--keep-runs <n>` keeps `n` runs instead, and `--keep-runs 0` keeps them all.
-
+`chopin connect` keeps its files in its base dir,
+`~/.local/state/chopin/connector`, never in your checkout.
 [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
-lists everything else in the base dir.
+lists them all.
+
+| Path                                    | Holds                                               | Removed                                         |
+| --------------------------------------- | --------------------------------------------------- | ----------------------------------------------- |
+| `runs/<run id>`                         | A job's worktree, for you to inspect                | Once 15 newer runs have finished                |
+| `runs/<run id>-worktrees/`              | Extra worktrees a build adds for more pull requests | When the run ends, uncommitted changes included |
+| `planners/<owner>/<repo>/<document id>` | A Planner command's worktree for one document       | Never                                           |
+
+`--keep-runs <n>` keeps `n` finished runs instead of 15, and `--keep-runs 0`
+keeps them all. `chopin` never removes a run that is going or waiting to start.
 
 ## Which GitHub account pushes
 
 Builds and Planner commands push branches and open draft pull requests as you,
-the machine's owner. Chopin hands them your token from its GitHub App:
+with your token from Chopin's GitHub App. Investigations get the token too;
+prototypes never do.
 
-- A build's or investigation's agent gets it as `GH_TOKEN` and `GITHUB_TOKEN`,
-  and Git uses it for github.com.
-- A Planner command gets it as `CHOPIN_GITHUB_TOKEN`; see
-  [the Planner's environment](planner-link.md#environment).
-
-The token is renewed before it expires and its file goes when the work ends.
-Prototypes never push.
+| What runs                          | Gets your token as                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| A build's or investigation's agent | `GH_TOKEN` and `GITHUB_TOKEN`. Git uses it for github.com.                           |
+| A Planner command                  | `CHOPIN_GITHUB_TOKEN`; see [the Planner's environment](planner-link.md#environment). |
 
 The machine uses your own `gh` and Git login instead when:
 
-- the server runs `AUTH_MODE=local`, where machines hold no GitHub token;
+- the server runs `AUTH_MODE=local`;
 - you can't push to the repository; or
 - the App can only read the repository. The connector and `chopin status` then
-  say so once:
+  say so:
 
 ```text
 The GitHub App can't push to octo-org/score (it needs Contents and Pull requests write), so this machine uses its own GitHub login for it.
 ```
-
-[Authentication](authentication.md#repository-permissions) lists the App's
-permissions.
 
 ## Update
 
@@ -512,7 +501,7 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 | `chopin connect [checkout] [--key <key>] -- <agent>`        | Runs work from Chopin with your agent in this checkout. Pairs first if needed.                                    |
 | `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
-| `chopin connect … --keep-runs <n>`                          | Keeps the worktrees of the `n` most recently finished runs (default 15, 0 for all) and removes older ones.        |
+| `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                |
 | `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                        |
 | `chopin status [--json]`                                    | Shows the server, pairing, running connectors, the service and what it runs, and the log.                         |
 | `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                        |

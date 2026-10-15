@@ -132,12 +132,13 @@ Callback:  http://127.0.0.1:8787/auth/github/callback
 Setup URL: http://127.0.0.1:8787/auth/github/setup
 ```
 
-Then, on the App:
+On the App:
 
-- enable expiring user authorization tokens;
-- disable OAuth during installation;
-- disable webhooks; and
-- give it these repository permissions:
+1. Enable expiring user authorization tokens.
+2. Disable OAuth during installation.
+3. Disable webhooks.
+4. Give it these repository permissions, which
+   [Authentication](docs/authentication.md#repository-permissions) explains:
 
 ```text
 Contents:        Read and write
@@ -148,11 +149,6 @@ Commit statuses: Read-only
 Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
-
-The write permissions let machines push and open draft pull requests as their
-owner. With a read-only App, machines use their owner's own `gh` and Git login
-instead. See [Authentication](docs/authentication.md#repository-permissions)
-for why each permission is needed.
 
 Install, configure, and start Chopin:
 
@@ -166,9 +162,8 @@ bun run migrate
 bun run dev
 ```
 
-The committed local Compose override publishes PostgreSQL on host port 5432 and
-is intended only for a trusted development machine. Do not use it on an exposed
-host. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
+The committed local Compose override publishes PostgreSQL on host port 5432, so
+use it only on a trusted development machine. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
 
 1. Open [http://127.0.0.1:8787](http://127.0.0.1:8787) and sign in.
 2. Install or update the GitHub App when the repository picker asks.

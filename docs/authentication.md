@@ -19,16 +19,14 @@ Setup URL:    <APP_ORIGIN>/auth/github/setup
 
 - Leave **Expire user authorization tokens** enabled.
 - Leave **Request user authorization (OAuth) during installation** disabled.
-- Leave device flow disabled for a hosted deployment; local device-flow sign-in
-  (below) requires enabling it on the App instead.
+- Leave device flow disabled, unless you use
+  [local device-flow sign-in](#local-device-flow-sign-in).
 - Enable **Redirect on update** when a setup URL is configured.
 - Disable webhooks.
 - Select **Any account** so personal accounts and organizations can install it.
 - Prefer **Only select repositories** while installing it.
 
 ### Repository permissions
-
-Give the App these repository permissions:
 
 ```text
 Contents:        Read and write
@@ -40,49 +38,29 @@ Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-| Permission      | Why                                                                                                            |
-| --------------- | -------------------------------------------------------------------------------------------------------------- |
-| Contents        | Chopin reads files, trees, code search and history. Machines push branches.                                    |
-| Pull requests   | Pull request link summaries and the Planner's pull request tools read them. Machines open draft pull requests. |
-| Workflows       | GitHub refuses a push that changes `.github/workflows` without it.                                             |
-| Checks          | The Planner's pull request tools read check runs.                                                              |
-| Commit statuses | The Planner's pull request tools read commit statuses.                                                         |
-| Issues          | Issue link summaries. Without it, issue links stay plain links.                                                |
-| Metadata        | GitHub grants it to every App.                                                                                 |
-
-Whoever installs the App approves these permissions. An `AGENT=off` deployment
-needs only Contents and Metadata, plus organization admission's permission
-below.
+| Permission                 | Chopin uses it for                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Contents                   | Reading code. Machines push branches.                                                                |
+| Pull requests              | Pull request link summaries and the Planner's pull request tools. Machines open draft pull requests. |
+| Workflows                  | Machines pushing `.github/workflows` changes.                                                        |
+| Checks and Commit statuses | The Planner's pull request tools.                                                                    |
+| Issues                     | Issue link summaries. Without it, those stay plain links.                                            |
+| Metadata                   | GitHub grants it to every App.                                                                       |
 
 ### Who writes to repositories
 
-The server never writes to a repository. Machines connected with
-[`chopin connect`](chopin-cli.md) push branches and open draft pull requests as
-their owner, with the owner's App user token.
-
-GitHub limits that token to repositories where the App is installed and the
-owner can push. **Only select repositories** narrows it further.
-
-Machines use their owner's own `gh` and Git login instead when the App can
-only read a repository, and always under `AUTH_MODE=local`, where machines hold
-no GitHub token. In the first case `chopin status` says the App can't push.
+The server never writes to a repository. Machines push as their owner; see
+[Which GitHub account pushes](chopin-cli.md#which-github-account-pushes).
 
 ### Organization admission
 
-Organization admission also needs:
+Organization admission also needs the `Members: Read-only` organization
+permission. Install the App on every allowed organization and have its owner
+approve it.
 
-```text
-Organization permissions:
-Members: Read-only
-```
-
-Install the App on every allowed organization. An organization owner approves
-this permission.
-
-No App ID, private key, JWT, installation access token, or webhook secret is
-used. Chopin acts on behalf of each signed-in user with a GitHub App user access
-token so repository-role checks and the user's Copilot entitlement remain
-theirs.
+Chopin uses no App ID, private key, JWT, installation access token, or webhook
+secret. It acts as each signed-in user, with their App user access token,
+so repository-role checks and Copilot entitlement stay theirs.
 
 Configure Chopin with the App's slug and OAuth client credentials. A minimal
 production environment contains:
@@ -110,8 +88,7 @@ fragment, or trailing slash. HTTPS is required except for loopback development,
 such as `http://127.0.0.1:8787`. Callback URLs are built only from this value,
 never from incoming Host or forwarded headers.
 
-The complete variable reference and deployment procedures live in
-[Self-hosting](self-hosting.md).
+[Self-hosting](self-hosting.md) lists every variable and how to deploy.
 
 ## Local device-flow sign-in
 
