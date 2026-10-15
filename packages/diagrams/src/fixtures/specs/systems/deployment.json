@@ -6,7 +6,7 @@
 		{
 			"id": "api1",
 			"label": "checkout-api",
-			"sub": "k8s · 3 pods",
+			"sub": "3 k8s pods",
 			"focal": true,
 			"row": 0,
 			"col": 1,
@@ -33,7 +33,7 @@
 		{
 			"id": "api2",
 			"label": "checkout-api",
-			"sub": "k8s · 2 pods",
+			"sub": "2 k8s pods",
 			"row": 0,
 			"col": 2,
 			"group": "us"

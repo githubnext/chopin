@@ -244,8 +244,8 @@
 		"tests": 11
 	},
 	"planner-attachment.e2e.ts": {
-		"ms": 22074,
-		"tests": 4
+		"ms": 24300,
+		"tests": 5
 	},
 	"planner-picker.e2e.ts": {
 		"ms": 15756,

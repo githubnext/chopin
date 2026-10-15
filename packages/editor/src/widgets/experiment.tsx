@@ -54,7 +54,7 @@ function Reference(
 				<>
 					<h3 className="text-base font-semibold">{decision.conclusion}</h3>
 					<p className="text-sm">{decision.rationale}</p>
-					<p className="text-xs text-text-secondary">Recorded by {decision.by} · Fixed evidence</p>
+					<p className="text-xs text-text-secondary">Fixed evidence recorded by {decision.by}</p>
 				</>
 			)}
 			{error && <p role="alert" className="text-sm text-destructive-ink">{error}</p>}

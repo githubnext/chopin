@@ -57,10 +57,9 @@ bearer tokens and browser sessions traverse it.
 
 Chopin runs its hosted agent through `@ai-sdk/harness`. `HARNESS` selects one
 adapter from a code-owned map: the default is `copilot-sdk`, a host-process
-wrapper over `@github/copilot-sdk`; `pi` is a second reviewed adapter over
-`@ai-sdk/harness-pi`; `atomic` embeds Atomic's headless SDK
+wrapper over `@github/copilot-sdk`; `atomic` embeds Atomic's headless SDK
 (`@bastani/atomic`) in the server process; and `remote` runs each Planner turn in
-a client attached over the Planner link instead. Adding an adapter to that map is a
+a client attached over the agent connection instead. Adding an adapter to that map is a
 reviewed trust decision, not a runtime plugin choice: an adapter's
 `builtinTools` and `supportsBuiltinToolFiltering` are self-declarations, and
 Chopin's contract suite checks those declarations and the tools a session
@@ -76,49 +75,9 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=pi` requires an explicit `HARNESS_AUTH`: unset is refused outright.
-Pi's own documented modes are `auto`, `openai`, `anthropic`, `custom`, and
-`ai-gateway`; `direct` is not one of them and is refused. On a non-loopback
-`SERVER_HOST`, only `ai-gateway` is accepted, because every other mode can
-fall back to Pi's native `~/.pi/agent` login. `ai-gateway` reads
-`AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`), `openai` reads `OPENAI_API_KEY`,
-`anthropic` reads `ANTHROPIC_API_KEY`, and `custom` forwards every `*_API_KEY`
-and `*_BASE_URL` variable. With `auto` on loopback, turns use the host
-operator's own Pi login; with an operator key, every admitted writer's turns
-bill that key.
-
-Under `pi`, the channel owner supplies only the GitHub App user token; model
-access comes from `HARNESS_AUTH`, not from the owner's Copilot entitlement.
-Repository reads still come from that GitHub token through Chopin's own host
-tools, never through Pi.
-
-Under `pi`, `MODEL` is required and must be an ID from Pi's model catalog,
-preferably provider-qualified (for example `github-copilot/gpt-5.6-luna`).
-Chopin's default, `gpt-6-luna`, is a Copilot ID that Pi does not recognize.
-`@ai-sdk/harness-pi` 1.0.148 fails the turn for an unknown ID ("Harness 'pi'
-has no model ... in its catalog") instead of falling back to another model, so
-the startup banner always names the model Pi runs.
-
-Chopin patches `@ai-sdk/harness-pi` 1.0.148 so Pi's resource loader never reads
-`AGENTS.md` or `CLAUDE.md` context files from the session's working directory,
-its parent directories, or Pi's agent directory on the host. The change lives
-in `patches/@ai-sdk%2Fharness-pi@1.0.148.patch`; reapply or drop it when
-bumping `@ai-sdk/harness-pi`, and run the Pi contract suite
-(`apps/server/src/harness/pi.contract.test.ts`), which covers both behaviors.
-
-`@ai-sdk/harness-pi` 1.0.148 cannot return structured output itself, so
-Chopin registers a result tool as an inline Pi extension. The tool runs inside
-Pi and ends the turn (`terminate: true`), so the summary and research workers
-get their structured result without a follow-up model request. The adapter
-enables the tool only for a turn that requests structured output and blocks it
-on every other turn. Prompt text, including quoted earlier chat, cannot enable
-it. The Pi contract suite (`apps/server/src/harness/pi.contract.test.ts`)
-covers this against the real Pi agent loop; run it before bumping
-`@ai-sdk/harness-pi` or `@earendil-works/pi-coding-agent`.
-
 `HARNESS=atomic` runs Atomic 0.9.37 in the Chopin server process through its
-headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI, use
-RPC mode, or substitute Atomic for Pi's runtime.
+headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
+RPC mode.
 
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** Every Planner
@@ -126,7 +85,7 @@ session is a full Atomic session: Atomic's workflows, subagents, MCP, web access
 Intercom, and default coding tools run beside Chopin's document tools, with the
 operator's Atomic extensions, skills, prompt templates, and context files. There is
 no separate flag; choosing the harness is the choice. Operators who do not want that
-should use `copilot-sdk` or `pi`, whose Planner keeps the isolated, Chopin-tools-only
+should use `copilot-sdk`, whose Planner keeps the isolated, Chopin-tools-only
 boundary. Only the summary and research workers still run isolated Atomic sessions.
 See [The atomic Planner](#the-atomic-planner) below and
 [Hosted agent](hosted-agent.md#full-atomic-planner) for the details.
@@ -158,7 +117,7 @@ Copilot login. An integration that passes Atomic a failed model lookup gets
 another model without warning. This adapter looks the model up itself and
 fails the turn before any model request.
 
-Structured output uses the same approach as Pi: an inline Atomic extension
+Structured output uses an inline Atomic extension that
 registers a terminating result tool, enabled only for a turn that requests
 structured output and blocked on every other turn. The tool records the calling
 model's own arguments. The adapter does not use Atomic's
@@ -245,8 +204,8 @@ remember it.
 ### The remote Planner
 
 `HARNESS=remote` keeps the model out of the server. Each Planner session and turn
-goes to a client attached to the document at `/planner-link`, usually a member's
-own Atomic session; code, model credentials, and that client's tools stay on the
+goes to a client attached to the document over the agent connection at
+`/api/v1/agent`, usually an agent on a member's own machine; code, model credentials, and that client's tools stay on the
 member's machine, while the document, Decisions, and every room write stay in
 this server. The server needs no `MODEL` (one that is set is passed to the
 client as the turn's requested model) and accepts no `HARNESS_AUTH`, so it may
@@ -259,22 +218,22 @@ GitHub token bearer, checked like hosted MCP, and needs push or administration
 access to the document's repository, rechecked before every session and turn and
 every 5 minutes while it stays attached. The same account must have signed in to
 this server in a browser: attaching makes that login the document's Planner
-owner, one client per document, and a detached or dropped link keeps it for
+owner, one client per document, and a detached or dropped connection keeps it for
 `PLANNER_ATTACH_GRACE_MS` so the same account can reattach. The server pings
-every link and counts one that answers nothing for `PLANNER_LINK_TIMEOUT_MS` as
+every connection and counts one that answers nothing for `AGENT_CONNECTION_TIMEOUT_MS` as
 dropped, so a client whose network silently went away does not stay attached.
 A queue of frames draining toward the client puts that off, but never past
-`PLANNER_LINK_MAX_SILENCE_MS` since the client last sent anything, because a
+`AGENT_CONNECTION_MAX_SILENCE_MS` since the client last sent anything, because a
 proxy such as Caddy can drain it while the client reads nothing. Its 15-minute
 default lets a client reading at about 19 KiB/s or faster drain the full 16 MiB
 the server may queue for it and answer a ping in time. A client that stops
 reading behind such a proxy is released by then at the latest, and usually much
 sooner: once the proxy's and the kernel's buffers fill, the queue stops
 shrinking and the ordinary timeout applies. Lower it to release such clients
-sooner, or raise it for slower links.
+sooner, or raise it for slower connections.
 A frame counts only once it has arrived whole, so with the 2-minute default a
 client must upload at about 17 KiB/s or more to send a full 2 MiB frame; see
-[Pings](planner-link.md#pings) and raise the timeout for slower uplinks.
+[Pings](agent-connection.md#pings) and raise the timeout for slower uplinks.
 The client then
 receives what a Planner turn sees, including repository reads made with that
 owner's token, and decides what the Planner writes during turns writers start;
@@ -283,10 +242,11 @@ gains no shell or filesystem access from this harness. Without an attached
 client, `@chopin` and `invoke_planner` are refused with `planner-not-attached`
 and instructions to attach one. See
 [Remote Planner](hosted-agent.md#remote-planner) for the behaviour and
-[Planner link](planner-link.md) for the wire format. The link shares the
+[Agent connection](agent-connection.md) for the wire format. The connection shares the
 application's origin and port with `/ws` and `/mcp`, so a TLS-terminating proxy
 such as Caddy needs no extra listener; its default `reverse_proxy` already passes
-WebSocket upgrades and the `Authorization` header.
+WebSocket upgrades with their `Sec-WebSocket-Protocol` and `Authorization`
+headers.
 
 ## Prerequisites
 
@@ -301,7 +261,7 @@ WebSocket upgrades and the `Authorization` header.
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
 - For `copilot-sdk`, an active Copilot entitlement for each user who may own a
-  hosted agent session. For `pi` or `atomic`, model credentials for the chosen
+  hosted agent session. For `atomic`, model credentials for the chosen
   `HARNESS_AUTH` mode instead.
 
 ## Register the GitHub App
@@ -314,25 +274,29 @@ Callback URL: <APP_ORIGIN>/auth/github/callback
 Setup URL:    <APP_ORIGIN>/auth/github/setup
 ```
 
-Enable expiring user authorization tokens, leave OAuth during installation
-disabled, disable webhooks, and make the App installable on any account. Leave
-device flow disabled unless this deployment also uses local device-flow
-sign-in (below), which requires enabling it instead. The complete product
-uses these read-only repository permissions:
+Then:
+
+1. Enable expiring user authorization tokens.
+2. Leave OAuth during installation disabled.
+3. Disable webhooks.
+4. Make the App installable on any account.
+5. Leave device flow disabled, unless you use
+   [local device-flow sign-in](#local-device-flow-sign-in).
+6. Give it these repository permissions, which
+   [Authentication](authentication.md#repository-permissions) explains:
 
 ```text
-Contents:        Read-only
-Pull requests:   Read-only
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
 Checks:          Read-only
 Commit statuses: Read-only
 Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Organization admission additionally requires organization Members read access
-and owner approval on every admitted organization. See
-[Authentication](authentication.md) for the complete identity, installation,
-session, and authorization model.
+Organization admission also needs
+[one organization permission](authentication.md#organization-admission).
 
 ## Runtime configuration
 
@@ -340,40 +304,41 @@ Store production values in the deployment's secret manager or an owner-readable
 environment file outside the source tree. Do not bake `.env` or credentials into
 the image.
 
-| Variable                       | Default                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `STORAGE_DRIVER`               | `postgres`              | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `DATABASE_URL`                 | required                | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `APP_ORIGIN`                   | required                | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `GITHUB_APP_SLUG`              | required                | Lowercase slug from the App's public URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `GITHUB_APP_CLIENT_ID`         | required                | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `GITHUB_APP_CLIENT_SECRET`     | required (hosted)       | OAuth client secret used for user-token exchange and refresh. Unused when `AUTH_MODE=local`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `GITHUB_ALLOWED_USERS`         | empty                   | Comma-separated admitted GitHub logins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `GITHUB_ALLOWED_ORGANIZATIONS` | empty                   | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `SESSION_ENCRYPTION_KEY`       | required                | Exactly 64 hexadecimal characters. Encrypts the hosted OAuth attempt cookie and derives a separate key for session credentials in PostgreSQL. Keep stable across releases and outside the database; replacing it invalidates hosted logins. Local mode requires the configured key but uses separate unpredictable, HttpOnly attempt and browser-binding cookies.                                                                                                                                                                                                                                                                                        |
-| `AUTH_MODE`                    | `hosted`                | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `DEMO_PERSONAS`                | `off`                   | Set `on` to enable the server-owned local demo collaborators (Lily and Felix). Requires `AUTH_MODE=local` on a loopback bind; otherwise, or for any value besides `on` and `off`, startup fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `CHOPIN_LOCAL_CREDENTIALS_DIR` | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                         |
-| `SERVER_HOST`                  | `127.0.0.1`             | Source-process bind address. The image sets `0.0.0.0`, which local mode refuses. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `PORT`                         | `8787`                  | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `MODEL`                        | `gpt-6-luna`            | Model requested for hosted agent sessions. Required under `HARNESS=pi` and `HARNESS=atomic`; under `atomic` it must be `provider/model` from Atomic's catalog. Optional under `HARNESS=remote`, where the attached client chooses its model and a set value is only passed along as the turn's request.                                                                                                                                                                                                                                                                                                                                                  |
-| `HARNESS`                      | `copilot-sdk`           | Adapter name selected from Chopin's harness map (`copilot-sdk`, `pi`, `atomic`, or `remote`). An unknown name refuses at startup. `remote` runs Planner turns in a client attached at `/planner-link`; see [The remote Planner](#the-remote-planner). `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                                                                                           |
-| `PLANNER_ATTACH_GRACE_MS`      | `120000`                | Under `HARNESS=remote`, how long a detached or dropped Planner link keeps the document's Planner ownership so the same account can reattach, in milliseconds, an integer between 0 and 3600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `PLANNER_LINK_PING_MS`         | `15000`                 | Under `HARNESS=remote`, how often the server sends each Planner link a WebSocket protocol ping, in milliseconds, an integer between 1000 and 600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `PLANNER_LINK_TIMEOUT_MS`      | `120000`                | Under `HARNESS=remote`, how long a Planner link may send nothing, not even a pong, before the server closes it as dropped, in milliseconds, an integer between 1000 and 600000 and longer than `PLANNER_LINK_PING_MS`. A whole frame must arrive within it: 2 MiB in 120 seconds is about 17 KiB/s of client upload.                                                                                                                                                                                                                                                                                                                                     |
-| `PLANNER_LINK_MAX_SILENCE_MS`  | `900000`                | Under `HARNESS=remote`, how long a Planner link may send nothing at all, not even a pong, before the server closes it as dropped, however much of what the server queued for it drains meanwhile, in milliseconds, an integer between 1000 and 3600000 and at least `PLANNER_LINK_TIMEOUT_MS`. A draining queue defers the timeout only up to this, since a proxy can drain it while the client reads nothing. The 15-minute default lets a client reading at about 19 KiB/s drain the full 16 MiB the server may queue for it and answer a ping; lower it to release a client that stopped reading behind a proxy sooner, or raise it for slower links. |
-| `HARNESS_AUTH`                 | unset                   | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `pi`, it is required: `auto`, `openai`, `anthropic`, and `custom` require a loopback-only `SERVER_HOST`, only `ai-gateway` is allowed otherwise, and `direct` is always refused. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused.                                                                   |
-| `HARNESS_EXTENSIONS`           | unset                   | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                                                                                        |
-| `AGENT`                        | on                      | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `BACKGROUND_JOBS`              | on                      | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner. `HARNESS=remote` requires `off`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `WEB_RESEARCH`                 | on                      | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `COPILOT_CLI_PATH`             | automatic               | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `CONVERSATION_PLAN`            | off                     | Set exactly `on` to enable experimental conversation-derived cards. Interpretation runs independently of `AGENT`; Planner jobs still obey the agent and job settings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `PLANNER_VISUALS`              | off                     | Set exactly `on` to enable the bounded Jev visual handoff for foreground Planner turns. Requires `AGENT=on` and `JEV_API_KEY`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `JEV_MODEL`                    | `jev-latest`            | Model alias for conversation interpretation. Independent of the hosted Planner's `MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `JEV_TIMEOUT_MS`               | `30000`                 | Per-request interpretation timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `JEV_API_KEY`                  | required when enabled   | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on` or `PLANNER_VISUALS=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `CONNECTOR_VERSION`            | the bundled connector's | The `chopin` release this server recommends: `chopin update` installs it by default, and a refused connector is told to run `chopin update <version>` with it. Defaults to the version in `apps/connector/package.json`. A `cli-v` or `v` prefix is dropped; anything but a version like `0.2.0` fails startup.                                                                                                                                                                                                                                                                                                                                          |
+| Variable                          | Default                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STORAGE_DRIVER`                  | `postgres`              | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `DATABASE_URL`                    | required                | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `APP_ORIGIN`                      | required                | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `GITHUB_APP_SLUG`                 | required                | Lowercase slug from the App's public URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `GITHUB_APP_CLIENT_ID`            | required                | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `GITHUB_APP_CLIENT_SECRET`        | required (hosted)       | OAuth client secret used for user-token exchange and refresh. Unused when `AUTH_MODE=local`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `GITHUB_ALLOWED_USERS`            | empty                   | Comma-separated admitted GitHub logins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `GITHUB_ALLOWED_ORGANIZATIONS`    | empty                   | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `SESSION_ENCRYPTION_KEY`          | required                | Exactly 64 hexadecimal characters. Encrypts the hosted OAuth attempt cookie and derives a separate key for session credentials in PostgreSQL. Keep stable across releases and outside the database; replacing it invalidates hosted logins. Local mode requires the configured key but uses separate unpredictable, HttpOnly attempt and browser-binding cookies.                                                                                                                                                                                                                                                                                                 |
+| `AUTH_MODE`                       | `hosted`                | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `DEMO_PERSONAS`                   | `off`                   | Set `on` to enable the server-owned local demo collaborators (Lily and Felix). Requires `AUTH_MODE=local` on a loopback bind; otherwise, or for any value besides `on` and `off`, startup fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `CHOPIN_LOCAL_CREDENTIALS_DIR`    | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `SERVER_HOST`                     | `127.0.0.1`             | Source-process bind address. The image sets `0.0.0.0`, which local mode refuses. A `HARNESS_AUTH` mode that falls back to a host-logged-in subscription is refused unless this stays loopback-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `PORT`                            | `8787`                  | Source-process HTTP and WebSocket port. The supplied image and health check expect internal port 8787.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `MODEL`                           | `gpt-6-luna`            | Model requested for hosted agent sessions. Required under `HARNESS=atomic`, where it must be `provider/model` from Atomic's catalog. Optional under `HARNESS=remote`, where the attached client chooses its model and a set value is only passed along as the turn's request.                                                                                                                                                                                                                                                                                                                                                                                     |
+| `HARNESS`                         | `copilot-sdk`           | Adapter name selected from Chopin's harness map (`copilot-sdk`, `atomic`, or `remote`). An unknown name refuses at startup. `remote` runs Planner turns in a client attached at `/api/v1/agent`; see [The remote Planner](#the-remote-planner). `atomic` gives every Planner session shell and filesystem access as the server process's user, hosted instances included; see [Choose and trust a harness](#choose-and-trust-a-harness).                                                                                                                                                                                                                          |
+| `PLANNER_ATTACH_GRACE_MS`         | `120000`                | Under `HARNESS=remote`, how long a detached or dropped agent connection keeps the document's Planner ownership so the same account can reattach, in milliseconds, an integer between 0 and 3600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `AGENT_CONNECTION_PING_MS`        | `15000`                 | Under `HARNESS=remote`, how often the server sends each agent connection a WebSocket protocol ping, in milliseconds, an integer between 1000 and 600000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `AGENT_CONNECTION_TIMEOUT_MS`     | `120000`                | Under `HARNESS=remote`, how long an agent connection may send nothing, not even a pong, before the server closes it as dropped, in milliseconds, an integer between 1000 and 600000 and longer than `AGENT_CONNECTION_PING_MS`. A whole frame must arrive within it: 2 MiB in 120 seconds is about 17 KiB/s of client upload.                                                                                                                                                                                                                                                                                                                                     |
+| `AGENT_CONNECTION_MAX_SILENCE_MS` | `900000`                | Under `HARNESS=remote`, how long an agent connection may send nothing at all, not even a pong, before the server closes it as dropped, however much of what the server queued for it drains meanwhile, in milliseconds, an integer between 1000 and 3600000 and at least `AGENT_CONNECTION_TIMEOUT_MS`. A draining queue defers the timeout only up to this, since a proxy can drain it while the client reads nothing. The 15-minute default lets a client reading at about 19 KiB/s drain the full 16 MiB the server may queue for it and answer a ping; lower it to release a client that stopped reading behind a proxy sooner, or raise it for slower links. |
+| `HARNESS_AUTH`                    | unset                   | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused.                                                                                                                                                                                                                                                                 |
+| `HARNESS_EXTENSIONS`              | unset                   | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                                                                                                 |
+| `AGENT`                           | on                      | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `BACKGROUND_JOBS`                 | on                      | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner. `HARNESS=remote` requires `off`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `WEB_RESEARCH`                    | on                      | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `COPILOT_CLI_PATH`                | automatic               | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `CONVERSATION_PLAN`               | off                     | Set exactly `on` to enable experimental conversation-derived cards. Interpretation runs independently of `AGENT`; Planner jobs still obey the agent and job settings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `PLANNER_VISUALS`                 | off                     | Set exactly `on` to enable the bounded Jev visual handoff for foreground Planner turns. Requires `AGENT=on` and `JEV_API_KEY`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `JEV_MODEL`                       | `jev-latest`            | Model alias for conversation interpretation. Independent of the hosted Planner's `MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `JEV_TIMEOUT_MS`                  | `30000`                 | Per-request interpretation timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `JEV_API_KEY`                     | required when enabled   | Server-side Jev API key. Required at startup when `CONVERSATION_PLAN=on` or `PLANNER_VISUALS=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `CONNECTOR_VERSION`               | the bundled connector's | The `chopin` release this server recommends: `chopin update` installs it by default, and a refused connector is told to run `chopin update <version>` with it. Defaults to the version in `apps/connector/package.json`. A `cli-v` or `v` prefix is dropped; anything but a version like `0.2.0` fails startup.                                                                                                                                                                                                                                                                                                                                                   |
+| `CHOPIN_SETUP_AGENTS`             | unset                   | Setups the Machines page offers before the built-in coding agents, as a JSON array. See [Setup agents](#setup-agents). The supplied Compose file forwards it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
@@ -389,7 +354,7 @@ paragraphs are not yet supported in a routed edit. `JEV_MODEL` and
 `JEV_TIMEOUT_MS` apply to this path too.
 
 Routing is limited to explicit member requests of at most 1,000 characters under
-`copilot-sdk` or `pi`. Comment turns, longer member requests, background
+`copilot-sdk`. Comment turns, longer member requests, background
 jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
 retained workflow sessions are outside this disposable-session prototype.
 
@@ -420,6 +385,42 @@ openssl rand -hex 32
 
 The image expects to listen on internal port 8787. Do not override `PORT` in the
 supplied image without also replacing its health check and container routing.
+
+### Setup agents
+
+`CHOPIN_SETUP_AGENTS` adds your own setups to the **Coding agent** picker on the
+Machines page, before the built-in agents. Only signed-in people see them.
+Chopin refuses to start when the value is malformed.
+
+```json
+[
+	{
+		"id": "acme",
+		"name": "Acme",
+		"install": ["curl -fsSL https://acme.example/install.sh | sh"],
+		"command": "acme connect --server {origin} --key {key} --name {name}",
+		"keyless": "acme connect --server {origin}",
+		"default": true
+	}
+]
+```
+
+| Field     | Value                                                                                                             |
+| --------- | ----------------------------------------------------------------------------------------------------------------- |
+| `id`      | Up to 40 lowercase letters, digits and dashes. Unique, and not a built-in agent's id.                             |
+| `name`    | What the picker shows, up to 60 characters.                                                                       |
+| `install` | Up to 20 lines, shown under **Show install steps**.                                                               |
+| `command` | The command for **Server or VM**. It must contain `{key}`.                                                        |
+| `keyless` | Optional. The command for **Your computer**, without `{key}`. Without it, only **Server or VM** offers the entry. |
+| `default` | Optional. `true` on one entry preselects it for anyone who hasn't picked an agent in that browser.                |
+
+`install`, `command` and `keyless` also take an object with one value each for
+`linux`, `macos` and `windows`. The page fills in `{origin}`, `{key}` and
+`{name}`, quoted for the system's shell. With no machine name, it drops `{name}`
+and the flag before it.
+
+The entry's command decides how the machine connects, so the page hides **Run in
+the background** for it. The list holds at most 10 entries.
 
 ## Deploy the Docker image
 
@@ -475,9 +476,9 @@ The proxy must:
 
 - terminate TLS for the exact `APP_ORIGIN`;
 - forward the original `Host` and `Origin` headers;
-- proxy WebSocket upgrades on `/ws`, and on `/planner-link` under `HARNESS=remote`;
-- proxy `/mcp` and the `/planner-link` upgrade without removing their
-  `Authorization` header;
+- proxy WebSocket upgrades on `/ws`, and on `/api/v1/agent` under `HARNESS=remote`;
+- proxy `/mcp` and the `/api/v1/agent` upgrade without removing their
+  `Authorization` header, nor the upgrade's `Sec-WebSocket-Protocol` header;
 - serve Chopin at `/`, not below a path prefix; and
 - redirect alternate hosts to the canonical origin before application traffic.
 
@@ -583,7 +584,7 @@ After the first deployment:
 5. Create a channel with a user who has push or administration access.
 6. Open the channel in a second browser and verify presence and live edits.
 7. Send one `@chopin` request to verify model access (the owner's Copilot
-   entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for `pi` or
+   entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for
    `atomic`)
    and the hosted agent runtime.
 8. Connect a local coding agent and call `list_documents` if MCP is part of the

@@ -1,10 +1,19 @@
 import { z } from "zod";
 
-/** The Planner link version this package speaks. A client states it in `attach`. */
-export const PLANNER_LINK_VERSION = 1;
+/**
+ * The agent connection version this package speaks. A client states it in `attach`, and it is
+ * the number in `AGENT_SUBPROTOCOL`.
+ */
+export const AGENT_VERSION = 1;
 
-/** Where a Chopin server accepts Planner links. */
-export const PLANNER_LINK_PATH = "/planner-link";
+/** Where a Chopin server accepts agent connections. */
+export const AGENT_PATH = "/api/v1/agent";
+
+/**
+ * The WebSocket subprotocol a client must offer and the server echoes. A breaking change to the
+ * messages gets a new one, `chopin.agent.v2`, rather than changing this one.
+ */
+export const AGENT_SUBPROTOCOL = "chopin.agent.v1";
 
 /** The largest message either side may send, in UTF-8 bytes. */
 export const MAX_LINK_MESSAGE_BYTES = 2 * 1024 * 1024;

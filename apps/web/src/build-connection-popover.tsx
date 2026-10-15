@@ -107,7 +107,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 						<div className="build-connection-footer">
 							<a
 								href={planner
-									? "https://github.com/githubnext/chopin/blob/main/docs/planner-link.md#planner-backend-commands"
+									? "https://github.com/githubnext/chopin/blob/main/docs/agent-connection.md#planner-backend-commands"
 									: "https://github.com/githubnext/chopin/blob/main/docs/local-experiments.md#trouble-connecting"}
 								rel="noreferrer"
 								target="_blank"

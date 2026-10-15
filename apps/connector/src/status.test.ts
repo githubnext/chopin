@@ -130,6 +130,8 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		baseDir: directory,
 		serviceRuns: null,
 		lastConnect: null,
+		runs: { kept: 0, running: 0, bytes: 0 },
+		plannerWorktrees: [],
 	});
 	expect(JSON.stringify(report)).not.toContain(TOKEN);
 	let text = formatStatus(report);
@@ -221,6 +223,103 @@ test("status shows an agent that failed to start under its connector", async () 
 	expect(formatStatus(report)).toContain(
 		"              Agent: failing (exit 127: agent: no credentials)",
 	);
+});
+
+test("status says once a connector's machine uses its own GitHub login because the App can't push", async () => {
+	let { directory, host } = await machine();
+	let lock = "f".repeat(64);
+	await writeFile(
+		join(directory, `${lock}.lock`),
+		JSON.stringify({
+			pid: process.pid,
+			processStart: (await processStart()(process.pid))!.id,
+			root: "/work/score",
+		}),
+	);
+	await writeFile(
+		join(directory, `${lock}.github.json`),
+		JSON.stringify({ repository: "octo-org/score" }),
+	);
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.connectors[0]?.githubCannotPush).toBe("octo-org/score");
+	expect(formatStatus(report)).toContain(
+		"              The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
+			+ "write), so this machine uses its own GitHub login for it.",
+	);
+});
+
+test("status names a built-in agent by its --agent id, with the command it runs", async () => {
+	let { directory, host } = await machine();
+	let runs = {
+		server: "https://chopin.example",
+		checkout: "/work/score",
+		agent: "atomic",
+		command: ["/usr/bin/atomic-acp", "--", "--package", "/x"],
+		planners: [],
+		plannerCommand: [],
+		env: { ATOMIC_ACP_HEADLESS: "1" },
+	};
+	await writeFile(
+		join(directory, "config.json"),
+		JSON.stringify({
+			connect: runs,
+			service: {
+				executable: "/opt/chopin",
+				directory,
+				version: VERSION,
+				installedAt: 1,
+				settings: runs,
+			},
+		}),
+	);
+	let report = await collectStatus({ directory, server: runs.server, source: "config", host });
+	let service = { state: "running" as const, manager: "systemd" as const, definition: "/u" };
+	expect(formatStatus({ ...report, service: { ...service, log: "/l", notes: [] } })).toContain(
+		"            runs /work/score with --agent atomic (/usr/bin/atomic-acp -- --package /x), on "
+			+ "https://chopin.example",
+	);
+});
+
+test("status lists the Planners' worktrees and the finished runs kept, with their size", async () => {
+	let { directory, host } = await machine();
+	let runs = join(directory, "runs");
+	await mkdir(runs, { recursive: true });
+	for (let id of ["a", "b"]) {
+		await mkdir(join(runs, id));
+		await writeFile(join(runs, id, "file.txt"), "x".repeat(64 * 1024));
+		await writeFile(
+			join(runs, `${id}.json`),
+			JSON.stringify({ id, state: "finished", finished: 1 }),
+		);
+	}
+	// A run this process has going, and one whose worktree retention already removed.
+	await mkdir(join(runs, "going"));
+	await writeFile(
+		join(runs, "going.json"),
+		JSON.stringify({
+			id: "going",
+			state: "accepted",
+			pid: process.pid,
+			processStart: (await processStart()(process.pid))!.id,
+		}),
+	);
+	await writeFile(join(runs, "spike.json"), JSON.stringify({ id: "spike", state: "finished" }));
+	let planner = join(directory, "planners", "octo-org", "score", "D_1");
+	await mkdir(planner, { recursive: true });
+	// The folder for a Planner that has yet to make its worktree.
+	await mkdir(join(directory, "planners", "octo-org", "other"), { recursive: true });
+
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.plannerWorktrees).toEqual([
+		{ path: planner, repository: "octo-org/score", document: "D_1" },
+	]);
+	expect(report.runs).toEqual({ kept: 2, running: 1, bytes: expect.any(Number) });
+	expect(report.runs.bytes).toBeGreaterThanOrEqual(2 * 64 * 1024);
+	let text = formatStatus(report);
+	expect(text).toContainEqual(
+		expect.stringMatching(/^Runs: {7}2 finished runs kept \(\d+(\.\d)? (kB|MB)\), 1 running$/),
+	);
+	expect(text).toContain(`Planners:   ${planner} (octo-org/score, document D_1)`);
 });
 
 test("status of an unpaired machine asks Chopin nothing", async () => {

@@ -130,10 +130,12 @@ export function InvestigationCard(
 						<span>
 							{WORDS[state]}
 							{ready && ready.views > 0 && (
-								<span className="plan-research-meta">
-									{"\u00a0· "}
-									{ready.views === 1 ? "1 view" : `${ready.views} views`}
-								</span>
+								<>
+									{" "}
+									<span className="plan-research-meta ms-1">
+										{ready.views === 1 ? "1 view" : `${ready.views} views`}
+									</span>
+								</>
 							)}
 						</span>
 					</Swap>

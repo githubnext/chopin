@@ -69,6 +69,11 @@
 	gap: var(--spacing);
 }
 
+/* Space, not a separator glyph, sets a phone's Build action apart from its status. */
+.build-status > .build-capsule-action {
+	margin-inline-start: var(--spacing);
+}
+
 .build-status-link {
 	position: relative;
 	display: inline-flex;

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
-import { linkAuth } from "../testing/planner-link";
+import { linkAuth } from "../testing/agent-link";
 import { admit, admitSidebar } from "./admission";
 import { SESSION_ENDED, SessionSockets } from "./session-sockets";
 

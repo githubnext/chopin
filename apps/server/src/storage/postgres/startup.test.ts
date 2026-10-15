@@ -54,7 +54,7 @@ async function started(child: Subprocess): Promise<void> {
 	let reader = output.getReader();
 	let content = "";
 	try {
-		while (!content.includes("chopin  ·")) {
+		while (!content.includes("chopin http")) {
 			let next = await reader.read();
 			if (next.done) throw new Error("server exited before startup completed");
 			content += new TextDecoder().decode(next.value);

@@ -30,7 +30,7 @@ The active work row keeps one stable position beneath Chopin's author line. A sm
 6. A response is streaming: **Writing a response**.
 7. Tools have finished but the turn has not: **Reviewing the next step**.
 
-Do not auto-advance through phases, show a percentage, or show generated reasoning paragraphs. A small secondary count may state how many actions finished. When the tool-bearing message is complete, the active headline contracts to a one-line disclosure such as **Work details · 4 actions**. Label the sum of reported tool durations as **tool time**, not as the duration of the entire thought or turn. If there are no tool calls, do not leave an empty work disclosure.
+Do not auto-advance through phases, show a percentage, or show generated reasoning paragraphs. A small secondary count may state how many actions finished. When the tool-bearing message is complete, the active headline contracts to a one-line disclosure such as **4 actions**. Label the sum of reported tool durations as **tool time**, not as the duration of the entire thought or turn. If there are no tool calls, do not leave an empty work disclosure.
 
 ## Tool inspection
 

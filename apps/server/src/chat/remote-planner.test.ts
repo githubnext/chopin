@@ -14,11 +14,11 @@ import {
 	linkServer,
 	RIVAL_TOKEN,
 	scriptedPlanner,
-} from "../testing/planner-link";
+} from "../testing/agent-link";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
-import type { PlannerLinkClient } from "@chopin/planner-link/client";
+import type { AgentClient } from "@chopin/agent-link/client";
 import type { HostedAuth } from "../auth/routes";
 import type { Socket, SocketData } from "../wire";
 
@@ -44,7 +44,7 @@ function card(status: "running" | "paused") {
 
 /**
  * A document's Chat under `HARNESS=remote`, served as `main.ts` serves it,
- * with a real Planner link server. The rival sends from a browser with a
+ * with a real agent connection server. The rival sends from a browser with a
  * login of their own; only the attached member may own the Planner.
  */
 async function remoteRoom() {
@@ -170,7 +170,7 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 	};
 	let message =
 		"No Planner is attached to this document. To attach one, connect a Planner client to "
-		+ `${room.url} over the Planner link from a session in a checkout of octo-org/score; `
+		+ `${room.url} over the agent connection from a session in a checkout of octo-org/score; `
 		+ "that session becomes this document's Planner.";
 
 	expect(await room.send("@chopin draft the plan")).toMatchObject({
@@ -218,7 +218,7 @@ test("an attached Planner receives @chopin and invoke_planner turns as their own
 	let { context } = room;
 	let script = scriptedPlanner();
 	let controls: Array<{ type: string; run?: string }> = [];
-	let client: PlannerLinkClient;
+	let client: AgentClient;
 	client = await attach(room.server.url, room.channel.id, {
 		...script.handlers,
 		async turn(turn) {
@@ -275,7 +275,7 @@ test("once the attached Planner's owner sign-in expires, @chopin is refused with
 		kind: "session:error",
 		code: "planner-not-attached",
 		message: "No Planner is attached to this document. To attach one, connect a Planner client to "
-			+ `${room.url} over the Planner link from a session in a checkout of octo-org/score; `
+			+ `${room.url} over the agent connection from a session in a checkout of octo-org/score; `
 			+ "that session becomes this document's Planner.",
 	});
 	expect(context.chat.entries).toEqual([]);

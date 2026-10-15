@@ -863,7 +863,9 @@ export function NavigationShell(
 		if (destination.origin !== location.origin) return;
 		if (
 			destination.pathname !== "/"
-			&& !/^\/(?:channels|connect|documents|repositories)(?:\/|$)/.test(destination.pathname)
+			&& !/^\/(?:channels|connect|documents|machines|repositories)(?:\/|$)/.test(
+				destination.pathname,
+			)
 		) return;
 		event.preventDefault();
 		// Lexical's clickable-link listener is attached at the editor root. Stop

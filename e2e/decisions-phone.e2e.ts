@@ -40,7 +40,7 @@ test("phone: the save bar appears only with unsaved answers, and Save confirms b
 	await card.getByText("In SQLite", { exact: true }).click();
 	await save.click();
 	let confirmed = page.locator("[data-decision-confirmed]");
-	await expect(confirmed.getByRole("status")).toContainText("Decided · You");
+	await expect(confirmed.getByRole("status")).toContainText("Decided by you");
 	await expect(confirmed).toContainText("In SQLite");
 	await expect(bar).not.toHaveAttribute("data-open");
 	await expect(confirmed).toHaveCount(0, { timeout: 5_000 });
@@ -73,7 +73,7 @@ test("phone: an unsaved answer survives leaving Decisions and can still be saved
 
 	await region.getByRole("button", { name: "Save", exact: true }).click();
 	await expect(page.locator("[data-decision-confirmed]").getByRole("status"))
-		.toContainText("Decided · You");
+		.toContainText("Decided by you");
 	await expect(page.getByRole("button", { name: "1 resolved" })).toBeVisible();
 });
 

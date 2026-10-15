@@ -28,13 +28,14 @@ let tested = (agent: CodingAgent) => agent.testedWithChopin ? "Yes" : "No";
 /** The table docs/chopin-cli.md shows, from the agent list the Machines page uses. */
 function guideTable(): string {
 	return table(
-		["Agent", "Install", "Sign in", "Node.js", "Connect with", "Tested with Chopin"],
+		["Agent", "Install", "Sign in", "Node.js", "Connect with", "Runs", "Tested with Chopin"],
 		AGENTS.map(agent => [
 			name(agent),
 			install(agent),
 			signIn(agent),
 			`${agent.node} or newer`,
 			code(agentArguments(agent)),
+			code([...agent.env, ...agent.acp]),
 			tested(agent),
 		]),
 	);

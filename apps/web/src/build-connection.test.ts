@@ -6,7 +6,7 @@ test("a Planner connection waits for a backend and preserves its exact command a
 	expect(plannerConnectCommand(url, "  ")).toBe("");
 	expect(plannerConnectCommand(url, 'planner --label="Cache plan"')).toBe(
 		`CHOPIN_URL=https://chopin.example chopin connect . --planner ${url}`
-			+ ` --planner-command 'planner --label="Cache plan"' -- copilot --acp --allow-all`,
+			+ ` --planner-command 'planner --label="Cache plan"' --agent copilot`,
 	);
 });
 

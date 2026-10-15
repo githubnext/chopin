@@ -52,8 +52,8 @@ https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
 The Planner can inspect the selected GitHub repository and its pull requests
 through bounded, read-only tools, then co-author the document. Under the default
-`copilot-sdk` harness, and under `pi`, it cannot write to GitHub, edit a checkout,
-or implement code. `HARNESS=atomic` deliberately runs it as a full Atomic session
+`copilot-sdk` harness it cannot write to GitHub, edit a checkout, or implement
+code. `HARNESS=atomic` deliberately runs it as a full Atomic session
 with shell and filesystem access as the server process's user; see
 [Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). A separate coding agent can connect
 to Chopin through MCP to create or revise documents and consume an approved
@@ -81,14 +81,14 @@ and tool vocabulary remain optimized for planning.
   who invokes the Planner, or who starts a model-backed research request supplies
   the GitHub App user token used for that channel
   and, under the default `copilot-sdk` harness, the Copilot entitlement. With
-  `HARNESS=pi` or `HARNESS=atomic`, model access comes from the operator's
+  `HARNESS=atomic`, model access comes from the operator's
   `HARNESS_AUTH` instead.
   A server restart releases that ownership. Hosted browser logins survive
   releases using encrypted session credentials; local device mode restores a
   new session. Returning browsers can claim Planner ownership on a later action.
 - Document and Chat context, along with repository material selected by
   the Planner, is sent to the harness's model provider during a turn (GitHub
-  Copilot by default; under `HARNESS=pi` or `HARNESS=atomic`, the provider
+  Copilot by default; under `HARNESS=atomic`, the provider
   chosen by `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
   material, including context loaded during execution, to isolated workers on
   the same harness. The public research worker receives
@@ -110,7 +110,7 @@ and tool vocabulary remain optimized for planning.
   `JEV_API_KEY`. Jev makes small possibility, comprehension, and type decisions
   for one explanatory paragraph at a time; Planner authors the selected visual.
   Routing applies to explicit member requests of at most 1,000 characters under
-  `copilot-sdk` or `pi`. Other turns keep their ordinary authoring behavior.
+  `copilot-sdk`. Other turns keep their ordinary authoring behavior.
 - One Chopin process may write to a database at a time. Horizontal application
   scaling and zero-downtime rolling deployment are not supported.
 
@@ -134,15 +134,23 @@ Callback:  http://127.0.0.1:8787/auth/github/callback
 Setup URL: http://127.0.0.1:8787/auth/github/setup
 ```
 
-Then, on the App:
+On the App:
 
-- enable expiring user authorization tokens;
-- disable OAuth during installation;
-- disable webhooks; and
-- grant read access to Contents, Pull requests, Checks, and Commit statuses.
+1. Enable expiring user authorization tokens.
+2. Disable OAuth during installation.
+3. Disable webhooks.
+4. Give it these repository permissions, which
+   [Authentication](docs/authentication.md#repository-permissions) explains:
 
-See [Authentication](docs/authentication.md) for the exact App settings and the
-additional permission needed for organization admission.
+```text
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
+Checks:          Read-only
+Commit statuses: Read-only
+Issues:          Read-only
+Metadata:        Read-only (automatic)
+```
 
 Install, configure, and start Chopin:
 
@@ -156,9 +164,8 @@ bun run migrate
 bun run dev
 ```
 
-The committed local Compose override publishes PostgreSQL on host port 5432 and
-is intended only for a trusted development machine. Do not use it on an exposed
-host. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
+The committed local Compose override publishes PostgreSQL on host port 5432, so
+use it only on a trusted development machine. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
 
 1. Open [http://127.0.0.1:8787](http://127.0.0.1:8787) and sign in.
 2. Install or update the GitHub App when the repository picker asks.
@@ -218,25 +225,25 @@ saves the server for later commands.
 
 ```bash
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
-CHOPIN_URL=https://your-chopin-instance.example chopin connect . -- copilot --acp --allow-all
+CHOPIN_URL=https://your-chopin-instance.example chopin connect . --agent copilot
 ```
 
 That runs in your terminal and stops when you close it. On a remote machine or
 server, add `--install-service` so a background service keeps it running after
 you close SSH.
 
-For another coding agent, install it, sign in, and put its **Connect with**
-arguments in place of `-- copilot --acp --allow-all`:
+Install the agent and sign in to it first. `--agent` names one of the built-in
+agents:
 
-| Agent                                                                                               | Install                                                       | Connect with                                              | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                              | `-- copilot --acp --allow-all`                            | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp`          | `--env ATOMIC_ACP_HEADLESS=1 -- atomic-acp`               | Yes                |
-| [Claude Code](https://github.com/agentclientprotocol/claude-agent-acp)                              | `npm install -g @agentclientprotocol/claude-agent-acp`        | `-- claude-agent-acp`                                     | No                 |
-| [OpenAI Codex](https://github.com/agentclientprotocol/codex-acp)                                    | `npm install -g @openai/codex @agentclientprotocol/codex-acp` | `--env INITIAL_AGENT_MODE=agent-full-access -- codex-acp` | No                 |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md)            | `npm install -g @google/gemini-cli`                           | `-- gemini --acp --yolo`                                  | No                 |
+| Agent                                                                                               | Install                                              | Connect with      | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `--agent copilot` | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--agent atomic`  | Yes                |
 
-The **Machines** page, at `/connect` on your server, gives one command that
+Any other agent that speaks ACP works too: give its command after `--` instead,
+as in `chopin connect . -- my-agent --acp`.
+
+The **Machines** page, at `/machines` on your server (its former address, `/connect`, redirects there), gives one command that
 installs `chopin` and connects the machine, with your server filled in: your
 computer pairs once you approve it in the browser, and a server pairs with a
 single-use key, so it works over SSH too; see
@@ -255,6 +262,7 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Deploy and operate an instance             | [Self-hosting](docs/self-hosting.md)                         |
 | Configure identity and access              | [Authentication](docs/authentication.md)                     |
 | Connect an external coding agent           | [Local agent MCP](docs/local-agent-mcp.md)                   |
+| Run a document's Planner in your own agent | [Agent connection](docs/agent-connection.md)                 |
 | Run Chopin's work on your own machine      | [chopin CLI](docs/chopin-cli.md)                             |
 | Understand the system                      | [Architecture](docs/architecture.md)                         |
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |

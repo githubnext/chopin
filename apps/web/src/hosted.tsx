@@ -24,7 +24,7 @@ let DocumentRouteSwap = lazy(() => {
 	void import("./room-workspace").catch(() => {});
 	return import("./document-route-view");
 });
-// /connect, the person's machines and the pairing confirmation, loads only when visited.
+// /machines, the person's machines and the pairing confirmation, loads only when visited.
 let MachinesPage = lazy(() => import("./experiments/pairing"));
 // Only a failed load shows it, so it stays out of the first JavaScript a reader downloads.
 let Failure = lazy(() => import("./hosted-failure"));
@@ -76,7 +76,9 @@ function decoded(value: string): string | undefined {
 
 export function hostedRoute(pathname: string): HostedRoute {
 	if (pathname === "/" || pathname === "") return { page: "repositories" };
-	if (/^\/connect\/?$/.test(pathname)) return { page: "machines" };
+	// The server redirects /connect, the page's former address; a history entry made before still
+	// opens the page.
+	if (/^\/(?:machines|connect)\/?$/.test(pathname)) return { page: "machines" };
 	let child = parseChildDocumentPath(pathname);
 	if (child) return { page: "child", ...child };
 	let document = parseDocumentPath(pathname);

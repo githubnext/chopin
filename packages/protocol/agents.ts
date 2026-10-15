@@ -20,8 +20,10 @@ export interface CodingAgent {
 	 * checked by `bun run verify:agents`.
 	 */
 	node: string;
-	/** The ACP command `chopin connect` starts, after `--`. */
+	/** The ACP command `chopin connect --agent <id>` starts. */
 	acp: string[];
+	/** Words between `acp` and extra arguments given after `--`, when the adapter wants a separator. */
+	passthrough?: string[];
 	/** `--env KEY=VALUE` variables the agent needs under Chopin. */
 	env: string[];
 	/**
@@ -31,6 +33,35 @@ export interface CodingAgent {
 	unattended: true | { setting: string };
 	docs: string;
 	testedWithChopin: boolean;
+}
+
+/** One value for every system, or one for each of them. */
+export type PerSystem<T> = T | { linux: T; macos: T; windows: T };
+
+/**
+ * A setup a deployment offers on the Machines page before the built-in agents, from the server's
+ * CHOPIN_SETUP_AGENTS: its install steps (shell lines, shown as they are) and the command that
+ * sets up a machine, a template whose `{key}`, `{name}` and `{origin}` are filled in, quoted for
+ * the shell. `keyless`, without `{key}`, sets up the computer in front of you; without it the
+ * entry is offered only for a server. `default` preselects it for someone who has picked nothing.
+ */
+export type SetupAgent = {
+	id: string;
+	name: string;
+	install: PerSystem<string[]>;
+	command: PerSystem<string>;
+	keyless?: PerSystem<string>;
+	default?: boolean;
+};
+
+/** The value of `value` for `system`. */
+export function forSystem<T>(
+	value: PerSystem<T>,
+	system: "linux" | "macos" | "windows",
+): T {
+	return value && typeof value === "object" && !Array.isArray(value) && "linux" in value
+		? value[system]
+		: value as T;
 }
 
 export const AGENTS: readonly CodingAgent[] = [
@@ -54,56 +85,22 @@ export const AGENTS: readonly CodingAgent[] = [
 		install: [["npm", "install", "-g", "@bastani/atomic", "@bastani/atomic-acp"]],
 		signIn: { command: ["atomic"], afterward: "sign in with /login, then quit" },
 		acp: ["atomic-acp"],
+		// atomic-acp passes the arguments after its own -- to every Atomic it starts.
+		passthrough: ["--"],
 		// Atomic asks no permission for its tools; this ends its questions at once instead of waiting.
 		env: ["ATOMIC_ACP_HEADLESS=1"],
 		unattended: true,
 		docs: "https://github.com/bastani-inc/atomic-acp",
 		testedWithChopin: true,
 	},
-	{
-		id: "claude-code",
-		node: "22",
-		name: "Claude Code",
-		install: [["npm", "install", "-g", "@agentclientprotocol/claude-agent-acp"]],
-		// `--cli` opens the Claude Code the adapter bundles; ANTHROPIC_API_KEY works instead.
-		signIn: { command: ["claude-agent-acp", "--cli"], afterward: "sign in with /login, then quit" },
-		acp: ["claude-agent-acp"],
-		env: [],
-		unattended: {
-			setting:
-				'set "defaultMode": "bypassPermissions" under "permissions" in ~/.claude/settings.json',
-		},
-		docs: "https://github.com/agentclientprotocol/claude-agent-acp",
-		testedWithChopin: false,
-	},
-	{
-		id: "codex",
-		node: "20",
-		name: "OpenAI Codex",
-		// The adapter bundles its own Codex; the CLI is for signing in.
-		install: [["npm", "install", "-g", "@openai/codex", "@agentclientprotocol/codex-acp"]],
-		signIn: { command: ["codex", "login"] },
-		acp: ["codex-acp"],
-		env: ["INITIAL_AGENT_MODE=agent-full-access"],
-		unattended: true,
-		docs: "https://github.com/agentclientprotocol/codex-acp",
-		testedWithChopin: false,
-	},
-	{
-		id: "gemini",
-		node: "20",
-		name: "Gemini CLI",
-		install: [["npm", "install", "-g", "@google/gemini-cli"]],
-		signIn: { command: ["gemini"], afterward: "sign in, then quit" },
-		acp: ["gemini", "--acp", "--yolo"],
-		env: [],
-		unattended: true,
-		docs: "https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/acp-mode.md",
-		testedWithChopin: false,
-	},
 ];
 
 export const DEFAULT_AGENT = AGENTS[0]!;
+
+/** The agent's ACP command with `extra` arguments, after its passthrough separator if it has one. */
+export function acpCommand(agent: CodingAgent, extra: readonly string[]): string[] {
+	return extra.length ? [...agent.acp, ...agent.passthrough ?? [], ...extra] : [...agent.acp];
+}
 
 /** The major version of a Node.js version like `22.19` or `v22.19.0`. */
 export function nodeMajor(version: string): number {

@@ -76,7 +76,7 @@ function decidedText(value: Questionnaire | undefined, meta: Question.CardMeta):
 	}) ?? [];
 	if (labels.length === 0 && question?.answer) labels = [question.answer];
 	let owner = meta.owner ?? value?.by;
-	return `Decided: ${labels.join(", ") || "Saved decision"}${owner ? ` · @${owner}` : ""}`;
+	return `Decided${owner ? ` by @${owner}` : ""}: ${labels.join(", ") || "Saved decision"}`;
 }
 
 export function promptView(

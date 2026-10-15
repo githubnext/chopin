@@ -15,7 +15,7 @@ The most useful technical references are:
 - [Repository channels](docs/channels.md)
 - [Storage and persistence](docs/storage.md)
 - [Hosted agent (Planner)](docs/hosted-agent.md)
-- [Planner link wire format](docs/planner-link.md)
+- [Agent connection](docs/agent-connection.md)
 - [Background jobs and workers](docs/background-jobs.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
 - [Self-hosting](docs/self-hosting.md)
@@ -71,21 +71,21 @@ Before opening a PR or repairing CI, use the repository's
 
 ## Repository map
 
-| Area                    | Responsibility                                            | Internal workspace dependencies                                                      |
-| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `packages/dialect`      | Restricted MDX, MDAST, and Lexical schema                 | none                                                                                 |
-| `packages/protocol`     | WebSocket declarations and addressing helper              | none                                                                                 |
-| `packages/planner-link` | Remote Planner link messages, schemas and test client     | none                                                                                 |
-| `packages/question`     | Questionnaire definitions and shared drafts               | `protocol`                                                                           |
-| `packages/draft`        | Bounded collaborative plain-text drafts                   | none                                                                                 |
-| `packages/viewport`     | Browser geometry and subscriptions                        | none                                                                                 |
-| `packages/diagrams`     | Bounded diagram rendering and scoped React viewing        | `icons` (React peer)                                                                 |
-| `packages/experiment`   | Investigation result schemas, selections and native views | `diagrams` (React peer)                                                              |
-| `apps/connector`        | Local ACP client and run-scoped MCP bridge                | `experiment`, `protocol`                                                             |
-| `packages/editor`       | Collaborative editor, decisions, comments, and widgets    | `diagrams`, `dialect`, `experiment`, `question`, `protocol`, `viewport`              |
-| `apps/server`           | Auth, channels, rooms, storage, Planner, MCP, tasks       | `diagrams`, `dialect`, `draft`, `experiment`, `planner-link`, `question`, `protocol` |
-| `apps/web`              | Repository picker, navigation, conversation, workspace    | `dialect`, `diagrams`, `draft`, `editor`, `experiment`, `protocol`, `viewport`       |
-| `e2e`                   | Browser and system integration harness                    | may import server internals as fixtures                                              |
+| Area                  | Responsibility                                            | Internal workspace dependencies                                                    |
+| --------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `packages/dialect`    | Restricted MDX, MDAST, and Lexical schema                 | none                                                                               |
+| `packages/protocol`   | WebSocket declarations and addressing helper              | none                                                                               |
+| `packages/agent-link` | Agent connection messages, schemas and test client        | none                                                                               |
+| `packages/question`   | Questionnaire definitions and shared drafts               | `protocol`                                                                         |
+| `packages/draft`      | Bounded collaborative plain-text drafts                   | none                                                                               |
+| `packages/viewport`   | Browser geometry and subscriptions                        | none                                                                               |
+| `packages/diagrams`   | Bounded diagram rendering and scoped React viewing        | `icons` (React peer)                                                               |
+| `packages/experiment` | Investigation result schemas, selections and native views | `diagrams` (React peer)                                                            |
+| `apps/connector`      | Local ACP client and run-scoped MCP bridge                | `experiment`, `protocol`                                                           |
+| `packages/editor`     | Collaborative editor, decisions, comments, and widgets    | `diagrams`, `dialect`, `experiment`, `question`, `protocol`, `viewport`            |
+| `apps/server`         | Auth, channels, rooms, storage, Planner, MCP, tasks       | `agent-link`, `diagrams`, `dialect`, `draft`, `experiment`, `question`, `protocol` |
+| `apps/web`            | Repository picker, navigation, conversation, workspace    | `dialect`, `diagrams`, `draft`, `editor`, `experiment`, `protocol`, `viewport`     |
+| `e2e`                 | Browser and system integration harness                    | may import server internals as fixtures                                            |
 
 Runtime workspace packages do not depend on an application. E2E and skill
 contract tests may deliberately import server internals; do not treat those test
@@ -138,8 +138,8 @@ collaborative state and external implementation runs are durable.
   build, settling a prototyped passage) never claim an owner; under
   `HARNESS=remote` they also wait for an attached Planner. The database stores only a token-free owner reference and durable
   context.
-- **Planner tools are repository-fixed under `copilot-sdk` and `pi`.** Those
-  Planners have no shell, checkout, host filesystem, skills, plugins, or arbitrary
+- **Planner tools are repository-fixed under `copilot-sdk`.** That
+  Planner has no shell, checkout, host filesystem, skills, plugins, or arbitrary
   GitHub access. `HARNESS=atomic` deliberately runs every Planner session, local
   or hosted, as a full Atomic session with the operator's Atomic tools and
   resources, including shell and filesystem access as the server process's user.
@@ -148,7 +148,7 @@ collaborative state and external implementation runs are durable.
   summary and research workers stay isolated. There is no flag for this; the
   harness is the choice.
 - **`HARNESS=remote` moves the model, not the authority.** Turns run in a client
-  attached at `/planner-link` with a GitHub bearer and push access; Chopin's
+  attached at `/api/v1/agent` with a GitHub bearer and push access; Chopin's
   host tools, Decisions, and room writes still run in the server. The attached
   client sees what a turn sees and steers its document writes. Attaching makes
   the account's live browser login the document's Planner owner, one client per
@@ -197,7 +197,7 @@ child has no Chat: a comment sent to Chopin inside a child, and an
 `invoke_planner` call naming a child, run on the root's Chat with that child as
 focus, and the turn answers in the child's thread.
 
-Under `copilot-sdk` and `pi` the Planner is a custom agent, not a general coding
+Under `copilot-sdk` the Planner is a custom agent, not a general coding
 agent; under `atomic` it is a full Atomic session. Either way its turn runs
 through `HarnessAgent.stream()` from `@ai-sdk/harness`; the conversation stays
 active until the returned stream finishes. An interrupted turn is never

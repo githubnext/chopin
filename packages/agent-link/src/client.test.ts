@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { connectPlannerLink } from "./client";
+import { connectAgent } from "./client";
 import { MAX_LINK_NOTE_LENGTH, parseClientMessage } from "./protocol";
 
 import type { ServerWebSocket } from "bun";
-import type { HostToolResult, PlannerLinkHandlers, TurnContext } from "./client";
+import type { AgentHandlers, HostToolResult, TurnContext } from "./client";
 import type { ClientMessage, ServerMessage } from "./protocol";
 
 let stops: Array<() => unknown> = [];
@@ -16,12 +16,23 @@ afterEach(async () => {
 function fakeServer() {
 	let socket: ServerWebSocket<unknown> | undefined;
 	let received: ClientMessage[] = [];
+	let upgrades: Array<{ path: string; subprotocol: string | null; authorization: string | null }> =
+		[];
 	let arrivals = new Set<() => void>();
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
 		fetch(request, self) {
-			return self.upgrade(request) ? undefined : new Response("upgrade failed", { status: 400 });
+			let subprotocol = request.headers.get("sec-websocket-protocol");
+			upgrades.push({
+				path: new URL(request.url).pathname,
+				subprotocol,
+				authorization: request.headers.get("authorization"),
+			});
+			let headers = subprotocol ? { "sec-websocket-protocol": subprotocol } : undefined;
+			return self.upgrade(request, { data: undefined, headers })
+				? undefined
+				: new Response("upgrade failed", { status: 400 });
 		},
 		websocket: {
 			open(ws) {
@@ -63,14 +74,15 @@ function fakeServer() {
 	return {
 		url: `http://127.0.0.1:${server.port}`,
 		received,
+		upgrades,
 		next,
 		send: (message: ServerMessage) => socket!.send(JSON.stringify(message)),
 		close: () => socket!.close(1000, "gone"),
 	};
 }
 
-async function connect(server: ReturnType<typeof fakeServer>, handlers: PlannerLinkHandlers) {
-	let client = await connectPlannerLink({ url: server.url, token: "t", document: "d", handlers });
+async function connect(server: ReturnType<typeof fakeServer>, handlers: AgentHandlers) {
+	let client = await connectAgent({ url: server.url, token: "t", document: "d", handlers });
 	stops.push(() => client.detach());
 	return client;
 }
@@ -83,7 +95,15 @@ const turn = (id: string) => ({
 	tools: [{ name: "read_plan" }],
 });
 
-describe("Planner link client", () => {
+describe("Agent connection client", () => {
+	it("opens /api/v1/agent offering chopin.agent.v1, with the bearer", async () => {
+		let server = fakeServer();
+		await connect(server, { turn() {} });
+		expect(server.upgrades).toEqual([
+			{ path: "/api/v1/agent", subprotocol: "chopin.agent.v1", authorization: "Bearer t" },
+		]);
+	});
+
 	it("settles a host call the server aborts or destroys instead of answering", async () => {
 		let server = fakeServer();
 		let results: HostToolResult[] = [];
@@ -164,7 +184,7 @@ describe("Planner link client", () => {
 		await client.closed;
 		expect(await client.ask("s", { method: "input", title: "Name?" })).toMatchObject({
 			status: "cancelled",
-			message: "The Planner link closed.",
+			message: "The agent connection closed.",
 		});
 		expect(await held.callHostTool("read_plan", {})).toEqual({
 			output: { error: "The turn has ended." },
@@ -174,7 +194,7 @@ describe("Planner link client", () => {
 	});
 });
 
-describe("Planner link client facing a faulty server", () => {
+describe("Agent connection client facing a faulty server", () => {
 	/** Answers attach, then a frame no client can parse in place of the question's answer. */
 	function garblingServer() {
 		let closes: { code: number; reason: string }[] = [];
@@ -210,7 +230,7 @@ describe("Planner link client facing a faulty server", () => {
 	}
 
 	async function faced(url: string) {
-		let early = await connectPlannerLink({
+		let early = await connectAgent({
 			url,
 			token: "t",
 			document: "garbled",
@@ -218,7 +238,7 @@ describe("Planner link client facing a faulty server", () => {
 				turn() {},
 			},
 		}).then(() => "attached", (error: Error) => error.message);
-		let client = await connectPlannerLink({
+		let client = await connectAgent({
 			url,
 			token: "t",
 			document: "d",
@@ -231,12 +251,12 @@ describe("Planner link client facing a faulty server", () => {
 	}
 
 	const expected = {
-		early: "The Planner link closed before attaching (4400 malformed-message).",
+		early: "The agent connection closed before attaching (4400 malformed-message).",
 		answer: {
 			type: "input-result",
 			request: expect.any(String),
 			status: "cancelled",
-			message: "The Planner link closed.",
+			message: "The agent connection closed.",
 		},
 		closed: { code: 4400, reason: "malformed-message" },
 	};
@@ -254,9 +274,7 @@ describe("Planner link client facing a faulty server", () => {
 		if (!probe || probe.stdout.toString().trim() !== "true") return;
 		let server = garblingServer();
 		let script = `
-			import { connectPlannerLink } from ${
-			JSON.stringify(new URL("./client.ts", import.meta.url).href)
-		};
+			import { connectAgent } from ${JSON.stringify(new URL("./client.ts", import.meta.url).href)};
 			${faced.toString().replace("async function faced", "async function run")}
 			console.log(JSON.stringify(await run(process.argv[1])));
 		`;

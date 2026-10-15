@@ -59,9 +59,10 @@ const installations = [
 		repository_selection: "selected",
 		html_url: "https://github.com/settings/installations/101",
 		suspended_at: null,
+		// The App as Chopin defines it: machines push and open draft pull requests as their owner.
 		permissions: {
-			contents: "read",
-			pull_requests: "read",
+			contents: "write",
+			pull_requests: "write",
 			checks: "read",
 			statuses: "read",
 			issues: "read",

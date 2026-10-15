@@ -55,7 +55,7 @@ async function connected(page: Page, label: string, headers: Record<string, stri
 	let origin = new URL(page.url()).origin;
 	let back = page.url();
 	await page.goto("/auth/github/connector?key");
-	await expect(page).toHaveURL(/\/connect\?server$/);
+	await expect(page).toHaveURL(/\/machines\?server$/);
 	let minted = await (await page.request.post("/api/connector/pairing-keys", {
 		data: {},
 		headers: { origin },
@@ -159,7 +159,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(automatic).toBeFocused();
 	await expect(automatic).toContainText(/Uses (build-box|laptop) now/);
 	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toContainText(`Connected · chopin ${RELEASE} · Linux`);
+		.toContainText(`Connected with chopin ${RELEASE} on Linux`);
 	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeVisible();
 	// Opened upward from the composer, inside the window.
 	let panel = (await menu.boundingBox())!;
@@ -280,7 +280,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	await expect(header).toHaveAccessibleName("Machine: Automatic, uses laptop");
 	// The favorite is offline, so Automatic says so and uses the laptop.
 	await expect(menu.getByRole("menuitemradio", { name: /^Automatic/ }))
-		.toContainText("Uses laptop now · build-box is offline");
+		.toContainText("Uses laptop now because build-box is offline");
 	await expect(menu.getByRole("button", { name: /favorite/i })).toHaveCount(2);
 	await expect(menu.locator("[data-star][aria-pressed=true]")).toHaveCount(1);
 	await page.keyboard.press("Escape");
@@ -311,7 +311,7 @@ test("one choice, two buttons: Chat's and Build plan's machine button choose whe
 	// Add machine opens the Machines page's Add your computer.
 	await chat.click();
 	await menu.getByRole("menuitem", { name: "Add machine…" }).click();
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 	await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
 });
 
@@ -524,7 +524,7 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 
 	// On the Machines page, the sidebar's count follows the table.
 	await entry.click();
-	await expect(page).toHaveURL(/\/connect$/);
+	await expect(page).toHaveURL(/\/machines$/);
 	let rows = page.getByRole("table", { name: "Your machines" });
 	await expect(rows.getByRole("row", { name: /laptop/ })).toContainText("Connected");
 	await laptop.disconnect();

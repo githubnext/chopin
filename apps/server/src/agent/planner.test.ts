@@ -62,6 +62,21 @@ test("a remote Planner learns where it runs and that its questions become Decisi
 	expect(prompt.endsWith("Earlier context.")).toBe(true);
 });
 
+test("a Planner with workflows says a Build's tasks show under Build, not as cards in Chat", () => {
+	for (
+		let workspace of [{ remote: true } as const, { cwd: "/tmp/chopin-test", checkout: false }]
+	) {
+		let prompt = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
+		// Chat's cards are for the workflow runs the Planner starts; a Build has none.
+		expect(prompt).toContain("Chat shows a card for each workflow run you start");
+		expect(prompt).not.toContain("Chat shows a card for each run");
+		expect(prompt).toContain(
+			"A Build is not a workflow run, and Chat shows no card for a Build or its tasks",
+		);
+		expect(prompt).toContain("under **Build**, beside Decisions");
+	}
+});
+
 test("ordinary guidance supplies an executable numerical chart example", () => {
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
 		.map(match => JSON.parse(match[1]!));

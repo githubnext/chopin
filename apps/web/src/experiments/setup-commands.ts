@@ -1,6 +1,8 @@
 /** The commands the Machines page shows to set up a machine. Change them here only. */
 
-import type { CodingAgent } from "@chopin/protocol/agents";
+import { AGENTS, findAgent, forSystem } from "@chopin/protocol/agents";
+
+import type { CodingAgent, SetupAgent } from "@chopin/protocol/agents";
 
 export type SetupShell = "sh" | "powershell";
 
@@ -22,9 +24,9 @@ function words(list: string[], shell: SetupShell): string {
 	return list.map(word => quote(word, shell)).join(" ");
 }
 
-/** What follows `chopin connect` for this agent, short of the service: its `--env`, then `--`. */
+/** What follows `chopin connect` for this agent, short of the service: `--agent` and its id. */
 export function agentArguments(agent: CodingAgent): string[] {
-	return [...agent.env.flatMap(variable => ["--env", variable]), "--", ...agent.acp];
+	return ["--agent", agent.id];
 }
 
 /**
@@ -39,8 +41,7 @@ export function runsAsService(agent: CodingAgent): boolean {
 /**
  * `connect` and its arguments, as the installer is given them: the machine's `name` in Chopin if
  * one is given (blank leaves chopin to use the hostname), as the background service if
- * `background`, the agent's variables, then the agent it starts. PowerShell takes a bare -- as the
- * end of a script block's own parameters and passes nothing for it, so there it goes in quotes.
+ * `background`, then the agent it starts, which brings its own command and variables.
  */
 export function connectArguments(
 	agent: CodingAgent,
@@ -53,9 +54,7 @@ export function connectArguments(
 		"connect",
 		...(label ? [`--name ${quote(label, shell)}`] : []),
 		...(background ? ["--install-service"] : []),
-		...agent.env.map(variable => `--env ${quote(variable, shell)}`),
-		shell === "powershell" ? "'--'" : "--",
-		words(agent.acp, shell),
+		words(agentArguments(agent), shell),
 	].join(" ");
 }
 
@@ -142,4 +141,69 @@ export function setupCommand(
 		...(key ? [`CHOPIN_PAIRING_KEY=${quote(key, shell)}`] : []),
 	];
 	return `curl -fsSL ${RELEASES}/install.sh | \\\n  ${environment.join(" ")} sh -s -- ${connect}`;
+}
+
+/**
+ * A setup agent's command for `system`: with a `key`, its template for a server, else its keyless
+ * one for your computer, undefined when it has none. `{origin}`, `{key}` and `{name}` are filled
+ * in quoted for the system's shell, as the built-in command quotes them. A blank name drops
+ * `{name}` and a flag right before it, as in `--name {name}`, so the machine keeps its hostname.
+ */
+export function setupAgentCommand(
+	agent: SetupAgent,
+	system: SetupSystem,
+	{ origin, key, name }: { origin: string; key?: string; name?: string },
+): string | undefined {
+	let template = key === undefined ? agent.keyless : agent.command;
+	if (template === undefined) return undefined;
+	let text = forSystem(template, system);
+	let label = name?.trim() ?? "";
+	if (!label) text = text.replaceAll(/[ \t]*(?:--?[\w-]+(?:[ \t]+|=))?\{name\}/g, "");
+	let shell = shellFor(system);
+	let values: Record<string, string> = { origin, key: key ?? "", name: label };
+	return text.replaceAll(
+		/\{(origin|key|name)\}/g,
+		(_, field: string) => quote(values[field]!, shell),
+	);
+}
+
+/** A setup agent's install steps for `system`, one line each, as the deployment wrote them. */
+export function setupAgentInstall(agent: SetupAgent, system: SetupSystem): string {
+	return forSystem(agent.install, system).join("\n");
+}
+
+/** What the coding agent picker offers: a setup agent or a built-in coding agent. */
+export type AgentOption = SetupAgent | CodingAgent;
+
+export function isSetupAgent(option: AgentOption): option is SetupAgent {
+	return !("acp" in option);
+}
+
+/**
+ * The picker's options for a server or your computer: the deployment's setup agents first, those
+ * with a keyless command only for your computer, then the built-in agents.
+ */
+export function agentOptions(
+	setupAgents: readonly SetupAgent[],
+	kind: "server" | "computer",
+): AgentOption[] {
+	return [
+		...setupAgents.filter(agent => kind === "server" || agent.keyless !== undefined),
+		...AGENTS,
+	];
+}
+
+/**
+ * The option a page starts on: the person's own last pick when the page offers it, else the
+ * deployment's default setup agent, else the default built-in agent.
+ */
+export function chosenAgent(
+	stored: string | null,
+	setupAgents: readonly SetupAgent[],
+	kind: "server" | "computer",
+): AgentOption {
+	let options = agentOptions(setupAgents, kind);
+	return options.find(option => option.id === stored)
+		?? options.find(option => isSetupAgent(option) && option.default)
+		?? findAgent(stored);
 }

@@ -292,7 +292,12 @@ function CommentPopover(
 					{resolvedCommentMeta(
 						{ notes: thread.notes.length, resolver: thread.resolver },
 						displayName,
-					)}
+					).map((part, index) => (
+						<span key={part}>
+							{index > 0 && " "}
+							{part}
+						</span>
+					))}
 				</p>
 			</div>
 		);
@@ -305,8 +310,13 @@ function CommentPopover(
 					<CheckIcon aria-hidden="true" size={14} />
 					<span>
 						{thread.resolver ? `Resolved by ${displayName(thread.resolver)}` : "Resolved"}
-						{at && ` · ${at}`}
 					</span>
+					{at && (
+						<>
+							{" "}
+							<span>{at}</span>
+						</>
+					)}
 				</p>
 				{onReopen && (
 					<button

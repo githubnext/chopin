@@ -263,15 +263,15 @@ export function commentKey(thread: string): string {
 	return `comment:${thread}`;
 }
 
-/** The quiet line under a resolved comment's opening note. */
+/** The quiet line under a resolved comment's opening note, as the pieces spacing sets apart. */
 export function resolvedCommentMeta(
 	{ notes, resolver }: { notes: number; resolver?: string },
 	name: (handle: string) => string,
-): string {
+): string[] {
 	let replies = Math.max(0, notes - 1);
 	return [
 		...(replies > 0 ? [`${replies} ${replies === 1 ? "reply" : "replies"}`] : []),
 		...(resolver ? [`Resolved by ${name(resolver)}`] : ["Resolved"]),
 		"Edited by Chopin",
-	].join(" · ");
+	];
 }

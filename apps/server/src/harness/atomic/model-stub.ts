@@ -1,9 +1,9 @@
 /**
- * A local OpenAI-completions-compatible model stub for the Pi contract test.
+ * A local OpenAI-completions-compatible model stub for the Atomic tests.
  *
- * `@ai-sdk/harness-pi`'s Pi runtime speaks the real `openai` SDK client
- * against `providers.<name>.baseUrl`, so this drives the actual `createPi()`
- * runtime end to end without a real provider credential or network access.
+ * Atomic's runtime speaks the real `openai` SDK client against
+ * `providers.<name>.baseUrl`, so this drives the actual Atomic session end to
+ * end without a real provider credential or network access.
  * Scripted by the last `role: "user"` message content, matching the plain
  * prompt string each contract case sends.
  */

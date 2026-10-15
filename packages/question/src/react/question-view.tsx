@@ -1132,7 +1132,8 @@ export function QuestionView(props: QuestionViewProps) {
 								{current.multiple && <p className="question-hint">Choose any</p>}
 								{previousAnswer && (
 									<p className="question-hint">
-										Previously: {plainInlineList(previousAnswer.labels)} · @{previousAnswer.by}
+										Previously chosen by @{previousAnswer.by}:{" "}
+										{plainInlineList(previousAnswer.labels)}
 									</p>
 								)}
 								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}

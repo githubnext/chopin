@@ -1,10 +1,10 @@
 import { afterAll, expect, mock, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { machineFile } from "./machine";
 import { createOutput } from "./output";
-import { commandWords, servePlanners, stopBackend } from "./planner";
+import { commandWords, dispatchedPlanners, servePlanners, stopBackend } from "./planner";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { git, lockWorkspace, startFailures } from "./workspace";
@@ -36,7 +36,7 @@ let log = process.argv[2];
 let launches = 0;
 try { launches = readFileSync(log, "utf8").split("\\n").filter(line => line.includes('"argv"')).length; } catch {}
 let env = Object.fromEntries(
-	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "SOME_FLAG"].map(name => [name, process.env[name]]),
+	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "CHOPIN_CHECKOUT", "CHOPIN_WORKTREE", "SOME_FLAG"].map(name => [name, process.env[name]]),
 );
 appendFileSync(log, JSON.stringify({ pid: process.pid, cwd: process.cwd(), argv: process.argv, env }) + "\\n");
 if (launches === 0) process.exit(3);
@@ -102,6 +102,9 @@ test(
 		await writeFile(script, BACKEND);
 		let root = await checkout();
 		let document = `${origin}/octo-org/score/plan`;
+		let state = await mkdtemp(join(scratch, "state-"));
+		// The Planner's own worktree: stable per document, under the base dir, made by the Planner.
+		let worktree = join(state, "planners", "octo-org", "score", "D_1");
 		let connector = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
@@ -120,7 +123,7 @@ test(
 			env: {
 				...process.env,
 				CHOPIN_URL: origin,
-				CHOPIN_CONNECTOR_STATE_DIR: await mkdtemp(join(scratch, "state-")),
+				CHOPIN_CONNECTOR_STATE_DIR: state,
 			},
 			stdout: "pipe",
 			stderr: "pipe",
@@ -132,20 +135,30 @@ test(
 		try {
 			await until(async () => (await entries(log)).filter(entry => entry.argv).length >= 2, 15_000);
 			let launches = (await entries(log)).filter(entry => entry.argv);
+			let checkoutRoot = await realpath(root);
 			expect(launches.map(launch => launch.env)).toEqual([
 				{
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[0],
+					CHOPIN_CHECKOUT: checkoutRoot,
+					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
 				},
 				{
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[1],
+					CHOPIN_CHECKOUT: checkoutRoot,
+					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
 				},
 			]);
+			// The connector makes the folders above it, private, and leaves the worktree to the Planner.
+			for (let folder of [join(state, "planners"), dirname(dirname(worktree)), dirname(worktree)]) {
+				expect(((await stat(folder)).mode & 0o777).toString(8)).toBe("700");
+			}
+			expect(await stat(worktree).catch(() => "missing")).toBe("missing");
 			expect(launches.map(launch => launch.argv.slice(1))).toEqual([[script, log], [script, log]]);
 			expect(asked).toEqual([
 				{ authorization: `Bearer ${MACHINE}`, body: { document } },
@@ -176,7 +189,7 @@ test(
 const STAYING_BACKEND = `
 import { appendFileSync } from "node:fs";
 let log = process.argv[2];
-appendFileSync(log, JSON.stringify({ pid: process.pid, token: process.env.CHOPIN_PLANNER_TOKEN }) + "\\n");
+appendFileSync(log, JSON.stringify({ pid: process.pid, token: process.env.CHOPIN_PLANNER_TOKEN, checkout: process.env.CHOPIN_CHECKOUT, worktree: process.env.CHOPIN_WORKTREE }) + "\\n");
 process.on("SIGTERM", () => {
 	appendFileSync(log, JSON.stringify({ stopped: process.pid }) + "\\n");
 	process.exit(0);
@@ -337,6 +350,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 		});
@@ -415,6 +430,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script, log],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(quiet, quiet, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -495,6 +512,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -590,6 +609,8 @@ test.skipIf(process.platform === "win32")(
 			documents: ["D_1"],
 			command: [process.execPath, script],
 			cwd: directory,
+			directory,
+			repository: "octo-org/score",
 			output: createOutput(capture, capture, {}),
 			signal: abort.signal,
 			failures: startFailures(directory, directory),
@@ -659,6 +680,8 @@ test.skipIf(process.platform === "win32")(
 				documents: ["D_1"],
 				command: [process.execPath, script],
 				cwd: directory,
+				directory,
+				repository: "octo-org/score",
 				output: createOutput(quiet, quiet, {}),
 				signal: new AbortController().signal,
 				failures: startFailures(directory, directory),
@@ -832,6 +855,11 @@ test.skipIf(process.platform === "win32")(
 			expect(registered[0]).toEqual({ protocol: "4", planner: null, plannerCommand: "1" });
 			expect(asked).toEqual([{ document }]);
 			let [launched] = await entries(log);
+			// A dispatched Planner gets its checkout and its own stable worktree path as well.
+			expect(launched.checkout).toBe(await realpath(root));
+			expect(launched.worktree).toBe(join(state, "planners", "octo-org", "score", "D_1"));
+			expect(((await stat(dirname(launched.worktree))).mode & 0o777).toString(8)).toBe("700");
+			expect(await stat(launched.worktree).catch(() => "missing")).toBe("missing");
 			await until(async () => polls.length >= 2, 5_000);
 			expect(polls.slice(0, 2)).toEqual([[], ["D_1"]]);
 			// chopin status lists it beside any --planner one, and says the machine can run Planners.
@@ -874,6 +902,208 @@ test.skipIf(process.platform === "win32")(
 			);
 		} finally {
 			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+/**
+ * A Planner backend that exits 0 by itself shortly after it starts, as one does once Chopin closes
+ * its link on a deliberate stop. Each launch is logged, and its exit before it happens.
+ */
+const LEAVING_BACKEND = `
+import { appendFileSync } from "node:fs";
+let log = process.argv[2];
+appendFileSync(log, JSON.stringify({ pid: process.pid }) + "\\n");
+process.on("SIGTERM", () => process.exit(0));
+setTimeout(() => {
+	appendFileSync(log, JSON.stringify({ exited: process.pid }) + "\\n");
+	process.exit(0);
+}, 300);
+`;
+
+test.skipIf(process.platform === "win32")(
+	"connect --planner-command does not start again a Planner whose link Chopin closed as it stopped asking for it",
+	async () => {
+		let { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+		let { WebStandardStreamableHTTPServerTransport } = await import(
+			"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+		);
+		let { CallToolRequestSchema, ListToolsRequestSchema } = await import(
+			"@modelcontextprotocol/sdk/types.js"
+		);
+		let polls: string[][] = [];
+		let document = "";
+		let directory = await mkdtemp(join(scratch, "withdrawn-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, LEAVING_BACKEND);
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					return Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: document },
+					});
+				}
+				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
+				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				mcp.setRequestHandler(CallToolRequestSchema, async call => {
+					let args = (call.params.arguments ?? {}) as { planners?: string[] };
+					let value: unknown = {};
+					if (call.params.name === "wait_for_work" && args.planners) {
+						polls.push(args.planners);
+						if (polls.length === 1) {
+							value = { kind: "planners", planners: [{ id: "D_1", url: document }] };
+						} else if (polls.length === 2) {
+							// Its owner chooses Automatic: Chopin closes the backend's link, which exits 0, and
+							// this answer, later than a restart's first backoff, stops asking for it.
+							await until(async () => (await entries(log)).some(entry => entry.exited), 10_000);
+							await Bun.sleep(1_500);
+							value = { kind: "planners", planners: [] };
+						} else await new Promise(() => {});
+					} else if (call.params.name === "wait_for_work") await new Promise(() => {});
+					return { content: [{ type: "text", text: JSON.stringify(value) }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await mcp.connect(transport);
+				return transport.handleRequest(request);
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		document = `${origin}/octo-org/score/plan`;
+		let root = await checkout();
+		let state = await mkdtemp(join(scratch, "state-"));
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			root,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--",
+			process.execPath,
+		], {
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = Promise.all([
+			new Response(connector.stdout).text(),
+			new Response(connector.stderr).text(),
+		]);
+		try {
+			await until(async () => polls.length >= 3, 20_000);
+			expect(polls[2]).toEqual([]);
+			await Bun.sleep(1_500);
+			// Launched once: never started again between its exit and Chopin's answer.
+			expect((await entries(log)).filter(entry => entry.pid)).toHaveLength(1);
+
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			let [stdout] = await output;
+			expect(stdout).not.toContain("starting it again");
+			expect(stdout.split(`Stopped the Planner for ${document}`)).toHaveLength(2);
+			expect(stdout).toContain(
+				`Stopped the Planner for ${document}: the document chose another machine.`,
+			);
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a dispatched Planner that exits by itself starts again only once Chopin's Planner poll still asks for it",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: request =>
+				new URL(request.url).pathname === "/api/connector/planner"
+					? Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", url: "http://x/plan" },
+					})
+					: new Response(null, { status: 404 }),
+		});
+		let directory = await mkdtemp(join(scratch, "confirm-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, LEAVING_BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let planners = dispatchedPlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: [],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			directory,
+			repository: "octo-org/score",
+			output: createOutput(sink, sink, {}),
+			signal: abort.signal,
+		});
+		let launches = async () => (await entries(log)).filter(entry => entry.pid).length;
+		let exits = async () => (await entries(log)).filter(entry => entry.exited).length;
+		try {
+			planners.assign([{ id: "D_1", url: "http://x/plan" }]);
+			expect(planners.running()).toEqual(["D_1"]);
+			await until(async () => await exits() === 1, 10_000);
+			// Until Chopin answers, the Planner poll no longer names it, and it waits.
+			await until(async () => planners.running().length === 0, 5_000);
+			await Bun.sleep(1_500);
+			expect(await launches()).toBe(1);
+
+			// Chopin still asks for it: it starts again, on the reconnect backoff.
+			planners.assign([{ id: "D_1", url: "http://x/plan" }]);
+			await until(async () => await launches() === 2, 5_000);
+			expect(said).toContain("Planner for http://x/plan exited (exit 0); starting it again in");
+			await until(async () => await exits() === 2, 10_000);
+			await until(async () => planners.running().length === 0, 5_000);
+
+			// Chopin answered a poll that no longer named it without a change: it was withdrawn.
+			planners.unchanged([]);
+			await Bun.sleep(1_500);
+			expect(await launches()).toBe(2);
+			expect(said).toContain(
+				"Stopped the Planner for http://x/plan: the document chose another machine.",
+			);
+		} finally {
+			abort.abort();
+			await planners.stop();
 			await chopin.stop(true);
 		}
 	},
@@ -1045,4 +1275,161 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 	40_000,
+);
+
+/** A Planner backend that records what it was given for GitHub, then reads its token file again. */
+const GITHUB_BACKEND = `
+import { appendFileSync, readFileSync, statSync } from "node:fs";
+let log = process.argv[2];
+let file = process.env.CHOPIN_GITHUB_TOKEN_FILE;
+let seen = () => file ? { content: readFileSync(file, "utf8"), mode: (statSync(file).mode & 0o777).toString(8) } : null;
+appendFileSync(log, JSON.stringify({
+	token: process.env.CHOPIN_GITHUB_TOKEN ?? null,
+	expiresAt: process.env.CHOPIN_GITHUB_TOKEN_EXPIRES_AT ?? null,
+	file: file ?? null,
+	argv: process.argv,
+	seen: seen(),
+}) + "\\n");
+process.on("SIGTERM", () => process.exit(0));
+setInterval(() => appendFileSync(log, JSON.stringify({ later: seen() }) + "\\n"), 200);
+`;
+
+/** A fake Chopin that issues Planner credentials and answers GitHub token requests with `github`. */
+function githubChopin(github: (asked: number) => Response) {
+	let asked = 0;
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let path = new URL(request.url).pathname;
+			if (path === "/api/connector/github-token") {
+				expect(await request.json()).toEqual({ repository: "octo-org/score" });
+				expect(request.headers.get("authorization")).toBe(`Bearer ${MACHINE}`);
+				return github(asked++);
+			}
+			return Response.json({
+				token: `chopin_p_${"P".repeat(43)}`,
+				expiresAt: Date.now() + 15 * 60_000,
+				document: { id: "D_1" },
+			});
+		},
+	});
+	return {
+		url: `http://127.0.0.1:${server.port}`,
+		asked: () => asked,
+		stop: () => server.stop(true),
+	};
+}
+
+test.skipIf(process.platform === "win32")(
+	"a Planner command gets the machine's GitHub token and a private file kept fresh, removed when it stops",
+	async () => {
+		let tokens = [`ghu_${"A".repeat(36)}`, `ghu_${"B".repeat(36)}`];
+		let expiries: number[] = [];
+		let chopin = githubChopin(asked => {
+			// Short-lived, so the connector replaces it before it expires.
+			expiries.push(Date.now() + 1_500);
+			return Response.json({ token: tokens[Math.min(asked, 1)], expiresAt: expiries.at(-1) });
+		});
+		let directory = await mkdtemp(join(scratch, "github-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, GITHUB_BACKEND);
+		let written = "";
+		let capture = {
+			write: (chunk: string | Uint8Array) => {
+				written += String(chunk);
+				return true;
+			},
+		};
+		let abort = new AbortController();
+		let serving = servePlanners({
+			url: chopin.url,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			cwd: directory,
+			directory,
+			repository: "octo-org/score",
+			output: createOutput(capture, capture, {}),
+			signal: abort.signal,
+			renewGitHubBeforeMs: 1_000,
+		});
+		try {
+			await until(async () => (await entries(log)).some(entry => entry.token), 10_000);
+			let [first] = await entries(log);
+			let file = join(directory, "planners", "octo-org", "score", "D_1.github-token");
+			expect(first).toMatchObject({
+				token: tokens[0],
+				expiresAt: new Date(expiries[0]!).toISOString(),
+				file,
+				seen: { content: `${tokens[0]}\n`, mode: "600" },
+			});
+			// Never in its arguments.
+			expect(JSON.stringify(first.argv)).not.toContain("ghu_");
+			// Replaced before it expires, without restarting the command.
+			await until(
+				async () => (await entries(log)).some(entry => entry.later?.content === `${tokens[1]}\n`),
+				10_000,
+			);
+			expect((await entries(log)).filter(entry => entry.token)).toHaveLength(1);
+			expect((await entries(log)).at(-1).later.mode).toBe("600");
+			abort.abort();
+			await serving;
+			expect(await stat(file).catch(() => "missing")).toBe("missing");
+			for (let token of tokens) expect(written).not.toContain(token);
+		} finally {
+			abort.abort();
+			await chopin.stop();
+		}
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"without a token from Chopin a Planner command gets none, and an App that can't push is said once",
+	async () => {
+		for (let answer of ["app-cannot-push", "not-found", "unavailable"]) {
+			let chopin = githubChopin(() =>
+				Response.json({ error: answer }, {
+					status: answer === "not-found" ? 404 : answer === "unavailable" ? 503 : 409,
+				})
+			);
+			let directory = await mkdtemp(join(scratch, "github-refused-"));
+			let script = join(directory, "backend.ts");
+			let log = join(directory, "launches.jsonl");
+			await writeFile(script, GITHUB_BACKEND);
+			let said: string[] = [];
+			let abort = new AbortController();
+			let serving = servePlanners({
+				url: chopin.url,
+				machine: MACHINE,
+				documents: ["D_1"],
+				command: [process.execPath, script, log],
+				cwd: directory,
+				directory,
+				repository: "octo-org/score",
+				output: createOutput({ write: () => true }, { write: () => true }, {}),
+				signal: abort.signal,
+				githubRefused: message => said.push(message),
+			});
+			try {
+				await until(async () => (await entries(log)).length > 0, 10_000);
+				expect((await entries(log))[0]).toMatchObject({ token: null, expiresAt: null, file: null });
+				expect(said).toEqual(
+					answer === "app-cannot-push"
+						? [
+							"The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
+							+ "write), so this machine uses its own GitHub login for it.",
+						]
+						: [],
+				);
+			} finally {
+				abort.abort();
+				await serving;
+				await chopin.stop();
+			}
+		}
+	},
+	30_000,
 );

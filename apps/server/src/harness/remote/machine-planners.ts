@@ -2,7 +2,7 @@
  * Planner credentials for paired machines.
  *
  * A paired machine asks for a short-lived credential naming one document, and
- * hands it to a Planner backend command, which attaches over `/planner-link`
+ * hands it to a Planner backend command, which attaches over `/api/v1/agent`
  * with it instead of a GitHub bearer. The machine's owner then holds the
  * document's Planner through a delegated login whose GitHub token is the
  * machine's own, so no browser sign-in is needed and signing out of one does
@@ -179,7 +179,7 @@ export class MachinePlanners {
 		try {
 			await this.#auth.sessions.end(id);
 		} catch (error) {
-			console.error("[planner-link] ending a machine's Planner login failed:", error);
+			console.error("[agent] ending a machine's Planner login failed:", error);
 		}
 	}
 }

@@ -250,7 +250,7 @@ export function render(spec, { settings = {} } = {}) {
 			"data-sc-step": st,
 			style: `--step:${st}`,
 			"data-sc-tip": `${p.label ? `${p.label}: ` : ""}${fmt(p.x, unitX)}, ${fmt(p.y, unitY)}${
-				p.size ? ` · ${fmt(p.size)}` : ""
+				p.size ? ` (size ${fmt(p.size)})` : ""
 			}`,
 		}));
 	});

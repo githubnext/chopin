@@ -7,6 +7,7 @@ services:
       # the preview env file, so preview-overridable values stay late-bound.
       AGENT: ${AGENT}
       BACKGROUND_JOBS: ${BACKGROUND_JOBS}
+      CHOPIN_SETUP_AGENTS: ${CHOPIN_SETUP_AGENTS}
       CONVERSATION_PLAN: ${CONVERSATION_PLAN}
       PLANNER_VISUALS: ${PLANNER_VISUALS}
       JEV_MODEL: ${JEV_MODEL}

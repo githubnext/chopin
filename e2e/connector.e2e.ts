@@ -54,7 +54,7 @@ for (let transport of ["stdio", "http"] as const) {
 			);
 			let read = (chunk: Buffer) => {
 				output += String(chunk);
-				let match = output.match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/);
+				let match = output.match(/http:\/\/[^\s]+\/machines\?pairing=[\w-]+/);
 				if (match) {
 					clearTimeout(timeout);
 					resolve(match[0]);
@@ -153,12 +153,16 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 	let first = start(baseURL!, root, state);
 	let second: ReturnType<typeof start> | undefined;
 	try {
-		await expect.poll(() => first.output().match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/))
+		await expect.poll(() => first.output().match(/http:\/\/[^\s]+\/machines\?pairing=[\w-]+/))
 			.toBeTruthy();
 		let handle = person();
 		let page = await enter(handle);
-		// Connect goes through the machine's own GitHub authorization and back.
-		await page.goto(first.output().match(/http:\/\/[^\s]+\/connect\?pairing=[\w-]+/)![0]);
+		// A link at the page's former address, as connectors printed before /machines, still opens
+		// the approval, at /machines. Connect goes through the machine's own GitHub authorization and
+		// back.
+		let link = first.output().match(/http:\/\/[^\s]+\/machines\?pairing=[\w-]+/)![0];
+		await page.goto(link.replace("/machines?", "/connect?"));
+		await expect(page).toHaveURL(link);
 		await expect(
 			page.getByRole("checkbox", {
 				name: "Let Chopin build and prototype automatically on this machine",
@@ -176,10 +180,10 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		await page.request.post("/auth/logout", { headers: { origin: new URL(baseURL!).origin } });
 		second = start(baseURL!, root, state);
 		await expect.poll(second.output, { timeout: 15_000 }).toContain("✓ Connected.");
-		expect(second.output()).not.toContain("/connect?pairing=");
+		expect(second.output()).not.toContain("?pairing=");
 
 		await authenticate(page, handle, baseURL!);
-		await page.goto("/connect");
+		await page.goto("/machines");
 		await expect(page.getByRole("heading", { name: "Your machines", exact: true })).toHaveCount(1);
 		let machines = page.getByRole("table", { name: "Your machines" });
 		await expect(machines.getByRole("button", { name: `Actions for ${hostname()}`, exact: true }))

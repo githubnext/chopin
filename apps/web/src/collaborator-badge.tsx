@@ -13,7 +13,8 @@ export function CollaboratorBadge({ actor }: { actor: DemoActor }) {
 			role="status"
 		>
 			<Face decorative handle={actor.id} size={16} textSize="2xs" titled={false} />
-			<span>{actor.name} · collaborator</span>
+			<span>{actor.name}</span>
+			<span className="text-text-tertiary">collaborator</span>
 		</div>
 	);
 }

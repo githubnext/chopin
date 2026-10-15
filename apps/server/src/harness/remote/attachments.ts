@@ -24,7 +24,7 @@ import type { AuthConfig } from "../../auth/config";
 import type { AuthenticatedSession, Sessions } from "../../auth/session";
 import type { GitHub } from "../../github/client";
 import type { StorageAdapter } from "../../storage/port";
-import type { PlannerLink } from "./link";
+import type { AgentLink } from "./link";
 
 export type AttachmentAuth = {
 	config: Pick<AuthConfig, "origin">;
@@ -71,7 +71,7 @@ type Hold = {
 	/** The paired machine whose delegated login owns the document, by label and id. */
 	machine?: string;
 	machineId?: string;
-	link?: PlannerLink;
+	link?: AgentLink;
 	forget?: () => void;
 	timer?: ReturnType<typeof setTimeout>;
 	releaseAt?: Date;
@@ -88,7 +88,7 @@ type PendingAttach = {
 /** What `@chopin` and `invoke_planner` say when no Planner is attached to the document. */
 export function notAttachedMessage(url: string, repository: string): string {
 	return `No Planner is attached to this document. To attach one, connect a Planner client to `
-		+ `${url} over the Planner link from a session in a checkout of ${repository}; `
+		+ `${url} over the agent connection from a session in a checkout of ${repository}; `
 		+ `that session becomes this document's Planner.`;
 }
 
@@ -179,7 +179,7 @@ export class PlannerAttachments {
 	}
 
 	/** Makes `link` the document's Planner and its account the owner, or says why not. */
-	attach(request: AttachRequest, link: PlannerLink): Promise<AttachGrant | AttachRefusal> {
+	attach(request: AttachRequest, link: AgentLink): Promise<AttachGrant | AttachRefusal> {
 		return this.#serialized(request.channelId, () => this.#attach(request, link));
 	}
 
@@ -212,7 +212,7 @@ export class PlannerAttachments {
 	 * stored owner is still its attachment's login and generation.
 	 * Otherwise the link closes and the document is free to attach.
 	 */
-	async verify(channelId: string, link: PlannerLink): Promise<boolean> {
+	async verify(channelId: string, link: AgentLink): Promise<boolean> {
 		let hold = this.#holds.get(channelId);
 		if (hold?.link !== link) return false;
 		let stored = await this.#auth.storage.channels.readAgent(channelId, this.#auth.clock());
@@ -242,7 +242,7 @@ export class PlannerAttachments {
 		this.#holds.clear();
 	}
 
-	async #attach(request: AttachRequest, link: PlannerLink): Promise<AttachGrant | AttachRefusal> {
+	async #attach(request: AttachRequest, link: AgentLink): Promise<AttachGrant | AttachRefusal> {
 		let { channelId, user } = request;
 		let held = this.#holds.get(channelId);
 		if (held && (held.link || held.userId !== user.id)) return attachedRefusal(held);
@@ -267,7 +267,7 @@ export class PlannerAttachments {
 	 */
 	async #attachPending(
 		request: AttachRequest,
-		link: PlannerLink,
+		link: AgentLink,
 		pending: PendingAttach,
 	): Promise<AttachGrant | AttachRefusal> {
 		let { channelId, user } = request;
@@ -393,7 +393,7 @@ export class PlannerAttachments {
 		return state.ownerSessionId === sessionId ? state : undefined;
 	}
 
-	#bind(hold: Hold, link: PlannerLink): AttachGrant {
+	#bind(hold: Hold, link: AgentLink): AttachGrant {
 		clearTimeout(hold.timer);
 		hold.timer = undefined;
 		hold.releaseAt = undefined;
@@ -403,7 +403,7 @@ export class PlannerAttachments {
 		return { ok: true, detach: () => this.#detached(hold, link) };
 	}
 
-	#detached(hold: Hold, link: PlannerLink): void {
+	#detached(hold: Hold, link: AgentLink): void {
 		if (hold.link !== link) return;
 		hold.link = undefined;
 		hold.forget?.();
@@ -439,7 +439,7 @@ export class PlannerAttachments {
 				this.#auth.clock(),
 			);
 		} catch (error) {
-			console.error("[planner-link] releasing the Planner owner failed:", error);
+			console.error("[agent] releasing the Planner owner failed:", error);
 		}
 	}
 
@@ -457,7 +457,7 @@ export class PlannerAttachments {
 			try {
 				listener(channelId, planner);
 			} catch (error) {
-				console.error("[planner-link] reporting the Planner attachment failed:", error);
+				console.error("[agent] reporting the Planner attachment failed:", error);
 			}
 		}
 	}

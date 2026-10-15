@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { LINK_CLOSE, PLANNER_LINK_VERSION } from "@chopin/planner-link";
+import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
@@ -9,7 +9,13 @@ import {
 import { Machines } from "../../auth/machines";
 import { registerExperimentRoutes } from "../../experiments/routes";
 import { Router } from "../../http/router";
-import { linkAuth, linkServer, machineToken, rawLink } from "../../testing/planner-link";
+import {
+	linkAuth,
+	linkServer,
+	machineToken,
+	rawLink,
+	upgradeRequest,
+} from "../../testing/agent-link";
 import { MachinePlanners } from "./machine-planners";
 
 let cleanups: Array<() => unknown> = [];
@@ -19,7 +25,7 @@ afterEach(async () => {
 
 /**
  * A HARNESS=remote server whose accounts pair machines that connect checkouts of octo-org/score,
- * choose them for the linked document, and run its Planner on them over the Planner link.
+ * choose them for the linked document, and run its Planner on them over the agent connection.
  */
 async function dispatchServer() {
 	let linked = await linkAuth();
@@ -156,7 +162,7 @@ async function dispatchServer() {
 		/** The backend the connector starts: a credential for the document, then a link that attaches. */
 		async function backend() {
 			let raw = await rawLink(server.url, await credential());
-			raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			return raw;
 		}
 		let disconnect = () =>
@@ -186,17 +192,9 @@ async function dispatchServer() {
 	return { ...linked, machines, planners, server, send, machine, choose, choice, url };
 }
 
-/** The status a Planner link's upgrade gets with `credential`: 101 when it opens. */
+/** The status an agent connection's upgrade gets with `credential`: 101 when it opens. */
 async function upgrade(url: string, credential: string) {
-	let response = await fetch(`${url}/planner-link`, {
-		headers: {
-			connection: "Upgrade",
-			upgrade: "websocket",
-			"sec-websocket-version": "13",
-			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-			authorization: `Bearer ${credential}`,
-		},
-	});
+	let response = await upgradeRequest(url, { authorization: `Bearer ${credential}` });
 	return response.status;
 }
 
@@ -366,5 +364,39 @@ describe("choosing a machine for a document", () => {
 		expect((await tower.poll([channel.id])).error).toStartWith("repository-forbidden");
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
 		expect(server.attachments.attached(channel.id)).toBe(false);
+	});
+});
+
+describe("a machine's GitHub token", () => {
+	it("goes only to the owner's machine, for a repository its owner can push to", async () => {
+		let { machine, machines, send } = await dispatchServer();
+		let ask = (bearer: string, repository: string) =>
+			send("/api/connector/github-token", {
+				bearer,
+				headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "4" },
+				body: { repository },
+			});
+		let member = await machine("member", "U_member", "box");
+		let issued = await ask(member.token, "octo-org/score");
+		expect(issued.status).toBe(200);
+		let body = await issued.json();
+		// The machine's own access token, never its refresh token.
+		expect(body).toEqual({ token: machineToken("member"), expiresAt: expect.any(Number) });
+		expect(JSON.stringify(body)).not.toContain("refresh");
+		// A viewer can't push, so its machine gets none; neither does a bearer that isn't a machine.
+		let viewer = await machines.pair({
+			userId: "U_viewer",
+			label: "box",
+			repositories: [],
+			autoRun: false,
+			grant: {
+				accessToken: machineToken("viewer"),
+				accessExpiresIn: 28_800,
+				refreshToken: "viewer-refresh",
+				refreshExpiresIn: 15_897_600,
+			},
+		});
+		expect((await ask(viewer.token, "octo-org/score")).status).toBe(403);
+		expect((await ask("chopin_m_unknown", "octo-org/score")).status).toBe(401);
 	});
 });

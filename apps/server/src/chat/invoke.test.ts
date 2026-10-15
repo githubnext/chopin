@@ -208,7 +208,7 @@ async function browserTurn(context: Chat.Room, text: string) {
 }
 
 test("visual routing only attaches to bounded member turns on disposable harnesses", async () => {
-	for (let harness of ["copilot-sdk", "pi", "atomic"]) {
+	for (let harness of ["copilot-sdk", "atomic"]) {
 		let { context } = await setup(configured({
 			HARNESS: harness,
 			HARNESS_AUTH: "ai-gateway",
@@ -459,7 +459,7 @@ test("HARNESS=atomic runs every Planner session full in hosted and local configu
 			[ATOMIC, true],
 			[{ ...ATOMIC, ...LOCAL }, true],
 			[{}, false],
-			[{ HARNESS: "pi", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model", ...LOCAL }, false],
+			[{ ...LOCAL }, false],
 		] as const
 	) {
 		let { context, user } = await setup(configured(overrides));

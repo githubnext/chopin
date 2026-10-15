@@ -104,8 +104,8 @@ async function connect(
 let refused = (status: number, body: Record<string, unknown>) => () =>
 	Response.json(body, { status });
 
-/** The entry script npm's shims for claude-agent-acp run. */
-const ENTRY = "node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js";
+/** The entry script npm's shims for copilot run. */
+const ENTRY = "node_modules/@github/copilot/npm-loader.js";
 
 /**
  * The shims `npm install -g` writes for a package's program (by cmd-shim), with the node next to
@@ -188,8 +188,8 @@ const CASES: Array<{
 	},
 	{
 		name: "the agent isn't installed, nor is npm",
-		run: async () => connect({ args: root => [root, "--", "gemini"], path: await programs() }),
-		says: ["gemini isn't installed", "npm comes with Node.js", "https://nodejs.org"],
+		run: async () => connect({ args: root => [root, "--", "atomic-acp"], path: await programs() }),
+		says: ["atomic-acp isn't installed", "npm comes with Node.js", "https://nodejs.org"],
 	},
 	{
 		name: "the agent's Node.js is too old",
@@ -211,36 +211,36 @@ const CASES: Array<{
 		name: "npm's Windows .cmd shim runs the agent on the older node beside it",
 		run: async () => {
 			let path = await programs({ node: node("22.12.0") });
-			let npm = await programs({ "claude-agent-acp.cmd": SHIM.cmd, "node.exe": node("20.11.1") });
+			let npm = await programs({ "copilot.cmd": SHIM.cmd, "node.exe": node("20.11.1") });
 			return connect({
-				args: root => [root, "--", join(npm.split(delimiter)[0]!, "claude-agent-acp.cmd")],
+				args: root => [root, "--", join(npm.split(delimiter)[0]!, "copilot.cmd"), "--acp"],
 				path,
 			});
 		},
 		says: [
-			"Claude Code needs Node.js 22 or newer; this machine has 20.11.1",
-			"npm install -g @agentclientprotocol/claude-agent-acp",
+			"GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1",
+			"npm install -g @github/copilot",
 		],
 	},
 	{
 		name: "npm's PowerShell shim runs the agent on an older node from PATH",
 		run: async () => {
-			let npm = await programs({ "claude-agent-acp.ps1": SHIM.ps1, node: node("20.11.1") });
+			let npm = await programs({ "copilot.ps1": SHIM.ps1, node: node("20.11.1") });
 			return connect({
-				args: root => [root, "--", join(npm.split(delimiter)[0]!, "claude-agent-acp.ps1")],
+				args: root => [root, "--", join(npm.split(delimiter)[0]!, "copilot.ps1"), "--acp"],
 				path: npm,
 			});
 		},
-		says: ["Claude Code needs Node.js 22 or newer; this machine has 20.11.1"],
+		says: ["GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1"],
 	},
 	{
 		name: "npm's sh shim runs the agent on an older node from PATH",
 		run: async () =>
 			connect({
-				args: root => [root, "--", "claude-agent-acp"],
-				path: await programs({ "claude-agent-acp": SHIM.sh, node: node("20.11.1") }),
+				args: root => [root, "--", "copilot", "--acp"],
+				path: await programs({ copilot: SHIM.sh, node: node("20.11.1") }),
 			}),
-		says: ["Claude Code needs Node.js 22 or newer; this machine has 20.11.1"],
+		says: ["GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1"],
 	},
 	{
 		name: "not inside a git checkout",
@@ -314,12 +314,12 @@ test("a compiled or non-Node agent isn't held to a Node.js version", async () =>
 	for (
 		let program of [
 			"\x7fELF\x02\x01\x01\0\0\0node_modules/x/index.js node",
-			'@ECHO off\r\n"%~dp0\\claude-agent-acp.exe" %*\r\n',
+			'@ECHO off\r\n"%~dp0\\copilot.exe" %*\r\n',
 		]
 	) {
 		let result = await connect({
-			args: root => [root, "--", "claude-agent-acp"],
-			path: await programs({ "claude-agent-acp": program, node: node("18.20.0") }),
+			args: root => [root, "--", "copilot", "--acp"],
+			path: await programs({ copilot: program, node: node("18.20.0") }),
 		});
 		expect(result.output).not.toContain("needs Node.js");
 	}

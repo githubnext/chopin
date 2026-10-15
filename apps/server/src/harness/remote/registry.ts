@@ -1,7 +1,7 @@
 import type { HostInput } from "@bastani/atomic";
 import type { FullPlanner } from "../atomic/full";
 import type { HumanInputStatus } from "../atomic/human-input";
-import type { PlannerLink } from "./link";
+import type { AgentLink } from "./link";
 
 /**
  * What Chopin keeps for one Planner session whose model runs in an attached
@@ -26,7 +26,7 @@ export type RemotePlanner =
 	};
 
 let planners = new Map<string, RemotePlanner>();
-let links = new Map<string, PlannerLink>();
+let links = new Map<string, AgentLink>();
 
 export function registerRemotePlanner(sessionId: string, planner: RemotePlanner): () => void {
 	if (planners.has(sessionId)) throw new Error("Remote Planner session is already registered");
@@ -41,13 +41,13 @@ export function remotePlanner(sessionId: string): RemotePlanner | undefined {
 }
 
 /** Records the link attached as a document's Planner; `PlannerAttachments` admits one per document. */
-export function attachLink(channelId: string, link: PlannerLink): () => void {
+export function attachLink(channelId: string, link: AgentLink): () => void {
 	links.set(channelId, link);
 	return () => {
 		if (links.get(channelId) === link) links.delete(channelId);
 	};
 }
 
-export function attachedLink(channelId: string): PlannerLink | undefined {
+export function attachedLink(channelId: string): AgentLink | undefined {
 	return links.get(channelId);
 }

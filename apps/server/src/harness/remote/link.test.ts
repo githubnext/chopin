@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { tool } from "ai";
 import { z } from "zod";
-import { LINK_CLOSE, MAX_LINK_MESSAGE_BYTES, PLANNER_LINK_VERSION } from "@chopin/planner-link";
-import { PlannerLinkRefused } from "@chopin/planner-link/client";
+import {
+	AGENT_PATH,
+	AGENT_SUBPROTOCOL,
+	AGENT_VERSION,
+	LINK_CLOSE,
+	MAX_LINK_MESSAGE_BYTES,
+} from "@chopin/agent-link";
+import { AgentRefused } from "@chopin/agent-link/client";
 
 import { GitHubError } from "../../github/client";
 import * as Store from "../../questions/store";
@@ -27,13 +33,14 @@ import {
 	scriptedPlanner,
 	silentLink,
 	slowUplink,
+	upgradeRequest,
 	VIEWER_TOKEN,
-} from "../../testing/planner-link";
+} from "../../testing/agent-link";
 import { createRemoteAdapter } from "./adapter";
-import { admitPlannerLink } from "./endpoint";
+import { admitAgent } from "./endpoint";
 import { remotePlanner } from "./registry";
 
-import type { PlannerLinkClient, PlannerLinkHandlers } from "@chopin/planner-link/client";
+import type { AgentClient, AgentHandlers } from "@chopin/agent-link/client";
 import type { ActiveOwnerBinding } from "../../agent/active-owner";
 import type { RemotePlanner } from "./registry";
 
@@ -42,12 +49,12 @@ afterEach(async () => {
 	for (let cleanup of cleanups.splice(0).toReversed()) await cleanup();
 });
 
-async function setup(handlers?: Partial<PlannerLinkHandlers>) {
+async function setup(handlers?: Partial<AgentHandlers>) {
 	let { auth, storage, channel } = await linkAuth();
 	let server = linkServer(auth, 300);
 	cleanups.push(server.stop);
 	let script = scriptedPlanner();
-	let client: PlannerLinkClient | undefined;
+	let client: AgentClient | undefined;
 	if (handlers !== undefined) {
 		client = await attach(server.url, channel.id, { ...script.handlers, ...handlers });
 		cleanups.push(() => client!.detach());
@@ -134,19 +141,39 @@ async function until(condition: () => boolean, withinMs: number) {
 	}
 }
 
-function upgradeRequest(url: string, headers: Record<string, string> = {}) {
-	return fetch(`${url}/planner-link`, {
-		headers: {
-			connection: "Upgrade",
-			upgrade: "websocket",
-			"sec-websocket-version": "13",
-			"sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
-			...headers,
-		},
+describe("Agent connection admission", () => {
+	it("upgrades only with the chopin.agent.v1 subprotocol, and echoes it", async () => {
+		let { server } = await setup();
+		let member = { authorization: `Bearer ${MEMBER_TOKEN}` };
+		for (
+			let headers of [
+				{ "sec-websocket-protocol": "" },
+				{ ...member, "sec-websocket-protocol": "" },
+				{ ...member, "sec-websocket-protocol": "chopin.agent.v2, graphql-ws" },
+			]
+		) {
+			let refused = await upgradeRequest(server.url, headers);
+			expect(refused.status).toBe(426);
+			expect(refused.headers.get("content-type")).toStartWith("application/json");
+			expect(refused.headers.get("sec-websocket-protocol")).toBeNull();
+			expect(await refused.json()).toEqual({
+				code: "subprotocol-required",
+				supported: ["chopin.agent.v1"],
+			});
+		}
+		let accepted = await upgradeRequest(server.url, {
+			...member,
+			"sec-websocket-protocol": "chopin.agent.v2, chopin.agent.v1",
+		});
+		expect(accepted.status).toBe(101);
+		expect(accepted.headers.get("sec-websocket-protocol")).toBe("chopin.agent.v1");
+		let raw = await rawLink(server.url);
+		expect(raw.socket.protocol).toBe("chopin.agent.v1");
+		raw.socket.close();
+		expect((await upgradeRequest(server.url, member, "/planner-link")).status).toBe(404);
+		expect(server.links).toEqual([]);
 	});
-}
 
-describe("Planner link admission", () => {
 	it("checks the bearer as hosted MCP does and upgrades nothing it refuses", async () => {
 		let { server, channel } = await setup();
 		let missing = await upgradeRequest(server.url);
@@ -169,13 +196,17 @@ describe("Planner link admission", () => {
 
 	it("answers 404 where the server does not run the remote Planner", async () => {
 		let { auth } = await linkAuth();
-		let request = new Request("https://chopin.test/planner-link", {
-			headers: { authorization: `Bearer ${MEMBER_TOKEN}`, upgrade: "websocket" },
+		let request = new Request(`https://chopin.test${AGENT_PATH}`, {
+			headers: {
+				authorization: `Bearer ${MEMBER_TOKEN}`,
+				upgrade: "websocket",
+				"sec-websocket-protocol": AGENT_SUBPROTOCOL,
+			},
 		});
-		let refused = await admitPlannerLink(request, auth, false);
+		let refused = await admitAgent(request, auth, false);
 		expect(refused).toBeInstanceOf(Response);
 		expect((refused as Response).status).toBe(404);
-		expect(await admitPlannerLink(request, auth, true)).toMatchObject({ plannerLink: true });
+		expect(await admitAgent(request, auth, true)).toMatchObject({ agentLink: true });
 	});
 
 	it("refuses a repository the caller cannot read, a missing or archived document, and another version", async () => {
@@ -184,12 +215,12 @@ describe("Planner link admission", () => {
 		let refusal = (token: string, document: string) =>
 			attach(server.url, document, scriptedPlanner().handlers, token).then(
 				() => undefined,
-				(error: PlannerLinkRefused) => error.code,
+				(error: AgentRefused) => error.code,
 			);
 		expect(await refusal(OUTSIDER_TOKEN, channel.id)).toBe("repository-forbidden");
 		expect(await refusal(MEMBER_TOKEN, crypto.randomUUID())).toBe("document-unavailable");
 		let raw = await rawLink(server.url);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION + 1, document: channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION + 1, document: channel.id });
 		expect(await raw.next("refused")).toMatchObject({ code: "unsupported-version" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unsupportedVersion);
 		expect(await storage.channels.get(channel.id)).toEqual(before);
@@ -216,11 +247,11 @@ describe("Planner link admission", () => {
 	});
 });
 
-describe("Planner link ownership", () => {
+describe("Agent connection ownership", () => {
 	/** The code, message, and close code an attach is refused with. */
 	async function refused(url: string, document: string, token: string) {
 		let raw = await rawLink(url, token);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document });
+		raw.send({ type: "attach", version: AGENT_VERSION, document });
 		let refusal = await raw.next("refused");
 		return { code: refusal.code, message: refusal.message, close: (await raw.closed).code };
 	}
@@ -305,7 +336,7 @@ describe("Planner link ownership", () => {
 		);
 
 		let dropped = await rawLink(server.url);
-		dropped.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+		dropped.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 		await dropped.next("attached");
 		expect(await owner(storage, channel.id))
 			.toMatchObject({ ownerSessionId: logins.get("member"), generation: 1 });
@@ -347,7 +378,7 @@ describe("Planner link ownership", () => {
 		cleanups.push(server.stop);
 		linked.revocations.add(id => server.attachments.sessionRevoked(id));
 		let raw = await rawLink(server.url);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: linked.channel.id });
 		await raw.next("attached");
 		expect(server.attachments.attached(linked.channel.id)).toBe(true);
 		return { ...linked, server, raw };
@@ -445,7 +476,7 @@ describe("Planner link ownership", () => {
 		let held = (await owner(linked.storage, linked.channel.id))!;
 		let paused = pauseOwnerRead(linked.storage);
 		let raw = await rawLink(server.url);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: linked.channel.id });
 		await paused.reading;
 		return { ...linked, server, raw, held, resume: paused.resume };
 	}
@@ -506,7 +537,7 @@ describe("Planner link ownership", () => {
 			return repositoryAccess(token, repositoryOwner, name);
 		};
 		let raw = await rawLink(server.url);
-		raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: linked.channel.id });
+		raw.send({ type: "attach", version: AGENT_VERSION, document: linked.channel.id });
 		await checking.promise;
 		return { ...linked, server, raw, resume: () => resume.resolve() };
 	}
@@ -595,7 +626,7 @@ describe("Planner link ownership", () => {
 			cleanups.push(server.stop);
 			let silent = await silentLink(server.url);
 			cleanups.push(silent.end);
-			silent.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			silent.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			await silent.next("attached");
 			expect(server.attachments.attached(channel.id)).toBe(true);
 			let started = silent.next("start").then(start => {
@@ -630,7 +661,7 @@ describe("Planner link ownership", () => {
 			cleanups.push(server.stop);
 			let silent = await silentLink(server.url);
 			cleanups.push(silent.end);
-			silent.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+			silent.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			await silent.next("attached");
 			expect((await silent.closed).code).toBe(LINK_CLOSE.unresponsive);
 			expect(server.attachments.attached(channel.id)).toBe(false);
@@ -699,7 +730,7 @@ describe("Planner link ownership", () => {
 				let raw = await rawLink(server.url);
 				let client = raw.socket as Readable;
 				cleanups.push(() => client.close());
-				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 				await raw.next("attached");
 				client.pause();
 				let socket = flood(server);
@@ -724,7 +755,7 @@ describe("Planner link ownership", () => {
 				let raw = await rawLink(server.url);
 				let client = raw.socket as Readable;
 				cleanups.push(() => client.terminate());
-				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 				await raw.next("attached");
 				client.pause();
 				let quiet = Date.now();
@@ -751,7 +782,7 @@ describe("Planner link ownership", () => {
 				cleanups.push(proxy.stop);
 				let raw = await rawLink(proxy.url);
 				cleanups.push(() => (raw.socket as Readable).terminate());
-				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 				await raw.next("attached");
 				let quiet = Date.now();
 				proxy.hold();
@@ -784,7 +815,7 @@ describe("Planner link ownership", () => {
 				cleanups.push(uplink.stop);
 				let raw = await rawLink(uplink.url);
 				cleanups.push(() => raw.socket.close());
-				raw.send({ type: "attach", version: PLANNER_LINK_VERSION, document: channel.id });
+				raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 				await raw.next("attached");
 				// One unfragmented frame: the client's pongs queue behind it until it is through.
 				let frame = JSON.stringify({
@@ -810,7 +841,7 @@ describe("Planner link ownership", () => {
 	});
 });
 
-describe("Planner link protocol", () => {
+describe("Agent connection protocol", () => {
 	it("closes the link on malformed or out-of-order messages", async () => {
 		let { server, channel } = await setup();
 		for (
@@ -959,7 +990,7 @@ describe("Planner link protocol", () => {
 		let session = await agent.createSession({ sandboxSession });
 		cleanups.push(() => session.destroy());
 		let outcome = await streamOn(agent, session, "large");
-		let failure = { error: "read_plan returned more than the Planner link can carry." };
+		let failure = { error: "read_plan returned more than the agent connection can carry." };
 		expect(seen).toEqual([{ output: failure, isError: true }]);
 		expect(outcome.parts.filter(part => part.type === "tool-result" || part.type === "tool-error"))
 			.toMatchObject([{ toolName: "read_plan" }]);
@@ -1246,7 +1277,7 @@ describe("Planner link protocol", () => {
 	});
 });
 
-describe("Planner link questions", () => {
+describe("Agent connection questions", () => {
 	async function questions(options: { expiresInMs?: number; isolated?: boolean } = {}) {
 		let f = await hostInputRoom(options.expiresInMs);
 		cleanups.push(f.close);
@@ -1436,7 +1467,7 @@ describe("Planner link questions", () => {
 		let f = await hostInputRoom();
 		cleanups.push(f.close);
 		let asks: Promise<{ status: string }>[] = [];
-		let client: PlannerLinkClient | undefined;
+		let client: AgentClient | undefined;
 		let linked = await setup({
 			async start(message) {
 				asks.push(client!.ask(message.session, { method: "confirm", title: "Ship?", message: "" }));

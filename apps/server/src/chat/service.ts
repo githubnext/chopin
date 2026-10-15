@@ -37,7 +37,7 @@ import { createNotices } from "./notices";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
 import { argsText, outputText, textOutput } from "./activity";
-import { toolErrorSchema } from "@chopin/planner-link";
+import { toolErrorSchema } from "@chopin/agent-link";
 import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
 import type { JobOutcome } from "../conversation-plan/jobs";
@@ -59,7 +59,7 @@ import type { Plan } from "../plan/service";
 import type { Focus, Said } from "./address";
 import type { ReferenceService } from "./references";
 import type { Socket, SocketData } from "../wire";
-import type { ToolError } from "@chopin/planner-link";
+import type { ToolError } from "@chopin/agent-link";
 
 /** Beyond this the queue is a backlog nobody is going to read. */
 const MAX_QUEUE = 20;
@@ -1600,7 +1600,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 function visualRouting(context: Room): boolean {
 	if (
 		!context.config?.plannerVisuals || context.chat.job
-		|| !["copilot-sdk", "pi"].includes(context.config.harness)
+		|| context.config.harness !== "copilot-sdk"
 	) return false;
 	let request = currentMemberRequest(context.chat);
 	return !!request && request.text.length <= 1_000;

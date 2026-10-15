@@ -105,13 +105,6 @@ describe("configuration", () => {
 		expect(description(config)).not.toContain("direct");
 	});
 
-	it("requires an explicit MODEL under the pi harness", () => {
-		expect(() => configured({ HARNESS: "pi", HARNESS_AUTH: "openai" }))
-			.toThrow("MODEL is required when HARNESS=pi");
-		expect(configured({ HARNESS: "pi", HARNESS_AUTH: "openai", MODEL: "openai/gpt-5.6" }))
-			.toMatchObject({ harness: "pi", model: "openai/gpt-5.6" });
-	});
-
 	it("requires an explicit provider/model MODEL under the atomic harness", () => {
 		expect(() => configured({ HARNESS: "atomic", HARNESS_AUTH: "auto" }))
 			.toThrow("MODEL is required when HARNESS=atomic");
@@ -131,7 +124,7 @@ describe("configuration", () => {
 		expect(config).toMatchObject({ harness: "remote", host: "0.0.0.0", model: "" });
 		expect(description(config)).toContain("agent: chosen by the attached client");
 		expect(description(config)).toContain(
-			"Planner: attached client over /planner-link (model and client tools run on its machine)",
+			"Planner: attached client over /api/v1/agent (model and client tools run on its machine)",
 		);
 		expect(configured({ ...remote, MODEL: "openai/gpt-6" }).model).toBe("openai/gpt-6");
 		expect(() => configured({ HARNESS: "remote" }))
@@ -150,43 +143,59 @@ describe("configuration", () => {
 		}
 	});
 
-	it("pings a remote Planner link every 15 seconds and drops it after 120 silent seconds unless configured", () => {
+	it("pings a remote agent connection every 15 seconds and drops it after 120 silent seconds unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
 		expect(configured(remote)).toMatchObject({
-			plannerLinkPingMs: 15_000,
-			plannerLinkTimeoutMs: 120_000,
+			agentConnectionPingMs: 15_000,
+			agentConnectionTimeoutMs: 120_000,
 		});
-		expect(configured({ ...remote, PLANNER_LINK_PING_MS: "1000", PLANNER_LINK_TIMEOUT_MS: "1001" }))
-			.toMatchObject({ plannerLinkPingMs: 1_000, plannerLinkTimeoutMs: 1_001 });
+		expect(
+			configured({
+				...remote,
+				AGENT_CONNECTION_PING_MS: "1000",
+				AGENT_CONNECTION_TIMEOUT_MS: "1001",
+			}),
+		)
+			.toMatchObject({ agentConnectionPingMs: 1_000, agentConnectionTimeoutMs: 1_001 });
 		for (let value of ["", "999", "1.5", "600001", "soon"]) {
-			expect(() => configured({ ...remote, PLANNER_LINK_PING_MS: value }))
-				.toThrow("PLANNER_LINK_PING_MS must be an integer between 1000 and 600000 milliseconds");
-			expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: value }))
-				.toThrow("PLANNER_LINK_TIMEOUT_MS must be an integer between 1000 and 600000 milliseconds");
+			expect(() => configured({ ...remote, AGENT_CONNECTION_PING_MS: value }))
+				.toThrow(
+					"AGENT_CONNECTION_PING_MS must be an integer between 1000 and 600000 milliseconds",
+				);
+			expect(() => configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: value }))
+				.toThrow(
+					"AGENT_CONNECTION_TIMEOUT_MS must be an integer between 1000 and 600000 milliseconds",
+				);
 		}
-		expect(() => configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "15000" }))
-			.toThrow("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
+		expect(() => configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: "15000" }))
+			.toThrow("AGENT_CONNECTION_TIMEOUT_MS must be longer than AGENT_CONNECTION_PING_MS");
 	});
 
-	it("caps a remote Planner link's silence at 15 minutes, however its queue drains, unless configured", () => {
+	it("caps a remote agent connection's silence at 15 minutes, however its queue drains, unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
-		expect(configured(remote).plannerLinkMaxSilenceMs).toBe(900_000);
-		expect(configured({ ...remote, PLANNER_LINK_TIMEOUT_MS: "600000" }).plannerLinkMaxSilenceMs)
+		expect(configured(remote).agentConnectionMaxSilenceMs).toBe(900_000);
+		expect(
+			configured({ ...remote, AGENT_CONNECTION_TIMEOUT_MS: "600000" }).agentConnectionMaxSilenceMs,
+		)
 			.toBe(900_000);
-		expect(configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "120000" }).plannerLinkMaxSilenceMs)
+		expect(
+			configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "120000" })
+				.agentConnectionMaxSilenceMs,
+		)
 			.toBe(120_000);
 		expect(
-			configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "3600000" }).plannerLinkMaxSilenceMs,
+			configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "3600000" })
+				.agentConnectionMaxSilenceMs,
 		)
 			.toBe(3_600_000);
 		for (let value of ["", "999", "1.5", "3600001", "soon"]) {
-			expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: value }))
+			expect(() => configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: value }))
 				.toThrow(
-					"PLANNER_LINK_MAX_SILENCE_MS must be an integer between 1000 and 3600000 milliseconds",
+					"AGENT_CONNECTION_MAX_SILENCE_MS must be an integer between 1000 and 3600000 milliseconds",
 				);
 		}
-		expect(() => configured({ ...remote, PLANNER_LINK_MAX_SILENCE_MS: "119999" }))
-			.toThrow("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
+		expect(() => configured({ ...remote, AGENT_CONNECTION_MAX_SILENCE_MS: "119999" }))
+			.toThrow("AGENT_CONNECTION_MAX_SILENCE_MS must be at least AGENT_CONNECTION_TIMEOUT_MS");
 	});
 
 	it("chooses a full Atomic Planner by harness alone, in hosted and local configuration", () => {
@@ -198,15 +207,8 @@ describe("configuration", () => {
 				"Planner: full Atomic session (shell and filesystem access as this process's user)",
 			);
 		}
-		for (
-			let isolated of [
-				{},
-				{ HARNESS: "pi", HARNESS_AUTH: "ai-gateway", MODEL: "stub/model" },
-			]
-		) {
-			for (let mode of [{}, LOCAL]) {
-				expect(description(configured({ ...isolated, ...mode }))).not.toContain("full Atomic");
-			}
+		for (let mode of [{}, LOCAL]) {
+			expect(description(configured(mode))).not.toContain("full Atomic");
 		}
 	});
 
@@ -289,5 +291,47 @@ describe("configuration", () => {
 		expect(() => configured({ GITHUB_APP_CLIENT_SECRET: undefined })).toThrow(
 			"GITHUB_APP_CLIENT_SECRET",
 		);
+	});
+
+	it("reads deployment-defined setup agents, and refuses a malformed one at startup", () => {
+		expect(configured().setupAgents).toEqual([]);
+		let acme = {
+			id: "acme-planner",
+			name: "Acme Planner",
+			install: {
+				linux: ["# Sign in once, then quit.", "curl -fsSL https://acme.example/install | sh"],
+				macos: ["brew install acme"],
+				windows: ["winget install Acme.Planner"],
+			},
+			command: "acme connect --server {origin} --key {key} --name {name}",
+			keyless: "acme connect --server {origin}",
+			default: true,
+		};
+		let other = {
+			id: "other",
+			name: "Other",
+			install: ["other install"],
+			command: { linux: "other {key}", macos: "other {key}", windows: "other.exe {key}" },
+		};
+		expect(configured({ CHOPIN_SETUP_AGENTS: JSON.stringify([acme, other]) }).setupAgents)
+			.toEqual([acme, other]);
+		let refused = (value: unknown, message: string) =>
+			expect(() =>
+				configured({
+					CHOPIN_SETUP_AGENTS: typeof value === "string" ? value : JSON.stringify(value),
+				})
+			).toThrow(message);
+		refused("[{", "CHOPIN_SETUP_AGENTS must be a JSON array");
+		refused({ id: "x" }, "CHOPIN_SETUP_AGENTS must be a JSON array");
+		refused([{ ...acme, id: "Acme Planner" }], "CHOPIN_SETUP_AGENTS[0].id");
+		refused([{ ...acme, id: "copilot" }], "a built-in coding agent");
+		refused([acme, { ...other, id: "acme-planner" }], "more than once");
+		refused([{ ...acme, name: "" }], "CHOPIN_SETUP_AGENTS[0].name");
+		refused([{ ...acme, command: "acme connect" }], "{key}");
+		refused([{ ...acme, keyless: "acme {key}" }], "keyless");
+		refused([{ ...acme, install: { linux: [], macos: [] } }], "CHOPIN_SETUP_AGENTS[0].install");
+		refused([{ ...acme, command: { linux: "a {key}" } }], "CHOPIN_SETUP_AGENTS[0].command");
+		refused([acme, { ...other, default: true }], "default");
+		refused([{ ...acme, extra: 1 }], "CHOPIN_SETUP_AGENTS[0]");
 	});
 });

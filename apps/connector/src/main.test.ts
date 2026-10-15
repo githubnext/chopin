@@ -10,6 +10,8 @@ import {
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
+import { installService, type ServiceHost } from "./service";
+import { collectStatus, formatStatus } from "./status";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { git } from "./workspace";
 
@@ -22,6 +24,11 @@ await mkdir(programs);
 for (let name of ["agent", "new-agent", "planner", "a"]) {
 	let file = process.platform === "win32" ? `${name}.cmd` : name;
 	await writeFile(join(programs, file), "#!/bin/sh\n", { mode: 0o755 });
+}
+
+/** `name` in `directory` by the path a PATH lookup finds it at: its .cmd shim on Windows. */
+function program(directory: string, name: string) {
+	return join(directory, process.platform === "win32" ? `${name}.cmd` : name);
 }
 
 async function checkout() {
@@ -176,13 +183,85 @@ test("connect saves the server, checkout, agent, Planner and --env it ran once i
 		connect: {
 			server: started.url,
 			checkout: await realpath(root),
-			command: ["agent", "--acp"],
+			command: [program(programs, "agent"), "--acp"],
 			planners: ["https://chopin.example/d/one"],
-			plannerCommand: ["planner", "--x"],
+			plannerCommand: [program(programs, "planner"), "--x"],
 			env: { SOME_FLAG: "1", LABEL: "two words=" },
 		},
 	});
 	expect((await stat(file)).mode & 0o777).toBe(0o600);
+});
+
+/** Stand-ins for the built-in agents' programs, first on PATH for the --agent connects below. */
+let builtIns = join(scratch, "built-ins");
+await mkdir(builtIns);
+for (let name of ["copilot", "atomic-acp"]) {
+	let file = process.platform === "win32" ? `${name}.cmd` : name;
+	await writeFile(join(builtIns, file), "#!/bin/sh\n", { mode: 0o755 });
+}
+let withBuiltIns = { PATH: [builtIns, process.env.PATH].join(delimiter) };
+
+test(
+	"connect --agent runs a built-in agent's command and variables, extra arguments after its separator",
+	async () => {
+		let root = await checkout();
+		let atomic = await connect(
+			"nothing",
+			[root, "--agent", "atomic", "--env", "SOME_FLAG=1", "--", "--package", "/x"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(atomic.code, atomic.stderr).toBe(0);
+		expect(JSON.parse(await readFile(join(atomic.directory, "config.json"), "utf8")).connect)
+			.toEqual({
+				server: atomic.url,
+				checkout: await realpath(root),
+				agent: "atomic",
+				command: [program(builtIns, "atomic-acp"), "--", "--package", "/x"],
+				planners: [],
+				plannerCommand: [],
+				env: { ATOMIC_ACP_HEADLESS: "1", SOME_FLAG: "1" },
+			});
+
+		// An --env given for one of the agent's own variables wins; copilot takes extras directly.
+		let copilot = await connect(
+			"nothing",
+			[root, "--agent", "copilot", "--env", "ATOMIC_ACP_HEADLESS=0", "--", "--model", "m"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(copilot.code, copilot.stderr).toBe(0);
+		let saved = JSON.parse(await readFile(join(copilot.directory, "config.json"), "utf8")).connect;
+		expect(saved).toMatchObject({
+			agent: "copilot",
+			command: [program(builtIns, "copilot"), "--acp", "--allow-all", "--model", "m"],
+			env: { ATOMIC_ACP_HEADLESS: "0" },
+		});
+		let headless = await connect(
+			"nothing",
+			[root, "--agent", "atomic", "--env", "ATOMIC_ACP_HEADLESS=0"],
+			undefined,
+			withBuiltIns,
+		);
+		expect(headless.code, headless.stderr).toBe(0);
+		expect(JSON.parse(await readFile(join(headless.directory, "config.json"), "utf8")).connect)
+			.toMatchObject({
+				command: [program(builtIns, "atomic-acp")],
+				env: { ATOMIC_ACP_HEADLESS: "0" },
+			});
+	},
+	60_000,
+);
+
+test("connect --agent with an id it doesn't know lists the ones it does, before it pairs", async () => {
+	let root = await checkout();
+	let unknown = await connect("pairing", [root, "--agent", "claude-code"]);
+	expect(unknown.code).toBe(2);
+	expect(unknown.stderr).toBe(
+		"There is no built-in agent claude-code. Use --agent with one of: copilot, atomic; or "
+			+ "give any other ACP agent's command after --.\n",
+	);
+	expect(unknown.requests).toEqual([]);
 });
 
 test("connect refuses an --env it can't pass on, before it pairs", async () => {
@@ -191,6 +270,39 @@ test("connect refuses an --env it can't pass on, before it pairs", async () => {
 		let refused = await connect("pairing", [root, "--env", bad, "--", "agent"]);
 		expect(refused.code).toBe(1);
 		expect(refused.stderr).toContain("--env");
+		expect(refused.requests).toEqual([]);
+	}
+});
+
+test("connect --keep-runs saves how many finished runs to keep, and removes older ones as it starts", async () => {
+	let root = await checkout();
+	let state = await mkdtemp(join(scratch, "state-"));
+	let runs = join(state, "runs");
+	await mkdir(runs, { recursive: true });
+	// Three finished runs from earlier connects, each with its worktree.
+	for (let [index, id] of ["old", "older", "newest"].entries()) {
+		git(root, "worktree", "add", "--detach", join(runs, id));
+		let finished = { old: 2_000, older: 1_000, newest: 3_000 }[id]! + index;
+		await writeFile(join(runs, `${id}.json`), JSON.stringify({ id, state: "finished", finished }));
+	}
+	let started = await connect("nothing", [root, "--keep-runs", "1", "--", "agent"], state);
+	expect(started.stdout).toContain("✓ Connected.");
+	expect(JSON.parse(await readFile(join(state, "config.json"), "utf8")).connect.keepRuns).toBe(1);
+	expect(
+		(await Array.fromAsync(new Bun.Glob("*").scan({ cwd: runs, onlyFiles: false }))).sort(),
+	).toEqual(["newest", "newest.json"]);
+	expect(
+		git(root, "worktree", "list", "--porcelain").split("\n")
+			.filter(line => line.startsWith("worktree ")),
+	).toHaveLength(2);
+});
+
+test("connect refuses a --keep-runs that isn't a whole number, before it pairs", async () => {
+	let root = await checkout();
+	for (let bad of ["-1", "x", "1.5", "15abc"]) {
+		let refused = await connect("pairing", [root, `--keep-runs=${bad}`, "--", "agent"]);
+		expect(refused.code).toBe(1);
+		expect(refused.stderr).toContain("--keep-runs takes a whole number");
 		expect(refused.requests).toEqual([]);
 	}
 });
@@ -238,7 +350,7 @@ test.skipIf(process.platform === "win32")(
 		);
 		expect(started.stdout).toContain(`Saved my-planner as ${join(stable, "my-planner")}`);
 
-		// A program that lives only in a per-shell directory is saved as given, with a warning.
+		// A program that lives only in a per-shell directory is saved where it is, with a warning.
 		let only = join(run, "fnm_multishells", "9_9", "bin");
 		await mkdir(only, { recursive: true });
 		await writeFile(join(only, "shell-agent"), "#!/bin/sh\n", { mode: 0o755 });
@@ -250,7 +362,7 @@ test.skipIf(process.platform === "win32")(
 		expect(
 			JSON.parse(await readFile(join(warned.directory, "config.json"), "utf8")).connect.command,
 		)
-			.toEqual(["shell-agent"]);
+			.toEqual([join(only, "shell-agent")]);
 		expect(warned.stderr).toContain(
 			`shell-agent is ${join(only, "shell-agent")}, which lasts only as long as this shell, so `
 				+ "chopin service install will refuse it.",
@@ -349,7 +461,7 @@ test("connect on a checkout the running service holds saves it as the last conne
 	expect(config.connect).toEqual({
 		server: saved.url,
 		checkout: root,
-		command: ["new-agent", "--acp"],
+		command: [program(programs, "new-agent"), "--acp"],
 		planners: [],
 		plannerCommand: [],
 	});
@@ -362,8 +474,55 @@ test("connect on a checkout the running service holds saves it as the last conne
 	);
 	expect(invalid.code).toBe(1);
 	expect(JSON.parse(await readFile(join(directory, "config.json"), "utf8")).connect.command)
-		.toEqual(["new-agent", "--acp"]);
+		.toEqual([program(programs, "new-agent"), "--acp"]);
 });
+
+test.skipIf(process.platform === "win32")(
+	"service install runs the agent connect found on its PATH, not one another shell's PATH finds",
+	async () => {
+		let root = await realpath(await checkout());
+		let directory = await realpath(await mkdtemp(join(scratch, "state-")));
+		// Two installs of the same agent: connect's shell finds one, service install's the other.
+		let [checked, other] = [join(scratch, "install-a"), join(scratch, "install-b")];
+		for (let bin of [checked, other]) {
+			await mkdir(bin, { recursive: true });
+			await writeFile(join(bin, "atomic-acp"), "#!/bin/sh\n", { mode: 0o755 });
+		}
+		await installed(directory, "https://service.example", root);
+		await writeFile(
+			lockPath(directory, root),
+			JSON.stringify({ pid: process.pid, root, service: true }),
+		);
+		let saved = await connect("pairing", [root, "--agent", "atomic"], directory, {
+			PATH: [checked, process.env.PATH].join(delimiter),
+		});
+		expect(saved.code, saved.stderr).toBe(0);
+		await rm(lockPath(directory, root));
+		let host: ServiceHost = {
+			platform: "linux",
+			home: await realpath(await mkdtemp(join(scratch, "home-"))),
+			user: "ada",
+			uid: 501,
+			env: { PATH: `${other}:/usr/bin:/bin` },
+			run: async command =>
+				command === "loginctl"
+					? { code: 0, stdout: "yes\n", stderr: "" }
+					: { code: 0, stdout: "", stderr: "" },
+			sleep: async () => {},
+		};
+		let report = await collectStatus({ directory, server: saved.url, source: "config", host });
+		let service = { state: "running", manager: "systemd", definition: "/u", log: "/l" } as const;
+		expect(formatStatus({ ...report, service: { ...service, notes: [] } })).toContain(
+			`            chopin connect last ran ${root} with --agent atomic (${
+				join(checked, "atomic-acp")
+			}), on ${saved.url}; run chopin service install to use it`,
+		);
+		await installService(host, { executable: "/opt/chopin/bin/chopin", directory });
+		let config = JSON.parse(await readFile(join(directory, "config.json"), "utf8"));
+		expect(config.service.settings.command).toEqual([join(checked, "atomic-acp")]);
+	},
+	30_000,
+);
 
 test.skipIf(process.platform === "win32")(
 	"connect stops before it pairs when the agent or Planner isn't installed, saying how to get it",
@@ -395,18 +554,16 @@ test.skipIf(process.platform === "win32")(
 		expect(copilot.requests).toEqual([]);
 
 		// Behind env, the program env starts is the one looked for.
-		let codex = await connect(
+		let atomic = await connect(
 			"nothing",
-			[root, "--", "env", "INITIAL_AGENT_MODE=agent-full-access", "codex-acp"],
+			[root, "--", "env", "ATOMIC_ACP_HEADLESS=1", "atomic-acp"],
 			undefined,
 			{ PATH: [tools, dirname(Bun.which("env")!)].join(delimiter) },
 		);
-		expect(codex.code).toBe(1);
-		expect(codex.stderr).toContain("codex-acp isn't installed");
-		expect(codex.stderr).toContain(
-			"  npm install -g @openai/codex @agentclientprotocol/codex-acp\n",
-		);
-		expect(codex.requests).toEqual([]);
+		expect(atomic.code).toBe(1);
+		expect(atomic.stderr).toContain("atomic-acp isn't installed");
+		expect(atomic.stderr).toContain("  npm install -g @bastani/atomic @bastani/atomic-acp\n");
+		expect(atomic.requests).toEqual([]);
 
 		let unknown = await connect("nothing", [root, "--", "my-agent"], undefined, only);
 		expect(unknown.code).toBe(1);

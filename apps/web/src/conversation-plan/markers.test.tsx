@@ -118,7 +118,7 @@ test("jobs-only diagnostics do not claim that message analysis was unlinked", ()
 	}));
 
 	expect(html).toContain("Planner jobs");
-	expect(html).toContain("refine · done");
+	expect(html).toContain("refine done");
 	expect(html).toContain('aria-label="Close Planner jobs"');
 	expect(html).not.toContain("Unlinked");
 	expect(html).not.toContain("not recorded");
@@ -133,7 +133,7 @@ test("failed Planner jobs show their reason, output and retry control", () => {
 	}));
 
 	expect(html).toContain('aria-label="Planner jobs"');
-	expect(html).toContain("refine · failed — The card could not be refined.");
+	expect(html).toContain("refine failed — The card could not be refined.");
 	expect(html).toContain("Updated title: Auth strategy.");
 	expect(html).toContain('type="button"');
 	expect(html).toContain("Retry refine job");
@@ -157,7 +157,7 @@ test("a failed generation-keyed prose job remains inspectable from the card's op
 		jobs: jobsForMessage(current, [prose], "message-1"),
 		onRetryJob: async () => {},
 	}));
-	expect(diagnostics).toContain("prose · failed — The writer failed.");
+	expect(diagnostics).toContain("prose failed — The writer failed.");
 	expect(diagnostics).toContain("Retry prose job");
 });
 
@@ -168,7 +168,7 @@ test("read-only job diagnostics omit retry controls", () => {
 		onRetryJob: async () => {},
 	}));
 
-	expect(html).toContain("refine · failed");
+	expect(html).toContain("refine failed");
 	expect(html).not.toContain("Retry refine job");
 });
 

@@ -199,7 +199,7 @@ test.skipIf(process.platform === "win32")(
 		expect(error.message).toContain("can't reach your systemd user manager");
 		expect(error.message).toContain("Nothing was installed.");
 		let config = await readConfig(machine.directory);
-		expect(config.connect?.command).toEqual(["agent", "--acp"]);
+		expect(config.connect?.command).toEqual([join(machine.bin, "agent"), "--acp"]);
 		expect(config.service).toBeUndefined();
 	},
 	20_000,

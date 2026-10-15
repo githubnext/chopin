@@ -344,7 +344,7 @@ export function renderTreemap(spec) {
 				parts.push(
 					text(
 						{ class: `tm-val${focal ? " is-focal" : ""}`, x: c.x + 8, y: c.y + 31 },
-						`${fmt(c.value, spec.unit || "")} · ${Math.round((c.value / total) * 100)}%`,
+						`${fmt(c.value, spec.unit || "")} (${Math.round((c.value / total) * 100)}%)`,
 					),
 				);
 			}
@@ -425,7 +425,7 @@ export function renderHeatmap(spec) {
 					height: ch - 2,
 					rx: 2,
 					"fill-opacity": (0.06 + t * 0.88).toFixed(2),
-					"data-sc-tip": `${r} · ${cols[j]}: ${fmt(v, spec.unit || "")}`,
+					"data-sc-tip": `${r}, ${cols[j]}: ${fmt(v, spec.unit || "")}`,
 				}),
 			);
 			if (spec.labels !== false && cw >= 34) {

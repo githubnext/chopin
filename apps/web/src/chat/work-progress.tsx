@@ -1,17 +1,7 @@
 import { useSyncExternalStore } from "react";
-import {
-	CodePullRequestIcon,
-	DecisionIcon,
-	GlobeSearchIcon,
-	MagnifierIcon,
-	PageIcon,
-	PencilIcon,
-	TerminalIcon,
-	WrenchIcon,
-} from "@chopin/icons";
+import { DecisionIcon } from "@chopin/icons";
 
 import {
-	duration,
 	summarize,
 	toolCopy,
 	toolGlyph,
@@ -20,6 +10,7 @@ import {
 	waitingText,
 	workPhase,
 } from "./model";
+import { TOOL_ICONS, WorkSummary } from "./work-summary";
 import {
 	Trace,
 	TraceCollapsible,
@@ -51,17 +42,6 @@ function isOpen(value: Questionnaire): boolean {
 	}
 }
 
-const TOOL_ICONS = {
-	ask: DecisionIcon,
-	other: WrenchIcon,
-	page: PageIcon,
-	"pull-request": CodePullRequestIcon,
-	search: MagnifierIcon,
-	terminal: TerminalIcon,
-	web: GlobeSearchIcon,
-	write: PencilIcon,
-} as const;
-
 function ToolCall(
 	{ active, disconnected, tool }: { active: boolean; disconnected: boolean; tool: Chat.Activity },
 ) {
@@ -90,7 +70,6 @@ function ToolCall(
 			{status === "Running" || status === "Done"
 				? <span className="sr-only">{status}</span>
 				: <TraceDescription>{status}</TraceDescription>}
-			{tool.took !== undefined && <TraceDescription>{duration(tool.took)}</TraceDescription>}
 		</TraceLine>
 	);
 	let toolStatus = active || disconnected ? tool.status : status.toLowerCase();
@@ -161,51 +140,27 @@ export function WorkProgress(
 	let phase = workPhase(tools, streaming, active, responseSeen);
 	if (!active && !disconnected && !tools.length) return null;
 
-	let headline = active
-		? waiting ? waitingText(waiting.count) : phase!
-		: disconnected && !tools.length
-		? "Connection lost"
-		: `Work details · ${summary.count} ${summary.count === 1 ? "action" : "actions"}`;
-	let details = active ? undefined : disconnected && tools.length
-		? "Connection lost"
-		: summary.toolTime > 0
-		? `${duration(summary.toolTime)} tool time`
-		: undefined;
-	let status = summary.failures > 0
-		? `${summary.failures} failed`
-		: summary.interrupted > 0
-		? `${summary.interrupted} interrupted`
-		: undefined;
+	let headline = active ? waiting ? waitingText(waiting.count) : phase! : "Connection lost";
 	let count = active && summary.finished > 0 ? `${summary.finished} finished` : undefined;
-	let line = (
-		<TraceLine
-			status={active && !waiting
-				? "running"
-				: !active && summary.failures > 0
-				? "error"
-				: undefined}
-		>
-			{waiting
-				? (
-					<TraceIcon>
-						<DecisionIcon size={14} />
-					</TraceIcon>
-				)
-				: active && (
-					<TraceIcon>
-						<TraceScribble />
-					</TraceIcon>
-				)}
-			<TraceTitle enter key={headline}>{headline}</TraceTitle>
-			{count && <TraceDescription>{count}</TraceDescription>}
-			{status && (
-				<TraceDescription tone={summary.failures > 0 ? "destructive" : undefined}>
-					{status}
-				</TraceDescription>
-			)}
-			{details && <TraceDescription>{details}</TraceDescription>}
-		</TraceLine>
-	);
+	let line = active || !tools.length
+		? (
+			<TraceLine status={active && !waiting ? "running" : undefined}>
+				{waiting
+					? (
+						<TraceIcon>
+							<DecisionIcon size={14} />
+						</TraceIcon>
+					)
+					: active && (
+						<TraceIcon>
+							<TraceScribble />
+						</TraceIcon>
+					)}
+				<TraceTitle enter key={headline}>{headline}</TraceTitle>
+				{count && <TraceDescription>{count}</TraceDescription>}
+			</TraceLine>
+		)
+		: <WorkSummary disconnected={disconnected} summary={summary} tools={tools} />;
 	let open = decisions && first && (
 		<button
 			aria-label="Open decision"

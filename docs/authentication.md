@@ -19,49 +19,48 @@ Setup URL:    <APP_ORIGIN>/auth/github/setup
 
 - Leave **Expire user authorization tokens** enabled.
 - Leave **Request user authorization (OAuth) during installation** disabled.
-- Leave device flow disabled for a hosted deployment; local device-flow sign-in
-  (below) requires enabling it on the App instead.
+- Leave device flow disabled, unless you use
+  [local device-flow sign-in](#local-device-flow-sign-in).
 - Enable **Redirect on update** when a setup URL is configured.
 - Disable webhooks.
 - Select **Any account** so personal accounts and organizations can install it.
 - Prefer **Only select repositories** while installing it.
 
-Repository permissions for the complete product are:
+### Repository permissions
 
 ```text
-Contents:        Read-only
-Pull requests:   Read-only
+Contents:        Read and write
+Pull requests:   Read and write
+Workflows:       Read and write
 Checks:          Read-only
 Commit statuses: Read-only
 Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Contents backs file, tree, code-search, and commit-history tools. Pull requests
-and Issues also back the summaries behind pull request and issue links in a
-document; without Issues, issue links stay plain links. The other read-only
-permissions back the hosted GitHub MCP pull-request toolset. Existing
-installations must approve the added Issues permission before issue summaries
-appear. Chopin
-does not request repository, organization, or account write permission. An
-`AGENT=off` deployment only needs Contents and automatic Metadata access unless
-organization admission is enabled.
+| Permission                 | Chopin uses it for                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Contents                   | Reading code. Machines push branches.                                                                |
+| Pull requests              | Pull request link summaries and the Planner's pull request tools. Machines open draft pull requests. |
+| Workflows                  | Machines pushing `.github/workflows` changes.                                                        |
+| Checks and Commit statuses | The Planner's pull request tools.                                                                    |
+| Issues                     | Issue link summaries. Without it, those stay plain links.                                            |
+| Metadata                   | GitHub grants it to every App.                                                                       |
 
-Organization admission additionally requires:
+### Who writes to repositories
 
-```text
-Organization permissions:
-Members: Read-only
-```
+The server never writes to a repository. Machines push as their owner; see
+[Which GitHub account pushes](chopin-cli.md#which-github-account-pushes).
 
-The App must be installed on every allowed organization, and an organization
-owner must approve this permission. Existing installations continue with their
-old permissions until the owner approves the update.
+### Organization admission
 
-No App ID, private key, JWT, installation access token, or webhook secret is
-used. Chopin acts on behalf of each signed-in user with a GitHub App user access
-token so repository-role checks and the user's Copilot entitlement remain
-theirs.
+Organization admission also needs the `Members: Read-only` organization
+permission. Install the App on every allowed organization and have its owner
+approve it.
+
+Chopin uses no App ID, private key, JWT, installation access token, or webhook
+secret. It acts as each signed-in user, with their App user access token,
+so repository-role checks and Copilot entitlement stay theirs.
 
 Configure Chopin with the App's slug and OAuth client credentials. A minimal
 production environment contains:
@@ -89,8 +88,7 @@ fragment, or trailing slash. HTTPS is required except for loopback development,
 such as `http://127.0.0.1:8787`. Callback URLs are built only from this value,
 never from incoming Host or forwarded headers.
 
-The complete variable reference and deployment procedures live in
-[Self-hosting](self-hosting.md).
+[Self-hosting](self-hosting.md) lists every variable and how to deploy.
 
 ## Local device-flow sign-in
 

@@ -1,10 +1,10 @@
 import { attachedLink, remotePlanner } from "./registry";
 
 import type { HarnessV1, HarnessV1Session, HarnessV1StartOptions } from "@ai-sdk/harness";
-import type { PlannerLink } from "./link";
+import type { AgentLink } from "./link";
 import type { RemotePlanner } from "./registry";
 
-export type RemoteTarget = { link: PlannerLink; planner: RemotePlanner };
+export type RemoteTarget = { link: AgentLink; planner: RemotePlanner };
 
 /**
  * Finds the attached client and Chopin's record for a session. Only sessions
@@ -23,7 +23,7 @@ export function attachedTarget(sessionId: string): RemoteTarget {
 }
 
 /**
- * `HarnessV1` whose sessions run in a client attached over the Planner link.
+ * `HarnessV1` whose sessions run in a client attached over the agent connection.
  * The server keeps no model and no client tools: it forwards each session and
  * turn, and runs Chopin's host tools when the client calls them.
  */

@@ -14,7 +14,7 @@ async function launch(presenter: Page, name = "Lily"): Promise<Page> {
 	await ready(persona);
 	expect(persona.context()).toBe(presenter.context());
 	await expect(persona.getByLabel(`Acting as ${name}, a demo collaborator`)).toBeVisible();
-	await expect(persona).toHaveTitle(new RegExp(`^${name} · `));
+	await expect(persona).toHaveTitle(new RegExp(`^${name} in `));
 	expect(new URL(persona.url()).searchParams.has("persona")).toBe(false);
 	return persona;
 }

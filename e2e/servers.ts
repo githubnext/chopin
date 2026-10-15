@@ -32,3 +32,35 @@ export const HARNESS = 8792;
 
 /** The repository root, from this file rather than from the current directory. */
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+/**
+ * The deployment-defined setup agents the fixtures server offers on its Machines page
+ * (CHOPIN_SETUP_AGENTS). The other servers set none, so their pages stay as they are.
+ */
+export const SETUP_AGENTS = [
+	{
+		id: "acme-planner",
+		name: "Acme Planner",
+		install: {
+			linux: [
+				"# Sign in once with acme login, then quit.",
+				"curl -fsSL https://acme.example/install.sh | sh",
+			],
+			macos: ["brew install acme-example/tap/acme"],
+			windows: ["winget install AcmeExample.Planner"],
+		},
+		command: "acme connect --server {origin} --key {key} --name {name}",
+		keyless: "acme connect --server {origin}",
+		default: true,
+	},
+	{
+		id: "acme-runner",
+		name: "Acme Runner",
+		install: ["npm install -g acme-runner"],
+		command: {
+			linux: "acme-runner {key}",
+			macos: "acme-runner {key}",
+			windows: "acme-runner.exe {key}",
+		},
+	},
+];

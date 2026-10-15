@@ -211,7 +211,7 @@
 	max-width: 100%;
 	min-width: 0;
 	align-items: center;
-	gap: var(--spacing);
+	gap: calc(var(--spacing) * 2);
 	font-size: var(--text-2xs);
 	line-height: var(--text-2xs--line-height);
 	white-space: nowrap;

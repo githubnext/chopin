@@ -4,7 +4,6 @@ import { isAbsolute } from "node:path";
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
 import { forgetWorkspaces } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
-import { createPiAdapter } from "./pi/adapter";
 import { createRemoteAdapter } from "./remote/adapter";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
@@ -15,30 +14,24 @@ const credentials = new Map<string, {
 	maxAiCredits?: number;
 }>();
 
-function createPiHarness(settings: { auth?: string }): HarnessV1 & { shutdown(): Promise<void> } {
-	// Pi has no notion of a GitHub credential or a per-turn credit limit; only
-	// `auth` (validated by `harnessFor` below) reaches the real adapter.
-	return createPiAdapter({ auth: settings.auth as never });
-}
-
 function createAtomicHarness(
 	settings: { auth?: string; extensions?: readonly string[] },
 ): HarnessV1 & { shutdown(): Promise<void> } {
-	// Like Pi, Atomic takes neither a GitHub credential nor a credit limit.
+	// Atomic takes neither a GitHub credential nor a credit limit; only `auth` (validated by
+	// `harnessFor` below) and the extensions reach the real adapter.
 	return createAtomicAdapter({
 		auth: settings.auth as AtomicAuthMode,
 		extensions: settings.extensions,
 	});
 }
 
-/** The model runs in a client attached over the Planner link, so the server holds no credential. */
+/** The model runs in a client attached over the agent connection, so the server holds no credential. */
 function createRemoteHarness(): HarnessV1 & { shutdown(): Promise<void> } {
 	return createRemoteAdapter();
 }
 
 export const harnesses = {
 	"copilot-sdk": createCopilotSdk,
-	pi: createPiHarness,
 	atomic: createAtomicHarness,
 	remote: createRemoteHarness,
 } satisfies Record<
@@ -61,15 +54,9 @@ function loopback(host: string): boolean {
 			&& host.split(".").slice(1).every(part => Number(part) <= 255);
 }
 
-/** Pi's documented string auth modes. `direct` is not one of them, and an
- * unrecognized value would silently fall back to a native host subscription
- * Pi was never told to isolate. */
-const PI_AUTH_MODES = new Set(["auto", "openai", "anthropic", "custom", "ai-gateway"]);
-
 /** Harnesses whose auth modes are validated explicitly; only `ai-gateway`
  * avoids a host login and may serve a non-loopback bind. */
 const AUTH_MODES = new Map<string, ReadonlySet<string>>([
-	["pi", PI_AUTH_MODES],
 	["atomic", new Set(ATOMIC_AUTH_MODES)],
 ]);
 

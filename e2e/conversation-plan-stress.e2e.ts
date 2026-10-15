@@ -191,7 +191,7 @@ test("three members carry two sourced questions through a suggested and a human 
 		await expectRetiredPrompts(
 			page,
 			first.questionnaireId!,
-			`Decided: ${humanChoice} · @ana`,
+			`Decided by @ana: ${humanChoice}`,
 		);
 	}
 	await ana.screenshot({ path: "e2e/test-results/conversation-stress-after.png", fullPage: true });
@@ -209,7 +209,7 @@ test("three members carry two sourced questions through a suggested and a human 
 	await expectRetiredPrompts(
 		bo,
 		first.questionnaireId!,
-		`Decided: ${humanChoice} · @ana`,
+		`Decided by @ana: ${humanChoice}`,
 	);
 });
 
@@ -361,7 +361,7 @@ test("a direct recommendation adds and suggests a sourced choice until a member 
 	await expectRetiredPrompts(
 		bo,
 		emailThread.questionnaireId!,
-		`Decided: ${EMAIL_RECOMMENDATION} · @ana`,
+		`Decided by @ana: ${EMAIL_RECOMMENDATION}`,
 	);
 });
 

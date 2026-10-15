@@ -5,6 +5,7 @@ import { ConnectorStopped, redacted } from "./connection";
 import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
+import { githubEnvironment, type GitHubToken, githubToken } from "./github-token";
 import { runAgent } from "./acp";
 import type { AgentInfo } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
@@ -14,6 +15,7 @@ import { ask, describePermission, permissionMemory } from "./permission";
 import { stopProcessesIn } from "./processes";
 import {
 	discardWorkspace,
+	endWorkspace,
 	git,
 	noPushEnvironment,
 	prepareWorkspace,
@@ -53,6 +55,10 @@ type Options = {
 	failures?: StartFailures;
 	/** The `--env` variables connect saved, for the agent. */
 	env?: Record<string, string>;
+	/** The machine token, to ask Chopin for the machine's GitHub token for a run that may push. */
+	machine?: string;
+	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
+	githubRefused?: (message: string) => void;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 
@@ -171,6 +177,9 @@ export async function runWork(
 	let spikeWork: { path: string; branch: string } | undefined;
 	let bridgeApi: Promise<Awaited<ReturnType<typeof remote>>> | undefined;
 	let prepared: Awaited<ReturnType<typeof prepareWorkspace>> | undefined;
+	/** The machine's GitHub token for this run, where Chopin gives one; spikes never push. */
+	let github: GitHubToken | undefined;
+	let secrets = () => [...Object.values(options.env ?? {}), ...github?.secrets() ?? []];
 	let agentStop: string | undefined;
 	try {
 		prepared = await prepareWorkspace(
@@ -180,6 +189,7 @@ export async function runWork(
 			implementation ? undefined : claim.generation,
 		);
 		let path = prepared.path;
+		let worktrees = { root: path, extras: prepared.extras };
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
 			git(path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
@@ -187,6 +197,15 @@ export async function runWork(
 		if (claim.spike) {
 			spikeWork = { path, branch: `chopin/spike-${input.id.slice(0, 8)}` };
 			git(path, "checkout", "-b", spikeWork.branch);
+		}
+		if (options.machine && !claim.spike) {
+			github = await githubToken({
+				url: options.url,
+				machine: options.machine,
+				repository: input.source.repository,
+				file: prepared.journalPath.replace(/\.json$/, ".github-token"),
+				...(options.githubRefused ? { refused: options.githubRefused } : {}),
+			});
 		}
 		output.job(
 			rebuild ? "rebuild" : implementation ? "build" : claim.spike ? "spike" : "investigation",
@@ -201,20 +220,24 @@ export async function runWork(
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
 			command: options.command,
 			cwd: path,
-			...(claim.spike || options.env
-				? { env: { ...options.env, ...(claim.spike ? noPushEnvironment() : {}) } }
-				: {}),
+			env: {
+				...options.env,
+				// Where a build's agent adds any extra worktrees, as its prompt says.
+				...(implementation ? { CHOPIN_RUN_WORKTREES: prepared.extras } : {}),
+				...(github ? githubEnvironment(github) : {}),
+				...(claim.spike ? noPushEnvironment() : {}),
+			},
 			onStart: failure =>
 				void (failure
 					? options.failures?.failed(
 						{ kind: "agent", ...failure, at: Date.now() },
-						Object.values(options.env ?? {}),
+						secrets(),
 					)
 					: options.failures?.started()),
 			prompt: rebuild
-				? rebuildPrompt
+				? rebuildPrompt(worktrees)
 				: implementation
-				? claim.live ? liveImplementationPrompt : implementationPrompt
+				? (claim.live ? liveImplementationPrompt : implementationPrompt)(worktrees)
 				: claim.spike
 				? "Use read_investigation from the Chopin MCP server to read the spike brief and "
 					+ "follow it: build the smallest prototype on this throwaway branch, take 1-3 "
@@ -321,7 +344,7 @@ export async function runWork(
 			},
 			stderr(text) {
 				agentTail = [...agentTail, ...text.split("\n").filter(Boolean)].slice(-10);
-				output.agent(text);
+				output.agent(redacted(text, secrets()));
 			},
 		});
 		if (stop !== "end_turn" || abort.signal.aborted) {
@@ -350,8 +373,10 @@ export async function runWork(
 			: "Local work failed";
 		if (stopped) output.stopped();
 		else {
-			let secrets = Object.values(options.env ?? {});
-			output.failed(message, agentTail.map(line => redacted(line, secrets)));
+			output.failed(
+				redacted(message, secrets()),
+				agentTail.map(line => redacted(line, secrets())),
+			);
 		}
 		// After Ctrl-C, or out of reach for the whole grace period, the failure gets one bounded attempt.
 		let send = stopped || reports.expired() ? reports.final : reports.deliver;
@@ -366,11 +391,19 @@ export async function runWork(
 		if (forgotten && !stopped) throw new ConnectorStopped("forgotten", message);
 	} finally {
 		// Servers the agent started (often in their own process group) end with its run.
-		if (prepared) await stopProcessesIn(prepared.path).catch(() => {});
+		if (prepared) {
+			await stopProcessesIn(prepared.path).catch(() => {});
+			await stopProcessesIn(prepared.extras).catch(() => {});
+		}
 		local?.close();
 		await bridgeApi?.then(api => api.close()).catch(() => {});
 		if (spikeWork) {
 			await discardWorkspace(options.root, spikeWork.path, spikeWork.branch).catch(() => {});
+		}
+		await github?.stop().catch(() => {});
+		// Extra worktrees end with the run; the run's own stays for inspection.
+		if (prepared) {
+			await endWorkspace(options.root, prepared).catch(() => {});
 		}
 		beating.abort();
 		await heartbeat;

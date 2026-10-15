@@ -11,7 +11,7 @@ const TROUBLESHOOTING =
 export function connectorCommand(origin: string): string {
 	return `mkdir -p ~/.chopin && curl -fsSL ${origin}/connector.js -o ~/.chopin/connector.js`
 		+ ` && CHOPIN_URL=${origin} bun --no-env-file --config=/dev/null`
-		+ " ~/.chopin/connector.js connect . -- copilot --acp --allow-all";
+		+ " ~/.chopin/connector.js connect . --agent copilot";
 }
 
 /** What the note asks for; it names `action` only when that button is there to press. */

@@ -23,7 +23,7 @@ import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import type { ChoosableMachine, MachineChoice, MachineRow, MachineState } from "./machine-choice";
 
 /** Where the Machines page's Add machine flow starts: Add your computer, opened at once. */
-export const ADD_MACHINE_PATH = "/connect?add";
+export const ADD_MACHINE_PATH = "/machines?add";
 
 /**
  * A machine as an icon with its state as a dot on the icon's corner: the server icon for one the

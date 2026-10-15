@@ -10,7 +10,9 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 import { loadAuth } from "./auth/config";
+import { setupAgents } from "./setup-agents";
 
+import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AuthConfig } from "./auth/config";
 import type { StorageConfig } from "./storage/registry";
 
@@ -27,19 +29,19 @@ export type Config = {
 	 */
 	harnessExtensions: string[];
 	/**
-	 * Under `HARNESS=remote`, how long a detached or dropped Planner link keeps
+	 * Under `HARNESS=remote`, how long a detached or dropped agent connection keeps
 	 * the document's Planner ownership for the same account to reattach.
 	 */
 	plannerAttachGraceMs: number;
-	/** How often the server sends a Planner link a WebSocket protocol ping. */
-	plannerLinkPingMs: number;
-	/** How long a Planner link may go without a pong or message before it counts as dropped. */
-	plannerLinkTimeoutMs: number;
+	/** How often the server sends an agent connection a WebSocket protocol ping. */
+	agentConnectionPingMs: number;
+	/** How long an agent connection may go without a pong or message before it counts as dropped. */
+	agentConnectionTimeoutMs: number;
 	/**
-	 * How long a Planner link may send nothing at all, however much of what the
+	 * How long an agent connection may send nothing at all, however much of what the
 	 * server queued for it drains meanwhile, before it counts as dropped.
 	 */
-	plannerLinkMaxSilenceMs: number;
+	agentConnectionMaxSilenceMs: number;
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -66,6 +68,8 @@ export type Config = {
 	connectorVersion?: string;
 	/** Keep a finished build's document as the source for later rebuilds. */
 	liveBuild?: boolean;
+	/** CHOPIN_SETUP_AGENTS: setups the Machines page offers before the built-in agents. */
+	setupAgents: SetupAgent[];
 	/** Let the editor's local agent prototype uncertain passages before the first build. */
 	liveSpikes?: boolean;
 	/**
@@ -99,15 +103,15 @@ export const DEFAULT_LINK_TIMEOUT_MS = 120_000;
 export const DEFAULT_LINK_MAX_SILENCE_MS = 900_000;
 const DEFAULT_MODEL = "gpt-6-luna";
 
-/** The default is a Copilot model ID. Pi and Atomic resolve IDs against their
- * own catalogs, so those deployments must name a model rather than inherit one
- * the catalog lacks. A remote Planner's client brings its own model; a
+/** The default is a Copilot model ID. Atomic resolves IDs against its own
+ * catalog, so its deployments must name a model rather than inherit one the
+ * catalog lacks. A remote Planner's client brings its own model; a
  * configured one is only passed along as the turn's request. */
 function model(harness: string): string {
 	let configured = process.env.MODEL;
 	if (configured) return configured;
 	if (harness === "remote") return "";
-	if (harness === "pi" || harness === "atomic") {
+	if (harness === "atomic") {
 		throw new Error(`MODEL is required when HARNESS=${harness}`);
 	}
 	return DEFAULT_MODEL;
@@ -134,7 +138,7 @@ function port(): number {
 	return value;
 }
 
-/** A Planner link liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
+/** An agent connection liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
 function milliseconds(name: string, fallback: number, max = 600_000): number {
 	let raw = process.env[name];
 	if (raw === undefined) return fallback;
@@ -230,18 +234,21 @@ export function load(): Config {
 			"PLANNER_ATTACH_GRACE_MS must be an integer between 0 and 3600000 milliseconds",
 		);
 	}
-	let plannerLinkPingMs = milliseconds("PLANNER_LINK_PING_MS", DEFAULT_LINK_PING_MS);
-	let plannerLinkTimeoutMs = milliseconds("PLANNER_LINK_TIMEOUT_MS", DEFAULT_LINK_TIMEOUT_MS);
-	if (plannerLinkTimeoutMs <= plannerLinkPingMs) {
-		throw new Error("PLANNER_LINK_TIMEOUT_MS must be longer than PLANNER_LINK_PING_MS");
+	let agentConnectionPingMs = milliseconds("AGENT_CONNECTION_PING_MS", DEFAULT_LINK_PING_MS);
+	let agentConnectionTimeoutMs = milliseconds(
+		"AGENT_CONNECTION_TIMEOUT_MS",
+		DEFAULT_LINK_TIMEOUT_MS,
+	);
+	if (agentConnectionTimeoutMs <= agentConnectionPingMs) {
+		throw new Error("AGENT_CONNECTION_TIMEOUT_MS must be longer than AGENT_CONNECTION_PING_MS");
 	}
-	let plannerLinkMaxSilenceMs = milliseconds(
-		"PLANNER_LINK_MAX_SILENCE_MS",
+	let agentConnectionMaxSilenceMs = milliseconds(
+		"AGENT_CONNECTION_MAX_SILENCE_MS",
 		DEFAULT_LINK_MAX_SILENCE_MS,
 		3_600_000,
 	);
-	if (plannerLinkMaxSilenceMs < plannerLinkTimeoutMs) {
-		throw new Error("PLANNER_LINK_MAX_SILENCE_MS must be at least PLANNER_LINK_TIMEOUT_MS");
+	if (agentConnectionMaxSilenceMs < agentConnectionTimeoutMs) {
+		throw new Error("AGENT_CONNECTION_MAX_SILENCE_MS must be at least AGENT_CONNECTION_TIMEOUT_MS");
 	}
 	let selection = harnessSelection();
 	if (selection.harness === "remote" && backgroundJobs) {
@@ -255,9 +262,9 @@ export function load(): Config {
 		port: serverPort,
 		model: model(selection.harness),
 		plannerAttachGraceMs,
-		plannerLinkPingMs,
-		plannerLinkTimeoutMs,
-		plannerLinkMaxSilenceMs,
+		agentConnectionPingMs,
+		agentConnectionTimeoutMs,
+		agentConnectionMaxSilenceMs,
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
@@ -270,6 +277,7 @@ export function load(): Config {
 		plannerVisuals,
 		connectorVersion: connectorVersion(),
 		liveBuild,
+		setupAgents: setupAgents(process.env.CHOPIN_SETUP_AGENTS),
 		liveSpikes,
 		liveSpikesRegexJudge,
 		devClient: process.env.DEV_CLIENT || undefined,
@@ -294,8 +302,6 @@ export function describe(config: Config): string {
 		} (restricted: ${users} users, ${organizations} organizations)`
 		: `auth: github${config.auth.local ? " local device flow" : ""} (unrestricted)`;
 	let parts = [
-		"chopin",
-		`http://${config.host}:${config.port}`,
 		config.devClient ? `client: vite (${config.devClient})` : "client: built",
 		config.agent
 			? `agent: ${config.model || "chosen by the attached client"} (on demand)`
@@ -305,7 +311,7 @@ export function describe(config: Config): string {
 			? ["Planner: full Atomic session (shell and filesystem access as this process's user)"]
 			: []),
 		...(config.harness === "remote"
-			? ["Planner: attached client over /planner-link (model and client tools run on its machine)"]
+			? ["Planner: attached client over /api/v1/agent (model and client tools run on its machine)"]
 			: []),
 		...(config.harnessExtensions.length
 			? [`Planner extensions: ${config.harnessExtensions.join(", ")}`]
@@ -324,5 +330,7 @@ export function describe(config: Config): string {
 		admission,
 		`storage: ${config.storage.driver}`,
 	];
-	return parts.join("  ·  ");
+	// One setting per line, so the log never needs a separator glyph.
+	return [`chopin http://${config.host}:${config.port}`, ...parts.map(part => `  ${part}`)]
+		.join("\n");
 }

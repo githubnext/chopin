@@ -5,13 +5,19 @@ import { join } from "node:path";
 import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
+	agentOptions,
+	chosenAgent,
 	connectArguments,
 	guessSystem,
 	pairCommand,
 	quote,
 	runsAsService,
+	setupAgentCommand,
+	setupAgentInstall,
 	setupCommand,
 } from "./setup-commands";
+
+import type { SetupAgent } from "@chopin/protocol/agents";
 
 const KEY = `chopin_k_${"Ab3-_".repeat(9).slice(0, 43)}`;
 const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
@@ -22,29 +28,27 @@ test("one sh command: the installer runs chopin connect itself, with a key only 
 	expect(setupCommand(ORIGIN, "sh", copilot)).toBe(
 		[
 			`curl -fsSL ${RELEASES}/install.sh | \\`,
-			"  CHOPIN_URL=https://chopin.example sh -s -- connect --install-service -- copilot --acp --allow-all",
+			"  CHOPIN_URL=https://chopin.example sh -s -- connect --install-service --agent copilot",
 		].join("\n"),
 	);
 	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY })).toBe(
 		[
 			`curl -fsSL ${RELEASES}/install.sh | \\`,
-			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --install-service -- copilot --acp --allow-all`,
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --install-service --agent copilot`,
 		].join("\n"),
 	);
-	// Run in the terminal instead, and the agent's own variables.
+	// Run in the terminal instead, and another agent.
 	expect(setupCommand(ORIGIN, "sh", copilot, { background: false }).split("\n")[1])
-		.toBe("  CHOPIN_URL=https://chopin.example sh -s -- connect -- copilot --acp --allow-all");
+		.toBe("  CHOPIN_URL=https://chopin.example sh -s -- connect --agent copilot");
 	expect(setupCommand(ORIGIN, "sh", findAgent("atomic")).split("\n")[1]).toEndWith(
-		"sh -s -- connect --install-service --env ATOMIC_ACP_HEADLESS=1 -- atomic-acp",
+		"sh -s -- connect --install-service --agent atomic",
 	);
-	expect(setupCommand(ORIGIN, "sh", findAgent("claude-code")).split("\n")[1])
-		.toEndWith("sh -s -- connect -- claude-agent-acp");
 });
 
 test("one PowerShell command: the key in the session only, on a line PSReadLine keeps out of its history file", () => {
 	let copilot = findAgent("copilot");
 	let installer =
-		`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) connect --install-service '--' copilot --acp --allow-all`;
+		`& ([scriptblock]::Create((irm ${RELEASES}/install.ps1))) connect --install-service --agent copilot`;
 	expect(setupCommand(ORIGIN, "powershell", copilot)).toBe(
 		["$env:CHOPIN_URL = 'https://chopin.example'", installer].join("\n"),
 	);
@@ -57,20 +61,20 @@ test("one PowerShell command: the key in the session only, on a line PSReadLine 
 	);
 	// Never on chopin's command line, where other programs on the machine can read it.
 	expect(keyed).not.toContain("--key");
-	expect(setupCommand(ORIGIN, "powershell", findAgent("claude-code")).split("\n")[1])
-		.toEndWith("connect '--' claude-agent-acp");
+	expect(setupCommand(ORIGIN, "powershell", copilot, { background: false }).split("\n")[1])
+		.toEndWith("connect --agent copilot");
 });
 
 test("a machine name goes to chopin connect as --name, quoted for the shell", () => {
 	let copilot = findAgent("copilot");
 	expect(setupCommand(ORIGIN, "sh", copilot, { key: KEY, name: "build-box" }).split("\n")[1])
 		.toBe(
-			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --name build-box --install-service -- copilot --acp --allow-all`,
+			`  CHOPIN_URL=https://chopin.example CHOPIN_PAIRING_KEY=${KEY} sh -s -- connect --name build-box --install-service --agent copilot`,
 		);
 	expect(setupCommand(ORIGIN, "sh", copilot, { name: "Jo's box" }).split("\n")[1])
 		.toContain("connect --name 'Jo'\\''s box' --install-service");
 	expect(setupCommand(ORIGIN, "powershell", copilot, { name: "Jo's box" }).split("\n")[1])
-		.toEndWith("connect --name 'Jo''s box' --install-service '--' copilot --acp --allow-all");
+		.toEndWith("connect --name 'Jo''s box' --install-service --agent copilot");
 	// A blank name leaves it out, so chopin uses the hostname.
 	expect(setupCommand(ORIGIN, "sh", copilot, { name: "  " }))
 		.toBe(setupCommand(ORIGIN, "sh", copilot));
@@ -127,9 +131,8 @@ test.skipIf(process.platform === "win32")(
 							"connect",
 							...name ? ["--name", name] : [],
 							...runsAsService(agent) ? ["--install-service"] : [],
-							...agent.env.flatMap(variable => ["--env", variable]),
-							"--",
-							...agent.acp,
+							"--agent",
+							agent.id,
 						]);
 					}
 				}
@@ -190,7 +193,7 @@ async function pasted(installer: string, key?: string) {
 }
 
 test.skipIf(!PWSH)(
-	"pasted into PowerShell, install.ps1 gets every argument, -- included, and the key, which goes",
+	"pasted into PowerShell, install.ps1 gets every argument and the key, which goes",
 	async () => {
 		let recording = [
 			'$lines = @("$env:CHOPIN_URL", "$env:CHOPIN_PAIRING_KEY") + $args',
@@ -204,10 +207,8 @@ test.skipIf(!PWSH)(
 				key ?? "",
 				"connect",
 				"--install-service",
-				"--env",
-				"ATOMIC_ACP_HEADLESS=1",
-				"--",
-				"atomic-acp",
+				"--agent",
+				"atomic",
 			]);
 			expect(result.output).toContain("after: [] []");
 		}
@@ -261,7 +262,11 @@ test("every agent that can run unattended connects as the service, in either she
 		}
 	}
 	expect(AGENTS.filter(runsAsService).map(agent => agent.id))
-		.toEqual(["copilot", "atomic", "codex", "gemini"]);
+		.toEqual(["copilot", "atomic"]);
+	// One that would wait on a permission prompt runs in the terminal.
+	let asks = { ...findAgent("copilot"), unattended: { setting: "approve its tools" } };
+	expect(runsAsService(asks)).toBe(false);
+	expect(connectArguments(asks, "sh")).toBe("connect --agent copilot");
 });
 
 test("installing an agent and signing in is one copyable block, @-scoped packages quoted for PowerShell", () => {
@@ -311,4 +316,98 @@ test("pairing again keeps the machine's name, quoted only when the shell needs i
 	// A name either shell would expand inside quotes falls back to the hostname default.
 	expect(pairCommand('say "$HOME"')).toBe("chopin pair");
 	expect(pairCommand("")).toBe("chopin pair");
+});
+
+const ACME: SetupAgent = {
+	id: "acme-planner",
+	name: "Acme Planner",
+	install: {
+		linux: ["# Sign in once, then quit.", "curl -fsSL https://acme.example/install | sh"],
+		macos: ["brew install acme"],
+		windows: ["winget install Acme.Planner"],
+	},
+	command: "acme connect --server {origin} --key {key} --name {name}",
+	keyless: "acme connect --server {origin} --name {name}",
+	default: true,
+};
+const OTHER: SetupAgent = {
+	id: "other",
+	name: "Other",
+	install: ["other install"],
+	command: { linux: "other {key}", macos: "other {key}", windows: "other.exe -Key {key}" },
+};
+
+test("a setup agent's command is its template with the key, name and origin quoted for the shell", () => {
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "build-box" }))
+		.toBe(`acme connect --server https://chopin.example --key ${KEY} --name build-box`);
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "Jo's box" }))
+		.toEndWith(`--name 'Jo'\\''s box'`);
+	expect(setupAgentCommand(ACME, "windows", { origin: ORIGIN, key: KEY, name: "Jo's box" }))
+		.toEndWith(`--name 'Jo''s box'`);
+	// Without a name, {name} goes with the flag before it, so the machine keeps its hostname.
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "  " }))
+		.toBe(`acme connect --server https://chopin.example --key ${KEY}`);
+	expect(setupAgentCommand(OTHER, "windows", { origin: ORIGIN, key: KEY }))
+		.toBe(`other.exe -Key ${KEY}`);
+	// Your computer: the keyless template, and none for an entry without one.
+	expect(setupAgentCommand(ACME, "macos", { origin: ORIGIN }))
+		.toBe("acme connect --server https://chopin.example");
+	expect(setupAgentCommand(OTHER, "macos", { origin: ORIGIN })).toBeUndefined();
+	expect(setupAgentInstall(ACME, "linux")).toBe(
+		"# Sign in once, then quit.\ncurl -fsSL https://acme.example/install | sh",
+	);
+	expect(setupAgentInstall(OTHER, "windows")).toBe("other install");
+});
+
+test.skipIf(process.platform === "win32")(
+	"sh, bash and zsh hand a setup agent's command the key and an awkward name exactly",
+	async () => {
+		let home = await mkdtemp(join(tmpdir(), "chopin-setup-agent-"));
+		try {
+			let bin = join(home, "bin");
+			await mkdir(bin);
+			await writeFile(join(bin, "acme"), `#!/bin/sh\nprintf '%s\\n' "$@" > "$HOME/ran"\n`);
+			await chmod(join(bin, "acme"), 0o755);
+			for (let shell of ["sh", "bash", "zsh"]) {
+				let found = Bun.which(shell);
+				if (!found) continue;
+				let name = `Jo's "build" box $HOME \`id\``;
+				let command = setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name })!;
+				let run = Bun.spawnSync([found, "-c", command], {
+					env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` },
+					stderr: "pipe",
+				});
+				expect(run.stderr.toString(), shell).toBe("");
+				expect((await readFile(join(home, "ran"), "utf8")).split("\n").slice(0, -1)).toEqual([
+					"connect",
+					"--server",
+					ORIGIN,
+					"--key",
+					KEY,
+					"--name",
+					name,
+				]);
+			}
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	},
+);
+
+test("the picker lists setup agents first, preselects the default, and keeps a person's own pick", () => {
+	let ids = (kind: "server" | "computer") =>
+		agentOptions([OTHER, ACME], kind).map(option => option.id);
+	expect(ids("server")).toEqual(["other", "acme-planner", ...AGENTS.map(agent => agent.id)]);
+	// Your computer offers only the setup agents that have a keyless command.
+	expect(ids("computer")).toEqual(["acme-planner", ...AGENTS.map(agent => agent.id)]);
+	expect(chosenAgent(null, [OTHER, ACME], "server").id).toBe("acme-planner");
+	expect(chosenAgent("atomic", [OTHER, ACME], "server").id).toBe("atomic");
+	expect(chosenAgent("other", [OTHER, ACME], "server").id).toBe("other");
+	// A pick this page doesn't offer falls back as if there were none.
+	expect(chosenAgent("other", [OTHER, ACME], "computer").id).toBe("acme-planner");
+	expect(chosenAgent("gone", [OTHER, ACME], "server").id).toBe("acme-planner");
+	// Without setup agents nothing changes.
+	expect(agentOptions([], "server")).toEqual([...AGENTS]);
+	expect(chosenAgent(null, [], "server")).toBe(findAgent(null));
+	expect(chosenAgent("atomic", [], "computer")).toBe(findAgent("atomic"));
 });

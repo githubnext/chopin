@@ -63,7 +63,7 @@ describe("launch helpers", () => {
 	});
 
 	it("titles an actor's tab and scopes drafts per actor", () => {
-		expect(actorTitle("chopin", LILY)).toBe("Lily · chopin");
+		expect(actorTitle("chopin", LILY)).toBe("Lily in chopin");
 		expect(actorTitle("chopin", undefined)).toBe("chopin");
 		expect(chatDraftKey("r", undefined)).toBe("chopin:chat-draft:r");
 		expect(chatDraftKey("r", "demo:lily")).not.toBe(chatDraftKey("r", "demo:felix"));

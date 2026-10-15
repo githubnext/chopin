@@ -40,9 +40,10 @@ export function DecisionCard(
 					</li>
 				))}
 			</ul>
-			<span className="text-xs text-text-tertiary tabular-nums sm:hidden">
-				{value.by && <>Accepted by @{value.by}</>}
-				{stamp && ` · ${stamp}`}
+			<span className="flex gap-2 text-xs text-text-tertiary tabular-nums sm:hidden">
+				{value.by && <span>Accepted by @{value.by}</span>}
+				{value.by && stamp && " "}
+				{stamp && <span>{stamp}</span>}
 			</span>
 		</div>
 	);
@@ -63,11 +64,12 @@ export function DecisionCard(
 			>
 				<MessageIcon aria-hidden="true" className="shrink-0" size={14} />
 				<span className="min-w-0 flex-1 truncate">
-					Accepted · <span className="text-text-primary">{outcome}</span>
+					Accepted: <span className="text-text-primary">{outcome}</span>
 				</span>
-				<span className="hidden shrink-0 text-xs text-text-tertiary tabular-nums sm:inline">
-					{value.by && <>@{value.by}</>}
-					{stamp && ` · ${stamp}`}
+				<span className="hidden shrink-0 gap-2 text-xs text-text-tertiary tabular-nums sm:inline-flex">
+					{value.by && <span>@{value.by}</span>}
+					{value.by && stamp && " "}
+					{stamp && <span>{stamp}</span>}
 				</span>
 				<MotionDisclosureIcon
 					className="editor-motion-feedback shrink-0 text-text-tertiary"

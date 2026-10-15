@@ -29,6 +29,7 @@ import { documentUrl } from "../channels/document-url";
 import type { PlannerAttachments } from "../harness/remote/attachments";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { Connections } from "./connections";
+import { machineGitHubToken } from "./machine-github";
 import type { About, Connection } from "./connections";
 import { PairingKeys } from "./pairing-keys";
 import { Experiments, fail } from "./service";
@@ -40,6 +41,7 @@ import { connectorSchemas } from "./mcp-schema";
 import type { Lease } from "../storage/model";
 import { createHash } from "node:crypto";
 import { imagePath } from "../images/format";
+import { MACHINES_PATH } from "../http/machines-path";
 import { MAX_IMAGE_REQUEST_BYTES, prepareImage } from "../mcp/image";
 import { spikeReport, spikeSubmissionSchema } from "./spikes";
 
@@ -528,7 +530,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { key, ...input } = pairingSchema.parse(await body(request));
 		if (key !== undefined) return json(await keyed(key, input));
 		let created = connections.create(input);
-		return json({ ...created, url: `${auth.config.origin}/connect?pairing=${created.id}` });
+		return json({ ...created, url: `${auth.config.origin}${MACHINES_PATH}?pairing=${created.id}` });
 	});
 	/**
 	 * A signed-in person mints a single-use key that pairs one machine as them, as approving its
@@ -640,7 +642,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			});
 			connections.paired(id, machine.id, token);
 		}
-		return `/connect?pairing=${id}`;
+		return `${MACHINES_PATH}?pairing=${id}`;
 	}
 	auth.pairings.complete = complete;
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
@@ -726,7 +728,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	/**
 	 * `chopin connect --planner`: a short-lived credential with which the machine's Planner backend
-	 * attaches one document over `/planner-link`, checked with the machine's own GitHub token. Under
+	 * attaches one document over `/api/v1/agent`, checked with the machine's own GitHub token. Under
 	 * AUTH_MODE=local machines hold no GitHub token, so there is no such credential to issue.
 	 */
 	route("POST", "/api/connector/planner", async request => {
@@ -744,6 +746,24 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await auth.machines.seen(machine);
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 		return json({ ...planners.issue(machine, channel.id), document: { id: channel.id, url } });
+	});
+	/**
+	 * A paired machine's own GitHub token, for its Planner commands and runs to push to
+	 * `repository` and open draft pull requests as its owner (see `machineGitHubToken`). Under
+	 * AUTH_MODE=local machines hold no GitHub token, so there is none to give.
+	 */
+	route("POST", "/api/connector/github-token", async request => {
+		if (!auth.machines.durable) fail("not-found");
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let { repository } = z.object({ repository: z.string().min(3).max(256) }).strict().parse(
+			await body(request),
+		);
+		let issued = await machineRefusal(() =>
+			machineGitHubToken({ machines: auth.machines, github: auth.github }, machine, repository)
+		);
+		await auth.machines.seen(machine);
+		return json(issued);
 	});
 	/**
 	 * `chopin status`: whether Chopin still accepts this machine's token, without registering a
