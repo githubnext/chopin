@@ -2065,6 +2065,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	storage,
 	agent: config.agent,
 	liveBuild: !!config.liveBuild,
+	setupAgents: config.setupAgents,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
 });

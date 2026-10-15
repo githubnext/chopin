@@ -9,7 +9,6 @@ import {
 	MachineIcon,
 	ServerIcon,
 } from "@chopin/icons";
-import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
@@ -17,13 +16,25 @@ import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem } from "../menu-item";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
+import { session } from "../api";
 import { useLogin } from "./machines";
-import { agentCommand, guessSystem, runsAsService, setupCommand, shellFor } from "./setup-commands";
+import {
+	agentCommand,
+	agentOptions,
+	chosenAgent,
+	guessSystem,
+	isSetupAgent,
+	runsAsService,
+	setupAgentCommand,
+	setupAgentInstall,
+	setupCommand,
+	shellFor,
+} from "./setup-commands";
 
 import type { KeyboardEvent } from "react";
-import type { CodingAgent } from "@chopin/protocol/agents";
+import type { SetupAgent } from "@chopin/protocol/agents";
 import type { NavigationDialogMotion } from "../navigation-dialog";
-import type { SetupShell, SetupSystem } from "./setup-commands";
+import type { AgentOption, SetupShell, SetupSystem } from "./setup-commands";
 
 /** A browser may wrap after a hyphen, so each flag, such as --install-service, is kept whole. */
 function flagsWhole(line: string) {
@@ -85,8 +96,30 @@ export function shellPlace(shell: SetupShell) {
  * npm's global folder belongs to root, `npm install -g` stops with EACCES; the fix that needs no
  * sudo is a global folder of the person's own.
  */
-export function Needs({ agent, shell }: { agent: CodingAgent; shell: SetupShell }) {
+export function Needs({ agent, system }: { agent: AgentOption; system: SetupSystem }) {
 	let install = useUnfold();
+	let shell = shellFor(system);
+	if (isSetupAgent(agent)) {
+		return (
+			<div className="machines-needs">
+				<p>
+					Install {agent.name} first.{" "}
+					<UnfoldToggle className="machines-needs-toggle" unfold={install}>
+						{install.open ? "Hide install steps" : "Show install steps"}
+					</UnfoldToggle>
+				</p>
+				<UnfoldPanel unfold={install}>
+					<div className="machines-needs-command">
+						<Command
+							label="install steps"
+							place={shellPlace(shell)}
+							text={setupAgentInstall(agent, system)}
+						/>
+					</div>
+				</UnfoldPanel>
+			</div>
+		);
+	}
 	return (
 		<div className="machines-needs">
 			<p>
@@ -152,19 +185,43 @@ export function useSystem(initial?: SetupSystem) {
 
 const AGENT_KEY = "chopin:machines:agent";
 
-/** The coding agent the command starts, remembered in this browser for next time. */
-export function useAgent() {
-	let [agent, setAgent] = useState(() => findAgent(localStorage.getItem(AGENT_KEY)));
+/** The deployment's setup agents, from the session; none until it answers. */
+function useSetupAgents() {
+	let [agents, setAgents] = useState<SetupAgent[]>([]);
+	useEffect(() => {
+		let current = true;
+		session().then(value => current && setAgents(value.setupAgents ?? []), () => {});
+		return () => {
+			current = false;
+		};
+	}, []);
+	return agents;
+}
+
+/**
+ * What the command sets up for a server or your computer, and the options to pick from: the
+ * person's own pick, remembered in this browser for next time, else the deployment's default.
+ */
+export function useAgent(kind: "server" | "computer") {
+	let setupAgents = useSetupAgents();
+	let [picked, setPicked] = useState(() => localStorage.getItem(AGENT_KEY));
 	let choose = (id: string) => {
-		let next = findAgent(id);
-		localStorage.setItem(AGENT_KEY, next.id);
-		setAgent(next);
+		localStorage.setItem(AGENT_KEY, id);
+		setPicked(id);
 	};
-	return [agent, choose] as const;
+	return {
+		agent: chosenAgent(picked, setupAgents, kind),
+		options: agentOptions(setupAgents, kind),
+		choose,
+	};
 }
 
 export function AgentChoice(
-	{ agent, onChange }: { agent: CodingAgent; onChange: (id: string) => void },
+	{ agent, onChange, options }: {
+		agent: AgentOption;
+		onChange: (id: string) => void;
+		options: AgentOption[];
+	},
 ) {
 	let pickerId = useId();
 	return (
@@ -176,7 +233,7 @@ export function AgentChoice(
 				onChange={event => onChange(event.currentTarget.value)}
 				value={agent.id}
 			>
-				{AGENTS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+				{options.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
 			</select>
 		</div>
 	);
@@ -354,7 +411,7 @@ export function AddComputerDialog(
 ) {
 	let login = useLogin();
 	let [system, setSystem] = useSystem();
-	let [agent, setAgent] = useAgent();
+	let { agent, options, choose } = useAgent("computer");
 	let shell = shellFor(system);
 	return (
 		<NavigationDialog
@@ -376,20 +433,24 @@ export function AddComputerDialog(
 				</p>
 				<SystemChoice onChange={setSystem} system={system} />
 				<div className="machines-dialog-agent">
-					<AgentChoice agent={agent} onChange={setAgent} />
-					<Needs agent={agent} shell={shell} />
+					<AgentChoice agent={agent} onChange={choose} options={options} />
+					<Needs agent={agent} system={system} />
 				</div>
 				<div className="machines-run">
 					<p className="machines-run-lead">In a terminal in your repository, run:</p>
 					<Command
 						label="setup command"
 						place={shellPlace(shell)}
-						text={setupCommand(location.origin, shell, agent)}
+						text={isSetupAgent(agent)
+							? setupAgentCommand(agent, system, { origin: location.origin }) ?? ""
+							: setupCommand(location.origin, shell, agent)}
 					/>
-					<p className="machines-detail">
-						It prints a link; open it here and approve.
-						{!runsAsService(agent) && " Keep the terminal open."}
-					</p>
+					{!isSetupAgent(agent) && (
+						<p className="machines-detail">
+							It prints a link; open it here and approve.
+							{!runsAsService(agent) && " Keep the terminal open."}
+						</p>
+					)}
 				</div>
 			</div>
 		</NavigationDialog>

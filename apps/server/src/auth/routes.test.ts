@@ -372,6 +372,31 @@ describe("hosted authentication routes", () => {
 		expect(await gone!.json()).toEqual({ user: null, agent: true });
 	});
 
+	it("tells only a signed-in person the deployment's setup agents", async () => {
+		let acme = {
+			id: "acme-planner",
+			name: "Acme Planner",
+			install: ["acme install"],
+			command: "acme connect {origin} {key}",
+			default: true,
+		};
+		let router = new Router();
+		registerAuthRoutes(router, {
+			config: CONFIG,
+			storage: new MemoryStorage(),
+			github: new FakeGitHub(),
+			setupAgents: [acme],
+		});
+		let signedIn = await callback(router);
+		let cookie = pair(cookies(signedIn).find(value => value.startsWith("__Host-chopin_session="))!);
+		let session = await router.handle(
+			new Request("https://chopin.test/api/session", { headers: { cookie } }),
+		);
+		expect(await session!.json()).toMatchObject({ setupAgents: [acme] });
+		let stranger = await router.handle(new Request("https://chopin.test/api/session"));
+		expect(await stranger!.json()).toEqual({ user: null, agent: true });
+	});
+
 	it("redirects to the configured App installation page", async () => {
 		let router = new Router();
 		registerAuthRoutes(router, {

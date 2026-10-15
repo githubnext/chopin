@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { FIXTURES, HARNESS, HOST, PLAIN, ROOT } from "./servers";
+import { FIXTURES, HARNESS, HOST, PLAIN, ROOT, SETUP_AGENTS } from "./servers";
 
 /*
  * Refuse a client that is not there, here rather than in a global setup.
@@ -58,6 +58,7 @@ function server(port: number, database: string, extra: Record<string, string>) {
 			// cannot quietly put a questionnaire in every room.
 			DEV_QUESTIONS: "",
 			DEV_COMMENTS: "",
+			CHOPIN_SETUP_AGENTS: "",
 			...extra,
 		},
 		reuseExistingServer: !process.env.CI,
@@ -167,6 +168,7 @@ export default defineConfig({
 				join(ROOT, "e2e/sidecar-option-async.e2e.ts"),
 				join(ROOT, "e2e/sidecar-option-contracts.e2e.ts"),
 				join(ROOT, "e2e/sidebar-decision-counts.e2e.ts"),
+				join(ROOT, "e2e/setup-agents.e2e.ts"),
 				"**/comment-motion.e2e.ts",
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
@@ -197,6 +199,7 @@ export default defineConfig({
 				"**/discarded-mobile-geometry.e2e.ts",
 				"**/decisions-phone.e2e.ts",
 				"**/sidebar-decision-counts.e2e.ts",
+				"**/setup-agents.e2e.ts",
 			],
 			use: { ...devices["Desktop Chrome"], baseURL: `http://${HOST}:${FIXTURES}` },
 		},
@@ -226,6 +229,7 @@ export default defineConfig({
 		server(FIXTURES, process.env.E2E_DATABASE_URL_1!, {
 			DEV_QUESTIONS: "1",
 			DEV_COMMENTS: "1",
+			CHOPIN_SETUP_AGENTS: JSON.stringify(SETUP_AGENTS),
 		}),
 		harnessServer(HARNESS, process.env.E2E_DATABASE_URL_2!),
 	],

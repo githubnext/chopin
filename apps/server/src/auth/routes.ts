@@ -8,6 +8,7 @@ import { DeviceAuthorization } from "./device";
 import { LocalAuth } from "./local";
 import { LocalCredentials } from "./local-store";
 
+import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AuthConfig } from "./config";
 import type { GitHub, GitHubConditional, GitHubTokenGrant } from "../github/client";
 import type { Router } from "../http/router";
@@ -27,6 +28,8 @@ type Dependencies = {
 	clock?: Clock;
 	agent?: boolean;
 	liveBuild?: boolean;
+	/** CHOPIN_SETUP_AGENTS, told only to a signed-in person. */
+	setupAgents?: SetupAgent[];
 	device?: DeviceAuthorization;
 	credentials?: LocalCredentials;
 	delay?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -437,6 +440,7 @@ export function registerAuthRoutes(
 					...(dependencies.liveBuild ? { liveBuild: true } : {}),
 					...(local ? { auth: "local" } : {}),
 					...(config.demoPersonas ? { demo: { actors: demoRoster(config).list() } } : {}),
+					...(dependencies.setupAgents?.length ? { setupAgents: dependencies.setupAgents } : {}),
 					installUrl: "/auth/github/install",
 					user: {
 						id: authenticated.user.id,

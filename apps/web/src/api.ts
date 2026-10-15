@@ -1,3 +1,5 @@
+import type { SetupAgent } from "@chopin/protocol/agents";
+
 export type User = {
 	id: string;
 	login: string;
@@ -8,6 +10,8 @@ export type Session = {
 	user: User | null;
 	agent: boolean;
 	liveBuild?: boolean;
+	/** CHOPIN_SETUP_AGENTS: setups the Machines page offers first, told only when signed in. */
+	setupAgents?: SetupAgent[];
 	installUrl?: string;
 	expiresAt?: string;
 	auth?: "local";

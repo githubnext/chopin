@@ -33,6 +33,35 @@ export interface CodingAgent {
 	testedWithChopin: boolean;
 }
 
+/** One value for every system, or one for each of them. */
+export type PerSystem<T> = T | { linux: T; macos: T; windows: T };
+
+/**
+ * A setup a deployment offers on the Machines page before the built-in agents, from the server's
+ * CHOPIN_SETUP_AGENTS: its install steps (shell lines, shown as they are) and the command that
+ * sets up a machine, a template whose `{key}`, `{name}` and `{origin}` are filled in, quoted for
+ * the shell. `keyless`, without `{key}`, sets up the computer in front of you; without it the
+ * entry is offered only for a server. `default` preselects it for someone who has picked nothing.
+ */
+export type SetupAgent = {
+	id: string;
+	name: string;
+	install: PerSystem<string[]>;
+	command: PerSystem<string>;
+	keyless?: PerSystem<string>;
+	default?: boolean;
+};
+
+/** The value of `value` for `system`. */
+export function forSystem<T>(
+	value: PerSystem<T>,
+	system: "linux" | "macos" | "windows",
+): T {
+	return value && typeof value === "object" && !Array.isArray(value) && "linux" in value
+		? value[system]
+		: value as T;
+}
+
 export const AGENTS: readonly CodingAgent[] = [
 	{
 		id: "copilot",

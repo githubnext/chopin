@@ -5,13 +5,19 @@ import { join } from "node:path";
 import { AGENTS, findAgent } from "@chopin/protocol/agents";
 import {
 	agentCommand,
+	agentOptions,
+	chosenAgent,
 	connectArguments,
 	guessSystem,
 	pairCommand,
 	quote,
 	runsAsService,
+	setupAgentCommand,
+	setupAgentInstall,
 	setupCommand,
 } from "./setup-commands";
+
+import type { SetupAgent } from "@chopin/protocol/agents";
 
 const KEY = `chopin_k_${"Ab3-_".repeat(9).slice(0, 43)}`;
 const RELEASES = "https://github.com/githubnext/chopin/releases/latest/download";
@@ -311,4 +317,98 @@ test("pairing again keeps the machine's name, quoted only when the shell needs i
 	// A name either shell would expand inside quotes falls back to the hostname default.
 	expect(pairCommand('say "$HOME"')).toBe("chopin pair");
 	expect(pairCommand("")).toBe("chopin pair");
+});
+
+const ACME: SetupAgent = {
+	id: "acme-planner",
+	name: "Acme Planner",
+	install: {
+		linux: ["# Sign in once, then quit.", "curl -fsSL https://acme.example/install | sh"],
+		macos: ["brew install acme"],
+		windows: ["winget install Acme.Planner"],
+	},
+	command: "acme connect --server {origin} --key {key} --name {name}",
+	keyless: "acme connect --server {origin} --name {name}",
+	default: true,
+};
+const OTHER: SetupAgent = {
+	id: "other",
+	name: "Other",
+	install: ["other install"],
+	command: { linux: "other {key}", macos: "other {key}", windows: "other.exe -Key {key}" },
+};
+
+test("a setup agent's command is its template with the key, name and origin quoted for the shell", () => {
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "build-box" }))
+		.toBe(`acme connect --server https://chopin.example --key ${KEY} --name build-box`);
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "Jo's box" }))
+		.toEndWith(`--name 'Jo'\\''s box'`);
+	expect(setupAgentCommand(ACME, "windows", { origin: ORIGIN, key: KEY, name: "Jo's box" }))
+		.toEndWith(`--name 'Jo''s box'`);
+	// Without a name, {name} goes with the flag before it, so the machine keeps its hostname.
+	expect(setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name: "  " }))
+		.toBe(`acme connect --server https://chopin.example --key ${KEY}`);
+	expect(setupAgentCommand(OTHER, "windows", { origin: ORIGIN, key: KEY }))
+		.toBe(`other.exe -Key ${KEY}`);
+	// Your computer: the keyless template, and none for an entry without one.
+	expect(setupAgentCommand(ACME, "macos", { origin: ORIGIN }))
+		.toBe("acme connect --server https://chopin.example");
+	expect(setupAgentCommand(OTHER, "macos", { origin: ORIGIN })).toBeUndefined();
+	expect(setupAgentInstall(ACME, "linux")).toBe(
+		"# Sign in once, then quit.\ncurl -fsSL https://acme.example/install | sh",
+	);
+	expect(setupAgentInstall(OTHER, "windows")).toBe("other install");
+});
+
+test.skipIf(process.platform === "win32")(
+	"sh, bash and zsh hand a setup agent's command the key and an awkward name exactly",
+	async () => {
+		let home = await mkdtemp(join(tmpdir(), "chopin-setup-agent-"));
+		try {
+			let bin = join(home, "bin");
+			await mkdir(bin);
+			await writeFile(join(bin, "acme"), `#!/bin/sh\nprintf '%s\\n' "$@" > "$HOME/ran"\n`);
+			await chmod(join(bin, "acme"), 0o755);
+			for (let shell of ["sh", "bash", "zsh"]) {
+				let found = Bun.which(shell);
+				if (!found) continue;
+				let name = `Jo's "build" box $HOME \`id\``;
+				let command = setupAgentCommand(ACME, "linux", { origin: ORIGIN, key: KEY, name })!;
+				let run = Bun.spawnSync([found, "-c", command], {
+					env: { HOME: home, PATH: `${bin}:/usr/bin:/bin` },
+					stderr: "pipe",
+				});
+				expect(run.stderr.toString(), shell).toBe("");
+				expect((await readFile(join(home, "ran"), "utf8")).split("\n").slice(0, -1)).toEqual([
+					"connect",
+					"--server",
+					ORIGIN,
+					"--key",
+					KEY,
+					"--name",
+					name,
+				]);
+			}
+		} finally {
+			await rm(home, { recursive: true, force: true });
+		}
+	},
+);
+
+test("the picker lists setup agents first, preselects the default, and keeps a person's own pick", () => {
+	let ids = (kind: "server" | "computer") =>
+		agentOptions([OTHER, ACME], kind).map(option => option.id);
+	expect(ids("server")).toEqual(["other", "acme-planner", ...AGENTS.map(agent => agent.id)]);
+	// Your computer offers only the setup agents that have a keyless command.
+	expect(ids("computer")).toEqual(["acme-planner", ...AGENTS.map(agent => agent.id)]);
+	expect(chosenAgent(null, [OTHER, ACME], "server").id).toBe("acme-planner");
+	expect(chosenAgent("claude-code", [OTHER, ACME], "server").id).toBe("claude-code");
+	expect(chosenAgent("other", [OTHER, ACME], "server").id).toBe("other");
+	// A pick this page doesn't offer falls back as if there were none.
+	expect(chosenAgent("other", [OTHER, ACME], "computer").id).toBe("acme-planner");
+	expect(chosenAgent("gone", [OTHER, ACME], "server").id).toBe("acme-planner");
+	// Without setup agents nothing changes.
+	expect(agentOptions([], "server")).toEqual([...AGENTS]);
+	expect(chosenAgent(null, [], "server")).toBe(findAgent(null));
+	expect(chosenAgent("claude-code", [], "computer")).toBe(findAgent("claude-code"));
 });

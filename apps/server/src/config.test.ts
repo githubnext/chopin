@@ -290,4 +290,46 @@ describe("configuration", () => {
 			"GITHUB_APP_CLIENT_SECRET",
 		);
 	});
+
+	it("reads deployment-defined setup agents, and refuses a malformed one at startup", () => {
+		expect(configured().setupAgents).toEqual([]);
+		let acme = {
+			id: "acme-planner",
+			name: "Acme Planner",
+			install: {
+				linux: ["# Sign in once, then quit.", "curl -fsSL https://acme.example/install | sh"],
+				macos: ["brew install acme"],
+				windows: ["winget install Acme.Planner"],
+			},
+			command: "acme connect --server {origin} --key {key} --name {name}",
+			keyless: "acme connect --server {origin}",
+			default: true,
+		};
+		let other = {
+			id: "other",
+			name: "Other",
+			install: ["other install"],
+			command: { linux: "other {key}", macos: "other {key}", windows: "other.exe {key}" },
+		};
+		expect(configured({ CHOPIN_SETUP_AGENTS: JSON.stringify([acme, other]) }).setupAgents)
+			.toEqual([acme, other]);
+		let refused = (value: unknown, message: string) =>
+			expect(() =>
+				configured({
+					CHOPIN_SETUP_AGENTS: typeof value === "string" ? value : JSON.stringify(value),
+				})
+			).toThrow(message);
+		refused("[{", "CHOPIN_SETUP_AGENTS must be a JSON array");
+		refused({ id: "x" }, "CHOPIN_SETUP_AGENTS must be a JSON array");
+		refused([{ ...acme, id: "Acme Planner" }], "CHOPIN_SETUP_AGENTS[0].id");
+		refused([{ ...acme, id: "copilot" }], "a built-in coding agent");
+		refused([acme, { ...other, id: "acme-planner" }], "more than once");
+		refused([{ ...acme, name: "" }], "CHOPIN_SETUP_AGENTS[0].name");
+		refused([{ ...acme, command: "acme connect" }], "{key}");
+		refused([{ ...acme, keyless: "acme {key}" }], "keyless");
+		refused([{ ...acme, install: { linux: [], macos: [] } }], "CHOPIN_SETUP_AGENTS[0].install");
+		refused([{ ...acme, command: { linux: "a {key}" } }], "CHOPIN_SETUP_AGENTS[0].command");
+		refused([acme, { ...other, default: true }], "default");
+		refused([{ ...acme, extra: 1 }], "CHOPIN_SETUP_AGENTS[0]");
+	});
 });

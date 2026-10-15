@@ -40,6 +40,9 @@ installer installs `chopin`, then runs `chopin connect` itself. If the install
 fails, it stops with its own message and runs nothing. The agent must be
 installed and signed in first: the page shows its install command under **Show
 install command**, and [Coding agents](#coding-agents) lists them all.
+Your Chopin server may list its own setups first in the **Coding agent** picker
+([setup agents](self-hosting.md#setup-agents)); for one of those, the page
+shows its install steps and its own command instead.
 
 ### Your computer
 

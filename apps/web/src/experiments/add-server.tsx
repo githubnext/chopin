@@ -12,7 +12,13 @@ import {
 } from "./machine-setup";
 import { expiryLabel, usePairingKey } from "./pairing-key";
 import { keyProblem } from "./pairing-problems";
-import { runsAsService, setupCommand, shellFor } from "./setup-commands";
+import {
+	isSetupAgent,
+	runsAsService,
+	setupAgentCommand,
+	setupCommand,
+	shellFor,
+} from "./setup-commands";
 
 import type { ReactNode } from "react";
 import type { CodingAgent } from "@chopin/protocol/agents";
@@ -191,7 +197,7 @@ function foreground(agent: CodingAgent) {
 export function AddServerPage() {
 	let [saved] = useState(storedSettings);
 	let [system, setSystem] = useSystem(saved.system);
-	let [agent, setAgent] = useAgent();
+	let { agent, options, choose } = useAgent("server");
 	let [background, setBackground] = useState(saved.background ?? true);
 	let [autoRun, setAutoRun] = useState(saved.autoRun ?? false);
 	let [name, setName] = useState(saved.name ?? "");
@@ -207,8 +213,10 @@ export function AddServerPage() {
 		}
 	}, [system, background, autoRun, name]);
 	let shell = shellFor(system);
-	let unattended = runsAsService(agent);
-	let runsInBackground = unattended && background;
+	// A setup agent's own command decides how the machine connects, service included.
+	let setup = isSetupAgent(agent) ? agent : undefined;
+	let builtIn = isSetupAgent(agent) ? undefined : agent;
+	let runsInBackground = !!builtIn && runsAsService(builtIn) && background;
 	return (
 		<ol className="machines-steps">
 			<li className="machines-step">
@@ -216,18 +224,20 @@ export function AddServerPage() {
 				<div className="machines-settings">
 					<MachineName name={name} onChange={setName} />
 					<div className="machines-setting">
-						<AgentChoice agent={agent} onChange={setAgent} />
-						<Needs agent={agent} shell={shell} />
+						<AgentChoice agent={agent} onChange={choose} options={options} />
+						<Needs agent={agent} system={system} />
 					</div>
-					<Setting
-						checked={runsInBackground}
-						disabled={foreground(agent)}
-						onChange={setBackground}
-						title="Run in the background"
-					>
-						chopin runs as a service that starts with the machine and stays connected after you log
-						out.
-					</Setting>
+					{builtIn && (
+						<Setting
+							checked={runsInBackground}
+							disabled={foreground(builtIn)}
+							onChange={setBackground}
+							title="Run in the background"
+						>
+							chopin runs as a service that starts with the machine and stays connected after you
+							log out.
+						</Setting>
+					)}
 					<Setting
 						checked={autoRun}
 						onChange={value => {
@@ -263,13 +273,21 @@ export function AddServerPage() {
 							<Command
 								label="install script"
 								place={shellPlace(shell)}
-								text={setupCommand(location.origin, shell, agent, {
-									key: pairing.key,
-									background: runsInBackground,
-									name,
-								})}
+								text={setup
+									? setupAgentCommand(setup, system, {
+										origin: location.origin,
+										key: pairing.key,
+										name,
+									})!
+									: setupCommand(location.origin, shell, builtIn!, {
+										key: pairing.key,
+										background: runsInBackground,
+										name,
+									})}
 							/>
-							{!runsInBackground && <p className="machines-detail">Keep the terminal open.</p>}
+							{!setup && !runsInBackground && (
+								<p className="machines-detail">Keep the terminal open.</p>
+							)}
 						</div>
 					)
 					: <Generate autoRun={autoRun} generate={generate} pairing={pairing} />}

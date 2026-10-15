@@ -10,7 +10,9 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 import { loadAuth } from "./auth/config";
+import { setupAgents } from "./setup-agents";
 
+import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AuthConfig } from "./auth/config";
 import type { StorageConfig } from "./storage/registry";
 
@@ -62,6 +64,8 @@ export type Config = {
 	connectorVersion?: string;
 	/** Keep a finished build's document as the source for later rebuilds. */
 	liveBuild?: boolean;
+	/** CHOPIN_SETUP_AGENTS: setups the Machines page offers before the built-in agents. */
+	setupAgents: SetupAgent[];
 	/** Let the editor's local agent prototype uncertain passages before the first build. */
 	liveSpikes?: boolean;
 	/**
@@ -250,6 +254,7 @@ export function load(): Config {
 		plannerVisuals,
 		connectorVersion: connectorVersion(),
 		liveBuild,
+		setupAgents: setupAgents(process.env.CHOPIN_SETUP_AGENTS),
 		liveSpikes,
 		liveSpikesRegexJudge,
 		devClient: process.env.DEV_CLIENT || undefined,
