@@ -129,7 +129,7 @@
 				1
 			]
 		],
-		"sourceHash": "cf59e0195ee8e77a69929365db75ddba04a9e58dd2a376a8f15a1d00729eaf9c"
+		"sourceHash": "78564f9c8db1eb366ee0d000db433c337cd805b8681807542ed2098459f3bcc2"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -143,7 +143,7 @@
 				1
 			]
 		],
-		"sourceHash": "7d08e5ceaaa8079c2e2824c24cc21bb2637931e2af97c00e470e9a1ffc00a602"
+		"sourceHash": "10983f1492d50b12ebebcd6c7be52b4da7f8d2ca1817e1693f229a2b0ecba7c4"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
