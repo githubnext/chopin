@@ -7,10 +7,12 @@ import {
 	summarize,
 	toolGlyph,
 	toolKind,
+	toolKinds,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
 	workPhase,
+	workSummaryLabel,
 } from "./model";
 
 import type { Chat } from "@chopin/protocol";
@@ -360,15 +362,36 @@ describe("work progression", () => {
 			finished: 2,
 			failures: 1,
 			interrupted: 0,
-			toolTime: 1_238,
 		});
 		expect(summarize(tools, false)).toEqual({
 			count: 3,
 			finished: 2,
 			failures: 1,
 			interrupted: 1,
-			toolTime: 1_238,
 		});
+	});
+
+	it("groups finished tools into glyph kinds in order of first use", () => {
+		let tools: Chat.Activity[] = [
+			{ id: "t1", name: "read_plan", status: "done" },
+			{ id: "t2", name: "pull_request_read", status: "failed" },
+			{ id: "t3", name: "read_child", status: "done" },
+			{ id: "t4", name: "edit_plan", status: "done" },
+		];
+		expect(toolKinds(tools)).toEqual([
+			{ glyph: "page", failed: false },
+			{ glyph: "pull-request", failed: true },
+			{ glyph: "write", failed: false },
+		]);
+	});
+
+	it("names a finished summary in words its glyphs only show", () => {
+		let base = { count: 3, finished: 3, failures: 0, interrupted: 0 };
+		expect(workSummaryLabel({ ...base, count: 1, finished: 1 }, false)).toBe("Used 1 tool");
+		expect(workSummaryLabel({ ...base, failures: 1 }, false)).toBe("Used 3 tools, 1 failed");
+		expect(workSummaryLabel({ ...base, interrupted: 1 }, false))
+			.toBe("Used 3 tools, 1 interrupted");
+		expect(workSummaryLabel(base, true)).toBe("Used 3 tools, connection lost");
 	});
 });
 

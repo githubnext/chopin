@@ -200,7 +200,7 @@ test("completed tool names wrap in compact Chat", async ({ join, seed }) => {
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
-	await page.getByRole("button", { name: /Work details.*1 action/ }).click();
+	await page.getByRole("button", { name: /Used 1 tool\b/ }).click();
 	let name = page.getByText(`A${toolName.slice(1)}`);
 	let fragments = await name.evaluate(element => {
 		let range = document.createRange();
@@ -242,7 +242,7 @@ test("a failed tool's structured error reads as its label and message", async ({
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /Chat/ }).click();
-	await page.getByRole("button", { name: /Work details.*2 actions/ }).click();
+	await page.getByRole("button", { name: /Used 2 tools/ }).click();
 	let tools = page.getByRole("list", { name: "Tool calls" });
 
 	let kinded = tools.getByRole("button", { name: /Fetch repository/ });

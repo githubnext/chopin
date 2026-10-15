@@ -1,0 +1,52 @@
+/* A finished turn: a face pile of the kinds of tool it used, then a bare count. */
+.work-summary {
+	display: contents;
+}
+
+.work-summary-pile {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	padding-inline-start: var(--spacing);
+	margin-inline-end: calc(var(--spacing) * 0.5);
+}
+
+.work-summary-chip {
+	display: inline-grid;
+	width: calc(var(--spacing) * 5.5);
+	height: calc(var(--spacing) * 5.5);
+	margin-inline-start: calc(var(--spacing) * -1);
+	place-items: center;
+	border-radius: var(--radius-full);
+	background: var(--color-page);
+	outline: 2px solid var(--color-ground);
+	color: var(--color-text-tertiary);
+}
+
+.work-summary-chip[data-failed] {
+	background: var(--color-destructive-wash);
+	color: var(--color-destructive-ink);
+}
+
+.work-summary-pile + .trace-title {
+	font-variant-numeric: tabular-nums;
+}
+
+.work-summary-stopped {
+	display: inline-flex;
+	color: var(--color-text-quaternary);
+}
+
+.work-summary-failed {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: var(--spacing);
+	color: var(--color-destructive-ink);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Icons default to --color-icon; a failure's tint must reach the glyph. */
+:is(.work-summary-chip[data-failed], .work-summary-failed) [data-nucleo-icon] {
+	color: inherit;
+}

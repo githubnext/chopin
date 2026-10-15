@@ -45,7 +45,6 @@ export type ToolSummary = {
 	finished: number;
 	failures: number;
 	interrupted: number;
-	toolTime: number;
 };
 
 export type WorkPhase =
@@ -298,8 +297,30 @@ export function summarize(tools: Chat.Activity[], active: boolean): ToolSummary 
 		finished: tools.filter(tool => tool.status !== "running").length,
 		failures: tools.filter(tool => tool.status === "failed").length,
 		interrupted: active ? 0 : tools.filter(tool => tool.status === "running").length,
-		toolTime: tools.reduce((total, tool) => total + (tool.took ?? 0), 0),
 	};
+}
+
+export type ToolPileKind = { glyph: ToolGlyph; failed: boolean };
+
+/** Each glyph a finished turn used, in order of first use; a kind fails if any of its calls did. */
+export function toolKinds(tools: Chat.Activity[]): ToolPileKind[] {
+	let kinds = new Map<ToolGlyph, ToolPileKind>();
+	for (let tool of tools) {
+		let glyph = toolGlyph(tool.name);
+		let kind = kinds.get(glyph) ?? { glyph, failed: false };
+		kind.failed ||= tool.status === "failed";
+		kinds.set(glyph, kind);
+	}
+	return [...kinds.values()];
+}
+
+/** The finished summary's accessible name, which carries what its glyphs only show. */
+export function workSummaryLabel(summary: ToolSummary, disconnected: boolean): string {
+	let parts = [`Used ${summary.count} ${summary.count === 1 ? "tool" : "tools"}`];
+	if (disconnected) parts.push("connection lost");
+	else if (summary.interrupted > 0) parts.push(`${summary.interrupted} interrupted`);
+	if (summary.failures > 0) parts.push(`${summary.failures} failed`);
+	return parts.join(", ");
 }
 
 export function duration(milliseconds: number): string {

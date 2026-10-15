@@ -23,7 +23,7 @@ test("active work exposes a stage and keeps tool details collapsed", () => {
 	expect(markup).not.toContain("&lt;unsafe&gt;");
 });
 
-test("completed work names action and tool-time totals", () => {
+test("completed work names its tool count and failures for screen readers", () => {
 	let markup = renderToStaticMarkup(createElement(WorkProgress, {
 		active: false,
 		responseSeen: true,
@@ -34,10 +34,10 @@ test("completed work names action and tool-time totals", () => {
 		],
 	}));
 
-	expect(markup).toContain("Work details");
-	expect(markup).toContain("2 actions");
-	expect(markup).toContain("1 failed");
-	expect(markup).toContain("1.2s tool time");
+	expect(markup).toContain('<span class="sr-only">Used 2 tools, 1 failed</span>');
+	expect(markup).toContain('aria-hidden="true" class="work-summary"');
+	expect(markup).not.toContain("Work details");
+	expect(markup).not.toContain("tool time");
 });
 
 test("active work counts failed calls as finished rather than done", () => {
@@ -64,10 +64,11 @@ test("disconnected work stays inspectable without claiming an active or interrup
 		tools: [{ id: "one", name: "read_plan", status: "running", args: "{}" }],
 	}));
 
-	expect(markup).toContain("Connection lost");
+	expect(markup).toContain("Used 1 tool, connection lost");
 	expect(markup).toContain('aria-expanded="false"');
 	expect(markup).not.toContain("trace-scribble");
 	expect(markup).not.toContain("Interrupted");
+	expect(markup).not.toContain("interrupted");
 });
 
 test("an active ask preserves the static decision wait while keeping tool details", () => {
@@ -89,7 +90,7 @@ test("an active ask preserves the static decision wait while keeping tool detail
 	expect(markup).toContain('aria-expanded="false"');
 });
 
-test("finished work with a failure reads as an error trace", () => {
+test("finished work with a failure marks only the failed kind", () => {
 	let markup = renderToStaticMarkup(createElement(WorkProgress, {
 		active: false,
 		responseSeen: true,
@@ -97,6 +98,23 @@ test("finished work with a failure reads as an error trace", () => {
 		tools: [{ id: "one", name: "edit_plan", status: "failed", took: 12 }],
 	}));
 
-	expect(markup).toContain('data-status="error"');
+	expect(markup).toContain('class="work-summary-chip" data-failed="true"');
+	expect(markup).toContain('class="work-summary-failed"');
+	expect(markup).not.toContain('data-status="error"');
 	expect(markup).toContain('data-slot="trace-collapsible-trigger"');
+});
+
+test("interrupted work counts its stopped call", () => {
+	let markup = renderToStaticMarkup(createElement(WorkProgress, {
+		active: false,
+		responseSeen: true,
+		streaming: false,
+		tools: [
+			{ id: "one", name: "read_plan", status: "done" },
+			{ id: "two", name: "edit_plan", status: "running" },
+		],
+	}));
+
+	expect(markup).toContain("Used 2 tools, 1 interrupted");
+	expect(markup).toContain('class="work-summary-stopped"');
 });
