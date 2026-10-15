@@ -28,7 +28,7 @@ export async function startJevProcess(): Promise<ChildProcessWithoutNullStreams>
 			HARNESS_AUTH: "direct",
 			CONVERSATION_PLAN: "on",
 			JEV_API_KEY: "e2e-jev-only",
-			JEV_MODEL: "jev-e2e",
+			DECISIONS_MODEL: "typesafe/jev-latest",
 			TYPESAFE_API_KEY: "",
 			E2E_JEV_CONTROL_DIR: JEV_CONTROL_DIR,
 			BACKGROUND_JOBS: "on",

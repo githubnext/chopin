@@ -1,6 +1,6 @@
-import { askJev } from "../conversation-plan/jev";
 import { sourcesDiffer } from "./live-sync";
 
+import type { Decide } from "../conversation-plan/decisions";
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { LiveClassifier, LiveDelta } from "./live-sync";
 
@@ -65,11 +65,7 @@ export function jevGate(ask: JevAsk): LiveClassifier {
 	};
 }
 
-/** The Jev-backed gate when Jev is configured, otherwise the plain source comparison. */
-export function liveClassifier(
-	config: { model: string; timeoutMs: number } | undefined,
-	ask: typeof askJev = askJev,
-): LiveClassifier {
-	if (!config || !(process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY)) return sourcesDiffer;
-	return jevGate(request => ask(request, { model: config.model, timeoutMs: config.timeoutMs }));
+/** The decisions-backed gate when a decisions model is configured, else the plain comparison. */
+export function liveClassifier(decide: Decide | undefined): LiveClassifier {
+	return decide ? jevGate(request => decide(request)) : sourcesDiffer;
 }

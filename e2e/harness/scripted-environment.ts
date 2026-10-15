@@ -14,7 +14,7 @@ export function requireScriptedServer(env: Record<string, string | undefined>, r
 		HARNESS: SCRIPTED_HARNESS,
 		HARNESS_AUTH: "direct",
 		JEV_API_KEY: "e2e-jev-only",
-		JEV_MODEL: "jev-e2e",
+		DECISIONS_MODEL: "typesafe/jev-latest",
 		TYPESAFE_API_KEY: "",
 		HTTP_PROXY: "",
 		HTTPS_PROXY: "",

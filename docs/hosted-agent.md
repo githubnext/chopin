@@ -193,7 +193,7 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
-With `PLANNER_VISUALS=on` and a configured Jev key, foreground `copilot-sdk`
+With `PLANNER_VISUALS=on` and a decisions model, foreground `copilot-sdk`
 sessions for an explicit member request of at most 1,000 characters also
 receive `assess_visual`. It routes one explanatory paragraph through
 possibility, comprehension, and type choices before `edit_plan` can publish it.

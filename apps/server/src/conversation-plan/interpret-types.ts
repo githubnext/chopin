@@ -13,6 +13,6 @@ export type InterpretInput = {
 	recent: readonly Chat.Entry[];
 	state: ConversationPlan.State;
 	linkedCards?: LinkedCardOptions;
-	/** Injectable transport for domain tests; production defaults to the bounded TypeSafe adapter. */
-	ask?: (request: JevRequest) => Promise<JevResult>;
+	/** The deployment's decisions boundary, or a scripted one in domain tests. */
+	ask: (request: JevRequest) => Promise<JevResult>;
 };

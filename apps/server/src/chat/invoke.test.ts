@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ActiveOwnerBindings } from "../agent/active-owner";
+import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import { fullPlanner } from "../harness/atomic/full";
@@ -216,6 +217,7 @@ test("visual routing only attaches to bounded member turns on disposable harness
 			PLANNER_VISUALS: "on",
 			JEV_API_KEY: "test-key",
 		}));
+		context.decide = decideReplying({});
 		let seen = observe(context);
 		await browserTurn(context, "Explain the process.");
 		await browserTurn(context, "A".repeat(1_001));

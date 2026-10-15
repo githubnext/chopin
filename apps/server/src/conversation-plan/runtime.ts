@@ -9,20 +9,19 @@ import { PROMPT_FOR } from "./job-prompts";
 import { createPlannerJobs, interruptPlannerJobs } from "./planner-jobs";
 import { createProcessor, type Dependencies, type Processor } from "./service";
 import { interpretMessage } from "./interpret";
-import { askJev } from "./jev";
 import { interpretResearch } from "./research-interpreter";
 import { createResearchBriefCoordinator } from "./research-brief-coordinator";
 import type { JobService } from "../jobs/service";
 import type { Config } from "../config";
+import type { Decide } from "./decisions";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
 import type * as Rooms from "../rooms";
 
 type RuntimeDeps = {
-	config: Pick<
-		Config,
-		"agent" | "conversationPlan" | "conversationPlanModel" | "conversationPlanTimeoutMs"
-	>;
+	config: Pick<Config, "agent" | "conversationPlan">;
+	/** The deployment's decisions boundary; required when conversation analysis runs. */
+	decide?: Decide;
 	server: () => Server<SocketData>;
 	unavailable: (id: string) => boolean;
 	interpret?: Dependencies["interpret"];
@@ -42,6 +41,9 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 	let mirrors = new WeakMap<Plan.Plan, Promise<void>>();
 	let stopping = new WeakMap<Plan.Plan, Promise<void>>();
 	let report = deps.onError ?? ((error: unknown) => console.error("[conversation-plan]", error));
+	let decide: Decide = (request, options) =>
+		deps.decide?.(request, options)
+			?? Promise.reject(new Error("no decisions model is configured"));
 
 	function stop(opened: Plan.Plan): Promise<void> {
 		let existing = stopping.get(opened);
@@ -171,23 +173,12 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			researchPresence: event => broadcast(server, room.id, event),
 			researchInterpret: researchAllowed
 				? deps.researchInterpret
-					?? ((input, signal) =>
-						interpretResearch(input, request =>
-							askJev(request, {
-								model: deps.config.conversationPlanModel,
-								timeoutMs: deps.config.conversationPlanTimeoutMs,
-								signal,
-							})))
+					?? ((input, signal) => interpretResearch(input, request => decide(request, { signal })))
 				: undefined,
 			interpret: deps.interpret ?? ((input, signal) =>
 				interpretMessage({
 					...input,
-					ask: request =>
-						askJev(request, {
-							model: deps.config.conversationPlanModel,
-							timeoutMs: deps.config.conversationPlanTimeoutMs,
-							signal,
-						}),
+					ask: request => decide(request, { signal }),
 				})),
 			onError: report,
 		});

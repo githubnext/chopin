@@ -56,11 +56,16 @@ export type Config = {
 	webResearch: boolean;
 	/** Explicitly enables the conversation-derived cards prototype. */
 	conversationPlan?: boolean;
+	/** Exact classifier `provider/id` for the turn-taking judge; defaults to `decisionsModel`. */
 	conversationInitiativeModel?: string;
 	conversationInitiativeSilenceMs?: number;
-	conversationPlanModel?: string;
-	conversationPlanTimeoutMs?: number;
-	/** Explicitly enables Jev-routed foreground visual authoring. */
+	/**
+	 * Exact `provider/id` of the Atomic classifier that answers every decision, or
+	 * undefined when none is configured.
+	 */
+	decisionsModel?: string;
+	decisionsTimeoutMs?: number;
+	/** Explicitly enables decision-routed foreground visual authoring. */
 	plannerVisuals?: boolean;
 	/** The chopin release `chopin update` installs from this server, and a refusal names. */
 	connectorVersion?: string;
@@ -71,8 +76,8 @@ export type Config = {
 	/** Let the editor's local agent prototype uncertain passages before the first build. */
 	liveSpikes?: boolean;
 	/**
-	 * LIVE_SPIKES_REGEX_JUDGE=on: without Jev, judge passages by explicit uncertainty words.
-	 * Off by default, so a deployment without Jev starts no spikes.
+	 * LIVE_SPIKES_REGEX_JUDGE=on: without a decisions model, judge passages by explicit
+	 * uncertainty words. Off by default, so a deployment without one starts no spikes.
 	 */
 	liveSpikesRegexJudge?: boolean;
 	/**
@@ -100,6 +105,8 @@ export const DEFAULT_LINK_TIMEOUT_MS = 120_000;
  */
 export const DEFAULT_LINK_MAX_SILENCE_MS = 900_000;
 const DEFAULT_MODEL = "gpt-6-luna";
+/** An exact Atomic classifier selection: a provider ID, a slash, then the model ID. */
+const CLASSIFIER = /^[A-Za-z0-9._-]{1,100}\/\S{1,200}$/;
 
 /** The default is a Copilot model ID. Atomic resolves IDs against its own
  * catalog, so its deployments must name a model rather than inherit one the
@@ -184,9 +191,11 @@ export function load(): Config {
 	let agent = process.env.AGENT !== "off";
 	let backgroundJobs = process.env.BACKGROUND_JOBS !== "off";
 	let conversationPlan = process.env.CONVERSATION_PLAN === "on";
-	let conversationInitiativeModel = process.env.CONVERSATION_INITIATIVE_MODEL || "jev-1.13.0";
-	if (agent && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationInitiativeModel)) {
-		throw new Error("CONVERSATION_INITIATIVE_MODEL must be a valid model alias");
+	let conversationInitiativeModel = process.env.CONVERSATION_INITIATIVE_MODEL || undefined;
+	if (conversationInitiativeModel && !CLASSIFIER.test(conversationInitiativeModel)) {
+		throw new Error(
+			"CONVERSATION_INITIATIVE_MODEL must be an exact classifier provider/id, such as typesafe/jev-latest",
+		);
 	}
 	let conversationInitiativeSilenceMs = milliseconds(
 		"CONVERSATION_INITIATIVE_SILENCE_MS",
@@ -197,29 +206,39 @@ export function load(): Config {
 	let liveBuild = process.env.LIVE_BUILD === "on";
 	let liveSpikes = process.env.LIVE_SPIKES === "on";
 	let liveSpikesRegexJudge = liveSpikes && process.env.LIVE_SPIKES_REGEX_JUDGE === "on";
-	let conversationPlanModel = process.env.JEV_MODEL || "jev-latest";
-	let timeoutRaw = process.env.JEV_TIMEOUT_MS;
-	let conversationPlanTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
+	let decisionsModel = process.env.DECISIONS_MODEL
+		|| (process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
+			? "typesafe/jev-latest"
+			: process.env.OPENAI_API_KEY
+			? "openai-decisions/gpt-6-luna"
+			: undefined);
+	if (decisionsModel && !CLASSIFIER.test(decisionsModel)) {
+		throw new Error(
+			"DECISIONS_MODEL must be an exact classifier provider/id, such as openai-decisions/gpt-6-luna",
+		);
+	}
+	let timeoutRaw = process.env.DECISIONS_TIMEOUT_MS;
+	let decisionsTimeoutMs = timeoutRaw === undefined ? 30_000 : Number(timeoutRaw);
 	if (
 		(timeoutRaw !== undefined && !/^\d+$/.test(timeoutRaw))
-		|| !Number.isSafeInteger(conversationPlanTimeoutMs)
-		|| conversationPlanTimeoutMs < 100 || conversationPlanTimeoutMs > 60_000
+		|| !Number.isSafeInteger(decisionsTimeoutMs)
+		|| decisionsTimeoutMs < 100 || decisionsTimeoutMs > 60_000
 	) {
-		throw new Error("JEV_TIMEOUT_MS must be an integer between 100 and 60000 milliseconds");
+		throw new Error("DECISIONS_TIMEOUT_MS must be an integer between 100 and 60000 milliseconds");
 	}
-	if (conversationPlan && !process.env.JEV_API_KEY) {
-		throw new Error("JEV_API_KEY is required when CONVERSATION_PLAN=on");
-	}
-	if (plannerVisuals && !process.env.JEV_API_KEY) {
-		throw new Error("JEV_API_KEY is required when PLANNER_VISUALS=on");
-	}
-	if (agent && !process.env.JEV_API_KEY) {
-		throw new Error("JEV_API_KEY is required when AGENT is enabled");
-	}
-	if (
-		(conversationPlan || plannerVisuals) && !/^[A-Za-z0-9._-]{1,100}$/.test(conversationPlanModel)
-	) {
-		throw new Error("JEV_MODEL must be a valid model alias");
+	let needsDecisions = conversationPlan
+		? "CONVERSATION_PLAN=on"
+		: plannerVisuals
+		? "PLANNER_VISUALS=on"
+		: agent
+		? "AGENT is enabled"
+		: undefined;
+	if (needsDecisions && !decisionsModel) {
+		throw new Error(
+			`A decisions model is required when ${needsDecisions}. Set OPENAI_API_KEY for OpenAI's `
+				+ "Decisions API, JEV_API_KEY for TypeSafe's Jev, or DECISIONS_MODEL to another "
+				+ "classifier provider/id.",
+		);
 	}
 	let graceRaw = process.env.PLANNER_ATTACH_GRACE_MS;
 	let plannerAttachGraceMs = graceRaw === undefined ? DEFAULT_ATTACH_GRACE_MS : Number(graceRaw);
@@ -268,8 +287,8 @@ export function load(): Config {
 		conversationPlan,
 		conversationInitiativeModel,
 		conversationInitiativeSilenceMs,
-		conversationPlanModel,
-		conversationPlanTimeoutMs,
+		decisionsModel,
+		decisionsTimeoutMs,
 		plannerVisuals,
 		connectorVersion: connectorVersion(),
 		liveBuild,
@@ -315,10 +334,10 @@ export function describe(config: Config): string {
 		config.backgroundJobs ? "background jobs: on" : "background jobs: off",
 		config.webResearch ? "web research: on" : "web research: off",
 		config.conversationPlan
-			? `conversation plan: ${config.conversationPlanModel}`
+			? `conversation plan: ${config.decisionsModel}`
 			: "conversation plan: off",
 		config.plannerVisuals
-			? `Planner visuals: ${config.conversationPlanModel}`
+			? `Planner visuals: ${config.decisionsModel}`
 			: "Planner visuals: off",
 		config.liveBuild ? "live build: on" : "live build: off",
 		config.liveSpikes ? "live spikes: on" : "live spikes: off",

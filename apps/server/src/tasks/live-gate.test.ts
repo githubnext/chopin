@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { changedLines, jevGate } from "./live-gate";
+import { changedLines, jevGate, liveClassifier } from "./live-gate";
+import { sourcesDiffer } from "./live-sync";
 
 import type { JevRequest, JevResult } from "../conversation-plan/jev";
 import type { LiveDelta } from "./live-sync";
@@ -43,5 +44,11 @@ describe("Jev live gate", () => {
 		});
 		expect(await failing.classify(delta)).toBe(true);
 		expect(await failing.classify({ ...delta, source: delta.baseSource })).toBe(false);
+	});
+	it("uses the deployment's decisions model, or the source comparison without one", async () => {
+		expect(liveClassifier(undefined)).toBe(sourcesDiffer);
+		let seen: JevRequest[] = [];
+		expect(await liveClassifier(answering(0.2, seen)).classify(delta)).toBe(false);
+		expect(seen).toHaveLength(1);
 	});
 });

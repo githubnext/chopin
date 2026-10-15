@@ -1,9 +1,4 @@
-import {
-	askJev,
-	type JevQuestion,
-	type JevRequest,
-	type JevResult,
-} from "../conversation-plan/jev";
+import type { JevQuestion, JevRequest, JevResult } from "../conversation-plan/jev";
 import { visualChoices } from "./visual-catalog";
 
 export type VisualPassage = { index: number; source: string };
@@ -89,7 +84,7 @@ function answer(
 /** Three small Jev decisions; all factual rendering remains the Planner's task. */
 export async function assessVisual(
 	input: VisualInput,
-	ask: JevAsk = askJev,
+	ask: JevAsk,
 ): Promise<VisualAssessment> {
 	bounds(input);
 	let routes = new Map<number, VisualRoute>();
@@ -207,7 +202,7 @@ export async function assessVisual(
 			stage,
 			reason: message.includes("timed out")
 				? "timeout"
-				: message.includes("invalid Jev") || message.includes("inconsistent Jev")
+				: /invalid (Jev|decision)|inconsistent Jev/.test(message)
 				? "invalid-response"
 				: "unavailable",
 		};

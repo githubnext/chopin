@@ -1,5 +1,5 @@
 import type { ConversationPlan } from "@chopin/protocol";
-import { askJev, type JevAnswer } from "./jev";
+import type { JevAnswer } from "./jev";
 import { planEvents } from "./policy";
 import {
 	buildCandidateTargetingRequest,
@@ -36,7 +36,7 @@ export async function interpretMessage(input: InterpretInput): Promise<Interpret
 			analysis: { ...base, status: "unlinked", policyGate: "message exceeds ownership context" },
 		};
 	}
-	let ask = input.ask ?? askJev;
+	let ask = input.ask;
 	try {
 		let quotes = extractQuotes(input.message.text);
 		assertQuoteBudget(quotes);

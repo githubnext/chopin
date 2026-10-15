@@ -110,8 +110,9 @@ owner for the resolved reader and each editor's highlights.
 ## Configuration
 
 `CONVERSATION_PLAN=on` enables processing; the default is off. Startup requires
-`JEV_API_KEY` when enabled. `JEV_MODEL` defaults to `jev-latest`;
-`JEV_TIMEOUT_MS` defaults to 30000 and accepts integers from 100 to 60000.
+a decisions model when enabled: `DECISIONS_MODEL`, or `JEV_API_KEY` for
+`typesafe/jev-latest` or `OPENAI_API_KEY` for `openai-decisions/gpt-6-luna`.
+`DECISIONS_TIMEOUT_MS` defaults to 30000 and accepts integers from 100 to 60000.
 Keep the key on the server. `AGENT=off` separately disables hosted Planner turns;
 it is not the switch for Jev classification. See [.env.example](../.env.example)
 and [self-hosting](self-hosting.md).

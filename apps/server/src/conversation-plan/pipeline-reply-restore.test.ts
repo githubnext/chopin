@@ -62,3 +62,25 @@ test("restores exactly 45 analysis answers and rejects a 46th", () => {
 		"too many analysis questions",
 	);
 });
+
+test("restores a score without a per-level distribution and checks one when present", () => {
+	let state = initialState();
+	let { probabilities: _, ...level } = structuredClone(validAnswers.level);
+	state.analysis.push({
+		messageId: "score",
+		questionSetVersion: "v1",
+		modelVersion: "gpt-6-luna",
+		status: "unlinked",
+		eventIds: [],
+		passes: [{ stage: "triage", answers: { level } as any }],
+	});
+	let restored = restoreState(JSON.parse(JSON.stringify(state)));
+	expect(restored.analysis[0].passes[0].answers.level as unknown).toEqual(level);
+	let inconsistent = structuredClone(state);
+	(inconsistent.analysis[0].passes[0].answers.level as any).probabilities = {
+		"0": 1,
+		"1": 0,
+		"2": 0,
+	};
+	expect(() => restoreState(inconsistent)).toThrow("invalid analysis score");
+});

@@ -97,7 +97,8 @@ matching the Copilot SDK's minimum accepted session limit.
 ## Configuration
 
 - `CONVERSATION_PLAN=on` enables both Jev analysis paths; the default is off.
-- `JEV_API_KEY`, `JEV_MODEL`, and `JEV_TIMEOUT_MS` configure their shared transport.
+- `DECISIONS_MODEL` and `DECISIONS_TIMEOUT_MS` configure the classifier both paths
+  share; see [Decisions](self-hosting.md#decisions).
 - Brief synthesis uses the existing harness and active Planner owner. Passive
   synthesis does not claim ownership.
 - `AGENT=off` or `BACKGROUND_JOBS=off` disables synthesis. Source-based offers can

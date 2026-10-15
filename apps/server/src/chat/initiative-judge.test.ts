@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import type { JevOptions, JevRequest } from "../conversation-plan/jev";
+import { createDecide, type Decide, type DecisionOptions } from "../conversation-plan/decisions";
+import { decideReplying, fakeRegistry } from "../conversation-plan/decisions.test-fixtures";
+import type { JevRequest } from "../conversation-plan/jev";
 import {
 	type InitiativeContext,
 	initiativeInstruction,
@@ -30,23 +32,20 @@ function options(
 	winningProbability = 0.8,
 	confidence = 0.1,
 	inspect?: (request: JevRequest) => void,
-): JevOptions {
+): DecisionOptions & { decide: Decide } {
+	let probabilities = Object.fromEntries(
+		["wait", "respond", "yield", "direct"].map(move => [
+			move,
+			move === choice ? winningProbability : (1 - winningProbability) / 3,
+		]),
+	);
+	let decide = decideReplying({
+		initiative: { type: "choice", choice, confidence, probabilities },
+	});
 	return {
-		apiKey: "test-key",
-		fetch: async (_input, init) => {
-			let request = JSON.parse(String(init?.body)) as JevRequest;
+		decide: (request, options) => {
 			inspect?.(request);
-			let probabilities = Object.fromEntries(
-				["wait", "respond", "yield", "direct"].map(move => [
-					move,
-					move === choice ? winningProbability : (1 - winningProbability) / 3,
-				]),
-			);
-			return Response.json({
-				model: "jev-fixture",
-				answers: { initiative: { type: "choice", choice, confidence, probabilities } },
-				usage: { input_tokens: 1, output_tokens: 1 },
-			});
+			return decide(request, options);
 		},
 	};
 }
@@ -150,29 +149,49 @@ test("paused conversation admits only a confident direct request", async () => {
 	expect(await judgeInitiative(input, options("direct", 0.75))).toBe("direct");
 });
 
-test("transport failures and malformed results stay quiet", async () => {
+test("provider failures, malformed results and a missing decisions model stay quiet", async () => {
 	for (
-		let injectedFetch of [
-			async () => {
+		let reply of [
+			() => {
 				throw new Error("unavailable");
 			},
-			async () => new Response("offline", { status: 503 }),
-			async () => Response.json({ answers: { initiative: { choice: "direct" } } }),
+			() => ({ stopReason: "error" as const, errorMessage: "offline (503)" }),
+			() => ({ answers: { initiative: { type: "choice", choice: "direct" } } as any }),
 		]
 	) {
-		expect(await judgeInitiative(context(), { apiKey: "test-key", fetch: injectedFetch }))
-			.toBeUndefined();
+		let decide = createDecide(fakeRegistry(reply), {
+			model: "typesafe/jev-latest",
+			timeoutMs: 30_000,
+		});
+		expect(await judgeInitiative(context(), { decide })).toBeUndefined();
 	}
+	expect(await judgeInitiative(context(), { decide: undefined })).toBeUndefined();
+});
+
+test("the judge asks the configured initiative model when one is pinned", async () => {
+	let registry = fakeRegistry(() => ({
+		answers: {
+			initiative: {
+				type: "choice",
+				choice: "respond",
+				confidence: 1,
+				probabilities: { wait: 0, respond: 1, yield: 0, direct: 0 },
+			},
+		},
+	}), [{ provider: "typesafe", id: "jev-latest" }, { provider: "acme-labs", id: "turns-1" }]);
+	let decide = createDecide(registry, { model: "typesafe/jev-latest", timeoutMs: 30_000 });
+	expect(await judgeInitiative(context(), { decide, model: "acme-labs/turns-1" })).toBe("respond");
+	expect(registry.calls.map(call => call.model)).toEqual([
+		{ provider: "acme-labs", id: "turns-1" },
+	]);
 });
 
 test("timeout and cancellation do not start a turn", async () => {
-	expect(
-		await judgeInitiative(context(), {
-			apiKey: "test-key",
-			timeoutMs: 100,
-			fetch: () => new Promise(() => {}),
-		}),
-	).toBeUndefined();
+	let stalled = createDecide(fakeRegistry(() => new Promise(() => {})), {
+		model: "typesafe/jev-latest",
+		timeoutMs: 100,
+	});
+	expect(await judgeInitiative(context(), { decide: stalled })).toBeUndefined();
 	let controller = new AbortController();
 	controller.abort();
 	expect(await judgeInitiative(context(), { ...options(), signal: controller.signal }))

@@ -25,7 +25,6 @@ import type { PlannerSession } from "../harness/session";
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
-import { askJev } from "../conversation-plan/jev";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { ChildDocuments } from "./children";
@@ -52,6 +51,8 @@ import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
 import type { Chat as Wire, ConversationPlan, Request } from "@chopin/protocol";
 import type { Config } from "../config";
+import type { Decide } from "../conversation-plan/decisions";
+import type { JevRequest } from "../conversation-plan/jev";
 import type { HostedAuth } from "../auth/routes";
 import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
@@ -599,6 +600,8 @@ export type Room = {
 	server: Server<SocketData>;
 	room: string;
 	config: Config;
+	/** The deployment's decisions boundary; absent when no decisions model is configured. */
+	decide?: Decide;
 	auth: HostedAuth;
 	/**
 	 * Login session that may claim Planner ownership for this room's turns.
@@ -1601,7 +1604,7 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 
 function visualRouting(context: Room): boolean {
 	if (
-		!context.config?.plannerVisuals || context.chat.job
+		!context.config?.plannerVisuals || !context.decide || context.chat.job
 		|| context.config.harness !== "copilot-sdk"
 	) return false;
 	let request = currentMemberRequest(context.chat);
@@ -1651,12 +1654,8 @@ export function documentRoom(context: Room): DocumentRoom {
 		},
 		...(visualRouting(context) && {
 			visual: {
-				ask: (request: Parameters<typeof askJev>[0]) =>
-					askJev(request, {
-						model: context.config.conversationPlanModel,
-						timeoutMs: context.config.conversationPlanTimeoutMs,
-						signal: chat.turnController?.signal,
-					}),
+				ask: (request: JevRequest) =>
+					context.decide!(request, { signal: chat.turnController?.signal }),
 			},
 		}),
 		readReference: async (id, repositoryId) => {

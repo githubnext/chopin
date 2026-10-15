@@ -372,7 +372,7 @@ export function environment(owned: ReturnType<typeof inputs>): Record<string, st
 		HARNESS_AUTH: "direct",
 		MODEL: "e2e-prompt-scripted-model",
 		JEV_API_KEY: "e2e-jev-only",
-		JEV_MODEL: "jev-e2e",
+		DECISIONS_MODEL: "typesafe/jev-latest",
 		TYPESAFE_API_KEY: "",
 		HTTP_PROXY: "",
 		HTTPS_PROXY: "",

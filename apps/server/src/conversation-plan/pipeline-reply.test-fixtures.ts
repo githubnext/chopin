@@ -17,9 +17,3 @@ export let validAnswers = {
 		probabilities: { "0": 0.1, "1": 0, "2": 0.9 },
 	},
 };
-
-export let reply = (answers: unknown) =>
-	new Response(
-		JSON.stringify({ model: "jev-1.13.0", answers, usage: { input_tokens: 10, output_tokens: 2 } }),
-		{ status: 200 },
-	);

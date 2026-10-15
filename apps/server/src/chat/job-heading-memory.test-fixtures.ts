@@ -23,8 +23,6 @@ export async function headingMemory(
 		config: {
 			agent,
 			conversationPlan,
-			conversationPlanModel: "offline",
-			conversationPlanTimeoutMs: 1_000,
 		},
 		server: () => opened.server,
 		unavailable: () => false,

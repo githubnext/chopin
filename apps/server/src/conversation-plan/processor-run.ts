@@ -45,10 +45,12 @@ export function createRun(
 				let { cardCycles, ...interpretInput } = input;
 				let interpretation: Interpretation;
 				try {
-					interpretation = await (deps.interpret ?? interpretMessage)(
-						interpretInput,
-						controller.signal,
-					);
+					interpretation = deps.interpret
+						? await deps.interpret(interpretInput, controller.signal)
+						: await interpretMessage({
+							...interpretInput,
+							ask: () => Promise.reject(new Error("no decisions model is configured")),
+						});
 				} catch {
 					interpretation = { events: [], analysis: failure("Jev interpretation failed") };
 				}

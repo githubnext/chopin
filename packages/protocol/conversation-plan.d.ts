@@ -431,7 +431,8 @@ export declare namespace ConversationPlan {
 			score: number;
 			confidence: number;
 			legend: { [level: string]: string };
-			probabilities: Distribution;
+			/** Per-level distribution, when the classifier reported one. */
+			probabilities?: Distribution;
 		};
 	export type AnalysisPass =
 		| { stage: "triage" | "targeting"; answers: { [question: string]: AnalysisAnswer } }

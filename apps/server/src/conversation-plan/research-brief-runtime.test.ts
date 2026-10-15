@@ -47,8 +47,6 @@ test("runner failure publishes a durable failed offer and explicit retry publish
 		config: {
 			agent: true,
 			conversationPlan: true,
-			conversationPlanModel: "fixture",
-			conversationPlanTimeoutMs: 100,
 		},
 		server: () => h.server,
 		unavailable: () => false,

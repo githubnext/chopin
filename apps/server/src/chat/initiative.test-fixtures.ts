@@ -78,7 +78,7 @@ export function installInitiativeCleanup() {
 			Object.assign(h.context.plan, { document, builds: [], records: new Map() });
 			Object.assign(h.context.config, {
 				conversationInitiativeSilenceMs: 15_000,
-				conversationPlanTimeoutMs: 1000,
+				decisionsTimeoutMs: 1000,
 			});
 			h.context.initiativePresent = () => true;
 			h.context.initiativeAuthorize = async () => true;

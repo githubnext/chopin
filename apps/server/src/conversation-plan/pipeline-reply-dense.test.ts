@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ConversationPlan } from "@chopin/protocol";
-import { askJev, type JevQuestion } from "./jev";
+import { decideReplying } from "./decisions.test-fixtures";
+import type { JevQuestion } from "./jev";
 import {
 	buildCandidateTargetingRequest,
 	buildTargetingRequest,
@@ -9,7 +10,6 @@ import {
 import { extractQuotes } from "./quotes";
 import { mockResult, seeded, withOption } from "./interpret.test-fixtures";
 import { message } from "./policy-initial.test-fixtures";
-import { reply } from "./pipeline-reply.test-fixtures";
 
 test("twelve populated targets fit Jev's state budget with three long quotes", async () => {
 	let template = withOption(seeded()).threads[0];
@@ -91,10 +91,7 @@ test("twelve populated targets fit Jev's state budget with three long quotes", a
 	for (let request of [triage, targeting]) {
 		expect((request.state as { threads: unknown[] }).threads).toHaveLength(12);
 		expect(JSON.stringify(request.state).length).toBeLessThanOrEqual(24_000);
-		let answer = await askJev(request, {
-			apiKey: "test-only",
-			fetch: async () => reply(mockResult(request.questions, {}).answers),
-		});
-		expect(answer.model).toBe("jev-1.13.0");
+		let answer = await decideReplying(mockResult(request.questions, {}).answers)(request);
+		expect(answer.model).toBe("jev-latest");
 	}
 });

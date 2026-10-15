@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
 import { initialState, restoreState } from "./domain";
-import { askJev } from "./jev";
+import { decideReplying } from "./decisions.test-fixtures";
 import { buildTargetingRequest, QUESTION_SET_VERSION } from "./questions";
 import { extractQuotes } from "./quotes";
 import { mockResult, seeded } from "./interpret.test-fixtures";
 import { message } from "./policy-initial.test-fixtures";
-import { reply } from "./pipeline-reply.test-fixtures";
 
 test("keeps the expanded three-quote request within a 45-question bound", async () => {
 	let questions = Object.fromEntries(
@@ -17,17 +16,14 @@ test("keeps the expanded three-quote request within a 45-question bound", async 
 	let calls = 0;
 	let ask = (count: number) => {
 		let selected = Object.fromEntries(Object.entries(questions).slice(0, count));
-		return askJev({ state: {}, questions: selected }, {
-			apiKey: "test-only",
-			fetch: async () => {
-				calls++;
-				return reply(mockResult(selected, {}).answers);
-			},
-		});
+		return decideReplying(() => {
+			calls++;
+			return mockResult(selected, {}).answers;
+		})({ state: {}, questions: selected });
 	};
 	expect(Object.keys((await ask(45)).answers)).toHaveLength(45);
 	expect(calls).toBe(1);
-	await expect(ask(46)).rejects.toThrow("invalid Jev request bounds");
+	await expect(ask(46)).rejects.toThrow("invalid decision request");
 	expect(calls).toBe(1);
 });
 
@@ -37,10 +33,7 @@ test("three discarded-thread quotes fit the request and persisted answer bounds"
 	let request = buildTargetingRequest(current, [], threads, extractQuotes(current.text));
 	expect(Object.keys(request.questions)).toHaveLength(39);
 	expect(Object.keys(request.questions).filter(key => key.endsWith("_duplicate"))).toEqual([]);
-	let result = await askJev(request, {
-		apiKey: "test-only",
-		fetch: async () => reply(mockResult(request.questions, {}).answers),
-	});
+	let result = await decideReplying(mockResult(request.questions, {}).answers)(request);
 	expect(Object.keys(result.answers)).toHaveLength(39);
 	let state = initialState();
 	state.analysis.push({

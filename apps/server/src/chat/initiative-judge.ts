@@ -1,4 +1,5 @@
-import { askJev, type JevOptions, type JevQuestion } from "../conversation-plan/jev";
+import type { Decide, DecisionOptions } from "../conversation-plan/decisions";
+import type { JevQuestion } from "../conversation-plan/jev";
 
 import type { TurnContext, TurnDecision } from "./initiative-schedule";
 
@@ -53,10 +54,11 @@ function bounded(text: string, budget: number): string {
 
 export async function judgeInitiative(
 	context: InitiativeContext,
-	options?: JevOptions,
+	options: DecisionOptions & { decide: Decide | undefined },
 ): Promise<InitiativeMove | undefined> {
+	let { decide, ...decision } = options;
 	try {
-		if (options?.signal?.aborted) return undefined;
+		if (decision.signal?.aborted) return undefined;
 		let conversation = context.messages.filter(message =>
 			message.author === "member" || message.text.trim()
 		);
@@ -106,12 +108,9 @@ export async function judgeInitiative(
 			},
 		};
 		// Encoded bounds include JSON escaping and every field, not only visible text.
-		if (JSON.stringify(state).length >= 24000) return undefined;
-		let result = await askJev({ state, questions: { initiative: question } }, {
-			...options,
-			model: options?.model ?? "jev-1.13.0",
-		});
-		if (options?.signal?.aborted) return undefined;
+		if (!decide || JSON.stringify(state).length >= 24000) return undefined;
+		let result = await decide({ state, questions: { initiative: question } }, decision);
+		if (decision.signal?.aborted) return undefined;
 		let answer = result.answers.initiative;
 		if (answer?.type !== "choice" || answer.choice === "wait") return undefined;
 		if (context.turn.paused || context.turn.focused) {

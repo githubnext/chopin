@@ -6,10 +6,10 @@ test("automatic participation uses the enabled Planner without an opt-in", () =>
 		agent: true,
 		conversationPlan: false,
 		conversationInitiativeSilenceMs: 15_000,
-		conversationInitiativeModel: "jev-1.13.0",
+		conversationInitiativeModel: undefined,
 	});
 	expect(() => configured({ JEV_API_KEY: undefined }))
-		.toThrow("JEV_API_KEY is required when AGENT is enabled");
+		.toThrow("A decisions model is required when AGENT is enabled");
 	expect(configured({ AGENT: "off", JEV_API_KEY: undefined }).agent).toBe(false);
 });
 

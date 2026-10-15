@@ -75,7 +75,7 @@ import { heuristicJudge, jevJudge, SpikeScout } from "./experiments/spike-scout"
 import { spikeHost } from "./experiments/spike-host";
 import { spikeSettler, startSettle } from "./experiments/spike-settle";
 import { resolveInstruction } from "./experiments/spikes";
-import { askJev } from "./conversation-plan/jev";
+import { openDecisions } from "./conversation-plan/decisions";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
@@ -125,6 +125,8 @@ import type {
 } from "./wire";
 
 const config = load();
+/** The one decisions boundary, checked against Atomic's registry before anything starts. */
+const decide = await openDecisions(config);
 harnessFor(config);
 const storage = createStorage(config.storage);
 const router = new Router();
@@ -201,6 +203,7 @@ let archivingChannels = new Set<string>();
 let deletingChannels = new Set<string>();
 let conversationRuntime = createConversationRuntime({
 	config,
+	decide,
 	server: () => server,
 	unavailable: id => archivingChannels.has(id) || deletingChannels.has(id),
 	researchJobs: () => researchBriefJobs,
@@ -522,6 +525,7 @@ function conversation(
 		server,
 		room: room.id,
 		config,
+		decide,
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
@@ -2276,9 +2280,7 @@ if (config.liveBuild) {
 		current: currentDocumentTarget,
 		skip: pastReadiness,
 		review: id => readinessReviews.review(id),
-		ask: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
-			? request => askJev(request)
-			: undefined,
+		ask: decide,
 		error: err => console.error("chopin: build readiness failed -", err),
 	});
 }
@@ -2395,10 +2397,7 @@ if (config.liveBuild) {
 	liveSync = new LiveSyncCoordinator({
 		withPlan: withImplementationPlan,
 		connections: runtime.connections,
-		classifier: liveClassifier({
-			model: config.conversationPlanModel ?? "jev-latest",
-			timeoutMs: config.conversationPlanTimeoutMs ?? 30_000,
-		}),
+		classifier: liveClassifier(decide),
 		queued: (id, build) => {
 			implementations?.track(id);
 			runtime.connections.wake(build.repositoryId);
@@ -2407,8 +2406,6 @@ if (config.liveBuild) {
 	});
 }
 if (config.liveSpikes) {
-	let jev = config.conversationPlanModel ?? "jev-latest";
-	let timeoutMs = config.conversationPlanTimeoutMs ?? 30_000;
 	spikeScout = new SpikeScout({
 		host: spikeHost({
 			service: experiments.service,
@@ -2420,9 +2417,9 @@ if (config.liveSpikes) {
 				);
 			},
 		}),
-		// Without Jev nothing is spiked unless the operator opts into the regex judge.
-		judge: process.env.JEV_API_KEY || process.env.TYPESAFE_API_KEY
-			? jevJudge(request => askJev(request, { model: jev, timeoutMs }))
+		// Without a decisions model nothing is spiked unless the operator opts into the regex judge.
+		judge: decide
+			? jevJudge(request => decide(request))
 			: config.liveSpikesRegexJudge
 			? heuristicJudge
 			: undefined,

@@ -58,8 +58,8 @@ export default defineConfig({
 			PLANNER_VISUALS: visualRouting ? "on" : "off",
 			...(visualRouting && {
 				JEV_API_KEY: process.env.JEV_API_KEY!,
-				JEV_MODEL: "jev-1.13.0",
-				JEV_TIMEOUT_MS: "30000",
+				DECISIONS_MODEL: "typesafe/jev-latest",
+				DECISIONS_TIMEOUT_MS: "30000",
 			}),
 			HARNESS: "copilot-sdk",
 			HARNESS_AUTH: "direct",

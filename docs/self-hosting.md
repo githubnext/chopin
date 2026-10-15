@@ -255,10 +255,11 @@ headers.
 - A stable DNS name with TLS termination and WebSocket proxying.
 - Outbound HTTPS access to GitHub and the selected harness's model provider
   (the hosted Copilot service for `copilot-sdk`).
-- When the Planner is enabled (the default), or `CONVERSATION_PLAN=on`, outbound
-  HTTPS access to TypeSafe's Jev service
-  (`api.typesafe.ai`) and a server-side `JEV_API_KEY`, separate from the Planner's
-  harness credentials.
+- When the Planner is enabled (the default), or `CONVERSATION_PLAN=on`, a
+  decisions classifier and its server-side key, separate from the Planner's
+  harness credentials: `OPENAI_API_KEY` for OpenAI's Decisions API
+  (`api.openai.com`) or `JEV_API_KEY` for TypeSafe's Jev (`api.typesafe.ai`).
+  See [Decisions](#decisions).
 - A GitHub App owned by the deployment.
 - At least one user with repository push or administration access.
 - For `copilot-sdk`, an active Copilot entitlement for each user who may own a
@@ -334,29 +335,29 @@ the image.
 | `WEB_RESEARCH`                    | on                      | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `COPILOT_CLI_PATH`                | automatic               | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `CONVERSATION_PLAN`               | off                     | Set exactly `on` to enable experimental conversation-derived cards. Interpretation runs independently of `AGENT`; Planner jobs still obey the agent and job settings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `PLANNER_VISUALS`                 | off                     | Set exactly `on` to enable the bounded Jev visual handoff for foreground Planner turns. Requires `AGENT=on` and `JEV_API_KEY`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `JEV_MODEL`                       | `jev-latest`            | Model alias for conversation interpretation. Independent of the hosted Planner's `MODEL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `JEV_TIMEOUT_MS`                  | `30000`                 | Per-request interpretation timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `JEV_API_KEY`                     | required when enabled   | Server-side Jev API key. Required at startup when the Planner is enabled (the default) or `CONVERSATION_PLAN=on`; never send it to the browser.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `PLANNER_VISUALS`                 | off                     | Set exactly `on` to enable the bounded visual handoff for foreground Planner turns. Requires `AGENT=on` and a decisions model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `DECISIONS_MODEL`                 | from the key present    | The classifier that answers every decision, as an exact Atomic `provider/id`. Unset, it is `typesafe/jev-latest` when `JEV_API_KEY` or `TYPESAFE_API_KEY` is set, otherwise `openai-decisions/gpt-6-luna` when `OPENAI_API_KEY` is set. See [Decisions](#decisions).                                                                                                                                                                                                                                                                                                                                                                                              |
+| `DECISIONS_TIMEOUT_MS`            | `30000`                 | Per-request decisions timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `OPENAI_API_KEY`                  | unset                   | OpenAI API key for `openai-decisions/gpt-6-luna`. Server-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `JEV_API_KEY`                     | unset                   | TypeSafe API key for `typesafe/jev-latest`. Server-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `CONNECTOR_VERSION`               | the bundled connector's | The `chopin` release this server recommends: `chopin update` installs it by default, and a refused connector is told to run `chopin update <version>` with it. Defaults to the version in `apps/connector/package.json`. A `cli-v` or `v` prefix is dropped; anything but a version like `0.2.0` fails startup.                                                                                                                                                                                                                                                                                                                                                   |
 | `CHOPIN_SETUP_AGENTS`             | unset                   | Setups the Machines page offers before the built-in coding agents, as a JSON array. See [Setup agents](#setup-agents). The supplied Compose file forwards it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 [Automatic participation](conversation-initiative.md) is part of the enabled Planner,
 with no separate feature flag. The shared Chat control pauses automatic replies per
-document. Group turn-taking uses Jev; solo replies bypass it.
+document. Group turn-taking asks the decisions model; solo replies bypass it.
 
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
 
 `PLANNER_VISUALS` defaults to off. Set it exactly to `on` alongside `AGENT=on`
-and `JEV_API_KEY` to enable the bounded foreground visual handoff. Jev makes
+to enable the bounded foreground visual handoff. The decisions model makes
 three decisions for each assessed paragraph: whether visualization is possible,
 whether it improves comprehension, and which SeeCode type or table fits. The
 Planner writes and validates the selected visual. This experimental path
 currently accepts one explanatory paragraph per edit, optionally followed by
 its selected visual; headings can be separate edits. Lists and nested MDX
-paragraphs are not yet supported in a routed edit. `JEV_MODEL` and
-`JEV_TIMEOUT_MS` apply to this path too.
+paragraphs are not yet supported in a routed edit.
 
 Routing is limited to explicit member requests of at most 1,000 characters under
 `copilot-sdk`. Comment turns, longer member requests, background
@@ -364,23 +365,51 @@ jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
 retained workflow sessions are outside this disposable-session prototype.
 
 Conversation-derived cards default to off. When enabled, interpretation sends
-current and recent Chat messages and selected decision context to TypeSafe's Jev
-service. It uses `JEV_API_KEY` and `JEV_MODEL` independently of the Planner's
-provider and credentials; `AGENT=off` does not disable it.
+current and recent Chat messages and selected decision context to the decisions
+model, independently of the Planner's provider and credentials; `AGENT=off` does
+not disable it.
 
 The same flag enables independent external-research suggestions in Chat. Their
 shared briefs can be synthesized by the `research-brief@1` background worker under
 the existing Planner owner; this uses the configured harness provider, separately
-from Jev. A self-contained source excerpt is the fallback when synthesis is
+from the decisions model. A self-contained source excerpt is the fallback when synthesis is
 unavailable. Actual research starts only after a writer accepts the current shared
 brief and the execution capability is enabled. See
 [Research offers from Chat](conversation-research.md).
 
-The supplied Compose file forwards `CONVERSATION_PLAN`, `PLANNER_VISUALS`, `JEV_MODEL` and
-`JEV_API_KEY` from the deployment environment. It uses the server's default
-30-second interpretation timeout. To override `JEV_TIMEOUT_MS`, configure it
-explicitly in the service environment; the Compose file does not forward an
-unset optional timeout as an empty value.
+The supplied Compose file forwards `CONVERSATION_PLAN`, `PLANNER_VISUALS`,
+`DECISIONS_MODEL`, `OPENAI_API_KEY` and `JEV_API_KEY` from the deployment
+environment. It uses the server's default 30-second decisions timeout. To
+override `DECISIONS_TIMEOUT_MS`, configure it explicitly in the service
+environment; the Compose file does not forward an unset optional timeout as an
+empty value.
+
+### Decisions
+
+Conversation cards, research offers, group turn-taking, visual routing, and the
+living-build and prototype gates ask small typed questions: a yes-or-no
+probability, a choice from a fixed set, or a score on ordered levels. One
+classifier model answers all of them through Atomic's model registry. The
+server checks at startup that `DECISIONS_MODEL` is a classifier the registry
+knows and that its provider has a key, and refuses to start otherwise.
+
+Any classifier in the registry works. Examples:
+
+| `DECISIONS_MODEL`                           | Key                                              |
+| ------------------------------------------- | ------------------------------------------------ |
+| `openai-decisions/gpt-6-luna`               | `OPENAI_API_KEY`                                 |
+| `typesafe/jev-latest`                       | `JEV_API_KEY` or `TYPESAFE_API_KEY`              |
+| `cloudflare-workers-ai/@cf/cloudflare/clef` | `CLOUDFLARE_API_KEY` and `CLOUDFLARE_ACCOUNT_ID` |
+
+Keys come from the server environment under each provider's usual variable;
+see Atomic's
+[model docs](https://github.com/bastani-inc/atomic/blob/main/packages/coding-agent/docs/models.md#use-classifier-models)
+for the classifier list. The server never reads Atomic's saved logins. It does
+read Atomic's `models.json` from `$ATOMIC_CODING_AGENT_DIR` (default
+`~/.atomic/agent`), so a provider's base URL can be overridden there. Requests
+send their decision context to the chosen provider and get one attempt each.
+`CONVERSATION_INITIATIVE_MODEL` can point group turn-taking at another
+classifier.
 
 Generate the encryption key with:
 

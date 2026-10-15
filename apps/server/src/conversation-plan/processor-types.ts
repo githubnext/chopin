@@ -26,7 +26,10 @@ export type Dependencies = {
 	persist: () => Promise<void>;
 	publish: (state: State) => void;
 	active: () => boolean;
-	interpret?: (input: InterpretInput, signal: AbortSignal) => Promise<Interpretation>;
+	interpret?: (
+		input: Omit<InterpretInput, "ask">,
+		signal: AbortSignal,
+	) => Promise<Interpretation>;
 	researchInterpret?: (
 		input: ResearchInput,
 		signal: AbortSignal,

@@ -91,10 +91,10 @@ export function loadAcceptance() {
 	}
 	let model = required("E2E_VISUAL_MODEL");
 	let questionAnswer = visualRouting ? undefined : required("E2E_VISUAL_QUESTION_ANSWER");
-	let jevModel = visualRouting ? required("JEV_MODEL") : undefined;
+	let decisionsModel = visualRouting ? required("DECISIONS_MODEL") : undefined;
 	if (
 		visualRouting && (
-			model !== "gpt-6-luna" || jevModel !== "jev-1.13.0"
+			model !== "gpt-6-luna" || decisionsModel !== "typesafe/jev-latest"
 			|| !process.env.JEV_API_KEY || process.env.E2E_VISUAL_QUESTION_ANSWER
 		)
 	) throw new Error("Jev-three requires the pinned models, JEV_API_KEY, and no answer control");
@@ -130,7 +130,9 @@ export function loadAcceptance() {
 		questionAnswer,
 		...(visualRouting && {
 			visualRouting: true,
-			jevModel,
+			decisionsModel,
+			// The version TypeSafe must resolve jev-latest to for this frozen subset.
+			jevModel: "jev-1.13.0",
 			jevTimeoutMs: 30_000,
 			jevDecisionThresholds: { possibility: 0.5, helpfulness: 0.5 },
 			jevRequestCap: { perCase: 3, total: 9 },

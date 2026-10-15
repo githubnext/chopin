@@ -1,16 +1,17 @@
 # Automatic participation in Chat
 
 Chopin joins ordinary saved conversation without an `@chopin` mention whenever the
-Planner is enabled. There is no separate feature flag. A server-side `JEV_API_KEY` is
-required at startup for group turn-taking judgments. Participation is independent of
+Planner is enabled. There is no separate feature flag. Group turn-taking judgments use
+the deployment's decisions model (`DECISIONS_MODEL`, chosen from `OPENAI_API_KEY` or
+`JEV_API_KEY` when unset), which is required at startup. Participation is independent of
 conversation-derived decision and research cards (`CONVERSATION_PLAN`).
 
 One human's saved message normally hands the turn to Chopin. After a short 1.5-second
-window that combines rapid messages, Chopin replies without needing Jev to approve the
+window that combines rapid messages, Chopin replies without needing the decisions model to approve the
 topic's usefulness. Typing postpones the turn. A brief reply or acknowledgment gets the
 same opportunity as a detailed question.
 
-When multiple humans contribute between Chopin's replies, a bounded Jev judgment first
+When multiple humans contribute between Chopin's replies, a bounded decisions judgment first
 decides whether they have invited Chopin to answer or are exchanging turns with each
 other. A direct request such as “Chopin, can you investigate this?” works without `@`.
 Direct requests and clear invitations can respond after the short window. Otherwise Chopin
@@ -22,7 +23,7 @@ message.
 
 The scheduler counts verified contributors since Chopin's latest reply, expiring activity
 after two minutes; passive viewers do not count. Two tabs for one person count once and
-local demo collaborators count separately. Jev sees conversation history and the current
+local demo collaborators count separately. The judgment sees conversation history and the current
 turn phase, so multiple recent speakers alone do not require waiting. Typing sends only an
 activity flag, never an unsent draft. Its lease expires after six seconds without renewal.
 
@@ -43,11 +44,11 @@ release is ignored, and the server refuses `chat:participation` pause requests.
 
 ## Configuration
 
-| Setting                              | Default      | Meaning                                                         |
-| ------------------------------------ | ------------ | --------------------------------------------------------------- |
-| `CONVERSATION_INITIATIVE_SILENCE_MS` | `15000`      | Group silence window, from 1,000 to 60,000 milliseconds.        |
-| `CONVERSATION_INITIATIVE_MODEL`      | `jev-1.13.0` | Jev model for turn-taking judgment, independent of `JEV_MODEL`. |
-| `JEV_TIMEOUT_MS`                     | `30000`      | Shared timeout for a Jev request.                               |
+| Setting                              | Default           | Meaning                                                  |
+| ------------------------------------ | ----------------- | -------------------------------------------------------- |
+| `CONVERSATION_INITIATIVE_SILENCE_MS` | `15000`           | Group silence window, from 1,000 to 60,000 milliseconds. |
+| `CONVERSATION_INITIATIVE_MODEL`      | `DECISIONS_MODEL` | Classifier `provider/id` for turn-taking judgment.       |
+| `DECISIONS_TIMEOUT_MS`               | `30000`           | Shared timeout for a decisions request.                  |
 
 Group judgments receive the source message, up to ten recent
 human/Planner messages, a bounded excerpt of the document, and up to four open decision

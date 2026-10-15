@@ -13,7 +13,9 @@ import { startFakeGithubMcpServer } from "./harness/fake-mcp-server";
 import { loadAcceptance, MCP_PORT } from "./planner-visual-acceptance";
 import { JevBudget } from "./planner-visual-jev-budget";
 
-import { type JevQuestion, validateJevResponse } from "../apps/server/src/conversation-plan/jev";
+import { validateJevResponse } from "./jev-response";
+
+import type { JevQuestion } from "../apps/server/src/conversation-plan/jev";
 import { instruction } from "../packages/protocol/address";
 
 const MCP_URL = "https://api.githubcopilot.com/mcp/";
@@ -98,7 +100,7 @@ let guarded = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeo
 		let caseId = item?.caseId;
 		let questionIds = Object.keys(body.questions ?? {});
 		if (
-			body.model !== acceptance.configuration.jevModel
+			body.model !== acceptance.configuration.decisionsModel?.replace(/^typesafe\//, "")
 			|| questionIds.length !== 1 || !["p0", "h0", "t0"].includes(questionIds[0]!)
 		) {
 			stopJev("unexpected-request", caseId);

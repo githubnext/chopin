@@ -182,21 +182,27 @@ export function assertAnalysisRecord(item: unknown): void {
 						|| !(legend[level] as string).trim() || (legend[level] as string).length > 500
 					)
 				) throw new Error("invalid analysis score legend");
-				let distribution = analysisDistribution(answer.probabilities, 10);
-				answerEntries += Object.keys(distribution).length;
-				if (
-					Object.keys(distribution).length !== levels.length
-					|| levels.some((level) => !(level in distribution))
-				) {
-					throw new Error("invalid analysis score distribution");
-				}
-				let weighted = levels.reduce((sum, level, index) => sum + index * distribution[level], 0);
 				if (
 					typeof answer.score !== "number" || !Number.isFinite(answer.score)
 					|| answer.score < 0 || answer.score > levels.length - 1
-					|| Math.abs(answer.score - weighted) > 0.12
 				) {
 					throw new Error("invalid analysis score");
+				}
+				answerEntries += levels.length;
+				// A stored per-level distribution must agree with the score weighted from it.
+				if (answer.probabilities !== undefined) {
+					let distribution = analysisDistribution(answer.probabilities, 10);
+					if (
+						Object.keys(distribution).length !== levels.length
+						|| levels.some((level) => !(level in distribution))
+					) {
+						throw new Error("invalid analysis score distribution");
+					}
+					let weighted = levels.reduce(
+						(sum, level, index) => sum + index * distribution[level]!,
+						0,
+					);
+					if (Math.abs(answer.score - weighted) > 0.12) throw new Error("invalid analysis score");
 				}
 				continue;
 			}

@@ -80,8 +80,8 @@ export function initiative(context: Room) {
 						: []
 				),
 			}, {
+				decide: context.decide,
 				model: context.config.conversationInitiativeModel,
-				timeoutMs: context.config.conversationPlanTimeoutMs,
 				signal,
 			});
 		},

@@ -1,5 +1,5 @@
 import type { Chat, ConversationPlan } from "@chopin/protocol";
-import { askJev, type JevQuestion, type JevRequest, type JevResult } from "./jev";
+import type { JevQuestion, JevRequest, JevResult } from "./jev";
 import { choice, noul } from "./policy-scoring";
 import { visibleThreads } from "./question-context";
 import { RESEARCH_POLICY_VERSION, researchAdmission } from "./research-admission";
@@ -146,7 +146,7 @@ export function researchRequest(input: ResearchInput) {
 
 export async function interpretResearch(
 	input: ResearchInput,
-	ask: (request: JevRequest) => Promise<JevResult> = askJev,
+	ask: (request: JevRequest) => Promise<JevResult>,
 ): Promise<ResearchInterpretation> {
 	let started = performance.now();
 	let analysis: ConversationPlan.ResearchAnalysis = {
