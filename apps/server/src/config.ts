@@ -21,6 +21,8 @@ export type Config = {
 	port: number;
 	/** Planner model. Empty under `HARNESS=remote` unless set, where the attached client chooses. */
 	model: string;
+	/** Writes History's one-line session summaries; a small fast model suits it. Defaults to `model`. */
+	historyModel: string;
 	harness: string;
 	harnessAuth: string | undefined;
 	/**
@@ -277,6 +279,7 @@ export function load(): Config {
 		...selection,
 		port: serverPort,
 		model: model(selection.harness),
+		historyModel: process.env.HISTORY_MODEL || model(selection.harness),
 		plannerAttachGraceMs,
 		agentConnectionPingMs,
 		agentConnectionTimeoutMs,

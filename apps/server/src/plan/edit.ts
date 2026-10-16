@@ -361,6 +361,49 @@ function collectProjections(nodes: RootContent[]): Map<string, string> | string 
 	return found;
 }
 
+function holdsProjection(node: RootContent): boolean {
+	let found = collectProjections([node]);
+	return typeof found === "string" || found.size > 0;
+}
+
+/**
+ * An earlier version's source with the current projections carried across, so restoring it never
+ * drops, alters or authors a Questionnaire, Decision, Research or Investigation projection, which
+ * their records own. The earlier version's own projection blocks give way to the current ones, and
+ * each current one returns after the block it followed now, when the earlier version has that
+ * block too; otherwise after the projection before it, or at the start.
+ */
+export function restoration(current: string, earlier: string): string {
+	let now = parse(current).children;
+	let restored = parse(earlier).children.filter(node => !holdsProjection(node));
+	let used = new Set<number>();
+	let after = (digest: string): number => {
+		let index = restored.findIndex((node, at) => !used.has(at) && fingerprint(node) === digest);
+		if (index >= 0) used.add(index);
+		return index;
+	};
+	let placed: { node: RootContent; at: RootContent | undefined }[] = [];
+	let previous: RootContent | undefined;
+	let lastPlaced: RootContent | undefined;
+	for (let node of now) {
+		if (!holdsProjection(node)) {
+			previous = node;
+			continue;
+		}
+		let index = previous ? after(fingerprint(previous)) : -1;
+		placed.push({ node, at: index >= 0 ? restored[index] : lastPlaced });
+		lastPlaced = node;
+	}
+	let children: RootContent[] = [];
+	let follow = (node: RootContent) => {
+		children.push(node);
+		for (let entry of placed) if (entry.at === node) follow(entry.node);
+	};
+	for (let entry of placed) if (entry.at === undefined) follow(entry.node);
+	for (let node of restored) follow(node);
+	return serialize({ type: "root", children });
+}
+
 function protectProjections(base: RootContent[], next: RootContent[]): string | undefined {
 	let current = collectProjections(base);
 	if (typeof current === "string") return current;

@@ -786,3 +786,37 @@ describe("replacing canonical source", () => {
 		expect(result).toMatchObject({ ok: true, mutation: undefined, touched: [], changes: [] });
 	});
 });
+
+describe("restoring an earlier version", () => {
+	let decision = (id: string, text: string) =>
+		`<Decision id="${id}" quote="q" by="ana" at="t">\n<Note by="ana" text="${text}" />\n</Decision>`;
+	let A = "01K0N4TR8K7JGM4R1J7PW4R8YA";
+	let B = "01K0N4TR8K7JGM4R1J7PW4R8YB";
+
+	it("takes the earlier prose and keeps today's decisions after the block they follow", () => {
+		let current = `# Title\n\nKept paragraph.\n\n${decision(A, "now")}\n\nNew paragraph.\n`;
+		let earlier = "# Title\n\nKept paragraph.\n\nOld paragraph.\n";
+		let restored = edit.restoration(current, earlier);
+		expect(restored).toContain("Old paragraph.");
+		expect(restored).not.toContain("New paragraph.");
+		expect(restored.indexOf("Kept paragraph.")).toBeLessThan(restored.indexOf(A));
+		expect(restored.indexOf(A)).toBeLessThan(restored.indexOf("Old paragraph."));
+	});
+
+	it("drops an earlier projection and its stale text for today's", () => {
+		let current = `# Title\n\n${decision(A, "answered")}\n`;
+		let earlier = `# Title\n\n${decision(A, "open")}\n\n${decision(B, "gone")}\n`;
+		let restored = edit.restoration(current, earlier);
+		expect(restored).toContain('text="answered"');
+		expect(restored).not.toContain('text="open"');
+		expect(restored).not.toContain(B);
+	});
+
+	it("keeps a decision whose anchor is gone, after the decision before it", () => {
+		let current = `Lead.\n\n${decision(A, "a")}\n\nOnly now.\n\n${decision(B, "b")}\n`;
+		let earlier = "Something else.\n";
+		let restored = edit.restoration(current, earlier);
+		expect(restored.indexOf(A)).toBeLessThan(restored.indexOf(B));
+		expect(restored).toContain("Something else.");
+	});
+});

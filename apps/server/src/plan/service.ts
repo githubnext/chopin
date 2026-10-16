@@ -145,6 +145,11 @@ export type DocumentTarget = {
 	editor?: string;
 	/** With `editor`: the source before this update, so a reader can tell what they changed. */
 	previousSource?: string;
+	/**
+	 * Who to credit in the document's history: the editor, or the person whose MCP client
+	 * rewrote it. Absent when Chopin itself wrote the change.
+	 */
+	author?: string;
 };
 
 /** Durable MCP context for a document created through the hosted surface. */
@@ -185,6 +190,8 @@ type Persistence = Backend & {
 	closing: boolean;
 	/** The member whose batch is committing, for derived work that follows their edit. */
 	editor?: string;
+	/** The person an MCP rewrite is committing for; credited in history but not an editor. */
+	author?: string;
 };
 
 type Captured = {
@@ -1007,6 +1014,9 @@ async function commitHosted(
 					source: captured.source,
 					sourceHash: captured.sourceHash,
 					...(durable.editor ? { editor: durable.editor, previousSource } : {}),
+					...(durable.editor ?? durable.author
+						? { author: durable.editor ?? durable.author }
+						: {}),
 				});
 			} catch (err) {
 				console.warn(`[plan] could not schedule derived work for ${durable.channelId}:`, err);
@@ -1947,7 +1957,10 @@ export async function publishStaged(
 export async function rewrite(
 	plan: Plan,
 	nextSource: string,
-	record: (source: string, revision: number) => McpUpdateRecord,
+	/** An MCP rewrite's idempotency record; a restore from history has none. */
+	record: ((source: string, revision: number) => McpUpdateRecord) | undefined,
+	/** The person whose MCP client sent the rewrite, so history can credit them. */
+	author?: string,
 ): Promise<edit.Result> {
 	if (implementationActive(plan)) throw new Error("implementation is active");
 	let before = room.project(plan.document);
@@ -1986,8 +1999,8 @@ export async function rewrite(
 		}
 		if (outcome.mutation) document.seq++;
 		if (source !== plan.persistence.committedSource) candidate.revision++;
-		let recorded = record(source, candidate.revision);
-		candidate.mcpUpdates.push(recorded);
+		let recorded = record?.(source, candidate.revision);
+		if (recorded) candidate.mcpUpdates.push(recorded);
 		let operationId = outcome.mutation
 			? `server:${document.epoch}:${
 				createHash("sha256").update(outcome.mutation.update).digest("hex")
@@ -1995,10 +2008,15 @@ export async function rewrite(
 			: `state:${crypto.randomUUID()}`;
 		let captured = {
 			...capture(candidate),
-			finalizeTitleReceipt: candidate.document.titleKey !== undefined,
+			finalizeTitleReceipt: recorded !== undefined && candidate.document.titleKey !== undefined,
 		};
-		await commitHosted(plan, outcome.mutation?.update, operationId, captured);
-		if (captured.finalizeTitleReceipt) {
+		plan.persistence.author = author;
+		try {
+			await commitHosted(plan, outcome.mutation?.update, operationId, captured);
+		} finally {
+			plan.persistence.author = undefined;
+		}
+		if (recorded && captured.finalizeTitleReceipt) {
 			let receipt = (captured.sidecar as unknown as { mcpUpdates: McpUpdateRecord[] }).mcpUpdates
 				.at(-1)!;
 			recorded.document = receipt.document;
@@ -2010,7 +2028,7 @@ export async function rewrite(
 		if (candidate.document.titleKey !== undefined) room.trackTitle(plan.document);
 		plan.document.seq = document.seq;
 		plan.revision = candidate.revision;
-		plan.mcpUpdates.push(recorded);
+		if (recorded) plan.mcpUpdates.push(recorded);
 		plan.outlines = candidate.outlines;
 		if (changed) {
 			Questions.rebase(plan, before);

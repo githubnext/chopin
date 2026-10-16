@@ -31,6 +31,7 @@ import type {
 	CreateResearchWorkspace,
 	CreateResearchWorkspaceResult,
 	CreateWebSession,
+	DocumentVersion,
 	EnqueueBackgroundJob,
 	FailBackgroundJob,
 	Lease,
@@ -47,6 +48,7 @@ import type {
 	PublishInitialResearchReportResult,
 	PutImage,
 	PutUser,
+	RecordDocumentVersion,
 	RecordNavigationVisit,
 	RenameChannel,
 	RenameResult,
@@ -68,9 +70,11 @@ import type {
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 	StoredChannel,
+	StoredDocumentVersion,
 	StoredImage,
 	StoredMachine,
 	StoredWebSession,
+	SummarizeDocumentVersion,
 	SupersedeBackgroundJob,
 	UpdateAgentContext,
 	UserNavigation,
@@ -139,6 +143,18 @@ export interface ImageStore {
 	get(channelId: string, sha256: string): Promise<StoredImage | undefined>;
 	/** Every document these bytes were uploaded to, oldest upload first. */
 	channels(sha256: string): Promise<string[]>;
+}
+
+/** A document's editing sessions, newest first. History is derived; nothing replays it. */
+export interface DocumentVersionStore {
+	/** Extend the latest session when it is the same author's and recent, otherwise start one. */
+	record(input: RecordDocumentVersion): Promise<DocumentVersion | undefined>;
+	list(channelId: string, limit: number): Promise<DocumentVersion[]>;
+	get(channelId: string, id: string): Promise<StoredDocumentVersion | undefined>;
+	/** The session before `id`, whose source a summary of `id` compares against. */
+	previous(channelId: string, id: string): Promise<StoredDocumentVersion | undefined>;
+	/** Stores a summary when the session still has that source; reports whether it did. */
+	summarize(input: SummarizeDocumentVersion): Promise<boolean>;
 }
 
 export interface NavigationStore {
@@ -313,6 +329,7 @@ export interface StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: ImageStore;
+	readonly versions: DocumentVersionStore;
 	readonly machines: MachineStore;
 
 	migrate(): Promise<void>;

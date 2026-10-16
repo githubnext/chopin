@@ -34,6 +34,46 @@ export type StoredImage = {
 
 export type PutImage = Omit<StoredImage, "size" | "createdAt"> & { now: Date };
 
+/**
+ * One editing session in a document's history and the source it left behind.
+ * Consecutive edits by the same author within the idle gap extend one session.
+ */
+export type DocumentVersion = {
+	id: string;
+	channelId: string;
+	/** The person whose edits these were; absent when Chopin itself wrote them. */
+	authorId?: string;
+	authorLogin?: string;
+	authorAvatarUrl?: string;
+	revision: number;
+	sourceHash: string;
+	startedAt: Date;
+	updatedAt: Date;
+	/** A one-line account of the session, present only while it describes the current source. */
+	summary?: string;
+};
+
+export type StoredDocumentVersion = DocumentVersion & { source: string };
+
+export type RecordDocumentVersion = {
+	channelId: string;
+	authorId?: string;
+	revision: number;
+	source: string;
+	sourceHash: string;
+	now: Date;
+	/** Edits by the same author closer together than this extend the latest session. */
+	idleMs: number;
+};
+
+export type SummarizeDocumentVersion = {
+	channelId: string;
+	id: string;
+	/** The source the summary describes; a session that has moved on since keeps none. */
+	sourceHash: string;
+	summary: string;
+};
+
 export type UserProject = {
 	userId: string;
 	repositoryId: string;

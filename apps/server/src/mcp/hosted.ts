@@ -645,6 +645,13 @@ export function hosted(
 							}
 							if (channel.archivedAt) return { kind: "archived" as const };
 							if (Plan.implementationActive(plan)) return { kind: "locked" as const };
+							// History credits the rewrite to this person, so they need a user row.
+							await auth.storage.users.put({
+								id: caller.user.id,
+								login: caller.user.login,
+								avatarUrl: caller.user.avatarUrl,
+								now: auth.clock(),
+							});
 							if (input.revision !== plan.revision) {
 								return {
 									kind: "revision-conflict" as const,
@@ -667,7 +674,7 @@ export function hosted(
 										? { description: channel.description.value }
 										: {}),
 								},
-							}));
+							}), caller.user.id);
 							if (!outcome.ok) {
 								return outcome.reason === "stale"
 									? {

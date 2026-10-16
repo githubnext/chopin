@@ -1,0 +1,264 @@
+/* The document and its side panel (Contents or Activity) share the paper: a quiet column at its edge. */
+.history-layout {
+	display: flex;
+	block-size: 100%;
+	min-block-size: 0;
+}
+.history-layout-main {
+	position: relative;
+	/* The Contents ticks size their spacing to this pane's height. */
+	container-type: size;
+	flex: 1 1 auto;
+	min-inline-size: 0;
+	block-size: 100%;
+}
+
+/*
+ * History slides in from the right under the title bar, over the views bar and the document, so
+ * nothing beneath reflows. Its header stays put while the list scrolls under a fade.
+ */
+.history-sidebar {
+	position: absolute;
+	inset-block: calc(-1 * var(--panel-header-height)) 0;
+	inset-inline-end: 0;
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	inline-size: 17rem;
+	max-inline-size: 100%;
+	border-inline-start: var(--edge-width) solid var(--color-edge);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	animation: history-sidebar-in calc(var(--duration-base) * 1.4) var(--ease-out) both;
+
+	&[data-closing] {
+		pointer-events: none;
+		animation: history-sidebar-out var(--duration-base) var(--ease-out) both;
+	}
+}
+
+@keyframes history-sidebar-in {
+	from {
+		opacity: 0;
+		translate: 100% 0;
+	}
+}
+
+@keyframes history-sidebar-out {
+	to {
+		opacity: 0;
+		translate: 100% 0;
+	}
+}
+
+.history-sidebar-header {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	block-size: var(--panel-header-height);
+	padding-inline: calc(var(--spacing) * 3) calc(var(--spacing) * 1.5);
+}
+
+.history-sidebar-title {
+	margin: 0;
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-semibold);
+}
+
+.history-sidebar-body {
+	--scroll-edge-fade-size: calc(var(--spacing) * 8);
+
+	flex: 1 1 auto;
+	min-block-size: 0;
+	padding: var(--spacing) calc(var(--spacing) * 1.5) calc(var(--spacing) * 4);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.history-note {
+	margin: calc(var(--spacing) * 2);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.history-entries {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	/* Elapsed time becomes space: minutes apart sit tight, weeks apart breathe. */
+	& > li {
+		margin-block-start: calc(var(--spacing) * var(--history-gap, 0));
+	}
+}
+
+.history-entry {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	inline-size: 100%;
+	block-size: calc(var(--spacing) * 7);
+	padding-inline: calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-sm);
+	color: var(--color-text-primary);
+	font-size: var(--text-xs);
+	text-align: start;
+	transition: background-color var(--duration-fast) var(--ease-out);
+
+	&:is(button):hover {
+		background: var(--color-hover);
+	}
+
+	&[aria-current] {
+		background: var(--color-selected);
+	}
+}
+
+.history-entry-who {
+	flex: none;
+	font-weight: var(--font-weight-medium);
+}
+
+.history-entry-what {
+	flex: 1 1 auto;
+	min-inline-size: 0;
+	overflow: hidden;
+	color: var(--color-text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* A summary still being written: a quiet bar that breathes, in its line's place. */
+.history-entry-skeleton {
+	flex: 1 1 auto;
+	max-inline-size: 9rem;
+	block-size: calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background: var(--color-selected);
+	animation: history-skeleton calc(var(--duration-linger) * 2) var(--ease-out) infinite alternate;
+}
+
+.history-entries > li:nth-child(3n+2) .history-entry-skeleton {
+	max-inline-size: 7rem;
+}
+
+.history-entries > li:nth-child(3n) .history-entry-skeleton {
+	max-inline-size: 10.5rem;
+}
+
+@keyframes history-skeleton {
+	to {
+		opacity: 0.45;
+	}
+}
+
+.history-entry-when {
+	flex: none;
+	min-inline-size: calc(var(--spacing) * 7);
+	color: var(--color-text-tertiary);
+	font-variant-numeric: tabular-nums;
+	text-align: end;
+}
+
+/* Lingering on a row: the full line and the exact time, just left of the row. */
+.history-detail {
+	position: fixed;
+	inset-block-start: var(--detail-top, 0px);
+	inset-inline-start: var(--detail-left, 0px);
+	z-index: 60;
+	display: grid;
+	gap: calc(var(--spacing) * 0.5);
+	max-inline-size: 16rem;
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	color: var(--color-text-primary);
+	font-size: var(--text-xs);
+	translate: calc(-100% - var(--spacing)) -50%;
+	pointer-events: none;
+	animation: history-detail-in var(--duration-fast) var(--ease-out);
+}
+
+.history-detail-when {
+	color: var(--color-text-tertiary);
+}
+
+@keyframes history-detail-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.history-entry-skeleton {
+		animation: none;
+	}
+
+	.history-sidebar {
+		animation-name: history-detail-in;
+
+		&[data-closing] {
+			animation-name: history-sidebar-fade-out;
+		}
+	}
+}
+
+@keyframes history-sidebar-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+
+.views-bar-tools {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 0.5);
+	margin-inline-start: auto;
+	padding-inline-start: calc(var(--spacing) * 2);
+}
+
+.views-bar-tools [aria-expanded="true"] {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/* An earlier version replaces the live document in place; its bar takes the views bar's place. */
+.history-version {
+	block-size: 100%;
+	min-block-size: 0;
+}
+
+.history-version-bar {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	min-inline-size: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.history-version-label {
+	display: flex;
+	gap: calc(var(--spacing) * 2);
+	min-inline-size: 0;
+	overflow: hidden;
+	white-space: nowrap;
+
+	& strong {
+		color: var(--color-text-primary);
+		font-weight: var(--font-weight-medium);
+	}
+}
+
+.history-version-failure {
+	min-inline-size: 0;
+	overflow: hidden;
+	color: var(--color-destructive-ink);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

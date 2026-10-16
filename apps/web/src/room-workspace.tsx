@@ -2,6 +2,7 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -14,6 +15,7 @@ import {
 	ArchiveIcon,
 	CheckIcon,
 	ChevronIcon,
+	ClockIcon,
 	CloseIcon,
 	DocumentIcon,
 	MagnifierIcon,
@@ -90,6 +92,12 @@ import {
 } from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { DocumentContents } from "./document-contents";
+import {
+	DocumentHistoryPanel,
+	DocumentVersionBar,
+	DocumentVersionView,
+} from "./document-history-panel";
 import { DocumentRename } from "./document-rename";
 import { LostEditsNotice, UNDO_REFUSALS, UndoRefusedNotice } from "./document-status-notices";
 import { browserStorage, rememberOpened } from "./documents-sheet-model";
@@ -121,6 +129,7 @@ import type {
 } from "@chopin/editor";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
+import type { DocumentVersionSummary } from "./document-history";
 import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { ReactNode } from "react";
@@ -478,6 +487,31 @@ export function RoomWorkspace(
 	}, [archivedAt, repository.id, room, userId]);
 	let [status, setStatus] = useState<Status>("connecting");
 	let [planState, setPlanState] = useState<PlanState>({ synced: false });
+	// Contents ticks sit in the document's margin. History slides over the views bar and document,
+	// and an earlier session it names replaces the live document in place.
+	let [activityOpen, setActivityOpen] = useState(false);
+	let [activityClosing, setActivityClosing] = useState(false);
+	let [historyReload, setHistoryReload] = useState(0);
+	let [viewedVersion, setViewedVersion] = useState<DocumentVersionSummary>();
+	let documentArea = useRef<HTMLDivElement>(null);
+	let sidePanelId = useId();
+	let activityId = `${sidePanelId}-activity`;
+	let contentsRoot = useCallback(
+		() =>
+			documentArea.current?.querySelector(
+				viewedVersion ? ".history-version" : "[data-live-document]",
+			),
+		[viewedVersion],
+	);
+	useEffect(() => {
+		setActivityOpen(false);
+		setActivityClosing(false);
+		setViewedVersion(undefined);
+	}, [room]);
+	let closeActivity = () => {
+		setActivityClosing(true);
+		setViewedVersion(undefined);
+	};
 	// Claimed while rendering, so a new document's title takes focus as soon as it mounts.
 	let [titleEdit, setTitleEdit] = useState(() => claimTitleEdit(room));
 	// A phone reads until its writer asks to edit. Local to this client and this document: it
@@ -1451,6 +1485,31 @@ export function RoomWorkspace(
 			/>
 		</GitHubReferencesProvider>
 	);
+	let planArea = (
+		<div className="history-layout">
+			<div className="history-layout-main" ref={documentArea}>
+				<div className="h-full" data-live-document hidden={!!viewedVersion}>{plan}</div>
+				{viewedVersion && <DocumentVersionView channelId={room} version={viewedVersion} />}
+				{!activityOpen && <DocumentContents area={documentArea} root={contentsRoot} />}
+			</div>
+			{activityOpen && (
+				<DocumentHistoryPanel
+					channelId={room}
+					closing={activityClosing}
+					id={activityId}
+					onClose={closeActivity}
+					onClosed={() => {
+						setActivityOpen(false);
+						setActivityClosing(false);
+					}}
+					onSelect={setViewedVersion}
+					reload={historyReload}
+					self={handle}
+					{...(viewedVersion ? { selected: viewedVersion.id } : {})}
+				/>
+			)}
+		</div>
+	);
 	let titleProps: TitleProps = {
 		archivedAt: workspaceArchivedAt,
 		canManage: effectiveCanManage,
@@ -1714,17 +1773,56 @@ export function RoomWorkspace(
 					}
 					controls={
 						<>
-							<DecisionViewControl
-								attention={attention}
-								buildEnabled={profile.implementation ? build.tabReady : undefined}
-								buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
-								buildHot={buildHover === "capsule"}
-								onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
-								documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-								onView={selectDestination}
-								unanswered={unanswered}
-								view={view}
-							/>
+							{viewedVersion
+								? (
+									<DocumentVersionBar
+										channelId={room}
+										onBack={() => setViewedVersion(undefined)}
+										{...(effectiveCanEdit && !archivedAt
+											? {
+												onRestored: () => {
+													setViewedVersion(undefined);
+													setHistoryReload(count => count + 1);
+												},
+											}
+											: {})}
+										self={handle}
+										version={viewedVersion}
+									/>
+								)
+								: (
+									<DecisionViewControl
+										attention={attention}
+										buildEnabled={profile.implementation ? build.tabReady : undefined}
+										buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
+										buildHot={buildHover === "capsule"}
+										onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+										documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+										onView={selectDestination}
+										unanswered={unanswered}
+										view={view}
+									/>
+								)}
+							<div className="views-bar-tools">
+								<button
+									aria-controls={activityOpen ? activityId : undefined}
+									aria-expanded={activityOpen && !activityClosing}
+									aria-label="History"
+									className="btn btn-icon btn-ghost"
+									onClick={() => {
+										if (activityOpen && !activityClosing) {
+											closeActivity();
+											return;
+										}
+										if (view !== "plan") selectDestination("plan");
+										setActivityClosing(false);
+										setActivityOpen(true);
+									}}
+									type="button"
+								>
+									<ClockIcon />
+								</button>
+							</div>
 						</>
 					}
 					// Build plan or its capsule closes the status, so the rule before the faces follows it.
@@ -1791,7 +1889,7 @@ export function RoomWorkspace(
 							wire={wire}
 						/>
 					}
-					plan={plan}
+					plan={planArea}
 					state={workspace}
 					presentation={presentation}
 					unanswered={unanswered}

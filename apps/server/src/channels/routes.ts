@@ -195,6 +195,36 @@ async function authorizedRepository(
 	return repository;
 }
 
+/** Enough editing sessions to cover a document's recent life without paging. */
+const VERSION_LIMIT = 200;
+
+/** The newest sessions History asks summaries for; the version-summary job accepts no more. */
+const MAX_SUMMARIZED_VERSIONS = 20;
+
+function versionAuthor(login: string, avatarUrl?: string) {
+	return { login, ...(avatarUrl ? { avatarUrl } : {}) };
+}
+
+/** A channel the caller may read, or the response that refuses it. */
+async function readableChannel(
+	auth: HostedAuth,
+	request: Request,
+	id: string,
+): Promise<ChannelRecord | Response> {
+	let session = await auth.sessions.authenticate(request);
+	if (!session) return json({ error: "authentication required" }, 401);
+	if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+	let channel = await auth.storage.channels.get(id);
+	if (!channel) return json({ error: "channel not found" }, 404);
+	let repo = await authorizedRepository(
+		auth,
+		session,
+		channel.repositoryOwner,
+		channel.repositoryName,
+	);
+	return openedDocument(repo, channel) ? channel : json({ error: "channel not found" }, 404);
+}
+
 /** Opens a document only after its current repository identity has been revalidated. */
 function openedDocument(
 	repo: Repository,
@@ -221,6 +251,24 @@ export function registerChannelRoutes(
 		onChannelRenamed?: (channel: ChannelRecord) => void;
 		renameChannel?: (id: string, title: string) => Promise<RenameResult>;
 		onChannelRestored?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
+		/** Restores an earlier version's prose as a new edit by `author` (a user id). */
+		onVersionRestore?: (
+			channelId: string,
+			source: string,
+			author: string,
+		) => Promise<
+			| { kind: "restored"; revision: number }
+			| { kind: "locked" }
+			| { kind: "invalid"; message: string }
+		>;
+		/**
+		 * Asks for one-line summaries of these sessions; "unavailable" when no Planner owner can
+		 * write them now. Absent when the hosted agent or background jobs are off.
+		 */
+		onVersionSummaries?: (
+			channelId: string,
+			versions: { id: string; sourceHash: string }[],
+		) => Promise<"pending" | "unavailable">;
 		random?: () => number;
 		references?: GitHubReferences;
 	} = {},
@@ -396,6 +444,125 @@ export function registerChannelRoutes(
 			return failure(err, request, auth);
 		}
 	});
+
+	/** The document's editing sessions, newest first, for its Activity panel. */
+	router.on("GET", "/api/channels/:channelId/versions", async (request, _url, params) => {
+		try {
+			let readable = await readableChannel(auth, request, params.channelId!);
+			if (readable instanceof Response) return readable;
+			let channel = readable;
+			let [versions, creator] = await Promise.all([
+				auth.storage.versions.list(channel.id, VERSION_LIMIT),
+				auth.storage.users.get(channel.createdBy),
+			]);
+			return json({
+				created: {
+					at: channel.createdAt.toISOString(),
+					...(creator ? { author: versionAuthor(creator.login, creator.avatarUrl) } : {}),
+				},
+				versions: versions.map(version => ({
+					id: version.id,
+					revision: version.revision,
+					startedAt: version.startedAt.toISOString(),
+					updatedAt: version.updatedAt.toISOString(),
+					...(version.summary ? { summary: version.summary } : {}),
+					...(version.authorLogin
+						? { author: versionAuthor(version.authorLogin, version.authorAvatarUrl) }
+						: {}),
+				})),
+			});
+		} catch (err) {
+			return failure(err, request, auth);
+		}
+	});
+
+	router.on(
+		"GET",
+		"/api/channels/:channelId/versions/:versionId",
+		async (request, _url, params) => {
+			try {
+				let readable = await readableChannel(auth, request, params.channelId!);
+				if (readable instanceof Response) return readable;
+				let version = await auth.storage.versions.get(readable.id, params.versionId!);
+				if (!version) return json({ error: "version not found" }, 404);
+				return json({
+					id: version.id,
+					revision: version.revision,
+					updatedAt: version.updatedAt.toISOString(),
+					source: version.source,
+				});
+			} catch (err) {
+				return failure(err, request, auth);
+			}
+		},
+	);
+
+	/**
+	 * Requests summaries for the newest sessions on show that have none, so History can fill its
+	 * rows in. Any reader may ask: it changes no document, and one request per sessions-and-sources
+	 * runs once.
+	 */
+	router.on(
+		"POST",
+		"/api/channels/:channelId/version-summaries",
+		async (request, _url, params) => {
+			if (request.headers.get("origin") !== auth.config.origin) {
+				return json({ error: "origin is not allowed" }, 403);
+			}
+			try {
+				let readable = await readableChannel(auth, request, params.channelId!);
+				if (readable instanceof Response) return readable;
+				if (!options.onVersionSummaries) return json({ state: "unavailable" });
+				let wanted = (await auth.storage.versions.list(readable.id, MAX_SUMMARIZED_VERSIONS))
+					.filter(version => !version.summary)
+					.map(version => ({ id: version.id, sourceHash: version.sourceHash }));
+				if (wanted.length === 0) return json({ state: "complete" });
+				return json({ state: await options.onVersionSummaries(readable.id, wanted) });
+			} catch (err) {
+				return failure(err, request, auth);
+			}
+		},
+	);
+
+	router.on(
+		"POST",
+		"/api/channels/:channelId/versions/:versionId/restore",
+		async (request, _url, params) => {
+			if (request.headers.get("origin") !== auth.config.origin) {
+				return json({ error: "origin is not allowed" }, 403);
+			}
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				let id = params.channelId!;
+				if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+				let channel = await auth.storage.channels.get(id);
+				if (!channel) return json({ error: "channel not found" }, 404);
+				let repo = await authorizedRepository(
+					auth,
+					session,
+					channel.repositoryOwner,
+					channel.repositoryName,
+				);
+				if (!openedDocument(repo, channel)) return json({ error: "channel not found" }, 404);
+				if (!repo.permissions.push && !repo.permissions.admin) {
+					return json({ error: "repository write access is required" }, 403);
+				}
+				if (channel.archivedAt) return json({ error: "the document is archived" }, 409);
+				if (!options.onVersionRestore) return json({ error: "restore is unavailable" }, 503);
+				let version = await auth.storage.versions.get(channel.id, params.versionId!);
+				if (!version) return json({ error: "version not found" }, 404);
+				let result = await options.onVersionRestore(channel.id, version.source, session.user.id);
+				if (result.kind === "locked") {
+					return json({ error: "the document is locked by an active build" }, 409);
+				}
+				if (result.kind === "invalid") return json({ error: result.message }, 422);
+				return json({ revision: result.revision });
+			} catch (err) {
+				return failure(err, request, auth);
+			}
+		},
+	);
 
 	let references = options.references;
 	if (references) {

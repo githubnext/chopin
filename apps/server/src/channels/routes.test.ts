@@ -214,6 +214,8 @@ async function setup(random?: () => number) {
 	let archived: Array<{ id: string; changed: boolean }> = [];
 	let restored: Array<{ id: string; changed: boolean }> = [];
 	let deleted: string[] = [];
+	let versionRestores: Array<{ id: string; source: string; author: string }> = [];
+	let summaryRequests: Array<{ id: string; versions: { id: string; sourceHash: string }[] }> = [];
 	registerChannelRoutes(router, auth, {
 		renameChannel: async (id, title) => {
 			let opened = await Service.open(id, {
@@ -248,6 +250,14 @@ async function setup(random?: () => number) {
 			restored.push({ id, changed: result.changed });
 			return result;
 		},
+		onVersionSummaries: async (id, versions) => {
+			summaryRequests.push({ id, versions });
+			return "pending";
+		},
+		onVersionRestore: async (id, source, author) => {
+			versionRestores.push({ id, source, author });
+			return { kind: "restored", revision: 7 };
+		},
 		random,
 		references: new GitHubReferences(referenceSource),
 	});
@@ -264,6 +274,8 @@ async function setup(random?: () => number) {
 		archived,
 		restored,
 		deleted,
+		versionRestores,
+		summaryRequests,
 		now,
 	};
 }
@@ -1090,6 +1102,135 @@ describe("channel routes", () => {
 		github.repo = { ...github.repo, id: "R_score" };
 		let response = await router.handle(request(`/api/channels/${channel.id}`, cookie));
 		expect(response!.status).toBe(404);
+	});
+
+	it("lists a readable document's editing sessions and serves each one's source", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		let channel = await createChannel(storage, now, "History");
+		let record = (revision: number, minutes: number, authorId?: string) =>
+			storage.versions.record({
+				channelId: channel.id,
+				...(authorId ? { authorId } : {}),
+				revision,
+				source: `# Plan ${revision}\n`,
+				sourceHash: `hash-${revision}`,
+				now: new Date(now.getTime() + minutes * 60_000),
+				idleMs: 10 * 60_000,
+			});
+		let first = await record(1, 1, "U_hubot");
+		await record(2, 2);
+
+		let listed = await router.handle(request(`/api/channels/${channel.id}/versions`, cookie));
+		expect(listed!.status).toBe(200);
+		let body = await listed!.json();
+		expect(body.created).toEqual({
+			at: now.toISOString(),
+			author: { login: "octocat", avatarUrl: "avatar" },
+		});
+		expect(body.versions.map((version: { revision: number }) => version.revision)).toEqual([2, 1]);
+		expect(body.versions[0].author).toBeUndefined();
+		expect(body.versions[1].author).toEqual({ login: "hubot", avatarUrl: "avatar" });
+
+		let version = await router.handle(
+			request(`/api/channels/${channel.id}/versions/${first!.id}`, cookie),
+		);
+		expect(await version!.json()).toMatchObject({ revision: 1, source: "# Plan 1\n" });
+		let unknown = await router.handle(
+			request(`/api/channels/${channel.id}/versions/${crypto.randomUUID()}`, cookie),
+		);
+		expect(unknown!.status).toBe(404);
+
+		expect((await router.handle(request(`/api/channels/${channel.id}/versions`)))!.status)
+			.toBe(401);
+		github.repo = { ...github.repo, permissions: { pull: false, push: false, admin: false } };
+		let denied = await router.handle(
+			request(`/api/channels/${channel.id}/versions/${first!.id}`, cookie),
+		);
+		expect(denied!.status).toBe(404);
+	});
+
+	it("asks for summaries of the newest sessions that have none", async () => {
+		let { router, storage, cookie, now, summaryRequests } = await setup();
+		let channel = await createChannel(storage, now, "Summaries");
+		let record = (revision: number, minutes: number, authorId?: string) =>
+			storage.versions.record({
+				channelId: channel.id,
+				...(authorId ? { authorId } : {}),
+				revision,
+				source: `# Plan ${revision}\n`,
+				sourceHash: `hash-${revision}`,
+				now: new Date(now.getTime() + minutes * 60_000),
+				idleMs: 10 * 60_000,
+			});
+		let first = await record(1, 1, "U_hubot");
+		let second = await record(2, 2);
+		await storage.versions.summarize({
+			channelId: channel.id,
+			id: first!.id,
+			sourceHash: "hash-1",
+			summary: "Started the plan",
+		});
+		let ask = () =>
+			router.handle(
+				request(`/api/channels/${channel.id}/version-summaries`, cookie, {
+					method: "POST",
+					headers: { origin: "https://chopin.test" },
+				}),
+			);
+
+		expect(await (await ask())!.json()).toEqual({ state: "pending" });
+		expect(summaryRequests).toEqual([{
+			id: channel.id,
+			versions: [{ id: second!.id, sourceHash: "hash-2" }],
+		}]);
+		let listed = await (await router.handle(
+			request(`/api/channels/${channel.id}/versions`, cookie),
+		))!.json();
+		expect(listed.versions[1].summary).toBe("Started the plan");
+
+		await storage.versions.summarize({
+			channelId: channel.id,
+			id: second!.id,
+			sourceHash: "hash-2",
+			summary: "Retitled it",
+		});
+		expect(await (await ask())!.json()).toEqual({ state: "complete" });
+		expect(summaryRequests).toHaveLength(1);
+	});
+
+	it("restores an earlier session for a writer and refuses everyone else", async () => {
+		let { router, storage, github, cookie, now, versionRestores } = await setup();
+		let channel = await createChannel(storage, now, "Restorable");
+		let version = await storage.versions.record({
+			channelId: channel.id,
+			revision: 1,
+			source: "# Earlier\n",
+			sourceHash: "hash-1",
+			now,
+			idleMs: 10 * 60_000,
+		});
+		let restore = (versionId: string, origin = "https://chopin.test") =>
+			router.handle(
+				request(`/api/channels/${channel.id}/versions/${versionId}/restore`, cookie, {
+					method: "POST",
+					headers: { origin },
+				}),
+			);
+
+		expect((await restore(version!.id, "https://elsewhere.test"))!.status).toBe(403);
+		expect((await restore(crypto.randomUUID()))!.status).toBe(404);
+		let restored = await restore(version!.id);
+		expect(restored!.status).toBe(200);
+		expect(await restored!.json()).toEqual({ revision: 7 });
+		expect(versionRestores).toEqual([{
+			id: channel.id,
+			source: "# Earlier\n",
+			author: "U_octocat",
+		}]);
+
+		github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
+		expect((await restore(version!.id))!.status).toBe(403);
+		expect(versionRestores).toHaveLength(1);
 	});
 
 	it("lets an editor explicitly release the Copilot owner", async () => {

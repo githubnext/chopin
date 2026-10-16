@@ -110,30 +110,9 @@ attempts, failures, and background-job channel revisions.
 The migration runner owns `chopin_migrations`, including a checksum for each
 applied migration. The application schema contains:
 
-| Table                      | Purpose                                                                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users`                    | GitHub identity and attribution records.                                                                                                                   |
-| `web_sessions`             | Session metadata and optional browser-secret hashes, encrypted hosted credentials, and credential revisions. Planner ownership references session IDs.     |
-| `channels`                 | Repository identity, optional parent channel, title, creator, archive and generated-description metadata, storage revision, next sequence, and timestamps. |
-| `channel_slugs`            | One canonical title-derived slug per channel plus retained repository-scoped historical aliases.                                                           |
-| `channel_state`            | Current sidecar JSON for a channel and its `unanswered_decisions` count, written with each sidecar from its question records.                              |
-| `channel_snapshots`        | Complete Yjs checkpoint, canonical source, source hash, epoch, counters, and checkpoint sidecar.                                                           |
-| `channel_operations`       | Per-channel operation idempotency and the revision and sequence assigned to each operation.                                                                |
-| `channel_updates`          | Ordered post-checkpoint Yjs update journal.                                                                                                                |
-| `channel_events`           | Ordered event capability in the adapter contract. Current collaboration commits do not use it for domain replay.                                           |
-| `agent_state`              | Reserved Planner summary and transcript cursor, status, owner session reference, and ownership generation.                                                 |
-| `storage_leases`           | Renewable named leases and fencing tokens.                                                                                                                 |
-| `background_job_channels`  | Job-state revision per channel, independent of collaboration counters.                                                                                     |
-| `background_job_targets`   | Current generation for each registered channel job target.                                                                                                 |
-| `background_jobs`          | Versioned requests, lifecycle, attempts, fenced claims, bounded progress, inputs, and sanitized failures.                                                  |
-| `background_job_artifacts` | Immutable validated results committed atomically with job completion.                                                                                      |
-| `research_workspaces`      | Internal request staging: parent channel, exact brief fields, optional published child, attribution, revision, idempotency, and compatibility counters.    |
-| `research_turns`           | Internal initial attempt and compatibility turns with evidence and answer job links.                                                                       |
-| `research_messages`        | Compatibility transcript rows retained for historical workspace references; not a current product thread.                                                  |
-| `plan_images`              | Images uploaded to a document through MCP `upload_image`: SHA-256, type, bytes, size, uploader, and time, keyed by channel and hash.                       |
-| `machines`                 | Paired local agents: owner, label, repositories, auto-run choice, token hash, encrypted GitHub credentials, contact and revocation times.                  |
 | `machine_choices`          | Each person's chosen machine for one document; no row is automatic. Revoking the machine or deleting the document removes it.                              |
 | `machine_favorites`        | Each person's one favorite machine, which Automatic prefers; no row is none. Revoking the machine removes it.                                              |
+| `document_versions`        | Activity history: one row per editing session with its author (absent for Chopin), the canonical MDX it left, revision, hash, and start and end times.     |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
 generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16
@@ -233,9 +212,29 @@ Deleting a document removes it from the live database, not from backups already
 captured by an operator. Those copies remain governed by the operator's backup
 retention and restoration policy.
 
-The database is a recovery store, not a user-visible edit history. Canonical MDX
-and current domain records are durable, but the compacted Yjs journal is not an
-audit log of every keystroke.
+The collaboration tables are a recovery store, not a user-visible edit history.
+Canonical MDX and current domain records are durable, but the compacted Yjs
+journal is not an audit log of every keystroke.
+
+Activity history is separate and derived. After a commit changes a document's
+source, `DocumentHistory` records the new canonical MDX in `document_versions`.
+Changes by the same author less than ten minutes apart extend that author's
+latest session; another author, Chopin, or a longer pause starts a new one.
+Browser edits are credited to the member whose batch committed and MCP rewrites
+to the calling user; Planner and other server-authored edits have no author.
+Recording happens after acknowledgement, outside the fenced commit, and a failure
+is logged without affecting the edit, so history can miss a change but never
+blocks one. Each session keeps a complete copy of the source; no retention policy
+is applied yet. Restoring a session goes through the same fenced rewrite as an MCP
+update, credited to whoever restored it, and carries today's decision,
+questionnaire, research and investigation projections across unchanged.
+
+Opening History asks for one-line summaries of the newest twenty sessions that
+lack one. A `version-summary` background job, which needs the document's active
+Planner owner and uses `HISTORY_MODEL`, writes them in one turn from the blocks
+each session removed and added. A summary is stored with the source hash it
+describes and is shown only while the session still has that source, so a
+session that grows is summarised again the next time History asks.
 
 ## Recovery
 

@@ -39,9 +39,23 @@ let staticSourcePlugin = realmPlugin<{ onError: (error: Error) => void; source: 
 });
 
 export function StaticPlanEditor(
-	{ children, className, questions, research, source }: {
+	{
+		children,
+		className,
+		label = "Authored content specimen",
+		presentation = "specimen",
+		questions,
+		research,
+		source,
+	}: {
 		children?: ReactNode;
 		className?: string;
+		label?: string;
+		/**
+		 * `specimen` flows in a design page; `pane` fills its container and scrolls inside the
+		 * document as the live editor does.
+		 */
+		presentation?: "pane" | "specimen";
 		questions?: QuestionnaireStore;
 		research?: ResearchStore;
 		source: string;
@@ -58,10 +72,24 @@ export function StaticPlanEditor(
 		[questions, research, source],
 	);
 
+	let editor = (
+		<MDXEditor
+			contentEditableClassName="plan-content focus-caret"
+			lexicalTheme={PLAN_LEXICAL_THEME}
+			markdown=""
+			onError={problem => setError(problem.error)}
+			plugins={plugins}
+			readOnly
+			spellCheck
+			suppressHtmlProcessing
+		/>
+	);
 	return (
 		<section
-			aria-label="Authored content specimen"
-			className={`plan ${className ?? ""}`.trim()}
+			aria-label={label}
+			className={`plan ${presentation === "pane" ? "flex h-full w-full flex-col" : ""} ${
+				className ?? ""
+			}`.trim()}
 			data-read-only="true"
 			data-source-length={source.length}
 			role="document"
@@ -69,17 +97,19 @@ export function StaticPlanEditor(
 			{error && <p className="text-sm text-destructive-ink" role="alert">{error}</p>}
 			<div className="plan-workspace">
 				<div className="plan-document">
-					<MDXEditor
-						contentEditableClassName="plan-content focus-caret"
-						lexicalTheme={PLAN_LEXICAL_THEME}
-						markdown=""
-						onError={problem => setError(problem.error)}
-						plugins={plugins}
-						readOnly
-						spellCheck
-						suppressHtmlProcessing
-					/>
-					{children}
+					{presentation === "pane"
+						? (
+							<div className="h-full min-h-0 overflow-auto" data-plan-scroll="">
+								{editor}
+								{children}
+							</div>
+						)
+						: (
+							<>
+								{editor}
+								{children}
+							</>
+						)}
 				</div>
 			</div>
 		</section>

@@ -1005,8 +1005,12 @@ body {
 	--scroll-edge-inset: calc(var(--spacing) * 3);
 }
 
+[data-history-scroll] {
+	--scroll-edge-inset: var(--spacing);
+}
+
 .workspace-root:not([data-workspace-phone])
-	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
+	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll], [data-history-scroll])::before {
 	content: "";
 	position: sticky;
 	z-index: 3;
@@ -1041,7 +1045,7 @@ body {
  * animation running forever, and settled-motion checks wait for every animation to finish.
  */
 .workspace-root:not([data-workspace-phone])
-	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll]) {
+	:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll], [data-history-scroll]) {
 	container-type: scroll-state;
 }
 
@@ -1052,7 +1056,7 @@ body {
 
 @container scroll-state(scrollable: top) {
 	.workspace-root:not([data-workspace-phone])
-		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
+		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll], [data-history-scroll])::before {
 		opacity: 1;
 	}
 }
@@ -1060,7 +1064,7 @@ body {
 /* Less see-through: the surface holds solid for half the edge before it fades. */
 @media (prefers-reduced-transparency: reduce) {
 	.workspace-root:not([data-workspace-phone])
-		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll])::before {
+		:is([data-plan-scroll], [data-plan-decisions-scroll]:not(.plan-decisions-content--empty), [data-build-view-scroll], [data-chat-scroll], [data-history-scroll])::before {
 		background: linear-gradient(var(--scroll-edge-surface) 50%, transparent);
 	}
 }

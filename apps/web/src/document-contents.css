@@ -1,0 +1,130 @@
+/*
+ * Contents: one quiet tick per heading in the document's right margin (comments keep the left).
+ * The first tick sits level with the title's first line; the ticks stay put while the page scrolls.
+ */
+.document-contents {
+	--contents-pitch: clamp(
+		calc(var(--spacing) * 1.5),
+		(100cqb - var(--document-top-inset) - calc(var(--spacing) * 8)) / var(--contents-count, 1),
+		calc(var(--spacing) * 3)
+	);
+
+	position: absolute;
+	inset-block-start: calc(var(--document-top-inset) + var(--spacing) * 0.5);
+	inset-inline-end: calc(var(--spacing) * 3);
+	z-index: 4;
+}
+
+.document-contents-ticks {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.document-contents-tick {
+	position: relative;
+	display: block;
+	inline-size: calc(var(--spacing) * 7);
+	block-size: var(--contents-pitch);
+	border-radius: var(--radius-sm);
+
+	&::before {
+		content: "";
+		position: absolute;
+		inset-block-start: calc(50% - var(--spacing) * 0.25);
+		inset-inline-end: 0;
+		inline-size: calc(var(--spacing) * 3.5);
+		block-size: calc(var(--spacing) * 0.5);
+		border-radius: var(--radius-full);
+		background: var(--color-control-edge);
+		transition:
+			inline-size var(--duration-fast) var(--ease-out),
+			background-color var(--duration-fast) var(--ease-out);
+	}
+
+	&[data-depth="0"]::before {
+		inline-size: calc(var(--spacing) * 5);
+	}
+
+	&[data-depth="2"]::before {
+		inline-size: calc(var(--spacing) * 2);
+	}
+
+	&[aria-current]::before {
+		background: var(--color-text-tertiary);
+	}
+
+	&[data-peeked]::before {
+		inline-size: calc(var(--spacing) * 7);
+		background: var(--color-text-primary);
+	}
+}
+
+/* The peek: that section's heading and opening lines, level with its tick, following the pointer down. */
+.document-contents-peek {
+	position: absolute;
+	inset-block-start: var(--peek-top, 0px);
+	inset-inline-end: calc(100% + var(--spacing) * 2);
+	inline-size: 20rem;
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-xl);
+	background: var(--color-page);
+	box-shadow: var(--shadow-raised);
+	opacity: 0;
+	translate: calc(var(--spacing)) -50%;
+	pointer-events: none;
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		translate var(--duration-fast) var(--ease-out),
+		inset-block-start var(--duration-base) var(--ease-out);
+
+	&[data-open] {
+		opacity: 1;
+		translate: 0 -50%;
+	}
+}
+
+.document-contents-peek-title {
+	margin: 0;
+	overflow: hidden;
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-medium);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.document-contents-peek-text {
+	display: -webkit-box;
+	margin: var(--spacing) 0 0;
+	overflow: hidden;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-sm);
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+
+	&:empty {
+		display: none;
+	}
+}
+
+/*
+ * Comment markers own the lane beside the prose. The ticks show only when the right margin also
+ * holds their own lane: the 40.625rem measure plus about 6.25rem of margin on each side.
+ */
+@container (width < 53rem) {
+	.document-contents {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.document-contents-peek {
+		translate: 0 -50%;
+		transition-property: opacity;
+	}
+}

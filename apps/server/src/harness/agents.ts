@@ -194,6 +194,16 @@ function structuredAgent<Schema extends z.ZodType>(
 	});
 }
 
+/** History's one-line session summaries, one per session it was given. */
+export let historySummarySchema = z.object({
+	summaries: z.array(
+		z.object({
+			id: z.string().min(1).max(64),
+			summary: z.string().min(1).max(120),
+		}).strict(),
+	).max(20),
+}).strict();
+
 export function createSummaryAgent(harness: HarnessV1) {
 	return structuredAgent(harness, descriptionSchema, false);
 }
@@ -203,6 +213,11 @@ export function createResearchAgent(harness: HarnessV1) {
 }
 
 export let summaryAgent = createSummaryAgent(harnessFor(harnessSelection()));
+export let historySummaryAgent = structuredAgent(
+	harnessFor(harnessSelection()),
+	historySummarySchema,
+	false,
+);
 export let researchBriefAgent = structuredAgent(
 	harnessFor(harnessSelection()),
 	researchBriefSchema,

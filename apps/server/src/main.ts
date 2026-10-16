@@ -57,6 +57,7 @@ import { handleConversationCommand } from "./conversation-plan/commands";
 import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
+import { DocumentHistory } from "./channels/history";
 import * as Comments from "./comments/service";
 import { proxy, serve } from "./client";
 import { describe, load } from "./config";
@@ -69,6 +70,7 @@ import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
 import { DocumentDescriptionProjector } from "./jobs/document-description";
 import { documentSummaryDefinition } from "./jobs/document-summary";
+import { versionSummaryDefinition, versionSummaryKey } from "./jobs/version-summary";
 import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
@@ -86,6 +88,7 @@ import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
+import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
@@ -134,6 +137,7 @@ const config = load();
 const decide = await openDecisions(config);
 harnessFor(config);
 const storage = createStorage(config.storage);
+const documentHistory = new DocumentHistory(storage);
 const router = new Router();
 
 /** Where the built client lands. Used only when there is no dev client. */
@@ -286,6 +290,7 @@ function documentBackend(): Service.Backend {
 			signal();
 		},
 		onDocumentPersisted: target => {
+			void documentHistory.record(target);
 			summaryCoordinator?.schedule(target);
 			liveSync?.schedule(target);
 			buildReadiness?.schedule(target);
@@ -1783,6 +1788,7 @@ function drain(): Promise<void> {
 		}
 		if (summaryCoordinator) await attempt(() => summaryCoordinator!.flush());
 		summaryCoordinator?.close();
+		await attempt(() => documentHistory.flush());
 		liveSync?.close();
 		buildReadiness?.close();
 		spikeScout?.close();
@@ -2093,6 +2099,40 @@ function withImplementationPlan<T>(id: string, action: (plan: Service.Plan) => P
 	});
 }
 
+export type VersionRestore =
+	| { kind: "restored"; revision: number }
+	| { kind: "locked" }
+	| { kind: "invalid"; message: string };
+
+/**
+ * Restores an earlier version's prose as a new edit by `author`, keeping today's decision,
+ * questionnaire and research projections, which their records own. Runs in the document's queue
+ * like any server edit, so it persists before it is published.
+ */
+function restoreDocumentVersion(
+	channelId: string,
+	earlier: string,
+	author: string,
+): Promise<VersionRestore> {
+	return withImplementationPlan(channelId, async opened => {
+		await Service.drain(opened);
+		return Service.exclusive(opened, async (): Promise<VersionRestore> => {
+			if (Service.implementationActive(opened)) return { kind: "locked" };
+			let merged = Edit.restoration(Service.source(opened), earlier);
+			let outcome = await Service.rewrite(opened, merged, undefined, author);
+			if (!outcome.ok) {
+				return {
+					kind: "invalid",
+					message: outcome.reason === "invalid" ? outcome.message : "The document changed.",
+				};
+			}
+			Service.changes(opened, server, channelId, outcome.changes, { cursor: false });
+			Service.anchors(opened, server, channelId);
+			return { kind: "restored", revision: opened.revision };
+		});
+	});
+}
+
 async function currentDocumentTarget(
 	channelId: string,
 ): Promise<Service.DocumentTarget | undefined> {
@@ -2273,6 +2313,7 @@ if (config.backgroundJobs) {
 }
 if (config.backgroundJobs && config.agent) {
 	definitions.push(researchAnswerDefinition({ config }));
+	definitions.push(versionSummaryDefinition({ config, versions: storage.versions }));
 }
 if (config.webResearch) {
 	definitions.push(researchEvidenceDefinition({ config }));
@@ -2438,6 +2479,7 @@ registerMcpRoutes(router, hostedAuth, {
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,
 	onDocumentPersisted: target => {
+		void documentHistory.record(target);
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
 		liveSync?.schedule(target);
 		buildReadiness?.schedule(target);
@@ -2506,6 +2548,20 @@ registerChannelRoutes(router, hostedAuth, {
 			opened => Service.exclusive(opened, () => Service.rename(opened, title)),
 		),
 	onChannelRestored: restoreChannel,
+	onVersionRestore: restoreDocumentVersion,
+	onVersionSummaries: config.backgroundJobs && config.agent
+		? async (channelId, versions) => {
+			let { job } = await jobService.enqueueScheduler({
+				channelId,
+				type: "version-summary",
+				targetKey: "history",
+				idempotencyKey: versionSummaryKey(versions),
+				input: { generatorVersion: 1, versions },
+			});
+			jobRunner?.wake();
+			return job.state === "paused" ? "unavailable" : "pending";
+		}
+		: undefined,
 	references: hostedAuth.github instanceof GitHubClient
 		? new GitHubReferences(hostedAuth.github)
 		: undefined,
