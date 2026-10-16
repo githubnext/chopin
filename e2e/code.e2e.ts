@@ -180,7 +180,7 @@ flowchart LR
 `);
 	let page = await join("ana");
 
-	let svg = content(page).locator("[data-plan-preview] svg");
+	let svg = content(page).getByRole("region", { name: "Diagram preview" }).locator("svg");
 	await expect(svg).toBeVisible();
 	let labels = await svg.evaluate(element =>
 		[...element.querySelectorAll("g.label, g.edgeLabel")].map(label =>

@@ -57,7 +57,7 @@ import { widgets$ } from "../widget-options";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
 import { fitsLegibly } from "./diagram-fit";
-import { DiagramSheet, ExpandDiagram } from "./diagram-sheet";
+import { DiagramSheet, ExpandDiagram, FitDiagram } from "./diagram-sheet";
 import { usePhone } from "../pointer";
 import { LanguageMenu } from "./language-menu";
 import { registerPreviewSelection } from "./preview-selection";
@@ -566,11 +566,14 @@ function sidesOf(element: HTMLElement): ReturnType<typeof hiddenSides> {
  *
  * Mermaid lays text out at its authored size, so shrinking a wide chart to the
  * measure makes its labels unreadable. A modest overshoot is scaled to fit;
- * anything wider keeps its size and scrolls, fading the side with more to see.
+ * anything wider keeps its size and scrolls from its start, fading the side
+ * with more to see, and offers its whole shape scaled to the frame's width.
  */
 function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean }) {
 	let region = useRef<HTMLDivElement>(null);
 	let [fit, setFit] = useState(false);
+	/** A reader asked for the whole shape at the frame's width. */
+	let [fitted, setFitted] = useState(false);
 	let [expanded, setExpanded] = useState(false);
 	let phone = usePhone();
 	let expand = useRef<HTMLButtonElement>(null);
@@ -603,7 +606,7 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 	// only known after that has been laid out.
 	useEffect(() => {
 		if (region.current) setMore(sidesOf(region.current));
-	}, [fit, html]);
+	}, [fit, fitted, html]);
 
 	return (
 		<>
@@ -611,7 +614,7 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 				ref={region}
 				aria-label="Diagram preview"
 				className="plan-diagram"
-				data-fit={fit ? "" : undefined}
+				data-fit={fit || fitted ? "" : undefined}
 				data-more={more}
 				data-stale={stale ? "" : undefined}
 				role="region"
@@ -622,6 +625,7 @@ function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean
 				dangerouslySetInnerHTML={{ __html: html }}
 			/>
 			{phone && !fit && <ExpandDiagram buttonRef={expand} onExpand={() => setExpanded(true)} />}
+			{!phone && !fit && <FitDiagram fitted={fitted} onToggle={() => setFitted(!fitted)} />}
 			{expanded && (
 				<DiagramSheet
 					onClose={() => {

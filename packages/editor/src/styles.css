@@ -609,12 +609,19 @@
 	}
 }
 
-/* Rendered only on a phone, and shown only where the document is narrow too. */
+/*
+ * Expand is rendered only on a phone, and shown only where the document is narrow too. Fit is
+ * rendered only off a phone, for a drawing too wide to read at the frame's width.
+ */
 .plan-content .plan-diagram-actions {
 	display: none;
 	justify-content: flex-end;
 	padding-block-start: calc(var(--spacing) * 1);
 	padding-inline: calc(var(--spacing) * 1.5);
+}
+
+.plan-content .plan-diagram-actions[data-plan-chrome="fit"] {
+	display: flex;
 }
 
 /*
@@ -3879,6 +3886,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-content .plan-diagram[data-fit] svg {
 	max-width: 100%;
+	/* Scaled by its width, so its height follows rather than leaving bands above and below. */
+	height: auto;
 }
 
 .plan-content .plan-diagram[data-more="end"] {

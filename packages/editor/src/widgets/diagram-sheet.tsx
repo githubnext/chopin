@@ -47,6 +47,31 @@ export function ExpandDiagram(
 }
 
 /**
+ * A row under a diagram too wide to read at the measure, on a desktop: its
+ * whole shape scaled to the frame's width, or back to its drawn size. Visible
+ * whenever the drawing scrolls, so a frame cut at its edge reads as more to see
+ * even where scrollbars hide at rest, and a mouse without a sideways wheel
+ * still reaches the end.
+ */
+export function FitDiagram({ fitted, onToggle }: { fitted: boolean; onToggle: () => void }) {
+	return (
+		<div className="plan-diagram-actions" contentEditable={false} data-plan-chrome="fit">
+			<button
+				type="button"
+				className="btn btn-sm btn-ghost gap-1 text-text-tertiary"
+				// Like the source toggle: a click in a non-editable island would
+				// otherwise move the caret into the source beside it.
+				onMouseDown={event => event.preventDefault()}
+				onClick={onToggle}
+			>
+				{fitted ? <ActualSizeIcon aria-hidden="true" /> : <FitWidthIcon aria-hidden="true" />}
+				{fitted ? "Actual size" : "Fit diagram to width"}
+			</button>
+		</div>
+	);
+}
+
+/**
  * A full-screen sheet holding a second, larger reading of a diagram.
  *
  * A modal dialog, so the page behind is inert and focus stays inside; Escape

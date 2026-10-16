@@ -38,6 +38,34 @@ flowchart LR
 \`\`\`
 `;
 
+/** A left-to-right flowchart of ten steps, far wider than any document's measure. */
+const FLOW = `\`\`\`mermaid
+flowchart LR
+	A[Draft the document] --> B[Review the plan] --> C[Ask the decisions] --> D[Answer them]
+	D --> E[Break it into tasks] --> F[Build plan] --> G[Open pull requests]
+	G --> H[Verify every task] --> I[Merge] --> J[Ship it to everyone]
+\`\`\`
+`;
+
+/** Where the frame, its drawing and the drawing's first and last steps are on screen. */
+function frame(region: Locator) {
+	return region.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		let svg = element.querySelector("svg")!.getBoundingClientRect();
+		let steps = [...element.querySelectorAll(".node")].map(node => node.getBoundingClientRect())
+			.sort((a, b) => a.left - b.left);
+		let shown = (step: DOMRect) => step.left >= box.left - 1 && step.right <= box.right + 1;
+		return {
+			scrolls: element.scrollWidth > element.clientWidth + 1,
+			fits: svg.right <= box.right + 1,
+			first: shown(steps[0]!),
+			last: shown(steps.at(-1)!),
+			drawn: svg.height,
+			height: box.height,
+		};
+	});
+}
+
 function mask(table: Locator): Promise<string> {
 	return table.evaluate(node => getComputedStyle(node).maskImage);
 }
@@ -166,5 +194,51 @@ test("a dense diagram opens full screen at a readable size and closes", async ({
 	await close.tap();
 	await expect(sheet).toBeHidden();
 	await expect(expand).toBeFocused();
+	await expectNoHorizontalOverflow(page);
+});
+
+for (let width of [1280, 1920]) {
+	test(`a wide flowchart starts at its first step and fits the frame on request at ${width}px`, async ({ join, seed }) => {
+		await seed(`# Delivery\n\nHow a document becomes pull requests.\n\n${FLOW}\nThen it ships.\n`);
+		let page = await join("ana", { viewport: { width, height: 900 } });
+		let region = content(page).getByRole("region", { name: "Diagram preview" });
+		await expect(region).toBeVisible();
+		let fit = content(page).getByRole("button", { name: "Fit diagram to width" });
+
+		// Too wide to read at the measure: its first screen is its start, and the frame says so.
+		await expect(fit).toBeVisible();
+		let shown = await frame(region);
+		expect(shown).toMatchObject({ scrolls: true, first: true, last: false });
+		await expect(region).toHaveAttribute("data-more", "end");
+
+		// Fitted, the whole shape is in the frame, with no band above or below it.
+		await fit.click();
+		await expect.poll(async () => (await frame(region)).fits).toBe(true);
+		let fitted = await frame(region);
+		expect(fitted).toMatchObject({ scrolls: false, first: true, last: true });
+		expect(fitted.drawn).toBeLessThan(shown.drawn);
+		await expect(region).not.toHaveAttribute("data-more");
+
+		// Actual size scrolls again, from its start.
+		await content(page).getByRole("button", { name: "Actual size" }).click();
+		await expect.poll(async () => (await frame(region)).scrolls).toBe(true);
+		expect(await frame(region)).toMatchObject({ first: true, last: false });
+		await expect(fit).toBeVisible();
+		await expectNoHorizontalOverflow(page);
+	});
+}
+
+test("a wide flowchart on a phone starts at its first step and offers its full-screen reading", async ({ join, seed }) => {
+	await seed(`# Delivery\n\nHow a document becomes pull requests.\n\n${FLOW}\nThen it ships.\n`);
+	let page = await join("ana", PHONE);
+	let region = content(page).getByRole("region", { name: "Diagram preview" });
+	await expect(region).toBeVisible();
+	await expect(content(page).getByRole("button", { name: "Expand diagram" })).toBeVisible();
+	await expect(content(page).getByRole("button", { name: "Fit diagram to width" })).toHaveCount(0);
+	expect(await frame(region)).toMatchObject({ scrolls: true, first: true, last: false });
+	await expect(region).toHaveAttribute("data-more", "end");
+	// A swipe reaches its last step.
+	await region.evaluate(node => (node.scrollLeft = node.scrollWidth));
+	await expect.poll(async () => (await frame(region)).last).toBe(true);
 	await expectNoHorizontalOverflow(page);
 });
