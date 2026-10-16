@@ -21,7 +21,7 @@
     },
     "apps/connector": {
       "name": "@chopin/connector",
-      "version": "0.0.12",
+      "version": "0.0.13",
       "dependencies": {
         "@agentclientprotocol/sdk": "1.6.0",
         "@chopin/experiment": "workspace:*",
