@@ -1,4 +1,12 @@
-import { CheckIcon } from "@chopin/icons";
+import { Face } from "@chopin/editor/face";
+import {
+	CheckIcon,
+	LoaderIcon,
+	MachineIcon,
+	ProgressRingIcon,
+	ServerIcon,
+	WarningIcon,
+} from "@chopin/icons";
 import { useEffect, useId, useState } from "react";
 
 import { BuildGlyph } from "./build-plan-button";
@@ -10,7 +18,6 @@ import {
 	buildLabel,
 	buildPhase,
 	buildProgress,
-	elapsed,
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
@@ -18,7 +25,6 @@ import {
 	pullRequestCommits,
 	pullRequestNumber,
 	retryAction,
-	startedBy,
 	TASK_STATE_LABEL,
 	taskStartsOpen,
 	unfinishedReason,
@@ -30,10 +36,58 @@ import {
 	stopBuild,
 } from "./build-start";
 import { LocalAgentNote } from "./local-agent-note";
+import { MachineGlyph } from "./machine-button";
 
 import type { ReactNode } from "react";
 import type { BuildPlan } from "./build-plan-button";
 import type { TaskState } from "./build-model";
+import type { BuildMachine, BuildRequest } from "@chopin/protocol/implementation";
+
+/** What the status card says: a title and count, one line under it, and per-task progress. */
+type Card = {
+	title: string;
+	count?: string;
+	glyph?: ReactNode;
+	detail?: ReactNode;
+	/** What the coding agent says it is doing now, in place of `detail`. */
+	activity?: string;
+	segments?: TaskState[];
+};
+
+function CardSpinner() {
+	return (
+		<span aria-hidden="true" className="build-glyph">
+			<LoaderIcon aria-hidden="true" className="build-glyph-quiet build-card-spin" />
+		</span>
+	);
+}
+
+/**
+ * The machine a build runs on, as everyone sees it. Only its starter is told whether it is
+ * online, so the state dot shows only for them.
+ */
+function MachineLabel({ machine }: { machine: BuildMachine }) {
+	let Icon = machine.service ? ServerIcon : MachineIcon;
+	return (
+		<span
+			className="build-card-machine"
+			title={machine.connected === false ? `${machine.label} is offline` : undefined}
+		>
+			{machine.connected === undefined
+				? (
+					<span aria-hidden="true" className="machine-glyph">
+						<Icon size={16} />
+					</span>
+				)
+				: (
+					<MachineGlyph
+						machine={{ service: machine.service, connected: machine.connected, reauthorize: false }}
+					/>
+				)}
+			<span className="build-card-machine-name">{machine.label}</span>
+		</span>
+	);
+}
 
 function sentence(text: string): string {
 	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
@@ -145,96 +199,162 @@ export function BuildView(
 		&& !(phase.kind === "blocked" && phase.stale)
 		&& !(phase.kind === "drafting" && !staleTasks);
 
-	let status: ReactNode;
+	let outstanding = new Set(snapshot?.live?.outstandingTasks?.map(task => task.id));
+	let rebuilding = phase.kind === "live" && phase.sync.kind === "building";
+	let reportFor = (task: (typeof tasks)[number]) =>
+		phase.kind === "live"
+			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
+			: progress?.tasks.find(item => item.id === task.id);
+	let stateFor = (task: (typeof tasks)[number], report = reportFor(task)): TaskState =>
+		phase.kind === "live"
+			? liveTaskState(report?.state ?? "queued", outstanding.has(task.id), rebuilding)
+			: report?.state ?? "queued";
+
 	let action: ReactNode;
-	let since: string | undefined;
-	if (phase.kind === "loading") {
-		status = loadError
-			? <span className="text-destructive-ink">{sentence(loadError)}</span>
-			: <span className="sr-only">Loading tasks</span>;
-	} else if (look.kind === "plan") {
-		// Built before, now back in planning: Build plan in the header builds it again.
-		if (phase.kind === "blocked") {
-			status = phase.decisions || phase.comments
-				? (
-					<span className="build-blockers">
-						{phase.decisions && (
-							<button className="build-link link" onClick={onShowDecisions} type="button">
-								{unanswered > 0
-									? `Answer ${plural(unanswered, "decision", "decisions")} first`
-									: "Answer the open decisions first"}
-							</button>
-						)}
-						{phase.comments && (
-							<button className="build-link link" onClick={onShowDocument} type="button">
-								{comments > 0
-									? `Update the document for ${
-										plural(comments, "accepted comment", "accepted comments")
-									} first`
-									: "Update the document for accepted comments first"}
-							</button>
-						)}
-					</span>
-				)
-				: "This document can’t be built yet.";
-		} else if (phase.kind === "drafting" && phase.draft === "returned") {
-			status = "Returned for changes. Build plan builds it again.";
-		} else if (phase.kind === "review") {
-			status = plural(tasks.length, "task", "tasks");
-		} else {
-			status = "Not built yet.";
+	function statusCard(): Card {
+		if (look.kind === "plan") {
+			// Built before, now back in planning: Build plan in the header builds it again.
+			if (phase.kind === "blocked") {
+				return {
+					title: "Waiting to build",
+					glyph: <span aria-hidden="true" className="build-glyph-dot" data-tone="warning" />,
+					detail: phase.decisions || phase.comments
+						? (
+							<span className="build-blockers">
+								{phase.decisions && (
+									<button className="build-link link" onClick={onShowDecisions} type="button">
+										{unanswered > 0
+											? `Answer ${plural(unanswered, "decision", "decisions")} first`
+											: "Answer the open decisions first"}
+									</button>
+								)}
+								{phase.comments && (
+									<button className="build-link link" onClick={onShowDocument} type="button">
+										{comments > 0
+											? `Update the document for ${
+												plural(comments, "accepted comment", "accepted comments")
+											} first`
+											: "Update the document for accepted comments first"}
+									</button>
+								)}
+							</span>
+						)
+						: "This document can’t be built yet.",
+				};
+			}
+			if (phase.kind === "drafting" && phase.draft === "returned") {
+				return { title: "Returned for changes", detail: "Build plan builds it again." };
+			}
+			return {
+				title: "Not built yet",
+				...(phase.kind === "review" ? { count: plural(tasks.length, "task", "tasks") } : {}),
+			};
 		}
-	} else {
-		let label = buildLabel(look);
-		let detail: string | undefined;
 		if (look.kind === "tasks") {
-			label = "Breaking the document into tasks…";
-			detail = look.tip === "Breaking the document into tasks" ? undefined : look.tip;
-		} else if (look.kind === "building") {
-			// A queued build has not started, so it has no time to count.
-			since = snapshot?.build && snapshot.build.state !== "queued"
-				? elapsed(snapshot.build.createdAt, now)
-				: undefined;
-			let who = startedBy(snapshot, userId);
-			detail = snapshot?.waitingForDocument || snapshot?.waitingForPrototype
-				? look.tip
-				: who && `started by ${who === "you" ? who : `@${who}`}`;
-		} else if (look.kind === "built") {
-			label = `Built ${plural(look.pullRequests, "pull request", "pull requests")}`;
-			let commits = snapshot?.live?.commits.length ?? 0;
-			detail = commits > 0
-				? `${plural(commits, "commit", "commits")} since first build`
-				: undefined;
-		} else if (look.kind === "agent") {
-			// The note below says how to start the agent.
-			detail = undefined;
-		} else if (
-			look.kind === "failed" && phase.kind === "live" && phase.sync.kind === "needs-attention"
-		) {
-			// The blocked row below shows the blocker, so the headline only says what to do.
-			detail = attentionHint(snapshot, true) ?? look.tip;
-		} else {
-			detail = look.tip;
+			return {
+				title: "Preparing tasks",
+				glyph: <CardSpinner />,
+				detail: look.tip === "Breaking the document into tasks" ? undefined : look.tip,
+			};
 		}
-		status = (
-			<>
-				<BuildGlyph look={look} />
-				<span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-					{label}
-					{detail && (
-						<>
-							{" "}
-							<span className="text-text-tertiary">{detail}</span>
-						</>
-					)}
-				</span>
-			</>
-		);
+		let states = tasks.map(task => stateFor(task));
+		let done = states.filter(state => state === "completed").length;
+		let count = tasks.length
+			? `${done} of ${plural(tasks.length, "task", "tasks")}`
+			: undefined;
+		let base = { count, segments: states, activity: activeBuild?.activity?.text };
+		if (look.kind === "building") {
+			let queued = activeBuild?.state === "queued";
+			return {
+				...base,
+				title: stopping ? "Stopping" : queued ? "Queued" : "Building",
+				glyph: queued
+					? <CardSpinner />
+					: (
+						<span aria-hidden="true" className="build-glyph" data-live="">
+							<ProgressRingIcon progress={Math.max(look.done / look.total, 0.08)} />
+						</span>
+					),
+				detail: snapshot?.waitingForDocument || snapshot?.waitingForPrototype
+					? look.tip
+					: undefined,
+			};
+		}
+		if (look.kind === "rebuilding") {
+			return {
+				...base,
+				title: stopping ? "Stopping" : "Building changes",
+				glyph: <CardSpinner />,
+				detail: look.tip,
+			};
+		}
+		if (look.kind === "built") {
+			let commits = snapshot?.live?.commits.length ?? 0;
+			return {
+				...base,
+				title: "Built",
+				count: plural(look.pullRequests, "pull request", "pull requests"),
+				glyph: <CheckIcon aria-hidden="true" className="build-card-check" />,
+				detail: commits > 0
+					? `${plural(commits, "commit", "commits")} since first build`
+					: undefined,
+			};
+		}
+		if (look.kind === "stopped" || look.kind === "failed" || look.kind === "agent") {
+			return {
+				...base,
+				title: look.kind === "failed" && phase.kind === "live"
+					? "Rebuild failed"
+					: buildLabel(look),
+				glyph: (
+					<span aria-hidden="true" className="build-glyph">
+						<WarningIcon aria-hidden="true" className="build-glyph-warning" />
+					</span>
+				),
+				// The note below says how to start the agent; a blocked row shows the blocker.
+				detail: look.kind === "agent"
+					? undefined
+					: look.kind === "failed" && phase.kind === "live"
+							&& phase.sync.kind === "needs-attention"
+					? attentionHint(snapshot, true) ?? look.tip
+					: look.tip,
+			};
+		}
+		return {
+			...base,
+			title: buildLabel(look),
+			glyph: <BuildGlyph look={look} />,
+			detail: look.tip,
+		};
 	}
+
+	let card = phase.kind === "loading" ? undefined : statusCard();
+
+	// The build the card's footer names: the one running, else the last that ran.
+	let shown: Pick<BuildRequest, "id" | "user" | "state"> & { createdAt?: string } | undefined =
+		look.kind === "plan" || look.kind === "tasks"
+			? undefined
+			: activeBuild ?? (phase.kind === "live" && snapshot?.live
+				? snapshot.live.rebuild
+					?? (snapshot.build?.id === snapshot.live.buildId
+						? snapshot.build
+						: { id: snapshot.live.buildId, user: snapshot.live.user, state: "stopped" })
+				: snapshot?.build);
+	let login = shown && (
+		shown.id === snapshot?.build?.id
+			? snapshot.startedBy
+			: shown.user === snapshot?.live?.user
+			? snapshot.builtBy
+			: undefined
+	);
+	let machine = shown && snapshot?.buildMachines?.[shown.id];
+	// A queued build has not started, so it has no time to show.
+	let when = shown?.createdAt && shown.state !== "queued" ? ago(shown.createdAt, now) : undefined;
+
 	if (phase.kind === "stopped" && canEdit && !returning) {
 		action = (
 			<button
-				className="btn btn-md btn-outline shrink-0"
+				className="btn btn-sm btn-outline shrink-0"
 				onClick={() => setReturning(true)}
 				type="button"
 			>
@@ -246,7 +366,7 @@ export function BuildView(
 	if (phase.kind === "blocked" && canEdit && userId && snapshot?.buildRequested?.by === userId) {
 		action = (
 			<button
-				className="btn btn-md btn-outline shrink-0"
+				className="btn btn-sm btn-outline shrink-0"
 				onClick={() => {
 					setActionError(undefined);
 					cancelBuildRequest(room).then(
@@ -265,7 +385,8 @@ export function BuildView(
 		action = (
 			<button
 				aria-busy={stopping || undefined}
-				className="btn btn-md btn-outline shrink-0"
+				aria-label="Stop build"
+				className="btn btn-sm btn-ghost shrink-0"
 				disabled={stopping}
 				onClick={() => {
 					setActionError(undefined);
@@ -278,7 +399,10 @@ export function BuildView(
 				}}
 				type="button"
 			>
-				Stop build
+				{stopping
+					? <LoaderIcon aria-hidden="true" className="build-card-spin" />
+					: <span aria-hidden="true" className="build-card-stop" />}
+				{stopping ? "Stopping" : "Stop"}
 			</button>
 		);
 	}
@@ -287,18 +411,12 @@ export function BuildView(
 	// A built document lists the tasks its later rebuilds added under their own heading.
 	let groups = phase.kind === "live" ? liveTaskGroups(tasks) : { first: tasks, since: [] };
 	let noChange = phase.kind === "live" ? [...(snapshot?.live?.noChange ?? [])].toReversed() : [];
-	let outstanding = new Set(snapshot?.live?.outstandingTasks?.map(task => task.id));
-	let rebuilding = phase.kind === "live" && phase.sync.kind === "building";
 	let renderTask = (task: (typeof tasks)[number]) => {
-		let report = phase.kind === "live"
-			? snapshot?.live?.tasks.find(item => item.id === task.id)?.progress
-			: progress?.tasks.find(item => item.id === task.id);
+		let report = reportFor(task);
 		let url = report?.pullRequest?.url;
 		let commits = url && !listed.has(url) ? pullRequestCommits(snapshot, url) : [];
 		if (url) listed.add(url);
-		let state: TaskState = phase.kind === "live"
-			? liveTaskState(report?.state ?? "queued", outstanding.has(task.id), rebuilding)
-			: report?.state ?? "queued";
+		let state = stateFor(task, report);
 		// A task the build left unfinished says why where a blocked one shows its blocker.
 		let stopped = phase.kind === "live" && outstanding.has(task.id) && !report?.blocker
 				&& state === "blocked"
@@ -332,27 +450,63 @@ export function BuildView(
 	return (
 		<div className="build-view">
 			<div className="build-view-content" data-build-view-scroll="">
-				<div className="build-status">
-					<p
-						aria-live={phase.kind === "blocked" ? undefined : "polite"}
-						className="build-status-line"
-					>
-						{status}
+				{phase.kind === "loading" && (
+					<p className="build-status-line">
+						{loadError
+							? <span className="text-destructive-ink">{sentence(loadError)}</span>
+							: <span className="sr-only">Loading tasks</span>}
 					</p>
-					{/* Outside the live region, so a ticking clock is not announced. */}
-					{since && <span className="build-elapsed">{since}</span>}
-					{action}
-				</div>
-				{activeBuild?.activity && (
-					<p className="build-activity">
-						<span aria-live="polite">{activeBuild.activity.text}</span>
-						<time
-							dateTime={activeBuild.activity.at}
-							title={new Date(activeBuild.activity.at).toLocaleString()}
+				)}
+				{card && (
+					<div className="build-card">
+						<p
+							aria-live={phase.kind === "blocked" ? undefined : "polite"}
+							className="build-card-top"
 						>
-							Updated {ago(activeBuild.activity.at, now)}
-						</time>
-					</p>
+							{card.glyph}
+							<span className="build-card-title">{card.title}</span>
+							{card.count && <span className="build-card-count">{card.count}</span>}
+						</p>
+						{(card.activity ?? card.detail) && (
+							<p className="build-card-detail">
+								{card.activity
+									? (
+										<span aria-live="polite" className="build-card-ticker" key={card.activity}>
+											{card.activity}
+										</span>
+									)
+									: typeof card.detail === "string"
+									? <span className="build-card-ticker" key={card.detail}>{card.detail}</span>
+									: card.detail}
+							</p>
+						)}
+						{card.segments && card.segments.length > 0 && (
+							<div aria-hidden="true" className="build-card-segments">
+								{card.segments.map((state, index) => <span data-state={state} key={index} />)}
+							</div>
+						)}
+						{(login || machine || action) && (
+							<footer className="build-card-foot">
+								{login && shown && (
+									<span className="build-card-person">
+										<Face decorative handle={login} size={18} titled={false} />
+										<span className="build-card-person-name">
+											{shown.user === userId ? "You" : `@${login}`}
+										</span>
+										{/* Outside the live region, so a ticking clock is not announced. */}
+										{when && (
+											<span className="build-card-quiet">
+												{look.kind === "built" ? `built ${when}` : when}
+											</span>
+										)}
+									</span>
+								)}
+								{machine && <MachineLabel machine={machine} />}
+								<span className="flex-1" />
+								{action}
+							</footer>
+						)}
+					</div>
 				)}
 				{(build.needsAgent || snapshot?.localAgent === false && look.kind === "stopped") && (
 					<div className="mt-3">

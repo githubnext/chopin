@@ -54,19 +54,194 @@
 	font-variant-numeric: tabular-nums;
 }
 
-.build-activity {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--spacing) calc(var(--spacing) * 3);
-	margin: calc(var(--spacing) * 2) 0 0;
-	color: var(--color-text-secondary);
-	font-size: var(--text-xs);
-	overflow-wrap: anywhere;
+/*
+ * The build's status card: title and count, what the agent is doing, one segment per task, then who
+ * started it, the machine it runs on and the action, under a rule that runs edge to edge.
+ */
+.build-card {
+	display: grid;
+	gap: calc(var(--spacing) * 3);
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-xl);
+	background: var(--color-inset);
+	font-size: var(--text-sm);
 }
 
-.build-activity time {
+.build-card-top {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin: 0;
+}
+
+.build-card-title {
+	min-width: 0;
+	flex: 1;
+	color: var(--color-text-primary);
+	font-weight: var(--font-weight-medium);
+}
+
+.build-card-count {
+	flex: none;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.build-card-detail {
+	display: flex;
+	min-width: 0;
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+}
+
+/* The activity line sits close under the title, above the segments. */
+.build-card-top + .build-card-detail {
+	margin-block-start: calc(var(--spacing) * -2);
+}
+
+.build-card-ticker {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.build-card-check {
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
+	flex: none;
+	color: var(--color-success-icon);
+}
+
+/* A build that is live breathes; the words beside it say what it is doing. */
+@keyframes build-card-breathe {
+	50% {
+		opacity: var(--opacity-quiet);
+	}
+}
+
+/* One segment per task: green when done, and green with a soft lighter sweep while it runs. */
+@keyframes build-card-sweep {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+
+.build-card-segments {
+	display: flex;
+	gap: var(--spacing);
+}
+
+.build-card-segments > span {
+	height: var(--spacing);
+	flex: 1;
+	border-radius: var(--radius-full);
+	background: var(--color-selected-strong);
+	transition: background-color var(--duration-base) var(--ease-out);
+}
+
+.build-card-segments > span:is([data-state="completed"], [data-state="in_progress"]) {
+	background: var(--color-success-graphic);
+}
+
+.build-card-segments > span[data-state="blocked"] {
+	background: var(--color-warning-graphic);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.build-card-spin {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
+
+	.build-card-ticker {
+		animation: build-fade var(--duration-linger) var(--ease-out);
+	}
+
+	.build-card .build-glyph[data-live] {
+		animation: build-card-breathe calc(var(--duration-linger) * 6) var(--motion-move) infinite;
+	}
+
+	.build-card-segments > span[data-state="in_progress"] {
+		background: linear-gradient(
+			90deg,
+			var(--color-success-graphic) 0%,
+			var(--color-success-graphic) 30%,
+			color-mix(in srgb, var(--color-success-graphic) 55%, var(--color-page)) 50%,
+			var(--color-success-graphic) 70%,
+			var(--color-success-graphic) 100%
+		);
+		background-size: 250% 100%;
+		animation: build-card-sweep calc(var(--duration-linger) * 8) linear infinite;
+	}
+}
+
+.build-card-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: calc(var(--spacing) * 3) calc(var(--spacing) * 5);
+	margin-inline: calc(var(--spacing) * -4);
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4) 0;
+	border-block-start: var(--edge-width) solid var(--color-edge);
+	font-size: var(--text-xs);
+}
+
+.build-card-person,
+.build-card-machine {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.build-card-person-name {
+	color: var(--color-text-secondary);
+	font-weight: var(--font-weight-medium);
+}
+
+.build-card-quiet {
 	color: var(--color-text-tertiary);
 	font-variant-numeric: tabular-nums;
+}
+
+.build-card-machine {
+	color: var(--color-text-secondary);
+}
+
+.build-card-machine-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* A 6px state dot, smaller than the shared glyph's, ringed in the card's inset surface. */
+.build-card-machine .machine-glyph-dot {
+	width: calc(var(--spacing) * 1.5);
+	height: calc(var(--spacing) * 1.5);
+	right: calc(var(--spacing) * -0.75);
+	bottom: calc(var(--spacing) * -0.75);
+	border-width: calc(var(--spacing) * 0.375);
+	border-color: var(--color-inset);
+}
+
+/* Stop's square, drawn in the button's ink. */
+.build-card-stop {
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	flex: none;
+	background: currentColor;
+}
+
+.build-card + .build-tasks {
+	margin-block-start: calc(var(--spacing) * 6);
 }
 
 /* Tasks drafted for an earlier revision stay readable but recede. */

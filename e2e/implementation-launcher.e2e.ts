@@ -248,7 +248,6 @@ for (let width of [1280, 390]) {
 			await page.getByRole("button", { name: "Build", exact: true }).click();
 			let view = page.getByRole("region", { name: "Build", exact: true });
 			await expect(view.getByText("Running server tests", { exact: true })).toBeVisible();
-			await expect(view.getByText(/^Updated /)).toBeVisible();
 			let stop = view.getByRole("button", { name: "Stop build", exact: true });
 			await expect(stop).toBeInViewport({ ratio: 1 });
 			await stop.focus();
@@ -349,7 +348,8 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			let blocked = view.getByRole("button", { name: /^Connect the local agent/ });
 			let dependent = view.getByRole("button", { name: /^Review the connection/ });
 			if (mode === "complete") {
-				await expect(view).toContainText("Built 2 pull requests");
+				await expect(view.getByText("Built", { exact: true })).toBeVisible();
+				await expect(view.getByText("2 pull requests", { exact: true })).toBeVisible();
 				await expect(view.getByRole("link", { name: /^Pull request #\d+/ })).toHaveCount(2);
 				await expect(blocked).toHaveAttribute("aria-expanded", "false");
 				// The tasks the connector started, completed and opened pull requests for show under
@@ -379,7 +379,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			);
 			await openBuild();
 			await expect(view).toContainText(
-				mode === "complete" ? "Built 2 pull requests" : "Blocked: Choose the next tracer",
+				mode === "complete" ? "2 pull requests" : "Blocked: Choose the next tracer",
 			);
 			if (
 				process.env.CHOPIN_LAUNCHER_SCREENSHOT
@@ -393,7 +393,8 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 					"Choose the next tracer before continuing.",
 				);
 				await view.getByRole("button", { name: "Return to planning", exact: true }).click();
-				await expect(view).toContainText("Returned for changes. Build plan builds it again.");
+				await expect(view.getByText("Returned for changes", { exact: true })).toBeVisible();
+				await expect(view.getByText("Build plan builds it again.", { exact: true })).toBeVisible();
 				await page.getByRole("group", { name: "Document view" })
 					.getByRole("button", { name: "Document", exact: true }).click();
 				await expect(content(page)).toHaveAttribute("contenteditable", "true");
@@ -747,7 +748,10 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		await expect(view).toBeVisible();
 		// The capsule stays while its own view is open.
 		await expect(capsule).toBeVisible();
-		await expect(view.getByText(/^Building 0 of 2 started by you/)).toBeVisible();
+		// A build waiting for its agent to pick it up reads as queued.
+		await expect(view.getByText(/^(Building|Queued)$/)).toBeVisible();
+		await expect(view.getByText("0 of 2 tasks", { exact: true })).toBeVisible();
+		await expect(view.getByText("You", { exact: true })).toBeVisible();
 		await expect(view.getByRole("button", { name: /Retry|Return to planning/ })).toHaveCount(0);
 		await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li")).toHaveCount(2);
 		let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
