@@ -124,14 +124,14 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 				label: text(
 					option.label,
 					`Question ${index + 1} option ${position + 1} label`,
-					limits.MAX_LABEL,
+					limits.MAX_NEW_LABEL,
 					verbatim,
 					verbatim,
 				),
 				description: text(
 					option.description,
 					`Question ${index + 1} option ${position + 1} description`,
-					limits.MAX_DESCRIPTION,
+					limits.MAX_NEW_DESCRIPTION,
 					true,
 					verbatim,
 				),
@@ -162,7 +162,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 					description: text(
 						raw.description,
 						`Question ${index + 1} description`,
-						limits.MAX_QUESTION_DESCRIPTION,
+						limits.MAX_NEW_QUESTION_DESCRIPTION,
 						true,
 						verbatim,
 					),
@@ -303,10 +303,10 @@ export function appendOption(
 	let label: string;
 	let description: string;
 	try {
-		label = text(input.label, "Option", limits.MAX_LABEL);
+		label = text(input.label, "Option", limits.MAX_NEW_LABEL);
 		description = input.description === undefined
 			? ""
-			: text(input.description, "Option description", limits.MAX_DESCRIPTION, true);
+			: text(input.description, "Option description", limits.MAX_NEW_DESCRIPTION, true);
 	} catch (err) {
 		return { ok: false, reason: "invalid", message: (err as Error).message };
 	}

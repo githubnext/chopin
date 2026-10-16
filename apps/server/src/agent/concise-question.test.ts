@@ -21,11 +21,11 @@ function question(question: string, description?: string) {
 }
 
 test("ask validates concise primary questions and keeps optional full-card context", () => {
-	expect(askPlan(question("x".repeat(100), "y".repeat(300))).questions[0]?.description)
-		.toHaveLength(300);
+	expect(askPlan(question("x".repeat(100), "y".repeat(140))).questions[0]?.description)
+		.toHaveLength(140);
 	expect(() => askPlan(question("x".repeat(101)))).toThrow("exceeds 100 characters");
-	expect(() => askPlan(question("Title?", "y".repeat(301))))
-		.toThrow("description exceeds 300 characters");
+	expect(() => askPlan(question("Title?", "y".repeat(141))))
+		.toThrow("description exceeds 140 characters");
 });
 
 test("refine and direct revision accept 100 character titles and refuse 101", () => {
@@ -50,7 +50,7 @@ test("Planner tool schemas advertise the same authoring limits", () => {
 		};
 	}).jsonSchema;
 	expect(ask.properties.questions.items.properties.question.maxLength).toBe(100);
-	expect(ask.properties.questions.items.properties.description.maxLength).toBe(300);
+	expect(ask.properties.questions.items.properties.description.maxLength).toBe(140);
 	expect(ask.properties.questions.items.required).not.toContain("description");
 	for (
 		let tool of [createDirectTools().revise_open_decision, createRefineTools().refine_decision]

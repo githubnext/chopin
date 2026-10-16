@@ -30,8 +30,8 @@ export function createDirectTools() {
 						items: {
 							type: "object",
 							properties: {
-								label: { type: "string", minLength: 1, maxLength: 200 },
-								rationale: { type: "string", minLength: 1, maxLength: 300 },
+								label: { type: "string", minLength: 1, maxLength: 60 },
+								rationale: { type: "string", minLength: 1, maxLength: 160 },
 							},
 							required: ["label", "rationale"],
 							additionalProperties: false,

@@ -77,10 +77,10 @@ describe("normalize", () => {
 				[{ header: "x".repeat(limits.MAX_HEADER + 1) }, /exceeds 80 characters/],
 				[{ question: "x".repeat(limits.MAX_NEW_QUESTION + 1) }, /exceeds 100 characters/],
 				[{ options: many }, /at most 20 options/],
-				[{ options: [{ label: "x".repeat(limits.MAX_LABEL + 1), description: "" }] }, /label/],
+				[{ options: [{ label: "x".repeat(limits.MAX_NEW_LABEL + 1), description: "" }] }, /label/],
 				[
-					{ options: [{ label: "a", description: "x".repeat(limits.MAX_DESCRIPTION + 1) }] },
-					/description exceeds 1000 characters/,
+					{ options: [{ label: "a", description: "x".repeat(limits.MAX_NEW_DESCRIPTION + 1) }] },
+					/description exceeds 160 characters/,
 				],
 			] as const
 		) expect(() => normalize(tool(override))).toThrow(message);

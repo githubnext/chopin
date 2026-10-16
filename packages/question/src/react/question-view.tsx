@@ -12,7 +12,7 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
-import { INPUT_EXPIRY_MS, MAX_LABEL, MAX_SHARED_OPTIONS } from "../limits";
+import { INPUT_EXPIRY_MS, MAX_NEW_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
 import { plainInlineList, plainInlineText } from "./inline-segments";
@@ -473,7 +473,7 @@ function AddOption(
 					className="question-field"
 					disabled={disabled}
 					enterKeyHint="done"
-					maxLength={MAX_LABEL}
+					maxLength={MAX_NEW_LABEL}
 					onBlur={event => {
 						// Only an empty field collapses by itself. Typed text is kept, because
 						// adding an option is visible to everyone and should be deliberate.

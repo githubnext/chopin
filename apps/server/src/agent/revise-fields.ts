@@ -35,11 +35,11 @@ export function input(raw: unknown): Input {
 			let option = rawOption as Record<string, unknown>;
 			let label = typeof option.label === "string" ? option.label.trim() : "";
 			let rationale = typeof option.rationale === "string" ? option.rationale.trim() : "";
-			if (!label || label.length > 200 || /[\r\n\u2028\u2029]/.test(label)) {
-				throw new Error("option label must be 1–200 characters on one line");
+			if (!label || label.length > 60 || /[\r\n\u2028\u2029]/.test(label)) {
+				throw new Error("option label must be 1–60 characters on one line");
 			}
-			if (!rationale || rationale.length > 300) {
-				throw new Error("option rationale must be 1–300 characters");
+			if (!rationale || rationale.length > 160) {
+				throw new Error("option rationale must be 1–160 characters");
 			}
 			add_options.push({ label, rationale });
 		}

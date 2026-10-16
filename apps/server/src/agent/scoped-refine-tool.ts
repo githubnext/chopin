@@ -16,15 +16,15 @@ export function createRefineTools() {
 					revision: { type: "integer", minimum: 0 },
 					id: { type: "string" },
 					title: { type: "string", minLength: 1, maxLength: 100 },
-					description: { type: "string", minLength: 1, maxLength: 300 },
+					description: { type: "string", minLength: 1, maxLength: 140 },
 					add_options: {
 						type: "array",
 						maxItems: 10,
 						items: {
 							type: "object",
 							properties: {
-								label: { type: "string", minLength: 1, maxLength: 200 },
-								rationale: { type: "string", minLength: 1, maxLength: 300 },
+								label: { type: "string", minLength: 1, maxLength: 60 },
+								rationale: { type: "string", minLength: 1, maxLength: 160 },
 								source: {
 									type: "object",
 									properties: {

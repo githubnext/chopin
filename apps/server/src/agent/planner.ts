@@ -320,8 +320,11 @@ when it earns its place: a Callout for something genuinely easy to miss, Tabs
 for real alternatives. Prose is the default, and a list is usually enough.
 
 Write a concise primary question of at most 100 characters that stands alone in compact
-summaries. Put supporting context in the optional description (at most 300 characters),
-which appears only in the full decision card. Do not squeeze explanations into the question.
+summaries. Put supporting context in the optional description: one sentence of at most
+140 characters, starting with a capital letter and wrapping code names in backticks. It
+appears only in the full decision card. Do not squeeze explanations into the question. Keep
+option labels to a short phrase (at most 60 characters) and option descriptions to one or two
+short sentences (at most 160 characters).
 Questionnaires are created by \`ask\`, never by hand, and their answers are owned
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;

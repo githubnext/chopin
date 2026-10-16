@@ -14,16 +14,16 @@ function input(question = "Where should we store sessions?", description?: strin
 }
 
 describe("concise authored questions", () => {
-	test("accepts the 100 character question and 300 character description boundaries", () => {
-		let value = normalize(input("x".repeat(100), "y".repeat(300)));
+	test("accepts the 100 character question and 140 character description boundaries", () => {
+		let value = normalize(input("x".repeat(100), "y".repeat(140)));
 		expect(value.questions[0]?.question).toHaveLength(100);
-		expect(value.questions[0]?.description).toHaveLength(300);
+		expect(value.questions[0]?.description).toHaveLength(140);
 	});
 
 	test("rejects longer new questions and descriptions without truncation", () => {
 		expect(() => normalize(input("x".repeat(101)))).toThrow("exceeds 100 characters");
-		expect(() => normalize(input("Question?", "y".repeat(301))))
-			.toThrow("description exceeds 300 characters");
+		expect(() => normalize(input("Question?", "y".repeat(141))))
+			.toThrow("description exceeds 140 characters");
 	});
 
 	test("leaves the optional description absent and trims authored context", () => {

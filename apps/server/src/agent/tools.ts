@@ -468,7 +468,7 @@ export const documentTools = {
 							},
 							description: {
 								type: "string",
-								maxLength: 300,
+								maxLength: 140,
 								description: "Optional supporting context shown only in the full decision card.",
 							},
 							options: {
@@ -478,8 +478,8 @@ export const documentTools = {
 								items: {
 									type: "object",
 									properties: {
-										label: { type: "string", minLength: 1, maxLength: 200 },
-										description: { type: "string", maxLength: 1000 },
+										label: { type: "string", minLength: 1, maxLength: 60 },
+										description: { type: "string", maxLength: 160 },
 									},
 									required: ["label", "description"],
 									additionalProperties: false,

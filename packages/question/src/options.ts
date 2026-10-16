@@ -26,11 +26,11 @@ export function addOption(
 	let question = definition.questions[0]!;
 	let text = label.trim();
 	if (!text) return { ok: false, reason: "invalid", message: "An option needs a label" };
-	if (text.length > limits.MAX_LABEL) {
+	if (text.length > limits.MAX_NEW_LABEL) {
 		return {
 			ok: false,
 			reason: "invalid",
-			message: `An option label is at most ${limits.MAX_LABEL} characters`,
+			message: `An option label is at most ${limits.MAX_NEW_LABEL} characters`,
 		};
 	}
 	if (question.options.length >= limits.MAX_DECISION_OPTIONS) {

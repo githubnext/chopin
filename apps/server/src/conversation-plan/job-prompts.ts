@@ -149,7 +149,7 @@ export function refinePrompt(input: {
 			? [
 				"[Initial decision card]",
 				"This decision has no card yet. Supply `title` (at most 100 characters on one line).",
-				"Optionally supply `description` (at most 300 characters) for necessary context.",
+				"Optionally supply `description` (one sentence, at most 140 characters) for necessary context.",
 				"The card will appear only after this call succeeds. Preserve the source meaning.",
 				"Do not supply add_options: the server preserves the latest options from the discussion.",
 				"You may supply place_after for a prose block read from the current document.",
