@@ -171,7 +171,8 @@ test("a decided card says how it relates to the document, even without actions",
 			relations: { [AUTH.questions[0]!.id]: relation },
 			onQuestionSelect: () => {},
 		}));
-	expect(card("linked")).toContain('aria-label="Show in document, 2 places"');
+	expect(card("linked")).toContain('aria-label="Show in document"');
+	expect(card("linked")).not.toMatch(/>2</);
 	expect(card("pending")).toContain("Linking…");
 	expect(card("empty")).toContain("No related text");
 	expect(card("orphaned")).toContain("Related text was removed");

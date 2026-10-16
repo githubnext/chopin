@@ -23,8 +23,7 @@ export function cardRelation(
 const ROW = "inline-flex min-w-0 items-center gap-1.5 text-xs";
 
 export function RelationNote(
-	{ count = 0, onEnter, onLeave, onSelect, pending = "Linking…", question, relation }: {
-		count?: number;
+	{ onEnter, onLeave, onSelect, pending = "Linking…", question, relation }: {
 		onEnter?: (question: string) => void;
 		onLeave?: (question: string) => void;
 		onSelect?: (question: string) => void;
@@ -38,7 +37,7 @@ export function RelationNote(
 		if (!onSelect) return null;
 		return (
 			<button
-				aria-label={count > 1 ? `Show in document, ${count} places` : "Show in document"}
+				aria-label="Show in document"
 				className={`btn btn-sm btn-ghost -mx-2.5 ${ROW} text-text-secondary`}
 				data-relation="linked"
 				onBlur={event => !event.currentTarget.matches(":hover") && onLeave?.(question)}
@@ -51,9 +50,6 @@ export function RelationNote(
 			>
 				<DocumentIcon aria-hidden="true" size={16} />
 				<span>Show in document</span>
-				{count > 1 && (
-					<span aria-hidden="true" className="text-text-tertiary tabular-nums">{count}</span>
-				)}
 			</button>
 		);
 	}

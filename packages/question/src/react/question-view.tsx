@@ -565,9 +565,7 @@ function Related(
 			type="button"
 			data-ace-question-id={id}
 			data-press="wide"
-			aria-label={count > 1
-				? `${label} — show in document, ${count} places`
-				: `${label} — show in document`}
+			aria-label={`${label} — show in document`}
 			onClick={() => onSelect?.(id)}
 			onMouseEnter={() => onEnter?.(id)}
 			onMouseLeave={event => event.currentTarget !== document.activeElement && onLeave?.(id)}
@@ -576,11 +574,6 @@ function Related(
 			className={`${className} ${LINK}`}
 		>
 			<span className="min-w-0 flex-1">{children}</span>
-			{count > 1 && (
-				<span aria-hidden="true" className="shrink-0 text-sm text-text-tertiary tabular-nums">
-					{count}
-				</span>
-			)}
 		</button>
 	);
 }
@@ -983,7 +976,6 @@ export function QuestionView(props: QuestionViewProps) {
 			: undefined;
 		let relationNote = hostNote ?? (related && (
 			<RelationNote
-				count={places?.[related.question]}
 				onEnter={onQuestionEnter}
 				onLeave={onQuestionLeave}
 				onSelect={onQuestionSelect}
