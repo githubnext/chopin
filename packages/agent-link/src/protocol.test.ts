@@ -77,6 +77,30 @@ describe("Agent connection messages", () => {
 		}
 	});
 
+	it("accepts optional stage parents and stopped stages without changing the connection version", () => {
+		let message = {
+			type: "runs" as const,
+			session: "s",
+			active: [],
+			paused: [],
+			cards: [{
+				id: "run",
+				name: "review",
+				status: "stopped" as const,
+				started: 1,
+				updated: 2,
+				waiting: 0,
+				stages: [
+					{ id: "parent", name: "parent", status: "stopped" as const },
+					{ id: "child", name: "child", status: "running" as const, parentIds: ["parent"] },
+				],
+			}],
+		};
+		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
+		message.cards[0]!.stages[1]!.parentIds = Array(65).fill("parent");
+		expect(parseClientMessage(JSON.stringify(message))).toMatchObject({ ok: false });
+	});
+
 	it("refuses text that is not JSON, binary frames, unknown types, and undeclared fields", () => {
 		for (
 			let raw of [

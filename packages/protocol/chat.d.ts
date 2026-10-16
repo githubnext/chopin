@@ -154,6 +154,8 @@ export declare namespace Chat {
 	export type RunStage = {
 		id: string;
 		name: string;
+		/** IDs of parent stages in this report; absent in older or topology-free reports. */
+		parentIds?: string[];
 		/** A `ctx.tool` step rather than an agent stage. */
 		kind?: "tool";
 		status:
@@ -164,7 +166,8 @@ export declare namespace Chat {
 			| "blocked"
 			| "completed"
 			| "failed"
-			| "skipped";
+			| "skipped"
+			| "stopped";
 		/** Seconds since the epoch. */
 		started?: number;
 		ended?: number;

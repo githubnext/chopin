@@ -587,10 +587,16 @@ paused, so a paused run stays stopped.
 `status` is one of `running`, `waiting`, `paused`, `finished`, `blocked`,
 `failed`, `stopped`; times are whole seconds since the epoch; `waiting` counts
 open questions. Up to 64 `stages` are
-`{ "id": "", "name": "", "kind?": "tool", "status": "", "started?": 0, "ended?": 0 }`
+`{ "id": "", "name": "", "parentIds?": [], "kind?": "tool", "status": "", "started?": 0, "ended?": 0 }`
 with `status` one of `pending`, `running`, `awaiting_input`, `paused`, `blocked`,
-`completed`, `failed`, `skipped`. `active` and `paused` list at most 64 root run
-ids. When the connection closes, the server shows the reported live runs as stopped.
+`completed`, `failed`, `skipped`, `stopped`. Optional `parentIds` names the parent
+stages by their IDs in this report (at most 64 IDs, each 1–128 characters). Send
+these links for nested work; older reports without them remain valid on version 1.
+Chat renders unfinished descendants of stopped, failed, blocked or skipped stages
+as stopped, while preserving finished outcomes. A stopped, failed or blocked run
+stops all unfinished stage displays even without parent links. `active` and
+`paused` list at most 64 root run IDs. When the connection closes, the server
+shows the reported live runs as stopped.
 
 ## Closing
 

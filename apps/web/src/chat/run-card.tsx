@@ -30,6 +30,7 @@ const STAGE: Record<Wire.RunStage["status"], string> = {
 	completed: "done",
 	failed: "failed",
 	skipped: "skipped",
+	stopped: "stopped",
 };
 
 /** Waiting runs first, then running, paused, and ended; newest first within each. */
@@ -69,6 +70,32 @@ export function visibleRuns(ordered: readonly Wire.Run[], showAll: boolean): Wir
 	if (showAll) return [...ordered];
 	let waiting = ordered.filter(run => run.status === "waiting").length;
 	return ordered.slice(0, Math.max(SHOWN_RUNS, waiting));
+}
+
+/** Apply ended ancestors before folding the visible rows, without changing the saved report. */
+export function displayStages(run: Wire.Run): Wire.RunStage[] {
+	let ended = new Set(["completed", "failed", "blocked", "skipped", "stopped"]);
+	let stopped = new Set(
+		run.stages.filter(stage => stage.status !== "completed" && ended.has(stage.status)).map(stage =>
+			stage.id
+		),
+	);
+	let changed = true;
+	while (changed) {
+		changed = false;
+		for (let stage of run.stages) {
+			if (!stopped.has(stage.id) && stage.parentIds?.some(id => stopped.has(id))) {
+				stopped.add(stage.id);
+				changed = true;
+			}
+		}
+	}
+	let runStopped = run.status === "stopped" || run.status === "failed" || run.status === "blocked";
+	return run.stages.map(stage =>
+		!ended.has(stage.status) && (runStopped || stopped.has(stage.id))
+			? { ...stage, status: "stopped" }
+			: stage
+	);
 }
 
 function useNow(live: boolean): number {
@@ -136,7 +163,7 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 	let now = useNow(live);
 	let end = run.ended ?? (live ? now : run.updated);
 	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
-	let stages = run.stages.slice(hidden);
+	let stages = displayStages(run).slice(hidden);
 	let earlier = hidden + (run.earlierStages ?? 0);
 	let stagesId = `run-stages-${run.id}`;
 	let title = tag ? `${run.name} ${tag}` : run.name;

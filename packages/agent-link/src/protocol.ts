@@ -168,6 +168,7 @@ export const inputSchema = z.discriminatedUnion("method", [
 const runStage = z.strictObject({
 	id,
 	name: z.string().max(MAX_NOTE),
+	parentIds: z.array(id).max(MAX_STAGES).optional(),
 	kind: z.literal("tool").optional(),
 	status: z.enum([
 		"pending",
@@ -178,6 +179,7 @@ const runStage = z.strictObject({
 		"completed",
 		"failed",
 		"skipped",
+		"stopped",
 	]),
 	started: seconds.optional(),
 	ended: seconds.optional(),

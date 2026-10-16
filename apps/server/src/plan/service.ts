@@ -776,6 +776,7 @@ const RUN_STAGE_STATUSES = new Set([
 	"completed",
 	"failed",
 	"skipped",
+	"stopped",
 ]);
 
 function seconds(value: JsonValue | undefined, optional = false): boolean {
@@ -803,6 +804,9 @@ function restoreWorkflowRuns(value: JsonValue | undefined): NonNullable<Chat.Cha
 				!stage || typeof stage !== "object" || Array.isArray(stage)
 				|| typeof stage.id !== "string" || typeof stage.name !== "string"
 				|| stage.kind !== undefined && stage.kind !== "tool"
+				|| stage.parentIds !== undefined && (!Array.isArray(stage.parentIds)
+						|| stage.parentIds.length > 64
+						|| stage.parentIds.some(id => typeof id !== "string" || !id || id.length > 128))
 				|| !RUN_STAGE_STATUSES.has(stage.status as string)
 				|| !seconds(stage.started, true) || !seconds(stage.ended, true)
 			)

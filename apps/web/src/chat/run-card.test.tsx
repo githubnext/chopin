@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { defaultOpen, elapsed, orderRuns, RunStack, visibleRuns } from "./run-card";
+import { defaultOpen, displayStages, elapsed, orderRuns, RunStack, visibleRuns } from "./run-card";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -116,6 +116,61 @@ test("runs of the same workflow are told apart by a short run id", () => {
 	expect(markup).toContain('aria-label="Pause demo-wait bbbbbbbb"');
 	let single = renderToStaticMarkup(createElement(RunStack, { onPause: () => {}, runs: [first] }));
 	expect(single).toContain('aria-label="Pause demo-wait"');
+});
+
+test("a failed stage stops unfinished descendants without changing completed work or siblings", () => {
+	let nested = {
+		...run("nested", "running", 10),
+		stages: [
+			{ id: "parent", name: "parent", status: "failed" as const },
+			{ id: "running", name: "running", status: "running" as const, parentIds: ["parent"] },
+			{ id: "queued", name: "queued", status: "pending" as const, parentIds: ["running"] },
+			{ id: "done", name: "done", status: "completed" as const, parentIds: ["parent"] },
+			{ id: "sibling", name: "sibling", status: "running" as const },
+		],
+	};
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [nested] }));
+	expect([...markup.matchAll(/data-run-stage="([^"]+)"/g)].map(match => match[1])).toEqual([
+		"failed",
+		"stopped",
+		"stopped",
+		"completed",
+		"running",
+	]);
+	expect(markup.match(/data-run-pulse=/g)).toHaveLength(2);
+});
+
+test("stopped parents stop running and pending descendants, keeping their finished outcomes", () => {
+	let nested = run("nested", "running", 10);
+	nested.stages = [
+		{ id: "parent", name: "parent", status: "stopped" },
+		{ id: "running", name: "running", status: "running", parentIds: ["parent"] },
+		{ id: "queued", name: "queued", status: "pending", parentIds: ["parent"] },
+		{ id: "done", name: "done", status: "completed", parentIds: ["parent"] },
+		{ id: "failed", name: "failed", status: "failed", parentIds: ["parent"] },
+	];
+	expect(displayStages(nested).map(stage => stage.status)).toEqual([
+		"stopped",
+		"stopped",
+		"stopped",
+		"completed",
+		"failed",
+	]);
+	expect(nested.stages[1]!.status).toBe("running");
+	for (let status of ["stopped", "failed", "blocked"] as const) {
+		let ended = {
+			...nested,
+			status,
+			stages: nested.stages.map(({ parentIds: _, ...stage }) => stage),
+		};
+		expect(displayStages(ended).map(stage => stage.status)).toEqual([
+			"stopped",
+			"stopped",
+			"stopped",
+			"completed",
+			"failed",
+		]);
+	}
 });
 
 test("elapsed switches to days instead of printing hundreds of hours", () => {

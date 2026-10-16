@@ -88,7 +88,25 @@ export function WorkflowRunsPlate() {
 				<RunStack
 					runs={[
 						run("finished", DONE_STAGES),
-						run("stopped", RUN_STAGES, { name: "docs-pass", started: 500 }),
+						run("stopped", [
+							{ id: "parent", name: "review", status: "stopped", started: 1_000, ended: 2_100 },
+							{
+								id: "active",
+								name: "review-a",
+								status: "running",
+								started: 1_100,
+								parentIds: ["parent"],
+							},
+							{ id: "queued", name: "review-b", status: "pending", parentIds: ["parent"] },
+							{
+								id: "done",
+								name: "review-c",
+								status: "completed",
+								started: 1_100,
+								ended: 1_200,
+								parentIds: ["parent"],
+							},
+						], { name: "docs-pass", started: 500 }),
 					]}
 				/>
 			</div>

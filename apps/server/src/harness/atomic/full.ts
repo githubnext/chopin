@@ -207,7 +207,21 @@ export function foldLifecycle(
 }
 
 /** The run cards to show, with the live/paused split from activity taking precedence over lifecycle. */
-export function runCards(cards: Map<string, Card>, runs: Omit<PlannerRuns, "cards">): Wire.Run[] {
+export function runCards(
+	cards: Map<string, Card>,
+	runs: Omit<PlannerRuns, "cards">,
+	roots: Iterable<WorkflowRootActivity> = [],
+): Wire.Run[] {
+	// Activity knows the topology; lifecycle knows the outcomes. Retain links when activity ends.
+	for (let root of roots) {
+		let card = cards.get(root.rootRunId);
+		if (!card || !root.graph) continue;
+		let ids = new Map(root.graph.nodes.map(node => [node.id, `${node.runId}:${node.nodeId}`]));
+		for (let node of root.graph.nodes) {
+			let stage = card.stages.find(stage => stage.id === ids.get(node.id));
+			if (stage) stage.parentIds = node.parentIds.flatMap(id => ids.get(id) ?? []);
+		}
+	}
 	return [...cards.values()].map(({ stageIndex: _index, prompts: _prompts, ...card }) => {
 		let waiting = Math.max(
 			card.waiting,
@@ -265,7 +279,7 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 				[...cards.values()].filter(card => card.ended !== undefined).map(card => card.id),
 			);
 			let split = classifyRuns(roots.values(), ended);
-			planner.runs = { ...split, cards: runCards(cards, split) };
+			planner.runs = { ...split, cards: runCards(cards, split, roots.values()) };
 			planner.onRuns?.(planner.runs);
 			for (let wake of planner.waiters ?? []) wake();
 		};

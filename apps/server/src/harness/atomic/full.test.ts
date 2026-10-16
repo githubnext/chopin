@@ -805,6 +805,60 @@ test("a new run clears ended cards, keeps live ones, and lists only the twelve m
 	expect(card?.earlierStages).toBe(3);
 });
 
+test("run cards retain graph parent links after the root leaves the live activity snapshot", () => {
+	let cards = new Map([["root", {
+		id: "root",
+		name: "nested",
+		status: "running" as const,
+		started: 1,
+		updated: 2,
+		stages: [
+			{ id: "root:parent", name: "parent", status: "failed" as const },
+			{ id: "child:work", name: "work", status: "running" as const },
+		],
+		waiting: 0,
+		stageIndex: new Map(),
+		prompts: new Set<string>(),
+	}]]);
+	let roots = [{
+		rootRunId: "root",
+		ownerSessionId: "session",
+		state: "working" as const,
+		reason: "executing" as const,
+		activeExecutionCount: 1,
+		actionableBlockCount: 0,
+		needsAttention: false,
+		graph: {
+			nodes: [
+				{
+					id: "parent",
+					runId: "root",
+					nodeId: "parent",
+					name: "parent",
+					kind: "stage" as const,
+					status: "failed" as const,
+					parentIds: [],
+					depth: 0,
+				},
+				{
+					id: "child:work",
+					runId: "child",
+					nodeId: "work",
+					name: "work",
+					kind: "stage" as const,
+					status: "running" as const,
+					parentIds: ["parent"],
+					depth: 1,
+				},
+			],
+		},
+	}];
+	expect(runCards(cards, { active: ["root"], paused: [] }, roots)[0]!.stages[1])
+		.toMatchObject({ parentIds: ["root:parent"] });
+	expect(runCards(cards, { active: [], paused: [] })[0]!.stages[1])
+		.toMatchObject({ parentIds: ["root:parent"] });
+});
+
 test("ctx.tool steps appear among the stages, marked as tool steps", async () => {
 	let { foldLifecycle } = await import("./full");
 	let cards = new Map();

@@ -199,7 +199,13 @@ describe("hosted plan persistence", () => {
 	it("restores workflow run cards, with runs still live then stopped", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
-		let stage = { id: "run-1:draft", name: "draft-1", status: "running" as const, started: 100 };
+		let stage = {
+			id: "run-1:draft",
+			name: "draft-1",
+			status: "running" as const,
+			started: 100,
+			parentIds: ["run-1:parent"],
+		};
 		plan.chat.runs = [
 			{
 				id: "run-1",
@@ -207,7 +213,7 @@ describe("hosted plan persistence", () => {
 				status: "running",
 				started: 100,
 				updated: 160,
-				stages: [stage],
+				stages: [{ id: "run-1:parent", name: "parent", status: "stopped" }, stage],
 				waiting: 1,
 			},
 			{
@@ -231,6 +237,10 @@ describe("hosted plan persistence", () => {
 			["run-0", "finished", 0],
 		]);
 		expect(restored.chat.runs?.[0]?.ended).toBeNumber();
+		expect(restored.chat.runs?.[0]?.stages).toEqual([
+			{ id: "run-1:parent", name: "parent", status: "stopped" },
+			stage,
+		]);
 		expect(restored.chat.runs?.[1]).toMatchObject({ ended: 90, earlierStages: 3 });
 		await Service.close(restored);
 
