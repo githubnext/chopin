@@ -171,12 +171,22 @@ test("Machine in the title's menu chooses where work runs, and an offline choice
 	await titleActions(page).click();
 	let item = menu.getByRole("menuitem", { name: /^Machine\b/ });
 	await expect(item).toContainText("Default");
+	await expect.poll(async () => Math.round((await menu.boundingBox())!.width)).toBe(280);
 	await shoot(page, "desktop-title-menu");
 	// ArrowRight opens the list; it starts on the chosen row.
 	await expect(menu.getByRole("menuitem").first()).toBeFocused();
 	await item.focus();
 	await page.keyboard.press("ArrowRight");
 	await expect(menu.getByRole("menuitemradio")).toHaveCount(3);
+	await expect(item).toHaveAttribute("aria-expanded", "true");
+	for (let name of ["Copy link", "Rename", "Archive"]) {
+		await expect(menu.getByRole("menuitem", { name, exact: true })).toBeVisible();
+	}
+	let options = menu.getByRole("group", { name: "Machine choices" });
+	await expect(options).toBeVisible();
+	expect(await options.evaluate(element => getComputedStyle(element).marginInlineStart)).toBe(
+		"4px",
+	);
 	let fallback = menu.getByRole("menuitemradio", { name: /^Default machine/ });
 	await expect(fallback).toHaveAttribute("aria-checked", "true");
 	await expect(fallback).toBeFocused();
@@ -187,7 +197,20 @@ test("Machine in the title's menu chooses where work runs, and an offline choice
 	await shoot(page, "desktop-machine");
 	// ArrowLeft goes back to the actions, on Machine; Escape closes and returns focus.
 	await page.keyboard.press("ArrowLeft");
-	await expect(menu.getByRole("menuitem", { name: /^Machine\b/ })).toBeFocused();
+	await expect(item).toBeFocused();
+	await expect(item).toHaveAttribute("aria-expanded", "false");
+	await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+	await item.click();
+	await expect(options).toBeVisible();
+	expect(
+		await options.evaluate(element =>
+			getComputedStyle(element.closest(".document-machine-panel")!).transitionDuration
+		),
+	).toBe("0.22s");
+	await item.click();
+	await expect(options).toBeHidden();
+	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(menu).toBeHidden();
 	await expect(titleActions(page)).toBeFocused();
@@ -264,6 +287,23 @@ test("Machine in the title's menu chooses where work runs, and an offline choice
 	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ })).toContainText(
 		"laptop",
 	);
+});
+
+test("the inline Machine picker respects reduced motion", async ({ join: enter }) => {
+	let page = await enter(person(), { ...DESKTOP, reducedMotion: "reduce" });
+	await connected(page, "build-box");
+	await page.reload();
+	let menu = await runOn(page);
+	let options = menu.getByRole("group", { name: "Machine choices" });
+	await expect(options).toBeVisible();
+	expect(
+		await options.evaluate(element =>
+			getComputedStyle(element.closest(".document-machine-panel")!).transitionDuration
+		),
+	).toBe("0s");
+	await expect(menu.getByRole("menuitem", { name: "Archive", exact: true })).toBeVisible();
+	await menu.getByRole("menuitemradio", { name: /^build-box/ }).click();
+	await expect(menu).toBeHidden();
 });
 
 test("on a phone, Machine in the actions sheet opens a sheet of machines", async ({ join: enter }) => {
@@ -472,6 +512,8 @@ test("twelve machines in a short window: the machine menu fits, scrolls and reac
 	let box = (await titleMenu.boundingBox())!;
 	expect(box.y + box.height).toBeLessThanOrEqual(600.5);
 	await page.keyboard.press("End");
+	await expect(titleMenu.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
+	await page.keyboard.press("ArrowUp");
 	let titleLast = titleMenu.getByRole("menuitemradio").last();
 	await expect(titleLast).toBeFocused();
 	await expect.poll(() => shownIn(titleLast, titleMenu)).toBe(true);
@@ -599,6 +641,8 @@ for (let height of [800, 600, "phone"] as const) {
 			}
 			await reachable(page, menu, labels);
 			await page.keyboard.press("End");
+			await expect(menu.getByRole("menuitem", { name: "Archive", exact: true })).toBeFocused();
+			await page.keyboard.press("ArrowUp");
 			await expect(menu.getByRole("menuitemradio").last()).toBeFocused();
 		},
 	);

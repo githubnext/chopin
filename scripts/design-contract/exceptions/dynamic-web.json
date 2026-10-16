@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
+		"sourceHash": "e07f8ebbc4c1befb74e7d739b82c26fbacc4fad43cb48f24a008faaf46cd60c5"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
+		"sourceHash": "e07f8ebbc4c1befb74e7d739b82c26fbacc4fad43cb48f24a008faaf46cd60c5"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
+		"sourceHash": "e07f8ebbc4c1befb74e7d739b82c26fbacc4fad43cb48f24a008faaf46cd60c5"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
