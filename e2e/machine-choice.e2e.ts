@@ -6,7 +6,8 @@ import {
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
-import { expect, test } from "./room";
+import { authenticate, expect, ready, test } from "./room";
+import { createChannel, seedChannel, titleChannel } from "./database";
 import { RELEASE } from "./release";
 
 import type { Locator, Page } from "@playwright/test";
@@ -785,18 +786,22 @@ async function machines(page: Page, count: number) {
 async function reachable(page: Page, panel: Locator, labels: string[]) {
 	let viewport = page.viewportSize()!;
 	let box = (await panel.boundingBox())!;
+	expect(box.x).toBeGreaterThanOrEqual(0);
 	expect(box.y).toBeGreaterThanOrEqual(0);
 	expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 0.5);
 	expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 0.5);
-	// More rows than fit: the panel scrolls rather than running off the window.
-	expect(await panel.evaluate(item => item.scrollHeight > item.clientHeight)).toBe(true);
+	if (labels.length >= 12) {
+		expect(await panel.evaluate(item => item.scrollHeight > item.clientHeight)).toBe(true);
+	}
 	for (let label of labels) {
 		let row = panel.getByRole("menuitemradio", { name: new RegExp(`^${label}`) });
 		await row.scrollIntoViewIfNeeded();
+		await row.click({ trial: true });
 		expect(await shownIn(row, panel), label).toBe(true);
 	}
 	let add = panel.getByRole("menuitem", { name: "Add machine…" });
 	await add.scrollIntoViewIfNeeded();
+	await add.click({ trial: true });
 	expect(await shownIn(add, panel)).toBe(true);
 }
 
@@ -805,8 +810,11 @@ async function shownIn(item: Locator, panel: Locator) {
 	return item.evaluate((element, container) => {
 		let box = element.getBoundingClientRect();
 		let frame = container!.getBoundingClientRect();
+		let hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
 		return box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1
-			&& box.bottom <= window.innerHeight + 1 && box.top >= -1;
+			&& box.left >= frame.left - 1 && box.right <= frame.right + 1
+			&& box.bottom <= window.innerHeight + 1 && box.top >= -1
+			&& !!hit && element.contains(hit);
 	}, await panel.elementHandle());
 }
 
@@ -854,6 +862,140 @@ test("twelve machines in a short window: the machine menu fits, scrolls and reac
 	await shoot(page, "short-window-title-menu");
 	await page.keyboard.press("Escape");
 });
+
+for (let height of [1080, 969]) {
+	test(
+		`machine menus fit after creating projects without reloading at 1920x${height}`,
+		async ({ page, baseURL }, testInfo) => {
+			await page.setViewportSize({ width: 1920, height });
+			await authenticate(page, `document-creator-${crypto.randomUUID()}`, baseURL!);
+			await page.goto("/");
+			let labels = await machines(page, 3);
+			let sidebar = page.getByRole("complementary", { name: "Projects" });
+			for (let repository of ["score", "archive-1", "archive-8"]) {
+				let add = page.getByRole("dialog", { name: "Add project", exact: true });
+				if (!await add.isVisible()) {
+					await sidebar.getByRole("button", { name: "Add project", exact: true }).click();
+				}
+				await add.getByRole("textbox", { name: "Search repositories" }).fill(repository);
+				await add.getByRole("option", { name: `octo-org/${repository}`, exact: true }).click();
+				let create = sidebar.getByRole("button", {
+					name: `New document in ${repository}`,
+					exact: true,
+				});
+				await create.locator("..").hover();
+				await create.click();
+				let title = page.getByRole("textbox", { name: "Document title", exact: true });
+				await title.fill(`Menu check ${repository}`);
+				await title.press("Enter");
+				await ready(page);
+				let chat = composer(page).getByRole("button", { name: /^Machine: / });
+				await chat.click();
+				let menu = page.getByRole("menu", { name: "Machine for this document" });
+				await expect(menu).toBeVisible();
+				await shoot(page, `creation-${height}-${repository}-chat`);
+				await testInfo.attach(`creation ${repository}`, {
+					body: await page.screenshot(),
+					contentType: "image/png",
+				});
+				await reachable(page, menu, labels);
+				let panel = (await menu.boundingBox())!;
+				expect(panel.y + panel.height).toBeLessThanOrEqual((await chat.boundingBox())!.y);
+				await page.keyboard.press("Escape");
+				await page.locator(".document-title-bar .machine-button").click();
+				await reachable(page, menu, labels);
+				await shoot(page, `creation-${height}-${repository}-build`);
+				await page.keyboard.press("Escape");
+			}
+		},
+	);
+}
+
+for (let height of [800, 600, "phone"] as const) {
+	test(
+		`populated workspace machine menus fit and reach every row at ${height}`,
+		async ({ seed, join: enter }, testInfo) => {
+			await seed(
+				"# Machine choice\n\n" + "A populated document with its sidebar projects.\n\n".repeat(30),
+				{
+					graph: GRAPH,
+				},
+			);
+			let page = await enter(
+				person(),
+				height === "phone" ? PHONE : { viewport: { width: 1280, height } },
+			);
+			let port = Number(new URL(page.url()).port);
+			let origin = new URL(page.url()).origin;
+			for (
+				let [id, name] of [["R_score", "score"], ["R_archive_1", "archive-1"], [
+					"R_archive_2",
+					"archive-2",
+				]]
+			) {
+				for (let index = 0; index < 2; index++) {
+					let document = crypto.randomUUID();
+					await createChannel(port, document, { id: id!, owner: "octo-org", name: name! });
+					await titleChannel(port, document, `${name} document ${index + 1}`);
+					await seedChannel(
+						port,
+						document,
+						`# ${name} document ${index + 1}\n\nWorkspace content.\n`,
+					);
+				}
+				let added = await page.request.post("/api/navigation/projects", {
+					headers: { origin },
+					data: { owner: "octo-org", repository: name },
+				});
+				expect(added.ok(), await added.text()).toBe(true);
+			}
+			let labels = await machines(page, 3);
+			await page.reload();
+			if (height === "phone") {
+				await page.getByRole("navigation", { name: "Workspace view" })
+					.getByRole("button", { name: "Chat", exact: true }).tap();
+			} else {
+				let sidebar = page.getByRole("complementary", { name: "Projects" });
+				for (let name of ["score", "archive-1", "archive-2"]) {
+					await expect(sidebar.getByRole("button", { name, exact: true })).toBeVisible();
+				}
+				await expect(sidebar.getByRole("link", { name: "score document 1", exact: true }).first())
+					.toBeVisible();
+			}
+			let chat = composer(page).getByRole("button", { name: /^Machine: / });
+			await chat.click();
+			let menu = height === "phone"
+				? page.getByRole("dialog", { name: "Machine for this document" }).locator(
+					".machine-sheet-group",
+				)
+				: page.getByRole("menu", { name: "Machine for this document" });
+			await expect(menu).toBeVisible();
+			await shoot(page, `populated-${height}-chat`);
+			await testInfo.attach("populated machine menu", {
+				body: await page.screenshot(),
+				contentType: "image/png",
+			});
+			await reachable(page, menu, labels);
+			if (height === "phone") return;
+			let panel = (await menu.boundingBox())!;
+			expect(panel.y + panel.height).toBeLessThanOrEqual((await chat.boundingBox())!.y);
+			await page.keyboard.press("Home");
+			await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ })).toBeFocused();
+			await page.keyboard.press("End");
+			await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeFocused();
+			await page.keyboard.press("Escape");
+			await expect(chat).toBeFocused();
+			await page.locator(".document-title-bar .machine-button").click();
+			await reachable(page, menu, labels);
+			await page.keyboard.press("Escape");
+			let titleMenu = await runOn(page);
+			let titlePanel = (await titleMenu.boundingBox())!;
+			expect(titlePanel.y + titlePanel.height).toBeLessThanOrEqual(height);
+			await page.keyboard.press("End");
+			expect(await shownIn(titleMenu.getByRole("menuitemradio").last(), titleMenu)).toBe(true);
+		},
+	);
+}
 
 test("twelve machines on a phone: the machine sheet scrolls to its last row and Add machine", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
