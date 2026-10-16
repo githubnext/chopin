@@ -549,10 +549,13 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * The queue as clients see it.
  *
  * Internal queue metadata decides how and under whose authority a turn runs.
- * None of it belongs in the wire projection.
+ * None of it belongs in the wire projection. Queued background jobs are not messages
+ * anyone sent, so they stay off the wire entirely.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.filter(item => !item.draft).map(({ handle, id, text, references }) => ({
+	return chat.waiting.filter(item => !item.draft && !item.job).map((
+		{ handle, id, text, references },
+	) => ({
 		handle,
 		id,
 		text,

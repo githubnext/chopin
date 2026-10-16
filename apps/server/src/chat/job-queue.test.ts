@@ -81,3 +81,20 @@ test("archive reset fences a job shifted out of the queue during persistence", a
 	});
 	expect(state.prompts).toHaveLength(1);
 });
+
+test("a job queued behind a turn never reaches clients as a queued message", async () => {
+	let state = harness();
+	await Chat.send(state.context, socket(), member("Human first"));
+	await until(() => state.prompts.length === 1);
+	let queued = Chat.job(state.context, JOB, "job later", "session");
+	await Chat.send(state.context, socket(), member("Human later"));
+	expect(state.chat.waiting).toHaveLength(2);
+	let frame = state.frames.findLast(f => f.kind === "chat:queue");
+	expect(frame).toMatchObject({ waiting: [{ text: "Human later" }] });
+	Chat.cancelQueuedJobs(state.context, "This document was archived.");
+	await queued;
+	state.emit("session.idle");
+	await until(() => state.prompts.length === 2);
+	state.emit("session.idle");
+	await until(() => !state.chat.busy);
+});
