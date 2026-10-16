@@ -1,6 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import { Count } from "@chopin/editor/count";
 import { MachineIcon, PlusIcon, ServerIcon, WarningIcon } from "@chopin/icons";
+import { useLayoutEffect, useRef } from "react";
 
 import { ago } from "./build-model";
 import { setFavorite } from "./machine-choice";
@@ -14,6 +15,7 @@ import {
 import "./machines-entry.css";
 
 import type { Machine } from "./machine-summary";
+import type { ReactNode } from "react";
 
 /** Where the Machines page's Add machine flow starts: Add your computer, opened at once. */
 const ADD_MACHINE_PATH = "/machines?add";
@@ -95,7 +97,7 @@ export function MachinesEntry(
 					side="top"
 					sideOffset={4}
 				>
-					<Menu.Popup className="machines-menu">
+					<MachinesMenuPopup>
 						<Menu.RadioGroup
 							onValueChange={value => void choose(value as string)}
 							value={favorite?.id ?? ANY}
@@ -136,11 +138,29 @@ export function MachinesEntry(
 							</span>
 							Manage machines
 						</Menu.LinkItem>
-					</Menu.Popup>
+					</MachinesMenuPopup>
 				</Menu.Positioner>
 			</Menu.Portal>
 		</Menu.Root>
 	);
+}
+
+function MachinesMenuPopup({ children }: { children: ReactNode }) {
+	let popup = useRef<HTMLDivElement>(null);
+	useLayoutEffect(() => {
+		let panel = popup.current;
+		if (!panel) return;
+		// Placement remeasures on resize, but a smaller scrollport can hide the focused row.
+		let observer = new ResizeObserver(() => {
+			let focused = document.activeElement;
+			if (focused instanceof HTMLElement && panel.contains(focused)) {
+				focused.scrollIntoView({ block: "nearest" });
+			}
+		});
+		observer.observe(panel);
+		return () => observer.disconnect();
+	}, []);
+	return <Menu.Popup className="machines-menu" ref={popup}>{children}</Menu.Popup>;
 }
 
 /** A machine's icon with its state as a dot on the corner, as the Machines page draws it. */

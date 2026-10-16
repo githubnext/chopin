@@ -9,6 +9,7 @@ import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { authenticate, expect, ready, test } from "./room";
 import { createChannel, seedChannel, titleChannel } from "./database";
 import { RELEASE } from "./release";
+import { failedBuild } from "./build-seed";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -911,6 +912,18 @@ for (let height of [1080, 969]) {
 				await reachable(page, menu, labels);
 				await shoot(page, `creation-${height}-${repository}-build`);
 				await page.keyboard.press("Escape");
+				let entry = sidebar.getByRole("button", { name: /^Machines/ });
+				await entry.click();
+				let defaults = page.getByRole("menu").filter({ hasText: "Default machine" });
+				await defaults.getByRole("menuitemradio").first().click({ trial: true });
+				await settledMenu(defaults);
+				expect((await defaults.boundingBox())!.y + (await defaults.boundingBox())!.height)
+					.toBeLessThanOrEqual((await entry.boundingBox())!.y);
+				for (let row of await defaults.locator('[role^="menuitem"]').all()) {
+					expect(await shownIn(row, defaults)).toBe(true);
+					await row.click({ trial: true });
+				}
+				await page.keyboard.press("Escape");
 			}
 		},
 	);
@@ -1032,6 +1045,153 @@ test("twelve machines on a phone: the machine sheet scrolls to its last row and 
 	await expect(sheet).toBeHidden();
 	await expect(composer(page).getByRole("button", { name: /^Machine: / }))
 		.toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
+});
+
+/** Wait for actual placement and entrance motion, not an arbitrary delay. */
+async function settledMenu(menu: Locator) {
+	await menu.evaluate(async element => {
+		await Promise.all(
+			element.getAnimations({ subtree: true }).map(animation => animation.finished),
+		);
+		await new Promise<void>(resolve => {
+			let previous = "";
+			let stable = 0;
+			let measure = () => {
+				let box = element.getBoundingClientRect();
+				let current = `${box.x},${box.y},${box.width},${box.height}`;
+				stable = current === previous ? stable + 1 : 0;
+				previous = current;
+				if (stable === 3) resolve();
+				else requestAnimationFrame(measure);
+			};
+			requestAnimationFrame(measure);
+		});
+	});
+}
+
+for (
+	let viewport of [
+		{ width: 1862, height: 1039 },
+		{ width: 1920, height: 1080 },
+		{ width: 1280, height: 800 },
+		{ width: 1280, height: 600 },
+		PHONE.viewport,
+	]
+) {
+	for (let projects of [1, 3]) {
+		test(`populated sidebar Default machine fits ${viewport.width}x${viewport.height} with ${projects} projects`, async ({ seed, join: enter }) => {
+			let title = `Sidebar ${viewport.width}x${viewport.height} ${projects}`;
+			await seed(`# ${title}\n\nA document open beside Chat.\n`, {
+				graph: GRAPH,
+				builds: [failedBuild(GRAPH)],
+			});
+			let phone = viewport.width === 390;
+			let page = await enter(person(), phone ? PHONE : { viewport });
+			await connected(page, "devbox");
+			for (let index = 0; index < projects; index++) {
+				let name = index === 0 ? "score" : `archive-${index}`;
+				if (index > 0) {
+					for (let document of [1, 2]) {
+						let id = crypto.randomUUID();
+						await createChannel(Number(new URL(page.url()).port), id, {
+							id: `R_archive_${index}`,
+							owner: "octo-org",
+							name,
+						});
+						await seedChannel(
+							Number(new URL(page.url()).port),
+							id,
+							`# ${name} ${document}\n\nContent.\n`,
+						);
+					}
+				}
+				let added = await page.request.post("/api/navigation/projects", {
+					headers: { origin: new URL(page.url()).origin },
+					data: { owner: "octo-org", repository: name },
+				});
+				expect(added.ok(), await added.text()).toBe(true);
+			}
+			await page.reload();
+			await page.getByRole("button", { name: "Build", exact: true }).click();
+			if (phone) {
+				// Phones intentionally link to Machines from the documents sheet instead of a menu.
+				await page.getByRole("button", { name: "Documents", exact: true }).tap();
+				let link = page.getByRole("link", { name: /^Machines/ });
+				await link.scrollIntoViewIfNeeded();
+				await expect(link).toBeInViewport({ ratio: 1 });
+				await link.tap();
+				await expect(page).toHaveURL(/\/machines$/);
+				await expect(page.getByRole("button", { name: "Favorite devbox", exact: true }))
+					.toBeVisible();
+				return;
+			}
+			let sidebar = page.getByRole("complementary", { name: "Projects" });
+			await expect(sidebar.getByRole("link", { name: title, exact: true })).toBeVisible();
+			let entry = sidebar.getByRole("button", { name: /^Machines/ });
+			await expect(entry).toBeInViewport({ ratio: 1 });
+			await entry.click();
+			let menu = page.getByRole("menu").filter({ hasText: "Default machine" });
+			await menu.getByRole("menuitemradio").first().click({ trial: true });
+			await settledMenu(menu);
+			if (SHOTS) {
+				await mkdir(SHOTS, { recursive: true });
+				await page.screenshot({
+					path: `${SHOTS}/sidebar-${viewport.width}x${viewport.height}-${projects}.png`,
+				});
+			}
+			let panel = (await menu.boundingBox())!;
+			let trigger = (await entry.boundingBox())!;
+			expect(panel.y).toBeGreaterThanOrEqual(0);
+			expect(panel.y + panel.height).toBeLessThanOrEqual(trigger.y);
+			for (let row of await menu.locator('[role^="menuitem"]').all()) {
+				expect(await shownIn(row, menu)).toBe(true);
+				await row.click({ trial: true });
+			}
+		});
+	}
+}
+
+test("the populated sidebar menu scrolls and refits while the viewport shrinks", async ({ seed, join: enter }) => {
+	test.setTimeout(90_000);
+	await seed("# Sidebar menu\n\n" + "A long document.\n\n".repeat(80), {
+		graph: GRAPH,
+		builds: [failedBuild(GRAPH)],
+	});
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await machines(page, 30);
+	let added = await page.request.post("/api/navigation/projects", {
+		headers: { origin: new URL(page.url()).origin },
+		data: { owner: "octo-org", repository: "score" },
+	});
+	expect(added.ok(), await added.text()).toBe(true);
+	await page.reload();
+	await page.getByRole("button", { name: "Build", exact: true }).click();
+	let sidebar = page.getByRole("complementary", { name: "Projects" });
+	let entry = sidebar.getByRole("button", { name: /^Machines/ });
+	await entry.click();
+	let menu = page.getByRole("menu").filter({ hasText: "Default machine" });
+	await menu.getByRole("menuitemradio").first().click({ trial: true });
+	await page.keyboard.press("End");
+	let last = menu.getByRole("menuitem", { name: "Manage machines", exact: true });
+	await expect(last).toBeFocused();
+	expect(await shownIn(last, menu)).toBe(true);
+	await page.setViewportSize({ width: 1280, height: 600 });
+	await settledMenu(menu);
+	if (SHOTS) {
+		await mkdir(SHOTS, { recursive: true });
+		await page.screenshot({ path: `${SHOTS}/sidebar-default-machine-resize.png` });
+	}
+	expect(await shownIn(last, menu)).toBe(true);
+	let panel = (await menu.boundingBox())!;
+	let trigger = (await entry.boundingBox())!;
+	expect(trigger.y + trigger.height).toBeLessThanOrEqual(600);
+	expect(panel.y).toBeGreaterThanOrEqual(0);
+	expect(panel.y + panel.height).toBeLessThanOrEqual(trigger.y);
+	for (let row of await menu.locator('[role^="menuitem"]').all()) {
+		await row.scrollIntoViewIfNeeded();
+		await row.click({ trial: true });
+		expect(await shownIn(row, menu)).toBe(true);
+	}
 });
 
 for (let width of [1280, 600, 390]) {
