@@ -815,9 +815,11 @@ body {
 	padding-inline-start: var(--control-padding-inline);
 }
 
-/* Both bars read at one size: the views' control text. */
+/* Both bars read at one size, larger than the compact buttons they use. */
 .document-title-bar
-	:is(.document-project-prefix, .document-project-separator, .document-title-crumb, .title-control) {
+	:is(.document-project-prefix, .document-project-separator, .document-title-crumb, .title-control),
+.document-title-bar :is(.build-plan, .build-capsule),
+.document-views-bar .btn {
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 }
@@ -1583,8 +1585,9 @@ body {
 	/* Centre the first line on the 1.5rem mark, then lift 2px optically. */
 	margin: calc((1.5rem - 1lh) / 2 - 0.125rem) 0 0;
 	font-family: var(--font-sans);
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
+	/* Prose size: a decision reads as part of the document, not its chrome. */
+	font-size: var(--plan-body, var(--text-base));
+	line-height: var(--text-base--line-height);
 	font-weight: 600;
 	color: var(--color-text-primary);
 	overflow-wrap: break-word;
@@ -1597,8 +1600,8 @@ body {
 
 .question-hint {
 	margin: 0.125rem 0 0;
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
+	font-size: var(--plan-text-sm, var(--text-sm));
+	line-height: var(--text-sm--line-height);
 	color: var(--color-text-tertiary);
 }
 
