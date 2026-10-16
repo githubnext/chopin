@@ -87,7 +87,7 @@ export function StaticPlanEditor(
 	return (
 		<section
 			aria-label={label}
-			className={`plan ${presentation === "pane" ? "flex h-full w-full flex-col" : ""} ${
+			className={`${presentation === "pane" ? "plan flex h-full w-full flex-col" : "plan"} ${
 				className ?? ""
 			}`.trim()}
 			data-read-only="true"

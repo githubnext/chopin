@@ -44,6 +44,7 @@ export class MemoryDocumentVersionStore implements DocumentVersionStore {
 		let latest = rows.at(-1);
 		if (latest?.sourceHash === input.sourceHash) return undefined;
 		let continued = latest
+				&& !input.newSession
 				&& latest.authorId === input.authorId
 				&& input.now.getTime() - latest.updatedAt.getTime() <= input.idleMs
 			? latest

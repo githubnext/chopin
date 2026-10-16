@@ -77,6 +77,20 @@ export function versionContract(name: string, factory: StorageFactory) {
 				expect((await storage.versions.list(channelId, 1))[0]?.summary).toBe("Rewrote the plan");
 				await record(5, 32, userId);
 				expect((await storage.versions.list(channelId, 1))[0]?.summary).toBeUndefined();
+
+				// A restore never extends the session before it, so that session stays restorable.
+				let restored = await storage.versions.record({
+					channelId,
+					authorId: userId,
+					revision: 6,
+					source: "# Plan 2\n",
+					sourceHash: "hash-restored",
+					now: at(33),
+					idleMs: 10 * MINUTE,
+					newSession: true,
+				});
+				expect(restored?.id).not.toBe(paused!.id);
+				expect(await storage.versions.get(channelId, paused!.id)).toMatchObject({ revision: 5 });
 			} finally {
 				await storage.close();
 			}

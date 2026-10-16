@@ -150,6 +150,8 @@ export type DocumentTarget = {
 	 * rewrote it. Absent when Chopin itself wrote the change.
 	 */
 	author?: string;
+	/** Starts a new history session, so a restore never overwrites the session before it. */
+	newSession?: boolean;
 };
 
 /** Durable MCP context for a document created through the hosted surface. */
@@ -192,6 +194,8 @@ type Persistence = Backend & {
 	editor?: string;
 	/** The person an MCP rewrite is committing for; credited in history but not an editor. */
 	author?: string;
+	/** The committing rewrite is a restore, which history keeps as its own session. */
+	newSession?: boolean;
 };
 
 type Captured = {
@@ -1017,6 +1021,7 @@ async function commitHosted(
 					...(durable.editor ?? durable.author
 						? { author: durable.editor ?? durable.author }
 						: {}),
+					...(durable.newSession ? { newSession: true } : {}),
 				});
 			} catch (err) {
 				console.warn(`[plan] could not schedule derived work for ${durable.channelId}:`, err);
@@ -2011,10 +2016,12 @@ export async function rewrite(
 			finalizeTitleReceipt: recorded !== undefined && candidate.document.titleKey !== undefined,
 		};
 		plan.persistence.author = author;
+		plan.persistence.newSession = record === undefined;
 		try {
 			await commitHosted(plan, outcome.mutation?.update, operationId, captured);
 		} finally {
 			plan.persistence.author = undefined;
+			plan.persistence.newSession = undefined;
 		}
 		if (recorded && captured.finalizeTitleReceipt) {
 			let receipt = (captured.sidecar as unknown as { mcpUpdates: McpUpdateRecord[] }).mcpUpdates

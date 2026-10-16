@@ -63,6 +63,7 @@ export class PostgresDocumentVersionStore implements DocumentVersionStore {
 				if (latest?.sourceHash === input.sourceHash) return undefined;
 				let authorId = input.authorId ?? null;
 				let continues = latest
+					&& !input.newSession
 					&& latest.authorId === authorId
 					&& input.now.getTime() - new Date(latest.updatedAt).getTime() <= input.idleMs;
 				let id = continues ? latest.id : crypto.randomUUID();

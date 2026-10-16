@@ -32,6 +32,7 @@ export class DocumentHistory {
 					sourceHash: target.sourceHash,
 					now,
 					idleMs: VERSION_IDLE_MS,
+					...(target.newSession ? { newSession: true } : {}),
 				});
 			} catch (err) {
 				console.warn(`[history] could not record a version of ${target.channelId}:`, err);

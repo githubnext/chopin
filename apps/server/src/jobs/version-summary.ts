@@ -112,13 +112,13 @@ function blocks(source: string): string[] {
 	return parse(source).children.map(node => serialize({ type: "root", children: [node] }).trim());
 }
 
-function bounded(parts: string[]): string[] {
+function bounded(parts: string[], budget = MAX_CHANGE_BYTES): string[] {
 	let kept: string[] = [];
 	let bytes = 0;
 	for (let part of parts) {
 		let size = Buffer.byteLength(part);
-		if (bytes + size > MAX_CHANGE_BYTES) {
-			let room = MAX_CHANGE_BYTES - bytes;
+		if (bytes + size > budget) {
+			let room = budget - bytes;
 			if (room > 64) kept.push(`${part.slice(0, room)}…`);
 			break;
 		}
@@ -149,6 +149,29 @@ export function versionChange(
 	return { id, removed: bounded(removed), added: bounded(added), created: false };
 }
 
+/**
+ * The model's input, with each session's changes trimmed further until twenty large sessions
+ * fit the prompt bound, so a busy document still gets every summary.
+ */
+export function summaryPrompt(changes: VersionChange[]): string {
+	let budget = MAX_CHANGE_BYTES;
+	let prompt = JSON.stringify({ sessions: changes });
+	while (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES && budget > 128) {
+		budget = Math.floor(budget / 2);
+		prompt = JSON.stringify({
+			sessions: changes.map(change => ({
+				...change,
+				removed: bounded(change.removed, budget),
+				added: bounded(change.added, budget),
+			})),
+		});
+	}
+	if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) {
+		throw new Error("History summary prompt exceeds its bound.");
+	}
+	return prompt;
+}
+
 const INSTRUCTIONS = [
 	"Each item is one editing session on a shared document: the top-level blocks it removed and",
 	"the blocks it added. For every item, write one short line saying what the session did, in",
@@ -176,10 +199,7 @@ class HarnessVersionSummaryEngine {
 			throw new Error("History summaries require an active Planner owner.");
 		}
 		let credential = execution.credential;
-		let prompt = JSON.stringify({ sessions: changes });
-		if (Buffer.byteLength(prompt) > MAX_PROMPT_BYTES) {
-			throw new Error("History summary prompt exceeds its bound.");
-		}
+		let prompt = summaryPrompt(changes);
 		let abortSignal = AbortSignal.any([
 			execution.signal,
 			...(credential.signal ? [credential.signal] : []),

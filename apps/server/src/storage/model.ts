@@ -64,6 +64,8 @@ export type RecordDocumentVersion = {
 	now: Date;
 	/** Edits by the same author closer together than this extend the latest session. */
 	idleMs: number;
+	/** Never extends the latest session, as for a restore. */
+	newSession?: boolean;
 };
 
 export type SummarizeDocumentVersion = {

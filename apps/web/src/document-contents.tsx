@@ -123,6 +123,11 @@ export function DocumentContents(
 		<nav
 			aria-label="Contents"
 			className="document-contents"
+			onKeyDown={event => {
+				if (event.key !== "Escape" || !peek) return;
+				event.stopPropagation();
+				setPeek(undefined);
+			}}
 			onMouseLeave={() => setPeek(undefined)}
 			style={{ "--contents-count": headings.length } as CSSProperties}
 		>

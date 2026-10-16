@@ -103,8 +103,11 @@ export function DocumentHistoryPanel(
 					}
 					if (asked) return;
 					asked = true;
-					let { state } = await requestHistorySummaries(channelId, controller.signal);
-					if (state !== "pending") return;
+					let state = await requestHistorySummaries(channelId, controller.signal).then(
+						result => result.state,
+						() => "unavailable" as const,
+					);
+					if (state !== "pending" || controller.signal.aborted) return;
 					waitUntil = Date.now() + SUMMARY_WAIT_MS;
 					setSummarising(true);
 					poll = window.setInterval(() => void load(), SUMMARY_POLL_MS);
@@ -137,6 +140,10 @@ export function DocumentHistoryPanel(
 		};
 	}, [hideDetail]);
 
+	// Opening moves focus into the list's heading, so the keyboard starts where the panel is.
+	let heading = useRef<HTMLHeadingElement>(null);
+	useEffect(() => heading.current?.focus({ preventScroll: true }), []);
+
 	let now = new Date();
 	let entries = history ? historyEntries(history) : [];
 	let lingerOn = (label: string, at: string) => (event: MouseEvent<HTMLElement>) => {
@@ -157,9 +164,21 @@ export function DocumentHistoryPanel(
 			onAnimationEnd={event => {
 				if (closing && event.target === event.currentTarget) onClosed();
 			}}
+			onKeyDown={event => {
+				if (event.key !== "Escape" || closing) return;
+				event.stopPropagation();
+				onClose();
+			}}
 		>
 			<header className="history-sidebar-header">
-				<h2 className="history-sidebar-title" id={`${id}-heading`}>History</h2>
+				<h2
+					className="history-sidebar-title"
+					id={`${id}-heading`}
+					ref={heading}
+					tabIndex={-1}
+				>
+					History
+				</h2>
 				<IconButton aria-label="Close history" onClick={onClose} size="compact">
 					<CloseIcon />
 				</IconButton>
@@ -169,7 +188,7 @@ export function DocumentHistoryPanel(
 					<p className="history-note">
 						History could not load.{" "}
 						<button
-							className="btn btn-compact btn-outline"
+							className="btn btn-sm btn-outline"
 							onClick={() => setAttempt(count => count + 1)}
 							type="button"
 						>
@@ -265,32 +284,41 @@ export function DocumentVersionBar(
 ) {
 	let [restoring, setRestoring] = useState(false);
 	let [failure, setFailure] = useState<string>();
-	useEffect(() => setFailure(undefined), [version.id]);
+	// Keyed by document and version, so a restore that settles after either changes is ignored.
+	let mounted = useRef(true);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+		};
+	}, []);
 	let name = version.author?.login === self ? "Your edits" : `${who(version.author, self)}’s edits`;
 	return (
-		<div className="history-version-bar" role="status">
-			<button className="btn btn-compact btn-ghost shrink-0" onClick={onBack} type="button">
+		<div className="history-version-bar">
+			<button className="btn btn-sm btn-ghost shrink-0" onClick={onBack} type="button">
 				<ArrowLeftIcon aria-hidden="true" />
 				Current
 			</button>
-			<span className="history-version-label">
+			<span className="history-version-label" role="status">
 				<strong>{name}</strong>
 				<span>{historyExact(version.updatedAt, new Date())}</span>
 			</span>
 			{onRestored && (
 				<button
 					aria-busy={restoring || undefined}
-					className="btn btn-compact btn-outline shrink-0"
+					className="btn btn-sm btn-outline shrink-0"
 					disabled={restoring}
 					onClick={() => {
 						setRestoring(true);
 						setFailure(undefined);
 						restoreDocumentVersion(channelId, version.id).then(
 							() => {
+								if (!mounted.current) return;
 								setRestoring(false);
 								onRestored();
 							},
 							(err: unknown) => {
+								if (!mounted.current) return;
 								setRestoring(false);
 								setFailure(err instanceof Error ? err.message : "Could not restore.");
 							},
@@ -301,7 +329,11 @@ export function DocumentVersionBar(
 					Restore
 				</button>
 			)}
-			{failure && <span className="history-version-failure">{failure}</span>}
+			{failure && (
+				<span className="history-version-failure" role="alert" title={failure}>
+					{failure}
+				</span>
+			)}
 		</div>
 	);
 }

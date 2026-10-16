@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	summaryLine,
+	summaryPrompt,
 	versionChange,
 	versionSummaryDefinition,
 	versionSummaryKey,
@@ -44,6 +45,19 @@ describe("history summaries", () => {
 		expect(summaryLine("  Rewrote\nVisibility levels. ")).toBe("Rewrote Visibility levels");
 		expect(() => summaryLine("")).toThrow();
 		expect(() => summaryLine("x".repeat(121))).toThrow();
+	});
+
+	it("trims twenty large sessions until they fit one prompt", () => {
+		let paragraph = (n: number) => `${"Word ".repeat(300)}${n}`;
+		let changes = Array.from({ length: 20 }, (_, n) =>
+			versionChange(
+				`v${n}`,
+				[1, 2, 3].map(i => paragraph(n * 10 + i)).join("\n\n"),
+				[4, 5, 6].map(i => paragraph(n * 10 + i)).join("\n\n"),
+			));
+		let prompt = summaryPrompt(changes);
+		expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(48 * 1024);
+		expect(JSON.parse(prompt).sessions).toHaveLength(20);
 	});
 
 	it("keys a request by its sessions and their sources", () => {

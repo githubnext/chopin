@@ -492,7 +492,14 @@ export function RoomWorkspace(
 	let [activityOpen, setActivityOpen] = useState(false);
 	let [activityClosing, setActivityClosing] = useState(false);
 	let [historyReload, setHistoryReload] = useState(0);
-	let [viewedVersion, setViewedVersion] = useState<DocumentVersionSummary>();
+	// Kept with its document, so a version chosen on one never shows over the next.
+	let [viewed, setViewed] = useState<{ room: string; version: DocumentVersionSummary }>();
+	let viewedVersion = viewed?.room === room ? viewed.version : undefined;
+	let setViewedVersion = useCallback(
+		(version: DocumentVersionSummary | undefined) =>
+			setViewed(version ? { room, version } : undefined),
+		[room],
+	);
 	let documentArea = useRef<HTMLDivElement>(null);
 	let sidePanelId = useId();
 	let activityId = `${sidePanelId}-activity`;
@@ -506,11 +513,16 @@ export function RoomWorkspace(
 	useEffect(() => {
 		setActivityOpen(false);
 		setActivityClosing(false);
-		setViewedVersion(undefined);
+		setViewed(undefined);
 	}, [room]);
+	let historyToggle = useRef<HTMLButtonElement>(null);
 	let closeActivity = () => {
 		setActivityClosing(true);
 		setViewedVersion(undefined);
+		// The panel covers its toggle and is about to unmount, so focus returns to the toggle.
+		if (document.getElementById(activityId)?.contains(document.activeElement)) {
+			historyToggle.current?.focus({ preventScroll: true });
+		}
 	};
 	// Claimed while rendering, so a new document's title takes focus as soon as it mounts.
 	let [titleEdit, setTitleEdit] = useState(() => claimTitleEdit(room));
@@ -1489,7 +1501,13 @@ export function RoomWorkspace(
 		<div className="history-layout">
 			<div className="history-layout-main" ref={documentArea}>
 				<div className="h-full" data-live-document hidden={!!viewedVersion}>{plan}</div>
-				{viewedVersion && <DocumentVersionView channelId={room} version={viewedVersion} />}
+				{viewedVersion && (
+					<DocumentVersionView
+						channelId={room}
+						key={`${room}:${viewedVersion.id}`}
+						version={viewedVersion}
+					/>
+				)}
 				{!activityOpen && <DocumentContents area={documentArea} root={contentsRoot} />}
 			</div>
 			{activityOpen && (
@@ -1497,6 +1515,7 @@ export function RoomWorkspace(
 					channelId={room}
 					closing={activityClosing}
 					id={activityId}
+					key={room}
 					onClose={closeActivity}
 					onClosed={() => {
 						setActivityOpen(false);
@@ -1777,6 +1796,7 @@ export function RoomWorkspace(
 								? (
 									<DocumentVersionBar
 										channelId={room}
+										key={`${room}:${viewedVersion.id}`}
 										onBack={() => setViewedVersion(undefined)}
 										{...(effectiveCanEdit && !archivedAt
 											? {
@@ -1809,6 +1829,7 @@ export function RoomWorkspace(
 									aria-expanded={activityOpen && !activityClosing}
 									aria-label="History"
 									className="btn btn-icon btn-ghost"
+									ref={historyToggle}
 									onClick={() => {
 										if (activityOpen && !activityClosing) {
 											closeActivity();

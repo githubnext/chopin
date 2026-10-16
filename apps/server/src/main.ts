@@ -2559,7 +2559,8 @@ registerChannelRoutes(router, hostedAuth, {
 				input: { generatorVersion: 1, versions },
 			});
 			jobRunner?.wake();
-			return job.state === "paused" ? "unavailable" : "pending";
+			// A finished job with the same key will not run again, so its missing rows stay plain.
+			return job.state === "pending" || job.state === "running" ? "pending" : "unavailable";
 		}
 		: undefined,
 	references: hostedAuth.github instanceof GitHubClient
