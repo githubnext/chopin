@@ -872,13 +872,16 @@ for (let height of [1080, 969]) {
 			await page.goto("/");
 			let labels = await machines(page, 3);
 			let sidebar = page.getByRole("complementary", { name: "Projects" });
+			let add = page.getByRole("dialog", { name: "Add project", exact: true });
+			// An account without projects opens this asynchronously after navigation loads.
+			await expect(add).toBeVisible();
 			for (let repository of ["score", "archive-1", "archive-8"]) {
-				let add = page.getByRole("dialog", { name: "Add project", exact: true });
-				if (!await add.isVisible()) {
+				if (repository !== "score") {
 					await sidebar.getByRole("button", { name: "Add project", exact: true }).click();
 				}
 				await add.getByRole("textbox", { name: "Search repositories" }).fill(repository);
 				await add.getByRole("option", { name: `octo-org/${repository}`, exact: true }).click();
+				await expect(add).toBeHidden();
 				let create = sidebar.getByRole("button", {
 					name: `New document in ${repository}`,
 					exact: true,
@@ -957,7 +960,8 @@ for (let height of [800, 600, "phone"] as const) {
 			} else {
 				let sidebar = page.getByRole("complementary", { name: "Projects" });
 				for (let name of ["score", "archive-1", "archive-2"]) {
-					await expect(sidebar.getByRole("button", { name, exact: true })).toBeVisible();
+					await expect(sidebar.getByRole("button", { name: new RegExp(`^${name}(?:,|$)`) }))
+						.toBeVisible();
 				}
 				await expect(sidebar.getByRole("link", { name: "score document 1", exact: true }).first())
 					.toBeVisible();
