@@ -681,7 +681,7 @@ test(
 		expect(Plan.source(f.plan)).toBe(source);
 
 		// An option that would take the document into the reserve.
-		let label = "Written ".repeat(25);
+		let label = "Written ".repeat(7);
 		let question = first!.definition.questions[0]!;
 		let option = await growth(
 			f,
