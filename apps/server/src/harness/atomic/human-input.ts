@@ -12,6 +12,20 @@ import type { DocumentRoom } from "../../agent/tools";
 export type HumanInputStatus = "answered" | "cancelled";
 
 /**
+ * A host input request's options, with the block it concerns: its `index` and `digest` from the
+ * Planner's latest read of the document. Its card goes beside that block and is linked to it; a
+ * changed or repeated block leaves the card unlinked at the end of the document.
+ */
+export type HumanInputOptions = HostInputOptions & { block?: { index: number; digest: string } };
+
+/** Chopin's HostInput, whose methods also take the block a request concerns. */
+export type HumanInput = {
+	[Method in keyof HostInput]: HostInput[Method] extends (...args: infer A) => infer R
+		? (...args: { [K in keyof A]: A[K] extends HostInputOptions ? HumanInputOptions : A[K] }) => R
+		: never;
+};
+
+/**
  * Atomic owns input requests; Chopin owns their shared decision records.
  *
  * A request has no time limit: it waits until a member answers it or it is
@@ -25,10 +39,10 @@ export function createHumanInput(
 	room: DocumentRoom,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	report?: (status: HumanInputStatus) => void,
-): HostInput {
+): HumanInput {
 	async function questionnaire(
 		params: QuestionParams,
-		options: HostInputOptions,
+		options: HumanInputOptions,
 	): Promise<QuestionnaireResult> {
 		if (options.signal.aborted) {
 			report?.("cancelled");
@@ -54,7 +68,7 @@ export function createHumanInput(
 			room.server,
 			room.id,
 			definition,
-			undefined,
+			options.block ? { near: options.block } : undefined,
 			room.anchors,
 			options.signal,
 		);
@@ -105,7 +119,7 @@ export function createHumanInput(
 		header: string,
 		question: string,
 		choices: string[],
-		options: HostInputOptions,
+		options: HumanInputOptions,
 	) {
 		let result = await questionnaire({
 			questions: [{

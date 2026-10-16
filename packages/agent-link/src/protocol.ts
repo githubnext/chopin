@@ -243,6 +243,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 		workflowRunId: id.optional(),
 		workflowStageId: id.optional(),
 		rootRunId: id.optional(),
+		/** The block the question concerns, as the Planner's latest read of the document names it. */
+		block: z.strictObject({
+			index: z.number().int().nonnegative(),
+			digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+		}).optional(),
 		input: inputSchema,
 	}),
 	z.strictObject({ type: z.literal("input-cancel"), request: id }),

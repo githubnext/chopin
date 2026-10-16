@@ -359,6 +359,50 @@ test("a workflow card shows its question as asked, without run or stage ids", as
 	);
 });
 
+/** A document of a title and two sections, whose first section is block 1. */
+async function sections() {
+	let f = await fixture();
+	let edited = Edit.apply(f.plan, f.plan.revision, [{
+		op: "replace_root",
+		source: "# Existing document\n\nStorage section.\n\nDeployment section.\n",
+	}]);
+	if (!edited.ok) throw new Error("fixture edit failed");
+	if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+	expect(Room.digests(f.plan.document)).toHaveLength(3);
+	return f;
+}
+
+test("a question that names its block is placed beside that block and linked to it", async () => {
+	let f = await sections();
+	let response = f.input.questionnaire({ questions: [params.questions[1]!] }, {
+		...f.options,
+		block: { index: 1, digest: Room.digests(f.plan.document)[1]! },
+	});
+	let [card] = await f.cards(1);
+	let source = Plan.source(f.plan);
+	expect(source.indexOf("Storage section.")).toBeLessThan(source.indexOf("<Questionnaire"));
+	expect(source.indexOf("<Questionnaire")).toBeLessThan(source.indexOf("Deployment section."));
+	let record = f.plan.records.get(card!.id)!;
+	let question = record.definition.questions[0]!.id;
+	expect(record.anchors?.questions[question]?.anchors).toHaveLength(1);
+	await f.answer(card!.id, [0]);
+	expect((await response).cancelled).toBe(false);
+});
+
+test("a question whose named block changed stays unlinked at the end of the document", async () => {
+	let f = await sections();
+	let response = f.input.questionnaire({ questions: [params.questions[1]!] }, {
+		...f.options,
+		block: { index: 1, digest: `sha256:${"0".repeat(64)}` },
+	});
+	let [card] = await f.cards(1);
+	let source = Plan.source(f.plan);
+	expect(source.indexOf("Deployment section.")).toBeLessThan(source.indexOf("<Questionnaire"));
+	expect(f.plan.records.get(card!.id)!.anchors).toBeUndefined();
+	await f.answer(card!.id, [0]);
+	await response;
+});
+
 test("abort before presentation creates no card and cancellation waits for durable storage", async () => {
 	let f = await fixture();
 	let cancelled = new AbortController();

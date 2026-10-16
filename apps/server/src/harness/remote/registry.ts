@@ -1,6 +1,5 @@
-import type { HostInput } from "@bastani/atomic";
 import type { FullPlanner } from "../atomic/full";
-import type { HumanInputStatus } from "../atomic/human-input";
+import type { HumanInput, HumanInputStatus } from "../atomic/human-input";
 import type { AgentLink } from "./link";
 
 /**
@@ -14,7 +13,7 @@ export type RemotePlanner =
 		/** A background job's session: the client may offer only Chopin's tools and ask nothing. */
 		isolated: boolean;
 		/** Decisions for one client input request; absent for an isolated session. */
-		humanInput?: (report: (status: HumanInputStatus) => void) => HostInput;
+		humanInput?: (report: (status: HumanInputStatus) => void) => HumanInput;
 		/** Stops or resumes the client's workflow runs; set while the session is open. */
 		control?: (action: "stop" | "resume", runId?: string) => Promise<void>;
 		/**

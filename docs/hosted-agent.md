@@ -304,8 +304,12 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   appear verbatim in the prompt. Explicitly submitted empty text is an answer,
   not cancellation.
 - Workflow cards show their question exactly as asked, with no run or stage
-  ids; Chat's run card shows which run is waiting on Decisions. A request is
-  appended as one adjacent batch at the end of the document.
+  ids; Chat's run card shows which run is waiting on Decisions. A request that
+  names the block it concerns goes, as one adjacent batch, directly after that
+  block and is linked to it (see
+  [Agent connection questions](agent-connection.md#questions)). One that names
+  none, or a block that has changed since, is appended at the end of the
+  document, not linked yet.
 - An abort withdraws still-open cards, removes their document nodes, and records
   cancellation by `@chopin`. Member cancellations retain any answers already
   given in that batch. Late submissions cannot approve withdrawn input.

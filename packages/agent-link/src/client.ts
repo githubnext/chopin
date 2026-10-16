@@ -83,6 +83,11 @@ export type InputOptions = {
 	workflowRunId?: string;
 	workflowStageId?: string;
 	rootRunId?: string;
+	/**
+	 * The block the question concerns, from the Planner's latest read of the document; its card
+	 * goes beside that block. A block that has changed since leaves the card unlinked.
+	 */
+	block?: { index: number; digest: string };
 	signal?: AbortSignal;
 };
 

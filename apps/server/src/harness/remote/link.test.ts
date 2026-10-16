@@ -14,6 +14,8 @@ import { AgentRefused } from "@chopin/agent-link/client";
 import { GitHubError } from "../../github/client";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
+import * as Edit from "../../plan/edit";
+import * as Room from "../../plan/room";
 import { createPlannerAgent } from "../agents";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
@@ -1343,6 +1345,27 @@ describe("Agent connection questions", () => {
 		let [prompt] = await f.cards(1);
 		await f.answer(prompt!.id, [0]);
 		expect(await confirm).toMatchObject({ status: "answered", value: true });
+	});
+
+	it("places a question that names its block beside that block, linked to it", async () => {
+		let { f, client, sessionId } = await questions();
+		let edited = Edit.apply(f.plan, f.plan.revision, [{
+			op: "replace_root",
+			source: "# Existing document\n\nStorage section.\n\nDeployment section.\n",
+		}]);
+		if (!edited.ok) throw new Error("fixture edit failed");
+		if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
+		let asked = client.ask(sessionId, { method: "questionnaire", params }, {
+			block: { index: 1, digest: Room.digests(f.plan.document)[1]! },
+		});
+		let [card] = await f.cards(1);
+		let source = Plan.source(f.plan);
+		expect(source.indexOf("Storage section.")).toBeLessThan(source.indexOf("<Questionnaire"));
+		expect(source.indexOf("<Questionnaire")).toBeLessThan(source.indexOf("Deployment section."));
+		let record = f.plan.records.get(card!.id)!;
+		expect(record.anchors?.questions[record.definition.questions[0]!.id]?.anchors).toHaveLength(1);
+		await f.answer(card!.id, [1]);
+		expect(await asked).toMatchObject({ status: "answered" });
 	});
 
 	it("keeps a client's question open past half an hour until a member answers it", async () => {

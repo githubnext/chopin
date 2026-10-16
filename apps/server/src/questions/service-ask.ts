@@ -1,4 +1,4 @@
-import { limits, ulid } from "@chopin/dialect";
+import { limits, parse, ulid } from "@chopin/dialect";
 import * as Question from "@chopin/question";
 import * as Y from "yjs";
 
@@ -26,6 +26,25 @@ import { withdraw } from "./service-cancel";
 import { type AskPlacement, validatePlacement } from "./service-definition";
 
 /**
+ * The prose block a question concerns, as a Planner's blocking question names it: the block at
+ * `index` when its digest still matches, else the one block with that digest. A changed, repeated
+ * or non-prose block resolves to nothing, and the card stays unlinked at the end of the document.
+ */
+export type AskNear = { near: { index: number; digest: string } };
+
+function nearBlock(plan: Plan, near: AskNear["near"]) {
+	let index = room.resolveBlock(plan.document, near);
+	if (index === undefined) return undefined;
+	let block = parse(room.project(plan.document)).children[index];
+	if (
+		!block || block.type === "mdxJsxFlowElement"
+			&& (block.name === "Questionnaire" || block.name === "Decision")
+	) return undefined;
+	let digest = room.digests(plan.document)[index]!;
+	return { at: { index, digest }, anchor: room.anchorAt(plan.document, index, digest) };
+}
+
+/**
  * Ask each decision independently; register its record before publishing its node.
  *
  * The cards wait until members answer them, however long that takes; an abort
@@ -36,7 +55,7 @@ export async function ask(
 	server: Server<SocketData>,
 	roomId: string,
 	definition: Definition,
-	placement?: AskPlacement,
+	placement?: AskPlacement | AskNear,
 	created?: () => void,
 	signal?: AbortSignal,
 ): Promise<Ended[]> {
@@ -53,7 +72,12 @@ export async function ask(
 		at: room.QuestionnaireInsertion["at"];
 	}> = [];
 	await Service.exclusive(plan, async () => {
-		let anchors = placement ? validatePlacement(plan, definition, placement) : undefined;
+		let near = placement && "near" in placement ? nearBlock(plan, placement.near) : undefined;
+		let anchors = placement && "blocks" in placement
+			? validatePlacement(plan, definition, placement)
+			: near && definition.questions.map(() => [near.anchor]);
+		let placedAt = (index: number) =>
+			placement && "blocks" in placement ? placement.blocks[index]?.[0] : near?.at;
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
 		let questions: Store.Questions = {
 			open: new Map(plan.questions.open),
@@ -146,7 +170,7 @@ export async function ask(
 				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
 			}
 			records.set(id, record);
-			return { id, single, value, waiting, at: placement?.blocks[index]?.[0] };
+			return { id, single, value, waiting, at: placedAt(index) };
 		});
 		// Verbatim host input has no per-field limits. Refuse before anything is registered or
 		// published.

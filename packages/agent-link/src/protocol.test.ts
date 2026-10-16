@@ -77,6 +77,29 @@ describe("Agent connection messages", () => {
 		}
 	});
 
+	it("accepts the block a question concerns without changing the connection version", () => {
+		let message = {
+			type: "input-request" as const,
+			request: "r",
+			session: "s",
+			block: { index: 3, digest: `sha256:${"a".repeat(64)}` },
+			input: { method: "confirm" as const, title: "Ship?", message: "Now." },
+		};
+		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
+		for (
+			let block of [
+				{ index: -1, digest: message.block.digest },
+				{ index: 1.5, digest: message.block.digest },
+				{ index: 3, digest: "sha256:short" },
+				{ index: 3, digest: message.block.digest, extra: true },
+			]
+		) {
+			expect(parseClientMessage(JSON.stringify({ ...message, block }))).toMatchObject({
+				ok: false,
+			});
+		}
+	});
+
 	it("accepts optional stage parents and stopped stages without changing the connection version", () => {
 		let message = {
 			type: "runs" as const,

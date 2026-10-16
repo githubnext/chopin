@@ -842,6 +842,7 @@ export class AgentLink {
 			sessionId: message.session,
 			...(message.workflowRunId ? { workflowRunId: message.workflowRunId } : {}),
 			...(message.workflowStageId ? { workflowStageId: message.workflowStageId } : {}),
+			...(message.block ? { block: message.block } : {}),
 		};
 		let input = message.input;
 		try {

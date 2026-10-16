@@ -366,7 +366,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "part", "session": "", "turn": "", "part": {} }
 { "type": "host-tool-call", "session": "", "turn": "", "toolCallId": "", "toolName": "", "input": "{}" }
 { "type": "turn-end", "session": "", "turn": "", "status": "finished", "message?": "" }
-{ "type": "input-request", "request": "", "session": "", "workflowRunId?": "", "workflowStageId?": "", "rootRunId?": "", "input": {} }
+{ "type": "input-request", "request": "", "session": "", "workflowRunId?": "", "workflowStageId?": "", "rootRunId?": "", "block?": { "index": 0, "digest": "sha256:<64 hex>" }, "input": {} }
 { "type": "input-cancel", "request": "" }
 { "type": "runs", "session": "", "active": [], "paused": [], "cards": [] }
 { "type": "control-result", "request": "", "ok": true, "message?": "" }
@@ -526,6 +526,14 @@ connection closes), and only then gets its `input-result`:
 A questionnaire has 1 to 16 questions of up to 32 options; `preview` may be
 16,000 characters; `select` offers up to 32 choices. The document's own limits
 still apply. Text is shown verbatim.
+
+`block` names the block of the document the question concerns, by the `index`
+and `digest` the Planner's latest `read_plan` or `edit_plan` result gave it. Its
+cards go directly after that block and are linked to it. When that block has
+changed since, its digest now repeats, or it is itself a decision card, the
+cards go at the end of the document, not linked to any passage, as they do
+without `block`. A Planner running in Chopin's own process (`HARNESS=atomic`)
+names the block the same way, in the options of its host input request.
 
 `input-result` is `{ "type": "input-result", "request": "", "status": "", "value?": json, "message?": "" }`.
 `status` and `value` by method:
