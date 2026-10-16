@@ -600,6 +600,8 @@ test("a long new option wraps in place and one confirm adds and chooses it", asy
 	let fixture = deckSeed({ before: "Intro paragraph." }, 2);
 	await seed(fixture.source, fixture.state);
 	let page = await join("ana");
+	// Labels are at most 60 characters, so a narrow window makes one wrap.
+	await page.setViewportSize({ width: 400, height: 800 });
 	let card = top(page);
 	let save = card.getByRole("button", { name: "Save", exact: true });
 	await expect(save).toBeDisabled();
@@ -608,8 +610,7 @@ test("a long new option wraps in place and one confirm adds and chooses it", asy
 	let field = card.getByRole("textbox", { name: "New option" });
 	let confirm = card.getByRole("button", { name: "Add option", exact: true });
 	await expect(confirm).toBeDisabled();
-	let label = "Keep room state in a small embedded database next to the server process, "
-		+ "so it survives restarts and needs no separate service";
+	let label = "Keep room state in a small embedded database by the server";
 	await field.pressSequentially(label);
 	await expect(confirm).toBeEnabled();
 
