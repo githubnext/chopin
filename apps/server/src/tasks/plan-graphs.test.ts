@@ -1016,6 +1016,8 @@ describe("living-document builds", () => {
 			}),
 		).toEqual({ kind: "accepted" });
 		expect(plan.live?.outstanding).toBeUndefined();
+		// The landed rebuild is dated from when it landed, not from when it was asked for.
+		expect(plan.builds.at(-1)).toMatchObject({ state: "stopped", finishedAt: expect.any(String) });
 		expect(historyFor(plan.graph!, plan.lifecycle)[0]!.progress.tasks[0]).toMatchObject({
 			id: "model",
 			state: "completed",

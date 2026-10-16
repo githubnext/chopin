@@ -16,6 +16,7 @@ import type { SocketData } from "../wire";
 export type SeedState = {
 	graph?: import("../tasks/graphs").Graph;
 	builds?: import("@chopin/protocol/implementation").BuildRequest[];
+	lifecycle?: import("../tasks/lifecycle").Lifecycle;
 	revision?: number;
 	questions?: unknown[];
 	openQuestions?: unknown[];
@@ -187,6 +188,7 @@ export async function checkpointSource(
 		transcript: state.transcript ?? [],
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
+		...(state.lifecycle ? { lifecycle: state.lifecycle } : {}),
 	} as JsonValue;
 	let document = await Room.create(source);
 	let canonical = Room.project(document);

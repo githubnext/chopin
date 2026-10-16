@@ -6,6 +6,7 @@ import {
 	attentionHint,
 	blockerLabelled,
 	blockerText,
+	buildAgo,
 	buildLabel,
 	buildLook,
 	buildPhase,
@@ -647,6 +648,25 @@ describe("living document commits", () => {
 		expect(ago("2026-10-10T09:00:00.000Z", now)).toBe("3h ago");
 		expect(ago("2026-10-08T12:00:00.000Z", now)).toBe("2d ago");
 		expect(ago("nonsense", now)).toBeUndefined();
+	});
+
+	it("dates a finished build from when it finished, not when it was asked for", () => {
+		let now = Date.parse("2026-10-10T12:00:00.000Z");
+		let asked = "2026-10-10T11:00:00.000Z";
+		expect(
+			buildAgo({ state: "stopped", createdAt: asked, finishedAt: "2026-10-10T11:59:50.000Z" }, now),
+		)
+			.toBe("just now");
+		expect(
+			buildAgo({ state: "failed", createdAt: asked, finishedAt: "2026-10-10T11:55:00.000Z" }, now),
+		)
+			.toBe("5m ago");
+		// A running build is dated from when it was asked for; a queued one has not started.
+		expect(buildAgo({ state: "running", createdAt: asked }, now)).toBe("1h ago");
+		expect(buildAgo({ state: "queued", createdAt: asked }, now)).toBeUndefined();
+		// A build that finished before its finish was recorded has no time to show, not a wrong one.
+		expect(buildAgo({ state: "stopped", createdAt: asked }, now)).toBeUndefined();
+		expect(buildAgo(undefined, now)).toBeUndefined();
 	});
 });
 

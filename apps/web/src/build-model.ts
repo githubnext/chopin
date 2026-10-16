@@ -1,4 +1,4 @@
-import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
 
 type Snapshot = ImplementationSnapshot;
 type Progress = NonNullable<Snapshot["lifecycle"]["activity"]>;
@@ -241,6 +241,22 @@ export function ago(at: string, now: number): string | undefined {
 	if (minutes < 60) return `${minutes}m ago`;
 	let hours = Math.floor(minutes / 60);
 	return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * How long ago a build ran: a running one from when it was asked for, a finished one from when it
+ * finished. A queued build has not started, and one that finished before its finish was recorded
+ * has no time to show rather than a wrong one.
+ */
+export function buildAgo(
+	build: { state: BuildRequest["state"]; createdAt?: string; finishedAt?: string } | undefined,
+	now: number,
+): string | undefined {
+	if (!build || build.state === "queued") return;
+	let at = build.state === "stopped" || build.state === "failed"
+		? build.finishedAt
+		: build.createdAt;
+	return at ? ago(at, now) : undefined;
 }
 
 function latestRun(snapshot: Snapshot) {

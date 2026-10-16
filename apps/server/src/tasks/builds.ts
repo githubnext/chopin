@@ -45,6 +45,7 @@ let buildSchema = z.object({
 	graphVersion: z.number().int().positive(),
 	graphRevision: z.number().int().positive(),
 	createdAt: z.string().datetime(),
+	finishedAt: z.string().datetime().optional(),
 	expiresAt: z.number().int().nonnegative(),
 	state: z.enum(["queued", "starting", "running", "stopped", "failed"]),
 	session: z.string().min(1).max(128).optional(),
@@ -523,6 +524,11 @@ export function reportBuild(
 			...current,
 			...fields,
 			...(stoppedByUser ? { stoppedAtRevision: plan.revision } : {}),
+			// A build's age is counted from when it finished, not from when it was asked for.
+			...(current.state !== report.state
+					&& (report.state === "stopped" || report.state === "failed")
+				? { finishedAt: new Date().toISOString() }
+				: {}),
 			...(progress && progress !== current.activity?.text
 				? { activity: { text: progress, at: new Date().toISOString() } }
 				: {}),
@@ -943,7 +949,10 @@ export function reportRebuild(
 				}
 				: {}),
 		};
-		plan.builds = [...plan.builds.slice(0, -1), buildSchema.parse({ ...build, state: "stopped" })];
+		plan.builds = [
+			...plan.builds.slice(0, -1),
+			buildSchema.parse({ ...build, state: "stopped", finishedAt: at }),
+		];
 		try {
 			await persistExclusive(plan, true);
 		} catch {

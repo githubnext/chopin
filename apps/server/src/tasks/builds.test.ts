@@ -163,6 +163,41 @@ test("a duplicate review cannot silently select another owner or checkout", asyn
 	}
 });
 
+test("a build records when it finished, apart from when it was asked for", async () => {
+	let { plan } = await prepared();
+	let input = {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+		user: "U_test",
+		connectionId: "laptop",
+		machineId: "M_laptop",
+		repositoryId: "R_test",
+		checkout,
+	};
+	try {
+		let first = await queueBuild(plan, input);
+		// Asked for an hour before it finishes.
+		plan.builds[0] = {
+			...plan.builds[0]!,
+			createdAt: new Date(Date.now() - 3_600_000).toISOString(),
+		};
+		await pickBuild(plan, input.user, input.connectionId);
+		await reportBuild(plan, input.user, input.connectionId, first.id, { state: "running" });
+		expect(plan.builds[0]?.finishedAt).toBeUndefined();
+		let before = Date.now();
+		await reportBuild(plan, input.user, input.connectionId, first.id, { state: "stopped" });
+		let finishedAt = plan.builds[0]?.finishedAt;
+		expect(finishedAt).toBeDefined();
+		expect(Date.parse(finishedAt!)).toBeGreaterThanOrEqual(before - 1);
+		// The same report again, as a retried connector request, keeps the first time.
+		await reportBuild(plan, input.user, input.connectionId, first.id, { state: "stopped" });
+		expect(plan.builds[0]?.finishedAt).toBe(finishedAt);
+	} finally {
+		await Plan.close(plan);
+	}
+});
+
 test("a build stored before machines were recorded still restores, with no machine", () => {
 	let legacy = {
 		id: crypto.randomUUID(),

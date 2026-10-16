@@ -15,6 +15,7 @@ import {
 	attentionHint,
 	blockerLabelled,
 	blockerText,
+	buildAgo,
 	buildLabel,
 	buildPhase,
 	buildProgress,
@@ -331,8 +332,9 @@ export function BuildView(
 	let card = phase.kind === "loading" ? undefined : statusCard();
 
 	// The build the card's footer names: the one running, else the last that ran.
-	let shown: Pick<BuildRequest, "id" | "user" | "state"> & { createdAt?: string } | undefined =
-		look.kind === "plan" || look.kind === "tasks"
+	let shown:
+		| Pick<BuildRequest, "id" | "user" | "state"> & { createdAt?: string; finishedAt?: string }
+		| undefined = look.kind === "plan" || look.kind === "tasks"
 			? undefined
 			: activeBuild ?? (phase.kind === "live" && snapshot?.live
 				? snapshot.live.rebuild
@@ -348,8 +350,7 @@ export function BuildView(
 			: undefined
 	);
 	let machine = shown && snapshot?.buildMachines?.[shown.id];
-	// A queued build has not started, so it has no time to show.
-	let when = shown?.createdAt && shown.state !== "queued" ? ago(shown.createdAt, now) : undefined;
+	let when = buildAgo(shown, now);
 
 	if (phase.kind === "stopped" && canEdit && !returning) {
 		action = (

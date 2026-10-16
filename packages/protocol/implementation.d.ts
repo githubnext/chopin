@@ -19,6 +19,8 @@ export type BuildRequest = {
 	graphVersion: number;
 	graphRevision: number;
 	createdAt: string;
+	/** When it stopped or failed; a build that finished before this was recorded has none. */
+	finishedAt?: string;
 	expiresAt: number;
 	state: "queued" | "starting" | "running" | "stopped" | "failed";
 	session?: string;

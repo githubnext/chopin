@@ -3,7 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { failedBuild } from "./build-seed";
+import { builtBuild, failedBuild } from "./build-seed";
 import { seedChildChannel, testChannelPath } from "./database";
 import { ROOT } from "./servers";
 import { storedQuestion } from "../apps/server/src/testing/plan";
@@ -759,6 +759,20 @@ test("a build in progress shows who started it and offers no action", async ({ s
 	} finally {
 		await local.close();
 	}
+});
+
+test("a build that ran for an hour reads as built when it finished, not when it was asked for", async ({ seed, join: enter }) => {
+	let now = Date.now();
+	await seed(
+		"# Long build\n\nIt took an hour to build.\n",
+		builtBuild(preparedGraph(), new Date(now - 65 * 60_000), new Date(now - 2 * 60_000)),
+	);
+	let page = await enter("ana");
+	await page.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: "Build", exact: true }).click();
+	let view = buildView(page);
+	await expect(view.getByText("Built", { exact: true })).toBeVisible();
+	await expect(view.getByText(/^built /)).toHaveText("built 2m ago");
 });
 
 test("on a phone, tapping Build or an inert Build plan says why, briefly", async ({ seed, join: enter }) => {
