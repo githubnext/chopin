@@ -127,7 +127,7 @@ async function crop(page: Page, targets: Locator | Locator[], name: string) {
 	});
 }
 
-/** The Chat composer, whose bottom row holds the machine button just before Send. */
+/** The Chat composer must stay free of machine controls. */
 function composer(page: Page) {
 	return page.locator(".chat-composer");
 }
@@ -164,6 +164,7 @@ test("Machine in the title's menu chooses where work runs, and an offline choice
 	let box = await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
 	await connected(page, "laptop");
 	await page.reload();
+	await expect(page.getByRole("button", { name: /^Machine: / })).toHaveCount(0);
 	let menu = page.getByRole("menu", { name: /^Actions for / });
 
 	// Machine sits in the title's menu, saying the default is in use.
@@ -379,359 +380,6 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 	await expect(entry).toHaveAccessibleName("Machines, 2 paired, 1 connected", live);
 });
 
-test("one choice, two buttons: Chat's and Build plan's machine button choose where work runs", async ({ seed, join: enter }) => {
-	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
-	let page = await enter(person(), DESKTOP);
-	let box = await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
-	await connected(page, "laptop");
-	await page.reload();
-	let chat = composer(page).getByRole("button", { name: /^Machine: / });
-	let header = page.locator(".machine-button:not(.composer-machine .machine-button)").first();
-	await expect(chat).toHaveAccessibleName(/^Machine: Default machine, uses (build-box|laptop)$/);
-	await expect(header).toHaveAccessibleName(await chat.getAttribute("aria-label") ?? "");
-	await expect(chat).toContainText("Default machine");
-	// Inside the composer's bottom row at its right end, just left of Send.
-	let send = composer(page).getByRole("button", { name: "Send message" });
-	let [machineBox, sendBox] = [(await chat.boundingBox())!, (await send.boundingBox())!];
-	expect(sendBox.x - (machineBox.x + machineBox.width)).toBeLessThanOrEqual(8);
-	expect(Math.abs(machineBox.y + machineBox.height / 2 - (sendBox.y + sendBox.height / 2)))
-		.toBeLessThanOrEqual(1);
-	await crop(page, chat, "desktop-chat-automatic");
-	await shoot(page, "desktop-closed");
-
-	// The menu: Automatic and what it uses, the machines, then Add machine.
-	await chat.click();
-	let menu = page.getByRole("menu", { name: "Machine for this document" });
-	await expect(menu).toBeVisible();
-	await expect(menu.getByRole("menuitemradio")).toHaveCount(3);
-	let automatic = menu.getByRole("menuitemradio", { name: /^Default machine/ });
-	await expect(automatic).toHaveAttribute("aria-checked", "true");
-	await expect(automatic).toBeFocused();
-	await expect(automatic).toContainText(/Uses (build-box|laptop) now/);
-	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toContainText(`Connected with chopin ${RELEASE} on Linux`);
-	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeVisible();
-	// Opened upward from the composer, inside the window.
-	let panel = (await menu.boundingBox())!;
-	expect(panel.y + panel.height).toBeLessThanOrEqual((await chat.boundingBox())!.y);
-	await shoot(page, "desktop-chat-menu");
-	await page.keyboard.press("ArrowDown");
-	await expect(menu.getByRole("menuitemradio").nth(1)).toBeFocused();
-	await page.keyboard.press("End");
-	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeFocused();
-	await page.keyboard.press("Escape");
-	await expect(menu).toBeHidden();
-	await expect(chat).toBeFocused();
-
-	// Choosing in Chat changes Build plan's button too.
-	await chat.click();
-	await menu.getByRole("menuitemradio", { name: /^build-box/ }).click();
-	await expect(chat).toHaveAccessibleName("Machine: build-box, connected");
-	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
-	await expect(header).toContainText("build-box");
-	await crop(page, chat, "desktop-chat-connected");
-	let [planBox, headerBox] = [
-		(await page.locator(".build-plan").boundingBox())!,
-		(await header.boundingBox())!,
-	];
-	expect(headerBox.x - (planBox.x + planBox.width)).toBeLessThanOrEqual(8);
-	expect(headerBox.x).toBeGreaterThan(planBox.x + planBox.width - 0.5);
-	expect(Math.abs(headerBox.height - planBox.height)).toBeLessThanOrEqual(1);
-	await crop(page, [page.locator(".build-plan"), header], "desktop-build-connected");
-	await header.click();
-	await expect(menu.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toHaveAttribute("aria-checked", "true");
-	await shoot(page, "desktop-build-menu");
-	await page.keyboard.press("Escape");
-	await page.reload();
-	await expect(chat).toHaveAccessibleName("Machine: build-box, connected");
-
-	// An offline choice stops Build plan rather than using the laptop. Offline looks the same in
-	// all three places, dimmed as the menu's offline row is, and is never written beside them.
-	await box.disconnect();
-	await page.reload();
-	await expect(header).toHaveAccessibleName("Machine: build-box, offline");
-	await expect(chat).toHaveAccessibleName("Machine: build-box, offline");
-	let build = page.getByRole("button", { name: "Build plan", exact: true });
-	let plan = page.locator(".build-plan");
-	let dimmed = (target: Locator) => target.evaluate(item => getComputedStyle(item).opacity);
-	let offlineLook = async (enabled: boolean) => {
-		for (let target of [plan, header, chat]) {
-			if (enabled) await expect(target).not.toHaveClass(/\bmachine-offline\b/);
-			else await expect(target).toHaveClass(/\bmachine-offline\b/);
-		}
-		if (enabled) await expect(build).not.toHaveAttribute("aria-disabled", "true");
-		else await expect(build).toHaveAttribute("aria-disabled", "true");
-	};
-	await offlineLook(false);
-	await expect(build).toHaveAccessibleDescription("build-box is offline");
-	await expect(build).not.toHaveAttribute("disabled");
-	await expect(build).not.toHaveAttribute("data-tooltip");
-	await expect(plan).toHaveText("Build plan");
-	for (let target of [header, chat]) expect(await target.innerText()).not.toMatch(/offline/i);
-	let look = await dimmed(plan);
-	expect(await dimmed(header)).toBe(look);
-	expect(await dimmed(chat)).toBe(look);
-	// Still focusable, so the keyboard and a screen reader find it and its reason.
-	await build.focus();
-	await expect(build).toBeFocused();
-	// Pressing it starts nothing and says nothing.
-	let posted: string[] = [];
-	let record = (request: import("@playwright/test").Request) => {
-		let path = new URL(request.url()).pathname;
-		if (request.method() === "POST" && /implementation|build/.test(path)) posted.push(path);
-	};
-	page.on("request", record);
-	await plan.click({ force: true });
-	await page.keyboard.press("Enter");
-	await page.waitForTimeout(500);
-	page.off("request", record);
-	expect(posted).toEqual([]);
-	await expect(plan).toHaveText("Build plan");
-	await expect(page.getByRole("alert").filter({ hasText: /offline/i })).toHaveCount(0);
-	await crop(page, [plan, header], "desktop-build-offline");
-	await crop(page, chat, "desktop-chat-offline");
-	await shoot(page, "desktop-offline");
-	await header.click();
-	let offline = menu.getByRole("menuitemradio", { name: /^build-box/ });
-	await expect(offline).toHaveAttribute("aria-disabled", "true");
-	await expect(offline).toContainText("Offline");
-	// The menu's offline row is the same dimmed look.
-	await expect(offline).toHaveClass(/\bmachine-offline\b/);
-	expect(await dimmed(offline)).toBe(look);
-	await shoot(page, "desktop-offline-menu");
-	await page.keyboard.press("Escape");
-
-	// The machine reconnecting enables Build plan again, as choosing Automatic does.
-	await box.reconnect();
-	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
-	await offlineLook(true);
-	await box.disconnect();
-	await page.reload();
-	await offlineLook(false);
-	await header.click();
-	await menu.getByRole("menuitemradio", { name: /^Default machine/ }).click();
-	await expect(header).toHaveAccessibleName("Machine: Default machine, uses laptop");
-	await offlineLook(true);
-
-	// A star in the menu sets the favorite Automatic prefers, without changing the choice.
-	await header.click();
-	let boxRow = menu.locator(".machine-menu-row").filter({
-		has: page.getByRole("menuitemradio", { name: /^build-box/ }),
-	});
-	let star = menu.getByRole("button", { name: "Favorite build-box" });
-	await expect(star).toHaveAttribute("aria-pressed", "false");
-	await boxRow.hover();
-	await star.click();
-	let starred = menu.getByRole("button", { name: "Remove build-box as favorite" });
-	await expect(starred).toHaveAttribute("aria-pressed", "true");
-	await expect(menu).toBeVisible();
-	await expect(header).toHaveAccessibleName("Machine: Default machine, uses laptop");
-	// The favorite is offline, so Automatic says so and uses the laptop.
-	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
-		.toContainText("Uses laptop now because build-box is offline");
-	await expect(menu.getByRole("button", { name: /favorite/i })).toHaveCount(2);
-	await expect(menu.locator("[data-star][aria-pressed=true]")).toHaveCount(1);
-	await page.keyboard.press("Escape");
-	// Back online, Automatic uses the favorite.
-	await box.reconnect();
-	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-	await expect(header).toHaveAccessibleName("Machine: Default machine, uses build-box");
-	await header.click();
-	// Starred on its own row only; Automatic's line just names it.
-	await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ }))
-		.toContainText("Uses build-box now");
-	// The star is its own control: Right from the machine's row, Left back.
-	await page.keyboard.press("ArrowDown");
-	await page.keyboard.press("ArrowDown");
-	let focusedRow = page.locator(":focus");
-	await expect(focusedRow).toHaveAttribute("role", "menuitemradio");
-	let rowName = await focusedRow.getAttribute("aria-checked");
-	expect(rowName).toBe("false");
-	let laptopStar = menu.getByRole("button", { name: "Favorite laptop" });
-	let target = (await focusedRow.textContent())?.startsWith("build-box") ? starred : laptopStar;
-	await page.keyboard.press("ArrowRight");
-	await expect(target).toBeFocused();
-	await page.keyboard.press("ArrowLeft");
-	await expect(focusedRow).toHaveAttribute("role", "menuitemradio");
-	await shoot(page, "desktop-favorite-menu");
-	await page.keyboard.press("Escape");
-
-	// Add machine opens the Machines page's Add your computer.
-	await chat.click();
-	await menu.getByRole("menuitem", { name: "Add machine…" }).click();
-	await expect(page).toHaveURL(/\/machines$/);
-	await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
-});
-
-test("on a phone the machine button is a 44px icon in the composer, opening a sheet", async ({ join: enter }) => {
-	let page = await enter(person(), PHONE);
-	let box = await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
-	await page.reload();
-	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: "Chat", exact: true }).tap();
-	let pill = composer(page).locator(".composer-surface");
-	let button = composer(page).getByRole("button", { name: /^Machine: / });
-	await expect(button).toBeInViewport({ ratio: 1 });
-	// After the Chat pane's slide.
-	await page.waitForTimeout(800);
-	let size = (await button.boundingBox())!;
-	// As round as the pill's other controls, with a 44px touch target around it.
-	expect(size.height).toBe(36);
-	let reach = async (dx: number, dy: number) =>
-		page.evaluate(([x, y]) => !!document.elementFromPoint(x!, y!)?.closest(".machine-button"), [
-			size.x + size.width / 2 + dx,
-			size.y + size.height / 2 + dy,
-		]);
-	await expect.poll(() => reach(0, -21)).toBe(true);
-	// It fits the composer's pill, beside the draft, mode switch and send.
-	let surface = (await pill.boundingBox())!;
-	expect(size.x + size.width).toBeLessThanOrEqual(surface.x + surface.width);
-	expect(size.y + size.height).toBeLessThanOrEqual(surface.y + surface.height + 0.5);
-	let draft = (await composer(page).locator(".composer-draft-input").boundingBox())!;
-	expect(draft.width).toBeGreaterThan(120);
-	await crop(page, button, "phone-chat-automatic");
-	await shoot(page, "phone-closed");
-	await button.tap();
-	let sheet = page.getByRole("dialog", { name: "Machine for this document" });
-	await expect(sheet).toBeVisible();
-	let row = sheet.getByRole("menuitemradio", { name: /^build-box/ });
-	expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-	// Its star sits at the right end of its own row. Both are measured in one frame, as the sheet
-	// may still be rising.
-	let star = sheet.getByRole("button", { name: "Favorite build-box" });
-	let [rowBox, starBox] = await star.evaluate(item => {
-		let rowItem = item.parentElement!.querySelector("[role=menuitemradio]")!;
-		return [rowItem.getBoundingClientRect().toJSON(), item.getBoundingClientRect().toJSON()];
-	}) as Array<{ x: number; y: number; width: number; height: number }>;
-	expect(starBox!.y).toBeGreaterThanOrEqual(rowBox!.y);
-	expect(starBox!.y + starBox!.height).toBeLessThanOrEqual(rowBox!.y + rowBox!.height);
-	expect(starBox!.x).toBeGreaterThan(rowBox!.x + rowBox!.width / 2);
-	await shoot(page, "phone-sheet");
-	await row.tap();
-	await expect(sheet).toBeHidden();
-	await expect(button).toHaveAccessibleName("Machine: build-box, connected");
-	await crop(page, button, "phone-chat-connected");
-	await box.disconnect();
-	await page.reload();
-	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: "Chat", exact: true }).tap();
-	await expect(button).toHaveAccessibleName("Machine: build-box, offline");
-	// Dimmed as the sheet's offline row is, and still a button that opens the sheet.
-	await expect(button).toHaveClass(/\bmachine-offline\b/);
-	await expect(button).not.toHaveAttribute("aria-disabled", "true");
-	await page.waitForTimeout(800);
-	await crop(page, button, "phone-chat-offline");
-	await shoot(page, "phone-chat-offline-full");
-	await button.tap();
-	await expect(sheet.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toHaveAttribute("aria-disabled", "true");
-	await expect(sheet.getByRole("menuitemradio", { name: /^build-box/ }))
-		.toHaveClass(/\bmachine-offline\b/);
-	await shoot(page, "phone-sheet-offline");
-});
-
-test("a long machine name shrinks the machine button before Send or Build plan on a 320px window", async ({ seed, join: enter }) => {
-	expect(LONG_NAME).toHaveLength(60);
-	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
-	let page = await enter(person(), { viewport: { width: 320, height: 800 }, deviceScaleFactor: 3 });
-	await connected(page, LONG_NAME, { [CONNECTOR_SERVICE_HEADER]: "1" });
-	await page.reload();
-	let views = page.getByRole("navigation", { name: "Workspace view" });
-	let chat = composer(page).getByRole("button", { name: /^Machine: / });
-	let send = composer(page).getByRole("button", { name: "Send message" });
-	let footer = composer(page).locator(".composer-footer");
-	let viewport = page.viewportSize()!;
-	// Every control of the composer's bottom row, Send included, whole inside the window, with the
-	// machine button inside the row.
-	let fits = async () => {
-		let [row, button, sending] = await footer.evaluate(item => {
-			let box = (target: Element | null) => target!.getBoundingClientRect().toJSON();
-			return [
-				box(item),
-				box(item.querySelector(".machine-button")),
-				box(item.querySelector(".send-action")),
-			];
-		}) as Array<{ x: number; y: number; width: number; height: number }>;
-		expect(sending!.x).toBeGreaterThanOrEqual(0);
-		expect(sending!.x + sending!.width).toBeLessThanOrEqual(viewport.width);
-		expect(button!.x).toBeGreaterThanOrEqual(row!.x);
-		expect(button!.x + button!.width).toBeLessThanOrEqual(sending!.x);
-		expect(row!.x + row!.width).toBeLessThanOrEqual(viewport.width);
-	};
-	await views.getByRole("button", { name: /^Chat/ }).click();
-	await expect(chat).toBeVisible();
-	await chat.click();
-	await page.getByRole("menu", { name: "Machine for this document" })
-		.getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) }).click();
-	await expect(chat).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
-	await fits();
-	// Send still sends from where it is.
-	await expect(send).toBeInViewport({ ratio: 1 });
-	await crop(page, footer, "narrow-chat-long-name");
-	await shoot(page, "narrow-chat-long-name-full");
-	// Build plan's row in the header keeps Build plan whole beside the button.
-	await views.getByRole("button", { name: /^Document/ }).click();
-	let header = page.locator(".room-header .machine-button");
-	await expect(header).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
-	await expect(page.locator(".build-plan")).toBeInViewport({ ratio: 1 });
-	await expect(header).toBeInViewport({ ratio: 1 });
-	await shoot(page, "narrow-header-long-name");
-	// A laptop's title bar gives the button a quarter at most, so the document's title keeps the
-	// rest; the name still shows, cut short.
-	await page.setViewportSize({ width: 1280, height: 800 });
-	let bar = page.locator(".document-title-bar");
-	let titled = bar.locator(".machine-button");
-	await expect(titled.locator(".machine-button-name")).toBeVisible();
-	let [barBox, titledBox] = [(await bar.boundingBox())!, (await titled.boundingBox())!];
-	expect(titledBox.width).toBeLessThanOrEqual(barBox.width / 4 + 0.5);
-	await expect(page.locator(".build-plan")).toBeInViewport({ ratio: 1 });
-	await crop(page, [page.locator(".build-plan"), titled], "desktop-build-long-name");
-});
-
-test("the title's Machine, Chat's button and Build plan's button share one choice", async ({ seed, join: enter }) => {
-	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
-	let page = await enter(person(), DESKTOP);
-	await connected(page, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
-	await connected(page, "laptop");
-	await page.reload();
-	let chat = composer(page).getByRole("button", { name: /^Machine: / });
-	let header = page.locator(".machine-button:not(.composer-machine .machine-button)").first();
-	let menu = page.getByRole("menu", { name: "Machine for this document" });
-	let titleMenu = page.getByRole("menu", { name: /^Actions for / });
-	let titleSays = async (name: string) => {
-		await titleActions(page).click();
-		await expect(titleMenu.getByRole("menuitem", { name: /^Machine\b/ })).toContainText(name);
-		await page.keyboard.press("Escape");
-	};
-	// Both buttons sit where they did: Chat's just before Send, Build plan's right after it.
-	await expect(chat).toBeVisible();
-	await expect(header).toBeVisible();
-	let [plan, beside] = [
-		(await page.locator(".build-plan").boundingBox())!,
-		(await header.boundingBox())!,
-	];
-	expect(beside.x).toBeGreaterThan(plan.x + plan.width - 0.5);
-	expect(Math.abs(beside.height - plan.height)).toBeLessThanOrEqual(1);
-
-	// Chosen in the title's menu: both buttons follow.
-	await (await runOn(page)).getByRole("menuitemradio", { name: /^laptop/ }).click();
-	await expect(chat).toHaveAccessibleName("Machine: laptop, connected");
-	await expect(header).toHaveAccessibleName("Machine: laptop, connected");
-	// Chosen in Chat: Build plan's button and the title's menu follow.
-	await chat.click();
-	await menu.getByRole("menuitemradio", { name: /^build-box/ }).click();
-	await expect(header).toHaveAccessibleName("Machine: build-box, connected");
-	await titleSays("build-box");
-	// Chosen beside Build plan: Chat's button and the title's menu follow.
-	await header.click();
-	await menu.getByRole("menuitemradio", { name: /^Default machine/ }).click();
-	await expect(chat).toHaveAccessibleName(/^Machine: Default machine, uses /);
-	await titleSays("Default");
-	await shoot(page, "three-places-in-step");
-});
-
 /** Pair and connect `count` machines, the last with a long name; keys pair ten at most. */
 async function machines(page: Page, count: number) {
 	let labels: string[] = [];
@@ -780,7 +428,7 @@ async function machines(page: Page, count: number) {
 }
 
 /**
- * In a panel of machine rows: it stays inside the window, every row and Add machine… can be
+ * In a panel of machine rows: it stays inside the window and every row can be
  * scrolled into view inside it and reached, and End moves focus to the last row, which scrolls
  * into view.
  */
@@ -793,19 +441,12 @@ async function reachable(page: Page, panel: Locator, labels: string[]) {
 	expect(box.y).toBeGreaterThanOrEqual(0);
 	expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 0.5);
 	expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 0.5);
-	if (labels.length >= 12) {
-		expect(await panel.evaluate(item => item.scrollHeight > item.clientHeight)).toBe(true);
-	}
 	for (let label of labels) {
 		let row = panel.getByRole("menuitemradio", { name: new RegExp(`^${label}`) });
 		await row.scrollIntoViewIfNeeded();
 		await row.click({ trial: true });
 		expect(await shownIn(row, panel), label).toBe(true);
 	}
-	let add = panel.getByRole("menuitem", { name: "Add machine…" });
-	await add.scrollIntoViewIfNeeded();
-	await add.click({ trial: true });
-	expect(await shownIn(add, panel)).toBe(true);
 }
 
 /** Whether `item` is whole inside the scrolled `panel`, to the pixel, and so can be clicked. */
@@ -826,42 +467,14 @@ test("twelve machines in a short window: the machine menu fits, scrolls and reac
 	let page = await enter(person(), { viewport: { width: 1280, height: 600 } });
 	let labels = await machines(page, 12);
 	await page.reload();
-	let menu = page.getByRole("menu", { name: "Machine for this document" });
-	// From Chat's button at the window's foot, the menu opens upward.
-	let chat = composer(page).getByRole("button", { name: /^Machine: / });
-	await chat.click();
-	await expect(menu).toBeVisible();
-	await shoot(page, "short-window-chat-menu");
-	await reachable(page, menu, labels);
-	// The keyboard reaches the rows out of view.
-	await page.keyboard.press("Home");
-	await page.keyboard.press("End");
-	await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeFocused();
-	expect(await shownIn(menu.getByRole("menuitem", { name: "Add machine…" }), menu)).toBe(true);
-	await page.keyboard.press("ArrowUp");
-	let bottom = menu.getByRole("menuitemradio").last();
-	await expect(bottom).toBeFocused();
-	expect(await shownIn(bottom, menu)).toBe(true);
-	let last = menu.getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) });
-	// A long name ends in an ellipsis inside its row, its whole name in its title.
-	await expect(last.locator(".machine-menu-title")).toHaveAttribute("title", LONG_NAME);
-	expect(await last.evaluate(item => item.scrollWidth <= item.clientWidth + 1)).toBe(true);
-	await last.click();
-	await expect(chat).toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
-	// From Build plan's button at the window's top, the menu opens downward and scrolls too.
-	let header = page.locator(".machine-button:not(.composer-machine .machine-button)").first();
-	await header.click();
-	await expect(menu).toBeVisible();
-	await reachable(page, menu, labels);
-	await page.keyboard.press("Escape");
-	// The title's menu shows the same rows, inside the window, scrolling.
 	let titleMenu = await runOn(page);
+	await reachable(page, titleMenu, labels);
 	let box = (await titleMenu.boundingBox())!;
 	expect(box.y + box.height).toBeLessThanOrEqual(600.5);
 	await page.keyboard.press("End");
 	let titleLast = titleMenu.getByRole("menuitemradio").last();
 	await expect(titleLast).toBeFocused();
-	expect(await shownIn(titleLast, titleMenu)).toBe(true);
+	await expect.poll(() => shownIn(titleLast, titleMenu)).toBe(true);
 	await shoot(page, "short-window-title-menu");
 	await page.keyboard.press("Escape");
 });
@@ -895,22 +508,12 @@ for (let height of [1080, 969]) {
 				await title.fill(`Menu check ${repository}`);
 				await title.press("Enter");
 				await ready(page);
-				let chat = composer(page).getByRole("button", { name: /^Machine: / });
-				await chat.click();
-				let menu = page.getByRole("menu", { name: "Machine for this document" });
-				await expect(menu).toBeVisible();
-				await shoot(page, `creation-${height}-${repository}-chat`);
+				let menu = await runOn(page);
+				await reachable(page, menu, labels);
 				await testInfo.attach(`creation ${repository}`, {
 					body: await page.screenshot(),
 					contentType: "image/png",
 				});
-				await reachable(page, menu, labels);
-				let panel = (await menu.boundingBox())!;
-				expect(panel.y + panel.height).toBeLessThanOrEqual((await chat.boundingBox())!.y);
-				await page.keyboard.press("Escape");
-				await page.locator(".document-title-bar .machine-button").click();
-				await reachable(page, menu, labels);
-				await shoot(page, `creation-${height}-${repository}-build`);
 				await page.keyboard.press("Escape");
 				let entry = sidebar.getByRole("button", { name: /^Machines/ });
 				await entry.click();
@@ -981,52 +584,36 @@ for (let height of [800, 600, "phone"] as const) {
 				await expect(sidebar.getByRole("link", { name: "score document 1", exact: true }).first())
 					.toBeVisible();
 			}
-			let chat = composer(page).getByRole("button", { name: /^Machine: / });
-			await chat.click();
-			let menu = height === "phone"
-				? page.getByRole("dialog", { name: "Machine for this document" }).locator(
-					".machine-sheet-group",
-				)
-				: page.getByRole("menu", { name: "Machine for this document" });
+			let menu = height === "phone" ? await phoneRunOn(page) : await runOn(page);
 			await expect(menu).toBeVisible();
-			await shoot(page, `populated-${height}-chat`);
 			await testInfo.attach("populated machine menu", {
 				body: await page.screenshot(),
 				contentType: "image/png",
 			});
+			if (height === "phone") {
+				for (let label of labels) {
+					await expect(menu.getByRole("menuitemradio", { name: new RegExp(`^${label}`) }))
+						.toBeVisible();
+				}
+				return;
+			}
 			await reachable(page, menu, labels);
-			if (height === "phone") return;
-			let panel = (await menu.boundingBox())!;
-			expect(panel.y + panel.height).toBeLessThanOrEqual((await chat.boundingBox())!.y);
-			await page.keyboard.press("Home");
-			await expect(menu.getByRole("menuitemradio", { name: /^Default machine/ })).toBeFocused();
 			await page.keyboard.press("End");
-			await expect(menu.getByRole("menuitem", { name: "Add machine…" })).toBeFocused();
-			await page.keyboard.press("Escape");
-			await expect(chat).toBeFocused();
-			await page.locator(".document-title-bar .machine-button").click();
-			await reachable(page, menu, labels);
-			await page.keyboard.press("Escape");
-			let titleMenu = await runOn(page);
-			let titlePanel = (await titleMenu.boundingBox())!;
-			expect(titlePanel.y + titlePanel.height).toBeLessThanOrEqual(height);
-			await page.keyboard.press("End");
-			expect(await shownIn(titleMenu.getByRole("menuitemradio").last(), titleMenu)).toBe(true);
+			await expect(menu.getByRole("menuitemradio").last()).toBeFocused();
 		},
 	);
 }
 
-test("twelve machines on a phone: the machine sheet scrolls to its last row and Add machine", async ({ join: enter }) => {
+test("twelve machines on a phone: the title menu machine sheet scrolls to its last row", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	let labels = await machines(page, 12);
 	await page.reload();
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: "Chat", exact: true }).tap();
-	await composer(page).getByRole("button", { name: /^Machine: / }).tap();
-	let sheet = page.getByRole("dialog", { name: "Machine for this document" });
+	let sheet = await phoneRunOn(page);
 	await expect(sheet).toBeVisible();
 	await page.waitForTimeout(800);
-	let group = sheet.locator(".machine-sheet-group");
+	let group = sheet.locator(".action-sheet-group");
 	let box = (await group.boundingBox())!;
 	expect(box.y).toBeGreaterThanOrEqual(0);
 	expect(box.y + box.height).toBeLessThanOrEqual(844.5);
@@ -1035,16 +622,15 @@ test("twelve machines on a phone: the machine sheet scrolls to its last row and 
 		await row.scrollIntoViewIfNeeded();
 		expect(await shownIn(row, group), label).toBe(true);
 	}
-	let add = sheet.getByRole("menuitem", { name: "Add machine…" });
-	await add.scrollIntoViewIfNeeded();
-	expect(await shownIn(add, group)).toBe(true);
 	await shoot(page, "phone-sheet-twelve-scrolled");
 	let last = sheet.getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) });
 	await last.scrollIntoViewIfNeeded();
 	await last.tap();
 	await expect(sheet).toBeHidden();
-	await expect(composer(page).getByRole("button", { name: /^Machine: / }))
-		.toHaveAccessibleName(`Machine: ${LONG_NAME}, connected`);
+	await expect(
+		(await phoneRunOn(page)).getByRole("menuitemradio", { name: new RegExp(`^${LONG_NAME}`) }),
+	)
+		.toHaveAttribute("aria-checked", "true");
 });
 
 /** Wait for actual placement and entrance motion, not an arbitrary delay. */
@@ -1163,50 +749,15 @@ for (let activation of ["Enter", "Space", "touch"] as const) {
 	});
 }
 
-for (let activation of ["click", "Enter", "Space"] as const) {
-	test(`Chat and Build machine navigation closes via ${activation}`, async ({ seed, join: enter }) => {
-		await seed("# Machine navigation\n\nA document with a build.\n", { graph: GRAPH });
-		let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
-		await connected(page, "devbox");
-		await page.reload();
-		for (let source of ["Chat", "Build"]) {
-			let button = source === "Chat"
-				? composer(page).getByRole("button", { name: /^Machine: / })
-				: page.locator(".document-title-bar .machine-button");
-			await button.click();
-			let add = page.getByRole("menuitem", { name: "Add machine…", exact: true });
-			if (activation === "click") await add.click();
-			else {
-				await page.keyboard.press("End");
-				await expect(add).toBeFocused();
-				await page.keyboard.press(activation);
-			}
-			await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
-			await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
-			await page.goBack();
-			await ready(page);
-		}
-	});
-}
-
 test("phone machine navigation leaves no menu or sheet behind", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	await connected(page, "devbox");
 	await page.reload();
 	await page.getByRole("button", { name: "Documents", exact: true }).tap();
 	await page.getByRole("link", { name: /^Machines/ }).tap();
-	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeFocused();
+	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeVisible();
 	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
 	await expect(page.getByRole("dialog", { name: "Documents", exact: true })).toHaveCount(0);
-	await page.goBack();
-	await ready(page);
-	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: "Chat", exact: true }).tap();
-	await composer(page).getByRole("button", { name: /^Machine: / }).tap();
-	await page.getByRole("menuitem", { name: "Add machine…", exact: true }).tap();
-	await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
-	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
-	await expect(page.getByRole("dialog", { name: "Machine for this document" })).toHaveCount(0);
 });
 
 test("machine menus close on same-document history navigation", async ({ seed, join: enter }) => {
@@ -1214,19 +765,11 @@ test("machine menus close on same-document history navigation", async ({ seed, j
 	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
 	await connected(page, "devbox");
 	await page.reload();
-	for (let source of ["Chat", "Build", "title"]) {
-		await page.evaluate(() => history.pushState(null, "", "#machine-menu"));
-		if (source === "title") await runOn(page);
-		else {
-			let button = source === "Chat"
-				? composer(page).getByRole("button", { name: /^Machine: / })
-				: page.locator(".document-title-bar .machine-button");
-			await button.click();
-		}
-		await expect(page.getByRole("menu")).toBeVisible();
-		await page.goBack();
-		await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
-	}
+	await page.evaluate(() => history.pushState(null, "", "#machine-menu"));
+	await runOn(page);
+	await expect(page.getByRole("menu")).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
 });
 
 test("the sidebar machine popup disappears when its trigger unmounts", async ({ join: enter }) => {
@@ -1467,18 +1010,18 @@ test("the machine choice shows only while the person has a paired machine, appea
 	await expect(page.getByRole("main").getByText("Add machine", { exact: false })).toHaveCount(0);
 	let before = { send: (await send.boundingBox())!, build: (await build.boundingBox())! };
 
-	// The first machine pairs in another tab: the selector appears here, with no reload, and Send
-	// stays where it was.
+	// Pairing reveals Machine in the title menu only; Build and Send stay in place.
 	let other = await page.context().newPage();
 	await other.goto(page.url());
 	await connected(other, "build-box", { [CONNECTOR_SERVICE_HEADER]: "1" });
 	let live = { timeout: 10_000 };
-	await expect(chat).toBeVisible(live);
-	await expect(header).toBeVisible(live);
-	expect(await machineItem()).toBe(1);
+	await expect(chat).toHaveCount(0, live);
+	await expect(header).toHaveCount(0, live);
+	await expect.poll(machineItem, live).toBe(1);
 	let after = { send: (await send.boundingBox())!, build: (await build.boundingBox())! };
 	expect(after.send.x).toBeCloseTo(before.send.x, 0);
 	expect(after.send.y).toBeCloseTo(before.send.y, 0);
+	expect(after.build.x).toBeCloseTo(before.build.x, 0);
 	expect(after.build.width).toBeCloseTo(before.build.width, 0);
 	expect(after.build.height).toBeCloseTo(before.build.height, 0);
 	await shoot(page, "selector-appears");
@@ -1497,6 +1040,6 @@ test("the machine choice shows only while the person has a paired machine, appea
 	}
 	await expect(chat).toHaveCount(0, live);
 	await expect(header).toHaveCount(0, live);
-	expect(await machineItem()).toBe(0);
+	await expect.poll(machineItem, live).toBe(0);
 	await other.close();
 });

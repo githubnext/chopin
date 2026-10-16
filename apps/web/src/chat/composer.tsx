@@ -51,8 +51,6 @@ export type ChatComposerProps = {
 	pickers?: ReactNode;
 	/** The remote Planner attachment line beneath the composer. */
 	attachment?: ReactNode;
-	/** The machine button: which of the person's machines works on this document, before Send. */
-	machine?: ReactNode;
 	input: Omit<
 		DraftInputProps,
 		| "role"
@@ -86,7 +84,6 @@ export function ChatComposer(
 		run,
 		pickers,
 		attachment,
-		machine,
 		input,
 	}: ChatComposerProps,
 ) {
@@ -285,8 +282,6 @@ export function ChatComposer(
 											</button>
 										)}
 									</span>
-									{/* Just before Send; Stop or Resume takes the reserved slot left of it. */}
-									{machine && <span className="composer-machine">{machine}</span>}
 									<SendAction
 										busy={sending}
 										disabled={sendDisabled}

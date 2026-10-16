@@ -511,11 +511,6 @@
 	}
 }
 
-/*
- * The machine button sits at the footer's end, just before Send, after Stop or Resume's slot. It is
- * the first thing in the row to give way: it shrinks and its name truncates, then it folds to its
- * glyph (machine-button.css); the mode switch, Stop or Resume, and Send keep their size.
- */
 .chat-composer .composer-footer {
 	container: composer-footer / inline-size;
 }
@@ -524,12 +519,4 @@
 }
 .chat-composer :is(.composer-left, .composer-connection, .composer-reconnect, .send-action) {
 	flex: none;
-}
-.chat-composer .composer-machine {
-	display: inline-flex;
-	min-width: 0;
-	align-items: center;
-}
-:root[data-phone] .chat-composer .composer-machine {
-	order: 4;
 }

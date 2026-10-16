@@ -513,7 +513,13 @@
 
 .action-sheet-group {
 	display: grid;
-	overflow: hidden;
+	overflow: hidden auto;
+	max-height: calc(
+		100dvh * var(--sheet-large-detent) - var(--action-sheet-row-height) - var(--sheet-gap) * 2 -
+			env(safe-area-inset-bottom) -
+			env(safe-area-inset-top)
+	);
+	overscroll-behavior: contain;
 	border-radius: var(--radius-sheet);
 	background: var(--color-page);
 	box-shadow: var(--shadow-overlay);

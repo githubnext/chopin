@@ -364,8 +364,10 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	});
 	let first = await studio.backend(room);
 	await expect(status).toHaveText("Planner: mona attached");
-	await expect(page.getByRole("button", { name: "Machine: studio, runs the Planner" }))
-		.toBeVisible();
+	await expect(page.getByRole("button", { name: /^Machine: / })).toHaveCount(0);
+	await expect((await runOn(page)).getByRole("menuitemradio", { name: /^Default machine/ }))
+		.toContainText("studio");
+	await page.keyboard.press("Escape");
 	await shoot(page, "default-planner-attached", page.locator(".chat-composer"));
 
 	// The favorite disconnects: the Planner moves to the other machine without anyone choosing it.
@@ -377,8 +379,10 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	});
 	let second = await desk.backend(room);
 	await expect(status).toHaveText("Planner: mona attached");
-	await expect(page.getByRole("button", { name: "Machine: desk, runs the Planner" }))
-		.toBeVisible();
+	await expect(page.getByRole("button", { name: /^Machine: / })).toHaveCount(0);
+	await expect((await runOn(page)).getByRole("menuitemradio", { name: /^Default machine/ }))
+		.toContainText("desk");
+	await page.keyboard.press("Escape");
 	await first.detach().catch(() => {});
 	await second.detach();
 });
