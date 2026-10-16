@@ -784,6 +784,8 @@ async function machines(page: Page, count: number) {
  * into view.
  */
 async function reachable(page: Page, panel: Locator, labels: string[]) {
+	// A visible phone drawer may still be rising; actionability waits for stable geometry.
+	await panel.getByRole("menuitemradio").first().click({ trial: true });
 	let viewport = page.viewportSize()!;
 	let box = (await panel.boundingBox())!;
 	expect(box.x).toBeGreaterThanOrEqual(0);
