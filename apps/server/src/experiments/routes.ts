@@ -394,6 +394,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/** Why each machine stopped running a document's Planner, told to its connector once. */
 	let stopReasons = new Map<string, Map<string, string>>();
 	/**
+	 * The address each connection was last told for each document whose Planner it runs, by
+	 * connection id, so a rename reaches the connector: its Planner poll names documents by id.
+	 */
+	let toldUrls = new Map<string, Map<string, string>>();
+	/**
 	 * Whether a connection can run its owner's Planners on request: it has a Planner command, speaks
 	 * protocol 4, and this server runs the remote Planner with machines' own GitHub authorization.
 	 */
@@ -635,6 +640,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * machine's other connections able to run Planners serves, and Default machine's move on.
 	 */
 	connections.onEnded = connection => {
+		toldUrls.delete(connection.id);
 		let others = connections.machine(connection.machineId).filter(runsPlanners);
 		void stopPlanners(
 			connection.machineId,
@@ -1638,9 +1644,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				let running = new Set(args.planners as string[]);
 				let changed = async (): Promise<PlannerControl | undefined> => {
 					let planners = await plannerDocuments(connection);
-					if (planners.length === running.size && planners.every(value => running.has(value.id))) {
+					let told = toldUrls.get(connection.id) ?? new Map<string, string>();
+					toldUrls.set(connection.id, told);
+					// A document renamed since this connection was told about it is a change too.
+					let moved = planners.some(value =>
+						told.has(value.id) && told.get(value.id) !== value.url
+					);
+					for (let value of planners) if (!told.has(value.id)) told.set(value.id, value.url);
+					if (
+						!moved && planners.length === running.size
+						&& planners.every(value => running.has(value.id))
+					) {
 						return undefined;
 					}
+					toldUrls.set(connection.id, new Map(planners.map(value => [value.id, value.url])));
 					let listed = new Set(planners.map(value => value.id));
 					let reasons = stopReasons.get(connection.machineId);
 					let stopped: Record<string, string> = {};

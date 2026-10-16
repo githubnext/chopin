@@ -306,6 +306,29 @@ describe("choosing a machine for a document", () => {
 		expect(server.attachments.attached(channel.id)).toBe(false);
 	});
 
+	it("tells the machine a renamed document's current address, once", async () => {
+		let { machine, choose, channel, storage } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		let told = await laptop.poll([]);
+		expect(told.planners[0].url).toEndWith(`/${channel.slug}`);
+		let renamed = await storage.channels.rename({
+			id: channel.id,
+			title: "Renamed document",
+			now: new Date(),
+		});
+		expect(renamed.channel.slug).not.toBe(channel.slug);
+		// The same document, so a connector running it hears only its new address.
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [{
+				id: channel.id,
+				url: expect.stringMatching(new RegExp(`/${renamed.channel.slug}$`)),
+			}],
+		});
+		expect(await laptop.poll([channel.id])).toEqual({ waiting: true });
+	});
+
 	it("never takes over a Planner another account holds", async () => {
 		let { machine, choose, choice, channel, server, url } = await dispatchServer();
 		let laptop = await machine("member", "U_member", "laptop");

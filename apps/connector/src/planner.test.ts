@@ -1130,6 +1130,87 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+	"a dispatched Planner whose document was renamed goes by its new address, in status, output and its next start",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: async request =>
+				new URL(request.url).pathname === "/api/connector/planner"
+					? Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: {
+							id: "D_1",
+							repository: "octo-org/score",
+							url: ((await request.json()) as { document: string }).document,
+						},
+					})
+					: new Response(null, { status: 404 }),
+		});
+		let directory = await mkdtemp(join(scratch, "renamed-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(
+			script,
+			`import { appendFileSync } from "node:fs";
+appendFileSync(process.argv[2], JSON.stringify({ pid: process.pid, document: process.env.CHOPIN_DOCUMENT }) + "\\n");
+process.on("SIGTERM", () => process.exit(0));
+setTimeout(() => process.exit(0), 1_000);
+`,
+		);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let recorded: string[][] = [];
+		let planners = dispatchedPlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: [],
+			command: [process.execPath, script, log],
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
+			directory,
+			output: createOutput(sink, sink, {}),
+			signal: abort.signal,
+			chosen: {
+				record: async documents => {
+					recorded.push(documents);
+				},
+			},
+		});
+		let launched = async () => (await entries(log)).filter(entry => entry.pid);
+		try {
+			planners.assign([{ id: "D_1", url: "http://x/documents/o/r/old-name" }]);
+			await until(async () => (await launched()).length === 1, 10_000);
+			expect(said).toContain("Planner for http://x/documents/o/r/old-name started.");
+			// Renamed while it runs: Chopin's next answer names the same document at its new address.
+			planners.assign([{ id: "D_1", url: "http://x/documents/o/r/new-name" }]);
+			expect(recorded.at(-1)).toEqual(["http://x/documents/o/r/new-name"]);
+			expect(planners.running()).toEqual(["D_1"]);
+			// It is not restarted for the rename; once it exits by itself, it starts again at the new one.
+			await until(async () => planners.running().length === 0, 10_000);
+			planners.assign([{ id: "D_1", url: "http://x/documents/o/r/new-name" }]);
+			await until(async () => (await launched()).length === 2, 10_000);
+			expect(said).toContain("Planner for http://x/documents/o/r/new-name exited (exit 0)");
+			expect((await launched()).map(entry => entry.document)).toEqual([
+				"http://x/documents/o/r/old-name",
+				"http://x/documents/o/r/new-name",
+			]);
+		} finally {
+			abort.abort();
+			await planners.stop();
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
 	"one machine runs the Planners of documents in several repositories, each in its repository's checkout",
 	async () => {
 		let repositories: Record<string, string> = {

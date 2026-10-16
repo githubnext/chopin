@@ -149,8 +149,14 @@ export function dispatchedPlanners(options: {
 		assign(planners: PlannerAssignment[], stopped?: Record<string, string>) {
 			let wanted = new Map(planners.map(value => [value.id, value]));
 			for (let [id, backend] of running) {
-				if (wanted.has(id)) backend.exited?.(true);
-				else withdraw(id, backend, stopped?.[id]);
+				let planner = wanted.get(id);
+				if (!planner) {
+					withdraw(id, backend, stopped?.[id]);
+					continue;
+				}
+				// A renamed document keeps its id; Chopin names its new address.
+				if (!backend.own) backend.url = planner.url;
+				backend.exited?.(true);
 			}
 			for (let [id, planner] of wanted) {
 				if (running.has(id) || options.signal.aborted) continue;
@@ -162,6 +168,7 @@ export function dispatchedPlanners(options: {
 					backend.served = servePlanner({
 						...options,
 						document: planner.url,
+						address: () => backend.url,
 						id: planner.id,
 						signal,
 						again: () =>
@@ -211,6 +218,8 @@ async function servePlanner(options: {
 	document: string;
 	/** The document's id in Chopin, when known before its credential names it. */
 	id?: string;
+	/** The document's current address, when Chopin can name a new one as it is renamed. */
+	address?: () => string;
 	command: string[];
 	checkouts: Checkouts;
 	directory: string;
@@ -229,10 +238,12 @@ async function servePlanner(options: {
 	 */
 	again?: () => Promise<boolean>;
 }) {
-	let { output, signal, document } = options;
+	let { output, signal } = options;
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
 	let values = Object.values(options.env ?? {});
+	let current = () => options.address?.() ?? options.document;
 	for (let attempt = 0; !signal.aborted;) {
+		let document = current();
 		let started = Date.now();
 		let credential;
 		try {
@@ -294,7 +305,12 @@ async function servePlanner(options: {
 		if (checkout) {
 			output.say(`› Planner for ${document} started.`);
 			let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
-			outcome = await launch({ ...options, cwd: checkout }, credential.token, worktree, github);
+			outcome = await launch(
+				{ ...options, document, cwd: checkout },
+				credential.token,
+				worktree,
+				github,
+			);
 			clearTimeout(healthy);
 		} else {
 			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
@@ -302,6 +318,8 @@ async function servePlanner(options: {
 		let { how, stderr } = outcome!;
 		await github?.stop();
 		if (signal.aborted) return;
+		// Renamed while it ran: say so by its new address.
+		document = current();
 		// What the backend printed may hold its credential, a GitHub token or an --env value.
 		let secrets = [credential.token, ...github?.secrets() ?? [], ...values];
 		let ended = Date.now();
@@ -319,6 +337,7 @@ async function servePlanner(options: {
 			// Status shows a failed start while Chopin is asked whether it still wants this Planner.
 			if (early) await failed(ended);
 			if (!(await options.again())) return;
+			document = current();
 		}
 		if (ended - started >= HEALTHY_MS) attempt = 0;
 		let wait = backoff(attempt++);

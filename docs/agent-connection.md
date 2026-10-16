@@ -746,4 +746,7 @@ A backend Chopin asked the machine to run (see
 Chopin's Planner poll still asks for it. Chopin closes the link of a Planner it
 no longer asks for, so the backend can exit before the poll's answer arrives;
 the connector then waits for that answer, and stops the backend for good when
-the answer leaves its document out.
+the answer leaves its document out. When a document is renamed, the poll's next
+answer names it at its new address; the connector shows that address in
+`chopin status` and its output, and starts the backend there next time, without
+restarting a backend that is running.

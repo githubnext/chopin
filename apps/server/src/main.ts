@@ -1840,6 +1840,8 @@ async function resetOpenAgents(
 }
 
 function announceChannel(channel: ChannelRecord): void {
+	// A machine running its Planner hears a new address on its next Planner poll; wake that poll.
+	experiments?.connections.wake(channel.repositoryId);
 	let room = Rooms.get(channel.id);
 	if (!room) return;
 	for (let ws of room.members.values()) {
