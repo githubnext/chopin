@@ -386,46 +386,43 @@ describe("recovery", () => {
 		}
 	});
 
-	it("with questions open, refuses a human edit that grows into the expiry reserve but allows one that shrinks", async () => {
-		let filler = "x".repeat(limits.MAX_SOURCE_BYTES - 40);
-		let document = await room.create(`# T\n\n${filler}\n\nTail.\n`);
-		room.mark(document);
-		expect(room.fitsExpiry(room.project(document), 1)).toBe(false);
+	it("with questions open, accepts a human edit that fills the document to its exact limit and refuses one past it", async () => {
+		let max = limits.MAX_SOURCE_BYTES;
+		/** A person appends a paragraph while three questions are open. */
+		let append = async (filler: number) => {
+			let document = await room.create(`# T\n\n${"x".repeat(filler)}\n\nTail.\n`);
+			room.mark(document);
+			let before = Buffer.byteLength(room.project(document));
+			let client = peer();
+			Y.applyUpdate(client.doc, room.sync(document), "remote");
+			await room.settle();
+			let vector = Y.encodeStateVector(client.doc);
+			client.editor.update(() => {
+				let paragraph = $createParagraphNode();
+				paragraph.append($createTextNode("More."));
+				$getRoot().append(paragraph);
+			}, { discrete: true });
+			let applied = await room.apply(
+				document,
+				[Y.encodeStateAsUpdate(client.doc, vector)],
+				undefined,
+				3,
+			);
+			let after = Buffer.byteLength(room.project(document));
+			document.doc.destroy();
+			return { applied, before, after };
+		};
+		let probe = await append(10);
+		expect(probe.applied.ok).toBe(true);
+		let growth = probe.after - probe.before;
+		let filler = max - (probe.before - 10) - growth;
 
-		let client = peer();
-		Y.applyUpdate(client.doc, room.sync(document), "remote");
-		await room.settle();
+		let filled = await append(filler);
+		expect(filled.applied.ok).toBe(true);
+		expect(filled.after).toBe(max);
 
-		let before = Y.encodeStateVector(client.doc);
-		client.editor.update(() => {
-			let paragraph = $createParagraphNode();
-			paragraph.append($createTextNode("More."));
-			$getRoot().append(paragraph);
-		}, { discrete: true });
-		let grown = await room.apply(
-			document,
-			[Y.encodeStateAsUpdate(client.doc, before)],
-			undefined,
-			1,
-		);
-		expect(grown.ok).toBe(false);
-
-		let fresh = await room.rebuild(document);
-		let shrinker = peer();
-		Y.applyUpdate(shrinker.doc, room.sync(fresh), "remote");
-		await room.settle();
-		let start = Y.encodeStateVector(shrinker.doc);
-		shrinker.editor.update(() => {
-			$getRoot().getLastChild()?.remove();
-		}, { discrete: true });
-		let shrunk = await room.apply(
-			fresh,
-			[Y.encodeStateAsUpdate(shrinker.doc, start)],
-			undefined,
-			1,
-		);
-		expect(shrunk.ok).toBe(true);
-		expect(room.project(fresh)).not.toContain("Tail.");
+		let past = await append(filler + 1);
+		expect(past.applied).toEqual({ ok: false, issues: ["source-too-large"] });
 	});
 
 	// Projection and its re-parse run on the event loop. Brackets used to make

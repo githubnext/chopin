@@ -13,11 +13,12 @@ import { AgentRefused } from "@chopin/agent-link/client";
 
 import { GitHubError } from "../../github/client";
 import * as Store from "../../questions/store";
+import * as Plan from "../../plan/service";
 import { createPlannerAgent } from "../agents";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
 import { untilUnpaused } from "../atomic/full";
-import { hostInputRoom } from "../../testing/decisions";
+import { hostInputRoom, laterTimers } from "../../testing/decisions";
 import {
 	attach,
 	DENIED_TOKEN,
@@ -1278,8 +1279,8 @@ describe("Agent connection protocol", () => {
 });
 
 describe("Agent connection questions", () => {
-	async function questions(options: { expiresInMs?: number; isolated?: boolean } = {}) {
-		let f = await hostInputRoom(options.expiresInMs);
+	async function questions(options: { isolated?: boolean } = {}) {
+		let f = await hostInputRoom();
 		cleanups.push(f.close);
 		let { server, channel, client } = await setup({});
 		let planner: RemotePlanner = { channelId: channel.id, isolated: options.isolated ?? false };
@@ -1287,7 +1288,6 @@ describe("Agent connection questions", () => {
 			planner.humanInput = report =>
 				createHumanInput(
 					f.room,
-					options.expiresInMs,
 					(runId, signal) => untilUnpaused(planner, runId, signal),
 					report,
 				);
@@ -1345,13 +1345,42 @@ describe("Agent connection questions", () => {
 		expect(await confirm).toMatchObject({ status: "answered", value: true });
 	});
 
-	it("expires an unanswered question and leaves its card in Decisions marked expired", async () => {
-		let { f, client, sessionId } = await questions({ expiresInMs: 30 });
-		let asked = await client.ask(sessionId, { method: "questionnaire", params });
-		expect(asked).toMatchObject({ status: "expired", value: { answers: [], cancelled: true } });
-		let records = [...f.plan.records.values()];
-		expect(records).toHaveLength(1);
-		expect(records[0]).toMatchObject({ status: "expired", resolver: "chopin" });
+	it("keeps a client's question open past half an hour until a member answers it", async () => {
+		let { f, client, sessionId } = await questions();
+		let clock = laterTimers();
+		try {
+			let settled = false;
+			let asked = client.ask(sessionId, { method: "confirm", title: "Ship?", message: "Now." })
+				.finally(() => {
+					settled = true;
+				});
+			let [card] = await f.cards(1);
+			await clock.pass(31 * 60 * 1_000);
+			expect(settled).toBe(false);
+			expect(f.plan.records.get(card!.id)?.status).toBe("open");
+			await f.answer(card!.id, [0]);
+			expect(await asked).toMatchObject({ status: "answered", value: true });
+		} finally {
+			clock.restore();
+		}
+	});
+
+	it("withdraws a question open past half an hour when the link closes", async () => {
+		let { f, client, sessionId } = await questions();
+		let clock = laterTimers();
+		try {
+			void client.ask(sessionId, { method: "confirm", title: "Ship?", message: "Now." })
+				.catch(() => {});
+			let [card] = await f.cards(1);
+			await clock.pass(31 * 60 * 1_000);
+			expect(f.plan.records.get(card!.id)?.status).toBe("open");
+			await client.detach();
+			await until(() => Store.outstanding(f.plan.questions).length === 0, 2_000);
+			expect(f.plan.records.get(card!.id)).toMatchObject({ status: "cancelled" });
+			expect(Plan.source(f.plan)).not.toContain(card!.id);
+		} finally {
+			clock.restore();
+		}
 	});
 
 	it("withdraws the cards when the client cancels or the session ends", async () => {
@@ -1413,7 +1442,7 @@ describe("Agent connection questions", () => {
 		let opened = await adapterFor(server, {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(f.room, undefined, undefined, report),
+			humanInput: report => createHumanInput(f.room, undefined, report),
 		}).doStart({ sessionId: crypto.randomUUID(), sandboxSession, sessionWorkDir: "/tmp" });
 		cleanups.push(() => opened.doDestroy());
 		let request = {
@@ -1480,7 +1509,7 @@ describe("Agent connection questions", () => {
 		let planner: RemotePlanner = {
 			channelId: f.room.id,
 			isolated: false,
-			humanInput: report => createHumanInput(f.room, undefined, undefined, report),
+			humanInput: report => createHumanInput(f.room, undefined, report),
 		};
 		let harness = adapterFor(linked.server, planner);
 		let start = (sessionId: string) =>

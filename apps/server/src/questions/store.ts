@@ -379,12 +379,11 @@ export function claimSubmit(
 	};
 }
 
-/** Reserve an unanswered close: a cancellation, or an expiry nobody answered in time. */
+/** Reserve an unanswered close: a cancellation. */
 export function claimCancel(
 	questions: Questions,
 	id: string,
 	resolver: string,
-	status: "cancelled" | "expired" = "cancelled",
 ): { ok: true; claim: Claim; widget?: string } | CancelRefusal {
 	let ended = questions.closed.get(id);
 	if (ended) return resolved(ended);
@@ -399,7 +398,7 @@ export function claimCancel(
 	return {
 		ok: true,
 		...(entry.widget ? { widget: entry.widget } : {}),
-		claim: { id, entry, result: { status, resolver } },
+		claim: { id, entry, result: { status: "cancelled", resolver } },
 	};
 }
 

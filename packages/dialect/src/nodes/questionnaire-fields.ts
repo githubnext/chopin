@@ -8,7 +8,7 @@ export type Option = {
 	description?: string;
 };
 
-/** `expired` is host input nobody answered in time: settled, but with no answer. */
+/** `expired` is host input an earlier Chopin closed unanswered: settled, but with no answer. */
 export type CardStatus = "open" | "decided" | "reopened" | "discarded" | "expired";
 
 export type Previous = { choices: string[]; value?: string; by: string; at: string };

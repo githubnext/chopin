@@ -1,5 +1,3 @@
-import { limits } from "@chopin/question";
-
 import * as Questions from "../../questions/service";
 
 import type {
@@ -11,20 +9,20 @@ import type {
 } from "@bastani/atomic";
 import type { DocumentRoom } from "../../agent/tools";
 
-export type HumanInputStatus = "answered" | "expired" | "cancelled";
+export type HumanInputStatus = "answered" | "cancelled";
 
 /**
  * Atomic owns input requests; Chopin owns their shared decision records.
  *
- * A request nobody answers within `expiresInMs` expires: its cards stay in
- * Decisions marked expired, and Atomic gets no answer. An answer to a workflow
+ * A request has no time limit: it waits until a member answers it or it is
+ * withdrawn, as when its Planner stops, its run is cancelled, or its link
+ * closes. An answer to a workflow
  * question is returned only once `hold` allows it, so a paused run stays stopped.
  * `report` learns how each request ended, which the cancelled result alone
  * cannot tell apart.
  */
 export function createHumanInput(
 	room: DocumentRoom,
-	expiresInMs = limits.INPUT_EXPIRY_MS,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	report?: (status: HumanInputStatus) => void,
 ): HostInput {
@@ -59,10 +57,9 @@ export function createHumanInput(
 			undefined,
 			room.anchors,
 			options.signal,
-			expiresInMs,
 		);
-		if (options.signal.aborted || ended.some(outcome => outcome.status === "expired")) {
-			report?.(options.signal.aborted ? "cancelled" : "expired");
+		if (options.signal.aborted) {
+			report?.("cancelled");
 			return { answers: [], cancelled: true };
 		}
 		if (hold && options.workflowRunId !== undefined) {

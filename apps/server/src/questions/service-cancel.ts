@@ -46,7 +46,7 @@ export async function cancel(
 	if (!acknowledged) reply(ws, msg.rid, { kind: "question:cancel", ts: 0, id: msg.id, ...result });
 }
 
-type Closed = { status: "cancelled" | "expired"; resolver: string; at?: number };
+type Closed = { status: "cancelled"; resolver: string };
 
 /**
  * Withdraw input on behalf of a member or the Planner, after its durable commit.
@@ -71,29 +71,6 @@ export function withdraw(
 	);
 }
 
-/**
- * Expire host input nobody answered in time, after its durable commit.
- *
- * Unlike a withdrawal the card stays in the document, marked expired, so the
- * room can still see what was asked and that nobody answered it.
- */
-export function expire(
-	plan: Plan,
-	server: Server<SocketData>,
-	roomId: string,
-	id: string,
-): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
-	let at = Math.floor(Date.now() / 1_000);
-	return closeUnanswered(
-		plan,
-		server,
-		roomId,
-		id,
-		{ status: "expired", resolver: "chopin", at },
-		document => room.projectExpiry(document, id, new Date(at * 1_000).toISOString()),
-	);
-}
-
 async function closeUnanswered(
 	plan: Plan,
 	server: Server<SocketData>,
@@ -104,7 +81,7 @@ async function closeUnanswered(
 	acknowledge?: () => void,
 ): Promise<Store.CancelRefusal | { ok: true; resolver: string }> {
 	let { status, resolver } = closed;
-	let claimed = Store.claimCancel(plan.questions, id, resolver, status);
+	let claimed = Store.claimCancel(plan.questions, id, resolver);
 	if (!claimed.ok) return claimed;
 	let mutationError: unknown;
 	let failure: unknown;
@@ -145,7 +122,7 @@ async function closeUnanswered(
 					document,
 					questions,
 					records,
-					pendingCardActions: record && status === "cancelled"
+					pendingCardActions: record
 						? pending(plan, record, {
 							kind: "discarded",
 							id,
@@ -182,15 +159,13 @@ async function closeUnanswered(
 					resolver,
 				}),
 			() => announce(plan, server, roomId, id),
-			...(status === "cancelled"
-				? [() =>
-					emit(plan, {
-						kind: "discarded",
-						id,
-						...(record?.threadId ? { threadId: record.threadId } : {}),
-						actor: resolver,
-					})]
-				: []),
+			() =>
+				emit(plan, {
+					kind: "discarded",
+					id,
+					...(record?.threadId ? { threadId: record.threadId } : {}),
+					actor: resolver,
+				}),
 		]
 	) {
 		try {

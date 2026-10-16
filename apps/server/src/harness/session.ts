@@ -166,7 +166,6 @@ export async function openPlannerSession(
 				cwd: workspace.cwd,
 				humanInput: createHumanInput(
 					channel.room,
-					undefined,
 					(runId, signal) => untilUnpaused(planner!, runId, signal),
 				),
 				onRuns: runs => {
@@ -187,7 +186,6 @@ export async function openPlannerSession(
 				held.humanInput = report =>
 					createHumanInput(
 						channel.room,
-						undefined,
 						(runId, signal) => untilUnpaused(held, runId, signal),
 						report,
 					);

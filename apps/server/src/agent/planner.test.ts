@@ -27,7 +27,7 @@ test("all Planner surfaces compose coaching once and preserve their question bou
 			expect(prompt.split(COACHING)).toHaveLength(2);
 			expect(prompt.endsWith("Earlier context.")).toBe(true);
 			if (workspace) {
-				expect(prompt).toContain("Expiry is not an answer or approval");
+				expect(prompt).toContain("a withdrawn question is not an answer or approval");
 				expect(prompt).toContain(
 					"continue only independent work with explicitly provisional assumptions",
 				);

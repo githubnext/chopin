@@ -149,8 +149,8 @@ The result contains `id`, `title`, and the canonical `url` (plus any generated
 `description`). It returns after the instruction is durably posted, not after the
 Planner finishes. The message joins the existing Planner queue if busy. Progress
 and results appear in the document and Chat; questions appear in Decisions. Under
-`atomic`, Atomic input nobody answers within 30 minutes expires: the card stays in
-Decisions marked expired and the Planner proceeds on its own judgement. The
+`atomic`, Atomic input waits in Decisions until a member answers it or it is
+withdrawn, however long that takes. The
 browser need not already have the document open: Chopin keeps its room alive
 while the invoked turn and queue run. An interrupted turn is not replayed
 automatically on restart.

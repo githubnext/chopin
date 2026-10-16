@@ -139,14 +139,7 @@ export async function appendOption(
 			};
 			let mutation = room.appendQuestionOption(stagedDocument, msg.id, msg.question, result.option);
 			if (!mutation) throw new Error("question projection is missing");
-			// Every open question needs room to expire, so growth stops where that room ends.
-			if (
-				!room.fitsOrShrinks(
-					room.project(plan.document),
-					room.project(stagedDocument),
-					plan.questions.open.size,
-				)
-			) {
+			if (!room.fitsOrShrinks(room.project(plan.document), room.project(stagedDocument))) {
 				outcome = refuse("invalid", "The document has no room for another option");
 				return;
 			}

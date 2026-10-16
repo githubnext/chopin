@@ -191,9 +191,9 @@ questions) appears as shared Decisions instead of terminal dialogs, including
 workflow run and stage labels. Unanchored batches append at the document's end.
 Dialog text and written answers stay verbatim, bounded only by the document's
 256 KiB source limit and the shared-draft limits rather than the Planner's own
-question limits. A request nobody answers within 30 minutes expires: its cards
-stay in Decisions marked as expired, and Atomic receives no answer. Cancellation
-withdraws pending cards; neither ever approves an action. See
+question limits. A request has no time limit: it waits until a member answers it
+or it is withdrawn. Cancellation withdraws pending cards and never approves an
+action. See
 [Full Atomic Planner](hosted-agent.md#full-atomic-planner) for the mapping,
 resource loading, persistence, and workflow restart boundaries.
 

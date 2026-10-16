@@ -1,16 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { $createParagraphNode, $createTextNode, $getRoot, $nodesOfType } from "lexical";
-import * as Y from "yjs";
-import { cardStatus, limits, QuestionnaireNode, ulid } from "@chopin/dialect";
-import { limits as questionLimits } from "@chopin/question";
+import { $nodesOfType } from "lexical";
+import { limits, QuestionnaireNode, ulid } from "@chopin/dialect";
 import * as QuestionModel from "@chopin/question";
 import * as Questions from "../../questions/service";
 import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
 import * as Edit from "../../plan/edit";
-import { hostInputRoom } from "../../testing/decisions";
-import { peer } from "../../testing/peer";
+import { hostInputRoom, laterTimers } from "../../testing/decisions";
 import type { QuestionParams } from "@bastani/atomic";
 
 let cleanups: Array<() => Promise<void>> = [];
@@ -18,8 +15,8 @@ afterEach(async () => {
 	for (let cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function fixture(expiresInMs?: number) {
-	let f = await hostInputRoom(expiresInMs);
+async function fixture() {
+	let f = await hostInputRoom();
 	cleanups.push(f.close);
 	return f;
 }
@@ -248,43 +245,39 @@ test("abort withdraws only its request's open cards, persists cancellation, and 
 	expect(saved.source).not.toContain(cards[1]!.id);
 });
 
-test("expiry keeps every unanswered card in Decisions, marked expired, and answers no HostInput method", async () => {
-	let f = await fixture(30);
+test("a withdrawal removes every card and answers no HostInput method", async () => {
+	let f = await fixture();
 	for (
-		let [invoke, expected] of [
-			[() => f.input.questionnaire(params, f.options), { answers: [], cancelled: true }],
-			[() => f.input.confirm("Confirm", "Proceed?", f.options), false],
-			[() => f.input.select("Select", ["A", "B"], f.options), undefined],
-			[() => f.input.input("Input", undefined, f.options), undefined],
-			[() => f.input.editor("Editor", undefined, f.options), undefined],
-		] as Array<[() => Promise<unknown>, unknown]>
+		let [invoke, expected, count] of [
+			[options => f.input.questionnaire(params, options), { answers: [], cancelled: true }, 3],
+			[options => f.input.confirm("Confirm", "Proceed?", options), false, 1],
+			[options => f.input.select("Select", ["A", "B"], options), undefined, 1],
+			[options => f.input.input("Input", undefined, options), undefined, 1],
+			[options => f.input.editor("Editor", undefined, options), undefined, 1],
+		] as Array<[(options: typeof f.options) => Promise<unknown>, unknown, number]>
 	) {
-		expect(await invoke()).toEqual(expected);
+		let controller = new AbortController();
+		let response = invoke({ ...f.options, signal: controller.signal });
+		await f.cards(count);
+		controller.abort();
+		expect(await response).toEqual(expected);
 		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
 	}
 	let records = [...f.plan.records.values()];
 	expect(records).toHaveLength(7);
 	for (let record of records) {
-		expect(record).toMatchObject({ status: "expired", resolver: "chopin" });
-		expect(record.at).toBeNumber();
+		expect(record).toMatchObject({ status: "cancelled", resolver: "chopin" });
 		expect(f.frames).toContainEqual(
 			expect.objectContaining({
 				kind: "question:resolved",
 				id: record.id,
-				status: "expired",
+				status: "cancelled",
 				resolver: "chopin",
 			}),
 		);
 	}
 	let saved = await Plan.readStored((await f.storage.collaboration.load(f.room.id, new Date()))!);
-	let cards = await documentCards(saved.source);
-	expect(cards.map(card => card.id)).toEqual(records.map(record => record.id));
-	for (let card of cards) {
-		expect(card.status).toBe("expired");
-		expect(card.at).toBeString();
-		expect(card.by).toBeUndefined();
-		expect(cardStatus(card)).toBe("expired");
-	}
+	expect(await documentCards(saved.source)).toEqual([]);
 	await Questions.submit(f.plan, f.server, f.room.id, f.ws, {
 		kind: "question:submit",
 		ts: 0,
@@ -295,42 +288,54 @@ test("expiry keeps every unanswered card in Decisions, marked expired, and answe
 	expect(f.frames.findLast(frame => frame.rid === "late")).toMatchObject({
 		ok: false,
 		reason: "resolved",
-		status: "expired",
+		status: "cancelled",
 		resolver: "chopin",
 	});
-	expect(f.plan.records.get(records[0]!.id)?.status).toBe("expired");
+	expect(f.plan.records.get(records[0]!.id)?.status).toBe("cancelled");
 });
 
-test("an abort still withdraws its cards rather than expiring them", async () => {
-	let f = await fixture(60_000);
-	let response = f.input.confirm("Confirm", "Proceed?", f.options);
-	let [card] = await f.cards(1);
-	f.controller.abort();
-	expect(await response).toBe(false);
-	expect(f.plan.records.get(card!.id)).toMatchObject({ status: "cancelled", resolver: "chopin" });
-	expect(Plan.source(f.plan)).not.toContain(card!.id);
-	expect(f.frames.filter(frame => frame.kind === "question:resolved")).toMatchObject([
-		{ kind: "question:resolved", id: card!.id, status: "cancelled", resolver: "chopin" },
-	]);
-});
-
-test("host input waits the shared 30-minute limit before expiring by default", async () => {
+test("host input stays open past half an hour and returns the member's answer", async () => {
 	let f = await fixture();
-	let delays: number[] = [];
-	let original = globalThis.setTimeout;
-	globalThis.setTimeout = ((handler: () => void, delay?: number, ...rest: unknown[]) => {
-		if (delay !== undefined) delays.push(delay);
-		return original(handler, delay, ...rest);
-	}) as typeof setTimeout;
+	let clock = laterTimers();
 	try {
-		let response = f.input.confirm("Confirm", "Proceed?", f.options);
-		await f.cards(1);
-		expect(questionLimits.INPUT_EXPIRY_MS).toBe(30 * 60 * 1_000);
-		expect(delays).toContain(questionLimits.INPUT_EXPIRY_MS);
-		f.controller.abort();
-		expect(await response).toBe(false);
+		let settled = false;
+		let response = f.input.confirm("Confirm", "Proceed?", f.options).finally(() => {
+			settled = true;
+		});
+		let [card] = await f.cards(1);
+		await clock.pass(31 * 60 * 1_000);
+		await clock.pass(24 * 60 * 60 * 1_000);
+		expect(settled).toBe(false);
+		expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([card!.id]);
+		expect(f.plan.records.get(card!.id)?.status).toBe("open");
+		expect(Plan.source(f.plan)).toContain(card!.id);
+		await f.answer(card!.id, [0]);
+		expect(await response).toBe(true);
 	} finally {
-		globalThis.setTimeout = original;
+		clock.restore();
+	}
+});
+
+test("host input open past half an hour is withdrawn when its Planner stops", async () => {
+	let f = await fixture();
+	let clock = laterTimers();
+	try {
+		let response = f.input.questionnaire(params, f.options);
+		let cards = await f.cards(3);
+		await clock.pass(31 * 60 * 1_000);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(3);
+		f.controller.abort();
+		expect(await response).toEqual({ answers: [], cancelled: true });
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
+		for (let card of cards) {
+			expect(f.plan.records.get(card.id)).toMatchObject({
+				status: "cancelled",
+				resolver: "chopin",
+			});
+			expect(Plan.source(f.plan)).not.toContain(card.id);
+		}
+	} finally {
+		clock.restore();
 	}
 });
 
@@ -570,33 +575,6 @@ async function seedDocument(f: Fixture) {
 	await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
 }
 
-/** Fill the document until `fits` just holds, leaving a margin smaller than one card's expiry. */
-async function crowd(f: Fixture, fits: (scratch: Room.Document) => boolean) {
-	let size = () => new TextEncoder().encode(Plan.source(f.plan)).length;
-	let base = Plan.source(f.plan);
-	let low = 0;
-	for (let high = limits.MAX_SOURCE_BYTES; low < high;) {
-		let mid = Math.ceil((low + high) / 2);
-		let scratch = await Room.create(`${base}\n${"x".repeat(mid)}\n`).catch(() => undefined);
-		let ok = scratch ? fits(scratch) : false;
-		scratch?.doc.destroy();
-		if (ok) low = mid;
-		else high = mid - 1;
-	}
-	let target = size() + low - 10;
-	for (let fill = 1; fill > 0;) {
-		fill = Math.min(40_000, target - size() - 2);
-		if (fill < 1) break;
-		let edited = Edit.replace(
-			f.plan,
-			f.plan.revision,
-			`${Plan.source(f.plan)}\n${"x".repeat(fill)}\n`,
-		);
-		if (!edited.ok) throw new Error(`edit refused: ${edited.reason}`);
-		if (edited.mutation) await Plan.publish(f.plan, f.server, f.room.id, edited.mutation);
-	}
-}
-
 const single = (header: string): QuestionParams => ({
 	questions: [{
 		header,
@@ -605,6 +583,7 @@ const single = (header: string): QuestionParams => ({
 	}],
 });
 
+const MAX = limits.MAX_SOURCE_BYTES;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 const FILLER = /\n\nq{10,}(?=\n)/g;
 
@@ -645,397 +624,157 @@ async function growth(f: Fixture, step: (scratch: Room.Document) => void) {
 	return after - before;
 }
 
+/** A size refusal names the document's limit and never an expiry. */
+function sizeRefusal(message: string) {
+	expect(message).toContain(`${MAX / 1024} KiB limit`);
+	expect(message).not.toMatch(/expir/i);
+}
+
 test(
-	"questions that fit when asked still fit when they expire, however the document changed since",
+	"with a question open, Planner edits may fill the document to its exact size limit and no further",
 	async () => {
 		let f = await fixture();
-		let max = limits.MAX_SOURCE_BYTES;
-		let low = 0;
-		for (let high = max; low < high;) {
-			let mid = Math.ceil((low + high) / 2);
-			if (Room.fitsExpiry("a".repeat(mid), 1)) low = mid;
-			else high = mid - 1;
+		await seedDocument(f);
+		let response = f.input.questionnaire(single("First"), f.options);
+		await f.cards(1);
+		await fillTo(f, MAX - 1);
+		let filled = Edit.replace(
+			f.plan,
+			f.plan.revision,
+			Plan.source(f.plan).replace("# Plan", "# Plans"),
+		);
+		expect(filled.ok).toBe(true);
+		if (filled.ok && filled.mutation) {
+			await Plan.publish(f.plan, f.server, f.room.id, filled.mutation);
 		}
-		let expiry = max - low;
-		let quote = "caches tiles for 60 seconds";
-		let seeded = Edit.apply(f.plan, f.plan.revision, [{
-			op: "replace_root",
-			source: `# Plan\n\nThe renderer ${quote}.\n`,
-		}]);
-		if (!seeded.ok || !seeded.mutation) throw new Error("fixture edit failed");
-		await Plan.publish(f.plan, f.server, f.room.id, seeded.mutation);
+		expect(bytes(Plan.source(f.plan))).toBe(MAX);
+		let source = Plan.source(f.plan);
+		for (
+			let refused of [
+				Edit.apply(f.plan, f.plan.revision, [{ op: "insert", index: 0, source: "y" }]),
+				Edit.replace(f.plan, f.plan.revision, source.replace("# Plans", "# Planss")),
+			]
+		) {
+			expect(refused).toMatchObject({ ok: false, reason: "invalid" });
+			sizeRefusal("message" in refused ? refused.message ?? "" : "");
+		}
+		expect(Plan.source(f.plan)).toBe(source);
+		f.controller.abort();
+		await response;
+	},
+	30_000,
+);
 
+test(
+	"a new question fits a document up to its exact size limit while another is open",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let responses = [f.input.questionnaire(single("First"), f.options)];
+		await f.cards(1);
+		let asked = await growth(f, scratch =>
+			Room.insertQuestionnaire(scratch, {
+				id: ulid(),
+				questions: [{
+					id: ulid(),
+					header: "Second",
+					prompt: "Which?",
+					multiple: false,
+					options: [{ id: ulid(), label: "A" }, { id: ulid(), label: "B" }],
+				}],
+			}));
+
+		await fillTo(f, MAX - asked + 1);
+		let refused = f.input.questionnaire(single("Second"), { ...f.options, requestId: "past" });
+		sizeRefusal(
+			await Promise.race([
+				refused.then(() => "asked", (err: Error) => err.message),
+				Bun.sleep(500).then(() => "asked"),
+			]),
+		);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(1);
+
+		await fillTo(f, MAX - asked);
+		responses.push(f.input.questionnaire(single("Second"), { ...f.options, requestId: "fits" }));
+		await f.cards(2);
+		expect(bytes(Plan.source(f.plan))).toBe(MAX);
+		f.controller.abort();
+		await Promise.allSettled(responses);
+	},
+	30_000,
+);
+
+test(
+	"an option fits a document up to its exact size limit while questions are open",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
 		let responses = [
 			f.input.questionnaire(single("First"), f.options),
 			f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" }),
 		];
-		let [first, second] = await f.cards(2);
-
-		// Planner text edits: two questions are open, so growth stops at their reserve.
-		await fillTo(f, max - 2 * expiry);
-		let source = Plan.source(f.plan);
-		expect(Edit.apply(f.plan, f.plan.revision, [{ op: "insert", index: 0, source: "y" }]))
-			.toMatchObject({ ok: false, message: expect.stringContaining("expire") });
-		expect(Edit.replace(f.plan, f.plan.revision, `${source}\ny\n`))
-			.toMatchObject({ ok: false, message: expect.stringContaining("expire") });
-		expect(Plan.source(f.plan)).toBe(source);
-
-		// An option that would take the document into the reserve.
-		let label = "Written ".repeat(7);
-		let question = first!.definition.questions[0]!;
+		let [card] = await f.cards(2);
+		let question = card!.definition.questions[0]!;
+		let label = "Written answer";
 		let option = await growth(
 			f,
 			scratch =>
-				Room.appendQuestionOption(scratch, first!.id, question.id, {
+				Room.appendQuestionOption(scratch, card!.id, question.id, {
 					id: ulid(),
 					label,
 					description: "",
 				}),
 		);
-		await fillTo(f, max - 10 - option);
-		await expect(f.addOption(first!.id, label)).rejects.toThrow("no room");
-		await fillTo(f, max - option - 2 * expiry - 100);
-		await f.addOption(first!.id, label);
+		let options = () => Store.get(f.plan.questions, card!.id)!.definition.questions[0]!.options;
 
-		// An answer that would do the same, then one that fits.
+		await fillTo(f, MAX - option + 1);
+		await expect(f.addOption(card!.id, label)).rejects.toThrow("no room");
+		expect(options()).toHaveLength(2);
+
+		await fillTo(f, MAX - option);
+		await f.addOption(card!.id, label);
+		expect(options()).toHaveLength(3);
+		expect(bytes(Plan.source(f.plan))).toBe(MAX);
+		f.controller.abort();
+		await Promise.allSettled(responses);
+	},
+	30_000,
+);
+
+test(
+	"an answer fits a document up to its exact size limit while another question is open",
+	async () => {
+		let f = await fixture();
+		await seedDocument(f);
+		let responses = [
+			f.input.questionnaire(single("First"), f.options),
+			f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" }),
+		];
+		let [card, other] = await f.cards(2);
+		let question = card!.definition.questions[0]!;
 		let text = "a".repeat(1_500);
 		let answered = await growth(
 			f,
 			scratch =>
-				Room.projectAnswer(scratch, first!.id, { [question.id]: text }, {
+				Room.projectAnswer(scratch, card!.id, { [question.id]: text }, {
 					by: "reader",
 					at: new Date().toISOString(),
 				}),
 		);
-		await fillTo(f, max - 10 - answered);
-		await expect(f.answer(first!.id, text)).rejects.toThrow("no room");
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(2);
-		await fillTo(f, max - answered - expiry - 100);
-		await f.answer(first!.id, "");
-		expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([second!.id]);
 
-		// A question that would take the document into the reserve, then one that fits.
-		let probe = {
-			id: ulid(),
-			questions: [{
-				id: ulid(),
-				header: "Third",
-				prompt: "Which?",
-				multiple: false,
-				options: [{ id: ulid(), label: "A" }, { id: ulid(), label: "B" }],
-			}],
-		};
-		let asked = await growth(f, scratch =>
-			Room.insertQuestionnaire(scratch, {
-				...probe,
-				status: "expired",
-				at: new Date().toISOString(),
-			}));
-		await fillTo(f, max - 10 - asked);
-		let refused = f.input.questionnaire(single("Third"), { ...f.options, requestId: "third" });
-		expect(
-			await Promise.race([
-				refused.then(() => "asked", (err: Error) => err.message),
-				Bun.sleep(300).then(() => "asked"),
-			]),
-		).toContain("KiB limit");
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(1);
-		await fillTo(f, max - asked - expiry - 100);
-		responses.push(
-			f.input.questionnaire(single("Third"), { ...f.options, requestId: "third-again" }),
-		);
-		await f.cards(2);
-
-		// A person's text edit: growth into the reserve is refused, shrinking or fitting is not.
-		await fillTo(f, max - 2 * expiry);
-		let sent: any[] = [];
-		let ben = {
-			data: { handle: "ben", client: "client-ben", room: f.room.id },
-			send: (raw: string) => sent.push(JSON.parse(raw)),
-			close() {},
-			publish() {},
-		} as unknown as Parameters<typeof Plan.submit>[1];
-		let type = async (client: ReturnType<typeof peer>, change: () => void) => {
-			let before = Y.encodeStateVector(client.doc);
-			client.editor.update(change, { discrete: true });
-			let rid = `ben-${sent.length}`;
-			Plan.submit(
-				f.plan,
-				ben,
-				{
-					kind: "plan:update",
-					rid,
-					ts: 0,
-					epoch: f.plan.document.epoch,
-					id: rid,
-					update: Buffer.from(Y.encodeStateAsUpdate(client.doc, before)).toString("base64"),
-				} as Parameters<typeof Plan.submit>[2],
-			);
-			await Bun.sleep(30);
-			await Plan.drain(f.plan);
-			return sent.findLast(frame => frame.kind === "plan:ack" && frame.id === rid);
-		};
-		let grow = () => {
-			let paragraph = $createParagraphNode();
-			paragraph.append($createTextNode("More text."));
-			$getRoot().append(paragraph);
-		};
-		let epoch = f.plan.document.epoch;
+		await fillTo(f, MAX - answered + 1);
 		let before = Plan.source(f.plan);
-		let ben1 = peer();
-		Y.applyUpdate(ben1.doc, Room.sync(f.plan.document), "remote");
-		await Room.settle();
-		expect(await type(ben1, grow)).toBeUndefined();
+		sizeRefusal(await f.answer(card!.id, text).then(() => "", (err: Error) => err.message));
 		expect(Plan.source(f.plan)).toBe(before);
-		expect(f.plan.document.epoch).not.toBe(epoch);
+		expect(Store.outstanding(f.plan.questions)).toHaveLength(2);
 
-		let ben2 = peer();
-		Y.applyUpdate(ben2.doc, Room.sync(f.plan.document), "remote");
-		await Room.settle();
-		let shrunk = await type(ben2, () => {
-			$getRoot().getChildren().find(node => node.getTextContent().startsWith("qq"))?.remove();
-		});
-		expect(shrunk).toBeDefined();
-		expect(bytes(Plan.source(f.plan))).toBeLessThan(bytes(before));
-		let fitted = await type(ben2, grow);
-		expect(fitted).toBeDefined();
-		expect(Plan.source(f.plan)).toContain("More text.");
-
-		// Both questions expire from a document with exactly their reserve left.
-		await fillTo(f, max - 2 * expiry);
-		for (let { id } of Store.outstanding(f.plan.questions)) {
-			await Questions.expire(f.plan, f.server, f.room.id, id);
-		}
+		// The refused text is still the shared draft, so submitting again sends it as it is.
+		await fillTo(f, MAX - answered);
+		await f.answer(card!.id, "");
+		expect(Store.outstanding(f.plan.questions).map(open => open.id)).toEqual([other!.id]);
+		expect(bytes(Plan.source(f.plan))).toBe(MAX);
+		f.controller.abort();
 		await Promise.allSettled(responses);
-
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
-		expect(bytes(Plan.source(f.plan))).toBeLessThanOrEqual(max);
-		let retitled = Edit.replace(
-			f.plan,
-			f.plan.revision,
-			Plan.source(f.plan).replace("# Plan", "# Pla2"),
-		);
-		expect(retitled.ok).toBe(true);
-	},
-	30_000,
-);
-
-test(
-	"a new question is refused when the questions already open would no longer have room to expire",
-	async () => {
-		let f = await fixture();
-		await seedDocument(f);
-		let first = f.input.questionnaire(single("First"), f.options);
-		await f.cards(1);
-		let probe = {
-			id: ulid(),
-			questions: [{
-				id: ulid(),
-				header: "Second",
-				prompt: "Which?",
-				multiple: false,
-				options: [{ id: ulid(), label: "A" }, { id: ulid(), label: "B" }],
-			}],
-		};
-		await crowd(f, scratch => Room.fitsQuestionnaires(scratch, [probe], 0));
-
-		let second = f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" });
-		let outcome = await Promise.race([
-			second.then(() => "asked", (err: Error) => err.message),
-			Bun.sleep(500).then(() => "asked"),
-		]);
-		expect(outcome).toContain("KiB limit");
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(1);
-		f.controller.abort();
-		await first;
-	},
-	30_000,
-);
-
-test(
-	"an option is refused when the questions open would no longer have room to expire",
-	async () => {
-		let f = await fixture();
-		await seedDocument(f);
-		let response = f.input.questionnaire({
-			questions: [{
-				header: "Choice",
-				question: "Which?",
-				options: [{ label: "A", description: "" }, { label: "B", description: "" }],
-			}],
-		}, f.options);
-		let [card] = await f.cards(1);
-		let question = card!.definition.questions[0]!;
-		await crowd(f, scratch => {
-			Room.appendQuestionOption(scratch, card!.id, question.id, {
-				id: ulid(),
-				label: "Another",
-				description: "",
-			});
-			return Room.fitsExpiry(Room.project(scratch), 0);
-		});
-
-		await expect(f.addOption(card!.id, "Another")).rejects.toThrow("no room");
-		expect(Store.get(f.plan.questions, card!.id)!.definition.questions[0]!.options).toHaveLength(2);
-		f.controller.abort();
-		await response;
-	},
-	30_000,
-);
-
-test(
-	"an answer is refused when the questions still open would no longer have room to expire",
-	async () => {
-		let f = await fixture();
-		await seedDocument(f);
-		let first = f.input.questionnaire(single("First"), f.options);
-		let second = f.input.questionnaire(single("Second"), { ...f.options, requestId: "second" });
-		let [card] = await f.cards(2);
-		let answer = "x".repeat(300);
-		let question = card!.definition.questions[0]!;
-		await crowd(f, scratch => {
-			Room.projectAnswer(scratch, card!.id, { [question.id]: answer }, {
-				by: "reader",
-				at: new Date().toISOString(),
-			});
-			return Room.fitsExpiry(Room.project(scratch), 0);
-		});
-
-		let before = Plan.source(f.plan);
-		await expect(f.answer(card!.id, answer)).rejects.toThrow("no room");
-		expect(Plan.source(f.plan)).toBe(before);
-		expect(Store.outstanding(f.plan.questions)).toHaveLength(2);
-		f.controller.abort();
-		await Promise.allSettled([first, second]);
-	},
-	30_000,
-);
-
-test(
-	"a Planner edit is refused when the open question would no longer have room to expire",
-	async () => {
-		let f = await fixture();
-		await seedDocument(f);
-		let response = f.input.questionnaire(single("First"), f.options);
-		await f.cards(1);
-		await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
-
-		let before = Plan.source(f.plan);
-		let grown = Edit.apply(f.plan, f.plan.revision, [{
-			op: "insert",
-			index: 0,
-			source: "y".repeat(30),
-		}]);
-		expect(grown).toMatchObject({
-			ok: false,
-			reason: "invalid",
-			message: expect.stringContaining("expire"),
-		});
-		expect(Plan.source(f.plan)).toBe(before);
-
-		let retitled = Edit.apply(f.plan, f.plan.revision, [{
-			op: "replace",
-			index: 0,
-			source: "# Pla2",
-		}]);
-		expect(retitled.ok).toBe(true);
-		f.controller.abort();
-		await response;
-	},
-	30_000,
-);
-
-test(
-	"a replaced plan is refused when the open question would no longer have room to expire",
-	async () => {
-		let f = await fixture();
-		await seedDocument(f);
-		let response = f.input.questionnaire(single("First"), f.options);
-		await f.cards(1);
-		await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
-
-		let before = Plan.source(f.plan);
-		let grown = Edit.replace(f.plan, f.plan.revision, `${before}\n${"y".repeat(30)}\n`);
-		expect(grown).toMatchObject({
-			ok: false,
-			reason: "invalid",
-			message: expect.stringContaining("expire"),
-		});
-		expect(Plan.source(f.plan)).toBe(before);
-
-		let retitled = Edit.replace(f.plan, f.plan.revision, before.replace("# Plan", "# Pla2"));
-		expect(retitled.ok).toBe(true);
-		f.controller.abort();
-		await response;
-	},
-	30_000,
-);
-
-/** A document already inside the reserve of its open questions, as one that has two open but room for one. */
-async function overcommitted(f: Fixture) {
-	await seedDocument(f);
-	let response = f.input.questionnaire(single("First"), f.options);
-	let [card] = await f.cards(1);
-	await crowd(f, scratch => Room.fitsExpiry(Room.project(scratch), 1));
-	void Store.ask(f.plan.questions, ulid(), Store.get(f.plan.questions, card!.id)!.definition);
-	expect(Room.fitsExpiry(Plan.source(f.plan), f.plan.questions.open.size)).toBe(false);
-	return { response };
-}
-
-test(
-	"a Planner block edit that shrinks the document is accepted even inside the expiry reserve",
-	async () => {
-		let f = await fixture();
-		let { response } = await overcommitted(f);
-		let before = new TextEncoder().encode(Plan.source(f.plan)).length;
-
-		let grown = Edit.apply(f.plan, f.plan.revision, [{
-			op: "insert",
-			index: 0,
-			source: "y".repeat(30),
-		}]);
-		expect(grown).toMatchObject({
-			ok: false,
-			reason: "invalid",
-			message: expect.stringContaining("expire"),
-		});
-
-		let shrunk = Edit.apply(f.plan, f.plan.revision, [{ op: "delete", index: 1 }]);
-		expect(shrunk.ok).toBe(true);
-		let trimmed = Edit.apply(f.plan, f.plan.revision, [{
-			op: "replace",
-			index: 0,
-			source: "# P",
-		}]);
-		expect(trimmed.ok).toBe(true);
-		if (trimmed.ok && trimmed.mutation) {
-			await Plan.publish(f.plan, f.server, f.room.id, trimmed.mutation);
-		}
-		expect(new TextEncoder().encode(Plan.source(f.plan)).length).toBeLessThan(before);
-		f.controller.abort();
-		await response;
-	},
-	30_000,
-);
-
-test(
-	"a replaced plan that shrinks the document is accepted even inside the expiry reserve",
-	async () => {
-		let f = await fixture();
-		let { response } = await overcommitted(f);
-		let before = Plan.source(f.plan);
-
-		let grown = Edit.replace(f.plan, f.plan.revision, `${before}\n${"y".repeat(30)}\n`);
-		expect(grown).toMatchObject({
-			ok: false,
-			reason: "invalid",
-			message: expect.stringContaining("expire"),
-		});
-
-		let shrunk = Edit.replace(f.plan, f.plan.revision, before.replace("Start.", "S"));
-		expect(shrunk.ok).toBe(true);
-		f.controller.abort();
-		await response;
 	},
 	30_000,
 );
@@ -1046,7 +785,7 @@ test("a workflow question's answer is returned only after its paused run is rele
 		release = resolve;
 	});
 	let held: string[] = [];
-	let f = await hostInputRoom(undefined, async runId => {
+	let f = await hostInputRoom(async runId => {
 		held.push(runId);
 		await gate;
 	});

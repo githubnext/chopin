@@ -104,11 +104,6 @@ export async function submit(
 				try {
 					let source = room.project(stagedDocument);
 					room.validate(source);
-					if (
-						!room.fitsOrShrinks(room.project(plan.document), source, plan.questions.open.size - 1)
-					) {
-						throw new Error("The answer would leave no room for the open questions to expire");
-					}
 				} catch (err) {
 					invalid = err instanceof Error ? err.message : "could not record the answer";
 					return;

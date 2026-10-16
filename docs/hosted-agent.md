@@ -309,13 +309,15 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
 - An abort withdraws still-open cards, removes their document nodes, and records
   cancellation by `@chopin`. Member cancellations retain any answers already
   given in that batch. Late submissions cannot approve withdrawn input.
-- A request nobody answers within 30 minutes expires. Its still-open cards stay
-  in the document and in Decisions, among the resolved cards, marked
-  `status="expired"`; each reads "Nobody answered within 30 minutes. The
-  Planner will use its best judgement for this decision." Nobody can answer an
-  expired card. Atomic receives no answer: a questionnaire comes back cancelled
-  with no answers, confirm returns false, and select, input, and editor return
-  nothing. The limit is fixed in code, not configured.
+- A request has no time limit. It waits until members answer it or it is
+  withdrawn: the Planner stops, its run is cancelled, the document is archived
+  or deleted, or the asker's link closes. A document on **Default machine**
+  keeps its Planner running while that Planner waits on a question or a live or
+  paused workflow run, so nobody viewing the document does not withdraw it.
+- Cards an earlier Chopin closed unanswered after a fixed time stay in the
+  document and in Decisions, among the resolved cards, marked
+  `status="expired"`; each reads "Nobody answered this question, so the Planner
+  used its best judgement for this decision." Nobody can answer an expired card.
 
 Host input is not held to the Planner `ask` tool's per-field limits on question
 and option counts or header, question, label, description, and answer lengths.

@@ -11,9 +11,44 @@ import type { HostInputOptions } from "@bastani/atomic";
 import type { DocumentRoom } from "../agent/tools";
 import type { Socket, SocketData } from "../wire";
 
+/**
+ * Holds back every timer armed for a minute or more until `pass` lets that much time go by, so a
+ * test can let hours pass at once while shorter timers, the room's own work included, run as usual.
+ */
+export function laterTimers() {
+	let original = { set: globalThis.setTimeout, clear: globalThis.clearTimeout };
+	let held = new Map<object, { at: number; run: () => void }>();
+	let elapsed = 0;
+	globalThis.setTimeout = ((handler: (...args: unknown[]) => void, ms = 0, ...args: unknown[]) => {
+		if (ms < 60_000) return original.set(handler, ms, ...args);
+		let handle = {};
+		held.set(handle, { at: elapsed + ms, run: () => handler(...args) });
+		return handle;
+	}) as typeof setTimeout;
+	globalThis.clearTimeout = ((handle?: Parameters<typeof clearTimeout>[0]) => {
+		if (handle && typeof handle === "object" && held.delete(handle)) return;
+		original.clear(handle);
+	}) as typeof clearTimeout;
+	return {
+		/** Lets `ms` go by: every held timer due by then fires, then the room settles. */
+		async pass(ms: number) {
+			elapsed += ms;
+			for (let [handle, timer] of held) {
+				if (timer.at > elapsed) continue;
+				held.delete(handle);
+				timer.run();
+			}
+			await Bun.sleep(20);
+		},
+		restore() {
+			globalThis.setTimeout = original.set;
+			globalThis.clearTimeout = original.clear;
+		},
+	};
+}
+
 /** A room whose Decisions answer Atomic HostInput requests, with a member to answer them. */
 export async function hostInputRoom(
-	expiresInMs?: number,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 ) {
 	let storage = new MemoryStorage();
@@ -63,7 +98,7 @@ export async function hostInputRoom(
 		sessionId: "session",
 		signal: controller.signal,
 	};
-	let input = createHumanInput(room, expiresInMs, hold);
+	let input = createHumanInput(room, hold);
 	async function cards(count: number) {
 		for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(5)) {
 			if (Store.outstanding(plan.questions).length === count) {

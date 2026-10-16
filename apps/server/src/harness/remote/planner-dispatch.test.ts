@@ -16,7 +16,11 @@ import {
 	rawLink,
 	upgradeRequest,
 } from "../../testing/agent-link";
+import { createHumanInput } from "../atomic/human-input";
+import { hostInputRoom } from "../../testing/decisions";
 import { MachinePlanners } from "./machine-planners";
+
+import type { RemotePlanner } from "./registry";
 
 let cleanups: Array<() => unknown> = [];
 afterEach(async () => {
@@ -636,6 +640,75 @@ describe("a document on Default machine", () => {
 			planners: [],
 			stopped: { [channel.id]: expect.stringContaining("Nobody has used this document") },
 		});
+	});
+
+	/** A Default machine Planner, attached and running a session, on a document nobody has open. */
+	async function unwatched() {
+		let dispatch = await dispatchServer();
+		let { machine, visit, channel, server, runtime, open } = dispatch;
+		let laptop = await machine("member", "U_member", "laptop");
+		await visit();
+		await laptop.poll([]);
+		let link = await laptop.backend();
+		await link.next("attached");
+		let room = await hostInputRoom();
+		cleanups.push(room.close);
+		let planner: RemotePlanner = {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(room.room, undefined, report),
+		};
+		let started = link.next("start").then(start => {
+			link.send({ type: "started", session: start.session });
+		});
+		let session = await server.links.at(-1)!.startSession("planner-session", planner);
+		cleanups.push(() => session.doDestroy?.());
+		await started;
+		open.delete(channel.id);
+		await runtime.sweep();
+		/** Lets `ms` go by on the server's clock with nobody viewing, and whether it still runs. */
+		let idle = async (ms: number) => {
+			dispatch.skew.ms += ms;
+			await runtime.sweep();
+			let answer = await laptop.poll([channel.id]);
+			return "waiting" in answer;
+		};
+		return { ...dispatch, laptop, link, room, idle };
+	}
+
+	it("keeps the Planner while it waits on a question, and stops it once that has been answered for a while", async () => {
+		let { link, room, idle } = await unwatched();
+		link.send({
+			type: "input-request",
+			request: "ship",
+			session: "planner-session",
+			input: { method: "confirm", title: "Ship?", message: "Now." },
+		});
+		let [card] = await room.cards(1);
+		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
+		expect(await idle(PLANNER_IDLE_MS * 4)).toBe(true);
+		expect(room.plan.records.get(card!.id)?.status).toBe("open");
+
+		await room.answer(card!.id, [0]);
+		expect(await link.next("input-result")).toMatchObject({ status: "answered", value: true });
+		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
+		expect(await idle(2_000)).toBe(false);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+	});
+
+	it("keeps the Planner while one of its workflow runs is live or paused", async () => {
+		let { link, idle } = await unwatched();
+		let runs = async (active: string[], paused: string[]) => {
+			link.send({ type: "runs", session: "planner-session", active, paused, cards: [] });
+			await Bun.sleep(50);
+		};
+		await runs(["root"], []);
+		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
+		await runs([], ["root"]);
+		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
+		await runs([], []);
+		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
+		expect(await idle(2_000)).toBe(false);
 	});
 });
 

@@ -8,8 +8,7 @@ import { forgetWorkspaces, rememberCheckout, stateDirectory } from "./atomic/wor
 import { plannerInstructions } from "../agent/planner";
 import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 import { remotePlanner } from "./remote/registry";
-import { hostInputRoom } from "../testing/decisions";
-import { limits } from "@chopin/question";
+import { hostInputRoom, laterTimers } from "../testing/decisions";
 
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { PlannerSessionDependencies } from "./session";
@@ -118,22 +117,19 @@ describe("openPlannerSession", () => {
 			expect(instructions).toContain("You run in a member's own session on their machine");
 			expect(instructions).toContain("BOOTSTRAP");
 
-			let delays: unknown[] = [];
-			let original = globalThis.setTimeout;
-			globalThis.setTimeout = ((handler: () => void, ms?: number) => {
-				delays.push(ms);
-				return original(handler, ms);
-			}) as typeof setTimeout;
+			let clock = laterTimers();
 			let asked: Promise<unknown>;
 			try {
 				asked = registered.humanInput!(() => {}).confirm("Ship?", "Now.", room.options);
-				await room.cards(1);
+				let [card] = await room.cards(1);
+				await clock.pass(31 * 60 * 1_000);
+				expect(room.plan.records.get(card!.id)?.status).toBe("open");
+				room.controller.abort();
+				expect(await asked).toBe(false);
+				expect(room.plan.records.get(card!.id)?.status).toBe("cancelled");
 			} finally {
-				globalThis.setTimeout = original;
+				clock.restore();
 			}
-			expect(delays).toContain(limits.INPUT_EXPIRY_MS);
-			room.controller.abort();
-			expect(await asked).toBe(false);
 
 			let seen: unknown[] = [];
 			session.watchRuns!(runs => seen.push(runs));
@@ -321,7 +317,7 @@ describe("Planner workspaces", () => {
 			expect({ attempt, cwd: registered?.cwd }).toEqual({ attempt, cwd: path });
 			expect(registered?.humanInput.questionnaire).toBeFunction();
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
-			expect(instructions).toContain("Expiry is not an answer or approval");
+			expect(instructions).toContain("a withdrawn question is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("`intercom` tool can reach other sessions");
@@ -337,6 +333,43 @@ describe("Planner workspaces", () => {
 		expect(fallback.registered?.cwd).not.toBe(path);
 		expect(await readdir(fallback.registered!.cwd)).toEqual([]);
 		expect(fallback.instructions).toContain("scratch directory Chopin keeps");
+	});
+
+	it("keeps an atomic Planner's question open past half an hour until a member answers it", async () => {
+		let { owner, channel, deps } = fixture();
+		let room = await hostInputRoom();
+		let sessionId = "";
+		let registered: ReturnType<typeof fullPlanner>;
+		deps.agent = {
+			createSession: async (options: { sessionId: string }) => {
+				sessionId = options.sessionId;
+				return { destroy: async () => {} };
+			},
+			stream: async () => {
+				registered = fullPlanner(sessionId);
+			},
+		} as never;
+		let opened = await openPlannerSession(owner, {
+			...channel,
+			room: room.room,
+			harness: "atomic",
+			instructions: workspace => plannerInstructions("owner/repo", "BOOTSTRAP", workspace),
+		}, deps);
+		if (!opened.ok) throw new Error("Planner unavailable");
+		let clock = laterTimers();
+		try {
+			await opened.value.stream("prompt", new AbortController().signal);
+			let asked = registered!.humanInput.confirm("Ship?", "Now.", room.options);
+			let [card] = await room.cards(1);
+			await clock.pass(31 * 60 * 1_000);
+			expect(room.plan.records.get(card!.id)?.status).toBe("open");
+			await room.answer(card!.id, [0]);
+			expect(await asked).toBe(true);
+		} finally {
+			clock.restore();
+			await opened.value.destroy();
+			await room.close();
+		}
 	});
 
 	it("gives each atomic channel without a checkout its own private directory that outlives shutdown", async () => {
@@ -356,7 +389,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain(`${cwd}, is a scratch directory Chopin keeps`);
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
-			expect(instructions).toContain("Expiry is not an answer or approval");
+			expect(instructions).toContain("a withdrawn question is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("one working in a checkout of owner/repo");
@@ -381,7 +414,7 @@ describe("Planner workspaces", () => {
 			let { registered, instructions } = await open("channel", harness);
 			expect(registered).toBeUndefined();
 			expect(instructions).toContain("You have no shell");
-			expect(instructions).not.toContain("Expiry is not an answer or approval");
+			expect(instructions).not.toContain("a withdrawn question is not an answer or approval");
 			expect(instructions).not.toContain("/workflow connect");
 			expect(instructions).not.toContain("intercom");
 		}

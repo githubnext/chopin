@@ -243,13 +243,13 @@ rests on ends or the document's Planner is reset. The server then sends
 `refused` and closes an attached connection at once, and any eligible account,
 including the same one, can attach again immediately:
 
-| Cause                                                                                                                                                                        | Refusal code       | Close code |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
-| The owner's browser sign-in signs out or expires                                                                                                                             | `sign-in-required` | 4401       |
-| The machine whose credential attached it is disconnected, or GitHub refuses its authorization                                                                                | `access-revoked`   | 4403       |
-| Chopin started it on a machine and moved it to another, or stopped it: a new machine choice or favorite, the document unused for 30 minutes, or the machine lost push access | `access-revoked`   | 4403       |
-| A repository writer resets the document's Planner                                                                                                                            | `access-revoked`   | 4403       |
-| The stored ownership no longer names this attachment's sign-in                                                                                                               | `access-revoked`   | 4403       |
+| Cause                                                                                                                                                                                                                                              | Refusal code       | Close code |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | ---------- |
+| The owner's browser sign-in signs out or expires                                                                                                                                                                                                   | `sign-in-required` | 4401       |
+| The machine whose credential attached it is disconnected, or GitHub refuses its authorization                                                                                                                                                      | `access-revoked`   | 4403       |
+| Chopin started it on a machine and moved it to another, or stopped it: a new machine choice or favorite, the document unused for 30 minutes (a Planner waiting on a question or a live or paused run is using it), or the machine lost push access | `access-revoked`   | 4403       |
+| A repository writer resets the document's Planner                                                                                                                                                                                                  | `access-revoked`   | 4403       |
+| The stored ownership no longer names this attachment's sign-in                                                                                                                                                                                     | `access-revoked`   | 4403       |
 
 The same checks before every `start` and `turn`, and the periodic one, also
 find an expired sign-in or a released ownership that nothing reported; an
@@ -511,7 +511,9 @@ the host tool returned it, and a failed host call keeps its
 ## Questions
 
 An `input-request` carries one question call in `input`, and becomes Decisions
-in the document:
+in the document. It has no time limit: it waits until members answer it or it
+is withdrawn (the client sends `input-cancel`, the session ends, or the
+connection closes), and only then gets its `input-result`:
 
 ```text
 { "method": "questionnaire", "params": { "questions": [{ "question": "", "header": "", "options": [{ "label": "", "description": "", "preview?": "" }], "multiSelect?": true }] } }
@@ -538,8 +540,11 @@ still apply. Text is shown verbatim.
 - `answered`: members answered every question. `confirm` is `true` only for
   **Yes**. `select` is the chosen string from `choices`, or `null` when a member
   wrote an answer instead. `input` and `editor` are the text a member wrote.
-- `expired`: nobody answered within 30 minutes. The cards stay in Decisions
-  marked expired and no partial answers are returned.
+- `expired`: an earlier Chopin closed the question unanswered after a fixed time.
+  Chopin no longer sends it: a question waits until a member answers it or it is
+  withdrawn, however long that takes. A client may still accept it from an older
+  server, where the cards stayed in Decisions marked expired and no partial
+  answers were returned.
 - `cancelled`: a member cancelled a question, the client sent `input-cancel`,
   the question was withdrawn before it was asked, the session ended, or the connection
   closed. Open cards are withdrawn. When a member cancelled one question of a

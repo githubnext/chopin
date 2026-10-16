@@ -159,7 +159,8 @@ export const SPIKE_DEADLINE_MS = 20 * 60_000;
 export const MAX_INVESTIGATION_IMAGES = 3;
 /**
  * A document on Default machine has its Planner run on its creator's machine while someone uses
- * it: it is open in Chopin, or was within this long.
+ * it: it is open in Chopin, its Planner waits on a question or a live or paused workflow run, or
+ * either was so within this long.
  */
 export const PLANNER_IDLE_MS = 30 * 60_000;
 /**
@@ -407,9 +408,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		);
 	}
 	/**
-	 * Documents someone uses, by id, with when they last were seen in use: open in Chopin, or
-	 * their Planner asked for. On Default machine their creator's machine runs their Planner until
-	 * one goes PLANNER_IDLE_MS unused. Forgotten with a restart.
+	 * Documents someone uses, by id, with when they last were seen in use: open in Chopin, their
+	 * Planner asked for, or their Planner waiting on a question or workflow run. On Default machine
+	 * their creator's machine runs their Planner until one goes PLANNER_IDLE_MS unused. Forgotten
+	 * with a restart.
 	 */
 	let inUse = new Map<string, number>();
 	/**
@@ -535,13 +537,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return undefined;
 	}
 	/**
-	 * A document stops being used once nobody has had it open for PLANNER_IDLE_MS: the machine
-	 * Default machine gave its Planner stops running it.
+	 * A document stops being used once nobody has had it open, and its Planner has waited on no
+	 * question or workflow run, for PLANNER_IDLE_MS: the machine Default machine gave its Planner
+	 * stops running it. A question never times out by this route while its Planner waits on it.
 	 */
 	async function plannersIdle() {
 		let now = auth.clock().getTime();
 		for (let [documentId, seen] of inUse) {
-			if (options.documentOpen?.(documentId)) {
+			if (options.documentOpen?.(documentId) || options.attachments?.()?.waiting(documentId)) {
 				inUse.set(documentId, now);
 				continue;
 			}

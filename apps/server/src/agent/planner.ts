@@ -369,7 +369,8 @@ and cannot change GitHub. Ground the plan in what those reading tools return.`;
 	}
 	let questions =
 		`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
-Decisions. Expiry is not an answer or approval. Keep consequential choices open;
+Decisions. Each waits until a member answers it or it is withdrawn, however long that takes;
+a withdrawn question is not an answer or approval. Keep consequential choices open;
 continue only independent work with explicitly provisional assumptions.`;
 	let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
 terminal commands, or Atomic CLI commands, so never tell them to use \`/workflow connect\`,

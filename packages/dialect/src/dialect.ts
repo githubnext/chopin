@@ -118,8 +118,9 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 	 * Both are optional: a questionnaire has neither until it is answered, and
 	 * one settled before this was recorded has neither for good.
 	 *
-	 * `status="expired"` marks host input nobody answered within its time limit.
-	 * It stays in the document, unanswered, with `at` saying when it expired.
+	 * `status="expired"` marks host input an earlier Chopin closed unanswered
+	 * after a fixed time; questions no longer expire. It stays in the document,
+	 * unanswered, with `at` saying when it expired.
 	 */
 	Questionnaire: component({
 		name: "Questionnaire",

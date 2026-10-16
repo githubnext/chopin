@@ -28,8 +28,6 @@ import * as room from "./room";
 import type { Nodes, Root, RootContent } from "mdast";
 import type { Plan } from "./service";
 
-const EXPIRY_ROOM = "The plan would leave no room for the open questions to expire.";
-
 /** Enough leading text to tell two blocks apart without resending the source. */
 const PREVIEW = 120;
 
@@ -206,9 +204,6 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 		let parsed = parse(next);
 		assert(parsed, { bytes: new TextEncoder().encode(next).byteLength });
 		assertIntroducedUrls(root.children, parsed.children);
-		if (!room.fitsOrShrinks(source(plan), next, plan.questions.open.size)) {
-			throw new Error(EXPIRY_ROOM);
-		}
 		if (parsed.children.length !== children.length) {
 			throw new Error("plan blocks merge or split during Markdown normalisation");
 		}
@@ -293,9 +288,6 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 		let parsed = parse(next);
 		assert(parsed, { bytes: new TextEncoder().encode(next).byteLength });
 		assertIntroducedUrls(root.children, parsed.children);
-		if (!room.fitsOrShrinks(source(plan), next, plan.questions.open.size)) {
-			throw new Error(EXPIRY_ROOM);
-		}
 		if (parsed.children.length !== children.length) {
 			throw new Error("plan blocks merge or split during Markdown normalisation");
 		}

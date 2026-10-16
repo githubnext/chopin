@@ -12,7 +12,7 @@
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
-import { INPUT_EXPIRY_MS, MAX_NEW_LABEL, MAX_SHARED_OPTIONS } from "../limits";
+import { MAX_NEW_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
 import { plainInlineList, plainInlineText } from "./inline-segments";
@@ -746,13 +746,13 @@ function Callout(
 	);
 }
 
-const EXPIRED_NOTE = `Nobody answered within ${
-	INPUT_EXPIRY_MS / 60_000
-} minutes. The Planner will use its best judgement for this decision.`;
+const EXPIRED_NOTE =
+	"Nobody answered this question, so the Planner used its best judgement for this decision.";
 
 /**
- * Host input whose time ran out. Unlike a cancelled card it stays in the
- * document, so it keeps what was asked beside the note saying nobody answered.
+ * Host input an earlier Chopin closed unanswered; questions no longer expire.
+ * Unlike a cancelled card it stays in the document, so it keeps what was asked
+ * beside the note saying nobody answered.
  */
 function Expired({ definition }: { definition: Definition }) {
 	return (

@@ -585,6 +585,20 @@ export class AgentLink {
 		return this.#state === "attached";
 	}
 
+	/**
+	 * Whether the client waits on the document's members: a question it asked is still open, or
+	 * one of its workflow runs is live or paused.
+	 */
+	get waiting(): boolean {
+		if (this.#state === "closed") return false;
+		if (this.#inputs.size > 0) return true;
+		for (let session of this.#sessions.values()) {
+			let runs = session.planner.runs;
+			if (runs && (runs.active.length > 0 || runs.paused.length > 0)) return true;
+		}
+		return false;
+	}
+
 	/** Opens a Planner session on the client; throws when it cannot. */
 	async startSession(sessionId: string, planner: RemotePlanner): Promise<HarnessV1Session> {
 		if (this.#state !== "attached") throw new Error("The agent connection is not attached.");

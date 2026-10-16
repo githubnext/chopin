@@ -457,6 +457,8 @@ the person who created it, picked as for builds: their default machine when it
 is connected and can run Planners, else the machine that last worked on the
 document, else any of theirs that can. Chopin asks for it while someone has the
 document open, and stops it once nobody has used the document for 30 minutes.
+A Planner waiting on a question or on a live or paused workflow run counts as
+use, so its questions stay open however long nobody views the document.
 A Planner stays on its machine while that machine is connected, even when
 another comes online; it moves when the machine disconnects or the creator
 changes the document's machine or their default. Chat says

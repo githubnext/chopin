@@ -415,7 +415,9 @@ export async function apply(
 			return { ok: false, issues: ["protected-projection"] };
 		}
 		let source = project(target);
-		if (open > 0 && Buffer.byteLength(source) > held && !fitsExpiry(source, open)) {
+		// With questions open, a person may not take the document past its limit, which would
+		// leave the Planner unable to edit it around them.
+		if (open > 0 && Buffer.byteLength(source) > held && !fits(source)) {
 			return { ok: false, issues: ["source-too-large"] };
 		}
 	} catch (err) {
@@ -622,52 +624,29 @@ export function insertQuestionnaires(
 	}, insertions);
 }
 
-/** What expiring one open questionnaire adds to its card: the status and the date. */
-const EXPIRY_BYTES = (() => {
-	let size = (value: Questionnaire) =>
-		Buffer.byteLength(serialize({ type: "root", children: [questionnaireElement(value)] }));
-	let card = { id: "", questions: [] };
-	return size({ ...card, status: "expired", at: new Date(0).toISOString() }) - size(card);
-})();
-
-/**
- * Whether this source still has room for `open` questionnaires to expire.
- *
- * Expiry adds to a card the document already holds, and a document past its
- * limit stops accepting Planner edits, so every change leaves this room.
- */
-export function fitsExpiry(source: string, open: number): boolean {
-	return Buffer.byteLength(source) + open * EXPIRY_BYTES <= limits.MAX_SOURCE_BYTES;
+/** Whether this source is within the document's byte limit. */
+function fits(source: string): boolean {
+	return Buffer.byteLength(source) <= limits.MAX_SOURCE_BYTES;
 }
 
 /**
- * Whether a change from `before` to `after` may proceed with `open` questionnaires
- * waiting: it may always shrink the source, and may grow it only while the
- * reserve for their expiry still fits.
+ * Whether a change from `before` to `after` may proceed: it may always shrink
+ * the source, and may grow it only within the document's byte limit.
  */
-export function fitsOrShrinks(before: string, after: string, open: number): boolean {
-	return Buffer.byteLength(after) <= Buffer.byteLength(before) || fitsExpiry(after, open);
+export function fitsOrShrinks(before: string, after: string): boolean {
+	return Buffer.byteLength(after) <= Buffer.byteLength(before) || fits(after);
 }
 
 /**
- * Whether appending these questionnaires keeps the source within its byte limit
- * once they, and the `open` questionnaires already waiting, have expired.
+ * Whether appending these questionnaires keeps the source within its byte limit.
  *
  * Measured before mutating, because Yjs cannot undo an insertion that turns out
  * to be too large.
  */
-export function fitsQuestionnaires(
-	target: Document,
-	values: Questionnaire[],
-	open = 0,
-): boolean {
+export function fitsQuestionnaires(target: Document, values: Questionnaire[]): boolean {
 	let tree = parse(project(target));
-	let at = new Date().toISOString();
-	// Reserve the metadata expiry adds to every card in this batch.
-	tree.children.push(
-		...values.map(value => questionnaireElement({ ...value, status: "expired", at })),
-	);
-	return fitsExpiry(serialize(tree), open);
+	tree.children.push(...values.map(value => questionnaireElement(value)));
+	return fits(serialize(tree));
 }
 
 /** Append one questionnaire to the plan. */
@@ -741,19 +720,6 @@ export function appendQuestionOption(
 						: item
 				),
 			});
-		}
-		return found;
-	});
-}
-
-/** Mark host input nobody answered in time as expired, leaving the card where it is. */
-export function projectExpiry(target: Document, id: string, at: string): Mutation | undefined {
-	return mutate(target, () => {
-		let found = false;
-		for (let node of $nodesOfType(QuestionnaireNode)) {
-			if (node.getId() !== id) continue;
-			found = true;
-			node.setQuestionnaire({ ...node.getQuestionnaire(), status: "expired", at });
 		}
 		return found;
 	});
