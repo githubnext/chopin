@@ -836,7 +836,7 @@
 }
 
 /* Placed below its button by measurement; see MachineActions. */
-.machines-menu {
+.machine-actions-menu {
 	position: fixed;
 	z-index: 60;
 	min-width: 13rem;

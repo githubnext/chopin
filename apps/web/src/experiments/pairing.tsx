@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, CheckIcon, MachineIcon, RestartIcon } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
@@ -40,6 +40,12 @@ function MachinesFrame(
 		title: string;
 	},
 ) {
+	let heading = useRef<HTMLHeadingElement>(null);
+	useLayoutEffect(() => {
+		if (!document.activeElement?.closest('[role="dialog"]')) {
+			heading.current?.focus({ preventScroll: true });
+		}
+	}, [title]);
 	return (
 		<div className="machines-page" data-hosted="">
 			<main className="machines-main">
@@ -47,7 +53,7 @@ function MachinesFrame(
 					{lead}
 					<div className="machines-title">
 						<div className="min-w-0">
-							<h1 className="text-xl font-semibold">{title}</h1>
+							<h1 className="text-xl font-semibold" ref={heading} tabIndex={-1}>{title}</h1>
 							{description && (
 								<p className="machines-description mt-1 text-sm text-text-secondary">
 									{description}

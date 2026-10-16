@@ -28,6 +28,7 @@ import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import { MenuItem, MenuSeparator } from "./menu-item";
 import { IconButton } from "./icon-button";
+import { useNavigationMenu } from "./navigation-shell";
 import { MachineGlyph } from "./machine-button";
 import { chosenMachine, machineRows, machineState } from "./machine-choice";
 
@@ -142,11 +143,11 @@ export function DocumentActionsMenu(
 		ComponentType<ComponentProps<typeof LazyActionSheet>>
 	>(LazyActionSheet);
 	let Sheet = sheet.current;
-	let [open, setOpen] = useState(false);
-	let [sheetOpen, setSheetOpen] = useState(false);
+	let [open, setOpen] = useNavigationMenu();
+	let [sheetOpen, setSheetOpen] = useNavigationMenu();
 	let [position, setPosition] = useState<CSSProperties>();
 	let [view, setView] = useState<"actions" | "machines">("actions");
-	let [machineSheet, setMachineSheet] = useState(false);
+	let [machineSheet, setMachineSheet] = useNavigationMenu();
 	let choice = machine?.state;
 	let chosen = chosenMachine(choice);
 	let rows = choice ? machineRows(choice, Date.now()) : [];

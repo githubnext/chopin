@@ -145,6 +145,7 @@ let KeyboardShortcutsDialog = lazy(() =>
 type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
 
 let NavigationDocument = createContext<{
+	navigationRevision: number;
 	channel?: Api.Channel;
 	onDocumentChanged: (
 		documentId: string,
@@ -164,6 +165,7 @@ let NavigationDocument = createContext<{
 	onResearchChildPublished: (parentId: string, child: Pick<Research.ReadyChild, "slug">) => void;
 }>({
 	onDocumentChanged() {},
+	navigationRevision: 0,
 	onDocumentAction() {},
 	onDocumentDeleted() {},
 	async onDocumentLoaded() {},
@@ -176,6 +178,16 @@ let NavigationDocument = createContext<{
 
 export function useNavigationDocument() {
 	return useContext(NavigationDocument);
+}
+
+/** An open menu belongs to one visit, never to the route rendered underneath it next. */
+export function useNavigationMenu() {
+	let { navigationRevision } = useNavigationDocument();
+	let [openedAt, setOpenedAt] = useState<number>();
+	return [
+		openedAt === navigationRevision,
+		(open: boolean) => setOpenedAt(open ? navigationRevision : undefined),
+	] as const;
 }
 
 function clamp(width: number): number {
@@ -751,6 +763,7 @@ export function NavigationShell(
 		setReveal(current => ({ id, nonce: (current?.nonce ?? 0) + 1 }));
 	}, [mode]);
 	let navigationDocument = useMemo(() => ({
+		navigationRevision,
 		channel: currentChannel,
 		onDocumentAction: workspaceDocumentAction,
 		onDocumentChanged: documentChanged,
@@ -762,6 +775,7 @@ export function NavigationShell(
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
 	}), [
+		navigationRevision,
 		currentChannel,
 		documentChanged,
 		documentDeleted,
@@ -868,9 +882,9 @@ export function NavigationShell(
 			)
 		) return;
 		event.preventDefault();
-		// Lexical's clickable-link listener is attached at the editor root. Stop
-		// the event before it reaches that root after this shell has claimed an app route.
-		event.stopPropagation();
+		// Menu links must receive their click so the owning menu can close. Stop editor links
+		// before Lexical's clickable-link listener handles the route we have already claimed.
+		if (!link.closest('[role="menu"]')) event.stopPropagation();
 		setDrawerOpen(false);
 		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};

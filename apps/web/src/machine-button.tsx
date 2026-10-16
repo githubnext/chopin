@@ -15,6 +15,7 @@ import {
 } from "./machine-choice";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
+import { useNavigationMenu } from "./navigation-shell";
 
 import "./machine-button.css";
 import "./phone-sheets.css";
@@ -91,7 +92,7 @@ export function MachineButton(
 	let id = useId();
 	let trigger = useRef<HTMLButtonElement>(null);
 	let menu = useRef<HTMLDivElement>(null);
-	let [open, setOpen] = useState(false);
+	let [open, setOpen] = useNavigationMenu();
 	let initialItem = useRef<"first" | "last">("first");
 	let presence = useTransitionPresence(open && !phone ? true : undefined, 150, motionImmediately());
 	let mounted = presence.phase !== "closed";
@@ -115,7 +116,7 @@ export function MachineButton(
 		if (row.id !== (chosen?.id ?? null)) void choice.choose(row.id);
 	};
 	let add = () => {
-		if (!phone) close(false);
+		close(false);
 		go(ADD_MACHINE_PATH);
 	};
 	useMenuDismissal(open && !phone, [trigger, menu], close);

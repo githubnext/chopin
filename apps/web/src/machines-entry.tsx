@@ -12,6 +12,7 @@ import {
 	useLiveMachines,
 } from "./machine-summary";
 
+import { useNavigationDocument, useNavigationMenu } from "./navigation-shell";
 import "./machines-entry.css";
 
 import type { Machine } from "./machine-summary";
@@ -32,6 +33,8 @@ const ANY = "any";
 export function MachinesEntry(
 	{ current = false, placement }: { current?: boolean; placement: "sidebar" | "sheet" },
 ) {
+	let [open, setOpen] = useNavigationMenu();
+	let { navigationRevision } = useNavigationDocument();
 	let { machines: list, error } = useLiveMachines();
 	let summary = list && !error ? summarizeMachines(list) : undefined;
 	let favorite = list?.find(machine => machine.favorite);
@@ -80,7 +83,14 @@ export function MachinesEntry(
 	};
 	let uses = list?.find(machine => machine.connected)?.label;
 	return (
-		<Menu.Root onOpenChange={open => open && void liveMachines.load()}>
+		<Menu.Root
+			key={navigationRevision}
+			open={open}
+			onOpenChange={next => {
+				setOpen(next);
+				if (next) void liveMachines.load();
+			}}
+		>
 			<Menu.Trigger
 				aria-current={current ? "page" : undefined}
 				aria-label={warn ? `${label}, your default is offline` : label}
@@ -147,6 +157,7 @@ export function MachinesEntry(
 
 function MachinesMenuPopup({ children }: { children: ReactNode }) {
 	let popup = useRef<HTMLDivElement>(null);
+	let openedOn = useRef(location.href);
 	useLayoutEffect(() => {
 		let panel = popup.current;
 		if (!panel) return;
@@ -160,7 +171,15 @@ function MachinesMenuPopup({ children }: { children: ReactNode }) {
 		observer.observe(panel);
 		return () => observer.disconnect();
 	}, []);
-	return <Menu.Popup className="machines-menu" ref={popup}>{children}</Menu.Popup>;
+	return (
+		<Menu.Popup
+			className="machines-menu"
+			finalFocus={() => openedOn.current === location.href}
+			ref={popup}
+		>
+			{children}
+		</Menu.Popup>
+	);
 }
 
 /** A machine's icon with its state as a dot on the corner, as the Machines page draws it. */

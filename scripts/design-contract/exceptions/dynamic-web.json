@@ -157,7 +157,7 @@
 				1
 			]
 		],
-		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
+		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -171,7 +171,7 @@
 				1
 			]
 		],
-		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
+		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -192,7 +192,7 @@
 				1
 			]
 		],
-		"sourceHash": "5f91bfb751092cf30a5c5512edcf5a2e4f09adca4c1b4cea48a5196cece7a8fe"
+		"sourceHash": "0062df60e084e8279966fcbc118c77135d7b1c635375e1af9b3167a6a8bcf279"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -227,7 +227,7 @@
 				1
 			]
 		],
-		"sourceHash": "6dbd2777812a028a5e6294c0b67923b364e1daf008ace8654ada6ea07cc85e71"
+		"sourceHash": "e2e9b967e71700303d65b4f88aa3c6f5c119d176218a81a2e3d33205bc01736c"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
@@ -325,7 +325,7 @@
 				1
 			]
 		],
-		"sourceHash": "7f2dd30e573fb926ce7e513ea08fd545ce62aba4e61d7f657686585f0b638101"
+		"sourceHash": "5de5fe00622291022e7add3c3fcb16b8ed371de9f5a6b07147d91e7b315f3cdc"
 	},
 	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
@@ -353,6 +353,6 @@
 				1
 			]
 		],
-		"sourceHash": "e69dc4c457e0086475f52c65fc2ee9b7da9df740bbfb5fd05acffb0c8a87cda9"
+		"sourceHash": "0f979aeac5155ade51fadf8d6ae164ccb406f10d282390d4e0092a6b431832b3"
 	}
 ]

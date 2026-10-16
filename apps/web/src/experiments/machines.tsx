@@ -331,7 +331,7 @@ export function MachineActions(
 				<div
 					aria-hidden={presence.phase === "closing" ? "true" : undefined}
 					aria-label={`Actions for ${machine.label}`}
-					className={`machines-menu motion-dropdown ${presence.className}`}
+					className={`machine-actions-menu motion-dropdown ${presence.className}`}
 					id={id}
 					inert={presence.phase === "closing"}
 					onKeyDown={menuKeyDown}

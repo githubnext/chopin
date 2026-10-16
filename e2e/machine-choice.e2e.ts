@@ -1069,6 +1069,190 @@ async function settledMenu(menu: Locator) {
 	});
 }
 
+test("Manage machines closes the sidebar menu after navigation", async ({ join: enter }) => {
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await connected(page, "devbox");
+	await page.reload();
+	let sidebar = page.getByRole("complementary", { name: "Projects" });
+	await sidebar.getByRole("button", { name: /^Machines/ }).click();
+	let menu = page.getByRole("menu").filter({ hasText: "Default machine" });
+	await menu.getByRole("menuitem", { name: "Manage machines", exact: true }).click();
+	await expect(page).toHaveURL(/\/machines$/);
+	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeVisible();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	// Activating the current destination must close too, without relying on a route change.
+	await sidebar.getByRole("button", { name: /^Machines/ }).click();
+	await menu.getByRole("menuitem", { name: "Manage machines", exact: true }).click();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+});
+
+test("the sidebar machine menu closes on browser history navigation", async ({ join: enter }) => {
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await connected(page, "devbox");
+	await page.reload();
+	let sidebar = page.getByRole("complementary", { name: "Projects" });
+	let entry = sidebar.getByRole("button", { name: /^Machines/ });
+	await entry.click();
+	await page.getByRole("menuitem", { name: "Manage machines", exact: true }).click();
+	await expect(page).toHaveURL(/\/machines$/);
+	await entry.click();
+	await expect(page.getByRole("menu")).toBeVisible();
+	await page.goBack();
+	await ready(page);
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+});
+
+test("keyboard Manage machines focuses the Machines heading", async ({ join: enter }) => {
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await connected(page, "devbox");
+	await page.reload();
+	let entry = page.getByRole("complementary", { name: "Projects" })
+		.getByRole("button", { name: /^Machines/ });
+	await entry.focus();
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("End");
+	await expect(page.getByRole("menuitem", { name: "Manage machines", exact: true })).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(page).toHaveURL(/\/machines$/);
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeFocused();
+});
+
+for (let activation of ["Enter", "Space", "touch"] as const) {
+	test(`sidebar machine items close via ${activation}`, async ({ join: enter }) => {
+		let page = await enter(person(), {
+			viewport: { width: 1862, height: 1039 },
+			hasTouch: activation === "touch",
+		});
+		await connected(page, "devbox");
+		await page.reload();
+		let entry = page.getByRole("complementary", { name: "Projects" })
+			.getByRole("button", { name: /^Machines/ });
+		let open = async () => {
+			if (activation === "touch") await entry.tap();
+			else {
+				await entry.focus();
+				await page.keyboard.press("ArrowDown");
+			}
+			let menu = page.getByRole("menu").filter({ hasText: "Default machine" });
+			await expect(menu).toBeVisible();
+			await settledMenu(menu);
+			return menu;
+		};
+		let activate = async (item: Locator) => {
+			if (activation === "touch") await item.tap();
+			else {
+				await item.focus();
+				await page.keyboard.press(activation);
+			}
+		};
+		for (let name of [/^Any available/, /^devbox/]) {
+			await activate((await open()).getByRole("menuitemradio", { name }));
+			await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+		}
+		await activate((await open()).getByRole("menuitem", { name: "Add machine…", exact: true }));
+		await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
+		await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+		await page.goBack();
+		await ready(page);
+		let menu = await open();
+		if (activation !== "touch") await page.keyboard.press("End");
+		await activate(menu.getByRole("menuitem", { name: "Manage machines", exact: true }));
+		await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeFocused();
+		await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	});
+}
+
+for (let activation of ["click", "Enter", "Space"] as const) {
+	test(`Chat and Build machine navigation closes via ${activation}`, async ({ seed, join: enter }) => {
+		await seed("# Machine navigation\n\nA document with a build.\n", { graph: GRAPH });
+		let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+		await connected(page, "devbox");
+		await page.reload();
+		for (let source of ["Chat", "Build"]) {
+			let button = source === "Chat"
+				? composer(page).getByRole("button", { name: /^Machine: / })
+				: page.locator(".document-title-bar .machine-button");
+			await button.click();
+			let add = page.getByRole("menuitem", { name: "Add machine…", exact: true });
+			if (activation === "click") await add.click();
+			else {
+				await page.keyboard.press("End");
+				await expect(add).toBeFocused();
+				await page.keyboard.press(activation);
+			}
+			await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
+			await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+			await page.goBack();
+			await ready(page);
+		}
+	});
+}
+
+test("phone machine navigation leaves no menu or sheet behind", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	await connected(page, "devbox");
+	await page.reload();
+	await page.getByRole("button", { name: "Documents", exact: true }).tap();
+	await page.getByRole("link", { name: /^Machines/ }).tap();
+	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeFocused();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	await expect(page.getByRole("dialog", { name: "Documents", exact: true })).toHaveCount(0);
+	await page.goBack();
+	await ready(page);
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: "Chat", exact: true }).tap();
+	await composer(page).getByRole("button", { name: /^Machine: / }).tap();
+	await page.getByRole("menuitem", { name: "Add machine…", exact: true }).tap();
+	await expect(page.getByRole("dialog", { name: "Add your computer" })).toBeVisible();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	await expect(page.getByRole("dialog", { name: "Machine for this document" })).toHaveCount(0);
+});
+
+test("machine menus close on same-document history navigation", async ({ seed, join: enter }) => {
+	await seed("# Machine navigation\n\nA document with a build.\n", { graph: GRAPH });
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await connected(page, "devbox");
+	await page.reload();
+	for (let source of ["Chat", "Build", "title"]) {
+		await page.evaluate(() => history.pushState(null, "", "#machine-menu"));
+		if (source === "title") await runOn(page);
+		else {
+			let button = source === "Chat"
+				? composer(page).getByRole("button", { name: /^Machine: / })
+				: page.locator(".document-title-bar .machine-button");
+			await button.click();
+		}
+		await expect(page.getByRole("menu")).toBeVisible();
+		await page.goBack();
+		await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+	}
+});
+
+test("the sidebar machine popup disappears when its trigger unmounts", async ({ join: enter }) => {
+	let page = await enter(person(), { viewport: { width: 1862, height: 1039 } });
+	await connected(page, "devbox");
+	await page.reload();
+	await page.getByRole("complementary", { name: "Projects" })
+		.getByRole("button", { name: /^Machines/ }).click();
+	await expect(page.getByRole("menu")).toBeVisible();
+	let { machines } = await (await page.request.get("/api/connector/machines")).json() as {
+		machines: Array<{ id: string }>;
+	};
+	for (let { id } of machines) {
+		let removed = await page.request.post(`/api/connector/machines/${id}/revoke`, {
+			data: {},
+			headers: { origin: new URL(page.url()).origin },
+		});
+		expect(removed.ok()).toBe(true);
+	}
+	await expect(
+		page.getByRole("complementary", { name: "Projects" })
+			.getByRole("link", { name: /^Machines/ }),
+	).toBeVisible();
+	await expect(page.getByRole("menu", { includeHidden: true })).toHaveCount(0);
+});
+
 for (
 	let viewport of [
 		{ width: 1862, height: 1039 },
