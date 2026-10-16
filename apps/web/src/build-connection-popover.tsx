@@ -74,7 +74,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 						? "build-status-link"
 						: outline
 						? "btn btn-xs btn-outline"
-						: "btn btn-xs btn-primary build-plan shrink-0"
+						: "btn btn-md btn-primary build-plan shrink-0"
 				}`}
 			>
 				{label}

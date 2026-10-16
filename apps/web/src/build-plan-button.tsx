@@ -490,7 +490,7 @@ export function BuildPlanButton(
 					aria-describedby={blocked || offline ? reason : undefined}
 					aria-disabled={blocked || offline ? true : undefined}
 					className={`${
-						phone ? "build-status-link" : "btn btn-xs btn-primary build-plan shrink-0"
+						phone ? "build-status-link" : "btn btn-md btn-primary build-plan shrink-0"
 					}${offline ? " machine-offline" : ""}`}
 					data-tooltip={blocked === "Chopin isn’t running for this document"
 						? "Chopin is off"

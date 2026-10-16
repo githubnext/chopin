@@ -30,7 +30,7 @@
 	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
 	border-radius: var(--radius-full);
 	background: var(--color-inset);
-	font-size: var(--text-xs);
+	font-size: var(--text-sm);
 	font-weight: 500;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;

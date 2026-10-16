@@ -70,7 +70,7 @@ export function DecisionViewControl(
 				aria-current={view === "plan" ? "page" : undefined}
 				aria-label={view === "plan" ? undefined : documentActivityLabel(documentActivity)}
 				aria-pressed={view === "plan"}
-				className={`btn btn-sm gap-1.5 transition-[background-color,box-shadow,color] ${
+				className={`btn btn-md gap-1.5 transition-[background-color,box-shadow,color] ${
 					view === "plan"
 						? "bg-ground font-medium text-gray-800"
 						: "text-text-tertiary hover:bg-hover"
@@ -85,7 +85,7 @@ export function DecisionViewControl(
 				aria-current={view === "decisions" ? "page" : undefined}
 				aria-label={unanswered > 0 ? `Decisions, ${unanswered} unanswered` : "Decisions"}
 				aria-pressed={view === "decisions"}
-				className={`btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
+				className={`btn btn-md gap-1 transition-[background-color,box-shadow,color] ${
 					unanswered > 0 ? "btn-with-count" : ""
 				} ${
 					view === "decisions"
@@ -151,7 +151,7 @@ function BuildSegment(
 				aria-describedby={ready ? undefined : reason}
 				aria-disabled={ready ? undefined : true}
 				aria-pressed={selected}
-				className={`build-tab btn btn-sm gap-1 transition-[background-color,box-shadow,color] ${
+				className={`build-tab btn btn-md gap-1 transition-[background-color,box-shadow,color] ${
 					selected
 						? "bg-ground font-medium text-gray-800"
 						: ready
