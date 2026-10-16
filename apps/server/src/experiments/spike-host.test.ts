@@ -333,6 +333,7 @@ test("a spike that finishes while a first build is queued waits for the build, n
 			graphRevision: 1,
 			user: "U_test",
 			connectionId: "laptop",
+			machineId: "M_laptop",
 			repositoryId: "R_test",
 			checkout,
 		});

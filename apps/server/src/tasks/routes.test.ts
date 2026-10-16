@@ -1412,6 +1412,71 @@ test("pairing records automatic-work consent, off unless asked for", async () =>
 	}
 });
 
+test("everyone who sees a build sees its machine; only its starter sees whether it is online", async () => {
+	let context = await setup();
+	try {
+		await paired(context);
+		let [machine] = await context.storage.machines.list("U_test");
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		expect(built.machineId).toBe(machine!.id);
+		expect(context.plan.builds[0]?.machineId).toBe(machine!.id);
+		let mine = await (await context.call(context.path)).json();
+		expect(mine.buildMachines).toEqual({
+			[built.id]: { label: "Laptop", service: false, connected: true },
+		});
+		let theirs = await (await context.call(
+			context.path,
+			undefined,
+			undefined,
+			undefined,
+			context.otherCookie,
+		)).json();
+		expect(theirs.build.id).toBe(built.id);
+		expect(theirs.buildMachines).toEqual({ [built.id]: { label: "Laptop", service: false } });
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a living document's first build and rebuild name their machine to everyone", async () => {
+	let { context, built, rebuild } = await rebuilding();
+	try {
+		let other = await (await context.call(
+			context.path,
+			undefined,
+			undefined,
+			undefined,
+			context.otherCookie,
+		)).json();
+		expect(other.buildMachines[built.id]).toEqual({ label: "Laptop", service: false });
+		expect(other.buildMachines[rebuild.build.id]).toEqual({ label: "Laptop", service: false });
+		expect(other.live.builderConnected).toBeUndefined();
+		let own = await (await context.call(context.path)).json();
+		expect(own.buildMachines[rebuild.build.id].connected).toBe(true);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build stored before machines were recorded shows no machine", async () => {
+	let context = await setup();
+	try {
+		await paired(context);
+		await context.call(context.path, { planRevision: 0, graphVersion: 1, graphRevision: 1 });
+		let { machineId: _machine, machineService: _service, ...legacy } = context.plan.builds[0]!;
+		context.plan.builds = [legacy];
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.build.id).toBe(legacy.id);
+		expect(snapshot.buildMachines).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
 test("only the builder sees their checkout, connection and whether their agent is online", async () => {
 	let { context, rebuild } = await rebuilding();
 	try {

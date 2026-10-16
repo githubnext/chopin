@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { openPlan } from "../testing/plan";
 import * as Plan from "../plan/service";
 import { implementationGraphs } from "./plan-graphs";
-import { pickBuild, queueBuild, reportBuild } from "./builds";
+import { pickBuild, queueBuild, reportBuild, restoreBuilds } from "./builds";
 
 let task = {
 	id: "first",
@@ -32,6 +32,7 @@ test("approval queues the reviewed graph once and pickup survives reopening", as
 		graphRevision: 1,
 		user: "U_test",
 		connectionId: "laptop",
+		machineId: "M_laptop",
 		repositoryId: "R_test",
 		checkout,
 	};
@@ -46,6 +47,7 @@ test("approval queues the reviewed graph once and pickup survives reopening", as
 	await Plan.close(plan);
 	let reopened = await Plan.open(id, backend, server);
 	expect(reopened.builds[0].id).toBe(first.id);
+	expect(reopened.builds[0].machineId).toBe("M_laptop");
 	expect(await pickBuild(reopened, "U_test", "laptop")).toBeUndefined();
 	await Plan.close(reopened);
 });
@@ -58,6 +60,7 @@ test("stale graph approval and unresolved planning decisions cannot queue a buil
 		graphRevision: 2,
 		user: "U_test",
 		connectionId: "laptop",
+		machineId: "M_laptop",
 		repositoryId: "R_test",
 		checkout,
 	};
@@ -88,6 +91,7 @@ test("a failed durable commit publishes neither approval nor a build", async () 
 			graphRevision: 1,
 			user: "U_test",
 			connectionId: "laptop",
+			machineId: "M_laptop",
 			repositoryId: "R_test",
 			checkout,
 		}),
@@ -108,6 +112,7 @@ test("failed pickup requires an explicit idempotent retry of the reviewed build"
 		graphRevision: 1,
 		user: "U_test",
 		connectionId: "laptop",
+		machineId: "M_laptop",
 		repositoryId: "R_test",
 		checkout,
 	};
@@ -140,6 +145,7 @@ test("a duplicate review cannot silently select another owner or checkout", asyn
 		graphRevision: 1,
 		user: "U_test",
 		connectionId: "laptop",
+		machineId: "M_laptop",
 		repositoryId: "R_test",
 		checkout,
 	};
@@ -155,4 +161,23 @@ test("a duplicate review cannot silently select another owner or checkout", asyn
 	} finally {
 		await Plan.close(plan);
 	}
+});
+
+test("a build stored before machines were recorded still restores, with no machine", () => {
+	let legacy = {
+		id: crypto.randomUUID(),
+		user: "U_test",
+		connectionId: "laptop",
+		repositoryId: "R_test",
+		checkout,
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+		createdAt: new Date().toISOString(),
+		expiresAt: 0,
+		state: "stopped",
+	};
+	let [restored] = restoreBuilds([legacy], "R_test");
+	expect(restored).toEqual(legacy as typeof restored);
+	expect(restored?.machineId).toBeUndefined();
 });

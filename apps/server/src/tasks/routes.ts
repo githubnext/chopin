@@ -13,7 +13,7 @@ import type { Source } from "@chopin/experiment";
 import type { HostedAuth } from "../auth/routes";
 import type { Plan } from "../plan/service";
 import type { RouteHandler, Router } from "../http/router";
-import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type { BuildMachine, ImplementationSnapshot } from "@chopin/protocol/implementation";
 
 type Options = {
 	withPlan<T>(id: string, action: (plan: Plan) => Promise<T>): Promise<T>;
@@ -235,15 +235,37 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							: { execution: { state: "idle" }, history: [] },
 						...(live ? { live } : {}),
 					};
-					return snapshot;
+					// The builds the snapshot names, whose machines everyone who sees them may know.
+					let named = [
+						snapshot.build,
+						live && plan.builds.findLast(build => build.kind === "rebuild"),
+						live && plan.builds.find(build => build.id === live.buildId),
+					].flatMap(build => build?.machineId ? [structuredClone(build)] : []);
+					return { snapshot, named };
 				}));
 			// Read outside the plan lock; a missing user only loses the attribution.
-			let login = current.build && (await auth.storage.users.get(current.build.user))?.login;
-			let builder = current.live && (await auth.storage.users.get(current.live.user))?.login;
+			let login = current.snapshot.build
+				&& (await auth.storage.users.get(current.snapshot.build.user))?.login;
+			let builder = current.snapshot.live
+				&& (await auth.storage.users.get(current.snapshot.live.user))?.login;
+			let buildMachines: Record<string, BuildMachine> = {};
+			for (let build of current.named) {
+				let machine = await auth.storage.machines.get(build.machineId!);
+				if (!machine) continue;
+				buildMachines[build.id] = {
+					label: machine.label,
+					service: build.machineService === true,
+					// Only the starter learns whether their own machine is online.
+					...(build.user === session.user.id
+						? { connected: options.connections.machine(machine.id).length > 0 }
+						: {}),
+				};
+			}
 			return json({
-				...current,
+				...current.snapshot,
 				...(login ? { startedBy: login } : {}),
 				...(builder ? { builtBy: builder } : {}),
+				...(Object.keys(buildMachines).length ? { buildMachines } : {}),
 			});
 		}),
 	);
@@ -300,6 +322,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							...input,
 							user: session.user.id,
 							connectionId: connection.id,
+							machineId: connection.machineId,
+							...(connection.about?.service ? { machineService: true as const } : {}),
 							repositoryId: channel.repositoryId,
 							checkout,
 						});

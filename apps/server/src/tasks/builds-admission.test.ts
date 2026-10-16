@@ -22,6 +22,7 @@ let input = {
 	graphRevision: 1,
 	user: "U_test",
 	connectionId: "laptop",
+	machineId: "M_laptop",
 	repositoryId: "R_test",
 	checkout: { repository: "owner/repository", branch: "main", commit: "a".repeat(40) },
 };

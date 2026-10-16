@@ -9,6 +9,10 @@ export type BuildRequest = {
 	retryOf?: string;
 	user: string;
 	connectionId: string;
+	/** The paired machine it runs on; builds stored before machines were recorded have none. */
+	machineId?: string;
+	/** That machine's connection ran as a background service. */
+	machineService?: true;
 	repositoryId: string;
 	checkout: CheckoutContext;
 	planRevision: number;
@@ -82,6 +86,18 @@ export type LiveSnapshot = {
 	 */
 	builderConnected?: boolean;
 };
+/** The machine a build runs or ran on, as everyone who can see the build sees it. */
+export type BuildMachine = {
+	/** The machine's paired name, as its owner last renamed it. */
+	label: string;
+	/** It ran as a background service rather than an interactive session. */
+	service: boolean;
+	/**
+	 * Whether the machine is connected now. Sent only to the build's own starter, so others never
+	 * learn when someone's machine is online.
+	 */
+	connected?: boolean;
+};
 /** A rebuild as people other than its builder see it. */
 export type LiveRebuild = Omit<BuildRequest, "connectionId" | "checkout" | "session">;
 export type ImplementationSnapshot = {
@@ -108,6 +124,11 @@ export type ImplementationSnapshot = {
 	startedBy?: string;
 	/** The GitHub login of the living document's builder (`live.user`), when it is still known. */
 	builtBy?: string;
+	/**
+	 * Where `build`, `live.rebuild` and the live build (`live.buildId`) run or ran, by build id. A
+	 * build stored before machines were recorded, or whose machine record is gone, has no entry.
+	 */
+	buildMachines?: Record<string, BuildMachine>;
 	/** Whether the viewer has a connected local agent for this repository; it may be busy. */
 	localAgent: boolean;
 	blockers: string[];

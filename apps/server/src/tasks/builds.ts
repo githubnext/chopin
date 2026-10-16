@@ -35,6 +35,10 @@ let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
 	user: z.string().min(1).max(128),
 	connectionId: z.string().min(1).max(128),
+	/** The paired machine it runs on; builds stored before machines were recorded have none. */
+	machineId: z.string().min(1).max(128).optional(),
+	/** That machine's connection ran as a background service. */
+	machineService: z.literal(true).optional(),
 	repositoryId: z.string().min(1).max(128),
 	checkout: checkoutSchema,
 	planRevision: z.number().int().nonnegative(),
@@ -169,6 +173,8 @@ type BuildInput = {
 	graphRevision: number;
 	user: string;
 	connectionId: string;
+	machineId: string;
+	machineService?: true;
 	repositoryId: string;
 	checkout: CheckoutContext;
 };
@@ -356,6 +362,8 @@ export async function queueRebuild(
 			kind: "rebuild",
 			user: owner,
 			connectionId: connection.id,
+			machineId: connection.machineId,
+			...(connection.about?.service ? { machineService: true } : {}),
 			repositoryId: live.repositoryId,
 			// A machine without a checkout of the repository rebuilds from the first build's.
 			checkout: checkoutFor(connection, live.repositoryId, original.checkout),
