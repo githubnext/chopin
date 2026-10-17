@@ -313,6 +313,8 @@ lends the caller's bearer to the Planner: the turn runs under the channel's
 existing Planner owner, and a channel without one is claimed only for the
 caller's own live browser login, which must already have passed the
 installation-gated owner checks.
+Its `as: "system"` form, an automatic follow-up shown in Chat as a system notice,
+is further limited to the document's creator or the account holding its Planner.
 
 The authorization-code flow uses state, S256 PKCE, the exact configured
 callback, and the App client secret. It does not request OAuth scopes;

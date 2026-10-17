@@ -276,6 +276,10 @@ describe("the hosted MCP adapter", () => {
 				expect(started[1]).toMatchObject({
 					session: { session: { id: session.id }, user: { id: caller.user.id } },
 				});
+				expect(Object.hasOwn(started[1]!, "system")).toBe(false);
+				refusal = undefined;
+				await adapter.invoke!.invoke(caller, { ...input, as: "system" });
+				expect(started[2]).toMatchObject({ instruction: input.instruction, system: true });
 			} finally {
 				await Service.close(opened.plan);
 			}

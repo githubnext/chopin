@@ -75,7 +75,7 @@ import { JobRunner } from "./jobs/runner";
 import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/research-workspace";
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
-import { invokeRouted } from "./mcp/invoke";
+import { invokeRouted, SystemTurns } from "./mcp/invoke";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { heuristicJudge, jevJudge, SpikeScout } from "./experiments/spike-scout";
@@ -174,6 +174,8 @@ let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
+/** Each document's recent automatic follow-ups through `invoke_planner`, for their hourly limit. */
+let systemTurns = new SystemTurns();
 /** Browser sockets by login, so a login that ends closes them before another broadcast. */
 let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
 let jobRunner: JobRunner | undefined;
@@ -2475,6 +2477,8 @@ registerMcpRoutes(router, hostedAuth, {
 			deleting: id => deletingChannels.has(id) || archivingChannels.has(id),
 			transition: withDocumentTransition,
 			open: rootId => openRootChat(rootId, input.session?.session.id, input.repository),
+			plannerAccount: rootId => plannerAttachments?.holding(rootId)?.userId,
+			systemTurns,
 		}, input),
 	plannerNotAttached,
 	archiveChannel,

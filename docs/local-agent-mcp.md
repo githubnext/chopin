@@ -155,6 +155,31 @@ browser need not already have the document open: Chopin keeps its room alive
 while the invoked turn and queue run. An interrupted turn is not replayed
 automatically on restart.
 
+### Automatic follow-ups
+
+Some instructions are not something anyone said. A client that watched a
+workflow run finish, for example, wants the Planner to update the document from
+its results. Add `"as": "system"` for those:
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"instruction": "The workflow run finished. Read its results and update the document.",
+	"as": "system"
+}
+```
+
+Chat then shows a short system notice, `Automatic follow-up requested by
+@octocat.`, instead of a message from you. The instruction goes to the Planner
+alone and stays out of the visible queue while it waits. Ownership,
+`planner-not-attached`, the queue, `checkout`, and the result work as for any
+other instruction.
+
+Only the document's creator, or the account whose client holds its Planner
+under `HARNESS=remote`, may send one; for a child document that means its root.
+Each document takes at most 10 an hour, counted in memory until the server
+restarts. Chopin logs each one it accepts or refuses.
+
 Refusals return an object with `code`, and `planner-not-attached` also a
 `message`:
 
@@ -169,6 +194,10 @@ Refusals return an object with `code`, and `planner-not-attached` also a
   repository origin.
 - `planner-unavailable`: the Planner is disabled or the room is closing.
 - `planner-queue-full`: wait for queued work to drain before invoking again.
+- `system-turn-forbidden`: `as: "system"` came from someone other than the
+  document's creator or the account holding its Planner.
+- `system-turn-limited`: the document has taken 10 automatic follow-ups in the
+  past hour; try again later.
 - `document-unavailable`, `document-archived`, and `repository-forbidden` retain
   their ordinary document/access meanings.
 

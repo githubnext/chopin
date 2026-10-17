@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import * as Chat from "../chat/service";
 import { handler, TOOLS } from "../mcp";
 import { rooted } from "../testing/rooted";
-import { invokeRouted } from "./invoke";
+import { invokeRouted, MAX_SYSTEM_TURNS_PER_HOUR, SystemTurns } from "./invoke";
 
 let cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -82,6 +82,8 @@ test("invoke_planner validates strict arguments and counts instruction bytes wit
 			{ ...valid, checkout: null },
 			{ ...valid, checkout: "" },
 			{ ...valid, extra: true },
+			{ ...valid, as: "member" },
+			{ ...valid, as: true },
 		]
 	) {
 		let result = await call(mcp, "tools/call", { name: "invoke_planner", arguments: args });
@@ -93,6 +95,11 @@ test("invoke_planner validates strict arguments and counts instruction bytes wit
 		(await call(mcp, "tools/call", { name: "invoke_planner", arguments: exact })).result.isError,
 	).toBeUndefined();
 	expect(received).toEqual([exact]);
+	let system = { ...valid, as: "system" };
+	expect(
+		(await call(mcp, "tools/call", { name: "invoke_planner", arguments: system })).result.isError,
+	).toBeUndefined();
+	expect(received).toEqual([exact, system]);
 });
 
 test("invoke_planner exposes each refusal as an object code", async () => {
@@ -106,6 +113,8 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 			"checkout-unverified",
 			"planner-unavailable",
 			"planner-queue-full",
+			"system-turn-forbidden",
+			"system-turn-limited",
 		] as const
 	) {
 		let mcp = endpoint({ invoke: async () => ({ kind: "refused", code }) });
@@ -137,7 +146,7 @@ test("invoke_planner carries a refusal's message beside its code", async () => {
 });
 
 /** A root and child, with `invokePlanner` routed as `main.ts` routes it. */
-async function routed() {
+async function routed(options: { plannerAccount?: string; now?: () => number } = {}) {
 	let fixture = await rooted({ root: "# Root\n\nRoot prose.\n", child: "# Child\n\nFinding.\n" });
 	cleanups.push(fixture.close);
 	let opened: string[] = [];
@@ -151,9 +160,20 @@ async function routed() {
 			if (rootId !== fixture.root.channel.id) throw new Error(`unexpected room ${rootId}`);
 			return { context: fixture.root.context, release: () => released++ };
 		},
+		plannerAccount: () => options.plannerAccount,
+		systemTurns: new SystemTurns(options.now),
 	};
-	let invoke = async (channelId: string, repositoryId = fixture.repository.id) => {
+	let invoke = async (
+		channelId: string,
+		repositoryId = fixture.repository.id,
+		as: {
+			user?: { id: string; login: string };
+			system?: boolean;
+			instruction?: string;
+		} = {},
+	) => {
 		let channel = (await fixture.storage.channels.get(channelId))!;
+		let user = as.user ?? fixture.user;
 		return invokeRouted(route, {
 			channel,
 			repository: {
@@ -161,12 +181,87 @@ async function routed() {
 				id: repositoryId,
 				permissions: { push: true, pull: true, admin: false },
 			},
-			user: { id: fixture.user.id, login: fixture.user.login, avatarUrl: "" },
-			instruction: "Summarize the open findings.",
+			user: { id: user.id, login: user.login, avatarUrl: "" },
+			instruction: as.instruction ?? "Summarize the open findings.",
+			...(as.system ? { system: true } : {}),
 		} as never);
 	};
 	return { ...fixture, invoke, opened, released: () => released };
 }
+
+const RIVAL = { id: "U_rival", login: "rival" };
+const FOLLOW_UP = "A workflow run finished. Update the document from its results.";
+
+test("a system invocation starts a Planner turn with its instruction behind a system notice", async () => {
+	let { invoke, root, turns } = await routed();
+	let system = { system: true, instruction: FOLLOW_UP };
+	expect(await invoke(root.channel.id, undefined, system)).toBeUndefined();
+	await turns.started();
+	expect(turns.prompts.at(-1)).toContain(FOLLOW_UP);
+	expect(root.plan.chat.entries).toEqual([
+		expect.objectContaining({
+			author: { kind: "system" },
+			text: "Automatic follow-up requested by @ana.",
+		}),
+	]);
+	expect(root.plan.chat.entries.some(entry => entry.text.includes(FOLLOW_UP))).toBe(false);
+});
+
+test("a system invocation behind a running turn waits out of the visible queue", async () => {
+	let { events, invoke, released, root, turns, user } = await routed();
+	expect(await Chat.invoke(root.context, user, "First")).toBeUndefined();
+	await turns.started(1);
+	expect(await invoke(root.channel.id, undefined, { system: true, instruction: FOLLOW_UP }))
+		.toBeUndefined();
+	let queues = events.filter(event => event.frame.kind === "chat:queue");
+	expect(JSON.stringify(queues)).not.toContain(FOLLOW_UP);
+
+	await turns.finish();
+	await turns.started(2);
+	expect(turns.prompts[1]).toContain(FOLLOW_UP);
+	expect(released()).toBe(0);
+	await turns.finish();
+	await root.plan.chat.running;
+	expect(released()).toBe(1);
+});
+
+test("only the document's creator or the account holding its Planner may start a system turn", async () => {
+	let refused = await routed();
+	let system = { user: RIVAL, system: true, instruction: FOLLOW_UP };
+	expect(await refused.invoke(refused.root.channel.id, undefined, system))
+		.toBe("system-turn-forbidden");
+	expect(await refused.invoke(refused.child.channel.id, undefined, system))
+		.toBe("system-turn-forbidden");
+	expect(refused.root.plan.chat.entries).toEqual([]);
+	expect(refused.opened).toEqual([]);
+
+	let holder = await routed({ plannerAccount: RIVAL.id });
+	expect(await holder.invoke(holder.root.channel.id, undefined, system)).toBeUndefined();
+	await holder.turns.started();
+	expect(holder.root.plan.chat.entries.at(-1)).toMatchObject({
+		author: { kind: "system" },
+		text: "Automatic follow-up requested by @rival.",
+	});
+});
+
+test("system turns are limited per document per hour", async () => {
+	let now = 0;
+	let { invoke, root, turns } = await routed({ now: () => now });
+	let system = { system: true, instruction: FOLLOW_UP };
+	for (let i = 0; i < MAX_SYSTEM_TURNS_PER_HOUR; i++) {
+		expect(await invoke(root.channel.id, undefined, system)).toBeUndefined();
+	}
+	let notices = root.plan.chat.entries.length;
+	expect(await invoke(root.channel.id, undefined, system)).toBe("system-turn-limited");
+	expect(root.plan.chat.entries).toHaveLength(notices);
+	// An ordinary instruction is not counted against the limit.
+	expect(await invoke(root.channel.id)).toBeUndefined();
+
+	now += 60 * 60_000;
+	turns.finishAll();
+	await root.plan.chat.running;
+	expect(await invoke(root.channel.id, undefined, system)).toBeUndefined();
+});
 
 test("invoke_planner on a child posts to the root's Chat with the child as focus", async () => {
 	let { child, invoke, opened, root, turns } = await routed();

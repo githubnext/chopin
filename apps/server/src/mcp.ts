@@ -149,7 +149,13 @@ export type RestoreDocument<Caller> = {
 	>;
 };
 
-export type InvokePlannerInput = { id: string; instruction: string; checkout?: string };
+export type InvokePlannerInput = {
+	id: string;
+	instruction: string;
+	checkout?: string;
+	/** An automatic follow-up: Chat shows a system notice rather than the caller's message. */
+	as?: "system";
+};
 
 export type InvokePlannerError =
 	| "document-unavailable"
@@ -159,7 +165,9 @@ export type InvokePlannerError =
 	| "planner-owner-unavailable"
 	| "checkout-unverified"
 	| "planner-unavailable"
-	| "planner-queue-full";
+	| "planner-queue-full"
+	| "system-turn-forbidden"
+	| "system-turn-limited";
 
 export type InvokePlanner<Caller> = {
 	invoke(caller: Caller, input: InvokePlannerInput): Promise<
@@ -524,7 +532,8 @@ export const TOOLS: Tool[] = [
 			+ "owner, and otherwise the call is refused. Where the Planner runs in an attached "
 			+ "client, a document with no attached Planner refuses the call with "
 			+ "planner-not-attached and a message saying how to attach one. Questions appear in "
-			+ "Decisions.",
+			+ 'Decisions. With as: "system", for an automatic follow-up, Chat shows a short '
+			+ "system notice instead of the caller's message.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -546,6 +555,14 @@ export const TOOLS: Tool[] = [
 					description: "Absolute path, on the Chopin server's machine, to a checkout of this "
 						+ "repository. Used only by HARNESS=atomic, which verifies its origin and "
 						+ "remembers it as the document's Planner working directory; ignored otherwise.",
+				},
+				as: {
+					type: "string",
+					enum: ["system"],
+					description: "An automatic follow-up nobody typed, such as a finished workflow run: "
+						+ "Chat shows a system notice naming the caller, and the instruction goes to the "
+						+ "Planner alone. Only the document's creator, or the account whose client holds "
+						+ "its Planner, may use it, at most 10 times per document per hour.",
 				},
 			},
 			required: ["id", "instruction"],
@@ -574,6 +591,8 @@ export const TOOLS: Tool[] = [
 								"checkout-unverified",
 								"planner-unavailable",
 								"planner-queue-full",
+								"system-turn-forbidden",
+								"system-turn-limited",
 							],
 						},
 						message: { type: "string" },
@@ -1100,19 +1119,20 @@ export function handler<Caller>(
 				if (tool.name === "invoke_planner" && options.invoke) {
 					let args = tool.arguments;
 					if (
-						Object.keys(args).some(key => !["id", "instruction", "checkout"].includes(key))
+						Object.keys(args).some(key => !["id", "instruction", "checkout", "as"].includes(key))
 						|| !isLocator(args.id)
 						|| typeof args.instruction !== "string" || !args.instruction.trim()
 						|| Buffer.byteLength(args.instruction) > MAX_MESSAGE_BYTES
 						|| (Object.hasOwn(args, "checkout")
 							&& (typeof args.checkout !== "string" || !isAbsolute(args.checkout)))
+						|| (Object.hasOwn(args, "as") && args.as !== "system")
 					) {
 						return notification
 							? undefined
 							: error(
 								call.id,
 								-32602,
-								"invoke_planner requires an id or URL, instruction, and optional absolute checkout",
+								"invoke_planner requires an id or URL, instruction, optional absolute checkout, and optional as: system",
 							);
 					}
 					let result = await options.invoke.invoke(caller, args as InvokePlannerInput);
