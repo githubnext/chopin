@@ -72,6 +72,17 @@ test("Chat Markdown admits formatting without document features", () => {
 	expect(markdown("Planner wrote **strongly**.")).toContain("<strong>strongly</strong>");
 });
 
+test("indentation keeps nested lists and code blocks intact", () => {
+	let nested =
+		/<li>parent\s*<ul>\s*<li>child<\/li>\s*<li>sibling<\/li>\s*<\/ul>\s*<\/li>\s*<li>next<\/li>/;
+
+	expect(markdown("- parent\n  - child\n  - sibling\n- next")).toMatch(nested);
+	expect(markdown("- parent\n    - child\n    - sibling\n- next")).toMatch(nested);
+	expect(markdown("1. parent\n   - child\n   - sibling\n2. next")).toMatch(nested);
+	expect(markdown("```py\nif ready:\n    run()\n```")).toContain("if ready:\n    run()");
+	expect(markdown("Ask @chopin about it")).toContain("Ask about it");
+});
+
 test("authoritative ranges render internal chips inside ordinary Markdown", () => {
 	let source = "@chopin Read **#Release: v2 (API)** and [the docs](https://example.com).";
 	let markup = markdown(source, [reference(source, "#Release: v2 (API)")]);

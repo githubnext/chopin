@@ -228,6 +228,24 @@ test("switching to Chat removes multiple addresses while preserving a document m
 	await expect(reference).toHaveAttribute("data-document-id", target);
 });
 
+test("a sent message keeps its nested list nested", async ({ join }) => {
+	let chat = chatPane(await join("ana"));
+	let input = chatInput(chat);
+	await fillChat(input, "Plan:\n\n- parent\n  - child\n    - grandchild\n- next");
+	await input.press("Enter");
+
+	let message = chat.locator("[data-chat-markdown]").filter({ hasText: "grandchild" });
+	let parent = message.getByRole("listitem").filter({ hasText: "parent" }).first();
+	let child = parent.getByRole("list").getByRole("listitem").filter({ hasText: "child" }).first();
+	let grandchild = child.getByRole("list").getByRole("listitem").filter({ hasText: "grandchild" });
+	await expect(grandchild).toHaveCount(1);
+	await expect(message.getByRole("listitem").filter({ hasText: "next" }).last())
+		.not.toContainText("child");
+	let left = async (item: typeof parent) => (await item.boundingBox())!.x;
+	expect(await left(child)).toBeGreaterThan(await left(parent));
+	expect(await left(grandchild)).toBeGreaterThan(await left(child));
+});
+
 test("context-menu paste undo restores the replaced native selection", async ({ join, page }) => {
 	let input = chatInput(chatPane(await join("ana")));
 	await input.fill("hello world");

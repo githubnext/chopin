@@ -490,6 +490,15 @@ function projectedDisplayUnits(source: string, references: Chat.Reference[]): Di
 			&& !word(source[offset + MENTION.length])
 		) {
 			offset += MENTION.length - 1;
+			// Whitespace is Markdown structure (indentation, code, hard breaks), so
+			// only the space left doubled by the removed mention is dropped.
+			let previous = units.at(-1);
+			if (previous && !previous.protected && /[^\S\n]/.test(previous.value)) {
+				while (
+					/[^\S\n]/.test(source[offset + 1] ?? "")
+					&& !protectedRange(references, offset + 1, offset + 2)
+				) offset++;
+			}
 			continue;
 		}
 		units.push({
@@ -499,23 +508,7 @@ function projectedDisplayUnits(source: string, references: Chat.Reference[]): Di
 		});
 	}
 
-	let collapsed: DisplayUnit[] = [];
-	for (let index = 0; index < units.length;) {
-		let current = units[index]!;
-		if (current.protected || !/[^\S\n]/.test(current.value)) {
-			collapsed.push(current);
-			index++;
-			continue;
-		}
-		let end = index + 1;
-		while (
-			end < units.length
-			&& !units[end]!.protected
-			&& /[^\S\n]/.test(units[end]!.value)
-		) end++;
-		collapsed.push(end - index >= 2 ? { ...current, value: " " } : current);
-		index = end;
-	}
+	let collapsed = units;
 	while (collapsed.length > 0 && /\s/.test(collapsed[0]!.value)) collapsed.shift();
 	while (collapsed.length > 0 && /\s/.test(collapsed.at(-1)!.value)) collapsed.pop();
 
