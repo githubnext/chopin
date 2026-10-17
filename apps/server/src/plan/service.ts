@@ -1988,6 +1988,8 @@ export async function rewrite(
 	try {
 		Questions.rebase(candidate);
 		Comments.rebase(candidate);
+		// A reviewed link whose blocks the rewrite left alone stays reviewed.
+		let reviewed = Questions.snapshot(candidate);
 		let outcome = edit.replace(candidate, plan.revision, nextSource);
 		if (outcome.ok && plan.persistence.documentTitles) room.trackTitle(document);
 		if (!outcome.ok) return outcome;
@@ -1995,7 +1997,7 @@ export async function rewrite(
 		let changed = source !== before;
 		if (changed) {
 			Questions.rebase(candidate);
-			Questions.invalidate(candidate, "plan_changed");
+			Questions.invalidate(candidate, "plan_changed", reviewed);
 			Comments.rebase(candidate);
 			Comments.invalidate(candidate, "plan_changed");
 		} else {
@@ -2039,7 +2041,7 @@ export async function rewrite(
 		plan.outlines = candidate.outlines;
 		if (changed) {
 			Questions.rebase(plan, before);
-			Questions.invalidate(plan, "plan_changed");
+			Questions.invalidate(plan, "plan_changed", reviewed);
 			Comments.rebase(plan);
 			Comments.invalidate(plan, "plan_changed");
 		}

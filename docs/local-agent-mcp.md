@@ -239,6 +239,11 @@ document delta commits. Their change list identifies the MCP client without
 displaying a Planner cursor. Calls without initialization are attributed to
 `unknown`.
 
+An answered decision stays linked to its text when the update leaves every
+block it is linked to unchanged. Any other answered decision, including one whose
+linked text changed or was removed, waits for a Planner turn to link it again
+and shows as not linked, or as having its related text removed, until then.
+
 ## Upload an image
 
 Document images are either absolute `https:` URLs or images Chopin hosts itself.

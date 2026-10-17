@@ -62,15 +62,32 @@ export function read(record: Question): Plan.WidgetAnchors {
  * Called when the plan changes or an answer does. The prose a decision lives in
  * is the thing most likely to have been rewritten, and a link to where it used
  * to be is worse than an admission that nobody has checked.
+ *
+ * Given the relationships from before a whole-document rewrite, one that was
+ * reviewed and whose every block survived with the same digest stays reviewed:
+ * nothing it points at changed, and only a Planner turn could review it again.
  */
-export function invalidate(record: Question, reason: Plan.AnchorReason): Plan.WidgetAnchors {
+export function invalidate(
+	record: Question,
+	reason: Plan.AnchorReason,
+	before?: Plan.WidgetAnchors,
+): Plan.WidgetAnchors {
 	let value = read(record);
 	if (record.status !== "answered") return value;
 
 	for (let [id, set] of Object.entries(value.questions)) {
+		if (unchanged(before?.questions[id], set)) continue;
 		value.questions[id] = { ...set, pending: true, reason };
 	}
 	return value;
+}
+
+function unchanged(before: Plan.AnchorSet | undefined, after: Plan.AnchorSet): boolean {
+	if (!before || before.pending || before.anchors.length === 0) return false;
+	if (after.pending || after.anchors.length !== before.anchors.length) return false;
+	return after.anchors.every((anchor, index) =>
+		!anchor.orphaned && anchor.digest === before.anchors[index]!.digest
+	);
 }
 
 /**

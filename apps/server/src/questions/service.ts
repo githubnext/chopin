@@ -46,6 +46,7 @@ export {
 	rebase,
 	relate,
 	setProse,
+	snapshot,
 } from "./service-relationships";
 export type { Placement } from "./service-relationships";
 export { reopen } from "./service-reopen";

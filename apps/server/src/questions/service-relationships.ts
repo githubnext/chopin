@@ -58,10 +58,23 @@ export function carry(plan: Plan, set: Wired.AnchorSet): Wired.AnchorSet {
 	};
 }
 
-export function invalidate(plan: Plan, reason: Wired.AnchorReason): void {
+export function invalidate(
+	plan: Plan,
+	reason: Wired.AnchorReason,
+	/** From before a rewrite: a reviewed link whose blocks all kept their digest stays reviewed. */
+	before?: Map<string, Wired.WidgetAnchors>,
+): void {
 	for (let [id, record] of plan.records) {
-		plan.records.set(id, { ...record, anchors: Anchors.invalidate(record, reason) });
+		plan.records.set(id, {
+			...record,
+			anchors: Anchors.invalidate(record, reason, before?.get(id)),
+		});
 	}
+}
+
+/** Every decision's relationships as they stand, to compare with after an edit. */
+export function snapshot(plan: Plan): Map<string, Wired.WidgetAnchors> {
+	return new Map([...plan.records].map(([id, record]) => [id, Anchors.read(record)]));
 }
 
 export function outstanding(plan: Plan): Anchors.Pending[] {
