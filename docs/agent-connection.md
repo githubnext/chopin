@@ -397,7 +397,10 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   fresh ids, such as UUIDs.
 - `runs` reports the session's workflow runs whenever they change. Report them
   before `turn-end` so the server keeps the session while runs are live. Reports
-  only change run cards and Chat notices; they never start a Planner turn.
+  only change run cards and Chat notices; they never start a Planner turn. To
+  have the Planner act on a run that ended, call `invoke_planner` with
+  `as: "system"` and a GitHub token of the account holding the Planner; see
+  [Automatic follow-ups](local-agent-mcp.md#automatic-follow-ups).
 - `control-result` answers `stop` or `resume`.
 - `detach` closes the connection with code 1000. The account keeps the document's
   Planner for the grace period in [Ownership](#ownership).

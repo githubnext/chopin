@@ -52,6 +52,8 @@ export type PlannerInvocation = {
 	instruction: string;
 	/** Unverified; only the atomic harness reads it. */
 	checkout?: string;
+	/** An automatic follow-up shown in Chat as a system notice rather than the caller's message. */
+	system?: boolean;
 };
 
 export type ImplementationPersistence = { lease(): Lease };
@@ -341,6 +343,7 @@ export function hosted(
 						session: await auth.sessions.forUser(caller.user.id),
 						instruction: input.instruction,
 						...(input.checkout === undefined ? {} : { checkout: input.checkout }),
+						...(input.as === "system" ? { system: true } : {}),
 					});
 					let url =
 						new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;

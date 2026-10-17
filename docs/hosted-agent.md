@@ -102,6 +102,11 @@ call follows the same rules. Its instruction is posted as the caller's own
 message; the turn runs under the channel's current owner, whoever that is. A
 channel without one is claimed for the caller's live browser login, hosted or
 local, and without such a login the call is refused and nothing is posted.
+With `as: "system"` the call is an
+[automatic follow-up](local-agent-mcp.md#automatic-follow-ups): Chat shows a
+system notice naming the caller instead of their message, and the instruction
+goes to the Planner alone. Only the document's creator or the account holding
+its Planner may send one, at most 10 an hour per document.
 Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
 `invoke_planner` call for a document without an attached Planner is refused with
 `planner-not-attached`, and with one it runs as a turn on that Planner under its

@@ -189,7 +189,9 @@ server writes the instruction from the plan, rechecks write access as for
 per document. An MCP
 `invoke_planner` call posts its instruction as the caller's member message and
 runs under the channel's existing Planner owner; only a caller with a live
-browser login can claim an unowned channel.
+browser login can claim an unowned channel. With `as: "system"`, an automatic
+follow-up limited to the document's creator or its Planner's holder and to 10
+an hour, it goes through `instruct()` and records only a system notice instead.
 
 `Chat.Send.focus` names the child a member has open. The server resolves it
 against storage and treats it as context, never as an authorization grant. A
