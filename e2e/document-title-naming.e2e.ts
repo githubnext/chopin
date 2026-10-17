@@ -22,7 +22,7 @@ test(
 	"saved Chat maintains titles with analysis off across peers, refinement and historical URLs",
 	async ({ join, seed, page, room }, info) => {
 		await seed(
-			"# Friendly Lark\n\nGoal: Keep the existing goal.\n\nPreserved body prose.\n\n# Body section\n",
+			"# quiet-river\n\nGoal: Keep the existing goal.\n\nPreserved body prose.\n\n# Body section\n",
 		);
 		let jobs: ConversationPlan.Job[] = [];
 		page.on("websocket", socket =>
@@ -36,7 +36,7 @@ test(
 		let historical = ana.url();
 		await send(ana, "Hello everyone.");
 		await expect.poll(() => jobs.at(-1)?.status).toBe("done");
-		await surfaces(ana, "Friendly Lark");
+		await surfaces(ana, "quiet-river");
 		await send(ana, "TITLE-TOPIC: Authentication choices");
 		for (let peer of [ana, bo]) {
 			await surfaces(peer, "Authentication choices");
@@ -68,3 +68,22 @@ test(
 		await bo.screenshot({ path: info.outputPath("automatic-title.png") });
 	},
 );
+
+test("a heading job keeps the title a person chose", async ({ join, seed, page, room }) => {
+	await seed("# E2E5 verify login resume\n\nExisting body.\n");
+	let jobs: ConversationPlan.Job[] = [];
+	page.on("websocket", socket =>
+		socket.on("framereceived", ({ payload }) => {
+			if (typeof payload !== "string") return;
+			let frame = JSON.parse(payload) as { kind: string; jobs?: ConversationPlan.Job[] };
+			if (frame.kind === "conversation-plan:jobs") jobs = frame.jobs ?? [];
+		}));
+	let ana = await join("ana");
+	await send(ana, "TITLE-TOPIC: Verify login logic in auth.rs");
+	await expect.poll(() => jobs.at(-1)?.status).toBe("done");
+	await surfaces(ana, "E2E5 verify login resume");
+	await written(ana, room, "# E2E5 verify login resume\n\nExisting body.\n");
+	await ana.reload();
+	await ready(ana);
+	await surfaces(ana, "E2E5 verify login resume");
+});

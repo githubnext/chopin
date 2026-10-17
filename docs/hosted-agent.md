@@ -87,7 +87,11 @@ occurs.
 Title maintenance uses an isolated heading job after a member message is saved,
 including ordinary coworker messages. It works with `CONVERSATION_PLAN=off`
 without Jev and is disabled by `AGENT=off`. It preserves weak-context titles and
-existing body prose, and may refine a human-edited title when the topic changes.
+existing body prose. When the topic changes it may refine a blank title, the
+generated name of a document created without one, or the title a Planner last
+drafted (kept in the sidecar as `plannerTitle`). A title a person set, at
+creation, by renaming or by editing the heading, is never replaced; the job may
+still seed a goal beneath it.
 Missing credentials, an absent remote attachment and an implementation lock keep
 new work pending. Closing or detaching interrupts live work; reconnecting never
 replays an interrupted job. Under `remote`, title work uses only the attached owner

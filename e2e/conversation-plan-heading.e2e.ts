@@ -9,7 +9,9 @@ test.afterEach(async () => {
 	await resetPlannerJobs();
 });
 
-test("a successful heading job preserves its decision card for both collaborators and reload", async ({ join, room }) => {
+test("a successful heading job preserves its decision card for both collaborators and reload", async ({ join, room, seed }) => {
+	// Blank, so the title is the job's to draft; a person's title would be kept.
+	await seed("#\n");
 	await scriptJob("heading", [{
 		tool: "draft_heading",
 		args: {

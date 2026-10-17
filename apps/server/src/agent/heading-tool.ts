@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import {
 	documentBodySource,
+	documentTitleText,
 	MAX_TITLE_LENGTH,
 	normalizeDocumentTitle,
 	withDocumentTitle,
@@ -8,6 +9,7 @@ import {
 import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 
+import { draftableTitle } from "../channels/document-title";
 import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as room from "../plan/room";
@@ -61,7 +63,12 @@ export async function draftHeading(
 	job: ConversationPlan.Job,
 	turn: Context["plan"]["chat"]["turn"],
 	raw: unknown,
-): Promise<{ output: { title: string; goal?: string; changed?: false }; revision: number }> {
+): Promise<
+	{
+		output: { title: string; goal?: string; titleKept?: true; changed?: false };
+		revision: number;
+	}
+> {
 	return context.exclusive(async () => {
 		let { plan } = context;
 		let active = () =>
@@ -72,6 +79,10 @@ export async function draftHeading(
 		let { revision, title, goal } = input(raw);
 		if (revision !== plan.revision) throw new Error("stale; read_plan again");
 		let source = room.project(plan.document);
+		let current = documentTitleText(parse(source)) ?? "";
+		// A person's title is theirs: the draft may still seed the goal beneath it.
+		if (!draftableTitle(current, plan.plannerTitle)) title = current;
+		let retitled = title !== current;
 		let next = withDocumentTitle(source, title);
 		let body = parse(documentBodySource(source));
 		let empty = body.children.every(node =>
@@ -86,7 +97,11 @@ export async function draftHeading(
 				children: [titled.children[0]!, ...parse(goal).children, ...body.children],
 			});
 		} else goal = undefined;
-		let output = { title, ...(goal ? { goal } : {}) };
+		let output = {
+			title,
+			...(goal ? { goal } : {}),
+			...(retitled ? {} : { titleKept: true as const }),
+		};
 		if (next === source) return { output: { ...output, changed: false }, revision: plan.revision };
 
 		// Resolve old anchors before the server edit moves any card in the live tree.
@@ -95,6 +110,7 @@ export async function draftHeading(
 			records: new Map(plan.records),
 			threads: new Map(plan.threads),
 			outlines: new Map(plan.outlines),
+			...(retitled ? { plannerTitle: title } : {}),
 		};
 		Questions.rebase(candidate);
 		Comments.rebase(candidate);

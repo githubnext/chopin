@@ -239,6 +239,8 @@ export type Plan = {
 	conversationPlanPendingEffects: Effect[];
 	/** Card actions waiting to be mirrored into their conversation thread. */
 	pendingCardActions: PendingCardAction[];
+	/** The title a Planner last drafted; any other non-generated title is a person's to keep. */
+	plannerTitle?: string;
 
 	/**
 	 * Every questionnaire this plan has ever held, answered or not.
@@ -325,6 +327,7 @@ type Sidecar = {
 	pendingCardActions?: PendingCardAction[];
 	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 	initiativePaused?: boolean;
+	plannerTitle?: string;
 };
 
 type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused">;
@@ -363,6 +366,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
 		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
 		...((chat.initiativePaused ?? plan.chat.initiativePaused) ? { initiativePaused: true } : {}),
+		...(plan.plannerTitle !== undefined ? { plannerTitle: plan.plannerTitle } : {}),
 	};
 }
 
@@ -552,6 +556,7 @@ function restoredState(
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	if (Object.hasOwn(item, "initiativePaused")) expected.push("initiativePaused");
+	if (Object.hasOwn(item, "plannerTitle")) expected.push("plannerTitle");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -568,6 +573,7 @@ function restoredState(
 		|| !Array.isArray(item.threads)
 		|| !Array.isArray(item.transcript)
 		|| (Object.hasOwn(item, "initiativePaused") && typeof item.initiativePaused !== "boolean")
+		|| (Object.hasOwn(item, "plannerTitle") && typeof item.plannerTitle !== "string")
 	) throw new Error("hosted channel has an invalid sidecar");
 	let execution = Object.hasOwn(item, "execution")
 		? restoreRun(item.execution, graph, item.revision)
@@ -742,6 +748,7 @@ function restoredState(
 		...(pendingCardActions.length ? { pendingCardActions } : {}),
 		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
 		...(item.initiativePaused === true ? { initiativePaused: true } : {}),
+		...(typeof item.plannerTitle === "string" ? { plannerTitle: item.plannerTitle } : {}),
 	};
 }
 
@@ -1479,6 +1486,7 @@ export async function open(
 		conversationPlanEffects: sidecar.conversationPlanEffects ?? [],
 		conversationPlanPendingEffects: sidecar.conversationPlanPendingEffects ?? [],
 		pendingCardActions: sidecar.pendingCardActions ?? [],
+		...(sidecar.plannerTitle !== undefined ? { plannerTitle: sidecar.plannerTitle } : {}),
 		outlines: new Map(),
 		records: new Map(
 			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
@@ -1942,6 +1950,7 @@ export async function publishStaged(
 	plan.pendingCardActions = candidate.pendingCardActions;
 	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;
 	plan.conversationPlanEffects = candidate.conversationPlanEffects;
+	plan.plannerTitle = candidate.plannerTitle;
 	if (mutation) {
 		try {
 			broadcast(server, roomId, {

@@ -21,6 +21,19 @@ test("the heading prompt quotes recent members and names its one writing tool", 
 	expect(prompt).toContain("Use no other writing tool. Do not reply in chat.");
 });
 
+test("the heading prompt keeps a title a person chose", () => {
+	let prompt = headingPrompt({
+		transcript: [],
+		outline: "",
+		title: "Login resume",
+		personal: true,
+	});
+	expect(prompt).toContain("A person chose the current title. Keep it exactly");
+	expect(prompt).not.toContain("Omit goal when keeping the title.");
+	expect(headingPrompt({ transcript: [], outline: "", title: "amber-river" }))
+		.not.toContain("A person chose the current title.");
+});
+
 test("a suggest prompt forbids retitling and moving", () => {
 	let prompt = refinePrompt({
 		kind: "suggest",

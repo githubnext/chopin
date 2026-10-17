@@ -200,8 +200,8 @@ yes, Markdown for now                  -> channel chat transcript
 The recent channel chat transcript is supplied as bounded context for the next turn,
 even when those messages did not address the Planner. Saved member messages also
 maintain the document's title independently of conversation-derived cards. Weak
-or incidental discussion leaves the title alone; topic changes may refine a title
-someone chose. This work obeys `AGENT`, ownership and implementation locks, and
+or incidental discussion leaves the title alone; topic changes may refine a blank,
+generated or Planner-drafted title, but never one a person set. This work obeys `AGENT`, ownership and implementation locks, and
 does not require Jev. A title job can seed a goal only before body prose exists.
 
 The first eligible model-backed action, including title maintenance, a Planner turn

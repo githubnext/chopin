@@ -126,18 +126,69 @@ test("draft_heading replaces only the empty H1 template before cards", async () 
 	expect(cardKey(context)).toBe(key);
 });
 
-test("draft_heading refines human titles while preserving all existing body blocks", async () => {
+test("draft_heading keeps a member's title and still seeds the goal of an empty body", async () => {
+	let member = "E2E5 2026-10-16: verify login resume";
+	let context = await opened(`# ${member}\n\n${CARD}`);
+	headingJob(context.plan);
+	let before = room.project(context.plan.document);
+	let result = await headingTool(context).handler(
+		{ revision: 0, title: "Verify login logic in auth.rs", goal: INPUT.goal },
+		{} as never,
+	);
+	expect(JSON.parse(String(result))).toMatchObject({ ok: true, title: member, goal: INPUT.goal });
+	expect(room.project(context.plan.document)).toBe(
+		before.replace(`# ${member}\n\n`, `# ${member}\n\n${INPUT.goal}\n\n`),
+	);
+});
+
+test("draft_heading keeps a member's title over a body it does not change", async () => {
 	let context = await opened(
 		`# Human title\n\nGoal: Keep our goal.\n\nBody prose.\n\n# Body heading\n\n${CARD}`,
 	);
 	headingJob(context.plan);
 	let before = room.project(context.plan.document);
 	let result = await headingTool(context).handler(INPUT, {} as never);
+	expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false, revision: 0 });
+	expect(room.project(context.plan.document)).toBe(before);
+	expect(context.broadcasts.filter(frame => frame.kind === "plan:update")).toHaveLength(0);
+});
+
+test("draft_heading titles a document still carrying its generated name", async () => {
+	let context = await opened("# amber-river\n\nExisting body.\n");
+	headingJob(context.plan);
+	let result = await headingTool(context).handler({ revision: 0, title: INPUT.title }, {} as never);
 	expect(JSON.parse(String(result))).toMatchObject({ ok: true, title: INPUT.title });
-	expect(room.project(context.plan.document)).toBe(
-		before.replace("# Human title", `# ${INPUT.title}`),
+	expect(room.project(context.plan.document)).toBe(`# ${INPUT.title}\n\nExisting body.\n`);
+});
+
+test("a later draft refines a Planner title, also after the document reopens", async () => {
+	let context = await opened("# \n\nExisting body.\n");
+	headingJob(context.plan);
+	await headingTool(context).handler({ revision: 0, title: "First draft" }, {} as never);
+	expect(room.project(context.plan.document)).toBe("# First draft\n\nExisting body.\n");
+	await Service.close(context.plan);
+	context.plan = await Service.open(context.channel.id, context.backend, context.server);
+	headingJob(context.plan);
+	let result = await headingTool(context).handler(
+		{ revision: context.plan.revision, title: "Second draft" },
+		{} as never,
 	);
-	expect(JSON.parse(context.plan.chat.jobOutput!)).not.toHaveProperty("goal");
+	expect(JSON.parse(String(result))).toMatchObject({ ok: true, title: "Second draft" });
+	expect(room.project(context.plan.document)).toBe("# Second draft\n\nExisting body.\n");
+});
+
+test("a member's rename after a draft is kept by the next draft", async () => {
+	let context = await opened("# \n\nExisting body.\n");
+	headingJob(context.plan);
+	await headingTool(context).handler({ revision: 0, title: "First draft" }, {} as never);
+	await Service.exclusive(context.plan, () => Service.rename(context.plan, "Member title"));
+	headingJob(context.plan);
+	let result = await headingTool(context).handler(
+		{ revision: context.plan.revision, title: "Second draft" },
+		{} as never,
+	);
+	expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false });
+	expect(room.project(context.plan.document)).toBe("# Member title\n\nExisting body.\n");
 });
 
 test("unchanged friendly or blank titles are successful no-ops", async () => {
@@ -155,7 +206,7 @@ test("unchanged friendly or blank titles are successful no-ops", async () => {
 
 test("title-only writes accept 50 Unicode characters and escape Markdown punctuation", async () => {
 	for (let title of ["😀".repeat(50), "# *Offline* retries [guide]"]) {
-		let context = await opened("# Before\n\nExisting body.\n");
+		let context = await opened("# \n\nExisting body.\n");
 		headingJob(context.plan);
 		let result = await headingTool(context).handler({ revision: 0, title }, {} as never);
 		expect(JSON.parse(String(result))).toMatchObject({ ok: true, title });

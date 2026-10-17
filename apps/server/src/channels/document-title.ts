@@ -164,3 +164,17 @@ export function* documentTitles(random: Random = Math.random): IterableIterator<
 		yield `${adjective}-${noun}`;
 	}
 }
+
+let adjectiveSet = new Set(adjectives);
+let nounSet = new Set(nouns);
+
+/** Whether a title is still a name Chopin generated because its creator gave none. */
+export function generatedTitle(value: string): boolean {
+	let [adjective, noun, ...rest] = value.split("-");
+	return rest.length === 0 && adjectiveSet.has(adjective!) && nounSet.has(noun ?? "");
+}
+
+/** A draft may replace a blank or generated title, or the one a Planner last drafted. */
+export function draftableTitle(title: string, plannerTitle: string | undefined): boolean {
+	return !title || title === plannerTitle || generatedTitle(title);
+}

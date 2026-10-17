@@ -99,7 +99,11 @@ export function line(
 	if (job.kind === "heading") {
 		if (summary.changed === false) return undefined;
 		return [
-			summary.goal ? "Chopin drafted the title and goal" : "Chopin updated the title",
+			summary.titleKept === true
+				? "Chopin drafted the goal"
+				: summary.goal
+				? "Chopin drafted the title and goal"
+				: "Chopin updated the title",
 			"document",
 		];
 	}

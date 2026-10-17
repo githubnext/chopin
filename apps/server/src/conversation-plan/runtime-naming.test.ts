@@ -161,6 +161,8 @@ test("the production build-release callback activates titles and resumes naming 
 	let h = await headingMemory(false, true, call);
 	try {
 		h.plan.persistence.documentTitles = true;
+		// A generated name, so the title is still the job's to draft.
+		h.plan.persistence.committedTitle = "quiet-river";
 		h.plan.persistence.liveBuild = false;
 		h.plan.persistence.onEditingUnlocked = createEditingUnlocked({
 			withDocumentLock: async (_id, action) => action(),

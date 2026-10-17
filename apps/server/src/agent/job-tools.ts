@@ -18,7 +18,8 @@ let contextSchema = z.object({
 export let jobTools = {
 	draft_heading: tool({
 		description: "Background job only. Maintain a short document title from saved conversation. "
-			+ "Keep the current title when evidence is weak. An optional goal only seeds an empty body.",
+			+ "Keep the current title when evidence is weak; a title a person chose is always kept. "
+			+ "An optional goal only seeds an empty body.",
 		inputSchema: jsonSchema<{ revision: number; title: string; goal?: string }>({
 			type: "object",
 			properties: {
