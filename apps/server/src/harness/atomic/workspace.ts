@@ -51,6 +51,15 @@ export function stateDirectory(): string {
 }
 
 /**
+ * Where Planner sessions journal their workflow runs. A run resumes only with
+ * the journal and working directory it started with, so the journal lives
+ * beside the channel directories rather than in Atomic's own home.
+ */
+export function workflowJournal(): string {
+	return join(stateDirectory(), "atomic", "workflows.sqlite");
+}
+
+/**
  * A stable directory per channel, private to the server's user. It lives in a
  * per-user directory rather than the shared tmp, so a predictable name is safe;
  * a symlink or file planted at that name is refused rather than followed.

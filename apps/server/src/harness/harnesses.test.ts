@@ -52,6 +52,35 @@ it("refuses Atomic's host-login auto mode on a non-loopback bind but accepts ai-
 		.toBe("atomic");
 });
 
+it("journals Atomic workflow runs in Chopin's state directory unless the operator names a journal", async () => {
+	let previous = {
+		state: process.env.XDG_STATE_HOME,
+		journal: process.env.ATOMIC_WORKFLOW_JOURNAL_PATH,
+	};
+	let state = join(tmpdir(), `chopin-state-${crypto.randomUUID()}`);
+	let restore = (name: string, value: string | undefined) =>
+		value === undefined ? delete process.env[name] : process.env[name] = value;
+	let journal = (): string | undefined => process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
+	try {
+		process.env.XDG_STATE_HOME = state;
+		delete process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
+		harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" });
+		if (process.platform === "linux") {
+			expect(journal()).toBe(join(state, "chopin", "atomic", "workflows.sqlite"));
+		}
+		await shutdownHarnesses();
+		expect(journal()).toBeUndefined();
+
+		process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = "/srv/atomic/runs.sqlite";
+		harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" });
+		expect(journal()).toBe("/srv/atomic/runs.sqlite");
+	} finally {
+		await shutdownHarnesses();
+		restore("XDG_STATE_HOME", previous.state);
+		restore("ATOMIC_WORKFLOW_JOURNAL_PATH", previous.journal);
+	}
+});
+
 it("accepts the remote harness on any bind without HARNESS_AUTH, and refuses one", () => {
 	for (let host of ["0.0.0.0", "::", "192.168.1.2", "127.0.0.1"]) {
 		expect(harnessFor({ harness: "remote", host }).harnessId).toBe("remote");

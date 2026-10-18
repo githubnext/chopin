@@ -75,7 +75,7 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=atomic` runs Atomic 0.9.37 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.38-alpha.9 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
@@ -148,9 +148,14 @@ Atomic caveats:
   `auto` also runs `!command` API-key entries in `auth.json` to resolve them.
 - There is no per-session credit limit like Copilot's, so a worker's
   `maxAiCredits` does not apply. Use the provider's spend limits.
-- `@bastani/atomic` adds more than 250 MB of installed dependencies on Linux
-  x64, including glibc and musl native modules and the embedded PostgreSQL
-  that only Atomic workflows use. Expect a larger image.
+- `@bastani/atomic` adds more than 200 MB of installed dependencies on Linux
+  x64, including glibc and musl native modules. Expect a larger image.
+- Atomic workflows need no database server. Their runs are journaled in a
+  SQLite file, `$XDG_STATE_HOME/chopin/atomic/workflows.sqlite`, beside the
+  documents' Planner directories (see
+  [Full Atomic Planner](hosted-agent.md#full-atomic-planner)). The Docker image
+  sets `XDG_STATE_HOME=/var/lib/chopin`; mount a volume there to keep runs
+  and those directories when the container is replaced.
 - Atomic depends on `typebox` 1.3.27 while Chopin pins 1.3.7. Host tool schemas
   pass to Atomic as plain JSON Schema, so the two versions never meet.
 
