@@ -1,0 +1,804 @@
+{
+	"appflowy-dark-mode-palette": [
+		"crowd-signal",
+		"implicit",
+		"coupled",
+		"delegate"
+	],
+	"ripgrep-long-line-handling": [
+		"other",
+		"blocking",
+		"evidence-not-check",
+		"coupled"
+	],
+	"ripgrep-hyperlink-support": [
+		"revert",
+		"supersede",
+		"evidence-not-check",
+		"external-authority"
+	],
+	"ripgrep-pager-flag": [
+		"revert",
+		"crowd-signal",
+		"other",
+		"external-authority"
+	],
+	"zoxide-fish-cd-call": [
+		"revert",
+		"other"
+	],
+	"uv-index-semantics": [
+		"coupled",
+		"other",
+		"nested",
+		"venue-split"
+	],
+	"atuin-classic-up-arrow": [
+		"stale-idle",
+		"crowd-signal",
+		"evidence-not-check"
+	],
+	"just-telemetry-mechanism": [
+		"reframe",
+		"crowd-signal",
+		"stale-idle"
+	],
+	"just-f-string-syntax": [
+		"revert",
+		"nested",
+		"stale-idle",
+		"coupled"
+	],
+	"just-parallel-mechanism": [
+		"staged",
+		"evidence-not-check",
+		"crowd-signal",
+		"stale-idle"
+	],
+	"crystal-io-first": [
+		"crowd-signal",
+		"staged",
+		"consensus-mechanics"
+	],
+	"delta-light-dark-detection": [
+		"staged",
+		"stale-idle",
+		"supersede",
+		"partition"
+	],
+	"deno-config-permissions": [
+		"venue-split",
+		"delegate",
+		"rejected-content",
+		"other"
+	],
+	"deno-rust-type-checker": [
+		"nested",
+		"staged",
+		"external-authority",
+		"delegate"
+	],
+	"deno-deny-flags-strict-check": [
+		"venue-split",
+		"coupled",
+		"delegate"
+	],
+	"deno-jupyter-display-hook": [
+		"venue-split",
+		"staged",
+		"coupled",
+		"external-authority"
+	],
+	"aspnetcore-mvc-in-shared-framework": [
+		"evidence-not-check",
+		"other",
+		"nested"
+	],
+	"eslint-formatting-rule-deprecation": [
+		"venue-split",
+		"partition",
+		"staged",
+		"blocking",
+		"other"
+	],
+	"eslint-native-ts-config-flag": [
+		"conditional",
+		"other",
+		"consensus-mechanics"
+	],
+	"eslint-adopt-codemod": [
+		"venue-split",
+		"delegate",
+		"other",
+		"consequences"
+	],
+	"excalidraw-chart-type-selection": [
+		"venue-split",
+		"coupled",
+		"staged"
+	],
+	"excalidraw-wheel-zoom": [
+		"delegate",
+		"crowd-signal",
+		"evidence-not-check",
+		"evidence-not-check"
+	],
+	"excalidraw-new-drawing-button": [
+		"consensus-mechanics",
+		"crowd-signal",
+		"blocking",
+		"evidence-not-check"
+	],
+	"excalidraw-handwritten-font": [
+		"crowd-signal",
+		"venue-split",
+		"reframe",
+		"visual-comparison"
+	],
+	"excalidraw-zen-mode-entry-exit": [
+		"coupled",
+		"convention",
+		"evidence-not-check"
+	],
+	"excalidraw-binding-default": [
+		"evidence-not-check",
+		"staged",
+		"delegate"
+	],
+	"excalidraw-export-split-labels": [
+		"coupled",
+		"venue-split",
+		"nested",
+		"other"
+	],
+	"excalidraw-embed-validator-api": [
+		"implicit",
+		"coupled"
+	],
+	"excalidraw-embed-alt-text": [
+		"venue-split"
+	],
+	"ghostty-broadcast-groups-design": [
+		"implicit",
+		"coupled",
+		"blocking",
+		"approve"
+	],
+	"ghostty-official-snap": [
+		"implicit",
+		"conditional",
+		"blocking",
+		"venue-split",
+		"implicit"
+	],
+	"godot-object-metadata": [
+		"crowd-signal",
+		"nested",
+		"venue-split"
+	],
+	"go-remove-binary-only-packages": [
+		"consensus-mechanics",
+		"other",
+		"conditional",
+		"staged",
+		"venue-split"
+	],
+	"go-try-builtin": [
+		"crowd-signal",
+		"reframe",
+		"venue-split",
+		"venue-split",
+		"other",
+		"evidence-not-check",
+		"coupled"
+	],
+	"go-slice-to-array": [
+		"delegate",
+		"staged",
+		"consensus-mechanics",
+		"nested"
+	],
+	"go-tb-output": [
+		"delegate",
+		"coupled",
+		"consensus-mechanics",
+		"staged"
+	],
+	"go-loopvar-per-iteration": [
+		"evidence-not-check",
+		"venue-split",
+		"coupled",
+		"crowd-signal",
+		"venue-split",
+		"staged"
+	],
+	"go-first-non-zero-helper": [
+		"other",
+		"coupled",
+		"crowd-signal",
+		"nested",
+		"venue-split"
+	],
+	"go-unique-generic-handle": [
+		"venue-split",
+		"staged",
+		"coupled",
+		"other"
+	],
+	"go-unique-naming": [
+		"crowd-signal"
+	],
+	"xterm-history-api-shape": [
+		"venue-split",
+		"staged",
+		"coupled",
+		"consensus-mechanics",
+		"stale-idle"
+	],
+	"helix-terminal-in-core": [
+		"venue-split",
+		"implicit",
+		"crowd-signal",
+		"delegate",
+		"blocking"
+	],
+	"helix-file-explorer-shape": [
+		"coupled",
+		"delegate",
+		"crowd-signal",
+		"revert"
+	],
+	"helix-explorer-design": [
+		"supersede",
+		"stale-idle",
+		"staged",
+		"blocking"
+	],
+	"helix-state-file-layout": [
+		"stale-idle",
+		"evidence-not-check"
+	],
+	"helix-state-scope": [
+		"delegate",
+		"venue-split",
+		"stale-idle"
+	],
+	"ha-floors-vs-nested-areas": [
+		"ratify",
+		"nested",
+		"blocking",
+		"other"
+	],
+	"ha-entity-name-editing": [
+		"implicit",
+		"rejected-content",
+		"revert",
+		"delegate",
+		"venue-split"
+	],
+	"ha-addons-to-apps": [
+		"other",
+		"evidence-not-check",
+		"venue-split",
+		"reframe"
+	],
+	"ha-template-binary-sensor-delays-ui": [
+		"venue-split",
+		"other",
+		"crowd-signal",
+		"rejected-content",
+		"evidence-not-check"
+	],
+	"home-assistant-network-interface-policy": [
+		"reframe",
+		"evidence-not-check",
+		"reframe",
+		"stale-idle"
+	],
+	"ha-numeric-state-unavailable": [
+		"stale-idle",
+		"venue-split",
+		"other",
+		"other"
+	],
+	"ha-device-ip-display": [
+		"implicit",
+		"delegate",
+		"stale-idle",
+		"coupled"
+	],
+	"home-assistant-lawn-mower-entity-model": [
+		"venue-split",
+		"other",
+		"coupled",
+		"staged",
+		"consequences"
+	],
+	"ha-event-entity-shape": [
+		"venue-split",
+		"coupled",
+		"other",
+		"partition",
+		"consensus-mechanics"
+	],
+	"home-assistant-fan-speed-model": [
+		"reframe",
+		"staged",
+		"coupled",
+		"stale-idle"
+	],
+	"ha-release-cycle-length": [
+		"venue-split",
+		"stale-idle",
+		"reframe",
+		"evidence-not-check"
+	],
+	"home-assistant-last-changed-persistence": [
+		"staged",
+		"stale-idle",
+		"delegate",
+		"evidence-not-check",
+		"other"
+	],
+	"ha-code-owner-required": [
+		"other",
+		"supersede",
+		"consensus-mechanics"
+	],
+	"home-assistant-choose-action-syntax": [
+		"supersede",
+		"venue-split",
+		"coupled",
+		"other"
+	],
+	"ha-zwave-driver-choice": [
+		"venue-split",
+		"revert",
+		"consequences",
+		"other"
+	],
+	"frontend-section-styling": [
+		"venue-split",
+		"revert",
+		"crowd-signal",
+		"supersede"
+	],
+	"ha-toggle-confirmation": [
+		"staged",
+		"delegate",
+		"crowd-signal",
+		"evidence-not-check",
+		"supersede",
+		"consensus-mechanics"
+	],
+	"lazygit-worktree-naming-location": [
+		"staged",
+		"evidence-not-check",
+		"deferred",
+		"other"
+	],
+	"fzf-default-opts-file": [
+		"ratify",
+		"consequences",
+		"other"
+	],
+	"fzf-preview-window": [
+		"implicit",
+		"partition",
+		"visual-comparison",
+		"other"
+	],
+	"logseq-hierarchy-placement": [
+		"delegate",
+		"crowd-signal",
+		"venue-split",
+		"implicit"
+	],
+	"mastodon-remote-local-timeline": [
+		"moot",
+		"consensus-mechanics",
+		"other",
+		"crowd-signal"
+	],
+	"mastodon-quote-posts-policy": [
+		"supersede",
+		"delegate",
+		"other",
+		"crowd-signal",
+		"venue-split"
+	],
+	"mastodon-text-formatting": [
+		"venue-split",
+		"crowd-signal",
+		"delegate",
+		"revert",
+		"evidence-not-check"
+	],
+	"mastodon-local-only-posts": [
+		"reframe",
+		"supersede",
+		"evidence-not-check",
+		"deferred",
+		"crowd-signal"
+	],
+	"typescript-node-esm-mode-shape": [
+		"venue-split",
+		"other",
+		"supersede",
+		"staged"
+	],
+	"vscode-scm-single-view-response": [
+		"revert",
+		"crowd-signal",
+		"supersede",
+		"delegate"
+	],
+	"vscode-centered-layout-scope-and-settings": [
+		"crowd-signal",
+		"implicit",
+		"other",
+		"other"
+	],
+	"vscode-focus-indicator-dim-vs-border": [
+		"crowd-signal",
+		"evidence-not-check",
+		"staged",
+		"stale-idle"
+	],
+	"vscode-dim-setting-shape-and-namespace": [
+		"revert",
+		"supersede",
+		"coupled"
+	],
+	"vscode-modern-ui-rollout": [
+		"delegate",
+		"venue-split",
+		"crowd-signal",
+		"evidence-not-check",
+		"staged"
+	],
+	"vscode-modern-ui-optin-rollout": [
+		"delegate",
+		"evidence-not-check",
+		"revert",
+		"crowd-signal",
+		"other"
+	],
+	"vscode-modern-ui-classic-removal": [
+		"delegate",
+		"revert",
+		"crowd-signal",
+		"staged",
+		"evidence-not-check"
+	],
+	"vscode-completion-item-label-shape": [
+		"coupled",
+		"staged",
+		"stale-idle",
+		"blocking",
+		"visual-comparison"
+	],
+	"vscode-quick-open-preview-behaviour": [
+		"staged",
+		"venue-split",
+		"other",
+		"blocking",
+		"crowd-signal",
+		"implicit"
+	],
+	"vscode-pinned-tab-sizing": [
+		"coupled",
+		"revert",
+		"other",
+		"crowd-signal",
+		"nested",
+		"evidence-not-check"
+	],
+	"vscode-fixed-width-tabs": [
+		"evidence-not-check",
+		"reframe",
+		"coupled",
+		"other"
+	],
+	"vscode-windows-titlebar-style": [
+		"venue-split",
+		"blocking",
+		"coupled",
+		"delegate",
+		"crowd-signal"
+	],
+	"node-yarn-vs-corepack": [
+		"vote",
+		"venue-split",
+		"staged",
+		"delegate"
+	],
+	"node-tsc-voting-method": [
+		"coupled",
+		"nested"
+	],
+	"node-primordials-error-path": [
+		"vote",
+		"venue-split",
+		"partition",
+		"other",
+		"venue-split"
+	],
+	"nodejs-primordials-policy": [
+		"supersede",
+		"crowd-signal",
+		"staged",
+		"supersede",
+		"reframe"
+	],
+	"node-incomingmessage-destroy": [
+		"revert",
+		"implicit",
+		"approve",
+		"evidence-not-check"
+	],
+	"node-rm-eperm-workaround": [
+		"approve",
+		"evidence-not-check",
+		"evidence-not-check",
+		"implicit"
+	],
+	"outline-document-tags": [
+		"crowd-signal",
+		"delegate",
+		"other",
+		"deferred"
+	],
+	"outline-raw-markdown-mode": [
+		"conditional",
+		"consensus-mechanics",
+		"evidence-not-check"
+	],
+	"outline-database-views": [
+		"crowd-signal",
+		"reframe",
+		"other",
+		"supersede"
+	],
+	"penpot-desktop-app-form": [
+		"crowd-signal",
+		"coupled",
+		"venue-split",
+		"staged",
+		"implicit",
+		"crowd-signal"
+	],
+	"pnpm-pre-post-scripts": [
+		"revert",
+		"staged",
+		"crowd-signal",
+		"coupled",
+		"consequences"
+	],
+	"pnpm-pm-strict-default": [
+		"crowd-signal",
+		"venue-split",
+		"revert",
+		"external-authority"
+	],
+	"prettier-final-newline": [
+		"convention",
+		"crowd-signal",
+		"conditional",
+		"reframe"
+	],
+	"prettier-generator-star-revert": [
+		"consensus-mechanics",
+		"revert",
+		"consensus-mechanics"
+	],
+	"prettier-nested-ternary-format": [
+		"crowd-signal",
+		"provisional",
+		"other",
+		"convention",
+		"nested"
+	],
+	"rfcs-abort-default-strategy": [
+		"venue-split",
+		"supersede",
+		"nested",
+		"approve"
+	],
+	"rfcs-crate-changelogs": [
+		"venue-split",
+		"partition",
+		"approve",
+		"supersede",
+		"reframe"
+	],
+	"rust-bool-option-methods": [
+		"coupled",
+		"staged",
+		"supersede",
+		"approve"
+	],
+	"rust-check-cfg-rfc": [
+		"implicit",
+		"delegate",
+		"staged"
+	],
+	"cargo-feature-doc-field": [
+		"staged",
+		"coupled",
+		"venue-split",
+		"approve",
+		"delegate"
+	],
+	"rfcs-derive-from-direction": [
+		"staged",
+		"coupled",
+		"approve",
+		"consensus-mechanics",
+		"delegate"
+	],
+	"rust-analyzer-attr-macro-input-fixup": [
+		"external-authority",
+		"venue-split",
+		"staged",
+		"implicit"
+	],
+	"ra-upstream-inlay-hints": [
+		"external-authority",
+		"venue-split",
+		"coupled",
+		"blocking"
+	],
+	"bat-builtin-pager-approach": [
+		"venue-split",
+		"staged",
+		"conditional"
+	],
+	"bat-debian-batcat-name": [
+		"revert",
+		"external-authority",
+		"venue-split",
+		"conditional"
+	],
+	"svelte-raw-snippet-functions": [
+		"evidence-not-check",
+		"coupled",
+		"evidence-not-check",
+		"approve"
+	],
+	"svelte-element-this-attr": [
+		"venue-split",
+		"supersede",
+		"coupled",
+		"staged"
+	],
+	"svelte-css-nesting-implementation": [
+		"coupled",
+		"supersede",
+		"venue-split",
+		"evidence-not-check"
+	],
+	"tailwind-variant-grouping": [
+		"venue-split",
+		"delegate",
+		"conditional",
+		"implicit"
+	],
+	"tailwindcss-prettier-strip-whitespace-default": [
+		"revert",
+		"crowd-signal",
+		"venue-split",
+		"evidence-not-check"
+	],
+	"tc39-reflection-syntax-shape": [
+		"venue-split",
+		"supersede",
+		"consensus-mechanics",
+		"other"
+	],
+	"uuid6-alt-text-encoding": [
+		"supersede",
+		"venue-split",
+		"coupled",
+		"evidence-not-check",
+		"supersede"
+	],
+	"nextjs-global-css-imports": [
+		"supersede",
+		"staged",
+		"stale-idle",
+		"partition"
+	],
+	"nextjs-page-file-and-dir-naming": [
+		"crowd-signal",
+		"venue-split",
+		"coupled",
+		"implicit",
+		"other"
+	],
+	"nextjs-auth-interrupts-api-shape": [
+		"delegate",
+		"evidence-not-check",
+		"coupled",
+		"other",
+		"stale-idle"
+	],
+	"nextjs-csp-approach": [
+		"staged",
+		"supersede",
+		"venue-split",
+		"coupled"
+	],
+	"vite-lib-externalize-lookup": [
+		"stale-idle",
+		"evidence-not-check",
+		"deferred"
+	],
+	"vite-eager-browserhash-merge": [
+		"delegate",
+		"approve",
+		"blocking",
+		"evidence-not-check"
+	],
+	"vite-node-worker-api": [
+		"venue-split",
+		"staged",
+		"supersede"
+	],
+	"astro-define-vars-scripts": [
+		"staged",
+		"approve",
+		"coupled",
+		"supersede"
+	],
+	"astro-scripts-only-when-rendered": [
+		"evidence-not-check",
+		"stale-idle",
+		"venue-split",
+		"partition"
+	],
+	"astro-inline-script-stage-2": [
+		"staged",
+		"approve",
+		"supersede",
+		"stale-idle"
+	],
+	"zed-commit-log-graph": [
+		"venue-split",
+		"visual-comparison",
+		"crowd-signal",
+		"staged"
+	],
+	"zed-git-panel-file-diff": [
+		"vote",
+		"reframe",
+		"other"
+	],
+	"zed-file-tree-refresh-approach": [
+		"delegate",
+		"implicit",
+		"consensus-mechanics",
+		"conditional",
+		"crowd-signal"
+	],
+	"zed-threads-sidebar-disable-option": [
+		"venue-split",
+		"other",
+		"crowd-signal",
+		"evidence-not-check",
+		"nested"
+	],
+	"zed-hide-title-bar": [
+		"revert",
+		"venue-split",
+		"crowd-signal",
+		"blocking",
+		"delegate"
+	],
+	"zed-smooth-scroll-trackpad": [
+		"staged",
+		"other",
+		"evidence-not-check",
+		"delegate"
+	]
+}

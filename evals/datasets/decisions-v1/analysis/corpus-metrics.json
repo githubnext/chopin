@@ -1,0 +1,6215 @@
+{
+	"meta": {
+		"n": 173,
+		"strata": {
+			"all": 173,
+			"threads": 132,
+			"documents": 41,
+			"small": 11
+		},
+		"ci": "Wilson 95% interval"
+	},
+	"describe": {
+		"all": {
+			"n": 173,
+			"quota": {
+				"document": 41,
+				"product-ui": 36,
+				"pr-debate": 28,
+				"formal-process": 26,
+				"eng-issue": 20,
+				"small-team": 11,
+				"open-choice": 11
+			},
+			"domain": {
+				"ui-ux": 32,
+				"api-design": 25,
+				"product-behaviour": 22,
+				"architecture": 15,
+				"process-governance": 15,
+				"language-design": 14,
+				"compatibility": 12,
+				"tooling": 9,
+				"security": 8,
+				"naming": 8,
+				"data-model": 8,
+				"infra": 3,
+				"dependency": 2
+			},
+			"participants_known": 155,
+			"participants_median": 15,
+			"participants_le3": 3,
+			"duration_median_days": 114.0,
+			"decided": {
+				"k": 148,
+				"n": 173,
+				"p": 0.855,
+				"ci95": [
+					0.795,
+					0.9
+				]
+			},
+			"how": {
+				"maintainer-decision": 83,
+				"consensus": 31,
+				"unclear": 23,
+				"default/no-action": 13,
+				"fcp": 12,
+				"abandoned": 7,
+				"vote": 4
+			},
+			"decider": {
+				"team": 63,
+				"named maintainer": 49,
+				"consensus": 26,
+				"unclear": 21,
+				"BDFL": 8,
+				"vote": 6
+			},
+			"formal_share": {
+				"k": 51,
+				"n": 173,
+				"p": 0.295,
+				"ci95": [
+					0.232,
+					0.367
+				]
+			},
+			"truncated": {
+				"k": 5,
+				"n": 173,
+				"p": 0.029,
+				"ci95": [
+					0.012,
+					0.066
+				]
+			}
+		},
+		"threads": {
+			"n": 132,
+			"quota": {
+				"product-ui": 36,
+				"pr-debate": 28,
+				"formal-process": 26,
+				"eng-issue": 20,
+				"small-team": 11,
+				"open-choice": 11
+			},
+			"domain": {
+				"ui-ux": 32,
+				"product-behaviour": 22,
+				"api-design": 22,
+				"architecture": 11,
+				"compatibility": 8,
+				"language-design": 8,
+				"data-model": 8,
+				"process-governance": 6,
+				"tooling": 5,
+				"naming": 5,
+				"security": 3,
+				"infra": 1,
+				"dependency": 1
+			},
+			"participants_known": 132,
+			"participants_median": 18.0,
+			"participants_le3": 3,
+			"duration_median_days": 188.0,
+			"decided": {
+				"k": 117,
+				"n": 132,
+				"p": 0.886,
+				"ci95": [
+					0.821,
+					0.93
+				]
+			},
+			"how": {
+				"maintainer-decision": 78,
+				"consensus": 18,
+				"fcp": 12,
+				"default/no-action": 10,
+				"abandoned": 7,
+				"unclear": 4,
+				"vote": 3
+			},
+			"decider": {
+				"named maintainer": 48,
+				"team": 48,
+				"unclear": 15,
+				"consensus": 12,
+				"BDFL": 6,
+				"vote": 3
+			},
+			"formal_share": {
+				"k": 26,
+				"n": 132,
+				"p": 0.197,
+				"ci95": [
+					0.138,
+					0.273
+				]
+			},
+			"truncated": {
+				"k": 2,
+				"n": 132,
+				"p": 0.015,
+				"ci95": [
+					0.004,
+					0.054
+				]
+			}
+		},
+		"documents": {
+			"n": 41,
+			"quota": {
+				"document": 41
+			},
+			"domain": {
+				"process-governance": 9,
+				"language-design": 6,
+				"security": 5,
+				"architecture": 4,
+				"tooling": 4,
+				"compatibility": 4,
+				"naming": 3,
+				"api-design": 3,
+				"infra": 2,
+				"dependency": 1
+			},
+			"participants_known": 23,
+			"participants_median": 10,
+			"participants_le3": 0,
+			"duration_median_days": 21.5,
+			"decided": {
+				"k": 31,
+				"n": 41,
+				"p": 0.756,
+				"ci95": [
+					0.607,
+					0.862
+				]
+			},
+			"how": {
+				"unclear": 19,
+				"consensus": 13,
+				"maintainer-decision": 5,
+				"default/no-action": 3,
+				"vote": 1
+			},
+			"decider": {
+				"team": 15,
+				"consensus": 14,
+				"unclear": 6,
+				"vote": 3,
+				"BDFL": 2,
+				"named maintainer": 1
+			},
+			"formal_share": {
+				"k": 25,
+				"n": 41,
+				"p": 0.61,
+				"ci95": [
+					0.457,
+					0.743
+				]
+			},
+			"truncated": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			}
+		},
+		"small": {
+			"n": 11,
+			"quota": {
+				"small-team": 11
+			},
+			"domain": {
+				"product-behaviour": 6,
+				"language-design": 2,
+				"compatibility": 1,
+				"tooling": 1,
+				"architecture": 1
+			},
+			"participants_known": 11,
+			"participants_median": 17,
+			"participants_le3": 0,
+			"duration_median_days": 1187,
+			"decided": {
+				"k": 10,
+				"n": 11,
+				"p": 0.909,
+				"ci95": [
+					0.623,
+					0.984
+				]
+			},
+			"how": {
+				"maintainer-decision": 10,
+				"default/no-action": 1
+			},
+			"decider": {
+				"named maintainer": 7,
+				"unclear": 2,
+				"BDFL": 2
+			},
+			"formal_share": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"truncated": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			}
+		}
+	},
+	"hypotheses": {
+		"H1": {
+			"all": {
+				"mixed_or_none": {
+					"k": 16,
+					"n": 173,
+					"p": 0.092,
+					"ci95": [
+						0.058,
+						0.145
+					]
+				},
+				"has_secondaryShape": {
+					"k": 141,
+					"n": 173,
+					"p": 0.815,
+					"ci95": [
+						0.751,
+						0.866
+					]
+				},
+				"shape_dist": {
+					"choice": 124,
+					"mixed": 16,
+					"explore": 14,
+					"check": 12,
+					"tune": 7
+				},
+				"primary_secondary_pairs": {
+					"choice+check": 36,
+					"choice+explore": 35,
+					"choice+None": 32,
+					"choice+tune": 21,
+					"explore+choice": 12,
+					"check+choice": 11,
+					"mixed+choice": 9,
+					"tune+choice": 5
+				}
+			},
+			"threads": {
+				"mixed_or_none": {
+					"k": 11,
+					"n": 132,
+					"p": 0.083,
+					"ci95": [
+						0.047,
+						0.143
+					]
+				},
+				"has_secondaryShape": {
+					"k": 117,
+					"n": 132,
+					"p": 0.886,
+					"ci95": [
+						0.821,
+						0.93
+					]
+				},
+				"shape_dist": {
+					"choice": 93,
+					"mixed": 11,
+					"check": 11,
+					"explore": 10,
+					"tune": 7
+				},
+				"primary_secondary_pairs": {
+					"choice+explore": 32,
+					"choice+check": 27,
+					"choice+tune": 19,
+					"choice+None": 15,
+					"check+choice": 10,
+					"explore+choice": 8,
+					"mixed+choice": 7,
+					"tune+choice": 5
+				}
+			},
+			"documents": {
+				"mixed_or_none": {
+					"k": 5,
+					"n": 41,
+					"p": 0.122,
+					"ci95": [
+						0.053,
+						0.255
+					]
+				},
+				"has_secondaryShape": {
+					"k": 24,
+					"n": 41,
+					"p": 0.585,
+					"ci95": [
+						0.434,
+						0.722
+					]
+				},
+				"shape_dist": {
+					"choice": 31,
+					"mixed": 5,
+					"explore": 4,
+					"check": 1
+				},
+				"primary_secondary_pairs": {
+					"choice+None": 17,
+					"choice+check": 9,
+					"explore+choice": 4,
+					"choice+explore": 3,
+					"choice+tune": 2,
+					"mixed+choice": 2,
+					"mixed+check": 2,
+					"check+choice": 1
+				}
+			},
+			"small": {
+				"mixed_or_none": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"has_secondaryShape": {
+					"k": 10,
+					"n": 11,
+					"p": 0.909,
+					"ci95": [
+						0.623,
+						0.984
+					]
+				},
+				"shape_dist": {
+					"choice": 8,
+					"explore": 1,
+					"check": 1,
+					"tune": 1
+				},
+				"primary_secondary_pairs": {
+					"choice+check": 3,
+					"choice+tune": 2,
+					"choice+explore": 2,
+					"explore+choice": 1,
+					"check+choice": 1,
+					"choice+None": 1,
+					"tune+explore": 1
+				}
+			}
+		},
+		"H2": {
+			"all": {
+				"choice": {
+					"k": 124,
+					"n": 173,
+					"p": 0.717,
+					"ci95": [
+						0.645,
+						0.779
+					]
+				},
+				"tune": {
+					"k": 7,
+					"n": 173,
+					"p": 0.04,
+					"ci95": [
+						0.02,
+						0.081
+					]
+				},
+				"choice_is_modal": true,
+				"uiux_product_n": 54,
+				"uiux_product_tune": {
+					"k": 7,
+					"n": 54,
+					"p": 0.13,
+					"ci95": [
+						0.064,
+						0.244
+					]
+				},
+				"uiux_product_tune_primary_or_secondary": {
+					"k": 24,
+					"n": 54,
+					"p": 0.444,
+					"ci95": [
+						0.32,
+						0.576
+					]
+				},
+				"tune_primary_or_secondary": {
+					"k": 31,
+					"n": 173,
+					"p": 0.179,
+					"ci95": [
+						0.129,
+						0.243
+					]
+				},
+				"check_primary_or_secondary": {
+					"k": 55,
+					"n": 173,
+					"p": 0.318,
+					"ci95": [
+						0.253,
+						0.391
+					]
+				},
+				"explore_primary_or_secondary": {
+					"k": 51,
+					"n": 173,
+					"p": 0.295,
+					"ci95": [
+						0.232,
+						0.367
+					]
+				}
+			},
+			"threads": {
+				"choice": {
+					"k": 93,
+					"n": 132,
+					"p": 0.705,
+					"ci95": [
+						0.622,
+						0.776
+					]
+				},
+				"tune": {
+					"k": 7,
+					"n": 132,
+					"p": 0.053,
+					"ci95": [
+						0.026,
+						0.105
+					]
+				},
+				"choice_is_modal": true,
+				"uiux_product_n": 54,
+				"uiux_product_tune": {
+					"k": 7,
+					"n": 54,
+					"p": 0.13,
+					"ci95": [
+						0.064,
+						0.244
+					]
+				},
+				"uiux_product_tune_primary_or_secondary": {
+					"k": 24,
+					"n": 54,
+					"p": 0.444,
+					"ci95": [
+						0.32,
+						0.576
+					]
+				},
+				"tune_primary_or_secondary": {
+					"k": 29,
+					"n": 132,
+					"p": 0.22,
+					"ci95": [
+						0.158,
+						0.298
+					]
+				},
+				"check_primary_or_secondary": {
+					"k": 43,
+					"n": 132,
+					"p": 0.326,
+					"ci95": [
+						0.252,
+						0.41
+					]
+				},
+				"explore_primary_or_secondary": {
+					"k": 43,
+					"n": 132,
+					"p": 0.326,
+					"ci95": [
+						0.252,
+						0.41
+					]
+				}
+			},
+			"documents": {
+				"choice": {
+					"k": 31,
+					"n": 41,
+					"p": 0.756,
+					"ci95": [
+						0.607,
+						0.862
+					]
+				},
+				"tune": {
+					"k": 0,
+					"n": 41,
+					"p": 0.0,
+					"ci95": [
+						0,
+						0.086
+					]
+				},
+				"choice_is_modal": true,
+				"uiux_product_n": 0,
+				"uiux_product_tune": {
+					"k": 0,
+					"n": 0,
+					"p": null,
+					"ci95": null
+				},
+				"uiux_product_tune_primary_or_secondary": {
+					"k": 0,
+					"n": 0,
+					"p": null,
+					"ci95": null
+				},
+				"tune_primary_or_secondary": {
+					"k": 2,
+					"n": 41,
+					"p": 0.049,
+					"ci95": [
+						0.013,
+						0.161
+					]
+				},
+				"check_primary_or_secondary": {
+					"k": 12,
+					"n": 41,
+					"p": 0.293,
+					"ci95": [
+						0.176,
+						0.445
+					]
+				},
+				"explore_primary_or_secondary": {
+					"k": 8,
+					"n": 41,
+					"p": 0.195,
+					"ci95": [
+						0.102,
+						0.34
+					]
+				}
+			},
+			"small": {
+				"choice": {
+					"k": 8,
+					"n": 11,
+					"p": 0.727,
+					"ci95": [
+						0.434,
+						0.903
+					]
+				},
+				"tune": {
+					"k": 1,
+					"n": 11,
+					"p": 0.091,
+					"ci95": [
+						0.016,
+						0.377
+					]
+				},
+				"choice_is_modal": true,
+				"uiux_product_n": 6,
+				"uiux_product_tune": {
+					"k": 1,
+					"n": 6,
+					"p": 0.167,
+					"ci95": [
+						0.03,
+						0.564
+					]
+				},
+				"uiux_product_tune_primary_or_secondary": {
+					"k": 2,
+					"n": 6,
+					"p": 0.333,
+					"ci95": [
+						0.097,
+						0.7
+					]
+				},
+				"tune_primary_or_secondary": {
+					"k": 3,
+					"n": 11,
+					"p": 0.273,
+					"ci95": [
+						0.097,
+						0.566
+					]
+				},
+				"check_primary_or_secondary": {
+					"k": 4,
+					"n": 11,
+					"p": 0.364,
+					"ci95": [
+						0.152,
+						0.646
+					]
+				},
+				"explore_primary_or_secondary": {
+					"k": 4,
+					"n": 11,
+					"p": 0.364,
+					"ci95": [
+						0.152,
+						0.646
+					]
+				}
+			}
+		},
+		"H3": {
+			"all": {
+				"n_choice": 124,
+				"options_median": 5.0,
+				"options_ge4": {
+					"k": 110,
+					"n": 124,
+					"p": 0.887,
+					"ci95": [
+						0.819,
+						0.932
+					]
+				},
+				"criteria_nonempty": {
+					"k": 124,
+					"n": 124,
+					"p": 1.0,
+					"ci95": [
+						0.97,
+						1.0
+					]
+				},
+				"composite_answer": {
+					"k": 68,
+					"n": 124,
+					"p": 0.548,
+					"ci95": [
+						0.461,
+						0.633
+					]
+				},
+				"has_deferred_option": {
+					"k": 69,
+					"n": 124,
+					"p": 0.556,
+					"ci95": [
+						0.469,
+						0.641
+					]
+				}
+			},
+			"threads": {
+				"n_choice": 93,
+				"options_median": 6,
+				"options_ge4": {
+					"k": 91,
+					"n": 93,
+					"p": 0.978,
+					"ci95": [
+						0.925,
+						0.994
+					]
+				},
+				"criteria_nonempty": {
+					"k": 93,
+					"n": 93,
+					"p": 1.0,
+					"ci95": [
+						0.96,
+						1.0
+					]
+				},
+				"composite_answer": {
+					"k": 52,
+					"n": 93,
+					"p": 0.559,
+					"ci95": [
+						0.458,
+						0.656
+					]
+				},
+				"has_deferred_option": {
+					"k": 59,
+					"n": 93,
+					"p": 0.634,
+					"ci95": [
+						0.533,
+						0.725
+					]
+				}
+			},
+			"documents": {
+				"n_choice": 31,
+				"options_median": 4,
+				"options_ge4": {
+					"k": 19,
+					"n": 31,
+					"p": 0.613,
+					"ci95": [
+						0.438,
+						0.763
+					]
+				},
+				"criteria_nonempty": {
+					"k": 31,
+					"n": 31,
+					"p": 1.0,
+					"ci95": [
+						0.89,
+						1.0
+					]
+				},
+				"composite_answer": {
+					"k": 16,
+					"n": 31,
+					"p": 0.516,
+					"ci95": [
+						0.348,
+						0.68
+					]
+				},
+				"has_deferred_option": {
+					"k": 10,
+					"n": 31,
+					"p": 0.323,
+					"ci95": [
+						0.186,
+						0.499
+					]
+				}
+			},
+			"small": {
+				"n_choice": 8,
+				"options_median": 5.5,
+				"options_ge4": {
+					"k": 7,
+					"n": 8,
+					"p": 0.875,
+					"ci95": [
+						0.529,
+						0.978
+					]
+				},
+				"criteria_nonempty": {
+					"k": 8,
+					"n": 8,
+					"p": 1.0,
+					"ci95": [
+						0.676,
+						1
+					]
+				},
+				"composite_answer": {
+					"k": 6,
+					"n": 8,
+					"p": 0.75,
+					"ci95": [
+						0.409,
+						0.929
+					]
+				},
+				"has_deferred_option": {
+					"k": 4,
+					"n": 8,
+					"p": 0.5,
+					"ci95": [
+						0.215,
+						0.785
+					]
+				}
+			}
+		},
+		"H4": {
+			"all": {
+				"order_guaranteed": false,
+				"first_option_chosen": {
+					"k": 57,
+					"n": 148,
+					"p": 0.385,
+					"ci95": [
+						0.311,
+						0.465
+					]
+				},
+				"first_option_chosen_by_source": {
+					"thread": {
+						"k": 42,
+						"n": 117,
+						"p": 0.359,
+						"ci95": [
+							0.278,
+							0.449
+						]
+					},
+					"document": {
+						"k": 15,
+						"n": 31,
+						"p": 0.484,
+						"ci95": [
+							0.32,
+							0.652
+						]
+					}
+				}
+			},
+			"threads": {
+				"order_guaranteed": false,
+				"first_option_chosen": {
+					"k": 42,
+					"n": 117,
+					"p": 0.359,
+					"ci95": [
+						0.278,
+						0.449
+					]
+				},
+				"first_option_chosen_by_source": {
+					"thread": {
+						"k": 42,
+						"n": 117,
+						"p": 0.359,
+						"ci95": [
+							0.278,
+							0.449
+						]
+					},
+					"document": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					}
+				}
+			},
+			"documents": {
+				"order_guaranteed": false,
+				"first_option_chosen": {
+					"k": 15,
+					"n": 31,
+					"p": 0.484,
+					"ci95": [
+						0.32,
+						0.652
+					]
+				},
+				"first_option_chosen_by_source": {
+					"thread": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					},
+					"document": {
+						"k": 15,
+						"n": 31,
+						"p": 0.484,
+						"ci95": [
+							0.32,
+							0.652
+						]
+					}
+				}
+			},
+			"small": {
+				"order_guaranteed": false,
+				"first_option_chosen": {
+					"k": 5,
+					"n": 10,
+					"p": 0.5,
+					"ci95": [
+						0.237,
+						0.763
+					]
+				},
+				"first_option_chosen_by_source": {
+					"thread": {
+						"k": 5,
+						"n": 10,
+						"p": 0.5,
+						"ci95": [
+							0.237,
+							0.763
+						]
+					},
+					"document": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					}
+				}
+			}
+		},
+		"H5": {
+			"all": {
+				"deferred_flag": {
+					"k": 66,
+					"n": 173,
+					"p": 0.382,
+					"ci95": [
+						0.312,
+						0.456
+					]
+				},
+				"undecided_and_deferred": {
+					"k": 23,
+					"n": 173,
+					"p": 0.133,
+					"ci95": [
+						0.09,
+						0.192
+					]
+				},
+				"parked_any": {
+					"k": 42,
+					"n": 173,
+					"p": 0.243,
+					"ci95": [
+						0.185,
+						0.312
+					]
+				},
+				"undecided_n": 25,
+				"undecided_deferred": 23,
+				"undecided_abandoned": 3,
+				"decided_but_deferred_flag": 43
+			},
+			"threads": {
+				"deferred_flag": {
+					"k": 47,
+					"n": 132,
+					"p": 0.356,
+					"ci95": [
+						0.28,
+						0.441
+					]
+				},
+				"undecided_and_deferred": {
+					"k": 13,
+					"n": 132,
+					"p": 0.098,
+					"ci95": [
+						0.058,
+						0.161
+					]
+				},
+				"parked_any": {
+					"k": 30,
+					"n": 132,
+					"p": 0.227,
+					"ci95": [
+						0.164,
+						0.306
+					]
+				},
+				"undecided_n": 15,
+				"undecided_deferred": 13,
+				"undecided_abandoned": 3,
+				"decided_but_deferred_flag": 34
+			},
+			"documents": {
+				"deferred_flag": {
+					"k": 19,
+					"n": 41,
+					"p": 0.463,
+					"ci95": [
+						0.321,
+						0.613
+					]
+				},
+				"undecided_and_deferred": {
+					"k": 10,
+					"n": 41,
+					"p": 0.244,
+					"ci95": [
+						0.138,
+						0.393
+					]
+				},
+				"parked_any": {
+					"k": 12,
+					"n": 41,
+					"p": 0.293,
+					"ci95": [
+						0.176,
+						0.445
+					]
+				},
+				"undecided_n": 10,
+				"undecided_deferred": 10,
+				"undecided_abandoned": 0,
+				"decided_but_deferred_flag": 9
+			},
+			"small": {
+				"deferred_flag": {
+					"k": 3,
+					"n": 11,
+					"p": 0.273,
+					"ci95": [
+						0.097,
+						0.566
+					]
+				},
+				"undecided_and_deferred": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"parked_any": {
+					"k": 4,
+					"n": 11,
+					"p": 0.364,
+					"ci95": [
+						0.152,
+						0.646
+					]
+				},
+				"undecided_n": 1,
+				"undecided_deferred": 0,
+				"undecided_abandoned": 0,
+				"decided_but_deferred_flag": 3
+			}
+		},
+		"H6": {
+			"all": {
+				"subq_nonempty": {
+					"k": 171,
+					"n": 173,
+					"p": 0.988,
+					"ci95": [
+						0.959,
+						0.997
+					]
+				},
+				"struct_tag": {
+					"k": 113,
+					"n": 173,
+					"p": 0.653,
+					"ci95": [
+						0.58,
+						0.72
+					]
+				},
+				"rfc_or_proposal_n": 31,
+				"rfc_or_proposal_struct_tag": {
+					"k": 26,
+					"n": 31,
+					"p": 0.839,
+					"ci95": [
+						0.674,
+						0.929
+					]
+				},
+				"follow_up_structure": {
+					"k": 87,
+					"n": 173,
+					"p": 0.503,
+					"ci95": [
+						0.429,
+						0.577
+					]
+				}
+			},
+			"threads": {
+				"subq_nonempty": {
+					"k": 130,
+					"n": 132,
+					"p": 0.985,
+					"ci95": [
+						0.946,
+						0.996
+					]
+				},
+				"struct_tag": {
+					"k": 81,
+					"n": 132,
+					"p": 0.614,
+					"ci95": [
+						0.528,
+						0.692
+					]
+				},
+				"rfc_or_proposal_n": 22,
+				"rfc_or_proposal_struct_tag": {
+					"k": 18,
+					"n": 22,
+					"p": 0.818,
+					"ci95": [
+						0.615,
+						0.927
+					]
+				},
+				"follow_up_structure": {
+					"k": 59,
+					"n": 132,
+					"p": 0.447,
+					"ci95": [
+						0.365,
+						0.532
+					]
+				}
+			},
+			"documents": {
+				"subq_nonempty": {
+					"k": 41,
+					"n": 41,
+					"p": 1.0,
+					"ci95": [
+						0.914,
+						1
+					]
+				},
+				"struct_tag": {
+					"k": 32,
+					"n": 41,
+					"p": 0.78,
+					"ci95": [
+						0.633,
+						0.88
+					]
+				},
+				"rfc_or_proposal_n": 9,
+				"rfc_or_proposal_struct_tag": {
+					"k": 8,
+					"n": 9,
+					"p": 0.889,
+					"ci95": [
+						0.565,
+						0.98
+					]
+				},
+				"follow_up_structure": {
+					"k": 28,
+					"n": 41,
+					"p": 0.683,
+					"ci95": [
+						0.53,
+						0.804
+					]
+				}
+			},
+			"small": {
+				"subq_nonempty": {
+					"k": 11,
+					"n": 11,
+					"p": 1.0,
+					"ci95": [
+						0.741,
+						1
+					]
+				},
+				"struct_tag": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				},
+				"rfc_or_proposal_n": 0,
+				"rfc_or_proposal_struct_tag": {
+					"k": 0,
+					"n": 0,
+					"p": null,
+					"ci95": null
+				},
+				"follow_up_structure": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				}
+			}
+		},
+		"H7": {
+			"all": {
+				"n_noncheck": 161,
+				"research_or_spike": {
+					"k": 142,
+					"n": 161,
+					"p": 0.882,
+					"ci95": [
+						0.823,
+						0.923
+					]
+				},
+				"strict_(research_beyond_links_or_spike)": {
+					"k": 112,
+					"n": 161,
+					"p": 0.696,
+					"ci95": [
+						0.621,
+						0.761
+					]
+				},
+				"spike_any": {
+					"k": 108,
+					"n": 161,
+					"p": 0.671,
+					"ci95": [
+						0.595,
+						0.739
+					]
+				},
+				"strict_excluding_implementation_pr": {
+					"k": 56,
+					"n": 161,
+					"p": 0.348,
+					"ci95": [
+						0.279,
+						0.424
+					]
+				},
+				"spike_dist": {
+					"implementation-pr": 64,
+					"none": 53,
+					"prototype": 35,
+					"feature-flag": 5,
+					"experiment": 4
+				},
+				"evidence_tag": {
+					"k": 43,
+					"n": 161,
+					"p": 0.267,
+					"ci95": [
+						0.205,
+						0.34
+					]
+				},
+				"check_secondary": {
+					"k": 43,
+					"n": 161,
+					"p": 0.267,
+					"ci95": [
+						0.205,
+						0.34
+					]
+				}
+			},
+			"threads": {
+				"n_noncheck": 121,
+				"research_or_spike": {
+					"k": 111,
+					"n": 121,
+					"p": 0.917,
+					"ci95": [
+						0.855,
+						0.954
+					]
+				},
+				"strict_(research_beyond_links_or_spike)": {
+					"k": 96,
+					"n": 121,
+					"p": 0.793,
+					"ci95": [
+						0.713,
+						0.856
+					]
+				},
+				"spike_any": {
+					"k": 92,
+					"n": 121,
+					"p": 0.76,
+					"ci95": [
+						0.677,
+						0.828
+					]
+				},
+				"strict_excluding_implementation_pr": {
+					"k": 42,
+					"n": 121,
+					"p": 0.347,
+					"ci95": [
+						0.268,
+						0.435
+					]
+				},
+				"spike_dist": {
+					"implementation-pr": 59,
+					"none": 29,
+					"prototype": 28,
+					"feature-flag": 4,
+					"experiment": 1
+				},
+				"evidence_tag": {
+					"k": 34,
+					"n": 121,
+					"p": 0.281,
+					"ci95": [
+						0.209,
+						0.367
+					]
+				},
+				"check_secondary": {
+					"k": 32,
+					"n": 121,
+					"p": 0.264,
+					"ci95": [
+						0.194,
+						0.349
+					]
+				}
+			},
+			"documents": {
+				"n_noncheck": 40,
+				"research_or_spike": {
+					"k": 31,
+					"n": 40,
+					"p": 0.775,
+					"ci95": [
+						0.625,
+						0.877
+					]
+				},
+				"strict_(research_beyond_links_or_spike)": {
+					"k": 16,
+					"n": 40,
+					"p": 0.4,
+					"ci95": [
+						0.263,
+						0.554
+					]
+				},
+				"spike_any": {
+					"k": 16,
+					"n": 40,
+					"p": 0.4,
+					"ci95": [
+						0.263,
+						0.554
+					]
+				},
+				"strict_excluding_implementation_pr": {
+					"k": 14,
+					"n": 40,
+					"p": 0.35,
+					"ci95": [
+						0.221,
+						0.505
+					]
+				},
+				"spike_dist": {
+					"none": 24,
+					"prototype": 7,
+					"implementation-pr": 5,
+					"experiment": 3,
+					"feature-flag": 1
+				},
+				"evidence_tag": {
+					"k": 9,
+					"n": 40,
+					"p": 0.225,
+					"ci95": [
+						0.123,
+						0.375
+					]
+				},
+				"check_secondary": {
+					"k": 11,
+					"n": 40,
+					"p": 0.275,
+					"ci95": [
+						0.161,
+						0.428
+					]
+				}
+			},
+			"small": {
+				"n_noncheck": 10,
+				"research_or_spike": {
+					"k": 10,
+					"n": 10,
+					"p": 1.0,
+					"ci95": [
+						0.722,
+						1
+					]
+				},
+				"strict_(research_beyond_links_or_spike)": {
+					"k": 9,
+					"n": 10,
+					"p": 0.9,
+					"ci95": [
+						0.596,
+						0.982
+					]
+				},
+				"spike_any": {
+					"k": 9,
+					"n": 10,
+					"p": 0.9,
+					"ci95": [
+						0.596,
+						0.982
+					]
+				},
+				"strict_excluding_implementation_pr": {
+					"k": 4,
+					"n": 10,
+					"p": 0.4,
+					"ci95": [
+						0.168,
+						0.687
+					]
+				},
+				"spike_dist": {
+					"implementation-pr": 5,
+					"prototype": 4,
+					"none": 1
+				},
+				"evidence_tag": {
+					"k": 3,
+					"n": 10,
+					"p": 0.3,
+					"ci95": [
+						0.108,
+						0.603
+					]
+				},
+				"check_secondary": {
+					"k": 3,
+					"n": 10,
+					"p": 0.3,
+					"ci95": [
+						0.108,
+						0.603
+					]
+				}
+			}
+		},
+		"H8": {
+			"all": {
+				"n_decided": 148,
+				"reversibility_stated": {
+					"k": 60,
+					"n": 148,
+					"p": 0.405,
+					"ci95": [
+						0.33,
+						0.486
+					]
+				},
+				"confidence_stated": {
+					"k": 99,
+					"n": 148,
+					"p": 0.669,
+					"ci95": [
+						0.59,
+						0.74
+					]
+				},
+				"confidence_stated_by_source": {
+					"thread": {
+						"k": 85,
+						"n": 117,
+						"p": 0.726,
+						"ci95": [
+							0.639,
+							0.799
+						]
+					},
+					"document": {
+						"k": 14,
+						"n": 31,
+						"p": 0.452,
+						"ci95": [
+							0.292,
+							0.622
+						]
+					}
+				},
+				"provisional_or_conditional_tag": {
+					"k": 24,
+					"n": 173,
+					"p": 0.139,
+					"ci95": [
+						0.095,
+						0.198
+					]
+				}
+			},
+			"threads": {
+				"n_decided": 117,
+				"reversibility_stated": {
+					"k": 51,
+					"n": 117,
+					"p": 0.436,
+					"ci95": [
+						0.349,
+						0.526
+					]
+				},
+				"confidence_stated": {
+					"k": 85,
+					"n": 117,
+					"p": 0.726,
+					"ci95": [
+						0.639,
+						0.799
+					]
+				},
+				"confidence_stated_by_source": {
+					"thread": {
+						"k": 85,
+						"n": 117,
+						"p": 0.726,
+						"ci95": [
+							0.639,
+							0.799
+						]
+					},
+					"document": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					}
+				},
+				"provisional_or_conditional_tag": {
+					"k": 10,
+					"n": 132,
+					"p": 0.076,
+					"ci95": [
+						0.042,
+						0.134
+					]
+				}
+			},
+			"documents": {
+				"n_decided": 31,
+				"reversibility_stated": {
+					"k": 9,
+					"n": 31,
+					"p": 0.29,
+					"ci95": [
+						0.161,
+						0.466
+					]
+				},
+				"confidence_stated": {
+					"k": 14,
+					"n": 31,
+					"p": 0.452,
+					"ci95": [
+						0.292,
+						0.622
+					]
+				},
+				"confidence_stated_by_source": {
+					"thread": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					},
+					"document": {
+						"k": 14,
+						"n": 31,
+						"p": 0.452,
+						"ci95": [
+							0.292,
+							0.622
+						]
+					}
+				},
+				"provisional_or_conditional_tag": {
+					"k": 14,
+					"n": 41,
+					"p": 0.341,
+					"ci95": [
+						0.216,
+						0.495
+					]
+				}
+			},
+			"small": {
+				"n_decided": 10,
+				"reversibility_stated": {
+					"k": 2,
+					"n": 10,
+					"p": 0.2,
+					"ci95": [
+						0.057,
+						0.51
+					]
+				},
+				"confidence_stated": {
+					"k": 5,
+					"n": 10,
+					"p": 0.5,
+					"ci95": [
+						0.237,
+						0.763
+					]
+				},
+				"confidence_stated_by_source": {
+					"thread": {
+						"k": 5,
+						"n": 10,
+						"p": 0.5,
+						"ci95": [
+							0.237,
+							0.763
+						]
+					},
+					"document": {
+						"k": 0,
+						"n": 0,
+						"p": null,
+						"ci95": null
+					}
+				},
+				"provisional_or_conditional_tag": {
+					"k": 1,
+					"n": 11,
+					"p": 0.091,
+					"ci95": [
+						0.016,
+						0.377
+					]
+				}
+			}
+		},
+		"H9": {
+			"all": {
+				"decided_ge3_n": 132,
+				"dissent_decided_ge3": {
+					"k": 116,
+					"n": 132,
+					"p": 0.879,
+					"ci95": [
+						0.812,
+						0.924
+					]
+				},
+				"dissent_all_decided": {
+					"k": 118,
+					"n": 148,
+					"p": 0.797,
+					"ci95": [
+						0.725,
+						0.854
+					]
+				}
+			},
+			"threads": {
+				"decided_ge3_n": 117,
+				"dissent_decided_ge3": {
+					"k": 104,
+					"n": 117,
+					"p": 0.889,
+					"ci95": [
+						0.819,
+						0.934
+					]
+				},
+				"dissent_all_decided": {
+					"k": 104,
+					"n": 117,
+					"p": 0.889,
+					"ci95": [
+						0.819,
+						0.934
+					]
+				}
+			},
+			"documents": {
+				"decided_ge3_n": 15,
+				"dissent_decided_ge3": {
+					"k": 12,
+					"n": 15,
+					"p": 0.8,
+					"ci95": [
+						0.548,
+						0.93
+					]
+				},
+				"dissent_all_decided": {
+					"k": 14,
+					"n": 31,
+					"p": 0.452,
+					"ci95": [
+						0.292,
+						0.622
+					]
+				}
+			},
+			"small": {
+				"decided_ge3_n": 10,
+				"dissent_decided_ge3": {
+					"k": 6,
+					"n": 10,
+					"p": 0.6,
+					"ci95": [
+						0.313,
+						0.832
+					]
+				},
+				"dissent_all_decided": {
+					"k": 6,
+					"n": 10,
+					"p": 0.6,
+					"ci95": [
+						0.313,
+						0.832
+					]
+				}
+			}
+		},
+		"H10": {
+			"all": {
+				"reopened_or_superseded": {
+					"k": 50,
+					"n": 173,
+					"p": 0.289,
+					"ci95": [
+						0.227,
+						0.361
+					]
+				},
+				"reopened": {
+					"k": 33,
+					"n": 173,
+					"p": 0.191,
+					"ci95": [
+						0.139,
+						0.256
+					]
+				},
+				"superseded": {
+					"k": 25,
+					"n": 173,
+					"p": 0.145,
+					"ci95": [
+						0.1,
+						0.205
+					]
+				},
+				"of_those_supersede_or_revert_tag": {
+					"k": 35,
+					"n": 50,
+					"p": 0.7,
+					"ci95": [
+						0.562,
+						0.809
+					]
+				},
+				"supersede_or_revert_tag_any": {
+					"k": 55,
+					"n": 173,
+					"p": 0.318,
+					"ci95": [
+						0.253,
+						0.391
+					]
+				}
+			},
+			"threads": {
+				"reopened_or_superseded": {
+					"k": 35,
+					"n": 132,
+					"p": 0.265,
+					"ci95": [
+						0.197,
+						0.346
+					]
+				},
+				"reopened": {
+					"k": 19,
+					"n": 132,
+					"p": 0.144,
+					"ci95": [
+						0.094,
+						0.214
+					]
+				},
+				"superseded": {
+					"k": 16,
+					"n": 132,
+					"p": 0.121,
+					"ci95": [
+						0.076,
+						0.188
+					]
+				},
+				"of_those_supersede_or_revert_tag": {
+					"k": 26,
+					"n": 35,
+					"p": 0.743,
+					"ci95": [
+						0.579,
+						0.858
+					]
+				},
+				"supersede_or_revert_tag_any": {
+					"k": 43,
+					"n": 132,
+					"p": 0.326,
+					"ci95": [
+						0.252,
+						0.41
+					]
+				}
+			},
+			"documents": {
+				"reopened_or_superseded": {
+					"k": 15,
+					"n": 41,
+					"p": 0.366,
+					"ci95": [
+						0.236,
+						0.519
+					]
+				},
+				"reopened": {
+					"k": 14,
+					"n": 41,
+					"p": 0.341,
+					"ci95": [
+						0.216,
+						0.495
+					]
+				},
+				"superseded": {
+					"k": 9,
+					"n": 41,
+					"p": 0.22,
+					"ci95": [
+						0.12,
+						0.367
+					]
+				},
+				"of_those_supersede_or_revert_tag": {
+					"k": 9,
+					"n": 15,
+					"p": 0.6,
+					"ci95": [
+						0.357,
+						0.802
+					]
+				},
+				"supersede_or_revert_tag_any": {
+					"k": 12,
+					"n": 41,
+					"p": 0.293,
+					"ci95": [
+						0.176,
+						0.445
+					]
+				}
+			},
+			"small": {
+				"reopened_or_superseded": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				},
+				"reopened": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				},
+				"superseded": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"of_those_supersede_or_revert_tag": {
+					"k": 5,
+					"n": 5,
+					"p": 1.0,
+					"ci95": [
+						0.566,
+						1
+					]
+				},
+				"supersede_or_revert_tag_any": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				}
+			}
+		},
+		"H11": {
+			"all": {
+				"pr_source_and_impl_pr": {
+					"k": 29,
+					"n": 173,
+					"p": 0.168,
+					"ci95": [
+						0.119,
+						0.23
+					]
+				},
+				"impl_pr_any_source": {
+					"k": 71,
+					"n": 173,
+					"p": 0.41,
+					"ci95": [
+						0.34,
+						0.485
+					]
+				},
+				"pr_source": {
+					"k": 34,
+					"n": 173,
+					"p": 0.197,
+					"ci95": [
+						0.144,
+						0.262
+					]
+				},
+				"implicit_tag": {
+					"k": 22,
+					"n": 173,
+					"p": 0.127,
+					"ci95": [
+						0.085,
+						0.185
+					]
+				},
+				"implementedIn_nonempty": {
+					"k": 76,
+					"n": 173,
+					"p": 0.439,
+					"ci95": [
+						0.367,
+						0.514
+					]
+				}
+			},
+			"threads": {
+				"pr_source_and_impl_pr": {
+					"k": 29,
+					"n": 132,
+					"p": 0.22,
+					"ci95": [
+						0.158,
+						0.298
+					]
+				},
+				"impl_pr_any_source": {
+					"k": 66,
+					"n": 132,
+					"p": 0.5,
+					"ci95": [
+						0.416,
+						0.584
+					]
+				},
+				"pr_source": {
+					"k": 34,
+					"n": 132,
+					"p": 0.258,
+					"ci95": [
+						0.191,
+						0.338
+					]
+				},
+				"implicit_tag": {
+					"k": 19,
+					"n": 132,
+					"p": 0.144,
+					"ci95": [
+						0.094,
+						0.214
+					]
+				},
+				"implementedIn_nonempty": {
+					"k": 73,
+					"n": 132,
+					"p": 0.553,
+					"ci95": [
+						0.468,
+						0.635
+					]
+				}
+			},
+			"documents": {
+				"pr_source_and_impl_pr": {
+					"k": 0,
+					"n": 41,
+					"p": 0.0,
+					"ci95": [
+						0,
+						0.086
+					]
+				},
+				"impl_pr_any_source": {
+					"k": 5,
+					"n": 41,
+					"p": 0.122,
+					"ci95": [
+						0.053,
+						0.255
+					]
+				},
+				"pr_source": {
+					"k": 0,
+					"n": 41,
+					"p": 0.0,
+					"ci95": [
+						0,
+						0.086
+					]
+				},
+				"implicit_tag": {
+					"k": 3,
+					"n": 41,
+					"p": 0.073,
+					"ci95": [
+						0.025,
+						0.194
+					]
+				},
+				"implementedIn_nonempty": {
+					"k": 3,
+					"n": 41,
+					"p": 0.073,
+					"ci95": [
+						0.025,
+						0.194
+					]
+				}
+			},
+			"small": {
+				"pr_source_and_impl_pr": {
+					"k": 1,
+					"n": 11,
+					"p": 0.091,
+					"ci95": [
+						0.016,
+						0.377
+					]
+				},
+				"impl_pr_any_source": {
+					"k": 5,
+					"n": 11,
+					"p": 0.455,
+					"ci95": [
+						0.213,
+						0.72
+					]
+				},
+				"pr_source": {
+					"k": 1,
+					"n": 11,
+					"p": 0.091,
+					"ci95": [
+						0.016,
+						0.377
+					]
+				},
+				"implicit_tag": {
+					"k": 1,
+					"n": 11,
+					"p": 0.091,
+					"ci95": [
+						0.016,
+						0.377
+					]
+				},
+				"implementedIn_nonempty": {
+					"k": 8,
+					"n": 11,
+					"p": 0.727,
+					"ci95": [
+						0.434,
+						0.903
+					]
+				}
+			}
+		},
+		"H12": {
+			"all": {
+				"le3_n": 3,
+				"le3_ids": [
+					"excalidraw-embed-validator-api",
+					"excalidraw-embed-alt-text",
+					"vscode-fixed-width-tabs"
+				],
+				"le3_single_decider": {
+					"k": 2,
+					"n": 3,
+					"p": 0.667,
+					"ci95": [
+						0.208,
+						0.939
+					]
+				},
+				"single_decider": {
+					"k": 57,
+					"n": 173,
+					"p": 0.329,
+					"ci95": [
+						0.264,
+						0.403
+					]
+				},
+				"maintainer_decision_how": {
+					"k": 83,
+					"n": 173,
+					"p": 0.48,
+					"ci95": [
+						0.407,
+						0.554
+					]
+				},
+				"team_or_consensus_decider": {
+					"k": 89,
+					"n": 173,
+					"p": 0.514,
+					"ci95": [
+						0.44,
+						0.588
+					]
+				},
+				"decider_unclear": {
+					"k": 21,
+					"n": 173,
+					"p": 0.121,
+					"ci95": [
+						0.081,
+						0.178
+					]
+				},
+				"vote_or_poll_nonstandards": {
+					"k": 15,
+					"n": 157,
+					"p": 0.096,
+					"ci95": [
+						0.059,
+						0.152
+					]
+				},
+				"vote_or_poll_nonformal": {
+					"k": 8,
+					"n": 122,
+					"p": 0.066,
+					"ci95": [
+						0.034,
+						0.124
+					]
+				},
+				"vote_or_poll_all": {
+					"k": 17,
+					"n": 173,
+					"p": 0.098,
+					"ci95": [
+						0.062,
+						0.152
+					]
+				}
+			},
+			"threads": {
+				"le3_n": 3,
+				"le3_ids": [
+					"excalidraw-embed-validator-api",
+					"excalidraw-embed-alt-text",
+					"vscode-fixed-width-tabs"
+				],
+				"le3_single_decider": {
+					"k": 2,
+					"n": 3,
+					"p": 0.667,
+					"ci95": [
+						0.208,
+						0.939
+					]
+				},
+				"single_decider": {
+					"k": 54,
+					"n": 132,
+					"p": 0.409,
+					"ci95": [
+						0.329,
+						0.494
+					]
+				},
+				"maintainer_decision_how": {
+					"k": 78,
+					"n": 132,
+					"p": 0.591,
+					"ci95": [
+						0.506,
+						0.671
+					]
+				},
+				"team_or_consensus_decider": {
+					"k": 60,
+					"n": 132,
+					"p": 0.455,
+					"ci95": [
+						0.372,
+						0.54
+					]
+				},
+				"decider_unclear": {
+					"k": 15,
+					"n": 132,
+					"p": 0.114,
+					"ci95": [
+						0.07,
+						0.179
+					]
+				},
+				"vote_or_poll_nonstandards": {
+					"k": 11,
+					"n": 131,
+					"p": 0.084,
+					"ci95": [
+						0.048,
+						0.144
+					]
+				},
+				"vote_or_poll_nonformal": {
+					"k": 7,
+					"n": 106,
+					"p": 0.066,
+					"ci95": [
+						0.032,
+						0.13
+					]
+				},
+				"vote_or_poll_all": {
+					"k": 11,
+					"n": 132,
+					"p": 0.083,
+					"ci95": [
+						0.047,
+						0.143
+					]
+				}
+			},
+			"documents": {
+				"le3_n": 0,
+				"le3_ids": [],
+				"le3_single_decider": {
+					"k": 0,
+					"n": 0,
+					"p": null,
+					"ci95": null
+				},
+				"single_decider": {
+					"k": 3,
+					"n": 41,
+					"p": 0.073,
+					"ci95": [
+						0.025,
+						0.194
+					]
+				},
+				"maintainer_decision_how": {
+					"k": 5,
+					"n": 41,
+					"p": 0.122,
+					"ci95": [
+						0.053,
+						0.255
+					]
+				},
+				"team_or_consensus_decider": {
+					"k": 29,
+					"n": 41,
+					"p": 0.707,
+					"ci95": [
+						0.555,
+						0.824
+					]
+				},
+				"decider_unclear": {
+					"k": 6,
+					"n": 41,
+					"p": 0.146,
+					"ci95": [
+						0.069,
+						0.284
+					]
+				},
+				"vote_or_poll_nonstandards": {
+					"k": 4,
+					"n": 26,
+					"p": 0.154,
+					"ci95": [
+						0.061,
+						0.335
+					]
+				},
+				"vote_or_poll_nonformal": {
+					"k": 1,
+					"n": 16,
+					"p": 0.062,
+					"ci95": [
+						0.011,
+						0.283
+					]
+				},
+				"vote_or_poll_all": {
+					"k": 6,
+					"n": 41,
+					"p": 0.146,
+					"ci95": [
+						0.069,
+						0.284
+					]
+				}
+			},
+			"small": {
+				"le3_n": 0,
+				"le3_ids": [],
+				"le3_single_decider": {
+					"k": 0,
+					"n": 0,
+					"p": null,
+					"ci95": null
+				},
+				"single_decider": {
+					"k": 9,
+					"n": 11,
+					"p": 0.818,
+					"ci95": [
+						0.523,
+						0.949
+					]
+				},
+				"maintainer_decision_how": {
+					"k": 10,
+					"n": 11,
+					"p": 0.909,
+					"ci95": [
+						0.623,
+						0.984
+					]
+				},
+				"team_or_consensus_decider": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"decider_unclear": {
+					"k": 2,
+					"n": 11,
+					"p": 0.182,
+					"ci95": [
+						0.051,
+						0.477
+					]
+				},
+				"vote_or_poll_nonstandards": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"vote_or_poll_nonformal": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				},
+				"vote_or_poll_all": {
+					"k": 0,
+					"n": 11,
+					"p": 0.0,
+					"ci95": [
+						0.0,
+						0.259
+					]
+				}
+			}
+		}
+	},
+	"tags": {
+		"venue-split": {
+			"all": {
+				"k": 78,
+				"n": 173,
+				"p": 0.451,
+				"ci95": [
+					0.379,
+					0.525
+				]
+			},
+			"threads": {
+				"k": 61,
+				"n": 132,
+				"p": 0.462,
+				"ci95": [
+					0.379,
+					0.547
+				]
+			},
+			"documents": {
+				"k": 17,
+				"n": 41,
+				"p": 0.415,
+				"ci95": [
+					0.278,
+					0.566
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 84,
+			"formal_share_of_hits": {
+				"k": 25,
+				"n": 78,
+				"p": 0.321,
+				"ci95": [
+					0.227,
+					0.43
+				]
+			},
+			"examples": [
+				{
+					"id": "bat-builtin-pager-approach",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/1053",
+					"gap": "off-platform decision: the choice of minus was made in PR #3402 and only noticed here afterwards"
+				},
+				{
+					"id": "astro-scripts-only-when-rendered",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/664",
+					"gap": "off-platform decision: early objections came from Discord and are only paraphrased in the thread"
+				},
+				{
+					"id": "bat-debian-batcat-name",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/2455",
+					"gap": "off-platform decision: the chosen path depends on a rename request filed on Bacula's GitLab, outside the thread"
+				},
+				{
+					"id": "cargo-feature-doc-field",
+					"source": "thread",
+					"url": "https://github.com/rust-lang/rfcs/pull/3485",
+					"gap": "off-platform decision: blocking concerns were cleared in a Cargo team meeting and an unconference, only reported here"
+				}
+			]
+		},
+		"staged": {
+			"all": {
+				"k": 55,
+				"n": 173,
+				"p": 0.318,
+				"ci95": [
+					0.253,
+					0.391
+				]
+			},
+			"threads": {
+				"k": 44,
+				"n": 132,
+				"p": 0.333,
+				"ci95": [
+					0.259,
+					0.417
+				]
+			},
+			"documents": {
+				"k": 11,
+				"n": 41,
+				"p": 0.268,
+				"ci95": [
+					0.157,
+					0.419
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"entries_total": 56,
+			"formal_share_of_hits": {
+				"k": 21,
+				"n": 55,
+				"p": 0.382,
+				"ci95": [
+					0.265,
+					0.514
+				]
+			},
+			"examples": [
+				{
+					"id": "bat-builtin-pager-approach",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/1053",
+					"gap": "staged acceptance: the pager shipped opt-in with known gaps while the issue stays open as the umbrella"
+				},
+				{
+					"id": "delta-light-dark-detection",
+					"source": "thread",
+					"url": "https://github.com/dandavison/delta/issues/447",
+					"gap": "community workarounds as interim answers: many user snippets served as de facto solutions for years without being recorded as partial outcomes"
+				},
+				{
+					"id": "just-parallel-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/626",
+					"gap": "staged acceptance: the attribute shipped while the CLI flag and job cap were explicitly deferred to new issues"
+				},
+				{
+					"id": "astro-define-vars-scripts",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/1246",
+					"gap": "staged acceptance: Stage 2 approves the direction while deprecation and removal span future majors"
+				}
+			]
+		},
+		"other:misc": {
+			"all": {
+				"k": 52,
+				"n": 173,
+				"p": 0.301,
+				"ci95": [
+					0.237,
+					0.373
+				]
+			},
+			"threads": {
+				"k": 42,
+				"n": 132,
+				"p": 0.318,
+				"ci95": [
+					0.245,
+					0.402
+				]
+			},
+			"documents": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"small": {
+				"k": 5,
+				"n": 11,
+				"p": 0.455,
+				"ci95": [
+					0.213,
+					0.72
+				]
+			},
+			"entries_total": 56,
+			"formal_share_of_hits": {
+				"k": 16,
+				"n": 52,
+				"p": 0.308,
+				"ci95": [
+					0.199,
+					0.443
+				]
+			},
+			"examples": [
+				{
+					"id": "fzf-default-opts-file",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/discussions/2528",
+					"gap": "answer findability: later users re-asked because the settled answer was buried in a long open discussion that was never marked answered"
+				},
+				{
+					"id": "fzf-preview-window",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/issues/587",
+					"gap": "support noise mixed in: an unrelated install problem interleaves with the design discussion"
+				},
+				{
+					"id": "ripgrep-long-line-handling",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/129",
+					"gap": "spec iteration in comments: the proposal was restated four times as edited specs, with no versioned draft"
+				},
+				{
+					"id": "ripgrep-pager-flag",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/86",
+					"gap": "duplicates merged: a fresh duplicate request elsewhere triggered the reopen"
+				}
+			]
+		},
+		"coupled": {
+			"all": {
+				"k": 51,
+				"n": 173,
+				"p": 0.295,
+				"ci95": [
+					0.232,
+					0.367
+				]
+			},
+			"threads": {
+				"k": 43,
+				"n": 132,
+				"p": 0.326,
+				"ci95": [
+					0.252,
+					0.41
+				]
+			},
+			"documents": {
+				"k": 8,
+				"n": 41,
+				"p": 0.195,
+				"ci95": [
+					0.102,
+					0.34
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"entries_total": 51,
+			"formal_share_of_hits": {
+				"k": 16,
+				"n": 51,
+				"p": 0.314,
+				"ci95": [
+					0.203,
+					0.45
+				]
+			},
+			"examples": [
+				{
+					"id": "just-f-string-syntax",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/11",
+					"gap": "coupled decisions: the brace choice was tied to relaxing a separate rule in recipe interpolations"
+				},
+				{
+					"id": "ripgrep-long-line-handling",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/129",
+					"gap": "coupled decisions: default-on behaviour, units and terminal detection were settled together"
+				},
+				{
+					"id": "appflowy-dark-mode-palette",
+					"source": "thread",
+					"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+					"gap": "coupled decisions: palette choice, toggle-versus-theming scope and colour-token renaming were settled together in one thread"
+				},
+				{
+					"id": "astro-define-vars-scripts",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/1246",
+					"gap": "coupled decisions: the outcome is tied to the separate inline-script proposal #995"
+				}
+			]
+		},
+		"evidence-not-check": {
+			"all": {
+				"k": 49,
+				"n": 173,
+				"p": 0.283,
+				"ci95": [
+					0.221,
+					0.355
+				]
+			},
+			"threads": {
+				"k": 40,
+				"n": 132,
+				"p": 0.303,
+				"ci95": [
+					0.231,
+					0.386
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"entries_total": 53,
+			"formal_share_of_hits": {
+				"k": 10,
+				"n": 49,
+				"p": 0.204,
+				"ci95": [
+					0.115,
+					0.336
+				]
+			},
+			"examples": [
+				{
+					"id": "just-parallel-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/626",
+					"gap": "competing implementations: a community draft PR implementing both options went unreviewed while the maintainer later shipped a different, narrower PR"
+				},
+				{
+					"id": "ripgrep-hyperlink-support",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/665",
+					"gap": "competing implementations: three successive PRs carried the decision before one merged"
+				},
+				{
+					"id": "ripgrep-long-line-handling",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/129",
+					"gap": "competing implementations: PRs #245, #356 and #406 each embodied a different answer"
+				},
+				{
+					"id": "aspnetcore-mvc-in-shared-framework",
+					"source": "thread",
+					"url": "https://github.com/dotnet/aspnetcore/issues/3755",
+					"gap": "private evidence: the deciders cited customer app inspections and other feedback channels that the thread never saw"
+				}
+			]
+		},
+		"crowd-signal": {
+			"all": {
+				"k": 48,
+				"n": 173,
+				"p": 0.277,
+				"ci95": [
+					0.216,
+					0.348
+				]
+			},
+			"threads": {
+				"k": 47,
+				"n": 132,
+				"p": 0.356,
+				"ci95": [
+					0.28,
+					0.441
+				]
+			},
+			"documents": {
+				"k": 1,
+				"n": 41,
+				"p": 0.024,
+				"ci95": [
+					0.004,
+					0.126
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"entries_total": 49,
+			"formal_share_of_hits": {
+				"k": 6,
+				"n": 48,
+				"p": 0.125,
+				"ci95": [
+					0.059,
+					0.247
+				]
+			},
+			"examples": [
+				{
+					"id": "just-parallel-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/626",
+					"gap": "votes as evidence: 83 reactions on the opener and many +1 use cases signalled demand without a structured tally"
+				},
+				{
+					"id": "just-telemetry-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/discussions/2934",
+					"gap": "demand signal: whether anyone besides the opener wants the feature was the deciding criterion, but there is no way to gather that interest"
+				},
+				{
+					"id": "ripgrep-pager-flag",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/86",
+					"gap": "votes as evidence: hundreds of reactions and repeated me-too comments were the main pressure but were never weighed explicitly"
+				},
+				{
+					"id": "appflowy-dark-mode-palette",
+					"source": "thread",
+					"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+					"gap": "votes as evidence: the designer's external straw poll results were never reported back, so the tally behind option 2 is invisible"
+				}
+			]
+		},
+		"delegate": {
+			"all": {
+				"k": 45,
+				"n": 173,
+				"p": 0.26,
+				"ci95": [
+					0.2,
+					0.33
+				]
+			},
+			"threads": {
+				"k": 35,
+				"n": 132,
+				"p": 0.265,
+				"ci95": [
+					0.197,
+					0.346
+				]
+			},
+			"documents": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 46,
+			"formal_share_of_hits": {
+				"k": 17,
+				"n": 45,
+				"p": 0.378,
+				"ci95": [
+					0.251,
+					0.524
+				]
+			},
+			"examples": [
+				{
+					"id": "appflowy-dark-mode-palette",
+					"source": "thread",
+					"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+					"gap": "decider not in thread: the designer deferred to an MVP design the maintainer had made before joining, which is not in the issue"
+				},
+				{
+					"id": "cargo-feature-doc-field",
+					"source": "thread",
+					"url": "https://github.com/rust-lang/rfcs/pull/3485",
+					"gap": "decision ownership dispute: which teams must approve was itself contested via labels"
+				},
+				{
+					"id": "deno-config-permissions",
+					"source": "thread",
+					"url": "https://github.com/denoland/deno/issues/12763",
+					"gap": "decider not in thread: the team that blocked #14520 never stated its threat model in the issue despite a user asking"
+				},
+				{
+					"id": "deno-deny-flags-strict-check",
+					"source": "thread",
+					"url": "https://github.com/denoland/deno/pull/19070",
+					"gap": "decider not in thread: a reviewer approved but waited on the lead maintainer, who appeared only at review checkpoints"
+				}
+			]
+		},
+		"supersede": {
+			"all": {
+				"k": 36,
+				"n": 173,
+				"p": 0.208,
+				"ci95": [
+					0.154,
+					0.275
+				]
+			},
+			"threads": {
+				"k": 26,
+				"n": 132,
+				"p": 0.197,
+				"ci95": [
+					0.138,
+					0.273
+				]
+			},
+			"documents": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"entries_total": 39,
+			"formal_share_of_hits": {
+				"k": 13,
+				"n": 36,
+				"p": 0.361,
+				"ci95": [
+					0.225,
+					0.524
+				]
+			},
+			"examples": [
+				{
+					"id": "delta-light-dark-detection",
+					"source": "thread",
+					"url": "https://github.com/dandavison/delta/issues/447",
+					"gap": "implementation elsewhere: the deciding work happened in a separate PR thread"
+				},
+				{
+					"id": "ripgrep-hyperlink-support",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/665",
+					"gap": "decision moved to another thread: the final design was argued in PR #2483 review, not the issue"
+				},
+				{
+					"id": "astro-define-vars-scripts",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/1246",
+					"gap": "decision moved to another thread: further work continues in a new Stage 2 issue"
+				},
+				{
+					"id": "astro-inline-script-stage-2",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/995",
+					"gap": "thread handoff: settling moved the conversation to a new issue rather than recording an answer here"
+				}
+			]
+		},
+		"consensus-mechanics": {
+			"all": {
+				"k": 32,
+				"n": 173,
+				"p": 0.185,
+				"ci95": [
+					0.134,
+					0.249
+				]
+			},
+			"threads": {
+				"k": 16,
+				"n": 132,
+				"p": 0.121,
+				"ci95": [
+					0.076,
+					0.188
+				]
+			},
+			"documents": {
+				"k": 16,
+				"n": 41,
+				"p": 0.39,
+				"ci95": [
+					0.257,
+					0.543
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 43,
+			"formal_share_of_hits": {
+				"k": 21,
+				"n": 32,
+				"p": 0.656,
+				"ci95": [
+					0.483,
+					0.796
+				]
+			},
+			"examples": [
+				{
+					"id": "crystal-io-first",
+					"source": "thread",
+					"url": "https://github.com/crystal-lang/crystal/issues/5916",
+					"gap": "unresolved dissent at settlement: the issue closed on merge while a collaborator's objection stood unanswered"
+				},
+				{
+					"id": "eslint-native-ts-config-flag",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/19985",
+					"gap": "decided too fast: closure came within a day, before key stakeholders could weigh in"
+				},
+				{
+					"id": "excalidraw-new-drawing-button",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+					"gap": "contested settled decision: users kept challenging a closed decision for years with no formal reopen path"
+				},
+				{
+					"id": "go-remove-binary-only-packages",
+					"source": "thread",
+					"url": "https://github.com/golang/go/issues/28152",
+					"gap": "silence as consent: acceptance rested on a week passing with no objections rather than an explicit check of affected users"
+				}
+			]
+		},
+		"nested": {
+			"all": {
+				"k": 27,
+				"n": 173,
+				"p": 0.156,
+				"ci95": [
+					0.11,
+					0.218
+				]
+			},
+			"threads": {
+				"k": 14,
+				"n": 132,
+				"p": 0.106,
+				"ci95": [
+					0.064,
+					0.17
+				]
+			},
+			"documents": {
+				"k": 13,
+				"n": 41,
+				"p": 0.317,
+				"ci95": [
+					0.196,
+					0.47
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 28,
+			"formal_share_of_hits": {
+				"k": 12,
+				"n": 27,
+				"p": 0.444,
+				"ci95": [
+					0.276,
+					0.627
+				]
+			},
+			"examples": [
+				{
+					"id": "just-f-string-syntax",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/11",
+					"gap": "split scope: settling one part (strings) spun the remainder (backticks) into a new issue"
+				},
+				{
+					"id": "aspnetcore-mvc-in-shared-framework",
+					"source": "thread",
+					"url": "https://github.com/dotnet/aspnetcore/issues/3755",
+					"gap": "living decision list: the issue served as a running list of removals, each settled in a separate PR, rather than one decision"
+				},
+				{
+					"id": "deno-rust-type-checker",
+					"source": "thread",
+					"url": "https://github.com/denoland/deno/issues/5432",
+					"gap": "coupled decisions: the umbrella question bundled several staged sub-decisions (no-check default, isolatedModules, emit via swc) each settled in other issues"
+				},
+				{
+					"id": "excalidraw-export-split-labels",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/pull/3613",
+					"gap": "staged acceptance: several reviewer points were explicitly deferred to follow-up PRs with no tracked record"
+				}
+			]
+		},
+		"revert": {
+			"all": {
+				"k": 24,
+				"n": 173,
+				"p": 0.139,
+				"ci95": [
+					0.095,
+					0.198
+				]
+			},
+			"threads": {
+				"k": 21,
+				"n": 132,
+				"p": 0.159,
+				"ci95": [
+					0.106,
+					0.231
+				]
+			},
+			"documents": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			},
+			"small": {
+				"k": 4,
+				"n": 11,
+				"p": 0.364,
+				"ci95": [
+					0.152,
+					0.646
+				]
+			},
+			"entries_total": 25,
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 24,
+				"p": 0.125,
+				"ci95": [
+					0.043,
+					0.31
+				]
+			},
+			"examples": [
+				{
+					"id": "just-f-string-syntax",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/11",
+					"gap": "reversal after merge: the brace choice was flipped in-thread after the implementing PR landed but before release"
+				},
+				{
+					"id": "ripgrep-hyperlink-support",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/665",
+					"gap": "reversal after closing: a won't-do decision was reopened years later when a concrete design appeared"
+				},
+				{
+					"id": "ripgrep-pager-flag",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/86",
+					"gap": "reversal after decision: settled as no, reopened with a plan and help wanted, then closed again three years later without a build"
+				},
+				{
+					"id": "zoxide-fish-cd-call",
+					"source": "thread",
+					"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+					"gap": "reversal after shipping: the first merged fix was changed and reverted in commits with no record in the thread until a contributor noticed"
+				}
+			]
+		},
+		"stale-idle": {
+			"all": {
+				"k": 24,
+				"n": 173,
+				"p": 0.139,
+				"ci95": [
+					0.095,
+					0.198
+				]
+			},
+			"threads": {
+				"k": 22,
+				"n": 132,
+				"p": 0.167,
+				"ci95": [
+					0.113,
+					0.239
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 4,
+				"n": 11,
+				"p": 0.364,
+				"ci95": [
+					0.152,
+					0.646
+				]
+			},
+			"entries_total": 24,
+			"formal_share_of_hits": {
+				"k": 4,
+				"n": 24,
+				"p": 0.167,
+				"ci95": [
+					0.067,
+					0.359
+				]
+			},
+			"examples": [
+				{
+					"id": "delta-light-dark-detection",
+					"source": "thread",
+					"url": "https://github.com/dandavison/delta/issues/447",
+					"gap": "long dormancy: the question sat for three years between feasibility findings and the fix"
+				},
+				{
+					"id": "just-f-string-syntax",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/11",
+					"gap": "years-long dormancy: a nine-year-old question with stalled community PRs and no record of why it waited"
+				},
+				{
+					"id": "just-parallel-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/issues/626",
+					"gap": "long dormancy: five years between framing and decision, with the maintainer's capacity as the real blocker"
+				},
+				{
+					"id": "just-telemetry-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/discussions/2934",
+					"gap": "stalled question: a maintainer gave an early lean and then went silent for ten months, with no owner or next step recorded"
+				}
+			]
+		},
+		"implicit": {
+			"all": {
+				"k": 22,
+				"n": 173,
+				"p": 0.127,
+				"ci95": [
+					0.085,
+					0.185
+				]
+			},
+			"threads": {
+				"k": 19,
+				"n": 132,
+				"p": 0.144,
+				"ci95": [
+					0.094,
+					0.214
+				]
+			},
+			"documents": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 24,
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 22,
+				"p": 0.136,
+				"ci95": [
+					0.047,
+					0.333
+				]
+			},
+			"examples": [
+				{
+					"id": "fzf-preview-window",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/issues/587",
+					"gap": "prototype-first framing: the maintainer had already built it, so yes/no was settled by demonstration rather than a question"
+				},
+				{
+					"id": "appflowy-dark-mode-palette",
+					"source": "thread",
+					"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+					"gap": "staged acceptance: the palette was agreed in December but implementation drifted across contributors and PRs for months, and the closure never links the decision to the code that shipped it"
+				},
+				{
+					"id": "excalidraw-embed-validator-api",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/pull/6691",
+					"gap": "reviewer implements the answer: the maintainer settled the API by pushing commits to the contributor's branch rather than recording a choice"
+				},
+				{
+					"id": "ghostty-broadcast-groups-design",
+					"source": "thread",
+					"url": "https://github.com/ghostty-org/ghostty/pull/13745",
+					"gap": "decisions as code suggestions: many design choices were made via suggestion blocks, so the record lives in diffs, not prose"
+				}
+			]
+		},
+		"blocking": {
+			"all": {
+				"k": 21,
+				"n": 173,
+				"p": 0.121,
+				"ci95": [
+					0.081,
+					0.178
+				]
+			},
+			"threads": {
+				"k": 14,
+				"n": 132,
+				"p": 0.106,
+				"ci95": [
+					0.064,
+					0.17
+				]
+			},
+			"documents": {
+				"k": 7,
+				"n": 41,
+				"p": 0.171,
+				"ci95": [
+					0.085,
+					0.313
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 21,
+			"formal_share_of_hits": {
+				"k": 5,
+				"n": 21,
+				"p": 0.238,
+				"ci95": [
+					0.106,
+					0.451
+				]
+			},
+			"examples": [
+				{
+					"id": "ripgrep-long-line-handling",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/129",
+					"gap": "staged acceptance: context-aware display was deferred pending an architecture refactor"
+				},
+				{
+					"id": "eslint-formatting-rule-deprecation",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/17522",
+					"gap": "external dependency: the decision waited on a separate community project being ready"
+				},
+				{
+					"id": "excalidraw-new-drawing-button",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+					"gap": "coupled decisions: the answer depended on a separate multi-scene issue that was never resolved here"
+				},
+				{
+					"id": "ghostty-broadcast-groups-design",
+					"source": "thread",
+					"url": "https://github.com/ghostty-org/ghostty/pull/13745",
+					"gap": "settled but not shipped: approved yet held for a release string freeze, so settled and merged diverge"
+				}
+			]
+		},
+		"reframe": {
+			"all": {
+				"k": 20,
+				"n": 173,
+				"p": 0.116,
+				"ci95": [
+					0.076,
+					0.172
+				]
+			},
+			"threads": {
+				"k": 14,
+				"n": 132,
+				"p": 0.106,
+				"ci95": [
+					0.064,
+					0.17
+				]
+			},
+			"documents": {
+				"k": 6,
+				"n": 41,
+				"p": 0.146,
+				"ci95": [
+					0.069,
+					0.284
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 21,
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 20,
+				"p": 0.35,
+				"ci95": [
+					0.181,
+					0.567
+				]
+			},
+			"examples": [
+				{
+					"id": "just-telemetry-mechanism",
+					"source": "thread",
+					"url": "https://github.com/casey/just/discussions/2934",
+					"gap": "reframing: the question shifted from 'add telemetry' to 'add a generic event hook', which needs the question itself to be renamed rather than answered"
+				},
+				{
+					"id": "excalidraw-handwritten-font",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/issues/2945",
+					"gap": "reframed question: the final answer (improve the incumbent) was not one of the options in the original framing"
+				},
+				{
+					"id": "go-try-builtin",
+					"source": "thread",
+					"url": "https://github.com/golang/go/issues/32437",
+					"gap": "problem before solution: the team conceded the problem statement was never agreed, so a question about whether to solve anything was hidden inside a question about one design"
+				},
+				{
+					"id": "ha-addons-to-apps",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/discussions/1287",
+					"gap": "reframing: many replies argued the real problem was a different menu, which the design cannot split off"
+				}
+			]
+		},
+		"consequences": {
+			"all": {
+				"k": 20,
+				"n": 173,
+				"p": 0.116,
+				"ci95": [
+					0.076,
+					0.172
+				]
+			},
+			"threads": {
+				"k": 5,
+				"n": 132,
+				"p": 0.038,
+				"ci95": [
+					0.016,
+					0.086
+				]
+			},
+			"documents": {
+				"k": 15,
+				"n": 41,
+				"p": 0.366,
+				"ci95": [
+					0.236,
+					0.519
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 24,
+			"formal_share_of_hits": {
+				"k": 4,
+				"n": 20,
+				"p": 0.2,
+				"ci95": [
+					0.081,
+					0.416
+				]
+			},
+			"examples": [
+				{
+					"id": "fzf-default-opts-file",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/discussions/2528",
+					"gap": "follow-up defect: a missed integration (key bindings) surfaced after the decision and needed its own PR"
+				},
+				{
+					"id": "eslint-adopt-codemod",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/20442",
+					"gap": "staged acceptance: deprecation of the old tools was agreed but not yet carried out"
+				},
+				{
+					"id": "ha-zwave-driver-choice",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/issues/483",
+					"gap": "spun-off follow-up: migration and old-integration retirement were deferred to separate issues"
+				},
+				{
+					"id": "home-assistant-lawn-mower-entity-model",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/discussions/894",
+					"gap": "cross-repo build: one decision fanned out to core, frontend, brands and two docs PRs"
+				}
+			]
+		},
+		"conditional": {
+			"all": {
+				"k": 18,
+				"n": 173,
+				"p": 0.104,
+				"ci95": [
+					0.067,
+					0.158
+				]
+			},
+			"threads": {
+				"k": 9,
+				"n": 132,
+				"p": 0.068,
+				"ci95": [
+					0.036,
+					0.125
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 19,
+			"formal_share_of_hits": {
+				"k": 6,
+				"n": 18,
+				"p": 0.333,
+				"ci95": [
+					0.163,
+					0.563
+				]
+			},
+			"examples": [
+				{
+					"id": "bat-builtin-pager-approach",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/1053",
+					"gap": "reversal after shipping: post-ship evidence (unmaintained upstream, large-file failures) reopens the library choice without a formal revisit"
+				},
+				{
+					"id": "bat-debian-batcat-name",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/2455",
+					"gap": "stale facts: no prompt to re-verify a 'True' check when upstream changes later"
+				},
+				{
+					"id": "eslint-native-ts-config-flag",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/19985",
+					"gap": "stale rationale: the stated condition for revisiting depended on external Node behaviour that later changed, with nothing prompting the decider to re-check"
+				},
+				{
+					"id": "ghostty-official-snap",
+					"source": "thread",
+					"url": "https://github.com/ghostty-org/ghostty/pull/3931",
+					"gap": "conditional acceptance: the yes depended on the contributor committing to future maintenance, a people commitment the record cannot capture"
+				}
+			]
+		},
+		"external-authority": {
+			"all": {
+				"k": 17,
+				"n": 173,
+				"p": 0.098,
+				"ci95": [
+					0.062,
+					0.152
+				]
+			},
+			"threads": {
+				"k": 8,
+				"n": 132,
+				"p": 0.061,
+				"ci95": [
+					0.031,
+					0.115
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"entries_total": 17,
+			"formal_share_of_hits": {
+				"k": 4,
+				"n": 17,
+				"p": 0.235,
+				"ci95": [
+					0.096,
+					0.473
+				]
+			},
+			"examples": [
+				{
+					"id": "ripgrep-hyperlink-support",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/665",
+					"gap": "external dependency evidence: Windows Terminal and tmux fixes upstream shaped what was viable"
+				},
+				{
+					"id": "ripgrep-pager-flag",
+					"source": "thread",
+					"url": "https://github.com/BurntSushi/ripgrep/issues/86",
+					"gap": "external alternative as answer: the outcome leans on a third-party tool (delta) endorsed in the README rather than a built feature"
+				},
+				{
+					"id": "bat-debian-batcat-name",
+					"source": "thread",
+					"url": "https://github.com/sharkdp/bat/issues/2455",
+					"gap": "decider not in thread: the real deciders are Debian and Bacula maintainers, and bat's own maintainers spoke only once"
+				},
+				{
+					"id": "deno-jupyter-display-hook",
+					"source": "thread",
+					"url": "https://github.com/denoland/deno/pull/20337",
+					"gap": "external expert input: a Jupyter maintainer from outside the project steered the design, a role the design does not distinguish"
+				}
+			]
+		},
+		"approve": {
+			"all": {
+				"k": 14,
+				"n": 173,
+				"p": 0.081,
+				"ci95": [
+					0.049,
+					0.131
+				]
+			},
+			"threads": {
+				"k": 12,
+				"n": 132,
+				"p": 0.091,
+				"ci95": [
+					0.053,
+					0.152
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 14,
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 14,
+				"p": 0.5,
+				"ci95": [
+					0.268,
+					0.732
+				]
+			},
+			"examples": [
+				{
+					"id": "astro-define-vars-scripts",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/1246",
+					"gap": "per-member approvals: each TSC member's sign-off is a separate reply that the record should tally"
+				},
+				{
+					"id": "astro-inline-script-stage-2",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/995",
+					"gap": "votes as evidence: steering committee members approve with one-line replies counted as a gate"
+				},
+				{
+					"id": "cargo-feature-doc-field",
+					"source": "thread",
+					"url": "https://github.com/rust-lang/rfcs/pull/3485",
+					"gap": "formal sign-off mechanics: rfcbot checkboxes and concerns act as the settle step, which Chopin's single settler does not model"
+				},
+				{
+					"id": "ghostty-broadcast-groups-design",
+					"source": "thread",
+					"url": "https://github.com/ghostty-org/ghostty/pull/13745",
+					"gap": "multiple approvers per platform: GTK and macOS maintainers each signed off on their area"
+				}
+			]
+		},
+		"rejected-content": {
+			"all": {
+				"k": 13,
+				"n": 173,
+				"p": 0.075,
+				"ci95": [
+					0.044,
+					0.124
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 13,
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 13,
+				"p": 0.538,
+				"ci95": [
+					0.291,
+					0.768
+				]
+			},
+			"examples": [
+				{
+					"id": "deno-config-permissions",
+					"source": "thread",
+					"url": "https://github.com/denoland/deno/issues/12763",
+					"gap": "reversal after shipping: two implementation PRs were opened and abandoned before the final design, with the reason recorded only on a closed PR"
+				},
+				{
+					"id": "ha-entity-name-editing",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/discussions/1185",
+					"gap": "silent option removal: an option added in response to feedback was later dropped by editing the proposal, with no recorded reasoning"
+				},
+				{
+					"id": "ha-template-binary-sensor-delays-ui",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/discussions/1340",
+					"gap": "reopening a decision scattered across PRs: the prior refusal lived in five closed PRs rather than one record"
+				},
+				{
+					"id": "eng-govuk-infrastructure-adr019-restructure-cicd",
+					"source": "document",
+					"url": "https://github.com/alphagov/govuk-infrastructure/blob/main/docs/architecture/decisions/0019-restructure-cicd.md",
+					"gap": "rejected options content: A late option with no recorded reason for non-adoption: an option whose fate has no rationale."
+				}
+			]
+		},
+		"convention": {
+			"all": {
+				"k": 12,
+				"n": 173,
+				"p": 0.069,
+				"ci95": [
+					0.04,
+					0.117
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 13,
+			"formal_share_of_hits": {
+				"k": 5,
+				"n": 12,
+				"p": 0.417,
+				"ci95": [
+					0.193,
+					0.68
+				]
+			},
+			"examples": [
+				{
+					"id": "excalidraw-zen-mode-entry-exit",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/pull/1450",
+					"gap": "decider not in thread: the team had no written design philosophy, so the author built a dialog that reviewers then rejected"
+				},
+				{
+					"id": "prettier-final-newline",
+					"source": "thread",
+					"url": "https://github.com/prettier/prettier/issues/6360",
+					"gap": "standing policy as decider: the outcome follows a project-wide option philosophy document rather than this thread's arguments, and the record needs to cite it"
+				},
+				{
+					"id": "prettier-nested-ternary-format",
+					"source": "thread",
+					"url": "https://github.com/prettier/prettier/issues/9561",
+					"gap": "principle constraint: a standing no-options policy ruled out a popular answer, which needs to sit beside the question as a fixed constraint"
+				},
+				{
+					"id": "eng-backstage-adr013-014-http-fetch-library",
+					"source": "document",
+					"url": "https://github.com/backstage/backstage/blob/master/docs/architecture-decisions/adr014-use-fetch.md",
+					"gap": "convention scope: One decision with three scopes (Node.js code, frontend, isomorphic packages), only one of which changed. The choice table holds a single answer, not per-context answers where one cel"
+				}
+			]
+		},
+		"vote": {
+			"all": {
+				"k": 10,
+				"n": 173,
+				"p": 0.058,
+				"ci95": [
+					0.032,
+					0.103
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 7,
+				"n": 41,
+				"p": 0.171,
+				"ci95": [
+					0.085,
+					0.313
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 11,
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 10,
+				"p": 0.7,
+				"ci95": [
+					0.397,
+					0.892
+				]
+			},
+			"examples": [
+				{
+					"id": "node-primordials-error-path",
+					"source": "thread",
+					"url": "https://github.com/nodejs/TSC/issues/1104",
+					"gap": "votes or reaction counts as evidence: charter seconding was counted from thumbs-up reactions, and the decision itself was a ranked Condorcet ballot"
+				},
+				{
+					"id": "node-yarn-vs-corepack",
+					"source": "thread",
+					"url": "https://github.com/nodejs/TSC/issues/1012",
+					"gap": "votes as evidence: the decision was a formal ranked ballot by a closed electorate with private ballots and turnout tracking, not thumbs from whoever passes by"
+				},
+				{
+					"id": "zed-git-panel-file-diff",
+					"source": "thread",
+					"url": "https://github.com/zed-industries/zed/discussions/33773",
+					"gap": "votes as evidence: the default was settled by a quick poll of reply votes from the implementer"
+				},
+				{
+					"id": "eng-modernisation-platform-adr004-019-core-languages",
+					"source": "document",
+					"url": "https://github.com/ministryofjustice/modernisation-platform/blob/main/architecture-decision-record/0019-use-bash-go-as-core-languages.md",
+					"gap": "formal vote: A poll feeding a decision, tied 3-3, followed by a rule to let each member pick. The design has Ask and Takes (Agrees/Objects/Unsure) but no poll tally, no quorum, and no 'decide not to d"
+				}
+			]
+		},
+		"deferred": {
+			"all": {
+				"k": 9,
+				"n": 173,
+				"p": 0.052,
+				"ci95": [
+					0.028,
+					0.096
+				]
+			},
+			"threads": {
+				"k": 4,
+				"n": 132,
+				"p": 0.03,
+				"ci95": [
+					0.012,
+					0.075
+				]
+			},
+			"documents": {
+				"k": 5,
+				"n": 41,
+				"p": 0.122,
+				"ci95": [
+					0.053,
+					0.255
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 9,
+			"formal_share_of_hits": {
+				"k": 5,
+				"n": 9,
+				"p": 0.556,
+				"ci95": [
+					0.267,
+					0.811
+				]
+			},
+			"examples": [
+				{
+					"id": "lazygit-worktree-naming-location",
+					"source": "thread",
+					"url": "https://github.com/jesseduffield/lazygit/discussions/2803",
+					"gap": "deferred question never reopened: later requests for name derivation pile up in the same thread without reviving the deferred item"
+				},
+				{
+					"id": "mastodon-local-only-posts",
+					"source": "thread",
+					"url": "https://github.com/mastodon/mastodon/issues/861",
+					"gap": "limbo state: neither accepted nor rejected, only signalled by label changes"
+				},
+				{
+					"id": "outline-document-tags",
+					"source": "thread",
+					"url": "https://github.com/outline/outline/discussions/2256",
+					"gap": "staged acceptance: a 'not at this time' deferral has no trigger or review date for reopening"
+				},
+				{
+					"id": "vite-lib-externalize-lookup",
+					"source": "thread",
+					"url": "https://github.com/vitejs/vite/pull/10632",
+					"gap": "deferred to a larger initiative: maintainers parked it for a future library-mode review that is not linked or tracked"
+				}
+			]
+		},
+		"partition": {
+			"all": {
+				"k": 8,
+				"n": 173,
+				"p": 0.046,
+				"ci95": [
+					0.024,
+					0.089
+				]
+			},
+			"threads": {
+				"k": 8,
+				"n": 132,
+				"p": 0.061,
+				"ci95": [
+					0.031,
+					0.115
+				]
+			},
+			"documents": {
+				"k": 0,
+				"n": 41,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.086
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"entries_total": 8,
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 8,
+				"p": 0.375,
+				"ci95": [
+					0.137,
+					0.694
+				]
+			},
+			"examples": [
+				{
+					"id": "delta-light-dark-detection",
+					"source": "thread",
+					"url": "https://github.com/dandavison/delta/issues/447",
+					"gap": "residual limits after settling: tmux and lazygit cases stayed unsolved after closing"
+				},
+				{
+					"id": "fzf-preview-window",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/issues/587",
+					"gap": "scope guarding after close: follow-on option requests were refused in the closed thread, a sub-decision the record would miss"
+				},
+				{
+					"id": "astro-scripts-only-when-rendered",
+					"source": "thread",
+					"url": "https://github.com/withastro/roadmap/discussions/664",
+					"gap": "coupled decisions: scripts and styles were treated as one question, then split when the maintainer judged styles differently"
+				},
+				{
+					"id": "eslint-formatting-rule-deprecation",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/17522",
+					"gap": "per-item settlement: the answer was a list of about seventy rules each with its own keep-or-drop call"
+				}
+			]
+		},
+		"provisional": {
+			"all": {
+				"k": 7,
+				"n": 173,
+				"p": 0.04,
+				"ci95": [
+					0.02,
+					0.081
+				]
+			},
+			"threads": {
+				"k": 1,
+				"n": 132,
+				"p": 0.008,
+				"ci95": [
+					0.001,
+					0.042
+				]
+			},
+			"documents": {
+				"k": 6,
+				"n": 41,
+				"p": 0.146,
+				"ci95": [
+					0.069,
+					0.284
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 7,
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 7,
+				"p": 0.429,
+				"ci95": [
+					0.158,
+					0.75
+				]
+			},
+			"examples": [
+				{
+					"id": "prettier-nested-ternary-format",
+					"source": "thread",
+					"url": "https://github.com/prettier/prettier/issues/9561",
+					"gap": "experiments as evidence: the outcome so far is an opt-in experimental flag announced on a blog, not a settled answer"
+				},
+				{
+					"id": "eng-backstage-adr013-014-http-fetch-library",
+					"source": "document",
+					"url": "https://github.com/backstage/backstage/blob/master/docs/architecture-decisions/adr014-use-fetch.md",
+					"gap": "provisional decision: Reversal trigger is an environmental change (minimum platform version raised), not a new argument. The record has 'What we knew at the time' but nothing like 'revisit when X chan"
+				},
+				{
+					"id": "eng-cloud-platform-adr012-021-036-048-multi-cluster",
+					"source": "document",
+					"url": "https://github.com/ministryofjustice/cloud-platform/blob/main/architecture-decision-record/036-multi-cluster.md",
+					"gap": "provisional decision: Evidence is a dated snapshot ('at time of writing' namespace counts, comparison against Kubernetes large-cluster limits). 'What we knew' could hold it, but nothing flags it for r"
+				},
+				{
+					"id": "eng-modernisation-platform-adr004-019-core-languages",
+					"source": "document",
+					"url": "https://github.com/ministryofjustice/modernisation-platform/blob/main/architecture-decision-record/0019-use-bash-go-as-core-languages.md",
+					"gap": "provisional decision: Both ADRs say they can be revisited, but neither names a review date or trigger. The design has no 'revisit when' condition on a settled question."
+				}
+			]
+		},
+		"visual-comparison": {
+			"all": {
+				"k": 5,
+				"n": 173,
+				"p": 0.029,
+				"ci95": [
+					0.012,
+					0.066
+				]
+			},
+			"threads": {
+				"k": 4,
+				"n": 132,
+				"p": 0.03,
+				"ci95": [
+					0.012,
+					0.075
+				]
+			},
+			"documents": {
+				"k": 1,
+				"n": 41,
+				"p": 0.024,
+				"ci95": [
+					0.004,
+					0.126
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 5,
+			"formal_share_of_hits": {
+				"k": 1,
+				"n": 5,
+				"p": 0.2,
+				"ci95": [
+					0.036,
+					0.624
+				]
+			},
+			"examples": [
+				{
+					"id": "fzf-preview-window",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/issues/587",
+					"gap": "screenshots as evidence: layout choices were argued with terminal screenshots, not a structured comparison"
+				},
+				{
+					"id": "excalidraw-handwritten-font",
+					"source": "thread",
+					"url": "https://github.com/excalidraw/excalidraw/issues/2945",
+					"gap": "visual evidence: options were judged from rendered samples and a live preview site rather than text"
+				},
+				{
+					"id": "vscode-completion-item-label-shape",
+					"source": "thread",
+					"url": "https://github.com/microsoft/vscode/issues/39441",
+					"gap": "visual alternatives as evidence: competing renderings were compared through screenshots"
+				},
+				{
+					"id": "zed-commit-log-graph",
+					"source": "thread",
+					"url": "https://github.com/zed-industries/zed/discussions/26511",
+					"gap": "visual references as evidence: options arrived as screenshots of other tools, with no way to compare them side by side"
+				}
+			]
+		},
+		"other:hidden-history": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 0,
+				"n": 41,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.086
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 3,
+			"formal_share_of_hits": {
+				"k": 0,
+				"n": 3,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.562
+				]
+			},
+			"examples": [
+				{
+					"id": "eslint-formatting-rule-deprecation",
+					"source": "thread",
+					"url": "https://github.com/eslint/eslint/issues/17522",
+					"gap": "thread moderation: locking and unlocking to steer scope has no equivalent"
+				},
+				{
+					"id": "typescript-node-esm-mode-shape",
+					"source": "thread",
+					"url": "https://github.com/microsoft/TypeScript/pull/44501",
+					"gap": "duplicates merged: repeated objections were hidden as duplicates rather than linked to the settled record"
+				},
+				{
+					"id": "zed-git-panel-file-diff",
+					"source": "thread",
+					"url": "https://github.com/zed-industries/zed/discussions/33773",
+					"gap": "existing-capability check: a hidden existing action partly answered the request, a fact that needed checking before building"
+				}
+			]
+		},
+		"moot": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 1,
+				"n": 132,
+				"p": 0.008,
+				"ci95": [
+					0.001,
+					0.042
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 3,
+			"formal_share_of_hits": {
+				"k": 1,
+				"n": 3,
+				"p": 0.333,
+				"ci95": [
+					0.061,
+					0.792
+				]
+			},
+			"examples": [
+				{
+					"id": "mastodon-remote-local-timeline",
+					"source": "thread",
+					"url": "https://github.com/mastodon/mastodon/issues/1053",
+					"gap": "partial solution as closure: a different feature that met part of the need was used to close the request"
+				},
+				{
+					"id": "eng-govuk-infrastructure-adr007-application-logging",
+					"source": "document",
+					"url": "https://github.com/alphagov/govuk-infrastructure/blob/main/docs/architecture/decisions/0007-use-fluentbit-elasticsearch-and-kibana-for-application-logs.md",
+					"gap": "moot question: Deprecated with no successor: the decision was withdrawn rather than replaced, and the repo does not say what is now true. Settled and Reopen exist, but there is no 'retired, no replace"
+				},
+				{
+					"id": "tc39-2023-11-operator-overloading-withdrawn",
+					"source": "document",
+					"url": "https://github.com/tc39/notes/blob/main/meetings/2023-11/november-28.md#withdrawing-operator-overloading",
+					"gap": "moot question: A negative decision: the outcome removes a feature and closes a line of work. Settle writes an answer sentence into the plan, and nothing records withdrawn, dropped or not doing it."
+				}
+			]
+		},
+		"other:deadline": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 0,
+				"n": 132,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.028
+				]
+			},
+			"documents": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 3,
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 3,
+				"p": 1.0,
+				"ci95": [
+					0.438,
+					1
+				]
+			},
+			"examples": [
+				{
+					"id": "tc39-2020-04-weakrefs-finalizationregistry-cleanup",
+					"source": "document",
+					"url": "https://github.com/tc39/notes/blob/main/meetings/2020-03/april-1.md#weakrefs-finalizationregistry-api-change",
+					"gap": "deadline: Implementation and a Test262 PR were already waiting, so the decision carried shipping urgency that the design cannot express."
+				},
+				{
+					"id": "tc39-2021-08-realm-constructor-shadowrealm-name",
+					"source": "document",
+					"url": "https://github.com/tc39/notes/blob/main/meetings/2021-08/aug-31.md#realms-renaming-bikeshedding-thread",
+					"gap": "deadline: The thread ended because patience ran out and a delegate called time; there is no discussion-has-run-its-course affordance or deadline on a question."
+				},
+				{
+					"id": "tc39-2025-09-iterator-windows-undersized-parameter",
+					"source": "document",
+					"url": "https://github.com/tc39/notes/blob/main/meetings/2025-05/may-29.md#iterator-chunking-for-stage-27",
+					"gap": "deadline: Feedback that arrived days before a meeting changed the design and the champion said it should have come earlier; the design has no early-input nudge or feedback deadline."
+				}
+			]
+		},
+		"ratify": {
+			"all": {
+				"k": 2,
+				"n": 173,
+				"p": 0.012,
+				"ci95": [
+					0.003,
+					0.041
+				]
+			},
+			"threads": {
+				"k": 2,
+				"n": 132,
+				"p": 0.015,
+				"ci95": [
+					0.004,
+					0.054
+				]
+			},
+			"documents": {
+				"k": 0,
+				"n": 41,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.086
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"entries_total": 2,
+			"formal_share_of_hits": {
+				"k": 0,
+				"n": 2,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.658
+				]
+			},
+			"examples": [
+				{
+					"id": "fzf-default-opts-file",
+					"source": "thread",
+					"url": "https://github.com/junegunn/fzf/discussions/2528",
+					"gap": "consultation skipped: the maintainer asked for opinions and shipped the PR before anyone could reply"
+				},
+				{
+					"id": "ha-floors-vs-nested-areas",
+					"source": "thread",
+					"url": "https://github.com/home-assistant/architecture/discussions/1021",
+					"gap": "decided before discussed: the proposal named its decision and PRs were open before feedback arrived"
+				}
+			]
+		},
+		"rank": {
+			"all": {
+				"k": 2,
+				"n": 173,
+				"p": 0.012,
+				"ci95": [
+					0.003,
+					0.041
+				]
+			},
+			"threads": {
+				"k": 0,
+				"n": 132,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.028
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"entries_total": 2,
+			"formal_share_of_hits": {
+				"k": 2,
+				"n": 2,
+				"p": 1.0,
+				"ci95": [
+					0.342,
+					1
+				]
+			},
+			"examples": [
+				{
+					"id": "python-2018-12-governance-model-vote-pep-8016",
+					"source": "document",
+					"url": "https://peps.python.org/pep-8001/",
+					"gap": "ranked choice: A formal ranked vote among full competing documents (Condorcet over seven candidates plus a 'none yet' sentinel), run by an outside trusted party. The nearest primitive is a stance pill"
+				},
+				{
+					"id": "rust-lang-team-2022-03-lang-roadmap-themes",
+					"source": "document",
+					"url": "https://github.com/rust-lang/lang-team/blob/c45345e32e81e273aab6c805b0d3cd7b1a666045/design-meeting-minutes/2022-03-09-lang-roadmap.md",
+					"gap": "ranked choice: Ordering of items is a decision type: neither a single choice nor a tune dial. There is no ranked-list shape."
+				}
+			]
+		}
+	},
+	"tag_reliability": {
+		"n": 60,
+		"agree": 42,
+		"po": 0.7,
+		"pe": 0.068,
+		"kappa": 0.678,
+		"confusions": {
+			"provisional->conditional": 1,
+			"convention->partition": 1,
+			"consensus-mechanics->delegate": 1,
+			"revert->evidence-not-check": 1,
+			"consequences->rejected-content": 1,
+			"rejected-content->other": 1,
+			"coupled->other": 1,
+			"rank->vote": 1,
+			"other->reframe": 1,
+			"blocking->delegate": 1
+		}
+	},
+	"gap_groups": {
+		"G7 follow-ups: nested|staged|consequences": {
+			"all": {
+				"k": 87,
+				"n": 173,
+				"p": 0.503,
+				"ci95": [
+					0.429,
+					0.577
+				]
+			},
+			"threads": {
+				"k": 59,
+				"n": 132,
+				"p": 0.447,
+				"ci95": [
+					0.365,
+					0.532
+				]
+			},
+			"documents": {
+				"k": 28,
+				"n": 41,
+				"p": 0.683,
+				"ci95": [
+					0.53,
+					0.804
+				]
+			},
+			"small": {
+				"k": 5,
+				"n": 11,
+				"p": 0.455,
+				"ci95": [
+					0.213,
+					0.72
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 33,
+				"n": 87,
+				"p": 0.379,
+				"ci95": [
+					0.285,
+					0.484
+				]
+			},
+			"examples": [
+				"bat-builtin-pager-approach",
+				"delta-light-dark-detection",
+				"fzf-default-opts-file",
+				"just-f-string-syntax"
+			]
+		},
+		"G9' composite answer (>=2 chosen or partly/merged)": {
+			"all": {
+				"k": 106,
+				"n": 173,
+				"p": 0.613,
+				"ci95": [
+					0.538,
+					0.682
+				]
+			},
+			"threads": {
+				"k": 83,
+				"n": 132,
+				"p": 0.629,
+				"ci95": [
+					0.544,
+					0.706
+				]
+			},
+			"documents": {
+				"k": 23,
+				"n": 41,
+				"p": 0.561,
+				"ci95": [
+					0.41,
+					0.701
+				]
+			},
+			"small": {
+				"k": 8,
+				"n": 11,
+				"p": 0.727,
+				"ci95": [
+					0.434,
+					0.903
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 26,
+				"n": 106,
+				"p": 0.245,
+				"ci95": [
+					0.173,
+					0.335
+				]
+			},
+			"examples": [
+				"bat-builtin-pager-approach",
+				"delta-light-dark-detection",
+				"fzf-preview-window",
+				"just-f-string-syntax"
+			]
+		},
+		"G2 parked: deferred|stale-idle or undecided+deferred": {
+			"all": {
+				"k": 42,
+				"n": 173,
+				"p": 0.243,
+				"ci95": [
+					0.185,
+					0.312
+				]
+			},
+			"threads": {
+				"k": 30,
+				"n": 132,
+				"p": 0.227,
+				"ci95": [
+					0.164,
+					0.306
+				]
+			},
+			"documents": {
+				"k": 12,
+				"n": 41,
+				"p": 0.293,
+				"ci95": [
+					0.176,
+					0.445
+				]
+			},
+			"small": {
+				"k": 4,
+				"n": 11,
+				"p": 0.364,
+				"ci95": [
+					0.152,
+					0.646
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 11,
+				"n": 42,
+				"p": 0.262,
+				"ci95": [
+					0.153,
+					0.411
+				]
+			},
+			"examples": [
+				"delta-light-dark-detection",
+				"just-f-string-syntax",
+				"just-parallel-mechanism",
+				"just-telemetry-mechanism"
+			]
+		},
+		"G6 evidence beyond check": {
+			"all": {
+				"k": 49,
+				"n": 173,
+				"p": 0.283,
+				"ci95": [
+					0.221,
+					0.355
+				]
+			},
+			"threads": {
+				"k": 40,
+				"n": 132,
+				"p": 0.303,
+				"ci95": [
+					0.231,
+					0.386
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 10,
+				"n": 49,
+				"p": 0.204,
+				"ci95": [
+					0.115,
+					0.336
+				]
+			},
+			"examples": [
+				"just-parallel-mechanism",
+				"ripgrep-hyperlink-support",
+				"ripgrep-long-line-handling",
+				"aspnetcore-mvc-in-shared-framework"
+			]
+		},
+		"G3 decided elsewhere: venue-split|implicit|ratify": {
+			"all": {
+				"k": 91,
+				"n": 173,
+				"p": 0.526,
+				"ci95": [
+					0.452,
+					0.599
+				]
+			},
+			"threads": {
+				"k": 73,
+				"n": 132,
+				"p": 0.553,
+				"ci95": [
+					0.468,
+					0.635
+				]
+			},
+			"documents": {
+				"k": 18,
+				"n": 41,
+				"p": 0.439,
+				"ci95": [
+					0.299,
+					0.59
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 26,
+				"n": 91,
+				"p": 0.286,
+				"ci95": [
+					0.203,
+					0.386
+				]
+			},
+			"examples": [
+				"bat-builtin-pager-approach",
+				"fzf-default-opts-file",
+				"fzf-preview-window",
+				"appflowy-dark-mode-palette"
+			]
+		},
+		"P8 external authority": {
+			"all": {
+				"k": 17,
+				"n": 173,
+				"p": 0.098,
+				"ci95": [
+					0.062,
+					0.152
+				]
+			},
+			"threads": {
+				"k": 8,
+				"n": 132,
+				"p": 0.061,
+				"ci95": [
+					0.031,
+					0.115
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 4,
+				"n": 17,
+				"p": 0.235,
+				"ci95": [
+					0.096,
+					0.473
+				]
+			},
+			"examples": [
+				"ripgrep-hyperlink-support",
+				"ripgrep-pager-flag",
+				"bat-debian-batcat-name",
+				"deno-jupyter-display-hook"
+			]
+		},
+		"G5 provisional|conditional": {
+			"all": {
+				"k": 24,
+				"n": 173,
+				"p": 0.139,
+				"ci95": [
+					0.095,
+					0.198
+				]
+			},
+			"threads": {
+				"k": 10,
+				"n": 132,
+				"p": 0.076,
+				"ci95": [
+					0.042,
+					0.134
+				]
+			},
+			"documents": {
+				"k": 14,
+				"n": 41,
+				"p": 0.341,
+				"ci95": [
+					0.216,
+					0.495
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 8,
+				"n": 24,
+				"p": 0.333,
+				"ci95": [
+					0.18,
+					0.533
+				]
+			},
+			"examples": [
+				"bat-builtin-pager-approach",
+				"bat-debian-batcat-name",
+				"eslint-native-ts-config-flag",
+				"ghostty-official-snap"
+			]
+		},
+		"G10 supersede|revert": {
+			"all": {
+				"k": 55,
+				"n": 173,
+				"p": 0.318,
+				"ci95": [
+					0.253,
+					0.391
+				]
+			},
+			"threads": {
+				"k": 43,
+				"n": 132,
+				"p": 0.326,
+				"ci95": [
+					0.252,
+					0.41
+				]
+			},
+			"documents": {
+				"k": 12,
+				"n": 41,
+				"p": 0.293,
+				"ci95": [
+					0.176,
+					0.445
+				]
+			},
+			"small": {
+				"k": 5,
+				"n": 11,
+				"p": 0.455,
+				"ci95": [
+					0.213,
+					0.72
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 16,
+				"n": 55,
+				"p": 0.291,
+				"ci95": [
+					0.188,
+					0.421
+				]
+			},
+			"examples": [
+				"delta-light-dark-detection",
+				"just-f-string-syntax",
+				"ripgrep-hyperlink-support",
+				"ripgrep-pager-flag"
+			]
+		},
+		"G4 coupled|blocking": {
+			"all": {
+				"k": 66,
+				"n": 173,
+				"p": 0.382,
+				"ci95": [
+					0.312,
+					0.456
+				]
+			},
+			"threads": {
+				"k": 52,
+				"n": 132,
+				"p": 0.394,
+				"ci95": [
+					0.315,
+					0.479
+				]
+			},
+			"documents": {
+				"k": 14,
+				"n": 41,
+				"p": 0.341,
+				"ci95": [
+					0.216,
+					0.495
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 20,
+				"n": 66,
+				"p": 0.303,
+				"ci95": [
+					0.206,
+					0.422
+				]
+			},
+			"examples": [
+				"just-f-string-syntax",
+				"ripgrep-long-line-handling",
+				"appflowy-dark-mode-palette",
+				"astro-define-vars-scripts"
+			]
+		},
+		"P10 crowd signal (votes as evidence)": {
+			"all": {
+				"k": 48,
+				"n": 173,
+				"p": 0.277,
+				"ci95": [
+					0.216,
+					0.348
+				]
+			},
+			"threads": {
+				"k": 47,
+				"n": 132,
+				"p": 0.356,
+				"ci95": [
+					0.28,
+					0.441
+				]
+			},
+			"documents": {
+				"k": 1,
+				"n": 41,
+				"p": 0.024,
+				"ci95": [
+					0.004,
+					0.126
+				]
+			},
+			"small": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 6,
+				"n": 48,
+				"p": 0.125,
+				"ci95": [
+					0.059,
+					0.247
+				]
+			},
+			"examples": [
+				"just-parallel-mechanism",
+				"just-telemetry-mechanism",
+				"ripgrep-pager-flag",
+				"appflowy-dark-mode-palette"
+			]
+		},
+		"G12 delegate|approve": {
+			"all": {
+				"k": 56,
+				"n": 173,
+				"p": 0.324,
+				"ci95": [
+					0.258,
+					0.397
+				]
+			},
+			"threads": {
+				"k": 44,
+				"n": 132,
+				"p": 0.333,
+				"ci95": [
+					0.259,
+					0.417
+				]
+			},
+			"documents": {
+				"k": 12,
+				"n": 41,
+				"p": 0.293,
+				"ci95": [
+					0.176,
+					0.445
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 22,
+				"n": 56,
+				"p": 0.393,
+				"ci95": [
+					0.276,
+					0.524
+				]
+			},
+			"examples": [
+				"appflowy-dark-mode-palette",
+				"astro-define-vars-scripts",
+				"astro-inline-script-stage-2",
+				"cargo-feature-doc-field"
+			]
+		},
+		"P6 consensus mechanics": {
+			"all": {
+				"k": 32,
+				"n": 173,
+				"p": 0.185,
+				"ci95": [
+					0.134,
+					0.249
+				]
+			},
+			"threads": {
+				"k": 16,
+				"n": 132,
+				"p": 0.121,
+				"ci95": [
+					0.076,
+					0.188
+				]
+			},
+			"documents": {
+				"k": 16,
+				"n": 41,
+				"p": 0.39,
+				"ci95": [
+					0.257,
+					0.543
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 21,
+				"n": 32,
+				"p": 0.656,
+				"ci95": [
+					0.483,
+					0.796
+				]
+			},
+			"examples": [
+				"crystal-io-first",
+				"eslint-native-ts-config-flag",
+				"excalidraw-new-drawing-button",
+				"go-remove-binary-only-packages"
+			]
+		},
+		"N reframe": {
+			"all": {
+				"k": 20,
+				"n": 173,
+				"p": 0.116,
+				"ci95": [
+					0.076,
+					0.172
+				]
+			},
+			"threads": {
+				"k": 14,
+				"n": 132,
+				"p": 0.106,
+				"ci95": [
+					0.064,
+					0.17
+				]
+			},
+			"documents": {
+				"k": 6,
+				"n": 41,
+				"p": 0.146,
+				"ci95": [
+					0.069,
+					0.284
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 20,
+				"p": 0.35,
+				"ci95": [
+					0.181,
+					0.567
+				]
+			},
+			"examples": [
+				"just-telemetry-mechanism",
+				"excalidraw-handwritten-font",
+				"go-try-builtin",
+				"ha-addons-to-apps"
+			]
+		},
+		"G8 convention": {
+			"all": {
+				"k": 12,
+				"n": 173,
+				"p": 0.069,
+				"ci95": [
+					0.04,
+					0.117
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 9,
+				"n": 41,
+				"p": 0.22,
+				"ci95": [
+					0.12,
+					0.367
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 5,
+				"n": 12,
+				"p": 0.417,
+				"ci95": [
+					0.193,
+					0.68
+				]
+			},
+			"examples": [
+				"excalidraw-zen-mode-entry-exit",
+				"prettier-final-newline",
+				"prettier-nested-ternary-format",
+				"eng-backstage-adr013-014-http-fetch-library"
+			]
+		},
+		"N visual comparison": {
+			"all": {
+				"k": 5,
+				"n": 173,
+				"p": 0.029,
+				"ci95": [
+					0.012,
+					0.066
+				]
+			},
+			"threads": {
+				"k": 4,
+				"n": 132,
+				"p": 0.03,
+				"ci95": [
+					0.012,
+					0.075
+				]
+			},
+			"documents": {
+				"k": 1,
+				"n": 41,
+				"p": 0.024,
+				"ci95": [
+					0.004,
+					0.126
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 1,
+				"n": 5,
+				"p": 0.2,
+				"ci95": [
+					0.036,
+					0.624
+				]
+			},
+			"examples": [
+				"fzf-preview-window",
+				"excalidraw-handwritten-font",
+				"vscode-completion-item-label-shape",
+				"zed-commit-log-graph"
+			]
+		},
+		"N rejected-content": {
+			"all": {
+				"k": 13,
+				"n": 173,
+				"p": 0.075,
+				"ci95": [
+					0.044,
+					0.124
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 13,
+				"p": 0.538,
+				"ci95": [
+					0.291,
+					0.768
+				]
+			},
+			"examples": [
+				"deno-config-permissions",
+				"ha-entity-name-editing",
+				"ha-template-binary-sensor-delays-ui",
+				"eng-govuk-infrastructure-adr019-restructure-cicd"
+			]
+		},
+		"N consequences": {
+			"all": {
+				"k": 20,
+				"n": 173,
+				"p": 0.116,
+				"ci95": [
+					0.076,
+					0.172
+				]
+			},
+			"threads": {
+				"k": 5,
+				"n": 132,
+				"p": 0.038,
+				"ci95": [
+					0.016,
+					0.086
+				]
+			},
+			"documents": {
+				"k": 15,
+				"n": 41,
+				"p": 0.366,
+				"ci95": [
+					0.236,
+					0.519
+				]
+			},
+			"small": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 4,
+				"n": 20,
+				"p": 0.2,
+				"ci95": [
+					0.081,
+					0.416
+				]
+			},
+			"examples": [
+				"fzf-default-opts-file",
+				"eslint-adopt-codemod",
+				"ha-zwave-driver-choice",
+				"home-assistant-lawn-mower-entity-model"
+			]
+		},
+		"G9 rank|partition": {
+			"all": {
+				"k": 10,
+				"n": 173,
+				"p": 0.058,
+				"ci95": [
+					0.032,
+					0.103
+				]
+			},
+			"threads": {
+				"k": 8,
+				"n": 132,
+				"p": 0.061,
+				"ci95": [
+					0.031,
+					0.115
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 5,
+				"n": 10,
+				"p": 0.5,
+				"ci95": [
+					0.237,
+					0.763
+				]
+			},
+			"examples": [
+				"delta-light-dark-detection",
+				"fzf-preview-window",
+				"astro-scripts-only-when-rendered",
+				"eslint-formatting-rule-deprecation"
+			]
+		},
+		"G11 moot": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 1,
+				"n": 132,
+				"p": 0.008,
+				"ci95": [
+					0.001,
+					0.042
+				]
+			},
+			"documents": {
+				"k": 2,
+				"n": 41,
+				"p": 0.049,
+				"ci95": [
+					0.013,
+					0.161
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 1,
+				"n": 3,
+				"p": 0.333,
+				"ci95": [
+					0.061,
+					0.792
+				]
+			},
+			"examples": [
+				"mastodon-remote-local-timeline",
+				"eng-govuk-infrastructure-adr007-application-logging",
+				"tc39-2023-11-operator-overloading-withdrawn"
+			]
+		},
+		"C deadline": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 0,
+				"n": 132,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.028
+				]
+			},
+			"documents": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 3,
+				"n": 3,
+				"p": 1.0,
+				"ci95": [
+					0.438,
+					1
+				]
+			},
+			"examples": [
+				"tc39-2020-04-weakrefs-finalizationregistry-cleanup",
+				"tc39-2021-08-realm-constructor-shadowrealm-name",
+				"tc39-2025-09-iterator-windows-undersized-parameter"
+			]
+		},
+		"X hidden history (corpus artefact)": {
+			"all": {
+				"k": 3,
+				"n": 173,
+				"p": 0.017,
+				"ci95": [
+					0.006,
+					0.05
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 0,
+				"n": 41,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.086
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 0,
+				"n": 3,
+				"p": 0.0,
+				"ci95": [
+					0,
+					0.562
+				]
+			},
+			"examples": [
+				"eslint-formatting-rule-deprecation",
+				"typescript-node-esm-mode-shape",
+				"zed-git-panel-file-diff"
+			]
+		},
+		"P7 formal vote": {
+			"all": {
+				"k": 10,
+				"n": 173,
+				"p": 0.058,
+				"ci95": [
+					0.032,
+					0.103
+				]
+			},
+			"threads": {
+				"k": 3,
+				"n": 132,
+				"p": 0.023,
+				"ci95": [
+					0.008,
+					0.065
+				]
+			},
+			"documents": {
+				"k": 7,
+				"n": 41,
+				"p": 0.171,
+				"ci95": [
+					0.085,
+					0.313
+				]
+			},
+			"small": {
+				"k": 0,
+				"n": 11,
+				"p": 0.0,
+				"ci95": [
+					0.0,
+					0.259
+				]
+			},
+			"formal_share_of_hits": {
+				"k": 7,
+				"n": 10,
+				"p": 0.7,
+				"ci95": [
+					0.397,
+					0.892
+				]
+			},
+			"examples": [
+				"node-primordials-error-path",
+				"node-yarn-vs-corepack",
+				"zed-git-panel-file-diff",
+				"eng-modernisation-platform-adr004-019-core-languages"
+			]
+		}
+	},
+	"flows": {
+		"all": {
+			"ask-teammate": {
+				"k": 118,
+				"n": 173,
+				"p": 0.682,
+				"ci95": [
+					0.609,
+					0.747
+				]
+			},
+			"build-pr": {
+				"k": 84,
+				"n": 173,
+				"p": 0.486,
+				"ci95": [
+					0.412,
+					0.56
+				]
+			},
+			"find": {
+				"k": 36,
+				"n": 173,
+				"p": 0.208,
+				"ci95": [
+					0.154,
+					0.275
+				]
+			},
+			"research-or-spike": {
+				"k": 64,
+				"n": 173,
+				"p": 0.37,
+				"ci95": [
+					0.302,
+					0.444
+				]
+			},
+			"reshape": {
+				"k": 41,
+				"n": 173,
+				"p": 0.237,
+				"ci95": [
+					0.18,
+					0.306
+				]
+			},
+			"revisit-reopen": {
+				"k": 78,
+				"n": 173,
+				"p": 0.451,
+				"ci95": [
+					0.379,
+					0.525
+				]
+			},
+			"settle": {
+				"k": 148,
+				"n": 173,
+				"p": 0.855,
+				"ci95": [
+					0.795,
+					0.9
+				]
+			},
+			"work-in-place": {
+				"k": 50,
+				"n": 173,
+				"p": 0.289,
+				"ci95": [
+					0.227,
+					0.361
+				]
+			}
+		},
+		"threads": {
+			"ask-teammate": {
+				"k": 99,
+				"n": 132,
+				"p": 0.75,
+				"ci95": [
+					0.67,
+					0.816
+				]
+			},
+			"build-pr": {
+				"k": 76,
+				"n": 132,
+				"p": 0.576,
+				"ci95": [
+					0.49,
+					0.657
+				]
+			},
+			"find": {
+				"k": 35,
+				"n": 132,
+				"p": 0.265,
+				"ci95": [
+					0.197,
+					0.346
+				]
+			},
+			"research-or-spike": {
+				"k": 54,
+				"n": 132,
+				"p": 0.409,
+				"ci95": [
+					0.329,
+					0.494
+				]
+			},
+			"reshape": {
+				"k": 38,
+				"n": 132,
+				"p": 0.288,
+				"ci95": [
+					0.218,
+					0.37
+				]
+			},
+			"revisit-reopen": {
+				"k": 55,
+				"n": 132,
+				"p": 0.417,
+				"ci95": [
+					0.336,
+					0.502
+				]
+			},
+			"settle": {
+				"k": 114,
+				"n": 132,
+				"p": 0.864,
+				"ci95": [
+					0.795,
+					0.912
+				]
+			},
+			"work-in-place": {
+				"k": 50,
+				"n": 132,
+				"p": 0.379,
+				"ci95": [
+					0.301,
+					0.464
+				]
+			}
+		},
+		"documents": {
+			"ask-teammate": {
+				"k": 19,
+				"n": 41,
+				"p": 0.463,
+				"ci95": [
+					0.321,
+					0.613
+				]
+			},
+			"build-pr": {
+				"k": 8,
+				"n": 41,
+				"p": 0.195,
+				"ci95": [
+					0.102,
+					0.34
+				]
+			},
+			"find": {
+				"k": 1,
+				"n": 41,
+				"p": 0.024,
+				"ci95": [
+					0.004,
+					0.126
+				]
+			},
+			"research-or-spike": {
+				"k": 10,
+				"n": 41,
+				"p": 0.244,
+				"ci95": [
+					0.138,
+					0.393
+				]
+			},
+			"reshape": {
+				"k": 3,
+				"n": 41,
+				"p": 0.073,
+				"ci95": [
+					0.025,
+					0.194
+				]
+			},
+			"revisit-reopen": {
+				"k": 23,
+				"n": 41,
+				"p": 0.561,
+				"ci95": [
+					0.41,
+					0.701
+				]
+			},
+			"settle": {
+				"k": 34,
+				"n": 41,
+				"p": 0.829,
+				"ci95": [
+					0.687,
+					0.915
+				]
+			}
+		},
+		"small": {
+			"ask-teammate": {
+				"k": 7,
+				"n": 11,
+				"p": 0.636,
+				"ci95": [
+					0.354,
+					0.848
+				]
+			},
+			"build-pr": {
+				"k": 9,
+				"n": 11,
+				"p": 0.818,
+				"ci95": [
+					0.523,
+					0.949
+				]
+			},
+			"find": {
+				"k": 3,
+				"n": 11,
+				"p": 0.273,
+				"ci95": [
+					0.097,
+					0.566
+				]
+			},
+			"research-or-spike": {
+				"k": 5,
+				"n": 11,
+				"p": 0.455,
+				"ci95": [
+					0.213,
+					0.72
+				]
+			},
+			"reshape": {
+				"k": 1,
+				"n": 11,
+				"p": 0.091,
+				"ci95": [
+					0.016,
+					0.377
+				]
+			},
+			"revisit-reopen": {
+				"k": 6,
+				"n": 11,
+				"p": 0.545,
+				"ci95": [
+					0.28,
+					0.787
+				]
+			},
+			"settle": {
+				"k": 9,
+				"n": 11,
+				"p": 0.818,
+				"ci95": [
+					0.523,
+					0.949
+				]
+			},
+			"work-in-place": {
+				"k": 2,
+				"n": 11,
+				"p": 0.182,
+				"ci95": [
+					0.051,
+					0.477
+				]
+			}
+		}
+	}
+}

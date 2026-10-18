@@ -1,0 +1,365 @@
+{
+	"method": "60 document gaps sampled at random (seed 11), recoded blind from text alone with the brief and a calibration set excluding the sampled gaps; compared with the v0 coder's tags.",
+	"items": [
+		{
+			"id": "eng-backstage-adr013-014-http-fetch-library",
+			"i": 1,
+			"v0": "provisional",
+			"recoded": "conditional"
+		},
+		{
+			"id": "eng-backstage-adr013-014-http-fetch-library",
+			"i": 3,
+			"v0": "convention",
+			"recoded": "partition"
+		},
+		{
+			"id": "eng-cloud-platform-adr003-040-ci-tooling",
+			"i": 0,
+			"v0": "supersede",
+			"recoded": "supersede"
+		},
+		{
+			"id": "eng-cloud-platform-adr003-040-ci-tooling",
+			"i": 1,
+			"v0": "external-authority",
+			"recoded": "external-authority"
+		},
+		{
+			"id": "eng-cloud-platform-adr012-021-036-048-multi-cluster",
+			"i": 3,
+			"v0": "staged",
+			"recoded": "staged"
+		},
+		{
+			"id": "eng-cloud-platform-adr012-021-036-048-multi-cluster",
+			"i": 5,
+			"v0": "consensus-mechanics",
+			"recoded": "delegate"
+		},
+		{
+			"id": "eng-cloud-platform-adr018-019-ingress-controllers",
+			"i": 0,
+			"v0": "revert",
+			"recoded": "evidence-not-check"
+		},
+		{
+			"id": "eng-govuk-infrastructure-adr018-concourse-ci",
+			"i": 3,
+			"v0": "coupled",
+			"recoded": "coupled"
+		},
+		{
+			"id": "eng-govuk-infrastructure-adr019-restructure-cicd",
+			"i": 2,
+			"v0": "rejected-content",
+			"recoded": "rejected-content"
+		},
+		{
+			"id": "eng-k8s-kep2221-remove-dockershim",
+			"i": 4,
+			"v0": "consequences",
+			"recoded": "consequences"
+		},
+		{
+			"id": "eng-k8s-kep2579-pod-security-admission",
+			"i": 0,
+			"v0": "supersede",
+			"recoded": "supersede"
+		},
+		{
+			"id": "eng-modernisation-platform-adr002-003-access-management",
+			"i": 0,
+			"v0": "rejected-content",
+			"recoded": "rejected-content"
+		},
+		{
+			"id": "eng-modernisation-platform-adr002-003-access-management",
+			"i": 1,
+			"v0": "consequences",
+			"recoded": "rejected-content"
+		},
+		{
+			"id": "eng-modernisation-platform-adr004-019-core-languages",
+			"i": 2,
+			"v0": "convention",
+			"recoded": "convention"
+		},
+		{
+			"id": "eng-modernisation-platform-adr032-ncsc-pdns",
+			"i": 2,
+			"v0": "rejected-content",
+			"recoded": "other"
+		},
+		{
+			"id": "eng-modernisation-platform-adr032-ncsc-pdns",
+			"i": 3,
+			"v0": "other",
+			"recoded": "other"
+		},
+		{
+			"id": "eng-modernisation-platform-adr043-s3-encryption-scp",
+			"i": 0,
+			"v0": "stale-idle",
+			"recoded": "stale-idle"
+		},
+		{
+			"id": "eng-nodejs-tsc-2026-ncrypto-source-of-truth",
+			"i": 2,
+			"v0": "implicit",
+			"recoded": "implicit"
+		},
+		{
+			"id": "eng-nodejs-tsc-2026-ncrypto-source-of-truth",
+			"i": 4,
+			"v0": "blocking",
+			"recoded": "blocking"
+		},
+		{
+			"id": "python-2007-pep-3103-switch-statement-rejected",
+			"i": 1,
+			"v0": "delegate",
+			"recoded": "delegate"
+		},
+		{
+			"id": "python-2007-pep-3103-switch-statement-rejected",
+			"i": 2,
+			"v0": "coupled",
+			"recoded": "other"
+		},
+		{
+			"id": "python-2018-12-governance-model-vote-pep-8016",
+			"i": 0,
+			"v0": "rank",
+			"recoded": "vote"
+		},
+		{
+			"id": "python-2019-06-pep-602-annual-release-cycle",
+			"i": 5,
+			"v0": "supersede",
+			"recoded": "supersede"
+		},
+		{
+			"id": "python-2023-05-pep-649-deferred-annotations-supersedes-563",
+			"i": 0,
+			"v0": "staged",
+			"recoded": "staged"
+		},
+		{
+			"id": "rust-lang-team-2021-07-decision-process-tenets-and-dissent",
+			"i": 0,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lang-roadmap-themes",
+			"i": 0,
+			"v0": "rank",
+			"recoded": "rank"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lang-roadmap-themes",
+			"i": 2,
+			"v0": "implicit",
+			"recoded": "implicit"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lang-roadmap-themes",
+			"i": 3,
+			"v0": "other",
+			"recoded": "other"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lang-roadmap-themes",
+			"i": 5,
+			"v0": "other",
+			"recoded": "other"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lint-policy-ownership",
+			"i": 4,
+			"v0": "evidence-not-check",
+			"recoded": "evidence-not-check"
+		},
+		{
+			"id": "rust-lang-team-2022-03-lint-policy-ownership",
+			"i": 5,
+			"v0": "venue-split",
+			"recoded": "venue-split"
+		},
+		{
+			"id": "rust-lang-team-2023-05-return-type-notation-spelling",
+			"i": 0,
+			"v0": "deferred",
+			"recoded": "deferred"
+		},
+		{
+			"id": "rust-lang-team-2023-05-return-type-notation-spelling",
+			"i": 6,
+			"v0": "other",
+			"recoded": "reframe"
+		},
+		{
+			"id": "tc39-2019-10-ecma402-casing-conventions",
+			"i": 3,
+			"v0": "staged",
+			"recoded": "staged"
+		},
+		{
+			"id": "tc39-2019-10-proposal-disclosure-policy",
+			"i": 0,
+			"v0": "external-authority",
+			"recoded": "external-authority"
+		},
+		{
+			"id": "tc39-2019-10-proposal-disclosure-policy",
+			"i": 1,
+			"v0": "reframe",
+			"recoded": "reframe"
+		},
+		{
+			"id": "tc39-2019-10-proposal-disclosure-policy",
+			"i": 2,
+			"v0": "blocking",
+			"recoded": "delegate"
+		},
+		{
+			"id": "tc39-2019-10-proposal-disclosure-policy",
+			"i": 5,
+			"v0": "deferred",
+			"recoded": "deferred"
+		},
+		{
+			"id": "tc39-2019-12-dynamic-code-brand-checks-stage2-refused",
+			"i": 0,
+			"v0": "conditional",
+			"recoded": "conditional"
+		},
+		{
+			"id": "tc39-2019-12-dynamic-code-brand-checks-stage2-refused",
+			"i": 1,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2019-12-dynamic-code-brand-checks-stage2-refused",
+			"i": 3,
+			"v0": "delegate",
+			"recoded": "approve"
+		},
+		{
+			"id": "tc39-2020-04-weakrefs-finalizationregistry-cleanup",
+			"i": 1,
+			"v0": "external-authority",
+			"recoded": "delegate"
+		},
+		{
+			"id": "tc39-2020-11-item-method-rename-to-at",
+			"i": 1,
+			"v0": "evidence-not-check",
+			"recoded": "evidence-not-check"
+		},
+		{
+			"id": "tc39-2021-08-pipeline-operator-stage2-hack-style",
+			"i": 3,
+			"v0": "other",
+			"recoded": "conditional"
+		},
+		{
+			"id": "tc39-2021-08-pipeline-operator-stage2-hack-style",
+			"i": 5,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2021-08-realm-constructor-shadowrealm-name",
+			"i": 2,
+			"v0": "other",
+			"recoded": "other"
+		},
+		{
+			"id": "tc39-2021-08-realm-constructor-shadowrealm-name",
+			"i": 3,
+			"v0": "consensus-mechanics",
+			"recoded": "other"
+		},
+		{
+			"id": "tc39-2021-08-realm-constructor-shadowrealm-name",
+			"i": 4,
+			"v0": "blocking",
+			"recoded": "blocking"
+		},
+		{
+			"id": "tc39-2021-08-realm-constructor-shadowrealm-name",
+			"i": 5,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2022-01-stage3-normative-changes-need-consensus",
+			"i": 1,
+			"v0": "nested",
+			"recoded": "delegate"
+		},
+		{
+			"id": "tc39-2022-01-stage3-normative-changes-need-consensus",
+			"i": 2,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2022-01-stage3-normative-changes-need-consensus",
+			"i": 3,
+			"v0": "venue-split",
+			"recoded": "other"
+		},
+		{
+			"id": "tc39-2023-01-explicit-support-consensus-procedure",
+			"i": 1,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2023-01-explicit-support-consensus-procedure",
+			"i": 2,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2023-01-explicit-support-consensus-procedure",
+			"i": 4,
+			"v0": "consensus-mechanics",
+			"recoded": "consensus-mechanics"
+		},
+		{
+			"id": "tc39-2023-05-array-grouping-static-methods",
+			"i": 0,
+			"v0": "provisional",
+			"recoded": "provisional"
+		},
+		{
+			"id": "tc39-2023-11-operator-overloading-withdrawn",
+			"i": 0,
+			"v0": "moot",
+			"recoded": "other"
+		},
+		{
+			"id": "tc39-2024-04-math-sumprecise-design-points",
+			"i": 4,
+			"v0": "consensus-mechanics",
+			"recoded": "crowd-signal"
+		},
+		{
+			"id": "tc39-2025-09-iterator-windows-undersized-parameter",
+			"i": 2,
+			"v0": "other",
+			"recoded": "other"
+		},
+		{
+			"id": "tc39-2025-09-iterator-windows-undersized-parameter",
+			"i": 4,
+			"v0": "convention",
+			"recoded": "convention"
+		}
+	]
+}

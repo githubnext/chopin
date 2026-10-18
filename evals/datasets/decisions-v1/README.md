@@ -1,7 +1,8 @@
 # decisions-v1
 
-A corpus of 127 real software decisions debated on public GitHub threads. It
-has two jobs:
+A corpus of 127 real software decisions debated on public GitHub threads, plus
+41 decision records taken from complete documents (ADRs, KEPs, meeting minutes,
+PEPs and RFC texts). It has two jobs:
 
 1. **Coverage critique** for Chopin's questions feature. Each decision record
    says which question shape it needed (explore, choice, tune, check), which
@@ -10,15 +11,17 @@ has two jobs:
    [`../v2/discussions`](../v2/discussions/README.md), with 2–4 cutoffs at
    meaningful moments.
 
-| File                                 | Contents                                                                      |
-| ------------------------------------ | ----------------------------------------------------------------------------- |
-| [`cases/*.json`](cases)              | 127 adapted threads, 8,367 paraphrased events                                 |
-| [`decisions.jsonl`](decisions.jsonl) | 132 decision records; a thread may hold more than one                         |
-| [`manifest.json`](manifest.json)     | Path, SHA-256, bytes, source URL, retrieval time and cutoff purposes per case |
-| [`stats.json`](stats.json)           | Shape, flow and gap distributions, plus process shares                        |
-| [`candidates.json`](candidates.json) | Every one of the 192 screened candidates and its outcome                      |
-| [`validate.py`](validate.py)         | Schema, enum, identity, manifest and licensing-leak checks                    |
-| [`tools/`](tools)                    | The fetcher, normaliser, assembler, packager and annotation guide             |
+| File                                 | Contents                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [`cases/*.json`](cases)              | 127 adapted threads, 8,367 paraphrased events                                                |
+| [`decisions.jsonl`](decisions.jsonl) | 132 decision records; a thread may hold more than one                                        |
+| [`manifest.json`](manifest.json)     | Path, SHA-256, bytes, source URL, retrieval time and cutoff purposes per case                |
+| [`stats.json`](stats.json)           | Shape, flow and gap distributions, plus process shares                                       |
+| [`candidates.json`](candidates.json) | Every one of the 192 screened candidates and its outcome                                     |
+| [`validate.py`](validate.py)         | Schema, enum, identity, manifest and licensing-leak checks                                   |
+| [`tools/`](tools)                    | The fetcher, normaliser, assembler, packager and annotation guide                            |
+| [`documents/`](documents)            | 41 decision records from complete documents, with no case files ([below](#document-records)) |
+| [`analysis/`](analysis)              | The coverage critique, rerun on all 173 records ([below](#analysis))                         |
 
 ## Provenance
 
@@ -75,6 +78,67 @@ matched, and no kept thread or source document links to any of them. Every
 thread URL in that snapshot's conversation corpus was also checked, and none
 matched. The holdout URLs are deliberately not recorded here. Rerun
 `tools/holdout_check.py <urls-file>` after adding cases.
+
+## Document records
+
+[`documents/decisions.jsonl`](documents/decisions.jsonl) holds 41 decision
+records an earlier cloud session wrote from complete files in public
+repositories:
+
+| Source                                                    | Records |
+| --------------------------------------------------------- | ------: |
+| TC39 meeting notes                                        |      15 |
+| Engineering ADRs, Kubernetes KEPs and Node.js TSC minutes |      16 |
+| Python PEPs                                               |       6 |
+| Rust RFC text and lang-team notes                         |       4 |
+
+They are the cloud corpus v0 records whose `fidelity.method` was `git-file`,
+excluding its `chopin-v2` collector. Its webfetch and mixed records were
+dropped, because this corpus refetched those threads in full. None shares a
+source URL with the thread records.
+
+These records come from documents, not threads, so they have no case files and
+no cutoffs. [`documents/convert_v0.py`](documents/convert_v0.py) converts them
+to this corpus's record format:
+
+- `caseId` is `null`, `collector` is `cloud-git` and `fidelity.method` is `git-file`.
+- `fitsFlows` loses v0's `F1`-style prefixes.
+- Free-text deciders map onto the `decider` enum. The original wording is kept in
+  `notes`.
+- `process.reactionsTotal` is `null`. `process.decidedOffPlatform` defaults to
+  `false`, because v0 had no such field.
+- Each gap becomes `cluster: detail`. The cluster comes from the gap's v0 tag,
+  using this corpus's cluster names where they match. v0's extra fields
+  (`gapTags`, `personaRelevance`, `contentKind`, `kruchtenKind`, `codingPass`)
+  are dropped.
+- Counts a document cannot supply (`participants.count`, `durationDays`,
+  `comments`) stay `null` where v0 left them `null`.
+
+The records are paraphrases written by the cloud session. They were checked the
+same way as the thread records:
+
+- [`documents/fetch_docs.py`](documents/fetch_docs.py) fetches all 72 distinct
+  source documents through `gh api` into the git-ignored
+  `.cache/decisions/docs/`. PEPs are read from `python/peps`.
+- [`documents/validate.py`](documents/validate.py) runs the main validator's
+  record checks, allowing only the differences above. It also fails on any run
+  of 8 or more words copied from the source documents.
+
+Two v0 phrases failed the leak check and are reworded in `convert_v0.py`.
+
+## Analysis
+
+[`analysis/`](analysis) holds the two critiques the cloud session wrote against
+v0, kept unchanged. It also holds a rerun on this corpus:
+
+- [`coverage-critique.md`](analysis/coverage-critique.md): H1–H12 retested, and
+  the gaps re-ranked, for the whole corpus, threads only and the small-team quota.
+- [`analyse_corpus.py`](analysis/analyse_corpus.py): produces
+  [`corpus-metrics.json`](analysis/corpus-metrics.json).
+- [`thread-gap-tags.json`](analysis/thread-gap-tags.json): codes each thread gap
+  into v0's tag vocabulary, so the two sources count alike.
+- [`tag-reliability.json`](analysis/tag-reliability.json): a blind recode of
+  60 document gaps against v0's tags (κ = 0.68).
 
 ## Licensing approach
 
@@ -192,6 +256,9 @@ python3 -I evals/datasets/decisions-v1/tools/normalise.py
 python3 -I evals/datasets/decisions-v1/tools/assemble.py          # needs .cache/decisions/ann/
 python3 -I evals/datasets/decisions-v1/tools/package.py
 python3 -I evals/datasets/decisions-v1/validate.py
+python3 -I evals/datasets/decisions-v1/documents/fetch_docs.py   # cached
+python3 -I evals/datasets/decisions-v1/documents/validate.py
+python3 -I evals/datasets/decisions-v1/analysis/analyse_corpus.py
 bun test evals/datasets                                           # structural checks, no cache needed
 ```
 
