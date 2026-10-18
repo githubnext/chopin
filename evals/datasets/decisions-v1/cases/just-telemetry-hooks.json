@@ -1,0 +1,161 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "just-telemetry-hooks",
+	"title": "Telemetry support in just",
+	"source": {
+		"url": "https://github.com/casey/just/discussions/2934",
+		"retrievedAt": "2026-10-18T07:34:37.015790+00:00",
+		"repository": "casey/just",
+		"number": 2934,
+		"nodeId": "D_kwDOA6gfW84AirPE"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-10-30T19:30:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-11-10T13:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-09-05T08:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOA6gfW84AirPE",
+			"kind": "opening",
+			"actor": "apljungquist",
+			"createdAt": "2025-10-30T18:20:15Z",
+			"url": "https://github.com/casey/just/discussions/2934",
+			"summary": "The opener asks whether just could emit telemetry such as traces per invocation and spans per recipe to tools like Sentry or OpenTelemetry, so teams can see which workflows matter, and invites opinions.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A4kvV",
+			"kind": "comment",
+			"actor": "casey",
+			"createdAt": "2025-10-30T19:21:01Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14830549",
+			"summary": "The maintainer doubts telemetry can be added in a privacy-respecting way, says it would need per-user opt-in, and floats opt-in logging that users could upload themselves.",
+			"actorId": "MDQ6VXNlcjE5NDU=",
+			"actorType": "human",
+			"parentId": "D_kwDOA6gfW84AirPE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A4kxR",
+			"kind": "reply",
+			"actor": "apljungquist",
+			"createdAt": "2025-10-30T19:40:17Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14830673",
+			"summary": "The opener clarifies the data would go to the user's own team via a DSN set in an environment variable, not to the just maintainers.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A4kvV"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A44ea",
+			"kind": "reply",
+			"actor": "laniakea64",
+			"createdAt": "2025-11-08T16:44:37Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14911386",
+			"summary": "A contributor suggests putting telemetry behind a cargo feature that is off by default, so only self-compiled builds contain it.",
+			"actorId": "MDQ6VXNlcjE2NjI4NDEx",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A4kvV"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A44hH",
+			"kind": "comment",
+			"actor": "laniakea64",
+			"createdAt": "2025-11-08T17:27:37Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14911559",
+			"summary": "The same contributor asks whether the opener could instrument their own recipes instead, warning that even optional telemetry in just would be seen as a privacy intrusion by most users.",
+			"actorId": "MDQ6VXNlcjE2NjI4NDEx",
+			"actorType": "human",
+			"parentId": "D_kwDOA6gfW84AirPE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A47rP",
+			"kind": "reply",
+			"actor": "apljungquist",
+			"createdAt": "2025-11-10T13:01:33Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14924495",
+			"summary": "The opener says per-recipe instrumentation works but is noisy and laborious, since just is a natural chokepoint, and accepts the privacy concern outweighs the benefit if few users want it.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A44hH"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A47rZ",
+			"kind": "reply",
+			"actor": "apljungquist",
+			"createdAt": "2025-11-10T13:02:09Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14924505",
+			"summary": "The opener agrees with the maintainer's opt-in point.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A4kvV"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A47sE",
+			"kind": "comment",
+			"actor": "apljungquist",
+			"createdAt": "2025-11-10T13:06:19Z",
+			"editedAt": "2025-11-10T13:06:28Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-14924548",
+			"summary": "The opener explains they wanted to learn from others' experience and gauge whether anyone else would use such a feature.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "D_kwDOA6gfW84AirPE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A8JNE",
+			"kind": "reply",
+			"actor": "thePanz",
+			"createdAt": "2026-02-11T09:05:44Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-15766340",
+			"summary": "A user proposes a pre-invocation hook as a generic place to record runs.",
+			"actorId": "MDQ6VXNlcjIyNjAyMQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A47sE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84A8Jgk",
+			"kind": "reply",
+			"actor": "apljungquist",
+			"createdAt": "2026-02-11T10:41:21Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-15767588",
+			"summary": "The opener says a hook could work if it fires at the right time and exposes the recipe name, duration and justfile location.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84A47sE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84BFzFT",
+			"kind": "comment",
+			"actor": "mlavrinenko",
+			"createdAt": "2026-09-04T22:24:33Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-18297171",
+			"summary": "A user wishes just would stream run events to a file named by an environment variable, so telemetry and CI tools could be built on top.",
+			"actorId": "MDQ6VXNlcjE1ODQwMjE0",
+			"actorType": "human",
+			"parentId": "D_kwDOA6gfW84AirPE"
+		},
+		{
+			"id": "DC_kwDOA6gfW84BF0BW",
+			"kind": "reply",
+			"actor": "apljungquist",
+			"createdAt": "2026-09-05T06:57:31Z",
+			"url": "https://github.com/casey/just/discussions/2934#discussioncomment-18301014",
+			"summary": "The opener points to Nix's socket event stream as a vendor-neutral model, noting it is harder for collaborators to set up.",
+			"actorId": "MDQ6VXNlcjY0MjA5OTE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA6gfW84BFzFT"
+		}
+	]
+}

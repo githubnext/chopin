@@ -1,0 +1,3398 @@
+{
+	"version": 1,
+	"dataset": "decisions-v1",
+	"partition": "development",
+	"caseSchemaVersion": 2,
+	"holdoutCheck": "pending",
+	"cases": [
+		{
+			"id": "appflowy-dark-mode-palette",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"retrievedAt": "2026-10-18T07:20:50.815119+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/appflowy-dark-mode-palette.json",
+				"sha256": "04867d2455c3788d9e9871d922c0ba6432b35a6aa22c40eaf848c2aa42a3f762",
+				"bytes": 12766
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "aspnetcore-mvc-in-shared-framework",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/dotnet/aspnetcore/issues/3755",
+			"retrievedAt": "2026-10-18T07:35:31.975782+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/aspnetcore-mvc-in-shared-framework.json",
+				"sha256": "a13e84e74cf8a17fe246acbeaca56ed69dc70ec90afea7692d01e1aef2b94c9c",
+				"bytes": 37032
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "astro-inline-script-processing",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/withastro/roadmap/discussions/995",
+			"retrievedAt": "2026-10-18T07:20:34.856922+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision"
+			},
+			"file": {
+				"path": "cases/astro-inline-script-processing.json",
+				"sha256": "a3fcd973b99c95bceab9a47030ae63ce97e2722a1a02b29d41c368b64d6fe1d8",
+				"bytes": 9238
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "astro-remove-script-define-vars",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/withastro/roadmap/discussions/1246",
+			"retrievedAt": "2026-10-18T07:20:34.034225+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/astro-remove-script-define-vars.json",
+				"sha256": "97a0a0ef3f611e6d60e532a978cad1bc1c5c0ae49f09a0e09addf4c02e0fb2e9",
+				"bytes": 7747
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "astro-scripts-only-when-rendered",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/withastro/roadmap/discussions/664",
+			"retrievedAt": "2026-10-18T07:20:35.887853+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/astro-scripts-only-when-rendered.json",
+				"sha256": "f4621becb3b093c7b86dcd90c5774752280a96b63143de83c22d8ee7261cf109",
+				"bytes": 12527
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "atuin-classic-up-arrow-from-db",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/atuinsh/atuin/issues/798",
+			"retrievedAt": "2026-10-18T07:35:19.304519+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/atuin-classic-up-arrow-from-db.json",
+				"sha256": "0ca3eb7e8b85435afb2b72e8d35d00e9a829efac8b04a8e38d80c19f44def110",
+				"bytes": 21462
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "bat-builtin-pager",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/sharkdp/bat/issues/1053",
+			"retrievedAt": "2026-10-18T07:34:57.040476+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/bat-builtin-pager.json",
+				"sha256": "b87bfad034350f8f20af39510fc39109337fc0d94dd2949d62dced49f586aed2",
+				"bytes": 15146
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "bat-debian-batcat-name",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/sharkdp/bat/issues/2455",
+			"retrievedAt": "2026-10-18T07:35:01.511207+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/bat-debian-batcat-name.json",
+				"sha256": "08bf5181266b48c8e973b66c3d7b7fe0ddbb604f59bb9847cd3bf23a452dcd45",
+				"bytes": 16042
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "crystal-io-argument-position",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/crystal-lang/crystal/issues/5916",
+			"retrievedAt": "2026-10-18T07:28:49.050097+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/crystal-io-argument-position.json",
+				"sha256": "b2059ecc6ea792aefc686ff05bcffd25f25e546fc210210c646b0a94160340cb",
+				"bytes": 22246
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "delta-auto-light-dark-detection",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/dandavison/delta/issues/447",
+			"retrievedAt": "2026-10-18T07:35:10.590404+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/delta-auto-light-dark-detection.json",
+				"sha256": "9e9c3a5438008a313b231129aa47bbed1b9b37f4876e7fe27bc99bcf09ad9110",
+				"bytes": 22030
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "deno-deny-flags-strict-check",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/denoland/deno/pull/19070",
+			"retrievedAt": "2026-10-18T07:26:37.376617+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/deno-deny-flags-strict-check.json",
+				"sha256": "6a4f410753ce974a2e6732e7db12dd916feceea34ecb2f495118694d9d89e305",
+				"bytes": 34176
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "deno-jupyter-rich-display",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/denoland/deno/pull/20337",
+			"retrievedAt": "2026-10-18T07:26:44.582099+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/deno-jupyter-rich-display.json",
+				"sha256": "fc4e3ab17f0f39b25e1832c93923e2f95131fa31cf9815c5ab05678cadb612f1",
+				"bytes": 35117
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "deno-permissions-in-config",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/denoland/deno/issues/12763",
+			"retrievedAt": "2026-10-18T07:28:14.989356+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/deno-permissions-in-config.json",
+				"sha256": "b8cef1acb96dca259dbd93fde7bd40738788568f5bb8df71faa21de991a6d48f",
+				"bytes": 26352
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "deno-typescript-checker-in-rust",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/denoland/deno/issues/5432",
+			"retrievedAt": "2026-10-18T07:28:06.778259+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/deno-typescript-checker-in-rust.json",
+				"sha256": "7a56cfdb7db8dddb18983385be33d57b0cb105a6761aa6b8c2dc5637541b38b2",
+				"bytes": 27199
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "eslint-codemod-replace-migrators",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/eslint/eslint/issues/20442",
+			"retrievedAt": "2026-10-18T07:28:24.652611+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/eslint-codemod-replace-migrators.json",
+				"sha256": "d6e043ecc497f4f74e636c543bb487dc78a1f33c3fd243eda58648e17350fca2",
+				"bytes": 22788
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "eslint-deprecate-formatting-rules",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/eslint/eslint/issues/17522",
+			"retrievedAt": "2026-10-18T07:28:20.045468+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/eslint-deprecate-formatting-rules.json",
+				"sha256": "ccdc45c0685e6738b662c2dc26db9cac286853620cbe83e9ec59f043a0342b69",
+				"bytes": 24185
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "eslint-native-ts-config-flag",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/eslint/eslint/issues/19985",
+			"retrievedAt": "2026-10-18T07:28:27.741960+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "before-decision",
+				"c3": "after-decision",
+				"c4": "options-on-table"
+			},
+			"file": {
+				"path": "cases/eslint-native-ts-config-flag.json",
+				"sha256": "96aac7cc48f9f071decae82372e99c1a03b6415fc5e09407c8b59b22a26fae24",
+				"bytes": 18290
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-arrow-binding-default",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/pull/1899",
+			"retrievedAt": "2026-10-18T07:21:08.980203+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-arrow-binding-default.json",
+				"sha256": "13090ba6ebeab22f98bcf261c5a19e4717738a2c40b895c450a93e30a786f8c8",
+				"bytes": 46602
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-export-dialog-redesign",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/pull/3613",
+			"retrievedAt": "2026-10-18T07:21:33.632923+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-export-dialog-redesign.json",
+				"sha256": "53490863816bb12f8030fdaad471978f62e678474fd70219d8086e4810e12270",
+				"bytes": 29516
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-handwritten-font-search",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/issues/2945",
+			"retrievedAt": "2026-10-18T07:02:46.312371+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-handwritten-font-search.json",
+				"sha256": "8d238ce9d3b817662d699c1f69748f10034d2c12b30919fd181375bb4e75c152",
+				"bytes": 22320
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-new-drawing-button",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/issues/1957",
+			"retrievedAt": "2026-10-18T07:02:48.939729+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-new-drawing-button.json",
+				"sha256": "42f6071b23530bdaf16c7de587804429db14c3af417e1cc622298accf4e5fa70",
+				"bytes": 18615
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-paste-chart-type-choice",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/discussions/2533",
+			"retrievedAt": "2026-10-18T07:20:16.073854+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-paste-chart-type-choice.json",
+				"sha256": "367dc2a73e0ce5003c636b8c50d743d6d26f2b2390c9718284b501080d9deaab",
+				"bytes": 8502
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-web-embeds-design",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/pull/6691",
+			"retrievedAt": "2026-10-18T07:21:16.768228+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-web-embeds-design.json",
+				"sha256": "529f9d6f89f2608f037e5d0867c1758660fa2050b4499fb61242a59aa28b2dd0",
+				"bytes": 38258
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-wheel-zoom-mode",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/discussions/5515",
+			"retrievedAt": "2026-10-18T07:20:15.285799+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table"
+			},
+			"file": {
+				"path": "cases/excalidraw-wheel-zoom-mode.json",
+				"sha256": "922e7b1b79e29fa609de0a83638e6d77541b23c1238d9aeec56226c30ecf2f13",
+				"bytes": 5916
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "excalidraw-zen-mode-exit",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/excalidraw/excalidraw/pull/1450",
+			"retrievedAt": "2026-10-18T07:21:25.214665+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/excalidraw-zen-mode-exit.json",
+				"sha256": "cf595e9a84afa2656c44c80bde581817490b97fd2797032b79c7f310793ec3e3",
+				"bytes": 30069
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "frontend-section-border-background",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/frontend/discussions/22288",
+			"retrievedAt": "2026-10-18T07:11:46.882772+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/frontend-section-border-background.json",
+				"sha256": "b299d24e288208de64c156bee2c6744e50df13f0d0e0a37dd24da8d94e3930b5",
+				"bytes": 13940
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "fzf-default-opts-file",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/junegunn/fzf/discussions/2528",
+			"retrievedAt": "2026-10-18T07:35:03.796709+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "before-decision",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/fzf-default-opts-file.json",
+				"sha256": "10d0afe7c44561352ddab24b9fb99abf6bfba020ce2ffab2f605acaaf38ea14a",
+				"bytes": 10830
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "fzf-preview-window",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/junegunn/fzf/issues/587",
+			"retrievedAt": "2026-10-18T07:35:04.683974+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/fzf-preview-window.json",
+				"sha256": "cf356de21314e338e07e577edfa8ac41e9a47881af753c6159ce5571a563e7de",
+				"bytes": 17246
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ghostty-broadcast-groups",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/ghostty-org/ghostty/pull/13745",
+			"retrievedAt": "2026-10-18T07:26:22.165954+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "options-on-table",
+				"c2": "before-decision",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/ghostty-broadcast-groups.json",
+				"sha256": "49afd7f6e0a5a29c0ef455e0f2fd2ab4a4ba98fec3ccf527362a8c7247047884",
+				"bytes": 29805
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ghostty-official-snap",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/ghostty-org/ghostty/pull/3931",
+			"retrievedAt": "2026-10-18T07:26:16.175633+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/ghostty-official-snap.json",
+				"sha256": "61590509419b2424492e61fc9559f5031a6dcef3257cac634363fc826352858a",
+				"bytes": 33462
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-cmp-or",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/60204",
+			"retrievedAt": "2026-10-18T07:30:08.433067+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-cmp-or.json",
+				"sha256": "8be0ee77c84bf139af19ccc1226550c77f89cee62a030ca6041677235f37a5a4",
+				"bytes": 36470
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-drop-binary-only-packages",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/28152",
+			"retrievedAt": "2026-10-18T07:30:31.465919+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-drop-binary-only-packages.json",
+				"sha256": "455ef9966b151d013fa4d4dd35c4433e36bd09bc214e9cacca176ebf6846a8b2",
+				"bytes": 33736
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-loopvar-per-iteration",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/60078",
+			"retrievedAt": "2026-10-18T07:00:45.118123+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-loopvar-per-iteration.json",
+				"sha256": "1a9686607596922b824a9799b9743d6ed2a4405585e6747ffa08a900f3dc146c",
+				"bytes": 67174
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-slice-to-array-conversion",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/46505",
+			"retrievedAt": "2026-10-18T07:30:18.642093+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-slice-to-array-conversion.json",
+				"sha256": "019d6e5f55dac849622f80aa1507eed2820e2e93a526632559fd1ed1a1e64e54",
+				"bytes": 35698
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-testing-output-writer",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/59928",
+			"retrievedAt": "2026-10-18T07:30:35.939718+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-testing-output-writer.json",
+				"sha256": "ab1626c5bdeb4782b717b8f232f6610729956cb195c8dd3d58abc1ddccc9aaff",
+				"bytes": 36667
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-try-builtin",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/32437",
+			"retrievedAt": "2026-10-18T06:59:58.759699+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-try-builtin.json",
+				"sha256": "aef5b8c0a4fca713c1bab5e9b20ed15b8fae5139a7c4c2b79d3d43881fb1218e",
+				"bytes": 68288
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-unique-handle",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/62483",
+			"retrievedAt": "2026-10-18T07:30:12.620768+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-unique-handle.json",
+				"sha256": "0eed37435646987a931dc191f22502b7e0a55f475c3a86253a6363f4fcd4e764",
+				"bytes": 36417
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "go-xterm-pluggable-history",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/golang/go/issues/68780",
+			"retrievedAt": "2026-10-18T07:30:44.388568+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/go-xterm-pluggable-history.json",
+				"sha256": "7868242e9accaba286476d1844deee94b3cd64339452cdb480d55b3fdd75ec12",
+				"bytes": 39335
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "godot-object-metadata-fate",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/godotengine/godot/issues/18591",
+			"retrievedAt": "2026-10-18T07:28:42.623422+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/godot-object-metadata-fate.json",
+				"sha256": "ce770c529e8be4c07c9e8d3ee4b46cdbce0d4d975619069301cf8d680316d5d0",
+				"bytes": 36654
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ha-toggle-confirmation",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/frontend/discussions/8905",
+			"retrievedAt": "2026-10-18T07:11:47.937987+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/ha-toggle-confirmation.json",
+				"sha256": "fdc80706bde53799c5f2ec12bd6cf1dbb42b7c8c824a7846316778abdbb4bb5b",
+				"bytes": 17368
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "helix-file-explorer-pr",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/helix-editor/helix/pull/2377",
+			"retrievedAt": "2026-10-18T07:24:57.765035+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/helix-file-explorer-pr.json",
+				"sha256": "e8a2059ca8504089693723ab018def111b4884e6e2f6006faea7f6f490164d5e",
+				"bytes": 35966
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "helix-integrated-terminal",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/helix-editor/helix/issues/1976",
+			"retrievedAt": "2026-10-18T07:29:24.405468+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision"
+			},
+			"file": {
+				"path": "cases/helix-integrated-terminal.json",
+				"sha256": "fcb64798fbd7f1d72c887af016f6971fa01e69c6ee3645e1d8530240a4f9d4d8",
+				"bytes": 31205
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "helix-persistent-state",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/helix-editor/helix/pull/9143",
+			"retrievedAt": "2026-10-18T07:24:49.680534+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "options-on-table",
+				"c2": "after-decision",
+				"c3": "question-clear",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/helix-persistent-state.json",
+				"sha256": "df28619f5154d5d2eeb5502012363cb2d4e73ff5d8ecbb21f4cbaad60c5ac789",
+				"bytes": 39369
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "helix-picker-file-explorer",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/helix-editor/helix/pull/11285",
+			"retrievedAt": "2026-10-18T07:25:13.469782+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/helix-picker-file-explorer.json",
+				"sha256": "d2f56ba9898a20036ae4f5dd1ba8e4f349cb29000092c9bf9b1e8432ebce7cfa",
+				"bytes": 39977
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-choose-branch-syntax",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/378",
+			"retrievedAt": "2026-10-18T07:19:10.775658+00:00",
+			"relatedUrls": [
+				"https://github.com/home-assistant/core/pull/37818"
+			],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-choose-branch-syntax.json",
+				"sha256": "7c18707534094259564c4cd1d0149044ba2dface9fca427022a282d2aced3685",
+				"bytes": 45596
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-device-ip-mac-display",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/717",
+			"retrievedAt": "2026-10-18T07:11:45.574165+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/home-assistant-device-ip-mac-display.json",
+				"sha256": "a6d52a4430c9579bee922f511860d89acc523241f21fa4365a76bae4d1b102d1",
+				"bytes": 23160
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-entity-name-editing",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/1185",
+			"retrievedAt": "2026-10-18T07:19:03.921825+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-entity-name-editing.json",
+				"sha256": "56425aec4a0ac7a8af9065e295bc63df9151172c3a8774f9bf08b02c48a0127a",
+				"bytes": 28750
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-event-entity",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/929",
+			"retrievedAt": "2026-10-18T07:19:07.387256+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-event-entity.json",
+				"sha256": "3f5f98e131ffa5df4ce8f1cf0ed9d435dcfa7dcaad69f20a06e8e60a88ffbf57",
+				"bytes": 38375
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-fan-speed-percentage",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/127",
+			"retrievedAt": "2026-10-18T07:19:17.229783+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-fan-speed-percentage.json",
+				"sha256": "da8112787d6403cef6d45af945da4d4bb7fdeba44734de467b4d4de49add7b55",
+				"bytes": 29411
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-last-changed-restart",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/230",
+			"retrievedAt": "2026-10-18T07:19:14.186756+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-last-changed-restart.json",
+				"sha256": "bb0938e4a377c6662a72ec8c60dfd875b7a490aebc3b04404faa7833d981d1b6",
+				"bytes": 20574
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-lawn-mower-entity",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/894",
+			"retrievedAt": "2026-10-18T07:19:08.491708+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-lawn-mower-entity.json",
+				"sha256": "440b26ad4d3af4a579ab30ec8d14f0570406d77b84c43f7ab70f85e024a7e62e",
+				"bytes": 26726
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-network-interface-binding",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/509",
+			"retrievedAt": "2026-10-18T07:19:06.290479+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-network-interface-binding.json",
+				"sha256": "ea8aff39e9db2fe96ee331f0b6397a8b5c27db861db3980de5e156c50ead756d",
+				"bytes": 28766
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-numeric-state-unavailable",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/668",
+			"retrievedAt": "2026-10-18T07:19:05.302738+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-numeric-state-unavailable.json",
+				"sha256": "b00bd4c0095e04358e7f53b78af859d5d6cf2fbc07b2991a2568f5e661018c95",
+				"bytes": 24960
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-require-code-owner",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/287",
+			"retrievedAt": "2026-10-18T07:27:40.229751+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-require-code-owner.json",
+				"sha256": "dba5fb3f1a6020ffbdeadfd347f80167d367fb98118a2f62e02e2ca29e577a4b",
+				"bytes": 20643
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "home-assistant-zwave-js-switch",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/483",
+			"retrievedAt": "2026-10-18T07:27:34.354470+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/home-assistant-zwave-js-switch.json",
+				"sha256": "cbe5623f78684406edabc6820c50b98302804b42064657861a8d4dd134dce92c",
+				"bytes": 23623
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "homeassistant-addons-to-apps",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/1287",
+			"retrievedAt": "2026-10-18T07:18:59.823484+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/homeassistant-addons-to-apps.json",
+				"sha256": "0550c626ec96395f02b6617f7ce0fa595e53c01693667ae6adaae025546666e5",
+				"bytes": 39346
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "homeassistant-floors-vs-nested-areas",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/1021",
+			"retrievedAt": "2026-10-18T07:19:02.025609+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/homeassistant-floors-vs-nested-areas.json",
+				"sha256": "3a77999b9c231b0cb687aa26801b4bd4bf3f05b7dbc7bbce10423d1f9de1470f",
+				"bytes": 48222
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "homeassistant-release-cycle",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/home-assistant/architecture/issues/192",
+			"retrievedAt": "2026-10-18T07:27:45.463455+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/homeassistant-release-cycle.json",
+				"sha256": "4cfa8ee67ff081eb8dd9b467ac866406ed8de7bfd8aad6d7ae016c431725f6b0",
+				"bytes": 20372
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "homeassistant-template-delay-ui",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/home-assistant/architecture/discussions/1340",
+			"retrievedAt": "2026-10-18T07:11:41.465649+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/homeassistant-template-delay-ui.json",
+				"sha256": "a476242c838eddb34a4d1528471899e207df42e9036c9a829ce095c6071e7201",
+				"bytes": 9453
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "just-format-string-interpolation",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/casey/just/issues/11",
+			"retrievedAt": "2026-10-18T07:34:33.121135+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/just-format-string-interpolation.json",
+				"sha256": "baa09c155fb902bff46f012d7d0cfbb38ced71cc29e5a2c972fadc66f28327c4",
+				"bytes": 20506
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "just-parallel-dependencies",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/casey/just/issues/626",
+			"retrievedAt": "2026-10-18T07:34:26.346426+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/just-parallel-dependencies.json",
+				"sha256": "f038b9804b428df8e2b3f6cd0da35c7aa4eb40072bdad27b78c2eaf5468d9026",
+				"bytes": 29696
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "just-telemetry-hooks",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/casey/just/discussions/2934",
+			"retrievedAt": "2026-10-18T07:34:37.015790+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision"
+			},
+			"file": {
+				"path": "cases/just-telemetry-hooks.json",
+				"sha256": "0175ff083c8ff44138c9bfc48acd24468beac6a3a42a6eba984c031af83e370a",
+				"bytes": 6125
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "lazygit-worktree-ux",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/jesseduffield/lazygit/discussions/2803",
+			"retrievedAt": "2026-10-18T07:35:23.230693+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/lazygit-worktree-ux.json",
+				"sha256": "51255e9e1e0a6256ce83e92260fccb7714400fe0697172311c086d4b2061f72a",
+				"bytes": 11488
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "logseq-hierarchy-above-backlinks",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/logseq/logseq/discussions/5115",
+			"retrievedAt": "2026-10-18T07:11:49.075834+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table"
+			},
+			"file": {
+				"path": "cases/logseq-hierarchy-above-backlinks.json",
+				"sha256": "dc16ae166024d28587631f4587b837a9994ffb95532b6491f185d7ff1b52ec9e",
+				"bytes": 6146
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "mastodon-browse-remote-local-timeline",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/mastodon/mastodon/issues/1053",
+			"retrievedAt": "2026-10-18T07:20:46.364884+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/mastodon-browse-remote-local-timeline.json",
+				"sha256": "3e3138b9420e55b468b951c56c538e562f97cb7114c27bf733e9402fa0beedb7",
+				"bytes": 29523
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "mastodon-local-only-posts",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/mastodon/mastodon/issues/861",
+			"retrievedAt": "2026-10-18T07:20:40.698297+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/mastodon-local-only-posts.json",
+				"sha256": "d3bbc60d6de0a0fcfcc41161b7cf956eb20d8da15de25a362fa5ef42363cad62",
+				"bytes": 43273
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "mastodon-quote-toots",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/mastodon/mastodon/issues/12753",
+			"retrievedAt": "2026-10-18T07:02:20.634890+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/mastodon-quote-toots.json",
+				"sha256": "cc49f3ad369533d46746e495a466f61ad7ae0697774084a83df462348da563f9",
+				"bytes": 19625
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "mastodon-toot-text-formatting",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/mastodon/mastodon/issues/853",
+			"retrievedAt": "2026-10-18T07:20:36.622112+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/mastodon-toot-text-formatting.json",
+				"sha256": "898fc7f41f4370c34c4a75975895657d52ee69d9a20de507964ec9fb5a5188fb",
+				"bytes": 34950
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nextjs-app-router-file-conventions",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/vercel/next.js/discussions/37136",
+			"retrievedAt": "2026-10-18T07:35:55.684501+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/nextjs-app-router-file-conventions.json",
+				"sha256": "523d6b2d00101f78728a28e9c424a76b9ff591fbe01a470591d0909c7651c7e9",
+				"bytes": 67291
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nextjs-forbidden-unauthorized-rfc",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/vercel/next.js/discussions/73753",
+			"retrievedAt": "2026-10-18T07:20:00.753718+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table"
+			},
+			"file": {
+				"path": "cases/nextjs-forbidden-unauthorized-rfc.json",
+				"sha256": "d6ea0b201b3127f4942b7d09ebb58014c05d94ac180deaee050735b125d891b5",
+				"bytes": 22044
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nextjs-global-css-imports-rfc",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/vercel/next.js/discussions/27953",
+			"retrievedAt": "2026-10-18T07:19:56.113465+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/nextjs-global-css-imports-rfc.json",
+				"sha256": "e64fe59c7a6969a273edce16715d82ff2efec8258fa1d3fa0eaa3039ea60dcfa",
+				"bytes": 33420
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nextjs-strict-csp-support",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/vercel/next.js/pull/4943",
+			"retrievedAt": "2026-10-18T07:23:20.800105+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/nextjs-strict-csp-support.json",
+				"sha256": "f8f993e3631d554c8f853cfe609016d4a8a02c340828a9133c8caed7e16ab940",
+				"bytes": 53496
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "node-incomingmessage-autodestroy",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/nodejs/node/pull/33035",
+			"retrievedAt": "2026-10-18T07:26:02.258094+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "options-on-table",
+				"c2": "before-decision",
+				"c3": "after-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/node-incomingmessage-autodestroy.json",
+				"sha256": "fa048fe9e3157333b0524def6851fe2689051ea388cc56e46c92c03d4132b5f9",
+				"bytes": 51547
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "node-rm-windows-eperm",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/nodejs/node/pull/38810",
+			"retrievedAt": "2026-10-18T07:25:53.244474+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/node-rm-windows-eperm.json",
+				"sha256": "b5bb4ae65562fc3d3673ae6ccdfbbee0c1ff771869c712e9c38293ff9127e287",
+				"bytes": 42838
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nodejs-remove-primordials",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/nodejs/TSC/issues/1438",
+			"retrievedAt": "2026-10-18T07:33:15.072420+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/nodejs-remove-primordials.json",
+				"sha256": "82275516ee48756bdb7ac8fdf035988e31f8d84fed905bb11568ec194c6d1a44",
+				"bytes": 31790
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "nodejs-tsc-yarn-corepack-vote",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/nodejs/TSC/issues/1012",
+			"retrievedAt": "2026-10-18T07:33:11.421003+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/nodejs-tsc-yarn-corepack-vote.json",
+				"sha256": "808ef3e4d17d7cd7ca0ea0b9c7eb98aa6ab64f0dae3130611f7efc681a79be59",
+				"bytes": 25002
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "outline-database-board-views",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/outline/outline/discussions/3440",
+			"retrievedAt": "2026-10-18T07:20:31.420671+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "before-decision",
+				"c3": "after-decision",
+				"c4": "options-on-table"
+			},
+			"file": {
+				"path": "cases/outline-database-board-views.json",
+				"sha256": "42beca6e0fed84ed6e58e1aa3ee858b89462a760bf13acc34a4b2980a634407e",
+				"bytes": 18876
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "outline-document-tags",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/outline/outline/discussions/2256",
+			"retrievedAt": "2026-10-18T07:20:28.529082+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "after-decision",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/outline-document-tags.json",
+				"sha256": "c6471deeda10cefdf1749d1a3edbbe194869f0ad29f06cec6af76c5ab2d3dfeb",
+				"bytes": 13361
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "outline-raw-markdown-mode",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/outline/outline/discussions/3326",
+			"retrievedAt": "2026-10-18T07:11:50.222678+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "before-decision",
+				"c2": "after-decision",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/outline-raw-markdown-mode.json",
+				"sha256": "f0323851e4b287554521003d61a0e00d9a277fc549b46ae8b258998745bb6403",
+				"bytes": 13386
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "penpot-desktop-app",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/penpot/penpot/discussions/475",
+			"retrievedAt": "2026-10-18T07:20:27.035518+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/penpot-desktop-app.json",
+				"sha256": "840a4989ac78df5be7db6f949066fc9ed2c3e2b5eb11b305b034fc98a0903ca1",
+				"bytes": 24254
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "pnpm-package-manager-strict-default",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/pnpm/pnpm/issues/8087",
+			"retrievedAt": "2026-10-18T07:27:51.818990+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/pnpm-package-manager-strict-default.json",
+				"sha256": "b4ead5a06b7e34988abad6da576cc92ee38ee6d8a704ea16cc0831e6c56aacf8",
+				"bytes": 20376
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "pnpm-pre-post-scripts",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/pnpm/pnpm/issues/2891",
+			"retrievedAt": "2026-10-18T07:27:47.886110+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "after-decision",
+				"c3": "options-on-table",
+				"c4": "before-decision"
+			},
+			"file": {
+				"path": "cases/pnpm-pre-post-scripts.json",
+				"sha256": "49faf26ab5ee4c5a0df7ec7a5750b38e2b6f26d193d220c21b77a6c2d896e877",
+				"bytes": 25757
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "prettier-final-newline-option",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/prettier/prettier/issues/6360",
+			"retrievedAt": "2026-10-18T07:29:04.610813+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "before-decision",
+				"c3": "after-decision",
+				"c4": "options-on-table"
+			},
+			"file": {
+				"path": "cases/prettier-final-newline-option.json",
+				"sha256": "bc367029aba1afd5004c2accba99c9424dcebd234a7e8cd50f144bf171443e7d",
+				"bytes": 35829
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "prettier-generator-star-revert",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/prettier/prettier/issues/7512",
+			"retrievedAt": "2026-10-18T07:35:29.051289+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/prettier-generator-star-revert.json",
+				"sha256": "453b635b5424e5e6e0df4addefc6254a90b82c45c8e5de498df4f10541d49367",
+				"bytes": 34443
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "prettier-nested-ternaries",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/prettier/prettier/issues/9561",
+			"retrievedAt": "2026-10-18T07:35:39.700810+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/prettier-nested-ternaries.json",
+				"sha256": "1f06245b8a88ce8b4daaf2921b51c54b7147006c15d26ce3429c573462a7f2cf",
+				"bytes": 42688
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rfcs-abort-by-default",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/1759",
+			"retrievedAt": "2026-10-18T07:31:56.948960+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rfcs-abort-by-default.json",
+				"sha256": "1f9d20164dae2a19489524cefadf80a8c55049e17ca2591c12b3d610cfd252bd",
+				"bytes": 37602
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rfcs-bool-to-option-methods",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/2180",
+			"retrievedAt": "2026-10-18T07:31:43.661364+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rfcs-bool-to-option-methods.json",
+				"sha256": "a795e18574f8e71bd7f2792472abdd5413c4b1b0b644ff0a943087fd7a73af0f",
+				"bytes": 39436
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rfcs-crate-changelogs",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/2129",
+			"retrievedAt": "2026-10-18T07:31:26.303846+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rfcs-crate-changelogs.json",
+				"sha256": "ede0efa12416d6113ecd52fab78cfaa1bc966595b1ecb1b8a7f1c404c6a40253",
+				"bytes": 36218
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rfcs-derive-from-single-field",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/3809",
+			"retrievedAt": "2026-10-18T07:32:02.801726+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rfcs-derive-from-single-field.json",
+				"sha256": "647184b52d35de8005e67093ba3a9602a4c1c88f8a436ac6e6a0ef7ec22bac8f",
+				"bytes": 43544
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ripgrep-built-in-pager",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/BurntSushi/ripgrep/issues/86",
+			"retrievedAt": "2026-10-18T07:34:37.711589+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/ripgrep-built-in-pager.json",
+				"sha256": "d83ecdadd4cba2600a741866633e6575ca3de615e7b462390dbabf107fdd5d3d",
+				"bytes": 30125
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ripgrep-file-hyperlinks",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/BurntSushi/ripgrep/issues/665",
+			"retrievedAt": "2026-10-18T07:34:48.647898+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/ripgrep-file-hyperlinks.json",
+				"sha256": "476428ad7eb3c17f6e2f6dc4c9866714fcc54aff82721884ff34cd5cf54b4af4",
+				"bytes": 26501
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "ripgrep-max-columns",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/BurntSushi/ripgrep/issues/129",
+			"retrievedAt": "2026-10-18T07:34:45.722882+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/ripgrep-max-columns.json",
+				"sha256": "c1553dcc25954d71316085d89df5a86e4287f980883d81772018fbc43c831080",
+				"bytes": 28087
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rust-analyzer-proc-macro-syntax-fixup",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"retrievedAt": "2026-10-18T07:28:31.402863+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rust-analyzer-proc-macro-syntax-fixup.json",
+				"sha256": "33805c3023e032d9b5b4dc50f6f6b00e5d7939ee6dd4ad6ec271e2808774c980",
+				"bytes": 18989
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rust-analyzer-upstream-inlay-hints",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "eng-issue",
+			"sourceUrl": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"retrievedAt": "2026-10-18T07:28:34.549592+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rust-analyzer-upstream-inlay-hints.json",
+				"sha256": "32e9a9cac1b3dd4d14f7d120606c1425a2f5e00751c0325f6e0f1f4ad3f9e0ff",
+				"bytes": 16757
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rust-cargo-feature-docs",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/3485",
+			"retrievedAt": "2026-10-18T07:31:37.127676+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rust-cargo-feature-docs.json",
+				"sha256": "74dbbcf6452c3063d7912c2347d3698eccbc83bef30f03d8b92c2977c5c151d5",
+				"bytes": 40055
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "rust-check-cfg-rfc",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/rust-lang/rfcs/pull/3013",
+			"retrievedAt": "2026-10-18T07:32:11.108967+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/rust-check-cfg-rfc.json",
+				"sha256": "4d832e36d94e745264ec0d2a3314e66cedca02943f6212e76fe4b48e880e57c0",
+				"bytes": 39721
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "svelte-create-raw-snippet-shape",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/sveltejs/svelte/pull/12409",
+			"retrievedAt": "2026-10-18T07:23:36.509493+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/svelte-create-raw-snippet-shape.json",
+				"sha256": "d03acd1014924ea37a379df0863daf8e9e5c7fdee083d255fd3a02ffa15bdc4f",
+				"bytes": 36190
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "svelte-css-nesting-approach",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/sveltejs/svelte/pull/9549",
+			"retrievedAt": "2026-10-18T07:23:46.860789+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/svelte-css-nesting-approach.json",
+				"sha256": "a1e5caca60293557d9f0144c22f0d2054dff7f377914a3d1bfaa3c22504890c4",
+				"bytes": 27915
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "svelte-dynamic-element-attr",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/sveltejs/svelte/pull/5481",
+			"retrievedAt": "2026-10-18T07:23:55.771302+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/svelte-dynamic-element-attr.json",
+				"sha256": "0e4464b04ac6d94ee3b10e3a6791132d14c315d30d769ca3bf2c6247d1154320",
+				"bytes": 26375
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "tailwindcss-prettier-whitespace-dedupe",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/tailwindlabs/tailwindcss/discussions/7560",
+			"retrievedAt": "2026-10-18T07:20:07.937703+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/tailwindcss-prettier-whitespace-dedupe.json",
+				"sha256": "b8b5bff3b22e0b57c3de20f3916e9e35d806a5a9b6aa9e6feae0f0f7a85b6e18",
+				"bytes": 34902
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "tailwindcss-variant-grouping",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/tailwindlabs/tailwindcss/discussions/11701",
+			"retrievedAt": "2026-10-18T07:20:10.242009+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/tailwindcss-variant-grouping.json",
+				"sha256": "52e55bbc3913bd33df8157a97c5cdc670926f4c46bfab614b6fdbe8e1c6a30e5",
+				"bytes": 34859
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "tc39-import-reflection-extensible-syntax",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/tc39/proposal-source-phase-imports/issues/18",
+			"retrievedAt": "2026-10-18T07:32:47.831632+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/tc39-import-reflection-extensible-syntax.json",
+				"sha256": "486995f70a14cc6ab3d236279d1a6d43455cef7c31f4abbd7541a82f1de202e4",
+				"bytes": 35315
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "tsc-primordials-error-path-vote",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "formal-process",
+			"sourceUrl": "https://github.com/nodejs/TSC/issues/1104",
+			"retrievedAt": "2026-10-18T07:33:04.394895+00:00",
+			"relatedUrls": [
+				"https://github.com/nodejs/TSC/pull/1158"
+			],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/tsc-primordials-error-path-vote.json",
+				"sha256": "7e35cd56067ac824034bb1a8df74be381bd6e5b4eac75387abc6bfea2cdc90aa",
+				"bytes": 50591
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "typescript-node12-esm-mode",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/microsoft/TypeScript/pull/44501",
+			"retrievedAt": "2026-10-18T07:25:35.775255+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/typescript-node12-esm-mode.json",
+				"sha256": "586139a0cb550d46518bccda931e47b065cc2a984ce73d6987a4be253de39fa6",
+				"bytes": 44740
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "uuid6-alt-text-encoding",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/uuid6/new-uuid-encoding-techniques-ietf-draft/issues/3",
+			"retrievedAt": "2026-10-18T07:35:36.576120+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/uuid6-alt-text-encoding.json",
+				"sha256": "12e6130b6992c13dd169c57aab864c4d467fb259bff46271de864ed5e63ae479",
+				"bytes": 51443
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "uv-named-explicit-indexes",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/astral-sh/uv/pull/7481",
+			"retrievedAt": "2026-10-18T07:26:30.340037+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/uv-named-explicit-indexes.json",
+				"sha256": "a8a20830fe2d50f94084c20d742c4b34055aad5f6dd2ba905d564ba55ec44c16",
+				"bytes": 32155
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vite-lib-auto-externalize-deps",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/vitejs/vite/pull/10632",
+			"retrievedAt": "2026-10-18T07:24:14.097739+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vite-lib-auto-externalize-deps.json",
+				"sha256": "3dbfcb3adb35b66cfa30bbb6f4a913a4f167ca5c64eabc80349891bc65a512e5",
+				"bytes": 16389
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vite-node-worker-threads",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/vitejs/vite/pull/3932",
+			"retrievedAt": "2026-10-18T07:24:07.231242+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vite-node-worker-threads.json",
+				"sha256": "4d01bbea85878ea567d320632128c73f7024b1c890e59e88596f111c59c1febb",
+				"bytes": 21490
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vite-optimizer-browserhash-restart",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/vitejs/vite/pull/20609",
+			"retrievedAt": "2026-10-18T07:24:19.484868+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vite-optimizer-browserhash-restart.json",
+				"sha256": "7010b19e2c3ca140573ef28fc1a486a3c4167e3e7bff7d8d3ba3e300e456c69d",
+				"bytes": 20391
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-centered-editor-layout",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/15684",
+			"retrievedAt": "2026-10-18T07:19:37.866245+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-centered-editor-layout.json",
+				"sha256": "0e711e0d52becfda2246701140a28b6842eebadceb39e01b269cfa7280ffb53d",
+				"bytes": 29854
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-completion-label-details",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/39441",
+			"retrievedAt": "2026-10-18T07:19:44.221446+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-completion-label-details.json",
+				"sha256": "261c4b5aeb4ace45bb1a52921ca38923ce6ffed36bd044f2ce27513cadfbf6d8",
+				"bytes": 26442
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-dim-unfocused-views",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/30522",
+			"retrievedAt": "2026-10-18T07:19:29.342140+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "options-on-table",
+				"c2": "before-decision",
+				"c3": "after-decision",
+				"c4": "before-decision"
+			},
+			"file": {
+				"path": "cases/vscode-dim-unfocused-views.json",
+				"sha256": "dd40608a46d3bc424104cb9d9a438e3122971fa59346c0bbd29f36666a000c7e",
+				"bytes": 33672
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-fixed-width-tabs",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/microsoft/vscode/pull/181729",
+			"retrievedAt": "2026-10-18T07:26:59.903031+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-fixed-width-tabs.json",
+				"sha256": "505325071302a96d86ca9d2f847827a157d83eac36d9e955b7bb92ff14f35b29",
+				"bytes": 34733
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-modern-ui-classic-removal",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/334285",
+			"retrievedAt": "2026-10-18T07:02:35.992461+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "options-on-table"
+			},
+			"file": {
+				"path": "cases/vscode-modern-ui-classic-removal.json",
+				"sha256": "49051212112c6f45df6be203255418d34c4e63b73f6c6259122f1c52b3c9dc74",
+				"bytes": 47244
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-modern-ui-default-optin",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/330693",
+			"retrievedAt": "2026-10-18T07:02:33.211966+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision"
+			},
+			"file": {
+				"path": "cases/vscode-modern-ui-default-optin.json",
+				"sha256": "18bf88a1a6a05bf68efffa7af6d2e5b986da742a44e1529fb76a4b1060e0fce1",
+				"bytes": 8556
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-modern-ui-default",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "open-choice",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/326328",
+			"retrievedAt": "2026-10-18T07:35:24.400218+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-modern-ui-default.json",
+				"sha256": "b932562b55832a55033ddea845a8a273056a4d41d4b62b4c9c56c07227d9bb23",
+				"bytes": 21120
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-pinned-tab-sizing",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/98161",
+			"retrievedAt": "2026-10-18T07:02:28.318269+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-pinned-tab-sizing.json",
+				"sha256": "fc074a475fdc47f3edc1d96fb39037363f4d394b1f247b2569220c7d15eb115a",
+				"bytes": 27949
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-quick-open-eager-preview",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/8939",
+			"retrievedAt": "2026-10-18T07:19:48.278981+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-quick-open-eager-preview.json",
+				"sha256": "6d92e65d4e9ae76098e2922d945bdef1b7f09743a85852b1e81d02b0ed561b87",
+				"bytes": 34585
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-scm-single-view-backlash",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/microsoft/vscode/issues/102118",
+			"retrievedAt": "2026-10-18T07:19:33.830459+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-scm-single-view-backlash.json",
+				"sha256": "5e6dcb1c05353bea1d8677fe3c732c524a20c07dd22156aa186dd6198f4e39c9",
+				"bytes": 30989
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "vscode-windows-custom-titlebar",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/microsoft/vscode/pull/39972",
+			"retrievedAt": "2026-10-18T07:26:52.092607+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/vscode-windows-custom-titlebar.json",
+				"sha256": "bc614b2e0cf738efaa111271e3443b6e6a8bdf12d9c7de36acafce6926141d2f",
+				"bytes": 32708
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-commit-log-graph",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/zed-industries/zed/discussions/26511",
+			"retrievedAt": "2026-10-18T07:19:27.939511+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "options-on-table",
+				"c2": "before-decision",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-commit-log-graph.json",
+				"sha256": "9ebb7d4e2a829b26c95c48bce8d4888eeac39bf09cb5eb637026f611a1b801b5",
+				"bytes": 17639
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-disable-threads-sidebar",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/zed-industries/zed/discussions/55157",
+			"retrievedAt": "2026-10-18T07:19:23.546979+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-disable-threads-sidebar.json",
+				"sha256": "e2d3de99854196d16219b5d5e5e48be45823d61c5c45b778ab9e77325312f967",
+				"bytes": 19814
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-hide-title-status-bar",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/zed-industries/zed/discussions/55183",
+			"retrievedAt": "2026-10-18T07:19:24.621057+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-hide-title-status-bar.json",
+				"sha256": "db77ad3cf41752e46ebd98c551f7c7727ba25e6b42181d68daaaf1792a4e15ba",
+				"bytes": 48931
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-manual-file-tree-refresh",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/zed-industries/zed/discussions/54150",
+			"retrievedAt": "2026-10-18T07:19:22.198811+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-manual-file-tree-refresh.json",
+				"sha256": "796c016ec59dad0a3a21e8209106a776a31222b057a9e9d88e585d3476b3d3da",
+				"bytes": 20589
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-single-file-diff-view",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "product-ui",
+			"sourceUrl": "https://github.com/zed-industries/zed/discussions/33773",
+			"retrievedAt": "2026-10-18T07:19:20.898545+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-single-file-diff-view.json",
+				"sha256": "7620b1337f29c0369c317a51995f630ccdebc4c5d96c74b366223ef26091eef7",
+				"bytes": 27699
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zed-smooth-scroll-input-handling",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "pr-debate",
+			"sourceUrl": "https://github.com/zed-industries/zed/pull/44827",
+			"retrievedAt": "2026-10-18T07:21:57.529921+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "after-decision"
+			},
+			"file": {
+				"path": "cases/zed-smooth-scroll-input-handling.json",
+				"sha256": "ce16745adb53b49a0ab9792cc2cc69aa6d85787734d96e0c3f6cc9e7687bf187",
+				"bytes": 38650
+			},
+			"reuse": "attributed-paraphrase"
+		},
+		{
+			"id": "zoxide-fish-cd-alias-recursion",
+			"kind": "async-discussion",
+			"origin": "adapted",
+			"sourceCluster": "small-team",
+			"sourceUrl": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"retrievedAt": "2026-10-18T07:35:06.752010+00:00",
+			"relatedUrls": [],
+			"checkpoints": [
+				"c1",
+				"c2",
+				"c3",
+				"c4"
+			],
+			"checkpointPurposes": {
+				"c1": "question-clear",
+				"c2": "options-on-table",
+				"c3": "before-decision",
+				"c4": "after-decision"
+			},
+			"file": {
+				"path": "cases/zoxide-fish-cd-alias-recursion.json",
+				"sha256": "f61b4075ff4e5fa3e6e6e50ae3b0d0a2f2d808a12d707c00fdba567ec9b7919b",
+				"bytes": 11159
+			},
+			"reuse": "attributed-paraphrase"
+		}
+	]
+}

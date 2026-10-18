@@ -1,0 +1,591 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "delta-auto-light-dark-detection",
+	"title": "Automatic light or dark mode in delta",
+	"source": {
+		"url": "https://github.com/dandavison/delta/issues/447",
+		"retrievedAt": "2026-10-18T07:35:10.590404+00:00",
+		"repository": "dandavison/delta",
+		"number": 447
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-12-17T17:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2020-12-18T17:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-03-12T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-03-17T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "delta-447:issue:447",
+			"kind": "opening",
+			"actor": "tshu-w",
+			"createdAt": "2020-12-15T06:08:42Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "The opener asks delta to pick its light or dark theme from the terminal theme or a system setting, since their terminal follows the macOS appearance.",
+			"actorId": 13161779,
+			"actorType": "human"
+		},
+		{
+			"id": "delta-447:comment:747542951",
+			"kind": "comment",
+			"actor": "lourenci",
+			"createdAt": "2020-12-17T16:17:13Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-747542951",
+			"summary": "A user seconds the request, wanting delta to switch between its --light and --dark colours automatically, and asks which terminal the opener uses.",
+			"actorId": 2339362,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:747562276",
+			"kind": "comment",
+			"actor": "tshu-w",
+			"createdAt": "2020-12-17T16:49:37Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-747562276",
+			"summary": "The opener says they use iTerm2 with a script that toggles its theme.",
+			"actorId": 13161779,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:747595837",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2020-12-17T17:48:44Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-747595837",
+			"summary": "The maintainer proposes splitting the problem: detecting system state is the user's job, and delta will read a new DELTA_FEATURES environment variable naming light or dark custom features, already added on master.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:748184142",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2020-12-18T16:19:14Z",
+			"editedAt": "2020-12-18T16:23:40Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-748184142",
+			"summary": "The maintainer posts a proof of concept using iTerm2 escape codes, a zsh preexec hook and a luminance script to set DELTA_FEATURES, noting it fails under tmux.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:748188736",
+			"kind": "comment",
+			"actor": "ghost",
+			"createdAt": "2020-12-18T16:27:36Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-748188736",
+			"summary": "A contributor agrees detection is not strictly delta's job but notes demand, suggests the termbg library, and offers to implement it.",
+			"actorId": 10137,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:748193527",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2020-12-18T16:36:37Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-748193527",
+			"summary": "The maintainer welcomes termbg and says building background detection into delta would be the better solution, partly because it supports tmux.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:748194744",
+			"kind": "comment",
+			"actor": "ghost",
+			"createdAt": "2020-12-18T16:39:02Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-748194744",
+			"summary": "The contributor confirms tmux support and plans to try termbg soon.",
+			"actorId": 10137,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:748344622",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2020-12-18T22:12:12Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-748344622",
+			"summary": "The maintainer hands the work to that contributor.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:749681187",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2020-12-22T17:39:35Z",
+			"editedAt": "2020-12-22T20:38:47Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-749681187",
+			"summary": "The maintainer sketches the end state: detection first toggles --light and --dark, later users could define light and dark features, with an open question about fixed versus user-chosen feature names.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:757135015",
+			"kind": "comment",
+			"actor": "tshu-w",
+			"createdAt": "2021-01-09T11:23:03Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-757135015",
+			"summary": "The opener thanks both, calls the env-var workaround enough for now, and keeps the issue open for built-in detection.",
+			"actorId": 13161779,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:764889828",
+			"kind": "comment",
+			"actor": "sscherfke",
+			"createdAt": "2021-01-21T19:40:08Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-764889828",
+			"summary": "A user suggests a configurable command, such as a DELTA_TERMBG_CMD variable, as a fallback when termbg does not work.",
+			"actorId": 511179,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:766504351",
+			"kind": "comment",
+			"actor": "ghost",
+			"createdAt": "2021-01-25T02:46:42Z",
+			"editedAt": "2021-01-25T02:47:06Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-766504351",
+			"summary": "The contributor says they are busy until March and invites a PR.",
+			"actorId": 10137,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:792042705",
+			"kind": "comment",
+			"actor": "skyfaller",
+			"createdAt": "2021-03-06T19:58:00Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-792042705",
+			"summary": "A user points out that bat added an ansi theme that adapts to light and dark terminals and asks if delta could do the same.",
+			"actorId": 80093,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:808821016",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-03-28T00:10:07Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-808821016",
+			"summary": "The maintainer says delta will adopt bat's ansi theme, but notes that diff background colours are usually 256 or 24-bit, so automatic switching would still be unsolved.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:808822987",
+			"kind": "comment",
+			"actor": "skyfaller",
+			"createdAt": "2021-03-28T00:30:33Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-808822987",
+			"summary": "The user agrees ansi is a partial workaround and shares a GNOME and fish script that rewrites the delta theme in gitconfig when the desktop theme changes.",
+			"actorId": 80093,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:808823775",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-03-28T00:39:35Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-808823775",
+			"summary": "The maintainer thanks them for the examples.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:829533349",
+			"kind": "comment",
+			"actor": "jtroo",
+			"createdAt": "2021-04-29T19:38:19Z",
+			"editedAt": "2021-04-29T19:51:20Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-829533349",
+			"summary": "A user reports the ansi theme on master works on light backgrounds but not dark ones.",
+			"actorId": 6634136,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:process:cross-referenced:2021-04-29T21:12:26Z",
+			"kind": "process",
+			"actor": "dandavison",
+			"createdAt": "2021-04-29T21:12:26Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "The maintainer links a PR fixing the ansi syntax theme.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:829600246",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-04-29T21:13:25Z",
+			"editedAt": "2021-04-29T21:13:32Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-829600246",
+			"summary": "The maintainer says the linked PR should fix it and asks the user to confirm.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:829606997",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-04-29T21:25:52Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-829606997",
+			"summary": "The maintainer retracts that, saying the branch needs more work.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:829614706",
+			"kind": "comment",
+			"actor": "jtroo",
+			"createdAt": "2021-04-29T21:41:51Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-829614706",
+			"summary": "The user reports the branch works for them.",
+			"actorId": 6634136,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:process:closed:2021-04-30T02:16:24Z",
+			"kind": "process",
+			"actor": "dandavison",
+			"createdAt": "2021-04-30T02:16:24Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "The maintainer closes the issue.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:829750194",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-04-30T02:19:16Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-829750194",
+			"summary": "The maintainer says the fix is now on master.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:process:reopened:2021-04-30T11:47:22Z",
+			"kind": "process",
+			"actor": "dandavison",
+			"createdAt": "2021-04-30T11:47:22Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "The maintainer reopens the issue, since automatic detection is still not done.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:845073704",
+			"kind": "comment",
+			"actor": "lourenci",
+			"createdAt": "2021-05-20T12:40:12Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-845073704",
+			"summary": "A user says the ansi theme still looks wrong on their light terminal.",
+			"actorId": 2339362,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:845482338",
+			"kind": "comment",
+			"actor": "jtroo",
+			"createdAt": "2021-05-20T21:15:33Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-845482338",
+			"summary": "Another user says the output is correct and the diff backgrounds are just too dark, suggesting custom colours.",
+			"actorId": 6634136,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:845502233",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-05-20T21:53:51Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-845502233",
+			"summary": "The maintainer suggests adding light = true, since delta assumes a dark background by default.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:845503167",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2021-05-20T21:55:43Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-845503167",
+			"summary": "The maintainer clarifies that syntax-theme only affects foreground colours, while backgrounds come from plus-style and similar options.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1082724238",
+			"kind": "comment",
+			"actor": "chtenb",
+			"createdAt": "2022-03-30T07:26:11Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1082724238",
+			"summary": "A contributor agrees ansi syntax is not a full workaround because diff backgrounds still need 24-bit colours, and asks whether termbg support shipped.",
+			"actorId": 1030961,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1082726675",
+			"kind": "comment",
+			"actor": "chtenb",
+			"createdAt": "2022-03-30T07:29:16Z",
+			"editedAt": "2022-03-30T07:29:50Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1082726675",
+			"summary": "The contributor argues DELTA_FEATURES fails for their case: an editor terminal that follows system theme has no hook, and env changes do not reach open terminals.",
+			"actorId": 1030961,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1082730400",
+			"kind": "comment",
+			"actor": "floriankisser",
+			"createdAt": "2022-03-30T07:33:53Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1082730400",
+			"summary": "A user reports that termbg needs stdin, which delta already uses for its input pipe.",
+			"actorId": 6919601,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1083678769",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2022-03-30T22:07:42Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1083678769",
+			"summary": "The maintainer suggests a wrapper script reading a state file, and agrees termbg looks like a dead end because of stdin.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1084248127",
+			"kind": "comment",
+			"actor": "chtenb",
+			"createdAt": "2022-03-31T08:15:37Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1084248127",
+			"summary": "The contributor replies that a generic terminal-background check would be far cleaner, and that termbg does not support their editor's terminal anyway.",
+			"actorId": 1030961,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1085094665",
+			"kind": "comment",
+			"actor": "cben",
+			"createdAt": "2022-03-31T20:48:33Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1085094665",
+			"summary": "A user notes that any standard descriptor attached to a terminal is bidirectional, as less reads keys from stderr.",
+			"actorId": 273688,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1100397812",
+			"kind": "comment",
+			"actor": "chtenb",
+			"createdAt": "2022-04-15T21:12:51Z",
+			"editedAt": "2024-03-12T12:57:36Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1100397812",
+			"summary": "The contributor describes an alternative using only ANSI palette colours for syntax and diff backgrounds, so a terminal that swaps palettes adapts automatically, with config and a demo video.",
+			"actorId": 1030961,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1239398586",
+			"kind": "comment",
+			"actor": "seansfkelley",
+			"createdAt": "2022-09-07T13:34:26Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1239398586",
+			"summary": "A user shares a macOS gitconfig pager line that picks a delta feature from the system appearance at run time.",
+			"actorId": 2101409,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1431268846",
+			"kind": "comment",
+			"actor": "eproxus",
+			"createdAt": "2023-02-15T12:08:10Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1431268846",
+			"summary": "A user adds the matching diffFilter line for interactive git add.",
+			"actorId": 112878,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1480094036",
+			"kind": "comment",
+			"actor": "connorjs",
+			"createdAt": "2023-03-22T18:50:45Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1480094036",
+			"summary": "A user gives a POSIX sh version of that snippet.",
+			"actorId": 22208536,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1491838752",
+			"kind": "comment",
+			"actor": "anuanandpremji",
+			"createdAt": "2023-03-31T12:14:50Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1491838752",
+			"summary": "A user shares an equivalent GNOME setup that checks the GTK theme name.",
+			"actorId": 60327270,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1550532267",
+			"kind": "comment",
+			"actor": "texastoland",
+			"createdAt": "2023-05-17T00:49:01Z",
+			"editedAt": "2024-04-06T21:07:43Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1550532267",
+			"summary": "A user posts a shorter alias variant that only toggles --light.",
+			"actorId": 48431,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:process:cross-referenced:2023-07-29T13:55:03Z",
+			"kind": "process",
+			"actor": "aykevl",
+			"createdAt": "2023-07-29T13:55:03Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "A user links a PR that tries to read the default light or dark state from the terminal.",
+			"actorId": 729697,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1656806629",
+			"kind": "comment",
+			"actor": "aykevl",
+			"createdAt": "2023-07-29T17:56:15Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1656806629",
+			"summary": "That user reports that querying the terminal colour is unreliable alongside less because of a race, not stdin, and suggests reading COLORFGBG instead, which is static per session.",
+			"actorId": 729697,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1991557036",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2024-03-12T12:38:08Z",
+			"editedAt": "2024-03-12T15:08:53Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1991557036",
+			"summary": "The maintainer announces a solution contributed in PR 1615, merged to main, and asks people to test.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:1998778806",
+			"kind": "comment",
+			"actor": "texastoland",
+			"createdAt": "2024-03-15T01:50:55Z",
+			"editedAt": "2024-03-15T01:54:34Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-1998778806",
+			"summary": "A user reports it works with lazygit on macOS.",
+			"actorId": 48431,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:2002011943",
+			"kind": "comment",
+			"actor": "dandavison",
+			"createdAt": "2024-03-16T14:58:40Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-2002011943",
+			"summary": "The maintainer says the fix shipped in delta 0.17.0 and notes tmux users must reattach for changes to apply.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:process:closed:2024-03-16T14:58:40Z",
+			"kind": "process",
+			"actor": "dandavison",
+			"createdAt": "2024-03-16T14:58:40Z",
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"summary": "The maintainer closes the issue.",
+			"actorId": 52205,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:2016911013",
+			"kind": "comment",
+			"actor": "texastoland",
+			"createdAt": "2024-03-24T19:12:40Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-2016911013",
+			"summary": "A user retracts their report: detect-dark-light always shows dark for them.",
+			"actorId": 48431,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:2017875324",
+			"kind": "comment",
+			"actor": "tautropfli",
+			"createdAt": "2024-03-25T12:17:47Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-2017875324",
+			"summary": "A contributor says automatic detection does not work inside lazygit and links a separate issue.",
+			"actorId": 4602612,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		},
+		{
+			"id": "delta-447:comment:2017924648",
+			"kind": "comment",
+			"actor": "texastoland",
+			"createdAt": "2024-03-25T12:45:59Z",
+			"url": "https://github.com/dandavison/delta/issues/447#issuecomment-2017924648",
+			"summary": "The user thanks them.",
+			"actorId": 48431,
+			"actorType": "human",
+			"parentId": "delta-447:issue:447"
+		}
+	]
+}

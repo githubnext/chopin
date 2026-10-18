@@ -1,0 +1,575 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "eslint-codemod-replace-migrators",
+	"title": "Replace ESLint migrators with Codemod recipes",
+	"source": {
+		"url": "https://github.com/eslint/eslint/issues/20442",
+		"retrievedAt": "2026-10-18T07:28:24.652611+00:00",
+		"repository": "eslint/eslint",
+		"number": 20442
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-01-19T19:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-03-09T21:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-05-28T20:30:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-05-28T21:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "eslint-20442:issue:20442",
+			"kind": "opening",
+			"actor": "nzakas",
+			"createdAt": "2026-01-19T18:37:30Z",
+			"url": "https://github.com/eslint/eslint/issues/20442",
+			"summary": "A maintainer notes ESLint maintains two under-loved migration tools, @eslint/config-migrator and eslint-transforms, and proposes evaluating donated Codemod recipes, which can open PRs on repos directly, as replacements in the docs. A volunteer evaluator is requested.",
+			"actorId": 38546,
+			"actorType": "human"
+		},
+		{
+			"id": "eslint-20442:comment:3769692421",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-01-19T18:45:54Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3769692421",
+			"summary": "A Codemod representative offers to answer questions.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3770434268",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-01-19T23:29:34Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3770434268",
+			"summary": "A contributor volunteers to evaluate, starting with common scenarios and then the code.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3815328589",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-01-29T03:51:35Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3815328589",
+			"summary": "The Codemod representative asks for an update.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3821078045",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-01-30T00:18:13Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3821078045",
+			"summary": "The contributor posts a detailed feature comparison: the new-rule-format codemod is ready to replace eslint-transforms, while the v9 rule migration and flat config codemods have bugs and are not ready.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3821126688",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-01-30T00:33:42Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3821126688",
+			"summary": "The Codemod representative thanks them, promises fixes, and asks for sample PRs and rough false positive and negative rates.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3825652922",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-01-30T20:42:52Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3825652922",
+			"summary": "The contributor suggests testing against older versions of popular plugins such as eslint-plugin-vue.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3843540407",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2026-02-03T20:40:40Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3843540407",
+			"summary": "The maintainer points to the config-migrator test fixtures as the best before-and-after examples.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3905644988",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-02-16T00:09:05Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3905644988",
+			"summary": "A Codemod engineer reports fixes for the rule and config bugs and asks for a reproduction of one unclear issue.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3918021027",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-02-18T01:42:38Z",
+			"editedAt": "2026-02-18T16:21:37Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3918021027",
+			"summary": "The Codemod representative asks the contributor to retest the published recipes.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3930676640",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-02-19T23:15:58Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3930676640",
+			"summary": "The contributor confirms the fixes, asks for ESLint v10 changes to be covered, reports a new regression, clarifies the dropped-property bug with an example, and notes --target does not work.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3930716115",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-02-19T23:28:55Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3930716115",
+			"summary": "The Codemod representative promises further changes.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3969871743",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-02-26T23:37:16Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3969871743",
+			"summary": "The Codemod engineer argues for finishing a stable v8-to-v9 codemod first and building v9-to-v10 separately to chain later, and reports three fixes.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:3977812790",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-02-28T20:57:13Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-3977812790",
+			"summary": "The contributor accepts deferring v10 but finds two fixes only partial, with examples of dropped properties and stringified output.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4006975238",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-03-05T18:46:03Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4006975238",
+			"summary": "The Codemod representative warns of delays and suggests documenting the codemod now with known issues, leaving the call to the evaluator and the maintainer.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4026685870",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2026-03-09T20:25:16Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4026685870",
+			"summary": "The maintainer says the codemod should only go in the docs once it matches the existing migrator's behaviour, and delegates that judgement to the contributor.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4026698914",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-03-09T20:27:36Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4026698914",
+			"summary": "The Codemod representative agrees.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4035090036",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-03-10T23:22:21Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4035090036",
+			"summary": "The contributor judges the config codemod not ready and agrees to wait.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4035376707",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-03-11T00:33:55Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4035376707",
+			"summary": "The Codemod representative says they will seek community help to finish.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4254729977",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-15T19:08:40Z",
+			"editedAt": "2026-04-15T19:10:42Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4254729977",
+			"summary": "The Codemod engineer returns and reports fixes for single-property detection, formatting, and stringifying, plus new parameters and runnable tests.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4263429585",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-04-16T21:08:29Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4263429585",
+			"summary": "The contributor confirms those fixes and lists new gaps: unsupported linterOptions, an unneeded dependency warning, --target misuse with custom config names, and optional package.json support.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4300626838",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-22T23:36:02Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4300626838",
+			"summary": "The Codemod engineer adds linterOptions support, keeps the dependency log as a safety measure, adds parameters for custom config names and formats, and supports package.json configs.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4308677184",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-04-23T22:22:59Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4308677184",
+			"summary": "The contributor says the codemods now clearly beat the old migrators and proposes comparing output against the migrators' fixture tests.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4313951543",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-24T14:31:34Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4313951543",
+			"summary": "The Codemod engineer welcomes the next step.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4320645066",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-04-25T21:48:23Z",
+			"editedAt": "2026-04-26T06:41:38Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4320645066",
+			"summary": "The contributor reports fixture comparisons: most match, a few fail, and each codemod has one shared bug such as unquoted plugin keys.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4327744994",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-27T14:22:31Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4327744994",
+			"summary": "The Codemod engineer says fixes are underway.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4339352445",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-28T21:51:53Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4339352445",
+			"summary": "The Codemod engineer reports fixes for every failing fixture and shared bug, using semantic analysis to keep local variables, and adds test cases.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4347617147",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-04-29T21:25:11Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4347617147",
+			"summary": "The contributor confirms the fixes, suggests handling extensionless .eslintrc through parameters, and proposes wider testing by the team or a public beta.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4347885816",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-04-29T22:06:56Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4347885816",
+			"summary": "The Codemod engineer removes the extensionless default as suggested.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4348162607",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-04-29T23:08:50Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4348162607",
+			"summary": "The Codemod representative asks how they can help with next steps.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4356440661",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-04-30T21:58:40Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4356440661",
+			"summary": "The contributor has asked the team internally for feedback, plans to propose a blog post for a public beta, and flags two documentation gaps.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4359696965",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-05-01T14:13:39Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4359696965",
+			"summary": "The Codemod engineer publishes the missing release and updates the README.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4433017057",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-05-12T17:19:06Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4433017057",
+			"summary": "The Codemod engineer asks about the beta proposal.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4455108971",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-05-14T22:05:32Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4455108971",
+			"summary": "The contributor says the team found no new bugs and more edge-case checks are pending.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4463529624",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-05-15T20:53:09Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4463529624",
+			"summary": "The contributor reports real-world testing results, raises the postponed v10 rule changes again, lists remaining bugs and polish items, and says the codemods are ready for a public beta once bugs are fixed.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4465796995",
+			"kind": "comment",
+			"actor": "jookira",
+			"createdAt": "2026-05-16T05:21:22Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4465796995",
+			"summary": "A contributor suggests adding a transform for the includeIgnoreFile move to the v10 list.",
+			"actorId": 241842546,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:process:cross-referenced:2026-05-16T05:26:10Z",
+			"kind": "process",
+			"actor": "kirkwaiblinger",
+			"createdAt": "2026-05-16T05:26:10Z",
+			"url": "https://github.com/eslint/eslint/issues/20442",
+			"summary": "A contributor links a rewrite PR updating the existing migrate-config package for includeIgnoreFile.",
+			"actorId": 53019676,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4480379973",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-05-18T17:55:53Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4480379973",
+			"summary": "The Codemod representative reiterates that the current scope is v8 to v9, with v10 to follow so users can chain both.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4500579045",
+			"kind": "comment",
+			"actor": "amirabbas-gh",
+			"createdAt": "2026-05-20T16:43:33Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4500579045",
+			"summary": "The Codemod engineer reports fixes for the listed bugs and polish items.",
+			"actorId": 93479436,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4503179277",
+			"kind": "comment",
+			"actor": "DMartens",
+			"createdAt": "2026-05-20T22:32:11Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4503179277",
+			"summary": "The contributor confirms all fixes and leaves the decision on an open beta to the maintainer.",
+			"actorId": 966276,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4561203427",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-05-28T05:55:27Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4561203427",
+			"summary": "The Codemod representative asks the maintainer for an update.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:process:labeled:2026-05-28T20:00:50Z",
+			"kind": "process",
+			"actor": "nzakas",
+			"createdAt": "2026-05-28T20:00:50Z",
+			"url": "https://github.com/eslint/eslint/issues/20442",
+			"summary": "The maintainer adds the issue to the TSC agenda.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4568153100",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2026-05-28T20:53:48Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4568153100",
+			"summary": "The maintainer reports the TSC meeting outcome: Codemod is invited to write a guest blog post announcing availability. He expects a muted response because most users already moved to v9, says a v8-to-v10 codemod would be a better announcement, and asks them to ping the whole TSC.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4568613081",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-05-28T21:46:57Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4568613081",
+			"summary": "The Codemod representative agrees to draft the post and argues for wrapping up v8-to-v9 now, with v10 recipes to follow and chain.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4580609159",
+			"kind": "comment",
+			"actor": "sam3k",
+			"createdAt": "2026-05-29T23:19:56Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4580609159",
+			"summary": "A contributor notes for the record that at its late-May meeting the TSC chose to ask Codemod for a guest post on the blog.",
+			"actorId": 180152,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4619074775",
+			"kind": "comment",
+			"actor": "lumirlumir",
+			"createdAt": "2026-06-04T04:52:54Z",
+			"editedAt": "2026-06-04T04:53:09Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4619074775",
+			"summary": "A maintainer asks what happens to @eslint/migrate-config if Codemod becomes the primary migration tool, citing an open PR against it.",
+			"actorId": 119669540,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4623293762",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-06-04T14:52:36Z",
+			"editedAt": "2026-06-04T15:17:52Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4623293762",
+			"summary": "The Codemod representative proposes porting any remaining logic into the eslint/codemods repo as a single home, and notes v9-to-v10 codemod PRs are in progress.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4624196679",
+			"kind": "comment",
+			"actor": "khadatkarrohit",
+			"createdAt": "2026-06-04T16:36:38Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4624196679",
+			"summary": "A Codemod contributor explains that the v8-to-v9 and v9-to-v10 config codemods are separate and suggests a chained v8-to-v10 workflow later.",
+			"actorId": 16465589,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		},
+		{
+			"id": "eslint-20442:comment:4635360721",
+			"kind": "comment",
+			"actor": "alexbit-codemod",
+			"createdAt": "2026-06-05T20:39:21Z",
+			"url": "https://github.com/eslint/eslint/issues/20442#issuecomment-4635360721",
+			"summary": "The Codemod representative records that, after talking with a maintainer, the existing migrate-config and eslint-transforms tools can be deprecated in favour of the codemods.",
+			"actorId": 78109534,
+			"actorType": "human",
+			"parentId": "eslint-20442:issue:20442"
+		}
+	]
+}

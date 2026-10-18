@@ -46,3 +46,7 @@ vite.config.ts.timestamp-*
 # Temporary local design jigs.
 /apps/web/design-jig/
 /apps/web/src/design-jig/
+
+# Raw GitHub responses for evals/datasets/decisions-v1 (never commit)
+.cache/decisions/
+__pycache__/

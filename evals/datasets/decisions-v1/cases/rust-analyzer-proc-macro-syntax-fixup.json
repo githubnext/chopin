@@ -1,0 +1,447 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "rust-analyzer-proc-macro-syntax-fixup",
+	"title": "Handling invalid syntax inside attribute proc-macros",
+	"source": {
+		"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+		"retrievedAt": "2026-10-18T07:28:31.402863+00:00",
+		"repository": "rust-lang/rust-analyzer",
+		"number": 11014
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-12-14T15:12:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2022-02-08T12:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2022-06-21T17:15:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2022-06-21T18:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "rust-analyzer-11014:issue:11014",
+			"kind": "opening",
+			"actor": "Veykril",
+			"createdAt": "2021-12-14T15:07:03Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"summary": "A maintainer opens a collection point for how the IDE should behave when typing breaks attribute or derive macro input, which makes macros emit only a compile error and kills completions. They list options (ask macro authors to recover, keep the original item when the expansion is just a compile error, repair the input syntax before expanding, or do nothing) and lean toward repairing the input, citing dtolnay's argument and asking IntelliJ Rust to align.",
+			"actorId": 3757771,
+			"actorType": "human"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:993649769",
+			"kind": "comment",
+			"actor": "matklad",
+			"createdAt": "2021-12-14T15:19:35Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-993649769",
+			"summary": "A contributor notes that rust-analyzer has no reliable model of which syntax tree parts are mandatory, which ungrammar might partly supply.",
+			"actorId": 1711539,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:993685533",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2021-12-14T15:57:10Z",
+			"editedAt": "2021-12-14T16:05:52Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-993685533",
+			"summary": "A maintainer disputes that macros are contractually owed valid syntax, since rustc used to pass invalid input, and argues macros should at least be able to opt in to handling broken input themselves.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1003150254",
+			"kind": "comment",
+			"actor": "jgarvin",
+			"createdAt": "2021-12-30T19:10:52Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1003150254",
+			"summary": "A user asks whether a way for macros to declare that they only add code around unmodified input would make completion easier.",
+			"actorId": 102322,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1004252357",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-01-03T17:46:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1004252357",
+			"summary": "A maintainer replies that macros behaving that way already work well, so such a declaration would add little.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1007941113",
+			"kind": "comment",
+			"actor": "Hades32",
+			"createdAt": "2022-01-08T10:03:53Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1007941113",
+			"summary": "A user shares a workaround: comment out the attribute while editing and restore it afterwards.",
+			"actorId": 167847,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1018071425",
+			"kind": "comment",
+			"actor": "twitchax",
+			"createdAt": "2022-01-21T01:13:14Z",
+			"editedAt": "2022-01-29T14:28:00Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1018071425",
+			"summary": "A comment GitHub marks as hidden (resolved); a user links a Rocket request and asks for an option to ignore chosen macros.",
+			"actorId": 549523,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1018183869",
+			"kind": "comment",
+			"actor": "memoryruins",
+			"createdAt": "2022-01-21T05:04:53Z",
+			"editedAt": "2022-01-29T12:30:28Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1018183869",
+			"summary": "A contributor points out that a recent PR already lets users replace named macros with dummy expanders, and that proc-macro kinds can be disabled in settings.",
+			"actorId": 6868531,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1018209563",
+			"kind": "comment",
+			"actor": "twitchax",
+			"createdAt": "2022-01-21T06:07:17Z",
+			"editedAt": "2022-01-29T14:27:41Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1018209563",
+			"summary": "A comment GitHub marks as hidden (resolved); the user thanks them for the pointer.",
+			"actorId": 549523,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024169608",
+			"kind": "comment",
+			"actor": "danielhenrymantilla",
+			"createdAt": "2022-01-28T12:29:15Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024169608",
+			"summary": "A user argues for detecting a compile_error expansion and re-emitting the original input as a short-term fix, with a Result-returning proc-macro API as the longer-term ideal.",
+			"actorId": 9920355,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024277712",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-01-28T14:30:14Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024277712",
+			"summary": "A maintainer rejects both ideas, explaining that passing through untransformed input gives wrong semantics (for example an async main under tokio::main) and would cause flickering diagnostics.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024366559",
+			"kind": "comment",
+			"actor": "hkalbasi",
+			"createdAt": "2022-01-28T16:11:01Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024366559",
+			"summary": "A maintainer suggests the syn-mid crate, which leaves function bodies unparsed, as an ecosystem-side route.",
+			"actorId": 45197576,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024372490",
+			"kind": "comment",
+			"actor": "lnicola",
+			"createdAt": "2022-01-28T16:17:54Z",
+			"editedAt": "2022-01-28T16:36:17Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024372490",
+			"summary": "A comment GitHub marks as hidden (resolved); a maintainer worries syn-mid would split the ecosystem and add compile cost.",
+			"actorId": 308347,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024382756",
+			"kind": "comment",
+			"actor": "hkalbasi",
+			"createdAt": "2022-01-28T16:28:54Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024382756",
+			"summary": "The maintainer answers that syn-mid shares code with syn's derive feature, so the cost needs measuring rather than assuming.",
+			"actorId": 45197576,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024423092",
+			"kind": "comment",
+			"actor": "jgarvin",
+			"createdAt": "2022-01-28T17:02:18Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024423092",
+			"summary": "A user frames the choice as heuristics versus trusted macro annotations and asks if a third way exists, mentioning Lisp-style macro hints.",
+			"actorId": 102322,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024436397",
+			"kind": "comment",
+			"actor": "vlad20012",
+			"createdAt": "2022-01-28T17:18:08Z",
+			"editedAt": "2022-01-28T17:18:54Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024436397",
+			"summary": "A contributor from IntelliJ Rust observes that their IDE shows the union of completions from the expansion and the plain item.",
+			"actorId": 3221931,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1024916517",
+			"kind": "comment",
+			"actor": "danielhenrymantilla",
+			"createdAt": "2022-01-29T13:56:17Z",
+			"editedAt": "2022-01-29T13:57:25Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1024916517",
+			"summary": "The user maintains that people would rather have completions with an extra spurious error than none, notes tokio already re-emits input on failure, but withdraws the Result API idea.",
+			"actorId": 9920355,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031304440",
+			"kind": "comment",
+			"actor": "Follpvosten",
+			"createdAt": "2022-02-07T10:22:01Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031304440",
+			"summary": "A user says attribute macros such as async-trait and web route macros break completely on unparseable input and asks for an input-as-output option.",
+			"actorId": 22855787,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031310916",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-02-07T10:28:40Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031310916",
+			"summary": "A maintainer replies that those macros replace their input with an error on parse failure and also transform it, so pass-through is not a fix.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031315945",
+			"kind": "comment",
+			"actor": "Follpvosten",
+			"createdAt": "2022-02-07T10:33:51Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031315945",
+			"summary": "The user adds that disabling attribute macro expansion removes all their problems, while the default-on feature breaks them.",
+			"actorId": 22855787,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031573991",
+			"kind": "comment",
+			"actor": "jgarvin",
+			"createdAt": "2022-02-07T15:12:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031573991",
+			"summary": "A user clarifies that by additive macros they meant ones that parse their input but re-emit it unchanged.",
+			"actorId": 102322,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031642818",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-02-07T16:10:20Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031642818",
+			"summary": "A maintainer says what matters is whether a macro passes its input through on error, which is easy for macro authors to fix without any annotation.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031749840",
+			"kind": "comment",
+			"actor": "jgarvin",
+			"createdAt": "2022-02-07T17:53:44Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031749840",
+			"summary": "A user asks whether falling back to pass-through on failure would ever make completion worse, arguing one central heuristic beats waiting on the ecosystem.",
+			"actorId": 102322,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1031849216",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-02-07T19:43:09Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1031849216",
+			"summary": "A maintainer says it causes other odd effects and calls the choice a false dichotomy, naming input syntax fixup as the workaround they can build.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1032350872",
+			"kind": "comment",
+			"actor": "vlad20012",
+			"createdAt": "2022-02-08T08:40:23Z",
+			"editedAt": "2022-02-08T08:43:24Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1032350872",
+			"summary": "An IntelliJ Rust contributor suggests using the original tokens only for completion, as IntelliJ does, so diagnostics are not affected.",
+			"actorId": 3221931,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:process:cross-referenced:2022-02-09T15:44:08Z",
+			"kind": "process",
+			"actor": "flodiebold",
+			"createdAt": "2022-02-09T15:44:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"summary": "A maintainer links PR #11444, which repairs syntax errors in attribute macro input so completion works more often.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1047609308",
+			"kind": "comment",
+			"actor": "trevyn",
+			"createdAt": "2022-02-22T09:46:29Z",
+			"editedAt": "2022-02-22T10:32:05Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1047609308",
+			"summary": "A user asks how a macro can tell it is being expanded by rust-analyzer, and shares a check on the executable name.",
+			"actorId": 230691,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1047697171",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-02-22T11:24:49Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1047697171",
+			"summary": "A maintainer asks for examples and doubts such a distinction is generally feasible, beyond live diagnostics versus explicit builds.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1047749052",
+			"kind": "comment",
+			"actor": "trevyn",
+			"createdAt": "2022-02-22T12:31:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1047749052",
+			"summary": "The user explains their derive macro writes migration files as a side effect, producing a table per keystroke under the IDE, so they suppress side effects there.",
+			"actorId": 230691,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1054957476",
+			"kind": "comment",
+			"actor": "samsieber",
+			"createdAt": "2022-03-01T03:19:06Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1054957476",
+			"summary": "A user proposes that macros publish a tree-sitter style grammar of their input that the IDE could load for better completion.",
+			"actorId": 5694469,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1162025834",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2022-06-21T17:07:29Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1162025834",
+			"summary": "A maintainer says the syntax fixup is now in and working well and asks whether to close the issue.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:1162044878",
+			"kind": "comment",
+			"actor": "Veykril",
+			"createdAt": "2022-06-21T17:24:06Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-1162044878",
+			"summary": "The opening maintainer agrees to close it.",
+			"actorId": 3757771,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:process:closed:2022-06-21T17:24:06Z",
+			"kind": "process",
+			"actor": "Veykril",
+			"createdAt": "2022-06-21T17:24:06Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"summary": "The opening maintainer closes the issue.",
+			"actorId": 3757771,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:process:cross-referenced:2022-06-29T20:49:37Z",
+			"kind": "process",
+			"actor": "vlad20012",
+			"createdAt": "2022-06-29T20:49:37Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"summary": "An IntelliJ Rust contributor links a PR in their IDE that also repairs syntax before calling attribute macros.",
+			"actorId": 3221931,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:2519610705",
+			"kind": "comment",
+			"actor": "safinaskar",
+			"createdAt": "2024-12-05T08:30:42Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-2519610705",
+			"summary": "A user asks to reopen two years later, showing that an unbalanced brace under tokio::main still turns the whole function red.",
+			"actorId": 859494,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:2519737830",
+			"kind": "comment",
+			"actor": "safinaskar",
+			"createdAt": "2024-12-05T09:27:26Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-2519737830",
+			"summary": "The user adds that the ignore setting did not help and only a cfg_attr guard for rust_analyzer worked.",
+			"actorId": 859494,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		},
+		{
+			"id": "rust-analyzer-11014:comment:2521167644",
+			"kind": "comment",
+			"actor": "Veykril",
+			"createdAt": "2024-12-05T18:51:42Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014#issuecomment-2521167644",
+			"summary": "A maintainer points them to a separate, newer issue instead of reopening.",
+			"actorId": 3757771,
+			"actorType": "human",
+			"parentId": "rust-analyzer-11014:issue:11014"
+		}
+	]
+}

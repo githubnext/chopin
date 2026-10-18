@@ -1,0 +1,157 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "logseq-hierarchy-above-backlinks",
+	"title": "Where the page hierarchy section should sit relative to backlinks",
+	"source": {
+		"url": "https://github.com/logseq/logseq/discussions/5115",
+		"retrievedAt": "2026-10-18T07:11:49.075834+00:00",
+		"repository": "logseq/logseq",
+		"number": 5115,
+		"nodeId": "D_kwDOD95dbc4APaXW"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2022-04-27T20:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-01-05T15:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOD95dbc4APaXW",
+			"kind": "opening",
+			"actor": "domhel",
+			"createdAt": "2022-04-27T18:50:46Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115",
+			"summary": "The opener asks for the hierarchy section to appear above backlinks, since scrolling to the page bottom every time they navigate is tiresome.",
+			"actorId": "MDQ6VXNlcjQ2OTM1Mjkx",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AKH5Q",
+			"kind": "comment",
+			"actor": "meldarionqeusse",
+			"createdAt": "2022-04-27T22:37:16Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-2653776",
+			"summary": "A user would rather have the hierarchy at the very top of the page.",
+			"actorId": "MDQ6VXNlcjIxNjY4OTY0",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AKH5R",
+			"kind": "comment",
+			"actor": "cannibalox",
+			"createdAt": "2022-04-28T02:03:59Z",
+			"editedAt": "2022-04-28T02:22:08Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-2653777",
+			"summary": "A user warns that large hierarchies would push notes far down if moved up, and instead proposes a jump-to-section shortcut plus a fold toggle in the short term, with longer-term ideas such as a collapsible tree, a floating window, or a single-line breadcrumb with dropdowns.",
+			"actorId": "MDQ6VXNlcjQ2MDU2OTM=",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AKH5S",
+			"kind": "comment",
+			"actor": "meldarionqeusse",
+			"createdAt": "2022-04-28T07:15:39Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-2653778",
+			"summary": "The user who wanted it at the top says they would accept a long list and simply collapse it, as their hierarchies are only a few items.",
+			"actorId": "MDQ6VXNlcjIxNjY4OTY0",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AK_ey",
+			"kind": "comment",
+			"actor": "castellco",
+			"createdAt": "2022-06-04T01:05:07Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-2881458",
+			"summary": "A user supports the change, saying it would make Logseq a good substitute for Dendron's hierarchy-first notes.",
+			"actorId": "U_kgDOBZ5f7g",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4ANVaZ",
+			"kind": "comment",
+			"actor": "TimLamoureux",
+			"createdAt": "2022-08-28T23:53:23Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-3495577",
+			"summary": "A user also wants hierarchy above tags and linked references, speculates it may load faster, and suggests making the section order configurable via drag and drop or config.edn.",
+			"actorId": "MDQ6VXNlcjQ0MDQ5NDA=",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4ARjiZ",
+			"kind": "comment",
+			"actor": "bendyorke",
+			"createdAt": "2023-01-05T14:18:24Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-4602009",
+			"summary": "A contributor suggests making the order themeable by laying the sections out in one flex column so each can be reordered with CSS order.",
+			"actorId": "MDQ6VXNlcjM0ODg4Nzk=",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4ARj2Q",
+			"kind": "reply",
+			"actor": "lef-est",
+			"createdAt": "2023-01-05T16:25:18Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-4603280",
+			"summary": "A user backs moving it up with a config.edn threshold for auto-collapsing, mirroring the existing linked-references setting.",
+			"actorId": "MDQ6VXNlcjk2NDM2Mzc=",
+			"actorType": "human",
+			"parentId": "DC_kwDOD95dbc4AKH5Q"
+		},
+		{
+			"id": "DC_kwDOD95dbc4ARlkc",
+			"kind": "reply",
+			"actor": "EasonSpirit",
+			"createdAt": "2023-01-06T09:50:09Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-4610332",
+			"summary": "A user points to a forum thread where people can vote on a collapsible tree view for hierarchies.",
+			"actorId": "MDQ6VXNlcjEwMTg2MjEw",
+			"actorType": "human",
+			"parentId": "DC_kwDOD95dbc4AKH5R"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AgEEp",
+			"kind": "comment",
+			"actor": "filiptrplan",
+			"createdAt": "2024-02-08T09:28:23Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-8405289",
+			"summary": "A user asks whether anyone has found a way to put hierarchy above backlinks.",
+			"actorId": "MDQ6VXNlcjg2NDM0NTc=",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4AjlC7",
+			"kind": "comment",
+			"actor": "chrispaynter",
+			"createdAt": "2024-05-06T09:09:25Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-9326779",
+			"summary": "A user adds support, explaining that on namespace root pages they want the hierarchy and find linked references mostly noise there.",
+			"actorId": "MDQ6VXNlcjE2ODQwODM=",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		},
+		{
+			"id": "DC_kwDOD95dbc4Ar3Z5",
+			"kind": "comment",
+			"actor": "jacob-404",
+			"createdAt": "2024-12-08T12:16:50Z",
+			"url": "https://github.com/logseq/logseq/discussions/5115#discussioncomment-11499129",
+			"summary": "A user shares a custom.css snippet that uses flex ordering to place the hierarchy above backlinks or first on the page, noting it syncs across devices with the graph.",
+			"actorId": "U_kgDOC2KimQ",
+			"actorType": "human",
+			"parentId": "D_kwDOD95dbc4APaXW"
+		}
+	]
+}

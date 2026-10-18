@@ -1,0 +1,446 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "vite-lib-auto-externalize-deps",
+	"title": "Auto-externalize dependencies in library mode",
+	"source": {
+		"url": "https://github.com/vitejs/vite/pull/10632",
+		"retrievedAt": "2026-10-18T07:24:14.097739+00:00",
+		"repository": "vitejs/vite",
+		"number": 10632
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2022-11-05T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2022-12-05T11:10:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-08-14T15:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-07-24T11:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "vite-10632:pr:10632",
+			"kind": "opening",
+			"actor": "Shinigami92",
+			"createdAt": "2022-10-25T14:08:32Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "A maintainer opens a breaking-change PR so library mode automatically treats package dependencies as external, linked to an earlier discussion.",
+			"actorId": 7195563,
+			"actorType": "human"
+		},
+		{
+			"id": "vite-10632:process:labeled:2022-10-25T14:08:48Z+",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-10-25T14:08:48Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author labels the PR as a breaking change.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1004578263",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-10-25T14:38:36Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1004578263",
+			"summary": "The author notes the code copies a pattern from config loading but reads package.json from the working directory, and is unsure that is right.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1012669165",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-11-03T09:32:24Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1012669165",
+			"summary": "The author notes peer and optional dependencies probably need handling too.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1304291947",
+			"kind": "comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-11-04T21:58:06Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1304291947",
+			"summary": "The author reports a local test works, opens it for review, and asks for help with tests and the working-directory question.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:process:ready_for_review:2022-11-04T21:58:10Z",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-11-04T21:58:10Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author marks the PR ready for review.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1024913652",
+			"kind": "review-comment",
+			"actor": "yyx990803",
+			"createdAt": "2022-11-17T08:58:02Z",
+			"editedAt": "2022-11-17T08:58:06Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1024913652",
+			"summary": "The project lead suggests finding package.json from the library entry rather than the config root.",
+			"actorId": 499550,
+			"actorType": "human",
+			"parentId": "vite-10632:review:1183900937"
+		},
+		{
+			"id": "vite-10632:review:1183900937",
+			"kind": "review",
+			"actor": "yyx990803",
+			"createdAt": "2022-11-17T08:58:06Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#pullrequestreview-1183900937",
+			"summary": "The project lead requests changes.",
+			"actorId": 499550,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1026201169",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-11-18T09:23:24Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1026201169",
+			"summary": "The author switches to the entry when it is a single string and asks whether object entries need handling or can be left to manual config.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1024913652"
+		},
+		{
+			"id": "vite-10632:comment:1323957697",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2022-11-22T16:39:52Z",
+			"editedAt": "2022-11-22T16:40:22Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1323957697",
+			"summary": "A collaborator asks whether the behaviour should apply to apps as well, citing SvelteKit's own post-build step, and notes docs are needed.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1327505094",
+			"kind": "comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-11-25T13:55:59Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1327505094",
+			"summary": "The author adds docs and suggests the application case be a separate issue.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1038765684",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-03T11:25:18Z",
+			"editedAt": "2022-12-03T11:37:35Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038765684",
+			"summary": "A maintainer points out default formats can include UMD, plugins can change formats later, and output arrays may set formats, so the check is unreliable.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:review:1203454658"
+		},
+		{
+			"id": "vite-10632:review-comment:1038766298",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-03T11:33:05Z",
+			"editedAt": "2022-12-03T11:37:35Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038766298",
+			"summary": "A maintainer proposes disabling the feature with a warning when entries resolve to different package.json files.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1024913652"
+		},
+		{
+			"id": "vite-10632:review:1203454658",
+			"kind": "review",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-03T11:37:35Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#pullrequestreview-1203454658",
+			"summary": "A maintainer comments that interactions with other options need more thought.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1038769959",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-03T12:13:11Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038769959",
+			"summary": "The author asks whether the type for rollupOptions is wrong since an array did not error.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038770487",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-03T12:18:25Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038770487",
+			"summary": "The maintainer corrects that they meant the output option.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038802993",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-03T16:04:56Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038802993",
+			"summary": "The author lists the cases where detection switches off and argues it is safe to merge and iterate, since manual externals still override it.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:comment:1336189873",
+			"kind": "comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-03T16:06:13Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1336189873",
+			"summary": "The author is reluctant to support complex multi-entry setups now and suggests the community iterate later.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1038923620",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-04T07:46:20Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038923620",
+			"summary": "The maintainer gives three concrete configs where detection would wrongly run despite UMD output.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038924750",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T07:54:43Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038924750",
+			"summary": "The author says the examples clarify the problem.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:process:convert_to_draft:2022-12-04T09:11:13Z",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T09:11:13Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author returns the PR to draft.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1038940413",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T09:51:49Z",
+			"editedAt": "2022-12-04T09:51:50Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038940413",
+			"summary": "The author proposes requiring explicit formats, admits not knowing how to handle the configResolved hook, and considers shipping a plugin instead.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038945973",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-04T10:31:59Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038945973",
+			"summary": "The maintainer suggests moving the logic after output options are resolved.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038980835",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T14:32:42Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038980835",
+			"summary": "The author applies the suggestion and reports all the examples now work locally.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:review-comment:1038980958",
+			"kind": "review-comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T14:33:25Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1038980958",
+			"summary": "The author offers to apply externals per format.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:review-comment:1038765684"
+		},
+		{
+			"id": "vite-10632:process:ready_for_review:2022-12-04T14:54:21Z",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-04T14:54:21Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author marks the PR ready again.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1039435911",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-05T10:48:43Z",
+			"editedAt": "2022-12-05T10:55:06Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1039435911",
+			"summary": "The maintainer shows a multi-entry config that still misfires and suggests checking resolved outputs for UMD or IIFE.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:review-comment:1039437519",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-05T10:50:24Z",
+			"editedAt": "2022-12-05T10:55:06Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#discussion_r1039437519",
+			"summary": "The maintainer suggests docs wording reflecting that output formats are considered.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1337143514",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2022-12-05T11:04:20Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1337143514",
+			"summary": "The maintainer calls the mixed lookup rule inconsistent and offers three choices: always use the config root, use the single entry or disable, or use all entries and disable if they disagree.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:process:convert_to_draft:2022-12-05T11:13:24Z",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-05T11:13:24Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author returns the PR to draft.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1339339745",
+			"kind": "comment",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-06T13:11:13Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1339339745",
+			"summary": "The author says it will miss Vite 4 and may start with a plugin.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:process:labeled:2022-12-07T19:19:56Z",
+			"kind": "process",
+			"actor": "Shinigami92",
+			"createdAt": "2022-12-07T19:19:56Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "The author marks the PR on hold.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1644388899",
+			"kind": "comment",
+			"actor": "luxaritas",
+			"createdAt": "2023-07-20T18:21:58Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1644388899",
+			"summary": "A contributor raises adding extra externals such as Node builtins on top of automatic ones, and nested package.json files in monorepos.",
+			"actorId": 18635705,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1677575440",
+			"kind": "comment",
+			"actor": "patak-cat",
+			"createdAt": "2023-08-14T15:39:10Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1677575440",
+			"summary": "A maintainer drops it from the Vite 5 milestone, suggesting it wait for a broader library-mode review.",
+			"actorId": 583075,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:1678511588",
+			"kind": "comment",
+			"actor": "Shinigami92",
+			"createdAt": "2023-08-15T07:08:19Z",
+			"editedAt": "2023-08-15T07:08:55Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-1678511588",
+			"summary": "The author says they switched to tsup and the PR can be closed.",
+			"actorId": 7195563,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:comment:2247590038",
+			"kind": "comment",
+			"actor": "bluwy",
+			"createdAt": "2024-07-24T10:49:53Z",
+			"url": "https://github.com/vitejs/vite/pull/10632#issuecomment-2247590038",
+			"summary": "A maintainer closes the PR based on that.",
+			"actorId": 34116392,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		},
+		{
+			"id": "vite-10632:process:closed:2024-07-24T10:49:53Z",
+			"kind": "process",
+			"actor": "bluwy",
+			"createdAt": "2024-07-24T10:49:53Z",
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"summary": "A maintainer closes the PR unmerged.",
+			"actorId": 34116392,
+			"actorType": "human",
+			"parentId": "vite-10632:pr:10632"
+		}
+	]
+}

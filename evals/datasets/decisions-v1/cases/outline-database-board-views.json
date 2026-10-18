@@ -1,0 +1,511 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "outline-database-board-views",
+	"title": "Whether Outline should offer Notion-style database, board and table views",
+	"source": {
+		"url": "https://github.com/outline/outline/discussions/3440",
+		"retrievedAt": "2026-10-18T07:20:31.420671+00:00",
+		"repository": "outline/outline",
+		"number": 3440,
+		"nodeId": "D_kwDOA4rpZM4APXXO"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2022-04-22T17:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-06-06T10:40:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-06-06T13:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2023-09-22T09:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOA4rpZM4APXXO",
+			"kind": "opening",
+			"actor": "MDXDave",
+			"createdAt": "2022-04-22T16:11:09Z",
+			"editedAt": "2023-03-23T22:24:33Z",
+			"url": "https://github.com/outline/outline/discussions/3440",
+			"summary": "The opener asks for data sources that can be shown as a Kanban board or table, as Notion does, with screenshots.",
+			"actorId": "MDQ6VXNlcjYwOTk5NzY=",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AN4Ph",
+			"kind": "comment",
+			"actor": "ecker00",
+			"createdAt": "2022-09-13T19:12:05Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-3638241",
+			"summary": "A user adds support, calling it their favourite Notion feature.",
+			"actorId": "MDQ6VXNlcjEzMzE3NjA=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AOLYD",
+			"kind": "comment",
+			"actor": "Gwemox",
+			"createdAt": "2022-09-23T11:45:33Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-3716611",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjk0MzI3Mjc=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4APRXh",
+			"kind": "comment",
+			"actor": "inf0matics",
+			"createdAt": "2022-10-29T09:40:25Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-4003297",
+			"summary": "A user adds a vote.",
+			"actorId": "MDQ6VXNlcjMzMjc2Njc=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AP5h9",
+			"kind": "comment",
+			"actor": "corysus",
+			"createdAt": "2022-11-17T14:11:13Z",
+			"editedAt": "2022-11-17T14:11:48Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-4167805",
+			"summary": "A user says board and table views are the one thing missing and that Focalboard is a weaker alternative.",
+			"actorId": "MDQ6VXNlcjk3ODMyOQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4ARDf6",
+			"kind": "comment",
+			"actor": "julianbrennum",
+			"createdAt": "2022-12-21T20:33:16Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-4470778",
+			"summary": "A user says this is the only missing feature for them.",
+			"actorId": "MDQ6VXNlcjk2OTkyNDY=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4ATwrN",
+			"kind": "comment",
+			"actor": "dsmrs",
+			"createdAt": "2023-03-02T15:36:03Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-5180109",
+			"summary": "A user suggests tying board columns to tags and links a related tags discussion.",
+			"actorId": "MDQ6VXNlcjEyMjAzMjIx",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AUU9K",
+			"kind": "comment",
+			"actor": "almereyda",
+			"createdAt": "2023-03-16T02:41:49Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-5328714",
+			"summary": "A user suggests integrating with external no-code database tools instead, to avoid bloating Outline.",
+			"actorId": "MDQ6VXNlcjE2NDUzMDg=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AUVIU",
+			"kind": "comment",
+			"actor": "SonnTakuu",
+			"createdAt": "2023-03-16T05:00:09Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-5329428",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjU2NDY1NTQz",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AUpJG",
+			"kind": "comment",
+			"actor": "s4l4x",
+			"createdAt": "2023-03-23T21:20:32Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-5411398",
+			"summary": "A user adds support for a native database or board view.",
+			"actorId": "MDQ6VXNlcjk5NjA2",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AWO9D",
+			"kind": "comment",
+			"actor": "sergi0g",
+			"createdAt": "2023-05-07T11:47:43Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-5828419",
+			"summary": "A user notes this is the most upvoted discussion and says they may switch to AppFlowy without it.",
+			"actorId": "MDQ6VXNlcjc3NTMwNTQ5",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXRIC",
+			"kind": "comment",
+			"actor": "NicolasRitouet",
+			"createdAt": "2023-06-06T10:25:31Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6099458",
+			"summary": "A user asks the lead maintainer whether it is planned, since it would ease migration from Notion.",
+			"actorId": "MDQ6VXNlcjIwNTEzNA==",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXRKV",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2023-06-06T10:46:32Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6099605",
+			"summary": "The lead maintainer says there are no plans to build it.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXRQ5",
+			"kind": "reply",
+			"actor": "corysus",
+			"createdAt": "2023-06-06T11:39:35Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6100025",
+			"summary": "A user predicts people needing it will move to AFFiNE.",
+			"actorId": "MDQ6VXNlcjk3ODMyOQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXRTQ",
+			"kind": "reply",
+			"actor": "ovizii",
+			"createdAt": "2023-06-06T11:56:51Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6100176",
+			"summary": "Another user notes AFFiNE is local-only, not a web app.",
+			"actorId": "MDQ6VXNlcjgzNzkwMg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXRYJ",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2023-06-06T12:40:11Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6100489",
+			"summary": "The lead maintainer says people should use whatever fits, and that Outline is not meant to move into task management.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXSI6",
+			"kind": "reply",
+			"actor": "corysus",
+			"createdAt": "2023-06-06T18:10:32Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6103610",
+			"summary": "A user regrets the decision but says they still use Outline daily.",
+			"actorId": "MDQ6VXNlcjk3ODMyOQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXjis",
+			"kind": "reply",
+			"actor": "herzkerl",
+			"createdAt": "2023-06-14T13:14:47Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6174892",
+			"summary": "A user asks instead for a simple overview of unchecked task-list items across documents and offers to sponsor it.",
+			"actorId": "MDQ6VXNlcjI5Njg2ODQz",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AYDdd",
+			"kind": "reply",
+			"actor": "ArcticXWolf",
+			"createdAt": "2023-06-28T14:27:48Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6305629",
+			"summary": "A contributor argues table views are not just task management, giving a tabletop campaign wiki as an example of organising notes by fields.",
+			"actorId": "MDQ6VXNlcjU4MTIyMTU=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AYDez",
+			"kind": "reply",
+			"actor": "ArcticXWolf",
+			"createdAt": "2023-06-28T14:35:45Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6305715",
+			"summary": "The contributor reframes the request as grouping similar pages, adding structured fields to pages, and multiple views over them.",
+			"actorId": "MDQ6VXNlcjU4MTIyMTU=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AYD-X",
+			"kind": "reply",
+			"actor": "ciekawy",
+			"createdAt": "2023-06-28T18:12:37Z",
+			"editedAt": "2023-06-28T18:13:47Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6307735",
+			"summary": "A user says simple data tables are essential and links React table libraries.",
+			"actorId": "MDQ6VXNlcjI4NDc5NTI=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AYERm",
+			"kind": "reply",
+			"actor": "problem",
+			"createdAt": "2023-06-28T21:05:38Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6308966",
+			"summary": "A user restates the minimum as tags on documents, querying by tag and showing results in a table, while keeping project management out.",
+			"actorId": "MDQ6VXNlcjMxNDM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AYET0",
+			"kind": "reply",
+			"actor": "almereyda",
+			"createdAt": "2023-06-28T21:27:31Z",
+			"editedAt": "2023-06-28T21:27:50Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6309108",
+			"summary": "A user agrees Outline should stay a team wiki and suggests folding a tag-filtered table into existing related proposals.",
+			"actorId": "MDQ6VXNlcjE2NDUzMDg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Aabli",
+			"kind": "comment",
+			"actor": "fvsion",
+			"createdAt": "2023-09-06T17:49:55Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6928738",
+			"summary": "A user adds support, noting competitors already have it, and argues it would not make Outline a project management tool.",
+			"actorId": "MDQ6VXNlcjczNTQ5Mzkz",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AabtU",
+			"kind": "comment",
+			"actor": "almereyda",
+			"createdAt": "2023-09-06T18:41:45Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-6929236",
+			"summary": "A user surveys low-code and database tools and the Block Protocol, warning the feature would put Outline in a very different market.",
+			"actorId": "MDQ6VXNlcjE2NDUzMDg=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Aa0Sf",
+			"kind": "comment",
+			"actor": "zeekhuge",
+			"createdAt": "2023-09-18T04:26:44Z",
+			"editedAt": "2023-09-18T04:28:35Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7029919",
+			"summary": "A user proposes deep integrations with Trello or Airtable via OAuth and asks whether the maintainer would accept backend-backed integrations.",
+			"actorId": "MDQ6VXNlcjg3MTEyMTg=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Aa1WM",
+			"kind": "reply",
+			"actor": "sergi0g",
+			"createdAt": "2023-09-18T12:31:52Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7034252",
+			"summary": "A user suggests Focalboard as an integration target.",
+			"actorId": "MDQ6VXNlcjc3NTMwNTQ5",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4Aa0Sf"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Aa1o6",
+			"kind": "comment",
+			"actor": "ArcticXWolf",
+			"createdAt": "2023-09-18T14:17:44Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7035450",
+			"summary": "The contributor suggests splitting the request into smaller organising features: grouped pages with enforced templates, page metadata, then an overview.",
+			"actorId": "MDQ6VXNlcjU4MTIyMTU=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AbASy",
+			"kind": "reply",
+			"actor": "zeekhuge",
+			"createdAt": "2023-09-22T08:24:08Z",
+			"editedAt": "2023-09-22T08:46:35Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7079090",
+			"summary": "A user now argues data sources should be built in, and proposes a community microservice plus one UI component, asking about licensing.",
+			"actorId": "MDQ6VXNlcjg3MTEyMTg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4Aa1o6"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AbATZ",
+			"kind": "reply",
+			"actor": "zeekhuge",
+			"createdAt": "2023-09-22T08:28:54Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7079129",
+			"summary": "The user notes this would need the planned move to JSON-based documents.",
+			"actorId": "MDQ6VXNlcjg3MTEyMTg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4Aa1o6"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AbAUr",
+			"kind": "reply",
+			"actor": "patzm",
+			"createdAt": "2023-09-22T08:38:24Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-7079211",
+			"summary": "A user agrees an external solution defeats Outline's purpose but supports the maintainer's focus.",
+			"actorId": "MDQ6VXNlcjUyMTk3MjY=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4Aa1o6"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AlIhr",
+			"kind": "comment",
+			"actor": "Snuupy",
+			"createdAt": "2024-06-11T05:05:48Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-9734251",
+			"summary": "A user notes this is the most requested feature.",
+			"actorId": "MDQ6VXNlcjk2NDUzOA==",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AoWOy",
+			"kind": "comment",
+			"actor": "uxodb",
+			"createdAt": "2024-09-07T12:16:26Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-10576818",
+			"summary": "A user asks for any update after two years.",
+			"actorId": "MDQ6VXNlcjIwNTM1MjQ2",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Aor_T",
+			"kind": "reply",
+			"actor": "keithschacht",
+			"createdAt": "2024-09-17T03:37:46Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-10665939",
+			"summary": "A user points back to the maintainer's earlier reply.",
+			"actorId": "MDQ6VXNlcjM1MDYx",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AoWOy"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Arx2O",
+			"kind": "comment",
+			"actor": "g-nardiello",
+			"createdAt": "2024-12-05T17:51:24Z",
+			"editedAt": "2024-12-05T17:52:33Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-11476366",
+			"summary": "A user describes sharing one data table across documents with tag filters and argues for a native component.",
+			"actorId": "U_kgDOBlBr_w",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Ar6u7",
+			"kind": "reply",
+			"actor": "wforte88",
+			"createdAt": "2024-12-09T20:28:24Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-11512763",
+			"summary": "A user argues filtered database views would enable richer taxonomies beyond task management.",
+			"actorId": "MDQ6VXNlcjIxMzMzNjEy",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXRIC"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AurNz",
+			"kind": "comment",
+			"actor": "ghost",
+			"createdAt": "2025-02-18T11:15:38Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-12235635",
+			"summary": "A user links a new discussion with mockups for structured data in Outline.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0KcG",
+			"kind": "comment",
+			"actor": "bvandevliet",
+			"createdAt": "2025-07-06T13:51:01Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-13674246",
+			"summary": "A user asks for a native board, or at least embeds from a self-hosted Planka instance.",
+			"actorId": "MDQ6VXNlcjM1NDU0MDEx",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BCMft",
+			"kind": "comment",
+			"actor": "tsutsurocket",
+			"createdAt": "2026-06-18T14:01:50Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-17352685",
+			"summary": "A user shares a board they built over the public API, storing status and assignee as tags in document titles.",
+			"actorId": "MDQ6VXNlcjMzNzU3NjEz",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BCOdU",
+			"kind": "reply",
+			"actor": "bvandevliet",
+			"createdAt": "2026-06-19T05:48:06Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-17360724",
+			"summary": "A user suggests front matter for metadata and asks about open-sourcing it.",
+			"actorId": "MDQ6VXNlcjM1NDU0MDEx",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4BCMft"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BCTT8",
+			"kind": "comment",
+			"actor": "T-Herrmann-WI",
+			"createdAt": "2026-06-21T09:52:45Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-17380604",
+			"summary": "A user adds support.",
+			"actorId": "U_kgDOBj4rfg",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BClQ9",
+			"kind": "reply",
+			"actor": "tsutsurocket",
+			"createdAt": "2026-06-27T12:17:26Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-17454141",
+			"summary": "The board builder says they lack metadata access on self-hosted community code.",
+			"actorId": "MDQ6VXNlcjMzNzU3NjEz",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4BCMft"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BEG86",
+			"kind": "comment",
+			"actor": "Plinsboorg",
+			"createdAt": "2026-07-31T13:26:51Z",
+			"url": "https://github.com/outline/outline/discussions/3440#discussioncomment-17854266",
+			"summary": "A user links a draft PR implementing document databases and asks if maintainers might accept it.",
+			"actorId": "MDQ6VXNlcjQyMzAwMzM5",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APXXO"
+		}
+	]
+}

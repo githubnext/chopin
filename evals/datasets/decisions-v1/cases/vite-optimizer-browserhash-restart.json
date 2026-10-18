@@ -1,0 +1,551 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "vite-optimizer-browserhash-restart",
+	"title": "Stable optimizer browserHash across dev server restarts",
+	"source": {
+		"url": "https://github.com/vitejs/vite/pull/20609",
+		"retrievedAt": "2026-10-18T07:24:19.484868+00:00",
+		"repository": "vitejs/vite",
+		"number": 20609
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-08-13T15:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-09-02T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-10-17T07:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2025-10-17T08:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "vite-20609:pr:20609",
+			"kind": "opening",
+			"actor": "infiton",
+			"createdAt": "2025-08-13T14:46:38Z",
+			"url": "https://github.com/vitejs/vite/pull/20609",
+			"summary": "An outside contributor from Gadget proposes setting the in-memory browserHash to the value later written to the deps metadata file, so a dev server restarted mid page load does not serve a second copy of React under a different hash.",
+			"actorId": 4368488,
+			"actorType": "human"
+		},
+		{
+			"id": "vite-20609:comment:3197061926",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-18T13:59:03Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3197061926",
+			"summary": "The opener asks a maintainer how to get the PR triaged.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3206364105",
+			"kind": "comment",
+			"actor": "airhorns",
+			"createdAt": "2025-08-20T13:33:08Z",
+			"editedAt": "2025-08-22T00:19:18Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3206364105",
+			"summary": "A comment GitHub marks as hidden (duplicate); a contributor adds support.",
+			"actorId": 158950,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3206601353",
+			"kind": "comment",
+			"actor": "aurelienbobenrieth",
+			"createdAt": "2025-08-20T14:14:12Z",
+			"editedAt": "2025-08-22T00:19:27Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3206601353",
+			"summary": "A comment GitHub marks as hidden (duplicate); a user adds support.",
+			"actorId": 37140583,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3207688902",
+			"kind": "comment",
+			"actor": "seilon",
+			"createdAt": "2025-08-20T19:05:19Z",
+			"editedAt": "2025-08-22T00:19:36Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3207688902",
+			"summary": "A comment GitHub marks as hidden (duplicate); a user adds support.",
+			"actorId": 14301870,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3210331720",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-08-21T12:07:19Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3210331720",
+			"summary": "A maintainer says Vite assumes one server instance serves a whole page load, and asks whether a restart would not already force a reload via the WebSocket.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3211111555",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-21T15:30:25Z",
+			"editedAt": "2025-08-21T15:30:45Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3211111555",
+			"summary": "The opener explains that in React Router SSR the client script loads late, so a duplicate React can crash the page before reconnection, and asks if in-memory and on-disk hashes should match.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3211942765",
+			"kind": "comment",
+			"actor": "colby-makowsky",
+			"createdAt": "2025-08-21T20:13:00Z",
+			"editedAt": "2025-08-22T00:19:47Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3211942765",
+			"summary": "A comment GitHub marks as hidden (duplicate); a user adds support.",
+			"actorId": 2815631,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3213036631",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-08-22T04:58:12Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3213036631",
+			"summary": "The maintainer says matching hashes is preferable but not required, will not object unless something breaks, and recommends loading the Vite client first.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review-comment:2292697333",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-08-22T05:01:51Z",
+			"editedAt": "2025-08-22T05:02:07Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2292697333",
+			"summary": "The maintainer flags that the change may overwrite per-dependency hashes set when a missing dependency is added, breaking the documented behaviour.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3214282865",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-22T12:53:12Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3214282865",
+			"summary": "The opener says they cannot control script order because the framework and their users decide it.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review-comment:2293656204",
+			"kind": "review-comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-22T12:53:29Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2293656204",
+			"summary": "The opener says they will check and add a test if something breaks.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:review-comment:2292697333"
+		},
+		{
+			"id": "vite-20609:review-comment:2293760311",
+			"kind": "review-comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-22T13:35:09Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2293760311",
+			"summary": "The opener argues the override is safe on the first build since all scanned deps are known, notes the earlier behaviour lacks a test, and asks another maintainer for input.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:review-comment:2292697333"
+		},
+		{
+			"id": "vite-20609:comment:3214410298",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-08-22T13:36:12Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3214410298",
+			"summary": "The opener hands follow-up to a colleague while on vacation.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3225135458",
+			"kind": "comment",
+			"actor": "airhorns",
+			"createdAt": "2025-08-26T17:46:11Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3225135458",
+			"summary": "The colleague argues even a first-loaded client cannot rule out a restart in remote dev environments, and asks what the downside of the fix is.",
+			"actorId": 158950,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review-comment:2313053174",
+			"kind": "review-comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-09-01T06:57:24Z",
+			"editedAt": "2025-09-01T06:57:25Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2313053174",
+			"summary": "The maintainer agrees the assignment is fine but identifies a deeper issue: hashes for dependencies discovered later are never persisted, so other code paths would also need fixing, which they are willing to leave for now.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:review-comment:2292697333"
+		},
+		{
+			"id": "vite-20609:review-comment:2319644356",
+			"kind": "review-comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-03T17:09:28Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2319644356",
+			"summary": "The opener sees no clean fix for those paths and asks to land this part first.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:review-comment:2292697333"
+		},
+		{
+			"id": "vite-20609:comment:3250084578",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-03T17:10:04Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3250084578",
+			"summary": "The opener reports being back and available.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3266302214",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-08T13:24:58Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3266302214",
+			"summary": "The opener asks whether it can be merged.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review:3221049725",
+			"kind": "review",
+			"actor": "sapphi-red",
+			"createdAt": "2025-09-13T15:56:38Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#pullrequestreview-3221049725",
+			"summary": "The maintainer approves the PR.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:process:renamed:2025-09-13T15:57:11Z",
+			"kind": "process",
+			"actor": "sapphi-red",
+			"createdAt": "2025-09-13T15:57:11Z",
+			"url": "https://github.com/vitejs/vite/pull/20609",
+			"summary": "The maintainer retitles the PR to the optimizer scope.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3288573967",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-09-13T16:01:07Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3288573967",
+			"summary": "The maintainer asks for a second maintainer's review.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review:3233191234",
+			"kind": "review",
+			"actor": "bluwy",
+			"createdAt": "2025-09-17T08:00:50Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#pullrequestreview-3233191234",
+			"summary": "A second maintainer finds it acceptable but asks for a code comment explaining why the new code waits for scan processing.",
+			"actorId": 34116392,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3304626548",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-17T21:31:17Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3304626548",
+			"summary": "The opener asks the first maintainer to merge.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3304884168",
+			"kind": "comment",
+			"actor": "bluwy",
+			"createdAt": "2025-09-17T23:53:43Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3304884168",
+			"summary": "The second maintainer notes their comment is still unaddressed and asks the opener not to push.",
+			"actorId": 34116392,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3305011219",
+			"kind": "comment",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-09-18T00:54:28Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3305011219",
+			"summary": "A contributor triggers an ecosystem CI run.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3305012342",
+			"kind": "comment",
+			"actor": "pkg-pr-new[bot]",
+			"createdAt": "2025-09-18T00:55:18Z",
+			"editedAt": "2025-10-09T23:46:09Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3305012342",
+			"summary": "A bot posts a preview package for the PR.",
+			"actorId": 167837488,
+			"actorType": "bot",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3305056816",
+			"kind": "comment",
+			"actor": "vite-ecosystem-ci[bot]",
+			"createdAt": "2025-09-18T01:24:35Z",
+			"editedAt": "2025-09-18T03:02:42Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3305056816",
+			"summary": "A comment GitHub marks as hidden (duplicate); a bot reports ecosystem CI results with a few suite failures.",
+			"actorId": 112554340,
+			"actorType": "bot",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3305236606",
+			"kind": "comment",
+			"actor": "vite-ecosystem-ci[bot]",
+			"createdAt": "2025-09-18T02:57:00Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3305236606",
+			"summary": "A bot reports ecosystem CI results, with laravel, unocss and sveltekit failing.",
+			"actorId": 112554340,
+			"actorType": "bot",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3305257605",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-09-18T03:10:10Z",
+			"editedAt": "2025-09-18T04:25:16Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3305257605",
+			"summary": "The maintainer first suspects the sveltekit failure, then finds it also fails on main.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review:3237362902",
+			"kind": "review",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-09-18T05:42:55Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#pullrequestreview-3237362902",
+			"summary": "A contributor doubts this fully fixes the use case but finds it fine as a start, and asks whether another ?v= injection site in the resolver also needs to wait.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3323888350",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-23T12:52:11Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3323888350",
+			"summary": "The opener asks how to help get it released.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3326022892",
+			"kind": "comment",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-09-24T00:42:57Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3326022892",
+			"summary": "A contributor asks if the patch was tested on the platform, pointing to the preview build.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3326461163",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-09-24T04:39:17Z",
+			"editedAt": "2025-09-24T04:39:26Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3326461163",
+			"summary": "The opener says they have run the patch on 6.3.5 for over a month and it fully resolved the issue.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review:3287495227",
+			"kind": "review",
+			"actor": "sapphi-red",
+			"createdAt": "2025-10-01T04:06:24Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#pullrequestreview-3287495227",
+			"summary": "The maintainer requests changes so the two open review points are addressed.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:process:review_dismissed:2025-10-09T22:59:22Z",
+			"kind": "process",
+			"actor": "infiton",
+			"createdAt": "2025-10-09T22:59:22Z",
+			"url": "https://github.com/vitejs/vite/pull/20609",
+			"summary": "The opener dismisses the earlier review.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3387730628",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-10-09T23:00:16Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3387730628",
+			"summary": "The opener says the comments are addressed.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:review-comment:2418128951",
+			"kind": "review-comment",
+			"actor": "graphite-app[bot]",
+			"createdAt": "2025-10-09T23:01:30Z",
+			"editedAt": "2025-10-09T23:01:31Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#discussion_r2418128951",
+			"summary": "A bot reviewer warns that a resolver call may now return a Promise that is not awaited.",
+			"actorId": 96075541,
+			"actorType": "bot",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3414247619",
+			"kind": "comment",
+			"actor": "sapphi-red",
+			"createdAt": "2025-10-17T07:38:18Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3414247619",
+			"summary": "The maintainer reverses course: a broken WebSocket should surface as an overlay error instead, partial module graphs remain a problem, the change effectively makes the scanner blocking and undoes an earlier PR, and the diff is too large to port to rolldown-vite before the next major.",
+			"actorId": 49056869,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3414692653",
+			"kind": "comment",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-10-17T09:47:34Z",
+			"editedAt": "2025-10-17T09:50:21Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3414692653",
+			"summary": "A contributor shares a repro suggesting the real cause may be the Vite client loading too late in React Router, and asks for a concrete repro of the Gadget setup.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3415088832",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-10-17T11:25:59Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3415088832",
+			"summary": "The opener asks whether the repro implies a userland fix.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3415419269",
+			"kind": "comment",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-10-17T12:39:29Z",
+			"editedAt": "2025-10-17T12:39:57Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3415419269",
+			"summary": "The contributor clarifies the causes may differ and suggests loading the client early from the HTML head or React Router's bootstrap script.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3586382159",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-11-27T15:12:02Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3586382159",
+			"summary": "The opener says they will close this and try another approach.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:process:closed:2025-11-27T15:12:02Z",
+			"kind": "process",
+			"actor": "infiton",
+			"createdAt": "2025-11-27T15:12:02Z",
+			"url": "https://github.com/vitejs/vite/pull/20609",
+			"summary": "The opener closes the PR unmerged.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3589570215",
+			"kind": "comment",
+			"actor": "infiton",
+			"createdAt": "2025-11-28T14:38:41Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3589570215",
+			"summary": "The opener posts a minimal repro of their setup and notes newer Vite mostly fails with an outdated-dependency 504 instead.",
+			"actorId": 4368488,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		},
+		{
+			"id": "vite-20609:comment:3594339926",
+			"kind": "comment",
+			"actor": "hi-ogawa",
+			"createdAt": "2025-12-01T03:09:34Z",
+			"url": "https://github.com/vitejs/vite/pull/20609#issuecomment-3594339926",
+			"summary": "A contributor asks them to file an issue with the repro.",
+			"actorId": 4232207,
+			"actorType": "human",
+			"parentId": "vite-20609:pr:20609"
+		}
+	]
+}

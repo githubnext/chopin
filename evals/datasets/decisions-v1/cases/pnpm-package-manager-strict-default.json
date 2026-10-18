@@ -1,0 +1,559 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "pnpm-package-manager-strict-default",
+	"title": "pnpm packageManager version strictness",
+	"source": {
+		"url": "https://github.com/pnpm/pnpm/issues/8087",
+		"retrievedAt": "2026-10-18T07:27:51.818990+00:00",
+		"repository": "pnpm/pnpm",
+		"number": 8087
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2024-05-16T14:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2024-05-30T02:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-05-31T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-06-04T01:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "pnpm-8087:issue:8087",
+			"kind": "opening",
+			"actor": "benmccann",
+			"createdAt": "2024-05-15T16:39:18Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087",
+			"summary": "The opener, a contributor, objects that pnpm 9 now fails when the installed version differs from the exact packageManager version, says engines should govern allowed versions, and notes hosts like Vercel and Netlify read packageManager.",
+			"actorId": 322311,
+			"actorType": "human"
+		},
+		{
+			"id": "pnpm-8087:comment:2115077351",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-16T12:07:55Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2115077351",
+			"summary": "A maintainer says the field comes from corepack and pnpm only follows it, and points to the setting that disables the strictness.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2115168627",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-16T12:51:19Z",
+			"editedAt": "2024-05-16T13:27:01Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2115168627",
+			"summary": "The opener asks why pnpm started enforcing it now when pnpm 8 did not.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2115262731",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-16T13:32:54Z",
+			"editedAt": "2024-05-16T13:33:20Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2115262731",
+			"summary": "The maintainer says it was a breaking change so it waited for a major, and users can omit the field or relax the setting.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2115300184",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-16T13:48:01Z",
+			"editedAt": "2024-05-16T14:52:37Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2115300184",
+			"summary": "The opener replies hosting providers effectively require the field, asks for non-strict to be the default, and argues only corepack should act on it.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2116578151",
+			"kind": "comment",
+			"actor": "trevorpfiz",
+			"createdAt": "2024-05-17T03:55:14Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2116578151",
+			"summary": "A user reports Vercel deployments suddenly failing with the version-mismatch error.",
+			"actorId": 24904780,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2117225602",
+			"kind": "comment",
+			"actor": "dominikg",
+			"createdAt": "2024-05-17T10:13:47Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2117225602",
+			"summary": "A user agrees pnpm should not enforce a corepack field when it cannot fetch the exact version itself, and cites Dependabot as another affected environment.",
+			"actorId": 611613,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2117556478",
+			"kind": "comment",
+			"actor": "exiguus",
+			"createdAt": "2024-05-17T13:02:10Z",
+			"editedAt": "2024-05-17T13:04:13Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2117556478",
+			"summary": "A user shares a CI workaround that rewrites packageManager to the installed pnpm version.",
+			"actorId": 1060633,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2117777070",
+			"kind": "comment",
+			"actor": "wadehammes",
+			"createdAt": "2024-05-17T14:50:25Z",
+			"editedAt": "2024-05-17T14:50:54Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2117777070",
+			"summary": "A user confirms the workaround works.",
+			"actorId": 222170,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2118273293",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-17T19:46:05Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2118273293",
+			"summary": "The opener explains most Vercel builds fail because Vercel runs a fixed older pnpm, and lists the separate issues in Vercel, pnpm and corepack.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2118463516",
+			"kind": "comment",
+			"actor": "EndangeredMassa",
+			"createdAt": "2024-05-17T22:48:30Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2118463516",
+			"summary": "A Vercel engineer clarifies Vercel does not require packageManager, ignores it unless corepack is enabled, and links workarounds.",
+			"actorId": 41545,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2118489643",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-17T23:35:52Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2118489643",
+			"summary": "The opener says dropping the field would force duplicating the version across CI workflows, so he would rather disable strictness in templates if the default stays.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2119246661",
+			"kind": "comment",
+			"actor": "kirso",
+			"createdAt": "2024-05-19T13:52:57Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2119246661",
+			"summary": "A user says enabling Vercel's corepack variable fixed their build.",
+			"actorId": 2138870,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2128257473",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-24T00:08:11Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2128257473",
+			"summary": "A maintainer posts a public poll on social media about the behaviour.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2128497449",
+			"kind": "comment",
+			"actor": "GeoffreyBooth",
+			"createdAt": "2024-05-24T04:26:13Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2128497449",
+			"summary": "A Node.js contributor notes packageManager is experimental and corepack-specific and suggests pnpm adopt the devEngines field with ranges.",
+			"actorId": 456802,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2132156345",
+			"kind": "comment",
+			"actor": "Dhruv97Sharma",
+			"createdAt": "2024-05-26T09:47:54Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2132156345",
+			"summary": "A user says the CI workaround fixed their Vercel deployment.",
+			"actorId": 46242531,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2135291273",
+			"kind": "comment",
+			"actor": "kms0219kms",
+			"createdAt": "2024-05-28T13:59:50Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2135291273",
+			"summary": "A user links another workaround from a Vercel discussion.",
+			"actorId": 67222970,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2135875258",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-28T18:30:36Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2135875258",
+			"summary": "The opener files issues with the pnpm setup action and Netlify to reduce reliance on the field.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2136133343",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-28T21:22:25Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2136133343",
+			"summary": "The opener sends a PR to the pnpm setup action to avoid needing packageManager.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2136170869",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-28T21:55:15Z",
+			"editedAt": "2024-05-29T15:10:48Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2136170869",
+			"summary": "The opener finds corepack auto-adds the field anyway, and that turning strictness off still emits noisy warnings.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2136181934",
+			"kind": "comment",
+			"actor": "dominikg",
+			"createdAt": "2024-05-28T22:05:52Z",
+			"editedAt": "2024-05-28T22:06:32Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2136181934",
+			"summary": "A user votes here for not crashing, describes setting the option globally, and asks why patch-level pinning is the default.",
+			"actorId": 611613,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2136186798",
+			"kind": "comment",
+			"actor": "dominikg",
+			"createdAt": "2024-05-28T22:09:26Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2136186798",
+			"summary": "The user asks whether contributors must bump a project's packageManager before sending fixes.",
+			"actorId": 611613,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2137632558",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-29T15:00:30Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2137632558",
+			"summary": "The opener says the poll seems stuck and that write-in replies favour not crashing.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2138424953",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-29T23:44:28Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2138424953",
+			"summary": "The maintainer says he dislikes the field himself, reads the poll as most users accepting the current behaviour, and was open to either outcome.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2138498069",
+			"kind": "comment",
+			"actor": "antfu",
+			"createdAt": "2024-05-30T01:16:41Z",
+			"editedAt": "2024-05-30T01:21:49Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2138498069",
+			"summary": "A user argues strictness makes sense like a lockfile for reproducibility, says ranges belong to corepack, and suggests the error mention corepack.",
+			"actorId": 11247099,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2139193027",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-30T09:53:36Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2139193027",
+			"summary": "The maintainer agrees the poll may be broken despite reposting.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2139967675",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-30T15:34:35Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2139967675",
+			"summary": "The maintainer posts updated poll results with hours left.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2140215359",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-30T16:43:18Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2140215359",
+			"summary": "The opener is puzzled by the jump in percentages.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2140370428",
+			"kind": "comment",
+			"actor": "FleetAdmiralJakob",
+			"createdAt": "2024-05-30T17:24:43Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2140370428",
+			"summary": "A user thinks the poll is now wrong in the other direction.",
+			"actorId": 77451351,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2140398479",
+			"kind": "comment",
+			"actor": "GeoffreyBooth",
+			"createdAt": "2024-05-30T17:31:48Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2140398479",
+			"summary": "The Node.js contributor repeats that devEngines would allow ranges and let projects choose warn or fail.",
+			"actorId": 456802,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2140993741",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-30T23:21:00Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2140993741",
+			"summary": "The maintainer says devEngines is unrelated to this issue and should be discussed separately.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141034362",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-05-31T00:17:18Z",
+			"editedAt": "2024-05-31T00:45:36Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141034362",
+			"summary": "The maintainer reports most poll voters prefer pnpm not to fail, agrees to change it, and proposes failing only on a different major version.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141054566",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-31T00:45:58Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141054566",
+			"summary": "The opener prefers relying on engines for range checks.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141440980",
+			"kind": "comment",
+			"actor": "dominikg",
+			"createdAt": "2024-05-31T08:07:34Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141440980",
+			"summary": "A user thanks the maintainer, supports a non-strict default, and suggests at least a warning for a different major.",
+			"actorId": 611613,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141494842",
+			"kind": "comment",
+			"actor": "FleetAdmiralJakob",
+			"createdAt": "2024-05-31T08:32:08Z",
+			"editedAt": "2024-05-31T08:32:14Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141494842",
+			"summary": "A user asks how the setting works in npmrc files.",
+			"actorId": 77451351,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141525771",
+			"kind": "comment",
+			"actor": "dominikg",
+			"createdAt": "2024-05-31T08:49:39Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141525771",
+			"summary": "A user points to the npmrc docs.",
+			"actorId": 611613,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2141915227",
+			"kind": "comment",
+			"actor": "antfu",
+			"createdAt": "2024-05-31T12:04:14Z",
+			"editedAt": "2024-05-31T12:05:55Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2141915227",
+			"summary": "The lockfile-analogy user now accepts not failing by default with a warning, but says hosts should honour exact versions.",
+			"actorId": 11247099,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2142005231",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-05-31T12:35:40Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2142005231",
+			"summary": "The opener thanks the maintainer, agrees with the warning idea, and still prefers exact versions for production.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2143435459",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-06-01T12:42:23Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2143435459",
+			"summary": "The maintainer proposes failing only when the package manager itself differs, and warning or staying silent on version differences.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:process:cross-referenced:2024-06-04T00:27:24Z",
+			"kind": "process",
+			"actor": "zkochan",
+			"createdAt": "2024-06-04T00:27:24Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087",
+			"summary": "The maintainer links PR 8166, which stops failing on a version mismatch.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2146346341",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-06-04T00:27:54Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2146346341",
+			"summary": "The maintainer posts the PR link.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:process:closed:2024-06-05T12:38:22Z",
+			"kind": "process",
+			"actor": "zkochan",
+			"createdAt": "2024-06-05T12:38:22Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087",
+			"summary": "The maintainer closes the issue.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2149945847",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-06-05T13:32:37Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2149945847",
+			"summary": "The maintainer announces the change shipped in pnpm 9.2.0.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2150519992",
+			"kind": "comment",
+			"actor": "benmccann",
+			"createdAt": "2024-06-05T16:49:21Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2150519992",
+			"summary": "The opener thanks the maintainer and suggests wider promotion of release candidates.",
+			"actorId": 322311,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2151094643",
+			"kind": "comment",
+			"actor": "zkochan",
+			"createdAt": "2024-06-05T22:57:12Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2151094643",
+			"summary": "The maintainer says v9 was in beta for months and was promoted publicly and to sponsors.",
+			"actorId": 1927579,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2286759979",
+			"kind": "comment",
+			"actor": "pvh",
+			"createdAt": "2024-08-13T17:27:09Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2286759979",
+			"summary": "A user thanks the maintainer for the change.",
+			"actorId": 2880,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		},
+		{
+			"id": "pnpm-8087:comment:2572821319",
+			"kind": "comment",
+			"actor": "adamscybot",
+			"createdAt": "2025-01-06T10:30:06Z",
+			"url": "https://github.com/pnpm/pnpm/issues/8087#issuecomment-2572821319",
+			"summary": "A user asks whether engines could be overridden in publishConfig so published packages do not impose package-manager constraints.",
+			"actorId": 1210785,
+			"actorType": "human",
+			"parentId": "pnpm-8087:issue:8087"
+		}
+	]
+}

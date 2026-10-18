@@ -1,0 +1,334 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "appflowy-dark-mode-palette",
+	"title": "Which palette AppFlowy's dark mode should use",
+	"source": {
+		"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+		"retrievedAt": "2026-10-18T07:20:50.815119+00:00",
+		"repository": "AppFlowy-IO/AppFlowy",
+		"number": 31
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-11-22T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-12-13T06:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2021-12-15T12:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2021-12-16T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "appflowy-31:issue:31",
+			"kind": "opening",
+			"actor": "rhinotastic",
+			"createdAt": "2021-11-18T22:10:22Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"summary": "The opener requests a dark mode, or built-in themes more generally, saying nearly every user would benefit.",
+			"actorId": 47990498,
+			"actorType": "human"
+		},
+		{
+			"id": "appflowy-31:process:renamed:2021-11-18T22:10:35Z",
+			"kind": "process",
+			"actor": "rhinotastic",
+			"createdAt": "2021-11-18T22:10:35Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"summary": "The opener retitles the request from an untitled template to Darkmode.",
+			"actorId": 47990498,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:973868335",
+			"kind": "comment",
+			"actor": "SleepDaemon",
+			"createdAt": "2021-11-19T08:38:49Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-973868335",
+			"summary": "A user agrees, saying the bright interface strains sensitive eyes and limits how long they can work.",
+			"actorId": 88533953,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:974554767",
+			"kind": "comment",
+			"actor": "MostHated",
+			"createdAt": "2021-11-20T00:23:10Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-974554767",
+			"summary": "A user says the app is too bright for long sessions even with a dimmed monitor and will follow the thread.",
+			"actorId": 3442753,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:974637197",
+			"kind": "comment",
+			"actor": "alilosoft",
+			"createdAt": "2021-11-20T11:41:04Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-974637197",
+			"summary": "A user new to Flutter asks the maintainers whether the app uses a custom Material theme and offers to work on the issue with guidance.",
+			"actorId": 25110612,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:974898527",
+			"kind": "comment",
+			"actor": "notd5a-alt",
+			"createdAt": "2021-11-21T21:25:22Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-974898527",
+			"summary": "A contributor offers to build it and asks what accent colours people want and where the dark mode toggle should sit.",
+			"actorId": 87091319,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:975114368",
+			"kind": "comment",
+			"actor": "rileyhawk1417",
+			"createdAt": "2021-11-22T04:54:30Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-975114368",
+			"summary": "A maintainer suggests starting with a simple light and dark switch and leaving custom themes for later.",
+			"actorId": 42723553,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:976124589",
+			"kind": "comment",
+			"actor": "kiralabs",
+			"createdAt": "2021-11-23T03:12:22Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-976124589",
+			"summary": "A user argues most people pick one theme and keep it, so swappable theme config files and a theme picker would serve users, including people who like heavy customisation, better than a toggle.",
+			"actorId": 61782679,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:976162186",
+			"kind": "comment",
+			"actor": "notd5a-alt",
+			"createdAt": "2021-11-23T04:34:43Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-976162186",
+			"summary": "The contributor says they will attempt the feature.",
+			"actorId": 87091319,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:989919065",
+			"kind": "comment",
+			"actor": "rileyhawk1417",
+			"createdAt": "2021-12-09T14:46:15Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-989919065",
+			"summary": "A maintainer asks the contributor for progress and says they are themselves aligning fonts and backgrounds.",
+			"actorId": 42723553,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:990026434",
+			"kind": "comment",
+			"actor": "notd5a-alt",
+			"createdAt": "2021-12-09T16:44:51Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-990026434",
+			"summary": "The contributor says they have been too busy, and suggests theming might be better built after the planned extension system lands, so users could make their own themes.",
+			"actorId": 87091319,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:990906887",
+			"kind": "comment",
+			"actor": "rileyhawk1417",
+			"createdAt": "2021-12-10T11:51:12Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-990906887",
+			"summary": "The maintainer says they are now working on it and wanted to know if anyone else had tried.",
+			"actorId": 42723553,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:992044332",
+			"kind": "comment",
+			"actor": "branhillsdesign",
+			"createdAt": "2021-12-13T02:07:50Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-992044332",
+			"summary": "A designer says they have taken the colours from the theme files and are mocking up dark mode options in Figma, mapped to existing colour tokens.",
+			"actorId": 51428934,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:992065113",
+			"kind": "comment",
+			"actor": "branhillsdesign",
+			"createdAt": "2021-12-13T03:04:35Z",
+			"editedAt": "2021-12-13T14:46:15Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-992065113",
+			"summary": "The designer posts three dark palettes, one tinted with the purple secondary brand colour, one in untinted greys and one tinted with the blue main brand colour, next to the current light theme, warns accessibility is untested, and links an external straw poll.",
+			"actorId": 51428934,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:992347148",
+			"kind": "comment",
+			"actor": "SleepDaemon",
+			"createdAt": "2021-12-13T11:02:35Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-992347148",
+			"summary": "A user votes for option 2.",
+			"actorId": 88533953,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:992359630",
+			"kind": "comment",
+			"actor": "rileyhawk1417",
+			"createdAt": "2021-12-13T11:16:19Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-992359630",
+			"summary": "A maintainer prefers option 2 as calmer.",
+			"actorId": 42723553,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:992542013",
+			"kind": "comment",
+			"actor": "MostHated",
+			"createdAt": "2021-12-13T14:35:27Z",
+			"editedAt": "2021-12-13T14:36:04Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-992542013",
+			"summary": "A user votes for option 2, the untinted greys.",
+			"actorId": 3442753,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:993094775",
+			"kind": "comment",
+			"actor": "mrtolkien",
+			"createdAt": "2021-12-14T02:23:20Z",
+			"editedAt": "2021-12-14T02:23:32Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-993094775",
+			"summary": "A user suggests starting from an established open scheme such as Solarized, Monokai or Dracula rather than designing a new one, so users feel at home.",
+			"actorId": 8489650,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:993095680",
+			"kind": "comment",
+			"actor": "annieappflowy",
+			"createdAt": "2021-12-14T02:25:25Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-993095680",
+			"summary": "A maintainer picks option 2, would use the left panel's grey for the editor too, and shares Obsidian's dark mode as a reference.",
+			"actorId": 12026239,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:993096282",
+			"kind": "comment",
+			"actor": "annieappflowy",
+			"createdAt": "2021-12-14T02:27:03Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-993096282",
+			"summary": "The same maintainer agrees that familiar schemes help users feel at home.",
+			"actorId": 12026239,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:995269689",
+			"kind": "comment",
+			"actor": "branhillsdesign",
+			"createdAt": "2021-12-15T22:39:08Z",
+			"editedAt": "2021-12-15T22:40:03Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-995269689",
+			"summary": "The designer replies that most popular editor schemes fail WCAG contrast and do not cover an app that uses colour for organisation, so they extended the MVP's existing colours with Obsidian influences. They post refined dark and light palettes, propose renaming colour variables by purpose for future theme authors, and ask for help implementing it in Flutter.",
+			"actorId": 51428934,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:995692289",
+			"kind": "comment",
+			"actor": "rileyhawk1417",
+			"createdAt": "2021-12-16T11:10:55Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-995692289",
+			"summary": "A maintainer says they are implementing dark mode as a starting point but text colour does not yet switch with the theme.",
+			"actorId": 42723553,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:process:cross-referenced:2022-01-17T07:15:22Z",
+			"kind": "process",
+			"actor": "hieugao",
+			"createdAt": "2022-01-17T07:15:22Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"summary": "A contributor links PR #259, which refactors the default themes and moves theme state management to Bloc.",
+			"actorId": 13729196,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:1038810790",
+			"kind": "comment",
+			"actor": "Aditya1402",
+			"createdAt": "2022-02-14T08:47:34Z",
+			"editedAt": "2022-02-14T08:47:53Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-1038810790",
+			"summary": "A first-time contributor asks how to help on the issue.",
+			"actorId": 75464869,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:1038814656",
+			"kind": "comment",
+			"actor": "hieugao",
+			"createdAt": "2022-02-14T08:52:00Z",
+			"editedAt": "2022-02-14T08:55:11Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-1038814656",
+			"summary": "A contributor points them to their related PR #259 and promises to list tasks there.",
+			"actorId": 13729196,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:comment:1198563784",
+			"kind": "comment",
+			"actor": "polypixeldev",
+			"createdAt": "2022-07-28T19:49:09Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31#issuecomment-1198563784",
+			"summary": "A contributor says dark mode appears to be implemented already and suggests closing the issue.",
+			"actorId": 79737178,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		},
+		{
+			"id": "appflowy-31:process:closed:2022-07-28T22:10:22Z",
+			"kind": "process",
+			"actor": "MikeWallaceDev",
+			"createdAt": "2022-07-28T22:10:22Z",
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"summary": "A maintainer closes the issue as completed.",
+			"actorId": 5375835,
+			"actorType": "human",
+			"parentId": "appflowy-31:issue:31"
+		}
+	]
+}

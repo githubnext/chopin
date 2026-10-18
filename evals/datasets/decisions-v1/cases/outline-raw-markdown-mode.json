@@ -1,0 +1,341 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "outline-raw-markdown-mode",
+	"title": "Raw Markdown editing mode",
+	"source": {
+		"url": "https://github.com/outline/outline/discussions/3326",
+		"retrievedAt": "2026-10-18T07:11:50.222678+00:00",
+		"repository": "outline/outline",
+		"number": 3326,
+		"nodeId": "D_kwDOA4rpZM4APMEb"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2022-04-02T05:30:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2022-04-02T06:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-12-15T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOA4rpZM4APMEb",
+			"kind": "opening",
+			"actor": "wohenbushuang",
+			"createdAt": "2022-04-02T05:07:09Z",
+			"editedAt": "2022-04-02T05:44:47Z",
+			"url": "https://github.com/outline/outline/discussions/3326",
+			"summary": "The opener asks for switchable editor modes, including raw Markdown, a split preview with synced scrolling, and the current WYSIWYG, because editing at the edges of marks is awkward and raw text would ease future LaTeX and diagram support.",
+			"actorId": "MDQ6VXNlcjE1NjEzMTg0",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AJf49",
+			"kind": "comment",
+			"actor": "tommoor",
+			"createdAt": "2022-04-02T05:46:24Z",
+			"editedAt": "2022-04-02T05:46:47Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-2489917",
+			"summary": "A maintainer declines a raw Markdown editor, saying the project is investing in collaboration, mentions, comments and embeds that plain Markdown cannot express, and suggests the mark-editing pain can be fixed directly.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AMJ7y",
+			"kind": "comment",
+			"actor": "wohenbushuang",
+			"createdAt": "2022-07-20T06:35:18Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-3186418",
+			"summary": "The opener, now a daily user, shows a list-editing glitch and shifts the ask: restore a full formatting toolbar or context menu, since the floating toolbar exposes too few options.",
+			"actorId": "MDQ6VXNlcjE1NjEzMTg0",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AXg81",
+			"kind": "comment",
+			"actor": "socketpair",
+			"createdAt": "2023-06-13T14:20:08Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-6164277",
+			"summary": "A user argues programmers prefer typing Markdown while managers prefer WYSIWYG, and pleads for raw Markdown editing.",
+			"actorId": "MDQ6VXNlcjExNTc0MTI=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AcjQS",
+			"kind": "reply",
+			"actor": "senpro-ingwersenk",
+			"createdAt": "2023-11-06T07:55:36Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7484434",
+			"summary": "A user asks how Markdown-based Outline really is if the source cannot be viewed, wanting it to debug odd heading behaviour.",
+			"actorId": "U_kgDOCJpyEQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AJf49"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Ad-gI",
+			"kind": "reply",
+			"actor": "threema-lenny",
+			"createdAt": "2023-12-14T21:51:10Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7858184",
+			"summary": "A user says they would accept proprietary extensions or an experimental mode just to get source editing, and calls the Markdown claim misleading.",
+			"actorId": "U_kgDOBzIDDg",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXg81"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Ad-na",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2023-12-14T23:14:31Z",
+			"editedAt": "2023-12-14T23:16:32Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7858650",
+			"summary": "The maintainer explains Markdown cannot represent embeds, table column widths, comments or multiplayer state, doubts both can be supported, but says he is open to a strong solution.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXg81"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Ad_nq",
+			"kind": "reply",
+			"actor": "threema-lenny",
+			"createdAt": "2023-12-15T10:56:52Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7862762",
+			"summary": "The user replies that editing an extended-Markdown storage format would be acceptable even without collaboration in that mode.",
+			"actorId": "U_kgDOBzIDDg",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXg81"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AeO2u",
+			"kind": "reply",
+			"actor": "wohenbushuang",
+			"createdAt": "2023-12-22T07:29:50Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7925166",
+			"summary": "The opener suggests a hidden, devtools-like source panel for power users to fix editor bugs.",
+			"actorId": "MDQ6VXNlcjE1NjEzMTg0",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXg81"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AePFY",
+			"kind": "reply",
+			"actor": "socketpair",
+			"createdAt": "2023-12-22T09:32:44Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-7926104",
+			"summary": "A user cites GitHub's own direct Markdown editing as precedent and asks again for a raw text area.",
+			"actorId": "MDQ6VXNlcjExNTc0MTI=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AXg81"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AjMVC",
+			"kind": "comment",
+			"actor": "socketpair",
+			"createdAt": "2024-04-25T13:40:28Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-9225538",
+			"summary": "A user pings the maintainer to look at the request.",
+			"actorId": "MDQ6VXNlcjExNTc0MTI=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaB_",
+			"kind": "comment",
+			"actor": "matthijskooijman",
+			"createdAt": "2024-08-13T20:31:29Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330239",
+			"summary": "A user adds that pasting Markdown source inserts literal list markers, so a raw mode would make pasting reliable.",
+			"actorId": "MDQ6VXNlcjE5NDQ5MQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaGb",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2024-08-13T21:12:37Z",
+			"editedAt": "2024-08-13T21:12:51Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330523",
+			"summary": "The maintainer explains HTML on the clipboard takes priority and recommends paste-and-match-style to force Markdown detection.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaII",
+			"kind": "reply",
+			"actor": "matthijskooijman",
+			"createdAt": "2024-08-13T21:32:47Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330632",
+			"summary": "The user says that option is missing on Firefox for Linux and repeats that a raw mode, even non-collaborative or lossy, would avoid source-dependent paste issues.",
+			"actorId": "MDQ6VXNlcjE5NDQ5MQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaIb",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2024-08-13T21:36:17Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330651",
+			"summary": "The maintainer says paste-without-formatting is the Linux equivalent.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaKc",
+			"kind": "reply",
+			"actor": "matthijskooijman",
+			"createdAt": "2024-08-13T21:51:47Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330780",
+			"summary": "The user reports that this still yields literal dashes rather than a list.",
+			"actorId": "MDQ6VXNlcjE5NDQ5MQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaKz",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2024-08-13T21:56:19Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330803",
+			"summary": "The maintainer suspects a Linux-specific difference.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AnaLS",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2024-08-13T22:03:36Z",
+			"editedAt": "2024-08-13T22:03:52Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-10330834",
+			"summary": "The maintainer suggests inspecting the clipboard contents to debug.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4AnaB_"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AshaM",
+			"kind": "comment",
+			"actor": "chulucninh09",
+			"createdAt": "2024-12-26T21:04:00Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-11671180",
+			"summary": "A user wants Markdown support for an AI workflow where Markdown is copied around and importing is slow.",
+			"actorId": "MDQ6VXNlcjQzOTA2MTcw",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0pQ1",
+			"kind": "comment",
+			"actor": "DaxtonD",
+			"createdAt": "2025-07-18T03:29:02Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-13800501",
+			"summary": "A user says Outline's non-Markdown feel is why they chose it, and asks that any Markdown mode stay optional.",
+			"actorId": "U_kgDOBcOoUA",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0qjo",
+			"kind": "reply",
+			"actor": "threema-lenny",
+			"createdAt": "2025-07-18T12:43:00Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-13805800",
+			"summary": "A user replies that an optional raw mode is all most requesters want, citing fiddly tables and paste behaviour.",
+			"actorId": "U_kgDOBzIDDg",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4A0pQ1"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0rZa",
+			"kind": "reply",
+			"actor": "wohenbushuang",
+			"createdAt": "2025-07-18T17:16:51Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-13809242",
+			"summary": "The opener retorts that WYSIWYG users also have alternatives and that the request is to add a view, not replace one.",
+			"actorId": "MDQ6VXNlcjE1NjEzMTg0",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4A0pQ1"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0sU2",
+			"kind": "reply",
+			"actor": "DaxtonD",
+			"createdAt": "2025-07-18T23:48:47Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-13813046",
+			"summary": "The WYSIWYG-preferring user asks for a respectful tone and accepts an optional raw view or developer tool as a compromise.",
+			"actorId": "U_kgDOBcOoUA",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4A0pQ1"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A1PBR",
+			"kind": "comment",
+			"actor": "atomlab",
+			"createdAt": "2025-08-01T06:30:15Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-13955153",
+			"summary": "A user wants raw editing to add front matter for documents exported via the API to a static site.",
+			"actorId": "MDQ6VXNlcjEyMjI0NDk=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A1pgM",
+			"kind": "comment",
+			"actor": "strangerinusall",
+			"createdAt": "2025-08-10T11:38:24Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-14063628",
+			"summary": "A user suggests a hidden button or hotkey toggling a raw view that would not affect people who never use it.",
+			"actorId": "MDQ6VXNlcjk5NDU0MTQ=",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A9bqn",
+			"kind": "comment",
+			"actor": "saxtron3000",
+			"createdAt": "2026-03-12T20:41:24Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-16104103",
+			"summary": "A user wants raw Markdown to work around trouble applying H5 and H6 headings.",
+			"actorId": "MDQ6VXNlcjgwMDY4OTk3",
+			"actorType": "human",
+			"parentId": "D_kwDOA4rpZM4APMEb"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A9bw_",
+			"kind": "reply",
+			"actor": "tommoor",
+			"createdAt": "2026-03-12T21:16:50Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-16104511",
+			"summary": "The maintainer says those levels are omitted on purpose because deep heading nesting is discouraged and they render like H4.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4A9bqn"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A9hGH",
+			"kind": "reply",
+			"actor": "saxtron3000",
+			"createdAt": "2026-03-14T02:06:32Z",
+			"url": "https://github.com/outline/outline/discussions/3326#discussioncomment-16126343",
+			"summary": "The user asks why they are disabled rather than merely discouraged, citing a PDF tool that needs them.",
+			"actorId": "MDQ6VXNlcjgwMDY4OTk3",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4A9bqn"
+		}
+	]
+}

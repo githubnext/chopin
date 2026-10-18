@@ -1,0 +1,460 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "zed-commit-log-graph",
+	"title": "Commit log and git graph",
+	"source": {
+		"url": "https://github.com/zed-industries/zed/discussions/26511",
+		"retrievedAt": "2026-10-18T07:19:27.939511+00:00",
+		"repository": "zed-industries/zed",
+		"number": 26511,
+		"nodeId": "D_kwDOFExXwM4AeyDe"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-06-08T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-01-23T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-04-29T20:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOFExXwM4AeyDe",
+			"kind": "opening",
+			"actor": "JosephTLyons",
+			"createdAt": "2025-03-12T04:12:17Z",
+			"editedAt": "2025-08-12T18:51:12Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511",
+			"summary": "A maintainer opens a feature request for a commit history view listing message, author and time, with click-through to diffs, search and branch/tag decorations; graph, squashing and branching from commits are listed as later extras.",
+			"actorId": "MDQ6VXNlcjE5ODY3NDQw",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOFExXwM4AwBLD",
+			"kind": "comment",
+			"actor": "coolemur",
+			"createdAt": "2025-03-22T17:46:05Z",
+			"editedAt": "2025-05-31T17:47:52Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-12587715",
+			"summary": "A user points to GitLens as a model: commit list on the left, selected diff on the right, plus double-click to check out a commit.",
+			"actorId": "MDQ6VXNlcjI5NjkzMTAz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4Ay2AT",
+			"kind": "reply",
+			"actor": "keybits",
+			"createdAt": "2025-05-31T10:02:21Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-13328403",
+			"summary": "A user suggests Sublime Merge's commits view as another source of inspiration.",
+			"actorId": "MDQ6VXNlcjgwOTgyMw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4AwBLD"
+		},
+		{
+			"id": "DC_kwDOFExXwM4Ay2g0",
+			"kind": "comment",
+			"actor": "WoodyWoodsta",
+			"createdAt": "2025-05-31T17:44:14Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-13330484",
+			"summary": "A contributor asks that any graph view follow GitKraken's style, with column-aligned branch, graph, message, sha and date fields and straight branch lines, contrasting it with the angled graphs most tools draw.",
+			"actorId": "MDQ6VXNlcjgyNjgwNDA=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4AzHFQ",
+			"kind": "comment",
+			"actor": "kozel-sd",
+			"createdAt": "2025-06-07T16:41:17Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-13398352",
+			"summary": "A user prefers Git Extensions' approach of deriving branches from lines, and floats a pluggable API so users could swap in their own graph renderer.",
+			"actorId": "MDQ6VXNlcjI5MzEwNTkx",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A1K2V",
+			"kind": "comment",
+			"actor": "jmoore34",
+			"createdAt": "2025-07-30T19:34:27Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-13938069",
+			"summary": "A user says a basic first version that is iterated on later would be fine.",
+			"actorId": "MDQ6VXNlcjE3ODM0NjQ=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A1ftU",
+			"kind": "comment",
+			"actor": "Sduby22",
+			"createdAt": "2025-08-06T17:06:40Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14023508",
+			"summary": "A user describes GitLens features worth copying: a commits tab in the Git panel, switching between branches, remotes and stashes, filtering by author, and per-file history.",
+			"actorId": "MDQ6VXNlcjI5MDQwNjk2",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A2OZj",
+			"kind": "comment",
+			"actor": "douglasrizzo",
+			"createdAt": "2025-08-25T21:10:17Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14214755",
+			"summary": "A user asks that the graph also support git operations such as checkout, merge, reset and rebase directly, as GitKraken and Git Graph do.",
+			"actorId": "MDQ6VXNlcjIyMDkzNjQ=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A24NE",
+			"kind": "comment",
+			"actor": "CaptainN",
+			"createdAt": "2025-09-12T15:45:44Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14385988",
+			"summary": "A user says the missing git graph is what keeps them from adopting Zed.",
+			"actorId": "MDQ6VXNlcjI0NTgyNQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A3H_v",
+			"kind": "comment",
+			"actor": "gordinmitya",
+			"createdAt": "2025-09-19T02:34:07Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14450671",
+			"summary": "A user points to the serie terminal tool as a reference design.",
+			"actorId": "MDQ6VXNlcjkyODYwOTI=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A3K9W",
+			"kind": "reply",
+			"actor": "WoodyWoodsta",
+			"createdAt": "2025-09-20T07:19:25Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14462806",
+			"summary": "A contributor praises that reference.",
+			"actorId": "MDQ6VXNlcjgyNjgwNDA=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A3H_v"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A36KW",
+			"kind": "comment",
+			"actor": "gengurke",
+			"createdAt": "2025-10-11T22:00:06Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14656150",
+			"summary": "A user names the VS Code Git Graph extension as a simple, capable model, possibly as a Zed extension.",
+			"actorId": "MDQ6VXNlcjE1MzY5NDA2",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A4BTz",
+			"kind": "comment",
+			"actor": "tediou5",
+			"createdAt": "2025-10-15T09:39:49Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14685427",
+			"summary": "A user points to community PR #39595 that already works well and asks whether the team plans to merge it.",
+			"actorId": "MDQ6VXNlcjE4MzQ4Nzk4",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A4QeN",
+			"kind": "reply",
+			"actor": "kobago",
+			"createdAt": "2025-10-22T06:45:11Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14747533",
+			"summary": "A user suggests that, if closed, the community PR could live on as an extension.",
+			"actorId": "MDQ6VXNlcjUzMjkwNjkx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A4BTz"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A4kQ5",
+			"kind": "reply",
+			"actor": "Angelk90",
+			"createdAt": "2025-10-30T15:39:51Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-14828601",
+			"summary": "A contributor asks the opening maintainer for implementation guidance and Zed's overall view, mentioning the community PR and the design team.",
+			"actorId": "MDQ6VXNlcjIwNDc2MDAy",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A4BTz"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A5aV0",
+			"kind": "reply",
+			"actor": "dimitrijejankov",
+			"createdAt": "2025-11-23T04:29:10Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15050100",
+			"summary": "A user recommends Meta's Sapling interface as the best they have used.",
+			"actorId": "MDQ6VXNlcjU5ODAyMDA=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A4BTz"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A6R_T",
+			"kind": "comment",
+			"actor": "MikePryadko",
+			"createdAt": "2025-12-17T10:48:24Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15278035",
+			"summary": "A user asks for news, describing how hard it is to see unpushed commits and branches without a log.",
+			"actorId": "MDQ6VXNlcjMxMjQ4MDQw",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A6SEm",
+			"kind": "reply",
+			"actor": "probitcarwyn",
+			"createdAt": "2025-12-17T11:29:50Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15278374",
+			"summary": "A user replies with a link to PR #44434.",
+			"actorId": "U_kgDOCMBdOA",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A6R_T"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A6SIm",
+			"kind": "reply",
+			"actor": "MikePryadko",
+			"createdAt": "2025-12-17T12:03:55Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15278630",
+			"summary": "The user says they will keep using an external tool while waiting.",
+			"actorId": "MDQ6VXNlcjMxMjQ4MDQw",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A6R_T"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A7Yzz",
+			"kind": "comment",
+			"actor": "juev",
+			"createdAt": "2026-01-22T08:46:11Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15568115",
+			"summary": "A user asks whether the team has decided anything or shelved the feature.",
+			"actorId": "MDQ6VXNlcjExNDYzNQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A7aF9",
+			"kind": "comment",
+			"actor": "fabianszabo",
+			"createdAt": "2026-01-22T18:20:13Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15573373",
+			"summary": "A contributor proposes a minimal fallback: list commits in a picker like the branch picker, reusing the existing last-commit hover and detail view.",
+			"actorId": "MDQ6VXNlcjg1NjgxODg5",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A7a3I",
+			"kind": "comment",
+			"actor": "tediou5",
+			"createdAt": "2026-01-23T02:56:28Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15576520",
+			"summary": "A user announces that the official graph implementation, PR #44434, has been merged.",
+			"actorId": "MDQ6VXNlcjE4MzQ4Nzk4",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A7a3R",
+			"kind": "reply",
+			"actor": "dDostalker",
+			"createdAt": "2026-01-23T02:58:04Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15576529",
+			"summary": "A contributor confirms that PR was merged.",
+			"actorId": "U_kgDOCL8fmQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A6R_T"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A7a3a",
+			"kind": "reply",
+			"actor": "onenewcode",
+			"createdAt": "2026-01-23T02:59:39Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-15576538",
+			"summary": "A user thanks them for the update.",
+			"actorId": "U_kgDOBaaqqw",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A7a3I"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A9VZw",
+			"kind": "reply",
+			"actor": "KaKi87",
+			"createdAt": "2026-03-11T05:13:40Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16078448",
+			"summary": "A user remarks that the GitKraken-style request seems to have been ignored.",
+			"actorId": "MDQ6VXNlcjIxMjg0MDg5",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A-q2L",
+			"kind": "comment",
+			"actor": "ojpro",
+			"createdAt": "2026-04-02T20:04:47Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16428427",
+			"summary": "A contributor reports the graph is available in a preview release.",
+			"actorId": "U_kgDOBnaeiQ",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A-scA",
+			"kind": "comment",
+			"actor": "WoodyWoodsta",
+			"createdAt": "2026-04-03T07:37:34Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16434944",
+			"summary": "A contributor reviews the preview and asks for follow-ups: separate tag and branch columns, truncation, emphasis on the checked-out branch, folding duplicate remotes, HEAD on the left, and showing uncommitted changes and stashes.",
+			"actorId": "MDQ6VXNlcjgyNjgwNDA=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A-tCv",
+			"kind": "reply",
+			"actor": "ojpro",
+			"createdAt": "2026-04-03T12:07:54Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16437423",
+			"summary": "A contributor adds a request to filter by username.",
+			"actorId": "U_kgDOBnaeiQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A-scA"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_75Y",
+			"kind": "comment",
+			"actor": "JosephTLyons",
+			"createdAt": "2026-04-29T19:40:14Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16760408",
+			"summary": "The opening maintainer announces the git graph shipped in stable 0.231, covering the essentials listed, says squashing, reordering and branching from commits will follow, and asks for new discussions for further asks.",
+			"actorId": "MDQ6VXNlcjE5ODY3NDQw",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "D_kwDOFExXwM4AeyDe:process:closed:2026-04-29T19:40:14Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2026-04-29T19:40:14Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511",
+			"summary": "The discussion is closed as resolved.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOFExXwM4AeyDe"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_8FQ",
+			"kind": "reply",
+			"actor": "KaKi87",
+			"createdAt": "2026-04-29T21:04:25Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16761168",
+			"summary": "A user welcomes it and notes the graph is read-only, inviting separate requests for each commit action.",
+			"actorId": "MDQ6VXNlcjIxMjg0MDg5",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_75Y"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_9gB",
+			"kind": "reply",
+			"actor": "lorenzo-campanile-octo",
+			"createdAt": "2026-04-30T09:02:59Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-16766977",
+			"summary": "A user says this was the last missing feature keeping them on VS Code.",
+			"actorId": "U_kgDOChbfIw",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_75Y"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCTYS",
+			"kind": "reply",
+			"actor": "Angelk90",
+			"createdAt": "2026-06-21T10:44:19Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-17380882",
+			"summary": "A contributor asks for a timeline view, linking an example.",
+			"actorId": "MDQ6VXNlcjIwNDc2MDAy",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_75Y"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BHZOJ",
+			"kind": "reply",
+			"actor": "digerata",
+			"createdAt": "2026-10-02T13:00:13Z",
+			"editedAt": "2026-10-02T13:01:05Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18715529",
+			"summary": "A user agrees GitKraken's graph layout is the best and wonders why others have not copied it.",
+			"actorId": "MDQ6VXNlcjE3Njc5OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BHZUM",
+			"kind": "reply",
+			"actor": "KaKi87",
+			"createdAt": "2026-10-02T13:25:31Z",
+			"editedAt": "2026-10-02T13:25:56Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18715916",
+			"summary": "A user notes that comment is the most upvoted in the thread and explains a word used.",
+			"actorId": "MDQ6VXNlcjIxMjg0MDg5",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BHZiO",
+			"kind": "reply",
+			"actor": "WoodyWoodsta",
+			"createdAt": "2026-10-02T14:25:23Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18716814",
+			"summary": "A contributor says Zed came close with right-angled lines but its branch tag placement hurts readability.",
+			"actorId": "MDQ6VXNlcjgyNjgwNDA=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BHZtF",
+			"kind": "reply",
+			"actor": "digerata",
+			"createdAt": "2026-10-02T15:12:04Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18717509",
+			"summary": "A user replies with banter and agreement.",
+			"actorId": "MDQ6VXNlcjE3Njc5OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BHZ5E",
+			"kind": "reply",
+			"actor": "KaKi87",
+			"createdAt": "2026-10-02T16:07:39Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18718276",
+			"summary": "A user replies with off-topic banter about wording.",
+			"actorId": "MDQ6VXNlcjIxMjg0MDg5",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4Ay2g0"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BIU21",
+			"kind": "reply",
+			"actor": "Randomblock1",
+			"createdAt": "2026-10-15T22:14:02Z",
+			"url": "https://github.com/zed-industries/zed/discussions/26511#discussioncomment-18959797",
+			"summary": "A user asks about the remaining items, especially drawing HEAD on the left.",
+			"actorId": "MDQ6VXNlcjE5ODczODAz",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_75Y"
+		}
+	]
+}

@@ -1,0 +1,521 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "homeassistant-release-cycle",
+	"title": "Home Assistant release cycle length",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/issues/192",
+		"retrievedAt": "2026-10-18T07:27:45.463455+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 192
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2019-04-11T08:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2019-04-22T12:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2021-01-25T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2021-01-26T01:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "architecture-192:issue:192",
+			"kind": "opening",
+			"actor": "pvizeli",
+			"createdAt": "2019-04-11T07:43:32Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192",
+			"summary": "A maintainer proposes moving to a three-week cycle (two weeks to beta, one week to release), citing the strain of release work, rushed merges and post-release bugfixes.",
+			"actorId": 15338540,
+			"actorType": "human"
+		},
+		{
+			"id": "architecture-192:comment:482027936",
+			"kind": "comment",
+			"actor": "robbiet480",
+			"createdAt": "2019-04-11T08:52:17Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482027936",
+			"summary": "A maintainer asks whether moving integrations out of core might instead allow a faster, weekly cadence.",
+			"actorId": 18516,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482043251",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-04-11T09:36:58Z",
+			"editedAt": "2019-04-11T09:42:01Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482043251",
+			"summary": "The proposer replies that splitting integrations would argue for monthly releases, and repeats that release chores, reviews and the lead developers' own work need more time.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482153853",
+			"kind": "comment",
+			"actor": "rohankapoorcom",
+			"createdAt": "2019-04-11T15:07:29Z",
+			"editedAt": "2019-04-11T15:37:10Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482153853",
+			"summary": "A maintainer agrees PRs have been squeezed in recent releases and suggests also lengthening beta.",
+			"actorId": 2511957,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482185611",
+			"kind": "comment",
+			"actor": "ludeeus",
+			"createdAt": "2019-04-11T16:24:23Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482185611",
+			"summary": "A maintainer supports a longer cycle provided the beta period grows too, to avoid bigger, less stable releases.",
+			"actorId": 15093472,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482215732",
+			"kind": "comment",
+			"actor": "DubhAd",
+			"createdAt": "2019-04-11T17:26:27Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482215732",
+			"summary": "A user welcomes a slower cycle if it brings a longer test window and a list of what to test.",
+			"actorId": 11191848,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:process:renamed:2019-04-11T17:38:19Z",
+			"kind": "process",
+			"actor": "balloob",
+			"createdAt": "2019-04-11T17:38:19Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192",
+			"summary": "The founder retitles the issue.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482226578",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-04-11T17:56:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482226578",
+			"summary": "The founder notes cherry-picking into a long beta gets hard as dev diverges and suggests fully overlapping cycles: cut each beta on release day.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482240483",
+			"kind": "comment",
+			"actor": "olbjan",
+			"createdAt": "2019-04-11T18:21:01Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482240483",
+			"summary": "A user asks for a list of touched areas in beta notes so non-developers can test.",
+			"actorId": 43749346,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482254279",
+			"kind": "comment",
+			"actor": "arsaboo",
+			"createdAt": "2019-04-11T19:01:32Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482254279",
+			"summary": "A user points to the release PR and preview docs that already list changes.",
+			"actorId": 18319734,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482289208",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-04-11T19:58:30Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482289208",
+			"summary": "The founder suggests organising release notes by integration with a checklist for testers.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:482290757",
+			"kind": "comment",
+			"actor": "dgomes",
+			"createdAt": "2019-04-11T20:03:24Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-482290757",
+			"summary": "A user suggests per-integration changelogs in manifests for personalised warnings.",
+			"actorId": 137684,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483348435",
+			"kind": "comment",
+			"actor": "ljmerza",
+			"createdAt": "2019-04-15T17:38:50Z",
+			"editedAt": "2019-04-15T17:41:14Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483348435",
+			"summary": "A user says beta should accept only bug fixes.",
+			"actorId": 4085765,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483353987",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-04-15T17:54:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483353987",
+			"summary": "The founder says that is already the rule.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483357132",
+			"kind": "comment",
+			"actor": "ljmerza",
+			"createdAt": "2019-04-15T18:02:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483357132",
+			"summary": "The user lists features merged days before a recent release as counter-evidence.",
+			"actorId": 4085765,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483364779",
+			"kind": "comment",
+			"actor": "cgtobi",
+			"createdAt": "2019-04-15T18:26:00Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483364779",
+			"summary": "A user argues most listed items were fixes, CI work or niche features that caused little trouble.",
+			"actorId": 856782,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483479063",
+			"kind": "comment",
+			"actor": "awarecan",
+			"createdAt": "2019-04-16T01:44:19Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483479063",
+			"summary": "A user explains frontend features often land after the beta cut because the frontend has no release branch.",
+			"actorId": 7366491,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483548663",
+			"kind": "comment",
+			"actor": "MartinHjelmare",
+			"createdAt": "2019-04-16T07:43:06Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483548663",
+			"summary": "A maintainer recalls large features slipping in just before release and wants the rule enforced more strictly.",
+			"actorId": 3181692,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483553709",
+			"kind": "comment",
+			"actor": "awarecan",
+			"createdAt": "2019-04-16T07:59:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483553709",
+			"summary": "A user links the example PR.",
+			"actorId": 7366491,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:483994839",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-04-17T08:45:31Z",
+			"editedAt": "2019-04-17T09:20:26Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-483994839",
+			"summary": "A maintainer lays out the trade-off between lengthening dev or beta, lists user wants (stability, quick features, fewer breaking changes), and proposes a monthly cycle with beta cut on release day.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484010863",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-04-17T09:32:33Z",
+			"editedAt": "2019-04-17T09:33:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484010863",
+			"summary": "The proposer endorses monthly releases, saying the one-week delay already felt calmer and produced better code.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484596822",
+			"kind": "comment",
+			"actor": "allanpersson",
+			"createdAt": "2019-04-18T17:13:14Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484596822",
+			"summary": "A user likes a fixed release day and suggests Friday so users have the weekend to fix breakage.",
+			"actorId": 46043392,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484597377",
+			"kind": "comment",
+			"actor": "arsaboo",
+			"createdAt": "2019-04-18T17:15:05Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484597377",
+			"summary": "A user quips that developers may not be free at weekends.",
+			"actorId": 18319734,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484598492",
+			"kind": "comment",
+			"actor": "allanpersson",
+			"createdAt": "2019-04-18T17:18:34Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484598492",
+			"summary": "The user replies that monthly releases should mean fewer fixes needed.",
+			"actorId": 46043392,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484599280",
+			"kind": "comment",
+			"actor": "olbjan",
+			"createdAt": "2019-04-18T17:20:35Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484599280",
+			"summary": "A user expects monthly releases to carry many more breaking changes each, at least initially.",
+			"actorId": 43749346,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:484631432",
+			"kind": "comment",
+			"actor": "awarecan",
+			"createdAt": "2019-04-18T18:34:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-484631432",
+			"summary": "A user says Wednesday has worked well as release day.",
+			"actorId": 7366491,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485294858",
+			"kind": "comment",
+			"actor": "andrewsayre",
+			"createdAt": "2019-04-22T00:45:57Z",
+			"editedAt": "2019-04-22T14:11:09Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485294858",
+			"summary": "A maintainer argues time to feedback matters most, that better practices and automation address the problems, and proposes tabling the change in favour of other work.",
+			"actorId": 6730289,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485301080",
+			"kind": "comment",
+			"actor": "BradleyFord",
+			"createdAt": "2019-04-22T01:50:20Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485301080",
+			"summary": "A user thinks a long gap would push active users onto beta, improving testing.",
+			"actorId": 322815,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485435697",
+			"kind": "comment",
+			"actor": "andrewsayre",
+			"createdAt": "2019-04-22T14:37:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485435697",
+			"summary": "The same maintainer proposes surveying users on release frequency and beta willingness, and doubts beta-for-features drives the right behaviour.",
+			"actorId": 6730289,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485437935",
+			"kind": "comment",
+			"actor": "Kane610",
+			"createdAt": "2019-04-22T14:45:20Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485437935",
+			"summary": "A maintainer agrees and adds the project should measure usage.",
+			"actorId": 24575746,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485447122",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-04-22T15:18:36Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485447122",
+			"summary": "The proposer says release coordination is consuming time that should go to features and fixes.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485458568",
+			"kind": "comment",
+			"actor": "MarsWarrior",
+			"createdAt": "2019-04-22T15:58:30Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485458568",
+			"summary": "A user managing several installs describes recurring regressions, doubts the cycle is the root problem, and proposes stable and edge channels per integration.",
+			"actorId": 1220775,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485549600",
+			"kind": "comment",
+			"actor": "dgomes",
+			"createdAt": "2019-04-22T20:56:19Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485549600",
+			"summary": "A user worries channels would burden integration developers but supports an LTS concept with fixes only.",
+			"actorId": 137684,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:485561518",
+			"kind": "comment",
+			"actor": "awarecan",
+			"createdAt": "2019-04-22T21:37:42Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-485561518",
+			"summary": "A user notes LTS is a serious commitment and wonders who would pay for it.",
+			"actorId": 7366491,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:486189482",
+			"kind": "comment",
+			"actor": "fabaff",
+			"createdAt": "2019-04-24T11:48:01Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-486189482",
+			"summary": "A maintainer recalls the tedium of release prep, says betas do not attract testers, that the earlier move to three weeks did not help, and suggests decoupling Hass.io releases.",
+			"actorId": 116184,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:486220544",
+			"kind": "comment",
+			"actor": "MarsWarrior",
+			"createdAt": "2019-04-24T13:05:49Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-486220544",
+			"summary": "The user expands on how per-integration channels could work without backporting.",
+			"actorId": 1220775,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:486369982",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-04-24T18:23:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-486369982",
+			"summary": "The founder says the thread has drifted from the real issue: he and the proposer carry the release grunt work.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:486371105",
+			"kind": "comment",
+			"actor": "rohankapoorcom",
+			"createdAt": "2019-04-24T18:26:47Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-486371105",
+			"summary": "A maintainer asks whether the work could be shared or automated.",
+			"actorId": 2511957,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:486427074",
+			"kind": "comment",
+			"actor": "SeanPM5",
+			"createdAt": "2019-04-24T21:08:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-486427074",
+			"summary": "A user argues monthly releases would double breaking changes per update and make each upgrade more stressful, though it may relieve the release managers.",
+			"actorId": 9065557,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:489298478",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-05-04T06:15:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-489298478",
+			"summary": "A user asks whether the two release managers would accept others doing releases.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:490345346",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-05-08T04:45:33Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-490345346",
+			"summary": "The founder welcomes help and lists the manual steps that remain: cherry-pick conflicts, broken link checks, breaking-change formatting and the release introduction.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:497002597",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-05-29T16:07:32Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-497002597",
+			"summary": "The user suggests releasing only when a volunteer release manager steps up and offers to handle some.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:comment:767198311",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2021-01-26T00:23:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192#issuecomment-767198311",
+			"summary": "A maintainer closes the old issue, noting the project now runs a monthly cycle, explained in the 2020 conference keynote.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		},
+		{
+			"id": "architecture-192:process:closed:2021-01-26T00:23:41Z",
+			"kind": "process",
+			"actor": "frenck",
+			"createdAt": "2021-01-26T00:23:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/192",
+			"summary": "The maintainer closes the issue.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-192:issue:192"
+		}
+	]
+}

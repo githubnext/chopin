@@ -1,0 +1,602 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "home-assistant-zwave-js-switch",
+	"title": "Move Home Assistant Z-Wave from OpenZWave to Z-Wave JS",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/issues/483",
+		"retrievedAt": "2026-10-18T07:27:34.354470+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 483
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-01-05T23:30:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-01-06T12:05:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2021-01-11T15:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2021-01-11T16:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "architecture-483:issue:483",
+			"kind": "opening",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-05T23:14:44Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483",
+			"summary": "A maintainer proposes abandoning the in-progress OpenZWave 1.6 integration, which talks to a daemon over MQTT, in favour of the JavaScript Z-Wave JS driver behind a small socket server; he cites MQTT state bugs, daemon instability, a single C++ upstream developer going on break, and accepts discarding most of a year's work, listing pros and cons including migration difficulty.",
+			"actorId": 6389780,
+			"actorType": "human"
+		},
+		{
+			"id": "architecture-483:comment:754965354",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2021-01-05T23:34:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-754965354",
+			"summary": "The project lead agrees restarting is painful but necessary, and clarifies this adds a new integration while the two existing Z-Wave integrations stay.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:754987666",
+			"kind": "comment",
+			"actor": "paularmstrong",
+			"createdAt": "2021-01-06T00:32:24Z",
+			"editedAt": "2021-01-06T00:38:05Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-754987666",
+			"summary": "A user asks whether this rules out zwavejs2mqtt and whether an add-on is still needed, and pushes back on calling missing device classes easy to add.",
+			"actorId": 33297,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:754988742",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-06T00:35:07Z",
+			"editedAt": "2021-01-06T00:36:14Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-754988742",
+			"summary": "A maintainer confirms the websocket approach replaces MQTT, sharing the same driver as zwavejs2mqtt, and that an add-on or container is still required.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755018156",
+			"kind": "comment",
+			"actor": "xAPPO",
+			"createdAt": "2021-01-06T01:32:11Z",
+			"editedAt": "2021-01-06T01:35:17Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755018156",
+			"summary": "A user asks whether dropping MQTT ties Z-Wave to one Home Assistant instance instead of a shared network-wide pool.",
+			"actorId": 875211,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755018339",
+			"kind": "comment",
+			"actor": "gdt",
+			"createdAt": "2021-01-06T01:32:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755018339",
+			"summary": "A user argues for explicit requirements: MQTT offers TLS and authentication and host separation, and any channel must be encrypted, authenticated, dual-stack, OS-independent and not require Docker.",
+			"actorId": 515284,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755024611",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-06T01:54:07Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755024611",
+			"summary": "A maintainer says multiple remote instances will still work.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755148570",
+			"kind": "comment",
+			"actor": "FreelancerJay",
+			"createdAt": "2021-01-06T08:03:10Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755148570",
+			"summary": "A user suggests designing a backend-agnostic interface so a future driver change is not another full rebuild.",
+			"actorId": 67540736,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755148671",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2021-01-06T08:03:24Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755148671",
+			"summary": "The project lead says authentication is out of scope for the server; the add-on restricts access to Home Assistant's address and users can front it with NGINX.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755151308",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T08:09:56Z",
+			"editedAt": "2021-01-06T08:10:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755151308",
+			"summary": "The proposing maintainer explains the server is a thin message forwarder that other clients, including zwavejs2mqtt, can share.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755186886",
+			"kind": "comment",
+			"actor": "OnFreund",
+			"createdAt": "2021-01-06T09:26:54Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755186886",
+			"summary": "A user supports the direction and asks where polling of legacy devices will live.",
+			"actorId": 2159693,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755187789",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T09:28:44Z",
+			"editedAt": "2021-01-06T09:30:17Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755187789",
+			"summary": "The proposing maintainer says polling is not yet in Z-Wave JS but would live in its device definitions.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755251140",
+			"kind": "comment",
+			"actor": "xAPPO",
+			"createdAt": "2021-01-06T11:39:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755251140",
+			"summary": "The earlier user clarifies they meant sharing devices across different automation products and asks if zwavejs2mqtt could be optional.",
+			"actorId": 875211,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755259268",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T11:59:33Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755259268",
+			"summary": "The proposing maintainer repeats that both can run side by side against the same server.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755259309",
+			"kind": "comment",
+			"actor": "varet80",
+			"createdAt": "2021-01-06T11:59:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755259309",
+			"summary": "A user with a clustered MQTT setup lists the benefits and drawbacks of keeping an MQTT layer.",
+			"actorId": 4048920,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755259918",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T12:01:14Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755259918",
+			"summary": "The proposing maintainer adds that users may route devices through zwavejs2mqtt if they prefer.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755305579",
+			"kind": "comment",
+			"actor": "johntdyer",
+			"createdAt": "2021-01-06T13:42:57Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755305579",
+			"summary": "A user thanks the maintainer with a reaction GIF.",
+			"actorId": 58234,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755342004",
+			"kind": "comment",
+			"actor": "nappyjim",
+			"createdAt": "2021-01-06T14:48:55Z",
+			"editedAt": "2021-01-06T15:07:26Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755342004",
+			"summary": "A user asks about multicast support and welcomes firmware updates.",
+			"actorId": 71914301,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755346434",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-06T14:56:27Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755346434",
+			"summary": "A maintainer says Z-Wave JS has some multicast support, but parity with existing integrations comes first.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755459151",
+			"kind": "comment",
+			"actor": "jarrettv",
+			"createdAt": "2021-01-06T17:56:38Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755459151",
+			"summary": "A user asks whether the server API could be defined in proto files with generated code, as ESPHome does.",
+			"actorId": 219295,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755470516",
+			"kind": "comment",
+			"actor": "kevinkahn",
+			"createdAt": "2021-01-06T18:18:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755470516",
+			"summary": "A user asks again whether the driver can run on a separate machine, since controller placement matters.",
+			"actorId": 16024970,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755471966",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T18:20:53Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755471966",
+			"summary": "The proposing maintainer says yes in principle, though basic features come first.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755480186",
+			"kind": "comment",
+			"actor": "kevinkahn",
+			"createdAt": "2021-01-06T18:27:30Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755480186",
+			"summary": "The user thanks him and suggests rethinking the missing device notion so central scene button events become first-class, easily matched events.",
+			"actorId": 16024970,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755482883",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T18:29:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755482883",
+			"summary": "The proposing maintainer says device automations for those events are already planned, after the basics.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755496220",
+			"kind": "comment",
+			"actor": "kevinkahn",
+			"createdAt": "2021-01-06T18:39:54Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755496220",
+			"summary": "The user thanks him and offers to test.",
+			"actorId": 16024970,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755564869",
+			"kind": "comment",
+			"actor": "ve6rah",
+			"createdAt": "2021-01-06T19:31:27Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755564869",
+			"summary": "A user strongly supports the change for its upstream fixability, but hopes the three parallel integrations are consolidated later.",
+			"actorId": 16531454,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755727291",
+			"kind": "comment",
+			"actor": "datascope11",
+			"createdAt": "2021-01-06T21:32:04Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755727291",
+			"summary": "A user running the OZW beta agrees on consolidation only after an easy migration path exists.",
+			"actorId": 67964685,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755755168",
+			"kind": "comment",
+			"actor": "PARitter",
+			"createdAt": "2021-01-06T22:26:13Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755755168",
+			"summary": "A user endorses generating the API from proto files.",
+			"actorId": 26285134,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755758422",
+			"kind": "comment",
+			"actor": "Neraud",
+			"createdAt": "2021-01-06T22:33:38Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755758422",
+			"summary": "A DevOps user questions whether dropping MQTT is worth it, since a separate server is still needed, and backs the security requirements.",
+			"actorId": 7656934,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755761290",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T22:41:25Z",
+			"editedAt": "2021-01-06T22:42:23Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755761290",
+			"summary": "The proposing maintainer says the Node server is not exposed to the network by default and can also be hosted by zwavejs2mqtt.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755780906",
+			"kind": "comment",
+			"actor": "incompetentJS",
+			"createdAt": "2021-01-06T23:40:25Z",
+			"editedAt": "2021-01-06T23:43:09Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755780906",
+			"summary": "A comment GitHub marks as hidden (abusive).",
+			"actorId": 77081279,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755782097",
+			"kind": "comment",
+			"actor": "marcelveldt",
+			"createdAt": "2021-01-06T23:44:13Z",
+			"editedAt": "2021-01-06T23:46:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755782097",
+			"summary": "A comment GitHub marks as hidden (resolved), replying to the abusive post.",
+			"actorId": 6389780,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:755782668",
+			"kind": "comment",
+			"actor": "bachya",
+			"createdAt": "2021-01-06T23:46:02Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-755782668",
+			"summary": "A contributor moderates, warning the abusive poster and asking others not to engage.",
+			"actorId": 47216,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756009932",
+			"kind": "comment",
+			"actor": "Twanislas",
+			"createdAt": "2021-01-07T09:51:49Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756009932",
+			"summary": "A user prefers a Zigbee2MQTT-style MQTT discovery setup for consistency.",
+			"actorId": 524706,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756112701",
+			"kind": "comment",
+			"actor": "jcam",
+			"createdAt": "2021-01-07T13:21:36Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756112701",
+			"summary": "A user points them to zwavejs2mqtt as an unofficial route.",
+			"actorId": 98744,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756374138",
+			"kind": "comment",
+			"actor": "MwC-Trexx",
+			"createdAt": "2021-01-07T20:46:19Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756374138",
+			"summary": "A user asks whether already-included devices can be adopted without re-inclusion.",
+			"actorId": 7128246,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756386552",
+			"kind": "comment",
+			"actor": "FreelancerJay",
+			"createdAt": "2021-01-07T21:10:54Z",
+			"editedAt": "2021-01-07T21:13:07Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756386552",
+			"summary": "A user explains inclusion lives on the controller, so only the network key must be copied, though names and areas would need redoing.",
+			"actorId": 67540736,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756945000",
+			"kind": "comment",
+			"actor": "mikedahlgren",
+			"createdAt": "2021-01-08T19:13:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756945000",
+			"summary": "A user adds that file-based device configs make adding devices easier, after an OZW patch went nowhere.",
+			"actorId": 11819905,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:756961329",
+			"kind": "comment",
+			"actor": "MwC-Trexx",
+			"createdAt": "2021-01-08T19:52:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-756961329",
+			"summary": "The user agrees and cites OZW startup slowness and instability.",
+			"actorId": 7128246,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:757333736",
+			"kind": "comment",
+			"actor": "LittlePapaJohn",
+			"createdAt": "2021-01-09T16:48:54Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-757333736",
+			"summary": "A user supports the change and hopes it will not take another year.",
+			"actorId": 24481793,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:757500665",
+			"kind": "comment",
+			"actor": "steve28",
+			"createdAt": "2021-01-10T16:10:09Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-757500665",
+			"summary": "A user dislikes the reset but welcomes an actively maintained stack.",
+			"actorId": 5874433,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:757501139",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-10T16:13:20Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-757501139",
+			"summary": "A maintainer reports good early progress and hopes for some support in release 2021.2.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:757502302",
+			"kind": "comment",
+			"actor": "steve28",
+			"createdAt": "2021-01-10T16:20:56Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-757502302",
+			"summary": "A user hopes the third attempt succeeds.",
+			"actorId": 5874433,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:757999742",
+			"kind": "comment",
+			"actor": "Colorado4Wheeler",
+			"createdAt": "2021-01-11T14:50:10Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-757999742",
+			"summary": "A user asks why entity and device names cannot be migrated.",
+			"actorId": 20329385,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:758009577",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2021-01-11T15:05:59Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-758009577",
+			"summary": "The project lead closes the issue because the first Z-Wave JS integration PR has merged.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:process:closed:2021-01-11T15:05:59Z",
+			"kind": "process",
+			"actor": "balloob",
+			"createdAt": "2021-01-11T15:05:59Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483",
+			"summary": "The project lead closes the issue.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:758653209",
+			"kind": "comment",
+			"actor": "Hedda",
+			"createdAt": "2021-01-12T13:25:45Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-758653209",
+			"summary": "A user asks the integration's name and beta status.",
+			"actorId": 6320001,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:758654803",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-12T13:28:46Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-758654803",
+			"summary": "A maintainer says it is in nightly builds, named Z-Wave JS, and targeted at 2021.2.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:768001919",
+			"kind": "comment",
+			"actor": "GrizzlyAK",
+			"createdAt": "2021-01-27T03:46:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-768001919",
+			"summary": "A user asks for a migration path that preserves names.",
+			"actorId": 4411963,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:768041899",
+			"kind": "comment",
+			"actor": "FreelancerJay",
+			"createdAt": "2021-01-27T05:30:45Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-768041899",
+			"summary": "A user relays that developers hope to provide migration but cannot yet promise it.",
+			"actorId": 67540736,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		},
+		{
+			"id": "architecture-483:comment:768282643",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2021-01-27T13:24:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/483#issuecomment-768282643",
+			"summary": "A maintainer links an issue planning the migration path.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-483:issue:483"
+		}
+	]
+}

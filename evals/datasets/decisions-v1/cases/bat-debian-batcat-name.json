@@ -1,0 +1,432 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "bat-debian-batcat-name",
+	"title": "Resolving the bat versus batcat name clash on Debian",
+	"source": {
+		"url": "https://github.com/sharkdp/bat/issues/2455",
+		"retrievedAt": "2026-10-18T07:35:01.511207+00:00",
+		"repository": "sharkdp/bat",
+		"number": 2455
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-01-21T13:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-08-10T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-06-12T04:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-06-12T09:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "bat-2455:issue:2455",
+			"kind": "opening",
+			"actor": "Tachi107",
+			"createdAt": "2023-01-21T12:10:25Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "A Debian contributor reports that Debian has moved the binary back from batcat to bat because the old owner of that path left the archive, and suggests the README prepare for Debian 12 and Ubuntu 23.04.",
+			"actorId": 34214253,
+			"actorType": "human"
+		},
+		{
+			"id": "bat-2455:comment:1399244330",
+			"kind": "comment",
+			"actor": "sharkdp",
+			"createdAt": "2023-01-21T12:40:49Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-1399244330",
+			"summary": "The project owner welcomes the news and agrees the docs should get ready for the change.",
+			"actorId": 4209276,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:1521552974",
+			"kind": "comment",
+			"actor": "nabajour",
+			"createdAt": "2023-04-25T10:29:56Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-1521552974",
+			"summary": "A user finds bat broken again on Debian unstable because a later fix restored the clash with the Bacula console's bat, and describes a manual update-alternatives workaround they suspect is misuse.",
+			"actorId": 4026451,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:2395215798",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2024-10-05T22:35:36Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-2395215798",
+			"summary": "A user proposes asking Bacula upstream to rename its binary, with a staged plan across Debian releases and a transitional explainer script at the old path.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:2800380303",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2025-04-14T03:27:04Z",
+			"editedAt": "2026-06-10T21:49:26Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-2800380303",
+			"summary": "A user suggests looking at how moreutils and GNU parallel share a binary name via diversions, later pointing to a fuller follow-up.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:2801338859",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2025-04-14T11:04:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-2801338859",
+			"summary": "The opener explains Debian only allows alternatives for programs with similar function, and the two bat programs are unrelated; batcat could at most be an alternative for cat.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:2804089533",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2025-04-15T07:26:55Z",
+			"editedAt": "2025-04-15T07:28:26Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-2804089533",
+			"summary": "The user accepts the policy point, notes Bacula's seniority, and suggests a one-time manual symlink or a post-install prompt.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:2810484380",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2025-04-16T19:00:32Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-2810484380",
+			"summary": "A user notes the same name clash exists on Arch's AUR.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:3170614175",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2025-08-09T11:02:43Z",
+			"editedAt": "2026-06-11T19:02:59Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-3170614175",
+			"summary": "A user details local dpkg-divert commands that rename both binaries, while noting the Bacula desktop entry would then break, so a shell alias may be simpler.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:process:cross-referenced:2026-03-14T10:12:16Z",
+			"kind": "process",
+			"actor": "XploitMonk0x01",
+			"createdAt": "2026-03-14T10:12:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "A contributor links a docs pull request clarifying the Ubuntu and Debian executable name.",
+			"actorId": 132329210,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:process:cross-referenced:2026-05-17T04:22:58Z",
+			"kind": "process",
+			"actor": "wyf027",
+			"createdAt": "2026-05-17T04:22:58Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "A contributor links a docs pull request stating Debian 12 and later install bat.",
+			"actorId": 39647285,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4601466769",
+			"kind": "comment",
+			"actor": "ded-furby",
+			"createdAt": "2026-06-02T10:26:55Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4601466769",
+			"summary": "A user says a merged docs change now describes newer releases as shipping bat, and suggests closing the issue.",
+			"actorId": 190979964,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4603563061",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-02T14:44:14Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4603563061",
+			"summary": "The opener corrects this: Debian reverted the rename within months, so no Debian release ships bat, quoting the package changelog.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:process:renamed:2026-06-02T14:44:24Z",
+			"kind": "process",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-02T14:44:24Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "The opener retitles the issue to say batcat has not been renamed after all.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4631462545",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-05T12:17:51Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4631462545",
+			"summary": "The user who proposed an upstream Bacula rename asks for opinions on it.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4638007961",
+			"kind": "comment",
+			"actor": "Huaian666",
+			"createdAt": "2026-06-06T08:46:09Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4638007961",
+			"summary": "A user posts off-topic praise about recommending bat.",
+			"actorId": 226061028,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4638008181",
+			"kind": "comment",
+			"actor": "Huaian666",
+			"createdAt": "2026-06-06T08:46:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4638008181",
+			"summary": "The same user posts off-topic praise for the docs.",
+			"actorId": 226061028,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4638296272",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-06T10:52:13Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4638296272",
+			"summary": "The opener calls the upstream rename sensible and asks the proposer to start the conversation with Bacula.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:process:cross-referenced:2026-06-07T05:45:11Z",
+			"kind": "process",
+			"actor": "ded-furby",
+			"createdAt": "2026-06-07T05:45:11Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "A contributor links a docs pull request clarifying the batcat fallback.",
+			"actorId": 190979964,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4645099771",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-08T03:06:36Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4645099771",
+			"summary": "The proposer says they could not join Debian's Salsa to reach the maintainers.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4646610449",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-08T08:06:02Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4646610449",
+			"summary": "The opener clarifies they meant contacting Bacula upstream, not Debian.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4647983140",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-08T10:34:14Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4647983140",
+			"summary": "The proposer says they could not find Bacula's repository.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4650441825",
+			"kind": "comment",
+			"actor": "Huaian666",
+			"createdAt": "2026-06-08T15:14:15Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4650441825",
+			"summary": "A user posts off-topic praise.",
+			"actorId": 226061028,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4651005748",
+			"kind": "comment",
+			"actor": "moposx",
+			"createdAt": "2026-06-08T16:15:21Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4651005748",
+			"summary": "A user links Bacula's community GitLab.",
+			"actorId": 15135544,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4655518271",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-09T02:42:54Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4655518271",
+			"summary": "The proposer reports filing a rename request on Bacula's GitLab and asks people to upvote it there.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4675317134",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2026-06-10T22:35:34Z",
+			"editedAt": "2026-06-11T19:12:47Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4675317134",
+			"summary": "A user suggests the Debian packager could divert Bacula's binary as GNU parallel does for moreutils, later striking this through as unsatisfactory.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4681981287",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-11T15:04:53Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4681981287",
+			"summary": "The opener, a Debian developer, says diversions between unrelated packages are not acceptable in Debian.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4683417415",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2026-06-11T17:52:57Z",
+			"editedAt": "2026-06-11T19:56:54Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4683417415",
+			"summary": "The user cites Debian policy calling package diversions a last resort and offers a docs PR and outreach advising local workarounds instead.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4683869439",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-11T18:47:21Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4683869439",
+			"summary": "The rename proposer welcomes contacting Debian.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4684076392",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-11T19:13:35Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4684076392",
+			"summary": "The opener doubts Debian would accept that, says diversions are too complex to recommend in a README, and stresses the issue is about fixing the name, not working around it.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4684391965",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2026-06-11T19:52:17Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4684391965",
+			"summary": "The user asks where the real fix lies and notes a Debian maintainer had already settled how users are told about the batcat name.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4686941645",
+			"kind": "comment",
+			"actor": "jvschiavo",
+			"createdAt": "2026-06-12T03:04:49Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4686941645",
+			"summary": "The rename proposer clarifies they want Bacula to rename its binary, which is a fix rather than a workaround.",
+			"actorId": 20977075,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4689004993",
+			"kind": "comment",
+			"actor": "Tachi107",
+			"createdAt": "2026-06-12T08:10:33Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4689004993",
+			"summary": "The opener agrees that asking Bacula to rename is the only way forward and that they had only objected to the diversion idea.",
+			"actorId": 34214253,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:4694429168",
+			"kind": "comment",
+			"actor": "ernstki",
+			"createdAt": "2026-06-12T19:08:35Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-4694429168",
+			"summary": "The user concludes the README already describes the situation about as well as possible for now.",
+			"actorId": 4009681,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:process:cross-referenced:2026-06-20T08:07:31Z",
+			"kind": "process",
+			"actor": "ded-furby",
+			"createdAt": "2026-06-20T08:07:31Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"summary": "A contributor links a docs pull request on a personal fork about the batcat naming note.",
+			"actorId": 190979964,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		},
+		{
+			"id": "bat-2455:comment:5147505818",
+			"kind": "comment",
+			"actor": "monerostar",
+			"createdAt": "2026-07-31T21:11:52Z",
+			"url": "https://github.com/sharkdp/bat/issues/2455#issuecomment-5147505818",
+			"summary": "A user checks Ubuntu 26.04 and finds only batcat, so the current README and a pending docs PR wrongly say newer releases install bat; they propose wording that treats batcat as the usual name.",
+			"actorId": 203146215,
+			"actorType": "human",
+			"parentId": "bat-2455:issue:2455"
+		}
+	]
+}

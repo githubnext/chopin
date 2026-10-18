@@ -1,0 +1,159 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "excalidraw-wheel-zoom-mode",
+	"title": "Scroll-wheel zoom mode for mouse users",
+	"source": {
+		"url": "https://github.com/excalidraw/excalidraw/discussions/5515",
+		"retrievedAt": "2026-10-18T07:20:15.285799+00:00",
+		"repository": "excalidraw/excalidraw",
+		"number": 5515,
+		"nodeId": "D_kwDODcka_M4AQRaD"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2022-07-31T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2024-11-05T12:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDODcka_M4AQRaD",
+			"kind": "opening",
+			"actor": "melyaaka",
+			"createdAt": "2022-07-30T22:12:27Z",
+			"editedAt": "2022-07-30T22:14:03Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515",
+			"summary": "The opener asks for plain scroll-wheel zoom and right-drag panning, citing Google Maps, Miro and Obsidian, and suggests at least a separate mouse mode alongside the current trackpad behaviour.",
+			"actorId": "MDQ6VXNlcjI0NjU5MTA0",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDODcka_M4AMjby",
+			"kind": "comment",
+			"actor": "sojusnik",
+			"createdAt": "2022-07-31T11:15:43Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-3290866",
+			"summary": "A user notes middle-button drag already pans, but on Linux it also pastes the clipboard, and asks that middle-click paste be blocked.",
+			"actorId": "MDQ6VXNlcjEyNDU3MTg=",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4ARyn2",
+			"kind": "comment",
+			"actor": "sean1832",
+			"createdAt": "2023-01-12T05:24:52Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-4663798",
+			"summary": "A user supports adding a zoom mode users can switch to.",
+			"actorId": "MDQ6VXNlcjg0OTQ4MDM4",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4ASBEE",
+			"kind": "reply",
+			"actor": "Alchete",
+			"createdAt": "2023-01-19T00:35:12Z",
+			"editedAt": "2023-01-19T00:35:33Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-4722948",
+			"summary": "A user praises the current controls, argues right-click must stay a context menu and middle-drag or space-drag already pan, but agrees plain-wheel zoom has a case.",
+			"actorId": "MDQ6VXNlcjQ3MDUxODk=",
+			"actorType": "human",
+			"parentId": "DC_kwDODcka_M4ARyn2"
+		},
+		{
+			"id": "DC_kwDODcka_M4AqVqx",
+			"kind": "comment",
+			"actor": "papucho",
+			"createdAt": "2024-10-30T10:43:26Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-11098801",
+			"summary": "A user asks for the option to be added.",
+			"actorId": "MDQ6VXNlcjIxMzAw",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4AqjFh",
+			"kind": "reply",
+			"actor": "juhasuni",
+			"createdAt": "2024-11-05T11:34:56Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-11153761",
+			"summary": "A user disputes the opener's claim, noting Figma and tldraw also use modifier plus scroll to zoom.",
+			"actorId": "MDQ6VXNlcjIwODI4Nzg=",
+			"actorType": "human",
+			"parentId": "DC_kwDODcka_M4AqVqx"
+		},
+		{
+			"id": "DC_kwDODcka_M4AqjH4",
+			"kind": "reply",
+			"actor": "papucho",
+			"createdAt": "2024-11-05T11:51:21Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-11153912",
+			"summary": "The requester replies that Miro and Figma support scroll zoom and right-drag panning, with a plain right-click still opening the menu.",
+			"actorId": "MDQ6VXNlcjIxMzAw",
+			"actorType": "human",
+			"parentId": "DC_kwDODcka_M4AqVqx"
+		},
+		{
+			"id": "DC_kwDODcka_M4A9mbl",
+			"kind": "comment",
+			"actor": "alastair-games",
+			"createdAt": "2026-03-16T00:02:21Z",
+			"editedAt": "2026-03-16T00:08:16Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-16148197",
+			"summary": "A user asks for wheel zoom, perhaps as a setting removing the need to hold Control, for one-handed navigation.",
+			"actorId": "MDQ6VXNlcjU3NDQ5MDg=",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4A_J5B",
+			"kind": "comment",
+			"actor": "arch1en",
+			"createdAt": "2026-04-14T10:42:32Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-16555585",
+			"summary": "A user bumps the request and suggests a toggle between the two behaviours.",
+			"actorId": "MDQ6VXNlcjYwMTczNzE=",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4BBb1A",
+			"kind": "comment",
+			"actor": "Frzjck",
+			"createdAt": "2026-06-02T14:55:56Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-17153344",
+			"summary": "A user wishes it were the default but says a browser extension would do.",
+			"actorId": "MDQ6VXNlcjcxNjExMTI1",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4BC46D",
+			"kind": "comment",
+			"actor": "sricks",
+			"createdAt": "2026-07-04T21:22:04Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-17534595",
+			"summary": "A user shares an AI-written userscript that turns the wheel into zoom and right-drag into panning.",
+			"actorId": "MDQ6VXNlcjYyMzg1MjQ=",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		},
+		{
+			"id": "DC_kwDODcka_M4BHhGy",
+			"kind": "comment",
+			"actor": "StianOvrevage",
+			"createdAt": "2026-10-04T19:03:38Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515#discussioncomment-18747826",
+			"summary": "A user notes the Excalidraw plugin for Obsidian already has a setting to invert wheel zoom.",
+			"actorId": "MDQ6VXNlcjY2MzAwMDU=",
+			"actorType": "human",
+			"parentId": "D_kwDODcka_M4AQRaD"
+		}
+	]
+}

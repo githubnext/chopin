@@ -1,0 +1,596 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "home-assistant-numeric-state-unavailable",
+	"title": "numeric_state triggers after an unavailable state",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/discussions/668",
+		"retrievedAt": "2026-10-18T07:19:05.302738+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 668,
+		"nodeId": "D_kwDOByplq84AOGiF"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-11-21T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2022-02-16T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2022-06-08T21:30:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2022-06-08T21:40:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOByplq84AOGiF",
+			"kind": "opening",
+			"actor": "amelchio",
+			"createdAt": "2021-11-20T20:22:02Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668",
+			"summary": "The opener proposes that the numeric_state trigger fire only when both the previous and new states are valid numbers, so a sensor dropping to unavailable and returning to the same value (for example after a reboot) no longer fires an automation; anyone wanting the old behaviour would combine a state trigger with a numeric condition.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOByplq84AGZMk",
+			"kind": "comment",
+			"actor": "Adminiuga",
+			"createdAt": "2021-11-21T00:26:26Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-1676068",
+			"summary": "A user suggests an opt-in option to ignore unavailable transitions, keeping the old default so nothing breaks.",
+			"actorId": "MDQ6VXNlcjU4MjYxNjA=",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AGZVn",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2021-11-21T08:49:46Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-1676647",
+			"summary": "The opener replies that the current behaviour is a bug contradicting the docs, so a compatibility flag is unwanted; changing the default would fix most automations, and he asks for real cases where the current behaviour helps.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMQQ",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2022-02-10T07:23:56Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2147344",
+			"summary": "A maintainer (the project lead) says the proposal makes sense.",
+			"actorId": "MDQ6VXNlcjE0NDQzMTQ=",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMTZ",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-02-10T08:06:14Z",
+			"editedAt": "2022-02-10T08:07:39Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2147545",
+			"summary": "A maintainer agrees in part but warns of side effects for polling devices and startup: an entity unavailable at boot would need two reports before firing, and entity-referenced thresholds would behave differently.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMrh",
+			"kind": "reply",
+			"actor": "elupus",
+			"createdAt": "2022-02-10T12:16:09Z",
+			"editedAt": "2022-02-10T12:16:47Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2149089",
+			"summary": "A user argues that treating comparisons with an unavailable value as invalid would handle both the original and the maintainer's examples.",
+			"actorId": "MDQ6VXNlcjQ4Mjk3Ng==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AIMQQ"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMr0",
+			"kind": "reply",
+			"actor": "elupus",
+			"createdAt": "2022-02-10T12:18:11Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2149108",
+			"summary": "The same user adds that arithmetic on unknown or unavailable values should yield unknown, as with templates.",
+			"actorId": "MDQ6VXNlcjQ4Mjk3Ng==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AIMQQ"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMs1",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-02-10T12:29:23Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2149173",
+			"summary": "The maintainer gives a simpler example: a temperature trigger whose sensor is not ready at startup, asking whether it would then need two updates to fire.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIMtF",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-02-10T12:32:58Z",
+			"editedAt": "2022-02-10T12:33:09Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2149189",
+			"summary": "The maintainer asks whether the change would create inconsistency between numeric_state triggers and numeric_state conditions.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AINCq",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-02-10T15:32:14Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2150570",
+			"summary": "The opener explains that under the proposal the startup case would not fire at all, matching entities that report an initial value immediately; only a real crossing fires.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIUyA",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-02-15T16:28:44Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2182272",
+			"summary": "The opener asks the maintainer whether that answers his concern.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIUyL",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-02-15T16:30:43Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2182283",
+			"summary": "The maintainer says the change would cause as much surprising behaviour as it removes.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIVM8",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-02-15T21:10:44Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2183996",
+			"summary": "The opener says he cannot think of such a case and finds not firing on unavailable easy to explain.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIVNn",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-02-15T21:21:21Z",
+			"editedAt": "2022-02-15T21:23:19Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2184039",
+			"summary": "The maintainer counters that firing when an entity returns and matches is also easy to explain, values may really change while unavailable, and the current behaviour lets users filter with from/to variables; he calls himself in the middle but does not see the proposal as an improvement.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AIkI8",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-02-24T16:17:44Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2245180",
+			"summary": "The opener rebuts point by point: the current rule has several caveats, firing on an unknown history is not useful, the state trigger can catch unavailability properly, and status quo is the current behaviour's only real merit.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AGZMk"
+		},
+		{
+			"id": "DC_kwDOByplq84AItRv",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-03-02T18:53:33Z",
+			"editedAt": "2022-03-02T18:58:49Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2282607",
+			"summary": "The opener notes discussion has stalled and, since the strongest objection was neutral, says he will open a PR.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AIMQQ"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimj",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:50:44Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763171",
+			"summary": "After the PR review asked for more discussion, the opener restates the maintainer's concern about trigger/condition consistency as its own thread.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKiml",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:51:06Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763173",
+			"summary": "The opener replies that the proposal adds no inconsistency, but the area is already inconsistent because comparisons with unavailable return false; such comparisons should ideally be invalid.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimj"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimo",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:51:21Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763176",
+			"summary": "The opener restates the objection that the change solves nothing and only introduces unwanted behaviour.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimq",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:51:39Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763178",
+			"summary": "The opener calls that objection a fallacy, since any change might be disliked yet still fix something.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimo"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimr",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:51:51Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763179",
+			"summary": "The opener restates the objection that the change breaks triggers people rely on.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKims",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:52:07Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763180",
+			"summary": "The opener answers that removing relied-on behaviour is a breaking change to weigh, not a veto, and that the usability gain is worth it.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimr"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimt",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:52:19Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763181",
+			"summary": "The opener quotes a PR review objection that the change assumes the value stayed in range while the device was offline.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimu",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:52:33Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763182",
+			"summary": "The opener replies that no assumption is made: the trigger is skipped for lack of knowledge, much as triggers do not fire for state changes during a restart.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimt"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimv",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:52:47Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763183",
+			"summary": "The opener quotes the PR objection that the change would be inconsistent with all other triggers.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimy",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:53:04Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763186",
+			"summary": "The opener argues numeric_state is unique in seeing non-numeric input, and that the proposal removes an inconsistency since no other trigger fires on what merely might have happened.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimv"
+		},
+		{
+			"id": "DC_kwDOByplq84AKimz",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:53:14Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763187",
+			"summary": "The opener quotes the PR objection that the change could miss triggers.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84AKim3",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:53:34Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763191",
+			"summary": "The opener replies that triggers are already missed today: the current firing is a late surrogate that can fire with no crossing and fires once for many possible crossings.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimz"
+		},
+		{
+			"id": "DC_kwDOByplq84AKim8",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T21:54:06Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763196",
+			"summary": "The opener explains he has split each objection from the PR review into its own reply thread and asks others to do the same for new points.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AIMQQ"
+		},
+		{
+			"id": "DC_kwDOByplq84AKin3",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:11:32Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763255",
+			"summary": "The maintainer says the opener misses the point: conditions always evaluate, so the change makes triggers fire in fewer cases than conditions pass.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimj"
+		},
+		{
+			"id": "DC_kwDOByplq84AKin-",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:12:42Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763262",
+			"summary": "The maintainer says the change makes another use case harder and is a breaking change without a real problem, so it should not be done.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimo"
+		},
+		{
+			"id": "DC_kwDOByplq84AKin_",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:13:28Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763263",
+			"summary": "The maintainer complains the split into sub-threads makes his replies hard to follow.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimr"
+		},
+		{
+			"id": "DC_kwDOByplq84AKioG",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:14:28Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763270",
+			"summary": "The maintainer says lack of knowledge is exactly why it should fire, since the only known fact is that the value is now in range.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimt"
+		},
+		{
+			"id": "DC_kwDOByplq84AKioM",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:15:40Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763276",
+			"summary": "The maintainer disagrees that numeric_state is special.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimv"
+		},
+		{
+			"id": "DC_kwDOByplq84AKioZ",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:18:07Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763289",
+			"summary": "The maintainer says one cannot tell whether the current firing is a surrogate, firing without a crossing is not worse, and the multiple-crossing point takes his concern out of context.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimz"
+		},
+		{
+			"id": "DC_kwDOByplq84AKio7",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-16T22:31:37Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763323",
+			"summary": "The opener asks the maintainer to explain how it is inconsistent with other triggers.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimv"
+		},
+		{
+			"id": "DC_kwDOByplq84AKipc",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-05-16T22:37:42Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2763356",
+			"summary": "The maintainer shows that a state trigger to on and a zone enter trigger both fire again when an entity returns from unavailable.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimv"
+		},
+		{
+			"id": "DC_kwDOByplq84AKpB5",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-20T08:55:52Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2789497",
+			"summary": "The opener agrees the split is awkward and says GitHub discussions handle long branching debates poorly.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimr"
+		},
+		{
+			"id": "DC_kwDOByplq84AKpCE",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-20T08:56:52Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2789508",
+			"summary": "The opener says he understands current behaviour but is proposing an alternative that removes silently accepted type errors.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimj"
+		},
+		{
+			"id": "DC_kwDOByplq84AKpCK",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-20T08:58:01Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2789514",
+			"summary": "The opener insists the problem is real, has caused forum posts, and that pretending to handle unavailability automatically causes confusion.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimo"
+		},
+		{
+			"id": "DC_kwDOByplq84AKpJm",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-05-20T10:26:54Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2789990",
+			"summary": "The opener tests the examples: a state trigger with an explicit from value does not refire, and the zone trigger actually bails out on unavailable, so there is no general rule; he limited the proposal to numeric_state to avoid a broader fight.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84AKimv"
+		},
+		{
+			"id": "DC_kwDOByplq84ALEb2",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2022-06-08T00:38:31Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2901750",
+			"summary": "The project lead proposes a middle variant: remember the last valid number and compare against it, so returning to an unchanged in-range value does not fire while a real crossing during unavailability does.",
+			"actorId": "MDQ6VXNlcjE0NDQzMTQ=",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84ALE7u",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-06-08T07:58:13Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2903790",
+			"summary": "The opener asks how the variant handles a value that stays above the threshold but changes while unavailable.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALEb2"
+		},
+		{
+			"id": "DC_kwDOByplq84ALE9G",
+			"kind": "reply",
+			"actor": "frenck",
+			"createdAt": "2022-06-08T08:06:06Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2903878",
+			"summary": "The maintainer answers that it would not fire, since it was already above the threshold.",
+			"actorId": "MDQ6VXNlcjE5NTMyNw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALEb2"
+		},
+		{
+			"id": "DC_kwDOByplq84ALGLI",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2022-06-08T21:13:44Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2908872",
+			"summary": "The opener says all the other maintainer's objections apply equally to the variant.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALEb2"
+		},
+		{
+			"id": "DC_kwDOByplq84ALGLR",
+			"kind": "reply",
+			"actor": "balloob",
+			"createdAt": "2022-06-08T21:15:14Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2908881",
+			"summary": "The project lead says that is fine because the variant was pre-approved.",
+			"actorId": "MDQ6VXNlcjE0NDQzMTQ=",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALEb2"
+		},
+		{
+			"id": "DC_kwDOByplq84ALGNH",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2022-06-08T21:36:54Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-2908999",
+			"summary": "The opener withdraws the proposal; it is marked as the answer.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "D_kwDOByplq84AOGiF:process:answered:2022-06-08T21:36:58Z",
+			"kind": "process",
+			"actor": "amelchio",
+			"createdAt": "2022-06-08T21:36:58Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668",
+			"summary": "The opener marks the withdrawal as the answer.",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "D_kwDOByplq84AOGiF:process:closed:2023-05-11T12:52:27Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2023-05-11T12:52:27Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668",
+			"summary": "The discussion is closed as resolved about a year later.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOByplq84AOGiF"
+		},
+		{
+			"id": "DC_kwDOByplq84A1CWC",
+			"kind": "reply",
+			"actor": "melyux",
+			"createdAt": "2025-07-27T19:11:06Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-13903234",
+			"summary": "A user who just hit the bug asks why it was withdrawn.",
+			"actorId": "MDQ6VXNlcjEwMjk2MDUz",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALGNH"
+		},
+		{
+			"id": "DC_kwDOByplq84A2AEB",
+			"kind": "reply",
+			"actor": "amelchio",
+			"createdAt": "2025-08-19T19:02:49Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/668#discussioncomment-14156033",
+			"summary": "The opener says the bug and proposal remain valid; the withdrawal reflected him leaving the process.",
+			"actorId": "MDQ6VXNlcjI2MTc0OTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84ALGNH"
+		}
+	]
+}

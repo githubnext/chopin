@@ -1,0 +1,533 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "home-assistant-require-code-owner",
+	"title": "Require code owners on new integrations",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/issues/287",
+		"retrievedAt": "2026-10-18T07:27:40.229751+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 287
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2019-09-13T17:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2019-09-16T05:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2019-09-17T21:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2019-09-20T12:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "architecture-287:issue:287",
+			"kind": "opening",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T16:47:50Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"summary": "A maintainer proposes refusing new integrations whose contributor does not list themselves as code owner, later widened to new features and major refactors, with internal integrations exempt and owners free to step down after release; an ADR PR is planned.",
+			"actorId": 195327,
+			"actorType": "human"
+		},
+		{
+			"id": "architecture-287:process:renamed:2019-09-13T16:48:07Z",
+			"kind": "process",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T16:48:07Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"summary": "The opener renames the issue to spell out code owner.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:process:renamed:2019-09-13T16:48:25Z",
+			"kind": "process",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T16:48:25Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"summary": "The opener renames it again to its final title about newly contributed integrations.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531311573",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-09-13T16:50:56Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531311573",
+			"summary": "A maintainer fully agrees.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531314517",
+			"kind": "comment",
+			"actor": "dmulcahey",
+			"createdAt": "2019-09-13T16:59:45Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531314517",
+			"summary": "A user supports the idea.",
+			"actorId": 1335687,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531326919",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T17:37:42Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531326919",
+			"summary": "The opener asks whether large contributions to integrations with no owner, such as rewrites, should also trigger the rule.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531327462",
+			"kind": "comment",
+			"actor": "Kane610",
+			"createdAt": "2019-09-13T17:39:20Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531327462",
+			"summary": "A maintainer says yes, citing being made co-owner after fixing a discovery feature.",
+			"actorId": 24575746,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531337977",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T18:11:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531337977",
+			"summary": "The opener notes the hard part is defining a significant contribution.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531339859",
+			"kind": "comment",
+			"actor": "dshokouhi",
+			"createdAt": "2019-09-13T18:17:19Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531339859",
+			"summary": "A maintainer suggests counting how many submissions someone makes to an integration.",
+			"actorId": 1634145,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531344089",
+			"kind": "comment",
+			"actor": "Adminiuga",
+			"createdAt": "2019-09-13T18:29:50Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531344089",
+			"summary": "A user jokes that anyone who touches an integration should own it.",
+			"actorId": 5826160,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531344804",
+			"kind": "comment",
+			"actor": "iantrich",
+			"createdAt": "2019-09-13T18:31:58Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531344804",
+			"summary": "A maintainer warns that would discourage contributors.",
+			"actorId": 1287159,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531345316",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T18:33:40Z",
+			"editedAt": "2019-09-13T18:54:50Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531345316",
+			"summary": "The opener agrees it could scare off bug fixers and proposes widening the rule to new features and significant refactors, which becomes the revised proposal.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531352099",
+			"kind": "comment",
+			"actor": "arsaboo",
+			"createdAt": "2019-09-13T18:54:33Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531352099",
+			"summary": "A user argues the rule should cover only new integrations and big refactors so feature additions are not discouraged.",
+			"actorId": 18319734,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531352496",
+			"kind": "comment",
+			"actor": "iantrich",
+			"createdAt": "2019-09-13T18:55:49Z",
+			"editedAt": "2019-09-13T18:56:07Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531352496",
+			"summary": "A maintainer counters that bug fixes should be spared but new features are significant enough to need an owner.",
+			"actorId": 1287159,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531352772",
+			"kind": "comment",
+			"actor": "dshokouhi",
+			"createdAt": "2019-09-13T18:56:42Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531352772",
+			"summary": "A maintainer repeats the submission-count idea as a sign of intent.",
+			"actorId": 1634145,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531352949",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T18:57:15Z",
+			"editedAt": "2019-09-13T18:59:33Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531352949",
+			"summary": "The opener rejects submission counts as a measure of impact.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531353902",
+			"kind": "comment",
+			"actor": "Adminiuga",
+			"createdAt": "2019-09-13T19:00:10Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531353902",
+			"summary": "A user suggests also counting contributions to the underlying library.",
+			"actorId": 5826160,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531354059",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T19:00:38Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531354059",
+			"summary": "The opener says that cannot be tracked.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531354411",
+			"kind": "comment",
+			"actor": "iantrich",
+			"createdAt": "2019-09-13T19:01:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531354411",
+			"summary": "A maintainer says reviewers will have to judge case by case and does not want ownership for trivial fixes.",
+			"actorId": 1287159,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531355713",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-13T19:05:43Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531355713",
+			"summary": "The opener notes existing new-integration labels could automate part of the check.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531366607",
+			"kind": "comment",
+			"actor": "dgomes",
+			"createdAt": "2019-09-13T19:42:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531366607",
+			"summary": "A user says reviewers can judge whether a contribution needs an owner as part of review.",
+			"actorId": 137684,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531421822",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2019-09-13T23:34:17Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531421822",
+			"summary": "A maintainer suggests feature contributors need not become owners when an active owner exists, but unowned integrations should recruit active people.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531471305",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-14T11:13:11Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531471305",
+			"summary": "The opener argues multiple owners help, since they can review each other and cover for one who disappears.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531480463",
+			"kind": "comment",
+			"actor": "balloob",
+			"createdAt": "2019-09-14T13:38:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531480463",
+			"summary": "The project lead agrees and cites an integration where two expert owners give fast turnaround.",
+			"actorId": 1444314,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531502801",
+			"kind": "comment",
+			"actor": "ties",
+			"createdAt": "2019-09-14T18:25:22Z",
+			"editedAt": "2019-09-14T18:26:13Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531502801",
+			"summary": "A user suggests reviewers simply ask contributors whether they want ownership, notes CODEOWNERS cannot scope ownership to part of an integration, and prefers people over process.",
+			"actorId": 199058,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531593209",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-09-15T19:38:18Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531593209",
+			"summary": "A maintainer says existing owners can manage their own co-owners, but every core integration needs a responsible person.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531595064",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-09-15T20:05:33Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531595064",
+			"summary": "A user opposes making an ADR, preferring reviewers to encourage ownership at their discretion and a checklist line, so ownership stays an honour rather than a chore.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531643932",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-16T05:17:18Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531643932",
+			"summary": "The opener replies this is about responsibility, not honour.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531655777",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-09-16T06:29:30Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531655777",
+			"summary": "The same user argues volunteers can only be encouraged to take responsibility, not forced.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531675990",
+			"kind": "comment",
+			"actor": "pvizeli",
+			"createdAt": "2019-09-16T07:56:28Z",
+			"editedAt": "2019-09-16T08:04:56Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531675990",
+			"summary": "A maintainer argues unmaintained code should be a custom integration instead, cites many broken integrations, and wants quality over quantity in core.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531690481",
+			"kind": "comment",
+			"actor": "Jc2k",
+			"createdAt": "2019-09-16T08:46:53Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531690481",
+			"summary": "A maintainer agrees new integrations need owners and adds that being invited to own one felt like earned trust.",
+			"actorId": 11544,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:531710852",
+			"kind": "comment",
+			"actor": "ties",
+			"createdAt": "2019-09-16T09:52:23Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-531710852",
+			"summary": "A user insists ownership depends on volunteer interest, not process.",
+			"actorId": 199058,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532152553",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-17T10:00:47Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532152553",
+			"summary": "The opener says the requirement is meant to filter out contributors without that commitment.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532354548",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-09-17T18:54:47Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532354548",
+			"summary": "A user says the proposal achieves nothing beyond bureaucracy.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532372609",
+			"kind": "comment",
+			"actor": "ties",
+			"createdAt": "2019-09-17T19:44:47Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532372609",
+			"summary": "A user opposes specific ADR wording because past ADRs were read narrowly, suggests dropping the internal exemption, and proposes PR template questions about willingness to maintain.",
+			"actorId": 199058,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532374159",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-17T19:49:08Z",
+			"editedAt": "2019-09-17T19:50:04Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532374159",
+			"summary": "The opener says turning away contributors who decline ownership is a goal, and bug fixes are out of scope.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532378729",
+			"kind": "comment",
+			"actor": "ties",
+			"createdAt": "2019-09-17T20:01:19Z",
+			"editedAt": "2019-09-17T20:02:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532378729",
+			"summary": "The user argues the real issue is communication and that forced yeses are worse than honest noes, and again suggests removing the internal exemption.",
+			"actorId": 199058,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532416894",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-17T21:53:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532416894",
+			"summary": "The opener thanks everyone and says an ADR PR will follow, softened to reflect the feedback, for a final go or no-go.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532751035",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-09-18T15:58:54Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532751035",
+			"summary": "A user notes code owner has no defined duties and is effectively a notification list, and says ADRs have often been ambiguous and not worth spending on this.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532830383",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-18T19:25:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532830383",
+			"summary": "The opener strongly disagrees, saying owner notifications have clearly sped up issue and PR handling.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532847033",
+			"kind": "comment",
+			"actor": "Jc2k",
+			"createdAt": "2019-09-18T20:12:24Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532847033",
+			"summary": "A maintainer says owner notifications are essential to their workflow.",
+			"actorId": 11544,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:process:cross-referenced:2019-09-18T20:49:09Z",
+			"kind": "process",
+			"actor": "frenck",
+			"createdAt": "2019-09-18T20:49:09Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"summary": "The ADR 0008 code owners PR is linked to this issue.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:532861267",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2019-09-18T20:51:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-532861267",
+			"summary": "The opener announces PR #290 with ADR 0008.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:comment:533175838",
+			"kind": "comment",
+			"actor": "amelchio",
+			"createdAt": "2019-09-19T15:08:37Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287#issuecomment-533175838",
+			"summary": "The objecting user clarifies they never opposed notifications.",
+			"actorId": 26174915,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		},
+		{
+			"id": "architecture-287:process:closed:2019-09-20T11:37:16Z",
+			"kind": "process",
+			"actor": "pvizeli",
+			"createdAt": "2019-09-20T11:37:16Z",
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"summary": "A maintainer closes the issue when the ADR PR is merged.",
+			"actorId": 15338540,
+			"actorType": "human",
+			"parentId": "architecture-287:issue:287"
+		}
+	]
+}

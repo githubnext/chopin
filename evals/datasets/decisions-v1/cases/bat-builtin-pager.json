@@ -1,0 +1,424 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "bat-builtin-pager",
+	"title": "A builtin pager for bat",
+	"source": {
+		"url": "https://github.com/sharkdp/bat/issues/1053",
+		"retrievedAt": "2026-10-18T07:34:57.040476+00:00",
+		"repository": "sharkdp/bat",
+		"number": 1053
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-06-05T21:20:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2022-02-06T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-10-06T19:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2025-10-24T21:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "bat-1053:issue:1053",
+			"kind": "opening",
+			"actor": "sharkdp",
+			"createdAt": "2020-06-05T21:07:40Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053",
+			"summary": "The owner opens a discussion on writing a custom pager library to replace calling `less`, listing benefits such as consistent cross-platform behaviour, resize handling, fixed headers and editor launch, against the large effort and expected bug reports, and suggests starting opt-in; he has a private prototype.",
+			"actorId": 4209276,
+			"actorType": "human"
+		},
+		{
+			"id": "bat-1053:process:renamed:2020-06-05T21:15:51Z",
+			"kind": "process",
+			"actor": "sharkdp",
+			"createdAt": "2020-06-05T21:15:51Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053",
+			"summary": "The owner retitles the issue from a brainstorm to a discussion.",
+			"actorId": 4209276,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:639834183",
+			"kind": "comment",
+			"actor": "eth-p",
+			"createdAt": "2020-06-05T21:35:57Z",
+			"editedAt": "2020-06-05T21:36:59Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-639834183",
+			"summary": "A collaborator fully supports it, agrees it should start as an opt-in `--pager` value to avoid surprising users, and suggests scroll anchoring on resize.",
+			"actorId": 32112321,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:639874485",
+			"kind": "comment",
+			"actor": "rr0ss0rr",
+			"createdAt": "2020-06-05T22:42:45Z",
+			"editedAt": "2020-06-06T01:49:33Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-639874485",
+			"summary": "A new user praises bat and supports the idea.",
+			"actorId": 16386590,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:640075670",
+			"kind": "comment",
+			"actor": "rr0ss0rr",
+			"createdAt": "2020-06-06T15:10:28Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-640075670",
+			"summary": "A user asks for vim colour schemes.",
+			"actorId": 16386590,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:653894895",
+			"kind": "comment",
+			"actor": "mouse07410",
+			"createdAt": "2020-07-05T14:21:18Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-653894895",
+			"summary": "A user asks for printer-friendly page headers and footers.",
+			"actorId": 5923577,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:671461042",
+			"kind": "comment",
+			"actor": "oconnor663",
+			"createdAt": "2020-08-10T16:36:29Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-671461042",
+			"summary": "A user notes many tools, including man, would benefit from a good pager library.",
+			"actorId": 860932,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:724369609",
+			"kind": "comment",
+			"actor": "metov",
+			"createdAt": "2020-11-10T00:31:19Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-724369609",
+			"summary": "A user asks whether the pager could instead be a separate recommended program, closer to Unix philosophy.",
+			"actorId": 51468504,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:724378094",
+			"kind": "comment",
+			"actor": "ssokolow",
+			"createdAt": "2020-11-10T00:55:19Z",
+			"editedAt": "2020-11-10T00:57:09Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-724378094",
+			"summary": "A user is fine with either as long as their `PAGER` setting is still honoured.",
+			"actorId": 46915,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:739566677",
+			"kind": "comment",
+			"actor": "magistau",
+			"createdAt": "2020-12-06T21:26:06Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-739566677",
+			"summary": "A contributor shares the `minus` pager crate.",
+			"actorId": 43097806,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:739567239",
+			"kind": "comment",
+			"actor": "sharkdp",
+			"createdAt": "2020-12-06T21:30:07Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-739567239",
+			"summary": "The owner says it looks promising.",
+			"actorId": 4209276,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:749307612",
+			"kind": "comment",
+			"actor": "pickfire",
+			"createdAt": "2020-12-22T02:51:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-749307612",
+			"summary": "A user asks for `more`-style page-break stops.",
+			"actorId": 4687791,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:749554515",
+			"kind": "comment",
+			"actor": "magistau",
+			"createdAt": "2020-12-22T14:01:52Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-749554515",
+			"summary": "The contributor compares how bat output looks in minus and another Rust pager with line numbers toggled.",
+			"actorId": 43097806,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:812919518",
+			"kind": "comment",
+			"actor": "ciscohack",
+			"createdAt": "2021-04-03T20:13:15Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-812919518",
+			"summary": "A user asks how to run the comparison command on macOS.",
+			"actorId": 11479557,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:1008022794",
+			"kind": "comment",
+			"actor": "stdedos",
+			"createdAt": "2022-01-08T15:17:50Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-1008022794",
+			"summary": "A user asks the owner to publish his prototype behind an experimental flag.",
+			"actorId": 133706,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:1030650853",
+			"kind": "comment",
+			"actor": "sharkdp",
+			"createdAt": "2022-02-05T16:05:42Z",
+			"editedAt": "2022-02-05T19:32:46Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-1030650853",
+			"summary": "The owner publishes a rough proof of concept (`riffle`) that reruns bat on resize, lists what it can and cannot do, and says requirements, design, and a check of existing crates such as minus should come first.",
+			"actorId": 4209276,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:1031292169",
+			"kind": "comment",
+			"actor": "stavros-mobal",
+			"createdAt": "2022-02-07T10:12:38Z",
+			"editedAt": "2022-02-07T10:12:57Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-1031292169",
+			"summary": "A user reports the prebuilt binary fails on an older glibc.",
+			"actorId": 98734638,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:1290569274",
+			"kind": "comment",
+			"actor": "hacker-DOM",
+			"createdAt": "2022-10-25T13:35:13Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-1290569274",
+			"summary": "A user asks for a two-column view.",
+			"actorId": 18601956,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:2107403600",
+			"kind": "comment",
+			"actor": "hacker-DOM",
+			"createdAt": "2024-05-13T12:08:12Z",
+			"editedAt": "2024-05-13T12:08:23Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-2107403600",
+			"summary": "A user points to Nushell's structured pager work.",
+			"actorId": 18601956,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3373558771",
+			"kind": "comment",
+			"actor": "academician",
+			"createdAt": "2025-10-06T19:27:01Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3373558771",
+			"summary": "A contributor notes a related issue was closed by PR #3402 and asks whether this one can close too.",
+			"actorId": 6391,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3424563467",
+			"kind": "comment",
+			"actor": "ManuLinares",
+			"createdAt": "2025-10-21T03:50:17Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3424563467",
+			"summary": "A user reports the builtin pager lacks an End key binding.",
+			"actorId": 3720020,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3444843712",
+			"kind": "comment",
+			"actor": "academician",
+			"createdAt": "2025-10-24T20:40:02Z",
+			"editedAt": "2025-10-24T20:41:04Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3444843712",
+			"summary": "The contributor who integrated minus as the builtin pager in #3402 explains minus uses `G`, and asks whether to request End upstream or add it in bat, preferring upstream.",
+			"actorId": 6391,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3444854928",
+			"kind": "comment",
+			"actor": "ManuLinares",
+			"createdAt": "2025-10-24T20:44:19Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3444854928",
+			"summary": "The user prefers adding it in bat, as minus's docs recommend.",
+			"actorId": 3720020,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3444980921",
+			"kind": "comment",
+			"actor": "ssokolow",
+			"createdAt": "2025-10-24T21:31:04Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3444980921",
+			"summary": "A user prefers fixing it upstream so platform conventions are the default for everyone.",
+			"actorId": 46915,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3462513352",
+			"kind": "comment",
+			"actor": "academician",
+			"createdAt": "2025-10-29T16:13:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3462513352",
+			"summary": "The contributor files an upstream feature request and will add it locally if declined.",
+			"actorId": 6391,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3462813123",
+			"kind": "comment",
+			"actor": "rr0ss0rr",
+			"createdAt": "2025-10-29T17:33:15Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3462813123",
+			"summary": "A user asks whether the builtin pager quits when output fits one screen.",
+			"actorId": 16386590,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3462842837",
+			"kind": "comment",
+			"actor": "ManuLinares",
+			"createdAt": "2025-10-29T17:42:56Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3462842837",
+			"summary": "A user points out minus has been inactive for over a year, so upstream changes are unlikely.",
+			"actorId": 3720020,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3463293005",
+			"kind": "comment",
+			"actor": "ciscohack",
+			"createdAt": "2025-10-29T18:55:23Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3463293005",
+			"summary": "A user says the builtin pager fails on large files and points to another pager as a better option.",
+			"actorId": 11479557,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3469835425",
+			"kind": "comment",
+			"actor": "academician",
+			"createdAt": "2025-10-30T19:55:45Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3469835425",
+			"summary": "The contributor confirms quit-if-one-screen was omitted by mistake and is harder to fix because minus supports it only in static mode.",
+			"actorId": 6391,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3470384225",
+			"kind": "comment",
+			"actor": "academician",
+			"createdAt": "2025-10-30T21:44:22Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3470384225",
+			"summary": "The contributor notes another tool switched from minus to a streampager fork for large inputs, lacking mouse support, and says they are improving minus.",
+			"actorId": 6391,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:3603816753",
+			"kind": "comment",
+			"actor": "keith-hall",
+			"createdAt": "2025-12-02T20:20:25Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-3603816753",
+			"summary": "A collaborator asks the contributor to add Home/End in bat for now since minus is unmaintained.",
+			"actorId": 11882719,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:process:cross-referenced:2026-03-24T19:31:16Z",
+			"kind": "process",
+			"actor": "keith-hall",
+			"createdAt": "2026-03-24T19:31:16Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053",
+			"summary": "A collaborator links an upstream minus PR adding quit-if-one-screen for dynamic paging.",
+			"actorId": 11882719,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:process:cross-referenced:2026-03-24T19:34:39Z",
+			"kind": "process",
+			"actor": "keith-hall",
+			"createdAt": "2026-03-24T19:34:39Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053",
+			"summary": "A collaborator links bat PR #3651 adding Home/End bindings to the builtin pager.",
+			"actorId": 11882719,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:5626459750",
+			"kind": "comment",
+			"actor": "Erquint",
+			"createdAt": "2026-09-10T22:46:59Z",
+			"editedAt": "2026-09-11T10:28:52Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-5626459750",
+			"summary": "A Windows user reports search and line-chopping problems with minus and reads the `less` default as a sign of little maintainer intent to develop the builtin pager.",
+			"actorId": 4364856,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		},
+		{
+			"id": "bat-1053:comment:5844689199",
+			"kind": "comment",
+			"actor": "eugenesvk",
+			"createdAt": "2026-09-26T08:42:26Z",
+			"url": "https://github.com/sharkdp/bat/issues/1053#issuecomment-5844689199",
+			"summary": "A user asks for minus key bindings to be configurable.",
+			"actorId": 12956286,
+			"actorType": "human",
+			"parentId": "bat-1053:issue:1053"
+		}
+	]
+}

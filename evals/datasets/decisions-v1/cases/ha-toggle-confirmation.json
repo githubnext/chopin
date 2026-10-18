@@ -1,0 +1,418 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "ha-toggle-confirmation",
+	"title": "Confirmation for Entities card toggles",
+	"source": {
+		"url": "https://github.com/home-assistant/frontend/discussions/8905",
+		"retrievedAt": "2026-10-18T07:11:47.937987+00:00",
+		"repository": "home-assistant/frontend",
+		"number": 8905,
+		"nodeId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-04-12T22:40:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-04-14T14:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-10-28T12:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2024-10-28T13:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "MDEwOkRpc2N1c3Npb24zMzE4MTI1",
+			"kind": "opening",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-12T22:35:41Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905",
+			"summary": "A maintainer asks for design input: Entities card actions cover a row's icon and label but not its rendered toggle, so a switch cannot be guarded; they sketch an `interactive_tap_action` key or a simpler `interactive_confirmation` key.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTI1",
+			"kind": "comment",
+			"actor": "bramkragten",
+			"createdAt": "2021-04-12T22:42:19Z",
+			"editedAt": "2021-04-13T12:37:40Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-602525",
+			"summary": "A maintainer recommends adding only a `confirmation` option and insists that a toggle must keep toggling rather than take configurable actions.",
+			"actorId": "MDQ6VXNlcjU2NjIyOTg=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTMz",
+			"kind": "reply",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-12T22:47:51Z",
+			"editedAt": "2021-04-12T22:48:03Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-602533",
+			"summary": "The opener asks whether the key needs a prefix, since a row could then hold two differently scoped `confirmation` blocks that users might confuse.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTQx",
+			"kind": "reply",
+			"actor": "bramkragten",
+			"createdAt": "2021-04-12T22:56:51Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-602541",
+			"summary": "The maintainer replies that the two blocks sit at different nesting levels, so a prefix is unnecessary.",
+			"actorId": "MDQ6VXNlcjU2NjIyOTg=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAzNTky",
+			"kind": "reply",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-13T08:04:52Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-603592",
+			"summary": "The opener accepts that it works technically, notes it likely stays YAML-only, and says either naming is fine.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAzNzQw",
+			"kind": "reply",
+			"actor": "pickonedev",
+			"createdAt": "2021-04-13T08:48:49Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-603740",
+			"summary": "A user backs the plain `confirmation` option, saying they already use that pattern.",
+			"actorId": "MDQ6VXNlcjM0MjAxMzg3",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjAyNTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA0Mzg0",
+			"kind": "comment",
+			"actor": "matthiasdebaat",
+			"createdAt": "2021-04-13T11:52:25Z",
+			"editedAt": "2021-04-13T11:58:37Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-604384",
+			"summary": "A design team member shares Figma prototypes and argues, citing toggle guidelines, that toggles should act instantly; they suggest replacing a guarded toggle with a button that opens more-info.",
+			"actorId": "MDQ6VXNlcjIwMjAzMjg0",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA2MzY3",
+			"kind": "reply",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-13T19:07:45Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-606367",
+			"summary": "The opener reads this as agreement: the toggle stays a toggle, with no tap or hold overrides, but an optional confirmation popup can sit in front of it.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA0Mzg0"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA4NjY1",
+			"kind": "reply",
+			"actor": "matthiasdebaat",
+			"createdAt": "2021-04-14T09:02:08Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-608665",
+			"summary": "The designer clarifies that a confirmation popup blocks the instant result a toggle promises, and repeats the more-info button recommendation.",
+			"actorId": "MDQ6VXNlcjIwMjAzMjg0",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA0Mzg0"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA4OTUy",
+			"kind": "reply",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-14T09:53:04Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-608952",
+			"summary": "The opener says more-info alone cannot warn users about a specific risk, which their use case needs, matching how existing actions already confirm.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA0Mzg0"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjEwMTUy",
+			"kind": "reply",
+			"actor": "matthiasdebaat",
+			"createdAt": "2021-04-14T13:54:29Z",
+			"editedAt": "2021-04-14T13:55:52Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-610152",
+			"summary": "The designer concedes that an explanatory dialog is better, but pitches a button plus confirmation dialog instead of a toggle.",
+			"actorId": "MDQ6VXNlcjIwMjAzMjg0",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50NjA0Mzg0"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjEwNDU1",
+			"kind": "comment",
+			"actor": "spacegaier",
+			"createdAt": "2021-04-14T14:44:32Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-610455",
+			"summary": "The opener objects that a button hides the on/off state behind its label text, and votes for a toggle with an optional confirmation.",
+			"actorId": "MDQ6VXNlcjExNDEzNw==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50NjM5NjQw",
+			"kind": "comment",
+			"actor": "Mariusthvdb",
+			"createdAt": "2021-04-21T12:06:23Z",
+			"editedAt": "2021-04-21T13:03:15Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-639640",
+			"summary": "A contributor links their own request for guarding covers and asks for a PIN dialog to be considered too.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84ANAW7",
+			"kind": "comment",
+			"actor": "franz134",
+			"createdAt": "2022-08-16T19:55:08Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-3409339",
+			"summary": "A user, over a year later, asks whether anything shipped, wants to guard printer and PC switches, and favours the designer's last prototype.",
+			"actorId": "U_kgDOBd3S3A",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84ASFTA",
+			"kind": "reply",
+			"actor": "Dmoua68",
+			"createdAt": "2023-01-20T18:48:41Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-4740288",
+			"summary": "A user links a community forum thread on confirmation dialogs for switches.",
+			"actorId": "U_kgDOByx4nw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84ANAW7"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AZXWx",
+			"kind": "comment",
+			"actor": "fvbrandt",
+			"createdAt": "2023-08-06T08:40:05Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-6649265",
+			"summary": "A user asks for news and prefers a native entity-level `confirmation` on an ordinary switch over workarounds.",
+			"actorId": "MDQ6VXNlcjg0NTc5NDc=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AZbq2",
+			"kind": "reply",
+			"actor": "matthiasdebaat",
+			"createdAt": "2023-08-08T08:47:36Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-6666934",
+			"summary": "The designer agrees actions should support confirmation but still holds that a switch cannot carry one, proposing the switch be swapped for a button when a confirmation is configured.",
+			"actorId": "MDQ6VXNlcjIwMjAzMjg0",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AZXWx"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AZbtH",
+			"kind": "reply",
+			"actor": "fvbrandt",
+			"createdAt": "2023-08-08T08:59:58Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-6667079",
+			"summary": "The user disputes the cited guideline's relevance and argues that the volume of requests outweighs an abstract rule.",
+			"actorId": "MDQ6VXNlcjg0NTc5NDc=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AZXWx"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Aiq28",
+			"kind": "comment",
+			"actor": "Stan-Tastic",
+			"createdAt": "2024-04-11T19:58:09Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-9088444",
+			"summary": "A user argues that someone who deliberately configures a confirmation no longer expects an instant toggle.",
+			"actorId": "MDQ6VXNlcjc5MzAyOQ==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Aiq6B",
+			"kind": "reply",
+			"actor": "Mariusthvdb",
+			"createdAt": "2024-04-11T20:26:47Z",
+			"editedAt": "2024-04-11T21:13:48Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-9088641",
+			"summary": "A contributor reports there is still no guard as of 2024.4, criticises the lock more-info behaviour, and shows lock and PIN patterns from custom cards.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Aiq28"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AjEeQ",
+			"kind": "reply",
+			"actor": "mfenske",
+			"createdAt": "2024-04-22T20:16:43Z",
+			"editedAt": "2024-04-22T20:22:48Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-9193360",
+			"summary": "A user reports that the current behaviour is inconsistent, since tapping the name confirms but tapping the switch does not, and asks maintainers to rethink.",
+			"actorId": "MDQ6VXNlcjY5NjM5ODU2",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Aiq28"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Aj-9-",
+			"kind": "reply",
+			"actor": "chammp",
+			"createdAt": "2024-05-14T12:14:23Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-9432958",
+			"summary": "A contributor points to guarded physical switches such as cockpit covers and mentions a template-lock workaround that lacks codes.",
+			"actorId": "MDQ6VXNlcjU3OTE4NzU3",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AZXWx"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AmjY_",
+			"kind": "comment",
+			"actor": "Mariusthvdb",
+			"createdAt": "2024-07-21T11:38:09Z",
+			"editedAt": "2024-07-21T11:38:29Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-10106431",
+			"summary": "A contributor links a forum report that a button row ignores the entity's confirmation on the button itself.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Amw_B",
+			"kind": "comment",
+			"actor": "karwosts",
+			"createdAt": "2024-07-26T16:23:42Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-10162113",
+			"summary": "A maintainer links a related pull request, #21453.",
+			"actorId": "MDQ6VXNlcjMyOTEyODgw",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqPub",
+			"kind": "reply",
+			"actor": "karwosts",
+			"createdAt": "2024-10-28T12:58:41Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11074459",
+			"summary": "The maintainer reports that the PR merged, so button, lock and script rows can now take confirmations.",
+			"actorId": "MDQ6VXNlcjMyOTEyODgw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqPxh",
+			"kind": "reply",
+			"actor": "Misiu",
+			"createdAt": "2024-10-28T13:16:29Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11074657",
+			"summary": "A contributor thanks them and asks about other domains, such as a garage-door cover on a tile card.",
+			"actorId": "MDQ6VXNlcjE3NDE4Mzg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqPzX",
+			"kind": "reply",
+			"actor": "karwosts",
+			"createdAt": "2024-10-28T13:25:45Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11074775",
+			"summary": "The maintainer says tile cards already confirm through `tap_action` and that the change only touched the Entities card.",
+			"actorId": "MDQ6VXNlcjMyOTEyODgw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqP2F",
+			"kind": "reply",
+			"actor": "Misiu",
+			"createdAt": "2024-10-28T13:41:59Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11074949",
+			"summary": "The contributor clarifies that they want confirmation on the tile card's open/close feature buttons.",
+			"actorId": "MDQ6VXNlcjE3NDE4Mzg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqP3J",
+			"kind": "reply",
+			"actor": "karwosts",
+			"createdAt": "2024-10-28T13:48:42Z",
+			"editedAt": "2024-10-28T13:49:12Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11075017",
+			"summary": "The maintainer calls tile features out of scope for now and suggests a workaround with a confirmed icon tap action.",
+			"actorId": "MDQ6VXNlcjMyOTEyODgw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AqP6U",
+			"kind": "reply",
+			"actor": "Mariusthvdb",
+			"createdAt": "2024-10-28T14:06:19Z",
+			"editedAt": "2024-10-28T14:08:44Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-11075220",
+			"summary": "A contributor offers the custom restriction-card as another workaround for tiles.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Amw_B"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A3OKY",
+			"kind": "comment",
+			"actor": "Mariusthvdb",
+			"createdAt": "2025-09-22T12:03:29Z",
+			"editedAt": "2025-09-22T12:21:49Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-14475928",
+			"summary": "A contributor shows that a tile's inline toggle feature bypasses configured confirmations and asks for a generic restriction option.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zMzE4MTI1"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A3OLJ",
+			"kind": "reply",
+			"actor": "Mariusthvdb",
+			"createdAt": "2025-09-22T12:10:39Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-14475977",
+			"summary": "The contributor asks a maintainer whether this legacy discussion should move to the new feature-request area.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A3OKY"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A3OMQ",
+			"kind": "reply",
+			"actor": "karwosts",
+			"createdAt": "2025-09-22T12:19:15Z",
+			"editedAt": "2025-09-22T12:26:42Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-14476048",
+			"summary": "A maintainer says there is no guidance, defers to the opener, warns that migration resets votes, and suggests a fresh request for feature restrictions.",
+			"actorId": "MDQ6VXNlcjMyOTEyODgw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A3OKY"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A3ONl",
+			"kind": "reply",
+			"actor": "Mariusthvdb",
+			"createdAt": "2025-09-22T12:26:11Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/8905#discussioncomment-14476133",
+			"summary": "The contributor links the new request they opened.",
+			"actorId": "MDQ6VXNlcjMzMzU0MTQx",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A3OKY"
+		}
+	]
+}

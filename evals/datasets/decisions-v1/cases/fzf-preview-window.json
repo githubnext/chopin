@@ -1,0 +1,481 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "fzf-preview-window",
+	"title": "fzf preview window and its layout options",
+	"source": {
+		"url": "https://github.com/junegunn/fzf/issues/587",
+		"retrievedAt": "2026-10-18T07:35:04.683974+00:00",
+		"repository": "junegunn/fzf",
+		"number": 587
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2016-06-04T09:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2016-06-08T16:20:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2016-06-11T12:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2016-06-12T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "fzf-587:issue:587",
+			"kind": "opening",
+			"actor": "junegunn",
+			"createdAt": "2016-06-04T08:05:10Z",
+			"url": "https://github.com/junegunn/fzf/issues/587",
+			"summary": "The maintainer floats a --preview option that runs an external command on the focused item, with screenshots, leaving open whether to add it at all and what layout (side, size, hidden) it should take.",
+			"actorId": 700826,
+			"actorType": "human"
+		},
+		{
+			"id": "fzf-587:comment:223758542",
+			"kind": "comment",
+			"actor": "deathmaz",
+			"createdAt": "2016-06-04T14:28:20Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-223758542",
+			"summary": "A user votes yes and suggests a right-side pane at 70 or 80 percent.",
+			"actorId": 6440135,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224026156",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-06T17:20:57Z",
+			"editedAt": "2016-06-07T09:33:56Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224026156",
+			"summary": "The maintainer reports a working build with configurable layout such as left:30% and asks for compelling use cases.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224228173",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-07T09:30:19Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224228173",
+			"summary": "A contributor suggests richer shell history search showing the full selected command with surrounding history, which would also help multi-line commands.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224228495",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-07T09:31:46Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224228495",
+			"summary": "The contributor adds file preview ideas for fzf.vim: line context and buffer contents.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224321296",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-07T15:40:00Z",
+			"editedAt": "2016-06-07T15:40:08Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224321296",
+			"summary": "The maintainer says trying the history idea surfaced a separate bug.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224326235",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-07T15:56:01Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224326235",
+			"summary": "The contributor thanks him and says the feature sounds great.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224337840",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-07T16:33:37Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224337840",
+			"summary": "The maintainer demonstrates history preview with two layouts, a three-line top pane and a 30 percent right pane.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224339475",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-07T16:39:16Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224339475",
+			"summary": "The contributor asks whether the preview command can receive the selected line number to show context.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224341736",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-07T16:47:05Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224341736",
+			"summary": "The maintainer is doubtful, as a long bash command is a single wrapped string in a fixed ncurses window.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224374689",
+			"kind": "comment",
+			"actor": "khalidchawtany",
+			"createdAt": "2016-06-07T18:39:28Z",
+			"editedAt": "2016-06-07T18:42:40Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224374689",
+			"summary": "A user welcomes seeing past the screen width and asks for a key to toggle the preview so it can be off by default.",
+			"actorId": 1681606,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224580135",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-08T12:56:17Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224580135",
+			"summary": "The contributor, unfamiliar with ncurses, asks why surrounding lines could not be fetched by line number.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224644129",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-08T16:17:48Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224644129",
+			"summary": "The maintainer clarifies he misread the request and that it is possible; on toggling he notes it implies a default on/off setting and a bindable action, and predicts requests for auto-hiding too.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224645576",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-08T16:22:43Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224645576",
+			"summary": "The contributor illustrates the grep -C style context he wants for history entries.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224649101",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-08T16:35:00Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224649101",
+			"summary": "The maintainer agrees anything scriptable works, but rules out dynamic resizing of the preview window for now.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224650497",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-08T16:39:35Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224650497",
+			"summary": "The contributor accepts that and looks forward to a release.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224651523",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-08T16:42:38Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224651523",
+			"summary": "The maintainer adds a toggle-preview bindable action and floats a hidden suffix like up:10:hidden for starting closed, still undecided.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224690872",
+			"kind": "comment",
+			"actor": "khalidchawtany",
+			"createdAt": "2016-06-08T18:50:16Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224690872",
+			"summary": "The user welcomes the toggle and predicts demand for a default on/off setting.",
+			"actorId": 1681606,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:224959832",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-09T17:01:37Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-224959832",
+			"summary": "The maintainer shows a one-line file-type preview as a simple use.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:process:closed:2016-06-11T17:21:13Z",
+			"kind": "process",
+			"actor": "junegunn",
+			"createdAt": "2016-06-11T17:21:13Z",
+			"url": "https://github.com/junegunn/fzf/issues/587",
+			"summary": "The maintainer closes the issue.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:225677834",
+			"kind": "comment",
+			"actor": "khalidchawtany",
+			"createdAt": "2016-06-13T19:08:09Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-225677834",
+			"summary": "A user asks whether a vim function can serve as the preview command.",
+			"actorId": 1681606,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:225811828",
+			"kind": "comment",
+			"actor": "balta2ar",
+			"createdAt": "2016-06-14T08:20:17Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-225811828",
+			"summary": "A user asks for an example showing a one-line log on the left and the commit diff on the right.",
+			"actorId": 340676,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:225867588",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-14T12:36:29Z",
+			"editedAt": "2016-06-14T12:56:59Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-225867588",
+			"summary": "The maintainer sees no simple way to call vim functions and posts a git commit browser example, noting a workaround for a bug later fixed in 0.13.1.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226413217",
+			"kind": "comment",
+			"actor": "balta2ar",
+			"createdAt": "2016-06-16T07:51:36Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226413217",
+			"summary": "The user likes the feature, wants a way to start hidden, and reports diff-so-fancy drawing rules too wide because it misjudges the pane width.",
+			"actorId": 340676,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226415486",
+			"kind": "comment",
+			"actor": "deathmaz",
+			"createdAt": "2016-06-16T08:02:24Z",
+			"editedAt": "2016-06-16T08:04:55Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226415486",
+			"summary": "A user reports an unknown option error when running the example.",
+			"actorId": 6440135,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226454183",
+			"kind": "comment",
+			"actor": "khalidchawtany",
+			"createdAt": "2016-06-16T11:01:33Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226454183",
+			"summary": "Another user suggests an older fzf binary is being picked up.",
+			"actorId": 1681606,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226456042",
+			"kind": "comment",
+			"actor": "deathmaz",
+			"createdAt": "2016-06-16T11:11:42Z",
+			"editedAt": "2016-06-16T11:12:16Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226456042",
+			"summary": "The user shares a terminal recording of the session.",
+			"actorId": 6440135,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226473869",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-16T12:43:26Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226473869",
+			"summary": "The maintainer points out the hidden suffix already exists and suggests overriding COLUMNS for diff-so-fancy.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226474253",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-16T12:45:04Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226474253",
+			"summary": "The maintainer advises checking which fzf binary is on the path.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226474544",
+			"kind": "comment",
+			"actor": "deathmaz",
+			"createdAt": "2016-06-16T12:46:23Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226474544",
+			"summary": "The user reports the path is the system package location.",
+			"actorId": 6440135,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226474858",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-16T12:47:50Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226474858",
+			"summary": "The maintainer says that is not where the install script places the binary.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226474960",
+			"kind": "comment",
+			"actor": "deathmaz",
+			"createdAt": "2016-06-16T12:48:23Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226474960",
+			"summary": "The user asks how to fix it.",
+			"actorId": 6440135,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226475430",
+			"kind": "comment",
+			"actor": "infokiller",
+			"createdAt": "2016-06-16T12:50:23Z",
+			"editedAt": "2016-06-16T12:50:55Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226475430",
+			"summary": "A contributor asks that the unrelated install problem move to its own issue.",
+			"actorId": 10516814,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226477019",
+			"kind": "comment",
+			"actor": "balta2ar",
+			"createdAt": "2016-06-16T12:57:03Z",
+			"editedAt": "2016-06-16T13:02:29Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226477019",
+			"summary": "The user thanks him for the hidden suffix and argues fzf should set COLUMNS itself, since it knows the pane width after margins.",
+			"actorId": 340676,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226481072",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-16T13:14:11Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226481072",
+			"summary": "The maintainer declines: LINES and COLUMNS are not honoured by all shells or programs, so it would be a partial and confusing fix left to users.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226486217",
+			"kind": "comment",
+			"actor": "balta2ar",
+			"createdAt": "2016-06-16T13:34:23Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226486217",
+			"summary": "The user accepts and asks to trim the separator padding, ellipsis and borders to save space.",
+			"actorId": 340676,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226494821",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-16T14:04:40Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226494821",
+			"summary": "The maintainer refuses more options to control complexity, saying preview is meant to be simple, not a customisable TUI framework.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:226950417",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2016-06-18T16:10:32Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-226950417",
+			"summary": "The maintainer recommends a faster syntax highlighter than pygmentize.",
+			"actorId": 700826,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:260328605",
+			"kind": "comment",
+			"actor": "suweller",
+			"createdAt": "2016-11-14T12:59:52Z",
+			"editedAt": "2016-11-14T14:14:37Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-260328605",
+			"summary": "A user shares a local diff-so-fancy patch to stop its rule width breaking on resize.",
+			"actorId": 70916,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		},
+		{
+			"id": "fzf-587:comment:475562037",
+			"kind": "comment",
+			"actor": "3N4N",
+			"createdAt": "2019-03-22T10:06:26Z",
+			"editedAt": "2019-03-22T10:14:59Z",
+			"url": "https://github.com/junegunn/fzf/issues/587#issuecomment-475562037",
+			"summary": "A user asks how to preview only text files, then shares a workaround using the file command.",
+			"actorId": 32037751,
+			"actorType": "human",
+			"parentId": "fzf-587:issue:587"
+		}
+	]
+}

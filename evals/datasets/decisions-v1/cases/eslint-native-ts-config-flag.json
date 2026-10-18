@@ -1,0 +1,467 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "eslint-native-ts-config-flag",
+	"title": "Unflagging native TypeScript config loading",
+	"source": {
+		"url": "https://github.com/eslint/eslint/issues/19985",
+		"retrievedAt": "2026-10-18T07:28:27.741960+00:00",
+		"repository": "eslint/eslint",
+		"number": 19985
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-08-05T09:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-08-06T12:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-08-06T15:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2025-11-19T19:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "eslint-19985:issue:19985",
+			"kind": "opening",
+			"actor": "karlhorky",
+			"createdAt": "2025-08-05T08:45:43Z",
+			"url": "https://github.com/eslint/eslint/issues/19985",
+			"summary": "A contributor asks whether the unstable_native_nodejs_ts_config flag can stop being required, since Node.js v22.18.0 and v24.3.0 now strip TypeScript types without a flag.",
+			"actorId": 1935696,
+			"actorType": "human"
+		},
+		{
+			"id": "eslint-19985:comment:3154651983",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-08-05T10:36:39Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3154651983",
+			"summary": "A contributor says this would be welcome.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3158485627",
+			"kind": "comment",
+			"actor": "lumirlumir",
+			"createdAt": "2025-08-06T09:11:44Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3158485627",
+			"summary": "A maintainer supports it, suggests weighing it with the pending Node.js support policy issue, and asks the team for views.",
+			"actorId": 119669540,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3158697725",
+			"kind": "comment",
+			"actor": "fasttime",
+			"createdAt": "2025-08-06T09:38:17Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3158697725",
+			"summary": "A maintainer notes Node only strips erasable syntax, so it does not replace jiti; removing the flag would leave jiti users needing a way to opt out of native loading.",
+			"actorId": 6367844,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3159686639",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-08-06T11:05:08Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3159686639",
+			"summary": "A contributor agrees and says either unflagging or a replacement setting would be a breaking change.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3160435360",
+			"kind": "comment",
+			"actor": "nzakas",
+			"createdAt": "2025-08-06T14:32:39Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3160435360",
+			"summary": "The lead maintainer says the feature cannot be unflagged until native support matches jiti, and that behaviour varying by Node version within one ESLint release would confuse users.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:process:closed:2025-08-06T14:32:39Z",
+			"kind": "process",
+			"actor": "nzakas",
+			"createdAt": "2025-08-06T14:32:39Z",
+			"url": "https://github.com/eslint/eslint/issues/19985",
+			"summary": "The lead maintainer closes the issue as not planned.",
+			"actorId": 38546,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3160843451",
+			"kind": "comment",
+			"actor": "karlhorky",
+			"createdAt": "2025-08-06T16:35:49Z",
+			"editedAt": "2025-08-06T16:58:09Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3160843451",
+			"summary": "The opener replies that erasable-only is a deliberate Node design that will never change, so waiting for parity means the flag stays forever; they ask to revisit that.",
+			"actorId": 1935696,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3160854424",
+			"kind": "comment",
+			"actor": "karlhorky",
+			"createdAt": "2025-08-06T16:40:02Z",
+			"editedAt": "2025-08-06T17:04:17Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3160854424",
+			"summary": "The opener points to Node's --experimental-transform-types flag as a way to handle TypeScript-only syntax if that matters.",
+			"actorId": 1935696,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3161067801",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-08-06T17:57:23Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3161067801",
+			"summary": "A contributor thinks that flag would still need explicit import extensions, unlike jiti.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3285489239",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-12T14:22:14Z",
+			"editedAt": "2025-09-12T14:23:14Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3285489239",
+			"summary": "A user proposes keeping jiti when an eligible version is present, otherwise trying native Node loading, and only then erroring, which would not break jiti users.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3285673806",
+			"kind": "comment",
+			"actor": "silverwind",
+			"createdAt": "2025-09-12T15:12:18Z",
+			"editedAt": "2025-09-12T15:14:01Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3285673806",
+			"summary": "A contributor warns jiti can arrive indirectly and proposes the reverse order: try native first, then jiti, then error, and drop the flag.",
+			"actorId": 115237,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3285739953",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-12T15:31:29Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3285739953",
+			"summary": "The user says indirect jiti installs already happen today and calls it odd that ESLint never tries Node's own loader.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3285786995",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-12T15:42:43Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3285786995",
+			"summary": "A contributor calls the native-first fallback reasonable and a good compromise.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3335158109",
+			"kind": "comment",
+			"actor": "JoshuaKGoldberg",
+			"createdAt": "2025-09-25T17:20:24Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3335158109",
+			"summary": "A typescript-eslint contributor regrets missing the brief window and supports the change, arguing native Node TypeScript is becoming the norm and silently preferring jiti will surprise people.",
+			"actorId": 3335181,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3335643571",
+			"kind": "comment",
+			"actor": "karlhorky",
+			"createdAt": "2025-09-25T19:28:18Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3335643571",
+			"summary": "The opener asks the lead maintainer to reconsider reopening.",
+			"actorId": 1935696,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3335894381",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-25T20:47:57Z",
+			"editedAt": "2025-09-25T21:30:43Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3335894381",
+			"summary": "A user argues type stripping is all an ESLint config needs and cites the TypeScript team calling enums and namespaces mistakes.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3336059766",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-25T21:53:37Z",
+			"editedAt": "2025-09-25T22:46:43Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3336059766",
+			"summary": "A contributor calls that view reductive, raising module resolution with bundler-style imports that jiti handles, while still backing a re-evaluation.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3336163350",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-25T22:48:55Z",
+			"editedAt": "2025-09-25T22:50:11Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3336163350",
+			"summary": "The user disputes that Node depends on TypeScript settings and says the request is only to drop the flag when jiti is absent.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3336176028",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-25T22:55:26Z",
+			"editedAt": "2025-09-26T02:42:12Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3336176028",
+			"summary": "The contributor says they understand type stripping and were making a point about how projects are set up.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3336187872",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-25T23:03:03Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3336187872",
+			"summary": "The user replies briefly that this is about cross-platform compatibility, not conventions.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3338342750",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-26T12:02:15Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3338342750",
+			"summary": "The user argues ESLint configs rarely import project sources, so project TypeScript settings seldom matter and advanced users can keep jiti.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3339952261",
+			"kind": "comment",
+			"actor": "silverwind",
+			"createdAt": "2025-09-26T18:26:49Z",
+			"editedAt": "2025-09-26T18:29:36Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3339952261",
+			"summary": "A contributor argues ESLint runs on Node, which has always required extensions in ESM imports, so extensionless imports need not be supported.",
+			"actorId": 115237,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3340535278",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-26T21:11:41Z",
+			"editedAt": "2025-09-26T21:25:16Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3340535278",
+			"summary": "A contributor describes large monorepos with local plugin packages using bundler resolution and warns against excluding real cases, while still backing the request.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3340592637",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-26T21:40:18Z",
+			"editedAt": "2025-11-19T01:29:23Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3340592637",
+			"summary": "The same contributor rejects calling bundler resolution legacy and describes a common monorepo layout that would break.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3340723868",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2025-09-26T22:54:22Z",
+			"editedAt": "2025-09-26T22:55:19Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3340723868",
+			"summary": "The user replies that bundler-style paths would fail for a JavaScript config too, so TypeScript support changes nothing there.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3340728761",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-09-26T22:57:30Z",
+			"editedAt": "2025-09-26T23:01:16Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3340728761",
+			"summary": "The contributor ends the exchange, repeating support for reopening.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3554175889",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2025-11-19T18:52:12Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3554175889",
+			"summary": "A contributor restates the two fallback orders (jiti then native, or native then jiti) and asks whether the jiti-first order has downsides.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3554263464",
+			"kind": "comment",
+			"actor": "silverwind",
+			"createdAt": "2025-11-19T19:17:30Z",
+			"editedAt": "2025-11-19T19:20:07Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3554263464",
+			"summary": "A contributor accepts either order and suggests a new issue since this one is closed.",
+			"actorId": 115237,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3977610743",
+			"kind": "comment",
+			"actor": "karlhorky",
+			"createdAt": "2026-02-28T19:15:52Z",
+			"editedAt": "2026-03-01T16:11:17Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3977610743",
+			"summary": "The opener reports Node removed --experimental-transform-types and asks the maintainers whether zero-dependency TypeScript configs are ever negotiable, citing Prettier and Jest support.",
+			"actorId": 1935696,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3979239669",
+			"kind": "comment",
+			"actor": "silverwind",
+			"createdAt": "2026-03-01T06:16:40Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3979239669",
+			"summary": "A contributor confirms the flag is gone and says other tools, including webpack, now load TypeScript configs natively.",
+			"actorId": 115237,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3980045212",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2026-03-01T14:10:16Z",
+			"editedAt": "2026-03-01T14:10:35Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3980045212",
+			"summary": "A contributor asks for at least some defined plan to move to native support eventually.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3980070824",
+			"kind": "comment",
+			"actor": "darksabrefr",
+			"createdAt": "2026-03-01T14:21:23Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3980070824",
+			"summary": "A user says the fallback design avoids breaking jiti users, so the block is hard to understand.",
+			"actorId": 17409537,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:3980080743",
+			"kind": "comment",
+			"actor": "michaelfaith",
+			"createdAt": "2026-03-01T14:26:18Z",
+			"editedAt": "2026-03-01T14:28:06Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-3980080743",
+			"summary": "A contributor asks to keep things civil and says the maintainers need to be comfortable with any approach.",
+			"actorId": 8071845,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:4189252122",
+			"kind": "comment",
+			"actor": "bakkot",
+			"createdAt": "2026-04-05T17:41:25Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-4189252122",
+			"summary": "A contributor asks the lead maintainer to reopen, since Node's TypeScript support is now stable and complete, and the jiti-first fallback need not break anything.",
+			"actorId": 1653598,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:4189284241",
+			"kind": "comment",
+			"actor": "silverwind",
+			"createdAt": "2026-04-05T18:04:33Z",
+			"editedAt": "2026-04-05T18:07:44Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-4189284241",
+			"summary": "A contributor notes Node 20 reaches end of life shortly, after which every supported Node version supports TypeScript natively.",
+			"actorId": 115237,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:comment:4295923869",
+			"kind": "comment",
+			"actor": "sosoba",
+			"createdAt": "2026-04-22T11:52:14Z",
+			"url": "https://github.com/eslint/eslint/issues/19985#issuecomment-4295923869",
+			"summary": "A user posts an image with no text.",
+			"actorId": 2843525,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		},
+		{
+			"id": "eslint-19985:process:locked:2026-04-24T13:33:25Z",
+			"kind": "process",
+			"actor": "eslint",
+			"createdAt": "2026-04-24T13:33:25Z",
+			"url": "https://github.com/eslint/eslint/issues/19985",
+			"summary": "The issue is locked.",
+			"actorId": 6019716,
+			"actorType": "human",
+			"parentId": "eslint-19985:issue:19985"
+		}
+	]
+}

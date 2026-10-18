@@ -1,0 +1,251 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "astro-inline-script-processing",
+	"title": "Processing is:inline scripts",
+	"source": {
+		"url": "https://github.com/withastro/roadmap/discussions/995",
+		"retrievedAt": "2026-10-18T07:20:34.856922+00:00",
+		"repository": "withastro/roadmap",
+		"number": 995,
+		"nodeId": "D_kwDOGa48bc4Aa5tV"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2024-08-14T12:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-10-16T11:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-10-08T12:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOGa48bc4Aa5tV",
+			"kind": "opening",
+			"actor": "delucis",
+			"createdAt": "2024-08-14T10:33:47Z",
+			"editedAt": "2024-08-14T10:36:04Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995",
+			"summary": "A maintainer proposes that scripts marked is:inline be minified and allow TypeScript while still being injected inline, so authors can write readable code without shipping comments and verbose names, as Starlight's colour-scheme scripts need.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AnbzR",
+			"kind": "comment",
+			"actor": "matthewp",
+			"createdAt": "2024-08-14T13:28:30Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-10337489",
+			"summary": "A core team member asks what would happen to an inline script that only has an external src.",
+			"actorId": "MDQ6VXNlcjM2MTY3MQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4Anbzz",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2024-08-14T13:32:11Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-10337523",
+			"summary": "The proposer thinks nothing would change and raises a similar question for scripts filled through set:html.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AnbzR"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AofJ2",
+			"kind": "comment",
+			"actor": "sommerper",
+			"createdAt": "2024-09-11T11:26:04Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-10613366",
+			"summary": "A user agrees, noting that using define:vars forces a script inline and throws away their TypeScript.",
+			"actorId": "MDQ6VXNlcjE1MTIwNDg=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EBO",
+			"kind": "comment",
+			"actor": "delucis",
+			"createdAt": "2025-10-16T09:08:57Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-14696526",
+			"summary": "The proposer adds content security policy as a motivation, since processing inline scripts could let Astro add hashes automatically.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EB4",
+			"kind": "reply",
+			"actor": "Adammatthiesen",
+			"createdAt": "2025-10-16T09:12:46Z",
+			"editedAt": "2025-10-16T09:13:46Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-14696568",
+			"summary": "A maintainer asks for a proper way to pass variables into inline scripts that still allows processing.",
+			"actorId": "MDQ6VXNlcjMwMzgzNTc5",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4A4EBO"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EMI",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2025-10-16T10:18:36Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-14697224",
+			"summary": "The proposer suggests three tiers: plain script bundled as now, is:inline processed but inlined, and is:raw left untouched.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AnbzR"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A9ONM",
+			"kind": "comment",
+			"actor": "ocavue",
+			"createdAt": "2026-03-09T06:45:16Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-16048972",
+			"summary": "A user shares a community plugin that already minifies inline scripts.",
+			"actorId": "MDQ6VXNlcjI0NzE1NzI3",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BAim3",
+			"kind": "reply",
+			"actor": "spaceemotion",
+			"createdAt": "2026-05-14T12:45:18Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-16918967",
+			"summary": "A user would like set:html content to go through the processing step too.",
+			"actorId": "MDQ6VXNlcjQyOTE0Nw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AnbzR"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BAit7",
+			"kind": "comment",
+			"actor": "jakefb",
+			"createdAt": "2026-05-14T13:34:48Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-16919419",
+			"summary": "A user links a related request for a render-blocking attribute on processed module scripts, noting limited browser support.",
+			"actorId": "MDQ6VXNlcjY4MzYyODI=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BAixr",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2026-05-14T14:03:54Z",
+			"editedAt": "2026-05-14T14:04:18Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-16919659",
+			"summary": "The proposer explains set:html values can depend on render-time data, which rules out build-time processing for them.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AnbzR"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHubA",
+			"kind": "comment",
+			"actor": "delucis",
+			"createdAt": "2026-10-07T22:14:25Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18802368",
+			"summary": "The proposer asks the technical steering committee to move the proposal to Stage 2.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHu7o",
+			"kind": "reply",
+			"actor": "matthewp",
+			"createdAt": "2026-10-08T02:07:23Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18804456",
+			"summary": "A core team member asks whether it would be a breaking change.",
+			"actorId": "MDQ6VXNlcjM2MTY3MQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHvvT",
+			"kind": "reply",
+			"actor": "florian-lefebvre",
+			"createdAt": "2026-10-08T07:11:18Z",
+			"editedAt": "2026-10-08T07:11:27Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18807763",
+			"summary": "A maintainer asks that CSP support for eligible inline scripts be a goal.",
+			"actorId": "MDQ6VXNlcjY5NjMzNTMw",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHwdY",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2026-10-08T10:36:37Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18810712",
+			"summary": "The proposer says it probably is breaking, so it would ship in a major or behind an experimental flag first, and Stage 2 can look for a non-breaking path.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIB6W",
+			"kind": "reply",
+			"actor": "florian-lefebvre",
+			"createdAt": "2026-10-12T14:19:56Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18882198",
+			"summary": "A maintainer approves Stage 2.",
+			"actorId": "MDQ6VXNlcjY5NjMzNTMw",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BICFv",
+			"kind": "reply",
+			"actor": "ematipico",
+			"createdAt": "2026-10-12T14:57:28Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18882927",
+			"summary": "Another maintainer approves Stage 2.",
+			"actorId": "MDQ6VXNlcjYwMjQ3OA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIF74",
+			"kind": "reply",
+			"actor": "ascorbic",
+			"createdAt": "2026-10-13T10:15:56Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18898680",
+			"summary": "A core team member approves Stage 2.",
+			"actorId": "MDQ6VXNlcjIxMzMwNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHubA"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIF-4",
+			"kind": "comment",
+			"actor": "delucis",
+			"createdAt": "2026-10-13T10:30:33Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995#discussioncomment-18898872",
+			"summary": "The proposer announces the move to Stage 2 and points feedback to a new roadmap issue.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		},
+		{
+			"id": "D_kwDOGa48bc4Aa5tV:process:closed:2026-10-13T10:30:33Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2026-10-13T10:30:33Z",
+			"url": "https://github.com/withastro/roadmap/discussions/995",
+			"summary": "The discussion is closed as resolved.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOGa48bc4Aa5tV"
+		}
+	]
+}

@@ -1,0 +1,228 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "vscode-modern-ui-default-optin",
+	"title": "Experimental Modern UI on by default in VS Code Stable",
+	"source": {
+		"url": "https://github.com/microsoft/vscode/issues/330693",
+		"retrievedAt": "2026-10-18T07:02:33.211966+00:00",
+		"repository": "microsoft/vscode",
+		"number": 330693
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-08-13T17:12:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-08-18T10:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-10-02T20:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "vscode-330693:issue:330693",
+			"kind": "opening",
+			"actor": "mordeccai",
+			"createdAt": "2026-08-13T17:08:59Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693",
+			"summary": "A user reports that a routine update switched their editor to the experimental Modern UI with floating panels and rounded corners, and asks that experimental redesigns stay opt-in on Stable, with clear notice and a one-click way to keep the old look.",
+			"actorId": 110318912,
+			"actorType": "human"
+		},
+		{
+			"id": "vscode-330693:comment:5283992242",
+			"kind": "comment",
+			"actor": "RanaUniverse",
+			"createdAt": "2026-08-13T17:14:17Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5283992242",
+			"summary": "A user points to another issue that shows how to turn the new UI off.",
+			"actorId": 142967497,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5284004579",
+			"kind": "comment",
+			"actor": "mordeccai",
+			"createdAt": "2026-08-13T17:15:29Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5284004579",
+			"summary": "The opener replies that being able to revert misses the point; experimental changes should require opting in.",
+			"actorId": 110318912,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5284091164",
+			"kind": "comment",
+			"actor": "gjsjohnmurray",
+			"createdAt": "2026-08-13T17:23:59Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5284091164",
+			"summary": "A contributor suggests opting out of A/B experiments.",
+			"actorId": 6726799,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5284155331",
+			"kind": "comment",
+			"actor": "RanaUniverse",
+			"createdAt": "2026-08-13T17:30:19Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5284155331",
+			"summary": "A user asks what the A/B suggestion means.",
+			"actorId": 142967497,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5285415644",
+			"kind": "comment",
+			"actor": "0x78f1935",
+			"createdAt": "2026-08-13T19:27:39Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5285415644",
+			"summary": "A user argues for opt-in rather than opt-out and complains about the frequency of releases.",
+			"actorId": 14298262,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5285788300",
+			"kind": "comment",
+			"actor": "MarcCharron",
+			"createdAt": "2026-08-13T20:05:15Z",
+			"editedAt": "2026-08-13T20:05:41Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5285788300",
+			"summary": "A user agrees, saying the new UI wastes screen space with padding and gaps, and asks to keep the compact UI with redesigns opt-in.",
+			"actorId": 215999818,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:process:labeled:2026-08-14T10:10:44Z",
+			"kind": "process",
+			"actor": "benibenj",
+			"createdAt": "2026-08-14T10:10:44Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693",
+			"summary": "A maintainer labels the issue modernization.",
+			"actorId": 44439583,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5324388493",
+			"kind": "comment",
+			"actor": "SlippyDong",
+			"createdAt": "2026-08-18T06:18:45Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5324388493",
+			"summary": "A user names the workbench.experimental.modernUI setting, calls the complaints exaggerated, agrees experiments should be opt-in, but likes the new look.",
+			"actorId": 71851581,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5329950950",
+			"kind": "comment",
+			"actor": "krillan49",
+			"createdAt": "2026-08-18T14:54:25Z",
+			"editedAt": "2026-08-18T14:57:03Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5329950950",
+			"summary": "A user replies that the new UI does change behaviour: tab width can no longer be fixed, which hurts with many open tabs.",
+			"actorId": 126559400,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5338607688",
+			"kind": "comment",
+			"actor": "inschrift-spruch-raum",
+			"createdAt": "2026-08-19T06:54:43Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5338607688",
+			"summary": "A user objects to A/B testing on developers and to the mobile-style visual direction.",
+			"actorId": 172902528,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5341609258",
+			"kind": "comment",
+			"actor": "MarcCharron",
+			"createdAt": "2026-08-19T11:40:20Z",
+			"editedAt": "2026-08-19T17:37:34Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5341609258",
+			"summary": "A user reports the tab close button is hard to hit and asks for reserved space, later noting it was fixed in a release.",
+			"actorId": 215999818,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5452542918",
+			"kind": "comment",
+			"actor": "junaga",
+			"createdAt": "2026-08-28T12:32:26Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5452542918",
+			"summary": "A user replies to the A/B suggestion that VS Code is infrastructure rather than a SaaS product.",
+			"actorId": 35770913,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5452570014",
+			"kind": "comment",
+			"actor": "junaga",
+			"createdAt": "2026-08-28T12:35:20Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5452570014",
+			"summary": "A user who likes the new UI still argues that opt-out is the wrong rollout model.",
+			"actorId": 35770913,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5653447008",
+			"kind": "comment",
+			"actor": "libiao7",
+			"createdAt": "2026-09-13T13:03:23Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5653447008",
+			"summary": "A user says the extra outer border stops the mouse from grabbing the scrollbar at the screen edge, which took trial and error to trace.",
+			"actorId": 31200418,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5960765616",
+			"kind": "comment",
+			"actor": "junaga",
+			"createdAt": "2026-10-02T20:16:50Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5960765616",
+			"summary": "A user thanks the team for reverting a tab styling change that made selected and open tabs hard to tell apart.",
+			"actorId": 35770913,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5962963716",
+			"kind": "comment",
+			"actor": "0x78f1935",
+			"createdAt": "2026-10-02T23:16:45Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5962963716",
+			"summary": "A user replies cynically that the revert was probably accidental.",
+			"actorId": 14298262,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		},
+		{
+			"id": "vscode-330693:comment:5998980112",
+			"kind": "comment",
+			"actor": "mjmatthiesen",
+			"createdAt": "2026-10-05T16:48:30Z",
+			"url": "https://github.com/microsoft/vscode/issues/330693#issuecomment-5998980112",
+			"summary": "A user repeats that forced UI changes harm a work tool and that usability should drive every choice.",
+			"actorId": 16603906,
+			"actorType": "human",
+			"parentId": "vscode-330693:issue:330693"
+		}
+	]
+}

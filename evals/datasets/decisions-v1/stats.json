@@ -1,0 +1,294 @@
+{
+	"decisions": 132,
+	"cases": 127,
+	"byQuota": {
+		"product-ui": 35,
+		"pr-debate": 26,
+		"formal-process": 24,
+		"eng-issue": 20,
+		"open-choice": 11,
+		"small-team": 11
+	},
+	"byDomain": {
+		"ui-ux": 32,
+		"product-behaviour": 22,
+		"api-design": 22,
+		"architecture": 11,
+		"compatibility": 8,
+		"language-design": 8,
+		"data-model": 8,
+		"process-governance": 6,
+		"tooling": 5,
+		"naming": 5,
+		"security": 3,
+		"infra": 1,
+		"dependency": 1
+	},
+	"byOutcomeHow": {
+		"maintainer-decision": 78,
+		"consensus": 18,
+		"fcp": 12,
+		"default/no-action": 10,
+		"abandoned": 7,
+		"unclear": 4,
+		"vote": 3
+	},
+	"decidedShare": 0.886,
+	"shapeDistribution": {
+		"choice": 93,
+		"mixed": 11,
+		"check": 11,
+		"explore": 10,
+		"tune": 7
+	},
+	"secondaryShapeDistribution": {
+		"explore": 33,
+		"check": 32,
+		"choice": 30,
+		"tune": 22
+	},
+	"flowDistribution": {
+		"settle": 114,
+		"ask-teammate": 99,
+		"build-pr": 76,
+		"revisit-reopen": 55,
+		"research-or-spike": 54,
+		"work-in-place": 50,
+		"reshape": 38,
+		"find": 35
+	},
+	"topGapClusters": [
+		{
+			"gap": "off-platform decision",
+			"decisions": 55,
+			"share": 0.417,
+			"examples": [
+				"uv-named-explicit-indexes",
+				"deno-permissions-in-config",
+				"deno-deny-flags-strict-check",
+				"deno-jupyter-rich-display",
+				"aspnetcore-mvc-in-shared-framework"
+			]
+		},
+		{
+			"gap": "staged acceptance",
+			"decisions": 54,
+			"share": 0.409,
+			"examples": [
+				"appflowy-dark-mode-palette",
+				"ripgrep-max-columns",
+				"atuin-classic-up-arrow-from-db",
+				"just-parallel-dependencies",
+				"crystal-io-argument-position"
+			]
+		},
+		{
+			"gap": "votes as evidence",
+			"decisions": 53,
+			"share": 0.402,
+			"examples": [
+				"appflowy-dark-mode-palette",
+				"ripgrep-built-in-pager",
+				"atuin-classic-up-arrow-from-db",
+				"just-telemetry-hooks",
+				"just-parallel-dependencies"
+			]
+		},
+		{
+			"gap": "coupled decisions",
+			"decisions": 51,
+			"share": 0.386,
+			"examples": [
+				"appflowy-dark-mode-palette",
+				"ripgrep-max-columns",
+				"uv-named-explicit-indexes",
+				"just-format-string-interpolation",
+				"deno-typescript-checker-in-rust"
+			]
+		},
+		{
+			"gap": "decider not in thread",
+			"decisions": 46,
+			"share": 0.348,
+			"examples": [
+				"appflowy-dark-mode-palette",
+				"deno-permissions-in-config",
+				"deno-typescript-checker-in-rust",
+				"deno-deny-flags-strict-check",
+				"eslint-codemod-replace-migrators"
+			]
+		},
+		{
+			"gap": "reversal after shipping",
+			"decisions": 29,
+			"share": 0.22,
+			"examples": [
+				"ripgrep-file-hyperlinks",
+				"ripgrep-built-in-pager",
+				"zoxide-fish-cd-alias-recursion",
+				"just-format-string-interpolation",
+				"deno-permissions-in-config"
+			]
+		},
+		{
+			"gap": "experiments as evidence",
+			"decisions": 29,
+			"share": 0.22,
+			"examples": [
+				"excalidraw-wheel-zoom-mode",
+				"excalidraw-new-drawing-button",
+				"excalidraw-handwritten-font-search",
+				"excalidraw-zen-mode-exit",
+				"excalidraw-arrow-binding-default"
+			]
+		},
+		{
+			"gap": "duplicates merged",
+			"decisions": 17,
+			"share": 0.129,
+			"examples": [
+				"ripgrep-built-in-pager",
+				"zoxide-fish-cd-alias-recursion",
+				"atuin-classic-up-arrow-from-db",
+				"deno-permissions-in-config",
+				"go-cmp-or"
+			]
+		},
+		{
+			"gap": "superseded or moved to another thread",
+			"decisions": 15,
+			"share": 0.114,
+			"examples": [
+				"ripgrep-file-hyperlinks",
+				"delta-auto-light-dark-detection",
+				"deno-typescript-checker-in-rust",
+				"helix-file-explorer-pr",
+				"mastodon-toot-text-formatting"
+			]
+		},
+		{
+			"gap": "dormant or ownerless question",
+			"decisions": 13,
+			"share": 0.098,
+			"examples": [
+				"just-telemetry-hooks",
+				"just-format-string-interpolation",
+				"just-parallel-dependencies",
+				"delta-auto-light-dark-detection",
+				"helix-persistent-state"
+			]
+		},
+		{
+			"gap": "stale or edited record",
+			"decisions": 12,
+			"share": 0.091,
+			"examples": [
+				"uv-named-explicit-indexes",
+				"aspnetcore-mvc-in-shared-framework",
+				"eslint-native-ts-config-flag",
+				"go-unique-handle",
+				"homeassistant-addons-to-apps"
+			]
+		},
+		{
+			"gap": "external dependency",
+			"decisions": 10,
+			"share": 0.076,
+			"examples": [
+				"ripgrep-file-hyperlinks",
+				"ripgrep-built-in-pager",
+				"deno-jupyter-rich-display",
+				"eslint-deprecate-formatting-rules",
+				"ghostty-official-snap"
+			]
+		},
+		{
+			"gap": "reframing",
+			"decisions": 10,
+			"share": 0.076,
+			"examples": [
+				"just-telemetry-hooks",
+				"excalidraw-handwritten-font-search",
+				"go-try-builtin",
+				"homeassistant-addons-to-apps",
+				"home-assistant-fan-speed-percentage"
+			]
+		},
+		{
+			"gap": "unresolved dissent",
+			"decisions": 9,
+			"share": 0.068,
+			"examples": [
+				"crystal-io-argument-position",
+				"eslint-native-ts-config-flag",
+				"excalidraw-new-drawing-button",
+				"go-slice-to-array-conversion",
+				"go-xterm-pluggable-history"
+			]
+		},
+		{
+			"gap": "competing implementations",
+			"decisions": 5,
+			"share": 0.038,
+			"examples": [
+				"ripgrep-max-columns",
+				"ripgrep-file-hyperlinks",
+				"just-parallel-dependencies",
+				"homeassistant-template-delay-ui",
+				"svelte-create-raw-snippet-shape"
+			]
+		},
+		{
+			"gap": "configurable outcome",
+			"decisions": 4,
+			"share": 0.03,
+			"examples": [
+				"delta-auto-light-dark-detection",
+				"logseq-hierarchy-above-backlinks",
+				"vscode-pinned-tab-sizing",
+				"tailwindcss-variant-grouping"
+			]
+		},
+		{
+			"gap": "other: spec iteration in comments",
+			"decisions": 1,
+			"share": 0.008,
+			"examples": [
+				"ripgrep-max-columns"
+			]
+		},
+		{
+			"gap": "other: deferred follow-ups",
+			"decisions": 1,
+			"share": 0.008,
+			"examples": [
+				"uv-named-explicit-indexes"
+			]
+		},
+		{
+			"gap": "other: residual limits after settling",
+			"decisions": 1,
+			"share": 0.008,
+			"examples": [
+				"delta-auto-light-dark-detection"
+			]
+		},
+		{
+			"gap": "other: progress tracking",
+			"decisions": 1,
+			"share": 0.008,
+			"examples": [
+				"deno-typescript-checker-in-rust"
+			]
+		}
+	],
+	"shareWithSubQuestionsOrCoupling": 0.985,
+	"shareWithSubQuestions": 0.985,
+	"shareWithCouplingGap": 0.386,
+	"shareFlaggedSupersededOrReopened": 0.265,
+	"shareDecidedOffPlatform": 0.326,
+	"shareReversedReopenedOrSuperseded": 0.386,
+	"medianParticipants": 18.0,
+	"medianDurationDays": 188.0,
+	"truncatedShare": 0.015
+}

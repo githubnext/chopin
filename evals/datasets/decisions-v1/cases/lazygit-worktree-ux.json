@@ -1,0 +1,295 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "lazygit-worktree-ux",
+	"title": "Worktree UX in lazygit",
+	"source": {
+		"url": "https://github.com/jesseduffield/lazygit/discussions/2803",
+		"retrievedAt": "2026-10-18T07:35:23.230693+00:00",
+		"repository": "jesseduffield/lazygit",
+		"number": 2803,
+		"nodeId": "D_kwDOB_zxBs4AUsHZ"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-07-21T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-07-26T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-07-29T09:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOB_zxBs4AUsHZ",
+			"kind": "opening",
+			"actor": "jesseduffield",
+			"createdAt": "2023-07-20T23:49:33Z",
+			"editedAt": "2023-07-30T10:00:49Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803",
+			"summary": "The owner, about to ship worktree support, asks how people use worktrees: one per branch or a reused few, inside or outside the repo, bare repos or not, since this shapes labels in the branches view and whether creating a worktree needs input.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY3dx",
+			"kind": "comment",
+			"actor": "briandipalma",
+			"createdAt": "2023-07-22T22:32:56Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6518641",
+			"summary": "A contributor asks whether reusing a few worktrees differs from cloning several times.",
+			"actorId": "MDQ6VXNlcjE1OTc4MjA=",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY3gA",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-07-22T23:42:31Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6518784",
+			"summary": "The owner explains worktrees share one repository while clones are separate.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AY3dx"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY6FX",
+			"kind": "comment",
+			"actor": "TheDevelolper",
+			"createdAt": "2023-07-24T13:01:04Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6529367",
+			"summary": "A user says easier worktree creation would make them use worktrees, mainly for PRs.",
+			"actorId": "MDQ6VXNlcjQwMjY1NTM=",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY6kc",
+			"kind": "comment",
+			"actor": "williamgoulois",
+			"createdAt": "2023-07-24T15:56:27Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6531356",
+			"summary": "A user describes a bare-repo layout with one worktree per branch, how they create worktrees, and that worktree names are shortened branch names.",
+			"actorId": "MDQ6VXNlcjM3MjcxOTcw",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY7Qb",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-07-24T22:14:46Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6534171",
+			"summary": "The owner asks detailed follow-ups: whether one name could serve both branch and worktree, whether a per-repo worktree location setting would help, deleting pairs together, and what opening from a bare-repo root should show.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AY6kc"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY8Qs",
+			"kind": "reply",
+			"actor": "williamgoulois",
+			"createdAt": "2023-07-25T09:32:16Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6538284",
+			"summary": "The user answers: company branch naming makes separate names useful, a configurable worktree location would help, they rarely delete, and a worktree list for bare-repo roots would be nice.",
+			"actorId": "MDQ6VXNlcjM3MjcxOTcw",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AY6kc"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AY972",
+			"kind": "comment",
+			"actor": "briandipalma",
+			"createdAt": "2023-07-25T22:36:16Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6545142",
+			"summary": "A contributor finds bare repos pointless, manages worktrees with git aliases from the CLI, and doubts lazygit can add much beyond deleting a worktree and branch together.",
+			"actorId": "MDQ6VXNlcjE1OTc4MjA=",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AZG3f",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-07-29T08:45:31Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6581727",
+			"summary": "The owner defers the shared-name and location-config ideas and bare-repo root support to a future iteration, and notes a detach action already covers checkout conflicts.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AY6kc"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AZG3n",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-07-29T08:46:44Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6581735",
+			"summary": "The owner thanks the contributor.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AY972"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AZYos",
+			"kind": "comment",
+			"actor": "thenbe",
+			"createdAt": "2023-08-07T04:26:49Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6654508",
+			"summary": "A user asks whether lazygit could change the shell into the selected worktree.",
+			"actorId": "MDQ6VXNlcjMzNzEzMjYy",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AZYqf",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-08-07T04:59:41Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-6654623",
+			"summary": "The owner says lazygit switches to a worktree on selection and the shell can follow on exit via documented setup.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AZYos"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AbnUL",
+			"kind": "comment",
+			"actor": "V4G4X",
+			"createdAt": "2023-10-10T09:20:44Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-7238923",
+			"summary": "A user reports opening a worktree in the editor hangs and asks to swap the quit keys.",
+			"actorId": "MDQ6VXNlcjM0MjQ5MTM3",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AbnVx",
+			"kind": "reply",
+			"actor": "mark2185",
+			"createdAt": "2023-10-10T09:30:50Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-7239025",
+			"summary": "A maintainer suggests testing the editor command manually and shows the quit keybinding config.",
+			"actorId": "MDQ6VXNlcjgzNjUyNDE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AbnUL"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AbnsG",
+			"kind": "reply",
+			"actor": "V4G4X",
+			"createdAt": "2023-10-10T12:17:19Z",
+			"editedAt": "2023-10-10T12:17:39Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-7240454",
+			"summary": "The user decides to keep the default keys.",
+			"actorId": "MDQ6VXNlcjM0MjQ5MTM3",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AbnUL"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AbpHT",
+			"kind": "reply",
+			"actor": "jesseduffield",
+			"createdAt": "2023-10-10T21:43:16Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-7246291",
+			"summary": "The owner asks the user to test the hang on master.",
+			"actorId": "MDQ6VXNlcjg0NTY2MzM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AbnUL"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AcZEh",
+			"kind": "reply",
+			"actor": "V4G4X",
+			"createdAt": "2023-11-01T06:58:39Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-7442721",
+			"summary": "The user reports a quoting difference in the editor command and that master works.",
+			"actorId": "MDQ6VXNlcjM0MjQ5MTM3",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AbnUL"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AfbEL",
+			"kind": "comment",
+			"actor": "diego898",
+			"createdAt": "2024-01-24T20:24:27Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-8237323",
+			"summary": "A user describes a bare-repo setup that lazygit cannot open from the project root and asks for support.",
+			"actorId": "MDQ6VXNlcjc0MjQwNw==",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AfcS-",
+			"kind": "comment",
+			"actor": "Nikola-Milovic",
+			"createdAt": "2024-01-25T08:49:37Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-8242366",
+			"summary": "A user asks for an option to copy ignored files such as env files and node_modules into new worktrees.",
+			"actorId": "MDQ6VXNlcjUwMDcyMDI3",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AiDfH",
+			"kind": "comment",
+			"actor": "rsniezek",
+			"createdAt": "2024-03-27T11:37:24Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-8927175",
+			"summary": "A contributor also uses a bare repo with one worktree per branch and links a video.",
+			"actorId": "MDQ6VXNlcjE5NDMzMjU2",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4Aink-",
+			"kind": "reply",
+			"actor": "jelling",
+			"createdAt": "2024-04-10T18:44:05Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-9075006",
+			"summary": "A user links a blog script that handles node_modules for worktrees.",
+			"actorId": "MDQ6VXNlcjE4ODc0ODY=",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AfcS-"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4Am5R7",
+			"kind": "comment",
+			"actor": "rswdch",
+			"createdAt": "2024-07-31T01:39:29Z",
+			"editedAt": "2024-07-31T01:41:54Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-10196091",
+			"summary": "A user describes a non-bare per-branch layout and reports that creating a worktree from a remote branch leaves it on no branch.",
+			"actorId": "MDQ6VXNlcjEzODIzMzQx",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AnuWM",
+			"kind": "comment",
+			"actor": "mattiasunger",
+			"createdAt": "2024-08-21T23:52:52Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-10413452",
+			"summary": "A user asks for a setting that derives worktree name and path from the branch name to avoid typos.",
+			"actorId": "MDQ6VXNlcjI0ODk2NDcx",
+			"actorType": "human",
+			"parentId": "D_kwDOB_zxBs4AUsHZ"
+		},
+		{
+			"id": "DC_kwDOB_zxBs4AzRAG",
+			"kind": "reply",
+			"actor": "rasibn",
+			"createdAt": "2025-06-11T21:57:50Z",
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803#discussioncomment-13438982",
+			"summary": "A user lists wished-for defaults: worktree name from the local branch, and from the remote branch name for remote refs.",
+			"actorId": "MDQ6VXNlcjQ5NzA5MTE2",
+			"actorType": "human",
+			"parentId": "DC_kwDOB_zxBs4AnuWM"
+		}
+	]
+}

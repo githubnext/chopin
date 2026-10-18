@@ -1,0 +1,284 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "astro-scripts-only-when-rendered",
+	"title": "Including component scripts and styles only when rendered",
+	"source": {
+		"url": "https://github.com/withastro/roadmap/discussions/664",
+		"retrievedAt": "2026-10-18T07:20:35.887853+00:00",
+		"repository": "withastro/roadmap",
+		"number": 664,
+		"nodeId": "D_kwDOGa48bc4AVMup"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-08-26T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-09-07T15:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-12-11T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOGa48bc4AVMup",
+			"kind": "opening",
+			"actor": "y-nk",
+			"createdAt": "2023-08-25T09:58:37Z",
+			"editedAt": "2023-08-25T09:58:52Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664",
+			"summary": "The opener, building CMS-driven pages that pick components by type, proposes that Astro stop adding a component's script to a page merely because it is imported. Static import maps ship every component's script, while dynamic imports drop scripts entirely, so they ask to move from static to runtime analysis and offer to lead the PR.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaD9C",
+			"kind": "comment",
+			"actor": "lilnasy",
+			"createdAt": "2023-08-26T21:44:51Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6831938",
+			"summary": "A contributor suggests a workaround: a middleware that parses the full HTML response and strips unused scripts, accepting the loss of streaming for static sites.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaZwL",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-09-06T05:19:01Z",
+			"editedAt": "2023-09-06T05:19:29Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6921227",
+			"summary": "The opener says that idea was raised on Discord but scripts may be bundled together, and without data attributes on script tags they would be hard to identify.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AaD9C"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaZxX",
+			"kind": "reply",
+			"actor": "lilnasy",
+			"createdAt": "2023-09-06T05:33:39Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6921303",
+			"summary": "The contributor proposes letting a page opt out of streaming with an exported flag, so Astro can track styles and scripts through component render calls instead of static analysis, which would also fix missing assets for content collections.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AaD9C"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaZx5",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-09-06T05:40:23Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6921337",
+			"summary": "The opener asks whether this would apply only to prerendered pages and whether the existing prerender flag could be reused.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AaD9C"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaZy1",
+			"kind": "reply",
+			"actor": "lilnasy",
+			"createdAt": "2023-09-06T05:50:00Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6921397",
+			"summary": "The contributor says the flags are independent and reusing prerender would be a breaking change, so the new behaviour must be opt-in.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AaD9C"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AadiE",
+			"kind": "comment",
+			"actor": "matthewp",
+			"createdAt": "2023-09-07T12:08:49Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6936708",
+			"summary": "A core contributor sees potential with caveats: building scripts at runtime would require shipping Vite at runtime, which is ruled out; building at build time and injecting only when used is possible but raises whether to inject once or per use, and moves scripts out of the head so they load later.",
+			"actorId": "MDQ6VXNlcjM2MTY3MQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4Aad6X",
+			"kind": "reply",
+			"actor": "bluwy",
+			"createdAt": "2023-09-07T14:40:37Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6938263",
+			"summary": "A maintainer favours the build-time-then-inject approach, noting the compiler can track hoisted script entrypoints and link them at render time as is done for island renderers, and floats an option to choose hoisting or per-use injection.",
+			"actorId": "MDQ6VXNlcjM0MTE2Mzky",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AadiE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4Aaeg-",
+			"kind": "reply",
+			"actor": "lilnasy",
+			"createdAt": "2023-09-07T19:07:34Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6940734",
+			"summary": "The contributor asks why anyone would want a hoisted script repeated for every instance of a component.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AadiE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AaeiE",
+			"kind": "reply",
+			"actor": "matthewp",
+			"createdAt": "2023-09-07T19:15:39Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6940804",
+			"summary": "The core contributor knows of none; they raised it because injecting only once is hard with parallel rendering and caused bugs before.",
+			"actorId": "MDQ6VXNlcjM2MTY3MQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AadiE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AapcE",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-09-13T04:19:53Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6985476",
+			"summary": "The opener agrees runtime Vite is undesirable and asks how Vue and Nuxt handle the same problem.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AadiE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AapcQ",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-09-13T04:22:34Z",
+			"editedAt": "2023-09-13T04:22:59Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-6985488",
+			"summary": "The opener worries a streaming flag could mislead users on adapters without streaming, and asks that any opt-in be settable per file and globally.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AaD9C"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AckkU",
+			"kind": "comment",
+			"actor": "adbl",
+			"createdAt": "2023-11-06T16:39:14Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7489812",
+			"summary": "A user reports the same over-inclusion with Astro.glob over MDX files, where an index page receives client scripts from components the MDX files import, and a hoisting setting did not help.",
+			"actorId": "MDQ6VXNlcjE3Nzg4MA==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AdPLE",
+			"kind": "comment",
+			"actor": "lilnasy",
+			"createdAt": "2023-11-25T01:18:53Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7664324",
+			"summary": "The contributor proposes a compiler-inserted internal propagate call listing the identifiers a template actually uses, so the runtime can collect only those components' assets into the head without Vite; it would apply only to the top-level page, with static analysis remaining for imported components to protect time to first byte.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AdU3E",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-11-28T03:21:28Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7687620",
+			"summary": "The opener restates the idea as a function that inspects child components and accumulates their asset data into a page context for the framework to emit.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AdPLE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AdU3O",
+			"kind": "reply",
+			"actor": "y-nk",
+			"createdAt": "2023-11-28T03:23:08Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7687630",
+			"summary": "The opener asks whether the propagate call would only be injected when streaming is disabled.",
+			"actorId": "MDQ6VXNlcjQxMTYyNQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AdPLE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AdU7x",
+			"kind": "reply",
+			"actor": "lilnasy",
+			"createdAt": "2023-11-28T04:15:00Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7687921",
+			"summary": "The contributor confirms the restatement, clarifies that it selects already bundled assets at render time, and says no flag is needed because the slow runtime check runs only on the page, which already blocks the response.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AdPLE"
+		},
+		{
+			"id": "DC_kwDOGa48bc4Adzcj",
+			"kind": "comment",
+			"actor": "lilnasy",
+			"createdAt": "2023-12-10T18:34:39Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-7812899",
+			"summary": "The contributor reports implementing the approach as a third-party integration in their gratelets repository.",
+			"actorId": "MDQ6VXNlcjY5MTcwMTA2",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AoRIt",
+			"kind": "comment",
+			"actor": "forberg",
+			"createdAt": "2024-09-05T10:11:50Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-10555949",
+			"summary": "A user proposes a per-component opt-in to inline stylesheet links next to the rendered component, as already done for scripts, relying on streaming and render-blocking hints to avoid unstyled flashes.",
+			"actorId": "MDQ6VXNlcjUxODYx",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AoRjz",
+			"kind": "reply",
+			"actor": "bluwy",
+			"createdAt": "2024-09-05T13:16:16Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-10557683",
+			"summary": "A maintainer explains they investigated inlining styles but declined: scoped styles are common so pages would fill with tags, CSS would follow two different models, ordering bugs become likely, and a per-usage opt-in cannot work because emission is decided at compile time. Unused scoped styles are mostly harmless, unlike scripts.",
+			"actorId": "MDQ6VXNlcjM0MTE2Mzky",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AoRIt"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AoTne",
+			"kind": "reply",
+			"actor": "forberg",
+			"createdAt": "2024-09-06T07:56:32Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-10566110",
+			"summary": "The user regrets that the main style bundle keeps growing with dynamically chosen components and points to Loadable Components as a model.",
+			"actorId": "MDQ6VXNlcjUxODYx",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AoRIt"
+		},
+		{
+			"id": "DC_kwDOGa48bc4AoWTA",
+			"kind": "reply",
+			"actor": "bluwy",
+			"createdAt": "2024-09-07T13:27:49Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-10577088",
+			"summary": "The maintainer says bundle size should not grow if components are imported where used; the cost is only unused styles appearing on some pages.",
+			"actorId": "MDQ6VXNlcjM0MTE2Mzky",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4AoRIt"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BISac",
+			"kind": "comment",
+			"actor": "florian-lefebvre",
+			"createdAt": "2026-10-15T13:11:03Z",
+			"url": "https://github.com/withastro/roadmap/discussions/664#discussioncomment-18949788",
+			"summary": "A maintainer says they have been experimenting with the problem and asks people to try a preview release from an Astro PR and leave feedback there.",
+			"actorId": "MDQ6VXNlcjY5NjMzNTMw",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AVMup"
+		}
+	]
+}

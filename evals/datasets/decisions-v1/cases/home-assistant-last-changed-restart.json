@@ -1,0 +1,535 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "home-assistant-last-changed-restart",
+	"title": "Preserving last_changed across restarts",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/issues/230",
+		"retrievedAt": "2026-10-18T07:19:14.186756+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 230
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2019-05-10T14:40:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2020-03-19T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2021-03-08T12:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2021-03-09T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "architecture-230:issue:230",
+			"kind": "opening",
+			"actor": "SaturnusDJ",
+			"createdAt": "2019-05-10T14:28:24Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"summary": "The opener argues that resetting `last_changed` and `last_updated` on every restart makes every entity look recently changed, rebuts a forum claim that restarts are rare, and proposes either not resetting those timestamps or adding a new restart-proof timestamp.",
+			"actorId": 14320018,
+			"actorType": "human"
+		},
+		{
+			"id": "architecture-230:comment:491319065",
+			"kind": "comment",
+			"actor": "cgarwood",
+			"createdAt": "2019-05-10T14:57:07Z",
+			"editedAt": "2019-05-10T18:58:54Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491319065",
+			"summary": "A maintainer says `last_updated` should reset on restart if fresh data was fetched, but `last_changed` should only move when the value actually differs.",
+			"actorId": 7545841,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491319390",
+			"kind": "comment",
+			"actor": "andriej",
+			"createdAt": "2019-05-10T14:58:01Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491319390",
+			"summary": "A user supports keeping `last_changed` or adding a timestamp shown in the UI.",
+			"actorId": 6303489,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491343293",
+			"kind": "comment",
+			"actor": "Adminiuga",
+			"createdAt": "2019-05-10T16:08:20Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491343293",
+			"summary": "A user agrees with the maintainer's split.",
+			"actorId": 5826160,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491407394",
+			"kind": "comment",
+			"actor": "dgomes",
+			"createdAt": "2019-05-10T19:40:00Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491407394",
+			"summary": "A user says everyone agrees with that split and calls this an implementation bug rather than architecture, citing retained MQTT values.",
+			"actorId": 137684,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491454459",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2019-05-10T23:12:02Z",
+			"editedAt": "2019-05-23T18:16:31Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491454459",
+			"summary": "The opener accepts the split, noting some devices push data late, and only needs one timestamp that survives restarts.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491471923",
+			"kind": "comment",
+			"actor": "Swamp-Ig",
+			"createdAt": "2019-05-11T02:23:59Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491471923",
+			"summary": "A user raises the edge case of devices that start unknown and refresh later: is that transition a change?",
+			"actorId": 6317645,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491477262",
+			"kind": "comment",
+			"actor": "Adminiuga",
+			"createdAt": "2019-05-11T04:01:59Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491477262",
+			"summary": "A user suggests keeping the prior `last_changed` until a successful poll shows a different value.",
+			"actorId": 5826160,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:491501235",
+			"kind": "comment",
+			"actor": "Swamp-Ig",
+			"createdAt": "2019-05-11T10:58:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-491501235",
+			"summary": "A user explains the state machine has no loading concept and proposes either a state-loaded event or a special unknown prior state that preserves `last_changed`, with a lifecycle table.",
+			"actorId": 6317645,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:522199363",
+			"kind": "comment",
+			"actor": "boojew",
+			"createdAt": "2019-08-17T03:10:13Z",
+			"editedAt": "2019-08-17T03:43:50Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-522199363",
+			"summary": "A user agrees with persisting `last_changed` and wants attribute changes to count too.",
+			"actorId": 1015566,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:559466135",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2019-11-28T11:57:39Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-559466135",
+			"summary": "The opener asks for progress.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:589998315",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-02-22T21:07:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-589998315",
+			"summary": "The opener bumps the issue.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:594814766",
+			"kind": "comment",
+			"actor": "remcotjeerdsma",
+			"createdAt": "2020-03-04T20:23:30Z",
+			"editedAt": "2020-03-04T20:23:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-594814766",
+			"summary": "A user adds support.",
+			"actorId": 3865006,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:600484354",
+			"kind": "comment",
+			"actor": "azogue",
+			"createdAt": "2020-03-18T08:17:38Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-600484354",
+			"summary": "A member proposes fixing it for all `RestoreEntity` integrations by writing the restored state straight into the state machine when it is fetched, so the first update compares against it, and sketches the code.",
+			"actorId": 9748301,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:614699910",
+			"kind": "comment",
+			"actor": "cmatte",
+			"createdAt": "2020-04-16T14:47:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-614699910",
+			"summary": "A user asks about progress.",
+			"actorId": 1192305,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:615379445",
+			"kind": "comment",
+			"actor": "azogue",
+			"createdAt": "2020-04-17T17:47:34Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-615379445",
+			"summary": "The member says they have run the patch for weeks without side effects but are unsure maintainers will accept touching the state machine, and notes there is no clear startup period anymore.",
+			"actorId": 9748301,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:615552649",
+			"kind": "comment",
+			"actor": "orson1282",
+			"createdAt": "2020-04-18T04:09:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-615552649",
+			"summary": "A user with a battery MQTT sensor supports not resetting the timestamp.",
+			"actorId": 4836141,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:617051232",
+			"kind": "comment",
+			"actor": "kalmanoharan",
+			"createdAt": "2020-04-21T09:01:05Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-617051232",
+			"summary": "A user adds thanks and support.",
+			"actorId": 38646666,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:633302770",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-05-24T21:22:52Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-633302770",
+			"summary": "The opener offers to test the patch.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:633508643",
+			"kind": "comment",
+			"actor": "azogue",
+			"createdAt": "2020-05-25T10:42:18Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-633508643",
+			"summary": "The member says the patch is ready and could become a PR, but wanted core maintainer discussion first because it may be controversial, and pings two leads.",
+			"actorId": 9748301,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:638435841",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-06-03T20:11:51Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-638435841",
+			"summary": "The opener says they applied the patch and asks if they did it right.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:639319477",
+			"kind": "comment",
+			"actor": "azogue",
+			"createdAt": "2020-06-05T07:51:59Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-639319477",
+			"summary": "The member confirms.",
+			"actorId": 9748301,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:641465527",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-06-09T17:33:48Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-641465527",
+			"summary": "The opener reports it works for automations, persons, inputs and counters but not for lights, sensors, trackers or groups.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:641473606",
+			"kind": "comment",
+			"actor": "azogue",
+			"createdAt": "2020-06-09T17:49:37Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-641473606",
+			"summary": "The member explains coverage depends on whether an integration uses `RestoreEntity`, a generic fix would be wrong for some integrations, and the issue should focus on `last_changed` only.",
+			"actorId": 9748301,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:process:renamed:2020-06-27T10:08:34Z",
+			"kind": "process",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-06-27T10:08:34Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"summary": "The opener narrows the title to `last_changed` only.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:process:renamed:2020-06-27T10:09:22Z",
+			"kind": "process",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-06-27T10:09:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"summary": "The opener adjusts the title formatting.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:650538135",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-06-27T10:23:36Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-650538135",
+			"summary": "The opener thanks the member and asks whether they must now wait for core developers.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:658726189",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2020-07-15T11:59:42Z",
+			"editedAt": "2020-07-15T12:16:55Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-658726189",
+			"summary": "The opener reports the patch broke a light migrated between integrations, with an assertion error in the new restore path.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:750351588",
+			"kind": "comment",
+			"actor": "Sjorsa",
+			"createdAt": "2020-12-23T15:33:22Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-750351588",
+			"summary": "A user asks for an update.",
+			"actorId": 40437966,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:791402554",
+			"kind": "comment",
+			"actor": "codingcatgirl",
+			"createdAt": "2021-03-05T12:57:07Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-791402554",
+			"summary": "A user says the current behaviour makes the property nearly useless.",
+			"actorId": 3868507,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792322877",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2021-03-07T17:50:03Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792322877",
+			"summary": "The opener says nothing will move until a core lead agrees.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792345482",
+			"kind": "comment",
+			"actor": "sanderlv",
+			"createdAt": "2021-03-07T20:21:04Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792345482",
+			"summary": "A user adds support.",
+			"actorId": 16528916,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792349523",
+			"kind": "comment",
+			"actor": "Santobert",
+			"createdAt": "2021-03-07T20:45:13Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792349523",
+			"summary": "A member says the architecture repo is for changes someone is ready to implement, not feature requests, and invites a PR once there is agreement.",
+			"actorId": 15657682,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792367092",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2021-03-07T22:42:08Z",
+			"editedAt": "2021-03-07T22:42:53Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792367092",
+			"summary": "A maintainer asks the opener for an implementation proposal, including how to handle integrations that report data late.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792423009",
+			"kind": "comment",
+			"actor": "bogdanbujdea",
+			"createdAt": "2021-03-08T02:50:05Z",
+			"editedAt": "2021-03-08T03:00:37Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792423009",
+			"summary": "A user suggests setting `last_changed` to null at startup in history code.",
+			"actorId": 793611,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792694939",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2021-03-08T11:34:41Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792694939",
+			"summary": "The opener explains they cannot program at the needed level and hopes someone builds on the member's patch.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792706193",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2021-03-08T11:55:24Z",
+			"editedAt": "2021-03-08T11:56:55Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792706193",
+			"summary": "A maintainer says the repo is for approving implementable architectural changes and proposes closing until someone writes a real proposal.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792711236",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2021-03-08T12:04:49Z",
+			"editedAt": "2021-03-08T12:05:40Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792711236",
+			"summary": "The opener says they thought this was an architectural change and asks what a proposal should contain.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792716612",
+			"kind": "comment",
+			"actor": "frenck",
+			"createdAt": "2021-03-08T12:15:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792716612",
+			"summary": "A maintainer closes the issue because nobody is implementing it, and welcomes a future proposal with implementation details.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:process:closed:2021-03-08T12:15:12Z",
+			"kind": "process",
+			"actor": "frenck",
+			"createdAt": "2021-03-08T12:15:12Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"summary": "A maintainer closes the issue.",
+			"actorId": 195327,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:792719943",
+			"kind": "comment",
+			"actor": "SaturnusDJ",
+			"createdAt": "2021-03-08T12:21:08Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-792719943",
+			"summary": "The opener thanks everyone.",
+			"actorId": 14320018,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:process:cross-referenced:2022-03-22T01:23:35Z",
+			"kind": "process",
+			"actor": "bdraco",
+			"createdAt": "2022-03-22T01:23:35Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"summary": "A maintainer links core PR #68488, a proof of concept restoring `last_changed` for entities whose state is unchanged at startup.",
+			"actorId": 663432,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:1074687745",
+			"kind": "comment",
+			"actor": "bdraco",
+			"createdAt": "2022-03-22T03:29:01Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-1074687745",
+			"summary": "A maintainer points to that proof-of-concept PR.",
+			"actorId": 663432,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:2731020391",
+			"kind": "comment",
+			"actor": "MathisP75",
+			"createdAt": "2025-03-17T21:53:53Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-2731020391",
+			"summary": "A user asks where the core issue lives, since the problem persists.",
+			"actorId": 98901170,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		},
+		{
+			"id": "architecture-230:comment:2731245036",
+			"kind": "comment",
+			"actor": "andriej",
+			"createdAt": "2025-03-18T00:14:27Z",
+			"url": "https://github.com/home-assistant/architecture/issues/230#issuecomment-2731245036",
+			"summary": "A user says there is none and calls it an ignored problem.",
+			"actorId": 6303489,
+			"actorType": "human",
+			"parentId": "architecture-230:issue:230"
+		}
+	]
+}

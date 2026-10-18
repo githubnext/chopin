@@ -1,0 +1,199 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "astro-remove-script-define-vars",
+	"title": "Remove define:vars on Astro script elements",
+	"source": {
+		"url": "https://github.com/withastro/roadmap/discussions/1246",
+		"retrievedAt": "2026-10-18T07:20:34.034225+00:00",
+		"repository": "withastro/roadmap",
+		"number": 1246,
+		"nodeId": "D_kwDOGa48bc4AidYZ"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2025-10-16T10:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-10-16T17:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-10-12T14:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-10-13T11:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOGa48bc4AidYZ",
+			"kind": "opening",
+			"actor": "delucis",
+			"createdAt": "2025-10-16T09:54:55Z",
+			"editedAt": "2025-10-16T10:30:36Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246",
+			"summary": "A maintainer proposes deprecating and then removing `define:vars` on script elements (keeping it on styles), because it forces unbundled inline scripts, repeats them per component, blocks inline-script optimisation and CSP work, and has documented alternatives; a new data-passing API is out of scope, and he estimates a two-year deprecation given about twelve thousand public usages.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EL9",
+			"kind": "comment",
+			"actor": "jdtjenkins",
+			"createdAt": "2025-10-16T10:17:24Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14697213",
+			"summary": "A user supports removal but asks why docs push custom elements, showing a simpler data-attribute approach.",
+			"actorId": "MDQ6VXNlcjc2NDkwMzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AidYZ"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EMu",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2025-10-16T10:23:08Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14697262",
+			"summary": "The proposing maintainer explains custom elements scope logic per component instance, and shows a selector-based variant that handles repeats.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4A4EL9"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4ENF",
+			"kind": "reply",
+			"actor": "Adammatthiesen",
+			"createdAt": "2025-10-16T10:26:22Z",
+			"editedAt": "2025-10-16T10:27:35Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14697285",
+			"summary": "Another maintainer warns selector-based scripts get painful as complexity grows, favouring custom elements.",
+			"actorId": "MDQ6VXNlcjMwMzgzNTc5",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4A4EL9"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4EPi",
+			"kind": "reply",
+			"actor": "jdtjenkins",
+			"createdAt": "2025-10-16T10:46:15Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14697442",
+			"summary": "The user accepts the point, asks docs to show a lighter non-custom-element option, remains happy to see the feature go, and floats a future component-scoped element helper.",
+			"actorId": "MDQ6VXNlcjc2NDkwMzE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4A4EL9"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4Ezm",
+			"kind": "comment",
+			"actor": "ascorbic",
+			"createdAt": "2025-10-16T14:17:00Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14699750",
+			"summary": "A contributor on the technical steering group objects to removal without an ergonomic replacement, calling the dataset workaround awkward outside custom elements.",
+			"actorId": "MDQ6VXNlcjIxMzMwNg==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AidYZ"
+		},
+		{
+			"id": "DC_kwDOGa48bc4A4FHC",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2025-10-16T16:02:29Z",
+			"editedAt": "2025-10-16T16:09:17Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-14700994",
+			"summary": "The proposing maintainer replies with a raw script reading `document.currentScript.dataset`, arguing it is only slightly longer, more explicit, and avoids endorsing inline scripts.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4A4Ezm"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHua-",
+			"kind": "comment",
+			"actor": "delucis",
+			"createdAt": "2026-10-07T22:14:17Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18802366",
+			"summary": "A year later the proposing maintainer asks the TSC to advance the proposal to Stage 2.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AidYZ"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHvvG",
+			"kind": "reply",
+			"actor": "florian-lefebvre",
+			"createdAt": "2026-10-08T07:10:25Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18807750",
+			"summary": "A TSC member agrees with the goals and with relying on the web platform over a custom API, and asks whether this unblocks the inline-script proposal #995.",
+			"actorId": "MDQ6VXNlcjY5NjMzNTMw",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHua-"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BHw5e",
+			"kind": "reply",
+			"actor": "delucis",
+			"createdAt": "2026-10-08T10:50:21Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18812510",
+			"summary": "The proposing maintainer says it simplifies #995, since render-time script content prevents CSP, and notes the IIFE wrapping of `define:vars` scripts changes variable scoping in surprising ways.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHua-"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIB6g",
+			"kind": "reply",
+			"actor": "florian-lefebvre",
+			"createdAt": "2026-10-12T14:20:22Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18882208",
+			"summary": "The TSC member approves Stage 2.",
+			"actorId": "MDQ6VXNlcjY5NjMzNTMw",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHua-"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BICFb",
+			"kind": "reply",
+			"actor": "ematipico",
+			"createdAt": "2026-10-12T14:56:40Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18882907",
+			"summary": "Another TSC member, after asking about breakage, approves Stage 2.",
+			"actorId": "MDQ6VXNlcjYwMjQ3OA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHua-"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIF8a",
+			"kind": "reply",
+			"actor": "ascorbic",
+			"createdAt": "2026-10-13T10:17:33Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18898714",
+			"summary": "The objecting contributor approves Stage 2, saying `document.currentScript` resolves most of his concerns.",
+			"actorId": "MDQ6VXNlcjIxMzMwNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOGa48bc4BHua-"
+		},
+		{
+			"id": "DC_kwDOGa48bc4BIF-7",
+			"kind": "comment",
+			"actor": "delucis",
+			"createdAt": "2026-10-13T10:30:44Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246#discussioncomment-18898875",
+			"summary": "The proposing maintainer announces the move to Stage 2 and links the new tracking issue.",
+			"actorId": "MDQ6VXNlcjM1NzM3OQ==",
+			"actorType": "human",
+			"parentId": "D_kwDOGa48bc4AidYZ"
+		},
+		{
+			"id": "D_kwDOGa48bc4AidYZ:process:closed:2026-10-13T10:30:44Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2026-10-13T10:30:44Z",
+			"url": "https://github.com/withastro/roadmap/discussions/1246",
+			"summary": "The discussion is closed as resolved.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOGa48bc4AidYZ"
+		}
+	]
+}

@@ -1,0 +1,246 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "homeassistant-template-delay-ui",
+	"title": "Template binary sensor delay options in the helper UI",
+	"source": {
+		"url": "https://github.com/home-assistant/architecture/discussions/1340",
+		"retrievedAt": "2026-10-18T07:11:41.465649+00:00",
+		"repository": "home-assistant/architecture",
+		"number": 1340,
+		"nodeId": "D_kwDOByplq84AkLzz"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-02-16T10:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-05-27T10:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-09-03T14:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-09-03T15:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOByplq84AkLzz",
+			"kind": "opening",
+			"actor": "suaveolent",
+			"createdAt": "2026-02-16T09:37:31Z",
+			"editedAt": "2026-02-16T09:42:15Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340",
+			"summary": "A user proposes revisiting the earlier refusal and exposing the delay_on and delay_off settings in the template binary sensor helper UI, perhaps under advanced options, citing several closed core PRs and a forum thread; a solar-excess sensor is the motivating case.",
+			"actorId": "MDQ6VXNlcjIxNjM2MjU=",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOByplq84A8XCW",
+			"kind": "comment",
+			"actor": "cvroque",
+			"createdAt": "2026-02-16T11:41:14Z",
+			"editedAt": "2026-02-16T12:31:41Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-15822998",
+			"summary": "A user strongly agrees, saying needing one advanced option forces a switch to YAML, and would accept either UI fields or a raw config text field behind the advanced-mode toggle.",
+			"actorId": "MDQ6VXNlcjY1NjgwMzk0",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84A8XIM",
+			"kind": "reply",
+			"actor": "suaveolent",
+			"createdAt": "2026-02-16T12:24:38Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-15823372",
+			"summary": "The opener suggests an alternative: an Edit in YAML mode like automations have, while noting that widens the scope.",
+			"actorId": "MDQ6VXNlcjIxNjM2MjU=",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A8XCW"
+		},
+		{
+			"id": "DC_kwDOByplq84A8qmo",
+			"kind": "comment",
+			"actor": "sjwright",
+			"createdAt": "2026-02-24T00:39:37Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-15903144",
+			"summary": "A user adds support for delay_off, which they use often.",
+			"actorId": "MDQ6VXNlcjM2NjkyMA==",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84A-vyV",
+			"kind": "comment",
+			"actor": "almirus",
+			"createdAt": "2026-04-04T16:41:01Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16448661",
+			"summary": "A user says YAML helpers break on major updates, and after rebuilding everything in the UI found the needed option missing.",
+			"actorId": "MDQ6VXNlcjE2ODk4Njg1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84A-1HD",
+			"kind": "comment",
+			"actor": "kzaoaai",
+			"createdAt": "2026-04-07T02:36:03Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16470467",
+			"summary": "A user says they submitted a core PR adding the options and have run it as a custom component.",
+			"actorId": "MDQ6VXNlcjM5MDI5MDA4",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84A-1dK",
+			"kind": "reply",
+			"actor": "mbo18",
+			"createdAt": "2026-04-07T06:03:17Z",
+			"editedAt": "2026-04-07T06:04:38Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16471882",
+			"summary": "A user points out five earlier attempts at this were all closed.",
+			"actorId": "MDQ6VXNlcjEyOTk5NTM1",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84A-2iT",
+			"kind": "reply",
+			"actor": "kzaoaai",
+			"createdAt": "2026-04-07T13:01:51Z",
+			"editedAt": "2026-04-07T13:02:05Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16476307",
+			"summary": "The PR author finds it baffling that the change is refused for clutter when it sits in a collapsible advanced section.",
+			"actorId": "MDQ6VXNlcjM5MDI5MDA4",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84A-2xD",
+			"kind": "reply",
+			"actor": "suaveolent",
+			"createdAt": "2026-04-07T14:15:23Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16477251",
+			"summary": "The opener asks the lead maintainer to revise the decision.",
+			"actorId": "MDQ6VXNlcjIxNjM2MjU=",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84A_NsW",
+			"kind": "reply",
+			"actor": "sjwright",
+			"createdAt": "2026-04-15T13:49:14Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-16571158",
+			"summary": "A user argues UX concerns should not block useful functionality, and that a collapsed advanced section balances a clean UI with capability.",
+			"actorId": "MDQ6VXNlcjM2NjkyMA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84BBHt3",
+			"kind": "reply",
+			"actor": "rvanmaanen",
+			"createdAt": "2026-05-27T05:08:56Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-17070967",
+			"summary": "A user who planned a PR asks the lead maintainer whether a YAML editing toggle would avoid adding more fields.",
+			"actorId": "MDQ6VXNlcjQ4MzUyNTg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84BBIR2",
+			"kind": "reply",
+			"actor": "ameer1234567890",
+			"createdAt": "2026-05-27T09:06:18Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-17073270",
+			"summary": "A user says a YAML toggle like the dashboard card editor would work for them.",
+			"actorId": "MDQ6VXNlcjE2MDE1Nw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84A-1HD"
+		},
+		{
+			"id": "DC_kwDOByplq84BDa9e",
+			"kind": "comment",
+			"actor": "ctjameson",
+			"createdAt": "2026-07-17T14:54:38Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-17674078",
+			"summary": "A user adds that UI-created template sensors would also give better insight into state than YAML ones.",
+			"actorId": "MDQ6VXNlcjU3NjczODI1",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84BFsde",
+			"kind": "comment",
+			"actor": "emontnemery",
+			"createdAt": "2026-09-03T14:16:18Z",
+			"editedAt": "2026-09-04T07:45:16Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-18270046",
+			"summary": "A maintainer reports the proposal was approved at the core architecture meeting of 2026-06-25 (the post first had a typo in the year); this is marked as the answer.",
+			"actorId": "MDQ6VXNlcjE0MjgxNTcy",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "D_kwDOByplq84AkLzz:process:answered:2026-09-03T14:16:21Z",
+			"kind": "process",
+			"actor": "emontnemery",
+			"createdAt": "2026-09-03T14:16:21Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340",
+			"summary": "The maintainer marks his approval comment as the answer.",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84BFtFo",
+			"kind": "reply",
+			"actor": "jan-tdy",
+			"createdAt": "2026-09-03T16:22:34Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-18272616",
+			"summary": "A user jokes about the year typo in the approval note.",
+			"actorId": "U_kgDOCwJFFg",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84BFsde"
+		},
+		{
+			"id": "DC_kwDOByplq84BGcxG",
+			"kind": "comment",
+			"actor": "mr-miles",
+			"createdAt": "2026-09-16T15:53:49Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-18467910",
+			"summary": "A user asks which proposal was approved, the extra fields or YAML editing, and whether the closed PR can be reopened.",
+			"actorId": "MDQ6VXNlcjU5MDMyMA==",
+			"actorType": "human",
+			"parentId": "D_kwDOByplq84AkLzz"
+		},
+		{
+			"id": "DC_kwDOByplq84BGc1x",
+			"kind": "reply",
+			"actor": "Petro31",
+			"createdAt": "2026-09-16T16:15:24Z",
+			"editedAt": "2026-09-16T16:20:34Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-18468209",
+			"summary": "A participant points to a different, complete PR that includes the preview support the earlier one lacked.",
+			"actorId": "MDQ6VXNlcjM1MDgyMzEz",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84BGcxG"
+		},
+		{
+			"id": "DC_kwDOByplq84BGc3p",
+			"kind": "reply",
+			"actor": "mr-miles",
+			"createdAt": "2026-09-16T16:24:25Z",
+			"url": "https://github.com/home-assistant/architecture/discussions/1340#discussioncomment-18468329",
+			"summary": "The user thanks them and looks forward to it landing.",
+			"actorId": "MDQ6VXNlcjU5MDMyMA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOByplq84BGcxG"
+		}
+	]
+}

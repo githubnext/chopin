@@ -1,0 +1,309 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "zoxide-fish-cd-alias-recursion",
+	"title": "How zoxide's fish hook should call cd when users alias cd to z",
+	"source": {
+		"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+		"retrievedAt": "2026-10-18T07:35:06.752010+00:00",
+		"repository": "ajeetdsouza/zoxide",
+		"number": 145
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-02-02T22:05:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-05-09T16:18:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2021-05-09T16:25:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2021-05-10T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "zoxide-145:issue:145",
+			"kind": "opening",
+			"actor": "fennewald",
+			"createdAt": "2021-02-02T22:00:40Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The opener reports that aliasing cd to z in fish recurses until the stack overflows, and proposes that the generated fish function call `command cd` so it bypasses user functions.",
+			"actorId": 23765149,
+			"actorType": "human"
+		},
+		{
+			"id": "zoxide-145:process:cross-referenced:2021-02-02T22:07:14Z",
+			"kind": "process",
+			"actor": "fennewald",
+			"createdAt": "2021-02-02T22:07:14Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The opener links PR #146, which switches the fish template to an external cd call.",
+			"actorId": 23765149,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:780327983",
+			"kind": "comment",
+			"actor": "thaliaarchi",
+			"createdAt": "2021-02-17T06:12:35Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-780327983",
+			"summary": "A user points to the line in the fish template where the fix would go.",
+			"actorId": 8071784,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:process:closed:2021-02-17T14:05:18Z",
+			"kind": "process",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-02-17T14:05:18Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The maintainer closes the issue as PR #146 merges.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:835836923",
+			"kind": "comment",
+			"actor": "dnlmlr",
+			"createdAt": "2021-05-09T16:15:20Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-835836923",
+			"summary": "A contributor asks to reopen: the template line was later changed and then reverted, because using fish's builtin cd drops the extra behaviour of fish's own cd wrapper function. They propose copying fish's cd function under a private name with `functions -c` and calling that copy from zoxide's hook, and offer a PR.",
+			"actorId": 34707428,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:process:reopened:2021-05-09T16:20:39Z",
+			"kind": "process",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-05-09T16:20:39Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The maintainer reopens the issue.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:835839716",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-05-09T16:32:42Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-835839716",
+			"summary": "The maintainer endorses the function-copy idea and tells the contributor to proceed.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:process:cross-referenced:2021-05-09T17:55:57Z",
+			"kind": "process",
+			"actor": "dnlmlr",
+			"createdAt": "2021-05-09T17:55:57Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The contributor links PR #207, which prevents the recursion by copying fish's cd function.",
+			"actorId": 34707428,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:process:closed:2021-05-09T19:46:25Z",
+			"kind": "process",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-05-09T19:46:25Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"summary": "The maintainer closes the issue when PR #207 merges.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:850562164",
+			"kind": "comment",
+			"actor": "federicotorrielli",
+			"createdAt": "2021-05-28T17:22:59Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-850562164",
+			"summary": "A user says the recursion still happens with their config, which sources several init scripts before setting the alias.",
+			"actorId": 31370059,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:850563961",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-05-28T17:26:38Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-850563961",
+			"summary": "The maintainer asks whether they are running the latest commit, since the fix is not yet in a release.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:850564791",
+			"kind": "comment",
+			"actor": "federicotorrielli",
+			"createdAt": "2021-05-28T17:28:14Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-850564791",
+			"summary": "The user realises they installed the packaged release and apologises.",
+			"actorId": 31370059,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:850573285",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2021-05-28T17:45:19Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-850573285",
+			"summary": "The maintainer says a release with the fix will follow soon.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1309795358",
+			"kind": "comment",
+			"actor": "pnunn",
+			"createdAt": "2022-11-10T05:25:56Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1309795358",
+			"summary": "A user reports the loop still occurs with version 0.8.3 installed from a deb package.",
+			"actorId": 1034315,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1309818967",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2022-11-10T06:07:11Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1309818967",
+			"summary": "The maintainer asks them to confirm the installed version.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1309847317",
+			"kind": "comment",
+			"actor": "pnunn",
+			"createdAt": "2022-11-10T06:50:13Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1309847317",
+			"summary": "The user confirms they are on 0.8.3.",
+			"actorId": 1034315,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1309934045",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2022-11-10T08:25:38Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1309934045",
+			"summary": "The maintainer cannot reproduce it and asks for a new issue with the setup details.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1310256867",
+			"kind": "comment",
+			"actor": "Muvkina",
+			"createdAt": "2022-11-10T13:08:18Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1310256867",
+			"summary": "Another user says they also still see the problem on Arch and are retraining themselves to type z instead.",
+			"actorId": 38061852,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:1310589272",
+			"kind": "comment",
+			"actor": "ajeetdsouza",
+			"createdAt": "2022-11-10T16:49:54Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-1310589272",
+			"summary": "The maintainer asks that user to open a new issue with their fish version and config.",
+			"actorId": 1777663,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2079469315",
+			"kind": "comment",
+			"actor": "Marwan-ibn-Amr",
+			"createdAt": "2024-04-26T14:07:47Z",
+			"editedAt": "2024-04-26T14:20:13Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2079469315",
+			"summary": "A user suggests placing the alias after the zoxide init line.",
+			"actorId": 112310530,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2080216228",
+			"kind": "comment",
+			"actor": "pnunn",
+			"createdAt": "2024-04-26T23:02:46Z",
+			"editedAt": "2024-04-26T23:19:02Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2080216228",
+			"summary": "An earlier reporter says that ordering did not help, but upgrading to 0.9.4 fixed it.",
+			"actorId": 1034315,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2116628129",
+			"kind": "comment",
+			"actor": "hoducha",
+			"createdAt": "2024-05-17T04:59:11Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2116628129",
+			"summary": "A user explains their recursion came from saving the alias as a persistent fish function, and gives steps to remove it and set the alias after init instead.",
+			"actorId": 3087444,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2122696005",
+			"kind": "comment",
+			"actor": "Joachim-42he",
+			"createdAt": "2024-05-21T13:54:22Z",
+			"editedAt": "2024-05-21T13:59:02Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2122696005",
+			"summary": "A user notes the documented `--cmd cd` init option achieves the same result without an alias.",
+			"actorId": 44265104,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2155844754",
+			"kind": "comment",
+			"actor": "callisto1232",
+			"createdAt": "2024-06-08T06:58:30Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2155844754",
+			"summary": "A user confirms that moving the alias after init worked for them.",
+			"actorId": 146484672,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		},
+		{
+			"id": "zoxide-145:comment:2462259666",
+			"kind": "comment",
+			"actor": "jbrodriguez",
+			"createdAt": "2024-11-07T13:35:55Z",
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145#issuecomment-2462259666",
+			"summary": "A user says both approaches work but fish no longer offers completions for cd.",
+			"actorId": 1305422,
+			"actorType": "human",
+			"parentId": "zoxide-145:issue:145"
+		}
+	]
+}

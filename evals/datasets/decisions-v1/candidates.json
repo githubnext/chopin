@@ -1,0 +1,1603 @@
+{
+	"note": "Every screened candidate. status: pending|kept|discarded|holdout|unfetchable. Holdout check pending.",
+	"candidates": [
+		{
+			"url": "https://github.com/golang/go/issues/32437",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-try-builtin"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/57001",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/issues/60078",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-loopvar-per-iteration"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/48429",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/issues/49085",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/issues/19412",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/discussions/58409",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/discussions/54763",
+			"provisionalQuota": "formal-process",
+			"source": "seed:cloud-session",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/mastodon/mastodon/issues/12753",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "mastodon-quote-toots"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/717",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "home-assistant-device-ip-mac-display"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/1340",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "homeassistant-template-delay-ui"
+		},
+		{
+			"url": "https://github.com/home-assistant/frontend/discussions/8905",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "ha-toggle-confirmation"
+		},
+		{
+			"url": "https://github.com/home-assistant/frontend/discussions/22288",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "frontend-section-border-background"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/98161",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-pinned-tab-sizing"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/330693",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-modern-ui-default-optin"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/334285",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-modern-ui-classic-removal"
+		},
+		{
+			"url": "https://github.com/tailwindlabs/tailwindcss/discussions/15203",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "discarded",
+			"reason": "Help-category support Q&A: users ask why buttons lost the pointer cursor and are pointed to the upgrade guide; the design choice was made elsewhere and is not weighed here."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/26344",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "discarded",
+			"reason": "Feature request with user +1s and one contributor explaining the current limit; no maintainer weighs options and it was closed administratively when the category moved to Discord."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/26857",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "discarded",
+			"reason": "Feature-request pile-on of +1s and workarounds; no maintainer engages and no options are weighed toward a decision."
+		},
+		{
+			"url": "https://github.com/logseq/logseq/discussions/5115",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "logseq-hierarchy-above-backlinks"
+		},
+		{
+			"url": "https://github.com/outline/outline/discussions/3326",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "outline-raw-markdown-mode"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/issues/2945",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "excalidraw-handwritten-font-search"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "excalidraw-new-drawing-button"
+		},
+		{
+			"url": "https://github.com/tldraw/tldraw/issues/7548",
+			"provisionalQuota": "product-ui",
+			"source": "seed:cloud-session",
+			"status": "discarded",
+			"reason": "Single-author, AI-drafted options memo with no replies from anyone else; a bot closed it as stale without any choice being made."
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/1287",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "homeassistant-addons-to-apps"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/1021",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "homeassistant-floors-vs-nested-areas"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/1185",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "home-assistant-entity-name-editing"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/668",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "home-assistant-numeric-state-unavailable"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/509",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "home-assistant-network-interface-binding"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/929",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "home-assistant-event-entity"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/894",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "home-assistant-lawn-mower-entity"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/378",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "home-assistant-choose-branch-syntax"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/230",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "home-assistant-last-changed-restart"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/127",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "home-assistant-fan-speed-percentage"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/33773",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "zed-single-file-diff-view"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/54150",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "zed-manual-file-tree-refresh"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/55157",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "zed-disable-threads-sidebar"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/55183",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "zed-hide-title-status-bar"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/discussions/26511",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "zed-commit-log-graph"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/30522",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-dim-unfocused-views"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/102118",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-scm-single-view-backlash"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/15684",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-centered-editor-layout"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/39441",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-completion-label-details"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/8939",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "vscode-quick-open-eager-preview"
+		},
+		{
+			"url": "https://github.com/vercel/next.js/discussions/27953",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "nextjs-global-css-imports-rfc"
+		},
+		{
+			"url": "https://github.com/vercel/next.js/discussions/71727",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Tracking thread for an already-decided feature (Node.js middleware runtime); the rest is support Q&A, canary bug reports and complaints, with no choice settled here."
+		},
+		{
+			"url": "https://github.com/vercel/next.js/discussions/73753",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "nextjs-forbidden-unauthorized-rfc"
+		},
+		{
+			"url": "https://github.com/shadcn-ui/ui/discussions/2930",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Support Q&A: users ask and guess what the Default and New York styles differ in; no maintainer engages and no design choice is weighed in the thread."
+		},
+		{
+			"url": "https://github.com/shadcn-ui/ui/discussions/859",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request where users only share their own multi-select implementations and fixes; no maintainer engages and no design choice is weighed or settled."
+		},
+		{
+			"url": "https://github.com/shadcn-ui/ui/discussions/1694",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request that turned into users sharing spinner snippets and support Q&A; no maintainer engagement or weighed design choice."
+		},
+		{
+			"url": "https://github.com/tailwindlabs/tailwindcss/discussions/7560",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "tailwindcss-prettier-whitespace-dedupe"
+		},
+		{
+			"url": "https://github.com/tailwindlabs/tailwindcss/discussions/11701",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "tailwindcss-variant-grouping"
+		},
+		{
+			"url": "https://github.com/tailwindlabs/tailwindcss/discussions/5969",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Help-category support thread of workarounds for a preflight button reset; the only design response (lower selector specificity in 3.4.2) was decided elsewhere and announced without debate here."
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/discussions/3879",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Support Q&A: a maintainer explains how to self-host collaboration, and the rest is setup and publishing help with no project design choice weighed."
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/discussions/5515",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "excalidraw-wheel-zoom-mode"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "excalidraw-paste-chart-type-choice"
+		},
+		{
+			"url": "https://github.com/penpot/penpot/issues/768",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request with years of status pings; no options weighed in-thread and the design happened off-platform."
+		},
+		{
+			"url": "https://github.com/penpot/penpot/discussions/1477",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request for physical units with only user workarounds and a guess from a contributor; no options weighed by the team."
+		},
+		{
+			"url": "https://github.com/penpot/penpot/discussions/475",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "penpot-desktop-app"
+		},
+		{
+			"url": "https://github.com/outline/outline/discussions/2256",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "outline-document-tags"
+		},
+		{
+			"url": "https://github.com/outline/outline/discussions/1535",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request for comments answered at once as already in development; the rest is status pings and use cases, with no options weighed."
+		},
+		{
+			"url": "https://github.com/outline/outline/discussions/3440",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "outline-database-board-views"
+		},
+		{
+			"url": "https://github.com/logseq/logseq/discussions/4827",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request for F-Droid listing made of user +1s; the only maintainer reply notes a closed-source blocker, and inclusion happened in an external F-Droid merge request with no options weighed here."
+		},
+		{
+			"url": "https://github.com/withastro/roadmap/discussions/1246",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "astro-remove-script-define-vars"
+		},
+		{
+			"url": "https://github.com/withastro/roadmap/discussions/995",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "astro-inline-script-processing"
+		},
+		{
+			"url": "https://github.com/withastro/roadmap/discussions/664",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "astro-scripts-only-when-rendered"
+		},
+		{
+			"url": "https://github.com/mastodon/mastodon/issues/853",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "mastodon-toot-text-formatting"
+		},
+		{
+			"url": "https://github.com/mastodon/mastodon/issues/861",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "mastodon-local-only-posts"
+		},
+		{
+			"url": "https://github.com/mastodon/mastodon/issues/1053",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "mastodon-browse-remote-local-timeline"
+		},
+		{
+			"url": "https://github.com/AppFlowy-IO/AppFlowy/issues/31",
+			"provisionalQuota": "product-ui",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "appflowy-dark-mode-palette"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/pull/338",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/pull/1899",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "excalidraw-arrow-binding-default"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/pull/6691",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "excalidraw-web-embeds-design"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/pull/1450",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "excalidraw-zen-mode-exit"
+		},
+		{
+			"url": "https://github.com/excalidraw/excalidraw/pull/3613",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "excalidraw-export-dialog-redesign"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/33616",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/44827",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "zed-smooth-scroll-input-handling"
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/46478",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/21675",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/39539",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/22668",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/zed-industries/zed/pull/20400",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/vercel/next.js/pull/17770",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/vercel/next.js/pull/4943",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "nextjs-strict-csp-support"
+		},
+		{
+			"url": "https://github.com/sveltejs/svelte/pull/15069",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/sveltejs/svelte/pull/12409",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "svelte-create-raw-snippet-shape"
+		},
+		{
+			"url": "https://github.com/sveltejs/svelte/pull/9549",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "svelte-css-nesting-approach"
+		},
+		{
+			"url": "https://github.com/sveltejs/svelte/pull/5481",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "svelte-dynamic-element-attr"
+		},
+		{
+			"url": "https://github.com/vitejs/vite/pull/3932",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "vite-node-worker-threads"
+		},
+		{
+			"url": "https://github.com/vitejs/vite/pull/10632",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "vite-lib-auto-externalize-deps"
+		},
+		{
+			"url": "https://github.com/vitejs/vite/pull/20609",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "vite-optimizer-browserhash-restart"
+		},
+		{
+			"url": "https://github.com/tldraw/tldraw/pull/6862",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/tldraw/tldraw/pull/6739",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/tldraw/tldraw/pull/8216",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/pull/9143",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "helix-persistent-state"
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/pull/2377",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "helix-file-explorer-pr"
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/pull/11149",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/pull/11285",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "helix-picker-file-explorer"
+		},
+		{
+			"url": "https://github.com/microsoft/TypeScript/pull/49886",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/microsoft/TypeScript/pull/44501",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "typescript-node12-esm-mode"
+		},
+		{
+			"url": "https://github.com/nodejs/node/pull/31806",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "A refactor PR dominated by CI runs and test fixes; reviewers approved without contesting the approach, so no design choice was genuinely weighed."
+		},
+		{
+			"url": "https://github.com/nodejs/node/pull/38810",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "node-rm-windows-eperm"
+		},
+		{
+			"url": "https://github.com/nodejs/node/pull/33035",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "node-incomingmessage-autodestroy"
+		},
+		{
+			"url": "https://github.com/ghostty-org/ghostty/pull/3931",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "ghostty-official-snap"
+		},
+		{
+			"url": "https://github.com/ghostty-org/ghostty/pull/13745",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "ghostty-broadcast-groups"
+		},
+		{
+			"url": "https://github.com/astral-sh/uv/pull/7481",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "uv-named-explicit-indexes"
+		},
+		{
+			"url": "https://github.com/denoland/deno/pull/19070",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "deno-deny-flags-strict-check"
+		},
+		{
+			"url": "https://github.com/denoland/deno/pull/20337",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "deno-jupyter-rich-display"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/pull/39972",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "vscode-windows-custom-titlebar"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/pull/181729",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "pr-debate",
+			"caseId": "vscode-fixed-width-tabs"
+		},
+		{
+			"url": "https://github.com/astral-sh/ruff/pull/21385",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/astral-sh/ruff/pull/9266",
+			"provisionalQuota": "pr-debate",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/483",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "home-assistant-zwave-js-switch"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/discussions/902",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/287",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "home-assistant-require-code-owner"
+		},
+		{
+			"url": "https://github.com/home-assistant/architecture/issues/192",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "homeassistant-release-cycle"
+		},
+		{
+			"url": "https://github.com/pnpm/pnpm/issues/2891",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "pnpm-pre-post-scripts"
+		},
+		{
+			"url": "https://github.com/pnpm/pnpm/issues/8087",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "pnpm-package-manager-strict-default"
+		},
+		{
+			"url": "https://github.com/pnpm/pnpm/issues/11633",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/denoland/deno/issues/5432",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "deno-typescript-checker-in-rust"
+		},
+		{
+			"url": "https://github.com/denoland/deno/issues/12763",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "deno-permissions-in-config"
+		},
+		{
+			"url": "https://github.com/eslint/eslint/issues/17522",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "eslint-deprecate-formatting-rules"
+		},
+		{
+			"url": "https://github.com/eslint/eslint/issues/20442",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "eslint-codemod-replace-migrators"
+		},
+		{
+			"url": "https://github.com/eslint/eslint/issues/19985",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "eslint-native-ts-config-flag"
+		},
+		{
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/11014",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "rust-analyzer-proc-macro-syntax-fixup"
+		},
+		{
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "rust-analyzer-upstream-inlay-hints"
+		},
+		{
+			"url": "https://github.com/scipy/scipy/issues/20334",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/micropython/micropython/issues/2603",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/godotengine/godot/issues/18591",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "godot-object-metadata-fate"
+		},
+		{
+			"url": "https://github.com/MonoGame/MonoGame/issues/7204",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/crystal-lang/crystal/issues/5916",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "crystal-io-argument-position"
+		},
+		{
+			"url": "https://github.com/zephyrproject-rtos/zephyr/issues/22748",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/prettier/prettier/issues/10918",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/prettier/prettier/issues/6360",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "prettier-final-newline-option"
+		},
+		{
+			"url": "https://github.com/oven-sh/bun/issues/887",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Missing-feature request dominated by +1s and status pings; no design alternatives are weighed, and the only choice (splitting server support into a new issue) is a one-line maintainer housekeeping call."
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/issues/1125",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/helix-editor/helix/issues/1976",
+			"provisionalQuota": "eng-issue",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "helix-integrated-terminal"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/32825",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/golang/go/issues/60204",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-cmp-or"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/62483",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-unique-handle"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/46505",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-slice-to-array-conversion"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/28152",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-drop-binary-only-packages"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/59928",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-testing-output-writer"
+		},
+		{
+			"url": "https://github.com/golang/go/issues/68780",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "go-xterm-pluggable-history"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/3537",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/1615",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/2129",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rfcs-crate-changelogs"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/3485",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rust-cargo-feature-docs"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/2180",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rfcs-bool-to-option-methods"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/1759",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rfcs-abort-by-default"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/3809",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rfcs-derive-from-single-field"
+		},
+		{
+			"url": "https://github.com/rust-lang/rfcs/pull/3013",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "rust-check-cfg-rfc"
+		},
+		{
+			"url": "https://github.com/tc39/proposal-pipeline-operator/issues/167",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/tc39/proposal-pipeline-operator/issues/205",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/tc39/proposal-decorators/issues/69",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/tc39/proposal-source-phase-imports/issues/18",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "tc39-import-reflection-extensible-syntax"
+		},
+		{
+			"url": "https://github.com/tc39/proposal-global/issues/32",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/nodejs/TSC/issues/1445",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/nodejs/TSC/issues/1104",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "tsc-primordials-error-path-vote"
+		},
+		{
+			"url": "https://github.com/nodejs/TSC/issues/1012",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "nodejs-tsc-yarn-corepack-vote"
+		},
+		{
+			"url": "https://github.com/nodejs/TSC/issues/1438",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "formal-process",
+			"caseId": "nodejs-remove-primordials"
+		},
+		{
+			"url": "https://github.com/kubernetes/enhancements/pull/4213",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/kubernetes/enhancements/pull/3004",
+			"provisionalQuota": "formal-process",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/casey/just/issues/383",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/casey/just/issues/626",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "just-parallel-dependencies"
+		},
+		{
+			"url": "https://github.com/casey/just/issues/531",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/casey/just/issues/11",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "just-format-string-interpolation"
+		},
+		{
+			"url": "https://github.com/casey/just/discussions/2934",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "just-telemetry-hooks"
+		},
+		{
+			"url": "https://github.com/BurntSushi/ripgrep/issues/86",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "ripgrep-built-in-pager"
+		},
+		{
+			"url": "https://github.com/BurntSushi/ripgrep/issues/129",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "ripgrep-max-columns"
+		},
+		{
+			"url": "https://github.com/BurntSushi/ripgrep/issues/665",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "ripgrep-file-hyperlinks"
+		},
+		{
+			"url": "https://github.com/BurntSushi/ripgrep/issues/1497",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/sharkdp/bat/issues/1053",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "bat-builtin-pager"
+		},
+		{
+			"url": "https://github.com/sharkdp/bat/issues/2455",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "eng-issue",
+			"caseId": "bat-debian-batcat-name"
+		},
+		{
+			"url": "https://github.com/junegunn/fzf/discussions/2528",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "fzf-default-opts-file"
+		},
+		{
+			"url": "https://github.com/junegunn/fzf/issues/587",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "fzf-preview-window"
+		},
+		{
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/145",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "zoxide-fish-cd-alias-recursion"
+		},
+		{
+			"url": "https://github.com/ajeetdsouza/zoxide/issues/433",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Support/debugging thread about a purged database; no design choice, closed as not reproducible."
+		},
+		{
+			"url": "https://github.com/dandavison/delta/issues/447",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "small-team",
+			"caseId": "delta-auto-light-dark-detection"
+		},
+		{
+			"url": "https://github.com/dandavison/delta/issues/72",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/atuinsh/atuin/issues/51",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Support Q&A about disabling the up-arrow binding; the maintainer agreed at once to make it configurable and the rest is workarounds and doc links, with no options genuinely weighed."
+		},
+		{
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "atuin-classic-up-arrow-from-db"
+		},
+		{
+			"url": "https://github.com/jesseduffield/lazygit/discussions/2803",
+			"provisionalQuota": "small-team",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "product-ui",
+			"caseId": "lazygit-worktree-ux"
+		},
+		{
+			"url": "https://github.com/microsoft/vscode/issues/326328",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "vscode-modern-ui-default"
+		},
+		{
+			"url": "https://github.com/prettier/prettier/issues/7512",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "prettier-generator-star-revert"
+		},
+		{
+			"url": "https://github.com/dotnet/aspnetcore/issues/3755",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "aspnetcore-mvc-in-shared-framework"
+		},
+		{
+			"url": "https://github.com/uuid6/new-uuid-encoding-techniques-ietf-draft/issues/3",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "uuid6-alt-text-encoding"
+		},
+		{
+			"url": "https://github.com/prettier/prettier/issues/9561",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "prettier-nested-ternaries"
+		},
+		{
+			"url": "https://github.com/tc39/proposal-class-fields/issues/100",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "not-screened",
+			"reason": "Fetched but not annotated: its quota was already met when screening stopped."
+		},
+		{
+			"url": "https://github.com/vercel/next.js/discussions/37136",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "kept",
+			"reason": null,
+			"quota": "open-choice",
+			"caseId": "nextjs-app-router-file-conventions"
+		},
+		{
+			"url": "https://github.com/shadcn-ui/ui/discussions/2262",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Feature request dominated by +1 comments with no maintainer participation; the scattered user debate over Solid primitives libraries and community ports has no one able to decide and never forms a question the project weighs."
+		},
+		{
+			"url": "https://github.com/pnpm/pnpm/issues/7072",
+			"provisionalQuota": "open-choice",
+			"source": "search:gh",
+			"status": "discarded",
+			"reason": "Implementation tracking issue: the catalogs design was settled in a separate RFC, and this thread is task updates, bug reports and feature requests; the one alternative raised was dismissed as out of scope without weighing."
+		}
+	]
+}

@@ -1,0 +1,360 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "outline-document-tags",
+	"title": "Tags for documents in Outline",
+	"source": {
+		"url": "https://github.com/outline/outline/discussions/2256",
+		"retrievedAt": "2026-10-18T07:20:28.529082+00:00",
+		"repository": "outline/outline",
+		"number": 2256,
+		"nodeId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-06-27T12:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-06-27T19:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2025-08-21T16:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "MDEwOkRpc2N1c3Npb24zNDMyODg3",
+			"kind": "opening",
+			"actor": "iamaravindh",
+			"createdAt": "2021-06-27T11:36:43Z",
+			"url": "https://github.com/outline/outline/discussions/2256",
+			"summary": "A user asks for document tags, since folder-based organisation makes it hard to search and filter when several areas share the same folder.",
+			"actorId": "MDQ6VXNlcjQyMjM5MzU4",
+			"actorType": "human"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50OTI4OTUw",
+			"kind": "comment",
+			"actor": "tommoor",
+			"createdAt": "2021-06-27T18:18:21Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-928950",
+			"summary": "A maintainer points to an older tags issue and says the team is holding off in favour of better search, because every extra organising step makes the product harder and the hierarchy already asks a lot; they invite concrete examples where tags would beat search.",
+			"actorId": "MDQ6VXNlcjM4MDkxNA==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AKXLt",
+			"kind": "reply",
+			"actor": "sudoexec",
+			"createdAt": "2022-05-09T17:09:42Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-2716397",
+			"summary": "A user replies that tags help when you do not know the right search word or want everything on a topic, likening them to blog tags.",
+			"actorId": "MDQ6VXNlcjI3NzcwOTIw",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50OTI4OTUw"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4ALeS0",
+			"kind": "comment",
+			"actor": "BRogers80",
+			"createdAt": "2022-06-23T06:45:39Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-3007668",
+			"summary": "A user with five collections and a ticketing-system bridge explains that fixed tags would let API searches reliably find guides that live in different collections.",
+			"actorId": "MDQ6VXNlcjczMjI1Nzgx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4ATwra",
+			"kind": "comment",
+			"actor": "dsmrs",
+			"createdAt": "2023-03-02T15:37:24Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-5180122",
+			"summary": "A user argues tags are about filtering rather than search and could also power other features such as a Kanban view, linking another discussion.",
+			"actorId": "MDQ6VXNlcjEyMjAzMjIx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AUHfh",
+			"kind": "reply",
+			"actor": "danfoxley",
+			"createdAt": "2023-03-11T02:51:18Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-5273569",
+			"summary": "A user adds that tags work best from a controlled vocabulary and asks whether an integration could provide them.",
+			"actorId": "MDQ6VXNlcjIwNzQwMzg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4ATwra"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AU9lI",
+			"kind": "comment",
+			"actor": "retiarylime",
+			"createdAt": "2023-04-01T04:55:56Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-5495112",
+			"summary": "A user upvotes, saying tags matter for sorting and categorising documents.",
+			"actorId": "MDQ6VXNlcjgzOTcwNjg1",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4ArAji",
+			"kind": "comment",
+			"actor": "atandy",
+			"createdAt": "2024-11-15T22:19:36Z",
+			"editedAt": "2024-11-15T22:20:13Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-11274466",
+			"summary": "A user wants a to-do style tag to find every document still missing a video, instead of keeping a separate list of links.",
+			"actorId": "MDQ6VXNlcjc5NTgyMw==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4As9QV",
+			"kind": "comment",
+			"actor": "juliocoelho",
+			"createdAt": "2025-01-09T10:57:55Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-11785237",
+			"summary": "A user proposes smart collections that include or exclude documents by tag, for example an onboarding set that skips drafts.",
+			"actorId": "MDQ6VXNlcjEwMzEzODk=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4AtXH6",
+			"kind": "comment",
+			"actor": "McFlyPartages",
+			"createdAt": "2025-01-20T14:20:35Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-11891194",
+			"summary": "A user notes the request has been open since 2021 and calls tags a core gap for documentation tools.",
+			"actorId": "MDQ6VXNlcjQ0NTMwMjUy",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4Auh4Z",
+			"kind": "comment",
+			"actor": "baditaflorin",
+			"createdAt": "2025-02-14T07:58:24Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-12197401",
+			"summary": "A user asks for inline hashtags that link to a list of every document using them.",
+			"actorId": "MDQ6VXNlcjIzMzA5OTk=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A0k_L",
+			"kind": "comment",
+			"actor": "swinis",
+			"createdAt": "2025-07-16T21:45:10Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-13782987",
+			"summary": "A user adds support.",
+			"actorId": "U_kgDOBrTdJw",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A1Jfk",
+			"kind": "comment",
+			"actor": "Brukkil",
+			"createdAt": "2025-07-30T09:35:41Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-13932516",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjM4MzIxNzk3",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A1tkG",
+			"kind": "comment",
+			"actor": "pavelcdn",
+			"createdAt": "2025-08-12T08:50:28Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-14080262",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjEwMTg4MDc3",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A1uJK",
+			"kind": "comment",
+			"actor": "DavidDieguezCodex",
+			"createdAt": "2025-08-12T13:18:56Z",
+			"editedAt": "2025-08-12T13:19:08Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-14082634",
+			"summary": "A user evaluating Outline for their company says the missing tags make them choose another tool.",
+			"actorId": "U_kgDOBY3Gdw",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A2F-t",
+			"kind": "comment",
+			"actor": "NeptunedGmbH",
+			"createdAt": "2025-08-21T15:17:55Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-14180269",
+			"summary": "A user wants tags to mark the departments involved in a process and, as an alternative, Workflowy-style mirrored documents.",
+			"actorId": "U_kgDOC_9IAw",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A7FKD",
+			"kind": "comment",
+			"actor": "CanalWood",
+			"createdAt": "2026-01-13T16:31:04Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-15487619",
+			"summary": "A user adds support, wanting to filter related documents, and asks whether any implementation is planned.",
+			"actorId": "MDQ6VXNlcjYzMjQ2MDAz",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A7YH6",
+			"kind": "comment",
+			"actor": "hdinguyen",
+			"createdAt": "2026-01-22T00:49:08Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-15565306",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjMyMTY4NTU=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A8ohR",
+			"kind": "comment",
+			"actor": "defcon1702",
+			"createdAt": "2026-02-23T09:13:43Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-15894609",
+			"summary": "A user supports tags for better interplay with Obsidian and note systems such as PARA or Zettelkasten.",
+			"actorId": "MDQ6VXNlcjYyNjUwMzE=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A83lf",
+			"kind": "comment",
+			"actor": "defcon1702",
+			"createdAt": "2026-02-28T17:19:40Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-15956319",
+			"summary": "The same user links a newer discussion about tags.",
+			"actorId": "MDQ6VXNlcjYyNjUwMzE=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A9o-t",
+			"kind": "comment",
+			"actor": "MystikReasons",
+			"createdAt": "2026-03-16T12:19:45Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-16158637",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjE4MzMzMDQ4",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4A91fu",
+			"kind": "comment",
+			"actor": "julbdx",
+			"createdAt": "2026-03-19T14:32:51Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-16209902",
+			"summary": "A user adds support.",
+			"actorId": "U_kgDOBaONLQ",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BAUr_",
+			"kind": "comment",
+			"actor": "thomaslc08",
+			"createdAt": "2026-05-09T12:00:15Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-16861951",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjU0NDM5MDc4",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BAU3U",
+			"kind": "comment",
+			"actor": "pavelcdn",
+			"createdAt": "2026-05-09T14:20:11Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-16862676",
+			"summary": "A user asks whether tags are on the 2026 roadmap and when they might land.",
+			"actorId": "MDQ6VXNlcjEwMTg4MDc3",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BAU-v",
+			"kind": "reply",
+			"actor": "defcon1702",
+			"createdAt": "2026-05-09T15:49:47Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-16863151",
+			"summary": "A user replies that two community pull requests for tags exist but have had no response, so the timeline is unclear.",
+			"actorId": "MDQ6VXNlcjYyNjUwMzE=",
+			"actorType": "human",
+			"parentId": "DC_kwDOA4rpZM4BAU3U"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BB0sY",
+			"kind": "comment",
+			"actor": "jammin88",
+			"createdAt": "2026-06-10T19:27:30Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-17255192",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjI0NjUzMzQ4",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BF5mv",
+			"kind": "comment",
+			"actor": "thaibinhindex",
+			"createdAt": "2026-09-07T03:08:50Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-18323887",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjE4ODkwMTE=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BGIp2",
+			"kind": "comment",
+			"actor": "JanJK2011",
+			"createdAt": "2026-09-10T11:32:10Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-18385526",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjI0Mzg3MjM4",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BGItU",
+			"kind": "comment",
+			"actor": "kameleon1er",
+			"createdAt": "2026-09-10T11:53:05Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-18385748",
+			"summary": "A user adds support, hoping tags would line up with Obsidian properties.",
+			"actorId": "MDQ6VXNlcjM2NDc2OTA5",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		},
+		{
+			"id": "DC_kwDOA4rpZM4BHNPD",
+			"kind": "comment",
+			"actor": "websafe",
+			"createdAt": "2026-09-29T21:19:01Z",
+			"url": "https://github.com/outline/outline/discussions/2256#discussioncomment-18666435",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjQxMjAxMw==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDMyODg3"
+		}
+	]
+}

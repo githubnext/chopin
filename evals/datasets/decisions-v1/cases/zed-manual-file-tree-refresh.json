@@ -1,0 +1,548 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "zed-manual-file-tree-refresh",
+	"title": "Manual refresh versus polling for Zed's stale file tree",
+	"source": {
+		"url": "https://github.com/zed-industries/zed/discussions/54150",
+		"retrievedAt": "2026-10-18T07:19:22.198811+00:00",
+		"repository": "zed-industries/zed",
+		"number": 54150,
+		"nodeId": "D_kwDOFExXwM4Alw3P"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-04-17T09:15:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-04-18T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-04-23T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-04-24T04:32:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOFExXwM4Alw3P",
+			"kind": "opening",
+			"actor": "chen1plus",
+			"createdAt": "2026-04-17T07:11:52Z",
+			"editedAt": "2026-04-17T07:24:46Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150",
+			"summary": "The opener asks for a manual file tree refresh because file system events are unreliable on cluster and shared file systems, lists duplicate issues and closed PRs, and criticises the team for rejecting community fixes on architectural grounds.",
+			"actorId": "U_kgDOB1DCUw",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_U_Q",
+			"kind": "comment",
+			"actor": "okaris",
+			"createdAt": "2026-04-17T09:13:43Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16601040",
+			"summary": "A user says the team should simply decide whether manual refresh is in scope.",
+			"actorId": "MDQ6VXNlcjE0NDg3MDI=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_VAD",
+			"kind": "comment",
+			"actor": "okaris",
+			"createdAt": "2026-04-17T09:18:29Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16601091",
+			"summary": "The user adds that the current workaround, reloading the workspace, destroys terminal state.",
+			"actorId": "MDQ6VXNlcjE0NDg3MDI=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_VAy",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-04-17T09:24:22Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16601138",
+			"summary": "A contributor argues Zed suits cluster users and should allow refreshing a specific folder, calling the watcher-only design fundamentally fragile.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_Wua",
+			"kind": "comment",
+			"actor": "ChristopherBiscardi",
+			"createdAt": "2026-04-17T23:06:25Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16608154",
+			"summary": "A Zed community liaison explains that a staff review opposed manual refresh because it could hide scanning bugs, points to a polling proposal, and asks for use cases where both polling and watching fail.",
+			"actorId": "MDQ6VXNlcjU1MTI0Nw==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_XJp",
+			"kind": "comment",
+			"actor": "chen1plus",
+			"createdAt": "2026-04-18T04:05:50Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16609897",
+			"summary": "The opener lists supercomputers where the problem occurs, says it cannot be reproduced without special hardware, and notes polling trades resources for latency.",
+			"actorId": "U_kgDOB1DCUw",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_c4K",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-04-20T08:36:10Z",
+			"editedAt": "2026-04-20T08:36:45Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16633354",
+			"summary": "A contributor describes their network file system, argues polling supplements but does not replace manual refresh, and rebuts the masking-bugs argument by saying frustrated users leave rather than report.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_fwC",
+			"kind": "comment",
+			"actor": "basemotive",
+			"createdAt": "2026-04-21T01:20:02Z",
+			"editedAt": "2026-04-21T01:20:34Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16645122",
+			"summary": "A user says workspace reloads are costly with many windows and describes stale dependencies on an NFS share.",
+			"actorId": "MDQ6VXNlcjQxMDE5NDY0",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_sUZ",
+			"kind": "comment",
+			"actor": "ChristopherBiscardi",
+			"createdAt": "2026-04-24T04:30:58Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16696601",
+			"summary": "The liaison announces that a polling backend has landed.",
+			"actorId": "MDQ6VXNlcjU1MTI0Nw==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_sU8",
+			"kind": "comment",
+			"actor": "okaris",
+			"createdAt": "2026-04-24T04:34:14Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16696636",
+			"summary": "A user notes polling shipped quickly while the simple menu item they asked for did not.",
+			"actorId": "MDQ6VXNlcjE0NDg3MDI=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_sah",
+			"kind": "comment",
+			"actor": "chen1plus",
+			"createdAt": "2026-04-24T05:33:23Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16696993",
+			"summary": "The opener keeps the discussion open to see how polling works out.",
+			"actorId": "U_kgDOB1DCUw",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_zbW",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-04-27T08:01:19Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16725718",
+			"summary": "A contributor says polling does not help when a network file system delivers local events but misses remote changes, and objects that an environment variable is the only way to choose it.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_zlV",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-04-27T08:51:35Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16726357",
+			"summary": "The contributor lists failure modes such as remote changes and exhausted watch limits, and calls manual refresh a requirement before recommending Zed at their company.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_1VM",
+			"kind": "comment",
+			"actor": "nilsholle",
+			"createdAt": "2026-04-27T19:30:45Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16733516",
+			"summary": "A user reports the same on HPC and SSH and favours a refresh button like VS Code's.",
+			"actorId": "MDQ6VXNlcjkxOTg0NzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A__Tc",
+			"kind": "comment",
+			"actor": "yukiumi13",
+			"createdAt": "2026-04-30T21:53:30Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16774364",
+			"summary": "A user describes cluster training outputs not appearing and calls manual refresh essential.",
+			"actorId": "MDQ6VXNlcjQ0MTE1NzE2",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BACdk",
+			"kind": "comment",
+			"actor": "okaris",
+			"createdAt": "2026-05-02T09:30:30Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16787300",
+			"summary": "A user says remote servers still miss files created by agents and urges a simple escape hatch.",
+			"actorId": "MDQ6VXNlcjE0NDg3MDI=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAGQy",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-05-04T09:16:02Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16802866",
+			"summary": "A contributor sarcastically notes the 1.0 release shipped without a fix.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAOP7",
+			"kind": "comment",
+			"actor": "chen1plus",
+			"createdAt": "2026-05-07T04:24:12Z",
+			"editedAt": "2026-05-07T04:29:16Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-16835579",
+			"summary": "The opener corrects that polling arrived in 1.1 and says it seems to work with some lag.",
+			"actorId": "U_kgDOB1DCUw",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "D_kwDOFExXwM4Alw3P:process:closed:2026-05-26T06:15:15Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2026-05-26T06:15:15Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150",
+			"summary": "The discussion is closed as resolved.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCAKZ",
+			"kind": "comment",
+			"actor": "TranToan2910",
+			"createdAt": "2026-06-15T01:44:47Z",
+			"editedAt": "2026-06-15T01:52:42Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17302169",
+			"summary": "A user reports the problem with WSL, then finds the remote WSL folder feature solves it.",
+			"actorId": "MDQ6VXNlcjIzMjkyOTAy",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCMmA",
+			"kind": "comment",
+			"actor": "jedrichards",
+			"createdAt": "2026-06-18T14:39:34Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17353088",
+			"summary": "A user reports a recent regression where external edits no longer show up on macOS.",
+			"actorId": "MDQ6VXNlcjEwNzg1NzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCNlQ",
+			"kind": "reply",
+			"actor": "linkthai",
+			"createdAt": "2026-06-18T21:26:11Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17357136",
+			"summary": "A user sees the same with an agent CLI and wishes for a reload button.",
+			"actorId": "MDQ6VXNlcjE2MTY2ODEx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMmA"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCauW",
+			"kind": "comment",
+			"actor": "ekkolyth",
+			"createdAt": "2026-06-23T17:48:27Z",
+			"editedAt": "2026-06-23T17:49:35Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17410966",
+			"summary": "A user posts an empty comment.",
+			"actorId": "U_kgDOCMRpGQ",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCaus",
+			"kind": "reply",
+			"actor": "ekkolyth",
+			"createdAt": "2026-06-23T17:51:04Z",
+			"editedAt": "2026-06-23T18:13:50Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17410988",
+			"summary": "The user says even Zed's own agent integration breaks the file tree and git panel.",
+			"actorId": "U_kgDOCMRpGQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMmA"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCcrw",
+			"kind": "reply",
+			"actor": "linkthai",
+			"createdAt": "2026-06-24T09:51:23Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17418992",
+			"summary": "A user suggests a particular extension may be the cause.",
+			"actorId": "MDQ6VXNlcjE2MTY2ODEx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCauW"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCc9e",
+			"kind": "reply",
+			"actor": "ekkolyth",
+			"createdAt": "2026-06-24T11:48:02Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17420126",
+			"summary": "The user says they will check the extension.",
+			"actorId": "U_kgDOCMRpGQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCauW"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCdFl",
+			"kind": "reply",
+			"actor": "linkthai",
+			"createdAt": "2026-06-24T12:41:49Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17420645",
+			"summary": "The other user advises uninstalling it.",
+			"actorId": "MDQ6VXNlcjE2MTY2ODEx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCauW"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BC2Aq",
+			"kind": "comment",
+			"actor": "EyMaddis",
+			"createdAt": "2026-07-03T11:21:04Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17522730",
+			"summary": "A user reports stale trees after switching branches from outside a dev container.",
+			"actorId": "MDQ6VXNlcjE0MDkxMDA=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BC3DX",
+			"kind": "comment",
+			"actor": "nitedani",
+			"createdAt": "2026-07-03T20:41:08Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17526999",
+			"summary": "A user on Windows with WSL reports agent edits not appearing anywhere in the UI.",
+			"actorId": "MDQ6VXNlcjY3NDE4Mjg2",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BC71G",
+			"kind": "comment",
+			"actor": "xiaozhangup",
+			"createdAt": "2026-07-06T10:58:35Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17546566",
+			"summary": "A user reports changes take tens of seconds to show up.",
+			"actorId": "MDQ6VXNlcjY4Mzc0NzY5",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDGQf",
+			"kind": "comment",
+			"actor": "smocer",
+			"createdAt": "2026-07-09T20:37:39Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17589279",
+			"summary": "A user finds that changes inside a symlinked folder are not picked up.",
+			"actorId": "MDQ6VXNlcjI2NDgzOTIx",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDHVj",
+			"kind": "comment",
+			"actor": "jedrichards",
+			"createdAt": "2026-07-10T07:48:36Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17593699",
+			"summary": "A user reports the situation has improved in a preview build.",
+			"actorId": "MDQ6VXNlcjEwNzg1NzE=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDWvW",
+			"kind": "comment",
+			"actor": "nathanchenseanwalter",
+			"createdAt": "2026-07-16T05:02:20Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17656790",
+			"summary": "A user asks why it is not fixed.",
+			"actorId": "MDQ6VXNlcjc5Mzc5ODQy",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDdD4",
+			"kind": "reply",
+			"actor": "Danvil",
+			"createdAt": "2026-07-18T18:28:21Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17682680",
+			"summary": "A user reports it getting worse and threatens to switch editors.",
+			"actorId": "MDQ6VXNlcjUxNzYwOA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BC3DX"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDdD9",
+			"kind": "comment",
+			"actor": "Danvil",
+			"createdAt": "2026-07-18T18:29:02Z",
+			"editedAt": "2026-07-18T18:32:58Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17682685",
+			"summary": "A user asks why the discussion was closed and requests a refresh menu item as a stopgap.",
+			"actorId": "MDQ6VXNlcjUxNzYwOA==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEGjS",
+			"kind": "comment",
+			"actor": "g4borg",
+			"createdAt": "2026-07-31T10:31:00Z",
+			"editedAt": "2026-07-31T10:40:40Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17852626",
+			"summary": "A user reports frequent desyncs on Windows and proposes a filesystem refresh command.",
+			"actorId": "MDQ6VXNlcjU5MDAwMA==",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEGkH",
+			"kind": "reply",
+			"actor": "g4borg",
+			"createdAt": "2026-07-31T10:39:09Z",
+			"editedAt": "2026-07-31T10:39:32Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17852679",
+			"summary": "A user shares a workaround for the symlink case.",
+			"actorId": "MDQ6VXNlcjU5MDAwMA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BDGQf"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEXhX",
+			"kind": "reply",
+			"actor": "roachadam",
+			"createdAt": "2026-08-06T14:32:59Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17922135",
+			"summary": "A user reports the same issue.",
+			"actorId": "MDQ6VXNlcjMwMDk4OTQ1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BC3DX"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEasl",
+			"kind": "comment",
+			"actor": "scilari",
+			"createdAt": "2026-08-07T15:14:19Z",
+			"editedAt": "2026-08-07T15:20:24Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17935141",
+			"summary": "A user asks for the discussion to be reopened, citing agent workflows on a remote VM.",
+			"actorId": "MDQ6VXNlcjk3NDIyMzA=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEpbZ",
+			"kind": "comment",
+			"actor": "twinkle311",
+			"createdAt": "2026-08-13T00:56:44Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-17995481",
+			"summary": "A user asks to reopen it.",
+			"actorId": "MDQ6VXNlcjYyNjg1MDE0",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BE_b5",
+			"kind": "comment",
+			"actor": "Saucy9607",
+			"createdAt": "2026-08-19T23:55:30Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-18085625",
+			"summary": "A user calls polling a hack with power costs and insists manual refresh is needed.",
+			"actorId": "U_kgDODm3R9A",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BFnT1",
+			"kind": "comment",
+			"actor": "vaqxai",
+			"createdAt": "2026-09-02T11:44:56Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-18248949",
+			"summary": "A user says they abandoned Zed over this.",
+			"actorId": "MDQ6VXNlcjE5ODcyNjgy",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BFq-h",
+			"kind": "comment",
+			"actor": "ches",
+			"createdAt": "2026-09-03T07:51:40Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-18263969",
+			"summary": "A user notes the opener closed the discussion, says the staff member who blocked it never engaged, and proposes exposing refresh to plugins as a compromise.",
+			"actorId": "MDQ6VXNlcjEzMjc3",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BFsXo",
+			"kind": "comment",
+			"actor": "kitzbergerg",
+			"createdAt": "2026-09-03T13:51:41Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-18269672",
+			"summary": "A new user says missing refresh makes Zed unusable for cluster work.",
+			"actorId": "MDQ6VXNlcjMzMTAyMjcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BGxOC",
+			"kind": "comment",
+			"actor": "auwi-nordic",
+			"createdAt": "2026-09-22T10:37:30Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-18551682",
+			"summary": "A contributor reports opening a follow-up discussion, which was also closed.",
+			"actorId": "MDQ6VXNlcjczMTAxNzcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BIg-G",
+			"kind": "comment",
+			"actor": "petejkim",
+			"createdAt": "2026-10-18T01:30:33Z",
+			"url": "https://github.com/zed-industries/zed/discussions/54150#discussioncomment-19009414",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjMwMTcz",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4Alw3P"
+		}
+	]
+}

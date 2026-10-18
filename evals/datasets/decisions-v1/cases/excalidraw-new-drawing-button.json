@@ -1,0 +1,488 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "excalidraw-new-drawing-button",
+	"title": "New drawing button versus clear canvas",
+	"source": {
+		"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+		"retrievedAt": "2026-10-18T07:02:48.939729+00:00",
+		"repository": "excalidraw/excalidraw",
+		"number": 1957
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-07-25T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2020-07-28T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2020-08-20T23:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2020-08-21T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "excalidraw-1957:issue:1957",
+			"kind": "opening",
+			"actor": "mwuf15",
+			"createdAt": "2020-07-24T17:20:57Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+			"summary": "The opener reports there is no button to start a new drawing or a way to name one.",
+			"actorId": 29104567,
+			"actorType": "human"
+		},
+		{
+			"id": "excalidraw-1957:comment:663668291",
+			"kind": "comment",
+			"actor": "ReneCode",
+			"createdAt": "2020-07-24T18:14:42Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-663668291",
+			"summary": "A contributor explains the workaround: the trash-can button clears the canvas for a new drawing, and the save button lets you name the file.",
+			"actorId": 1595098,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:663732190",
+			"kind": "comment",
+			"actor": "dwelle",
+			"createdAt": "2020-07-24T21:00:43Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-663732190",
+			"summary": "A maintainer acknowledges the pain point and says the scene toolbar needs a redesign because many people are confused by it.",
+			"actorId": 5153846,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:663931992",
+			"kind": "comment",
+			"actor": "cor-rine",
+			"createdAt": "2020-07-26T03:46:38Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-663931992",
+			"summary": "A user asks for a Ctrl/Cmd+N shortcut for a new drawing, as design tools offer.",
+			"actorId": 1207134,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:663941228",
+			"kind": "comment",
+			"actor": "cor-rine",
+			"createdAt": "2020-07-26T06:18:37Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-663941228",
+			"summary": "The same user asks another maintainer for guidance on menu and UX feedback to inform a better design.",
+			"actorId": 1207134,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:664006166",
+			"kind": "comment",
+			"actor": "lipis",
+			"createdAt": "2020-07-26T16:02:06Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-664006166",
+			"summary": "A maintainer rejects Ctrl/Cmd+N because browsers use it to open a new tab.",
+			"actorId": 125676,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:664151821",
+			"kind": "comment",
+			"actor": "ReneCode",
+			"createdAt": "2020-07-27T06:43:40Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-664151821",
+			"summary": "A contributor asks whether overriding browser shortcuts is acceptable, citing Cmd+D, and proposes swapping the trash icon for a 'new' icon placed on the left, with mockups.",
+			"actorId": 1595098,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:664253994",
+			"kind": "comment",
+			"actor": "dwelle",
+			"createdAt": "2020-07-27T10:01:54Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-664253994",
+			"summary": "A maintainer says shortcuts are overridden only with precedent and some cannot be, and asks to wait for issue #1543 before changing the icon.",
+			"actorId": 5153846,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:665543107",
+			"kind": "comment",
+			"actor": "faraz16iqbal",
+			"createdAt": "2020-07-29T09:13:45Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-665543107",
+			"summary": "A user asks whether the issue is still open.",
+			"actorId": 53421337,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:665724894",
+			"kind": "comment",
+			"actor": "ReneCode",
+			"createdAt": "2020-07-29T15:13:27Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-665724894",
+			"summary": "The contributor relays that the maintainer wants to wait on #1543, since it affects whether new means clearing the scene or opening a tab.",
+			"actorId": 1595098,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:666424624",
+			"kind": "comment",
+			"actor": "justshrey",
+			"createdAt": "2020-07-30T14:54:53Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-666424624",
+			"summary": "A user asks to remove the trash icon after someone in a live session cleared a shared canvas thinking it deleted one element.",
+			"actorId": 1253625,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:666426959",
+			"kind": "comment",
+			"actor": "dwelle",
+			"createdAt": "2020-07-30T14:58:31Z",
+			"editedAt": "2020-07-30T15:00:10Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-666426959",
+			"summary": "A maintainer predicts a 'new scene' button would draw the mirror complaint from people who expected a separate scene, and notes undo restores a cleared canvas.",
+			"actorId": 5153846,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:677949773",
+			"kind": "comment",
+			"actor": "lipis",
+			"createdAt": "2020-08-20T23:08:12Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-677949773",
+			"summary": "A maintainer says a second button that duplicates the existing delete button makes no sense.",
+			"actorId": 125676,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:process:closed:2020-08-20T23:08:12Z",
+			"kind": "process",
+			"actor": "lipis",
+			"createdAt": "2020-08-20T23:08:12Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957",
+			"summary": "The issue is closed.",
+			"actorId": 125676,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1440784775",
+			"kind": "comment",
+			"actor": "nemith",
+			"createdAt": "2023-02-22T20:55:43Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1440784775",
+			"summary": "A user arriving years later from a search says the current model is still unclear.",
+			"actorId": 349360,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1441242214",
+			"kind": "comment",
+			"actor": "alecthomas",
+			"createdAt": "2023-02-23T05:40:38Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1441242214",
+			"summary": "Another user agrees.",
+			"actorId": 41767,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1694212830",
+			"kind": "comment",
+			"actor": "gokulk16",
+			"createdAt": "2023-08-26T07:31:30Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1694212830",
+			"summary": "A user, who had to search the web to learn how, asks for a simpler route to a blank canvas.",
+			"actorId": 8376313,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1695117754",
+			"kind": "comment",
+			"actor": "ad1992",
+			"createdAt": "2023-08-28T06:40:31Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1695117754",
+			"summary": "A maintainer asks whether the user means the same behaviour as the existing reset button.",
+			"actorId": 11256141,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1695123017",
+			"kind": "comment",
+			"actor": "gokulk16",
+			"createdAt": "2023-08-28T06:45:17Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1695123017",
+			"summary": "The user confirms and suggests a keyboard shortcut.",
+			"actorId": 8376313,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1695126693",
+			"kind": "comment",
+			"actor": "ad1992",
+			"createdAt": "2023-08-28T06:48:35Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1695126693",
+			"summary": "The maintainer says a duplicate button makes no sense and floats renaming the action, perhaps to something like clear and start fresh.",
+			"actorId": 11256141,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1695282504",
+			"kind": "comment",
+			"actor": "gokulk16",
+			"createdAt": "2023-08-28T08:40:57Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1695282504",
+			"summary": "The user says 'reset the canvas' does not map to the idea of a new drawing and asks that the existing shortcut be shown in the menu.",
+			"actorId": 8376313,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1784568585",
+			"kind": "comment",
+			"actor": "bebound",
+			"createdAt": "2023-10-30T06:39:29Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1784568585",
+			"summary": "A user says the trash icon and its confirmation prompt make the action more confusing.",
+			"actorId": 2227874,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1784580203",
+			"kind": "comment",
+			"actor": "konashevich",
+			"createdAt": "2023-10-30T06:51:33Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1784580203",
+			"summary": "A user insists a dedicated create-new button is the only good UX and says they lost diagrams via clear canvas.",
+			"actorId": 18244957,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1784597803",
+			"kind": "comment",
+			"actor": "ad1992",
+			"createdAt": "2023-10-30T07:08:32Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1784597803",
+			"summary": "A maintainer argues a 'start a new drawing' label would wrongly imply the current one is saved, which the open-source editor does not support, and asks whether a label stressing erasure would help.",
+			"actorId": 11256141,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1784725411",
+			"kind": "comment",
+			"actor": "bebound",
+			"createdAt": "2023-10-30T08:42:14Z",
+			"editedAt": "2023-10-30T08:47:12Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1784725411",
+			"summary": "A user asks for a New button with the same behaviour plus a warning that the current canvas will be replaced, noting reset also unlinks the file name.",
+			"actorId": 2227874,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1790664474",
+			"kind": "comment",
+			"actor": "jamfor999",
+			"createdAt": "2023-11-02T12:48:04Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1790664474",
+			"summary": "A user suggests simply renaming the reset action to start a new drawing.",
+			"actorId": 33285502,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:1931689887",
+			"kind": "comment",
+			"actor": "joaowatchful",
+			"createdAt": "2024-02-07T10:02:02Z",
+			"editedAt": "2024-02-07T10:03:06Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-1931689887",
+			"summary": "A user supports the New button with a warning and suggests putting it first in the menu.",
+			"actorId": 99800206,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2077629349",
+			"kind": "comment",
+			"actor": "itsobgraph",
+			"createdAt": "2024-04-25T15:54:45Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2077629349",
+			"summary": "A user reports still being confused in 2024.",
+			"actorId": 168109345,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2157304917",
+			"kind": "comment",
+			"actor": "almeraikhi",
+			"createdAt": "2024-06-10T05:34:40Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2157304917",
+			"summary": "A user proposes a create-new action whose prompt offers save to file, save to Excalidraw+, or discard before enabling it.",
+			"actorId": 130155541,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2260625051",
+			"kind": "comment",
+			"actor": "lordpanduka",
+			"createdAt": "2024-07-31T14:12:25Z",
+			"editedAt": "2024-07-31T17:44:12Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2260625051",
+			"summary": "A comment GitHub marks as hidden (abuse).",
+			"actorId": 37260467,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2274378376",
+			"kind": "comment",
+			"actor": "lappi",
+			"createdAt": "2024-08-07T21:26:54Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2274378376",
+			"summary": "A user pleads for the conventional New button with save-or-discard prompt.",
+			"actorId": 3740390,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2527234343",
+			"kind": "comment",
+			"actor": "cjj1120",
+			"createdAt": "2024-12-09T08:19:22Z",
+			"editedAt": "2024-12-09T08:30:56Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2527234343",
+			"summary": "A user questions why the issue is closed when users dislike the current reset behaviour.",
+			"actorId": 50688209,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2641218714",
+			"kind": "comment",
+			"actor": "x029a",
+			"createdAt": "2025-02-06T22:20:58Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2641218714",
+			"summary": "A user agrees, describing confusion about whether clearing would affect a shared drawing.",
+			"actorId": 2062218,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2713237155",
+			"kind": "comment",
+			"actor": "Ceaus",
+			"createdAt": "2025-03-11T09:05:15Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2713237155",
+			"summary": "A user reports still being confused in 2025.",
+			"actorId": 13982083,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:2713265966",
+			"kind": "comment",
+			"actor": "Ceaus",
+			"createdAt": "2025-03-11T09:13:49Z",
+			"editedAt": "2025-03-11T09:42:30Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-2713265966",
+			"summary": "A user argues the UI should follow the long-standing New/Save/Close idiom and that the trash-icon debate replaces a functional model with a technical one.",
+			"actorId": 13982083,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:3156786545",
+			"kind": "comment",
+			"actor": "iandees",
+			"createdAt": "2025-08-05T22:07:10Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-3156786545",
+			"summary": "A user reports the problem persists in August 2025.",
+			"actorId": 261584,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:3210062233",
+			"kind": "comment",
+			"actor": "jezewskiBNetrox",
+			"createdAt": "2025-08-21T11:03:04Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-3210062233",
+			"summary": "A new user says the absence of a New option after five years is confusing.",
+			"actorId": 142919116,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:3441954127",
+			"kind": "comment",
+			"actor": "maiku1008",
+			"createdAt": "2025-10-24T08:59:41Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-3441954127",
+			"summary": "A user asks why the issue is closed, unsure whether clearing would delete a colleague's shared drawing, and asks to reopen the discussion.",
+			"actorId": 25299092,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:3549227691",
+			"kind": "comment",
+			"actor": "peterfisher",
+			"createdAt": "2025-11-18T19:23:09Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-3549227691",
+			"summary": "A user shares the clear-canvas keyboard shortcut as a workaround.",
+			"actorId": 198814,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:3707184343",
+			"kind": "comment",
+			"actor": "Andrewryanhyde",
+			"createdAt": "2026-01-03T16:41:32Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-3707184343",
+			"summary": "A user reports still being confused in 2026.",
+			"actorId": 26203676,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		},
+		{
+			"id": "excalidraw-1957:comment:5481777559",
+			"kind": "comment",
+			"actor": "scubbo",
+			"createdAt": "2026-08-31T17:09:57Z",
+			"url": "https://github.com/excalidraw/excalidraw/issues/1957#issuecomment-5481777559",
+			"summary": "A user reports still being confused in August 2026.",
+			"actorId": 2373726,
+			"actorType": "human",
+			"parentId": "excalidraw-1957:issue:1957"
+		}
+	]
+}

@@ -1,0 +1,570 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "atuin-classic-up-arrow-from-db",
+	"title": "Classic in-place up-arrow history backed by Atuin's database",
+	"source": {
+		"url": "https://github.com/atuinsh/atuin/issues/798",
+		"retrievedAt": "2026-10-18T07:35:19.304519+00:00",
+		"repository": "atuinsh/atuin",
+		"number": 798
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2023-03-22T20:45:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2023-04-15T05:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2023-10-18T03:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2023-11-02T15:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "atuin-798:issue:798",
+			"kind": "opening",
+			"actor": "endigma",
+			"createdAt": "2023-03-22T00:22:16Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "The opener asks whether the up arrow could keep the shell's normal in-place history stepping, but read from Atuin's database instead of opening the full-screen search.",
+			"actorId": 34945114,
+			"actorType": "human"
+		},
+		{
+			"id": "atuin-798:comment:1479277487",
+			"kind": "comment",
+			"actor": "RafaelKr",
+			"createdAt": "2023-03-22T10:16:22Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1479277487",
+			"summary": "A user points to the docs for disabling Atuin's up-arrow binding.",
+			"actorId": 14234815,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1479640988",
+			"kind": "comment",
+			"actor": "endigma",
+			"createdAt": "2023-03-22T14:13:41Z",
+			"editedAt": "2023-03-22T14:15:13Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1479640988",
+			"summary": "The opener clarifies that disabling loses Atuin's history; they want classic in-place scrolling backed by the Atuin database, since the TUI disrupts quick history use.",
+			"actorId": 34945114,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1479677165",
+			"kind": "comment",
+			"actor": "conradludgate",
+			"createdAt": "2023-03-22T14:32:43Z",
+			"editedAt": "2023-03-22T14:33:14Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1479677165",
+			"summary": "A maintainer mentions a blocked work-in-progress inline view (#648) with a smaller search list near the prompt.",
+			"actorId": 6625462,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1480230528",
+			"kind": "comment",
+			"actor": "endigma",
+			"createdAt": "2023-03-22T20:39:01Z",
+			"editedAt": "2023-03-22T20:39:41Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1480230528",
+			"summary": "The opener asks whether a drop-in replacement of native up/down behaviour is planned or possible, stressing they want no search UI at all.",
+			"actorId": 34945114,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1480244126",
+			"kind": "comment",
+			"actor": "conradludgate",
+			"createdAt": "2023-03-22T20:51:55Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1480244126",
+			"summary": "The maintainer says they now understand and will check whether it is easy to achieve.",
+			"actorId": 6625462,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1480852365",
+			"kind": "comment",
+			"actor": "RafaelKr",
+			"createdAt": "2023-03-23T09:23:19Z",
+			"editedAt": "2023-03-23T09:26:05Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1480852365",
+			"summary": "A user reports that with the up-arrow binding disabled their native history still works, and asks which shell the opener uses and whether cross-terminal history is the goal.",
+			"actorId": 14234815,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1481083480",
+			"kind": "comment",
+			"actor": "endigma",
+			"createdAt": "2023-03-23T12:10:59Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1481083480",
+			"summary": "The opener explains native up arrow works but reads fish's own history file, not Atuin's database.",
+			"actorId": 34945114,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1490551240",
+			"kind": "comment",
+			"actor": "arcuru",
+			"createdAt": "2023-03-30T15:59:28Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1490551240",
+			"summary": "A contributor suggests the new `--offset` search flag from #825 makes this scriptable.",
+			"actorId": 160646,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1492800134",
+			"kind": "comment",
+			"actor": "endigma",
+			"createdAt": "2023-04-01T02:30:46Z",
+			"editedAt": "2023-04-01T02:53:24Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1492800134",
+			"summary": "The opener agrees it is feasible but wants it built in, noting that tracking the current history index per shell is the hard part.",
+			"actorId": 34945114,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1493172263",
+			"kind": "comment",
+			"actor": "arcuru",
+			"createdAt": "2023-04-01T23:38:43Z",
+			"editedAt": "2024-01-01T17:52:54Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1493172263",
+			"summary": "A contributor shares a fish prototype on a branch, notes rough edges, and asks whether maintainers want it integrated or just documented as a customisation example, declining to write other shells.",
+			"actorId": 160646,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1493410837",
+			"kind": "comment",
+			"actor": "endigma",
+			"createdAt": "2023-04-02T18:35:39Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1493410837",
+			"summary": "The opener suggests an opt-in switch alongside the existing bindings and asks whether the prototype uses the current buffer as a search prefix.",
+			"actorId": 34945114,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1493454863",
+			"kind": "comment",
+			"actor": "arcuru",
+			"createdAt": "2023-04-02T22:26:48Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1493454863",
+			"summary": "The contributor says prefix search is a small change, worries about option sprawl, and sketches config for filter mode, search mode and prefix use on a cycling up arrow.",
+			"actorId": 160646,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1509159616",
+			"kind": "comment",
+			"actor": "ellie",
+			"createdAt": "2023-04-14T19:56:42Z",
+			"editedAt": "2023-04-14T19:57:12Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1509159616",
+			"summary": "A maintainer welcomes a docs page of custom shell integrations as a first step, with possible full integration later, and points to a zsh attempt in #826.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1509494561",
+			"kind": "comment",
+			"actor": "mentalisttraceur",
+			"createdAt": "2023-04-15T04:14:58Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1509494561",
+			"summary": "A contributor proposes negative offsets in the CLI so every shell script can keep a simple counter instead of reimplementing index tracking.",
+			"actorId": 6531708,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1535569798",
+			"kind": "comment",
+			"actor": "Nezteb",
+			"createdAt": "2023-05-05T00:57:48Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1535569798",
+			"summary": "A user shares a zsh gist reimplementing classic up/down against Atuin's database.",
+			"actorId": 3588798,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1535987198",
+			"kind": "comment",
+			"actor": "takac",
+			"createdAt": "2023-05-05T09:31:24Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1535987198",
+			"summary": "The contributor who added `--offset` explains `--reverse` can be combined with it to fetch the last or nth-last match.",
+			"actorId": 1015381,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1609835369",
+			"kind": "comment",
+			"actor": "ekristen",
+			"createdAt": "2023-06-27T16:13:41Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1609835369",
+			"summary": "A user supports the idea and asks for it natively behind a config switch.",
+			"actorId": 48329,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1670582389",
+			"kind": "comment",
+			"actor": "alextremblay",
+			"createdAt": "2023-08-09T03:00:39Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1670582389",
+			"summary": "A user shares a bash gist that cycles history when the line is empty and falls back to Atuin's interactive search when text is typed.",
+			"actorId": 23367954,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1761546263",
+			"kind": "comment",
+			"actor": "tyalie",
+			"createdAt": "2023-10-13T13:45:00Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1761546263",
+			"summary": "A user posts an improved zsh script that handles Ctrl-C by tracking the previous result buffer.",
+			"actorId": 14364148,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1767582886",
+			"kind": "comment",
+			"actor": "ellie",
+			"createdAt": "2023-10-18T03:47:26Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1767582886",
+			"summary": "A maintainer says it would be good to include behind config or possibly as a new default, lists the community scripts per shell, proposes an option such as `classic_inline` or reusing `inline_height = 1`, offers to write the Rust side, and asks where shell functions should live.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:labeled:2023-10-18T03:50:12Z",
+			"kind": "process",
+			"actor": "ellie",
+			"createdAt": "2023-10-18T03:50:12Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A maintainer labels the issue as an enhancement.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:labeled:2023-10-18T03:50:12Z+",
+			"kind": "process",
+			"actor": "ellie",
+			"createdAt": "2023-10-18T03:50:12Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A maintainer labels the issue help wanted.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1780143646",
+			"kind": "comment",
+			"actor": "arcuru",
+			"createdAt": "2023-10-25T22:27:58Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1780143646",
+			"summary": "A contributor says Nushell cannot support this yet, mentions they now prefer full-screen search with `enter_accept`, and votes to put the new function in the existing script and switch the binding.",
+			"actorId": 160646,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1790888026",
+			"kind": "comment",
+			"actor": "alextremblay",
+			"createdAt": "2023-11-02T14:52:55Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1790888026",
+			"summary": "A user agrees with keeping it in the same script and plans to rework their bash version.",
+			"actorId": 23367954,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1790892121",
+			"kind": "comment",
+			"actor": "alextremblay",
+			"createdAt": "2023-11-02T14:54:53Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1790892121",
+			"summary": "The same user prefers an explicit `classic_inline` option over overloading `inline_height = 1`, but accepts either.",
+			"actorId": 23367954,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1964485526",
+			"kind": "comment",
+			"actor": "cohml",
+			"createdAt": "2024-02-26T15:55:44Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1964485526",
+			"summary": "A user notes that with directory filter mode the up arrow still cycles global history, a mismatch this feature would fix.",
+			"actorId": 62400541,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1964511976",
+			"kind": "comment",
+			"actor": "ellie",
+			"createdAt": "2024-02-26T16:03:51Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1964511976",
+			"summary": "A maintainer says the mismatch is intentional and points to a separate filter setting for the up-arrow binding.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1964546446",
+			"kind": "comment",
+			"actor": "cohml",
+			"createdAt": "2024-02-26T16:13:41Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1964546446",
+			"summary": "The user replies that setting only affects the TUI, not native scrolling with the binding disabled, which is what this issue is about.",
+			"actorId": 62400541,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1964560600",
+			"kind": "comment",
+			"actor": "ellie",
+			"createdAt": "2024-02-26T16:20:08Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1964560600",
+			"summary": "The maintainer apologises for misreading the comment.",
+			"actorId": 53315310,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:cross-referenced:2024-02-27T16:59:56Z",
+			"kind": "process",
+			"actor": "arcuru",
+			"createdAt": "2024-02-27T16:59:56Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A contributor's config-file reorganisation PR (#1789) references the issue.",
+			"actorId": 160646,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:1974773630",
+			"kind": "comment",
+			"actor": "remmycat",
+			"createdAt": "2024-03-02T11:43:55Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-1974773630",
+			"summary": "A contributor notes remaining Nushell blockers and floats asking Nushell for a pluggable external history API instead of keystroke hacks.",
+			"actorId": 3317423,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2181121591",
+			"kind": "comment",
+			"actor": "atuin-bot",
+			"createdAt": "2024-06-20T16:43:23Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2181121591",
+			"summary": "A bot links a related community forum thread.",
+			"actorId": 152089506,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2264926171",
+			"kind": "comment",
+			"actor": "GDYendell",
+			"createdAt": "2024-08-02T09:09:40Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2264926171",
+			"summary": "A user wants prefix search using text left of the cursor and suggests separate inline heights for up arrow and Ctrl-R.",
+			"actorId": 15689569,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2310239299",
+			"kind": "comment",
+			"actor": "davidebenato",
+			"createdAt": "2024-08-26T13:37:34Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2310239299",
+			"summary": "A user adds support, preferring a one-line search for fast work.",
+			"actorId": 554170,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2336668026",
+			"kind": "comment",
+			"actor": "kboshold",
+			"createdAt": "2024-09-08T12:29:08Z",
+			"editedAt": "2025-03-28T06:56:51Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2336668026",
+			"summary": "A user shares their own fish implementation.",
+			"actorId": 18258842,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2727053776",
+			"kind": "comment",
+			"actor": "maphew",
+			"createdAt": "2025-03-15T23:27:43Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2727053776",
+			"summary": "A user describes setting a small inline height as a workaround and wishes it could resize dynamically.",
+			"actorId": 486200,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:2833409840",
+			"kind": "comment",
+			"actor": "laundmo",
+			"createdAt": "2025-04-27T11:31:17Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-2833409840",
+			"summary": "A user asks about progress, notes `inline_height = 1` still renders below the prompt, and asks whether separate up-arrow settings for style and height would be accepted.",
+			"actorId": 24855949,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:3262253321",
+			"kind": "comment",
+			"actor": "fyxw",
+			"createdAt": "2025-09-06T14:13:46Z",
+			"editedAt": "2025-09-06T14:24:09Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-3262253321",
+			"summary": "A user shares a zsh workaround that loads recent Atuin history into native history at shell start.",
+			"actorId": 37008822,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:3313599206",
+			"kind": "comment",
+			"actor": "wak-google",
+			"createdAt": "2025-09-19T19:42:57Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-3313599206",
+			"summary": "A user supports the request and points to elvish's split between inline up-arrow and a search UI.",
+			"actorId": 22405326,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:3445678720",
+			"kind": "comment",
+			"actor": "rseymour",
+			"createdAt": "2025-10-25T03:54:28Z",
+			"editedAt": "2025-10-25T03:54:36Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-3445678720",
+			"summary": "A user confirms the zsh workaround works for them.",
+			"actorId": 105805,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:3649782389",
+			"kind": "comment",
+			"actor": "nadeemkhedr",
+			"createdAt": "2025-12-13T20:31:29Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-3649782389",
+			"summary": "A user says they cannot replicate that workaround in fish.",
+			"actorId": 180256,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:3684564454",
+			"kind": "comment",
+			"actor": "khimaros",
+			"createdAt": "2025-12-22T23:47:33Z",
+			"editedAt": "2025-12-22T23:48:44Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-3684564454",
+			"summary": "A user recommends a long-used bash gist.",
+			"actorId": 231498,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:comment:4103348823",
+			"kind": "comment",
+			"actor": "dmd",
+			"createdAt": "2026-03-21T13:32:29Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798#issuecomment-4103348823",
+			"summary": "A user reports that disabling the up arrow appears broken in a newer Atuin mode.",
+			"actorId": 41439,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:unlabeled:2026-07-30T20:14:48Z",
+			"kind": "process",
+			"actor": "markovejnovic",
+			"createdAt": "2026-07-30T20:14:48Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A maintainer removes the help wanted label.",
+			"actorId": 15203893,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:cross-referenced:2026-07-30T20:15:07Z",
+			"kind": "process",
+			"actor": "markovejnovic",
+			"createdAt": "2026-07-30T20:15:07Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A maintainer links the open TUI v2 PR (#3796).",
+			"actorId": 15203893,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:cross-referenced:2026-09-08T13:49:07Z",
+			"kind": "process",
+			"actor": "okuuva",
+			"createdAt": "2026-09-08T13:49:07Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A contributor links a reedline PR about cursor movement relevant to Nushell up navigation.",
+			"actorId": 2804020,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		},
+		{
+			"id": "atuin-798:process:cross-referenced:2026-09-14T13:59:09Z",
+			"kind": "process",
+			"actor": "okuuva",
+			"createdAt": "2026-09-14T13:59:09Z",
+			"url": "https://github.com/atuinsh/atuin/issues/798",
+			"summary": "A contributor links an open Atuin PR to preserve multiline Up navigation in Nushell.",
+			"actorId": 2804020,
+			"actorType": "human",
+			"parentId": "atuin-798:issue:798"
+		}
+	]
+}

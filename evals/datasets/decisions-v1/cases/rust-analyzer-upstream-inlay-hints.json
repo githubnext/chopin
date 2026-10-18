@@ -1,0 +1,415 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "rust-analyzer-upstream-inlay-hints",
+	"title": "Upstreaming rust-analyzer's inlay hints into a standard editor API",
+	"source": {
+		"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+		"retrievedAt": "2026-10-18T07:28:34.549592+00:00",
+		"repository": "rust-lang/rust-analyzer",
+		"number": 2797
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-03-02T13:21:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2021-01-20T11:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2022-02-12T14:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2022-03-07T18:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "rust-analyzer-2797:issue:2797",
+			"kind": "opening",
+			"actor": "kjeremy",
+			"createdAt": "2020-01-11T17:20:31Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"summary": "A contributor asks whether rust-analyzer's custom inlay hints should be put forward upstream as a proposed API.",
+			"actorId": 4325700,
+			"actorType": "human"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:593392404",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2020-03-02T13:07:15Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-593392404",
+			"summary": "The opener suggests revisiting after another issue lands, seeing it as a possible step toward pushing VS Code's long-open inline hints request.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:593397511",
+			"kind": "comment",
+			"actor": "matklad",
+			"createdAt": "2020-03-02T13:19:29Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-593397511",
+			"summary": "A lead maintainer argues against waiting for VS Code: draft a proposed protocol now, since it can already be implemented hackily in Emacs and VS Code, and ask the LSP repo whether they can review protocol changes.",
+			"actorId": 1711539,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:593399252",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2020-03-02T13:23:25Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-593399252",
+			"summary": "The opener agrees the LSP side should come first.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:process:cross-referenced:2020-03-03T20:04:08Z",
+			"kind": "process",
+			"actor": "Veetaha",
+			"createdAt": "2020-03-03T20:04:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"summary": "A contributor links a PR redesigning the VS Code hint rendering to handle several editors on one file.",
+			"actorId": 36276403,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:611042088",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2020-04-08T15:57:08Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-611042088",
+			"summary": "The opener invites maintainers to join an issue he filed in the vscode-languageclient repo.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763153354",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-01-19T21:29:23Z",
+			"editedAt": "2021-01-19T21:39:01Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763153354",
+			"summary": "A maintainer announces an upstream API proposal from VS Code and moves the review here, raising points on the meaning of the hint range, naming, caret behaviour around hints, the whitespaceBefore/After fields, lack of style customisation, interaction with hints, and passing caret position to the provider.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763161356",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2021-01-19T21:45:09Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763161356",
+			"summary": "The opener tags the Dart/Flutter extension author, who also shows end-of-line hints.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763168866",
+			"kind": "comment",
+			"actor": "DanTup",
+			"createdAt": "2021-01-19T21:59:55Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763168866",
+			"summary": "The Dart extension author says they will read it and give feedback on the VS Code issue.",
+			"actorId": 1078012,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763513595",
+			"kind": "comment",
+			"actor": "jrieken",
+			"createdAt": "2021-01-20T10:43:24Z",
+			"editedAt": "2021-01-20T10:45:04Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763513595",
+			"summary": "A VS Code maintainer answers: the whitespace fields act as margins outside the hint's background, the range supports a future overlay mode, caret rules are hard and may be a user setting, styling may come through limited markdown and theme colours, and caret position is unlikely because the API must stay editor-agnostic. He asks for a live call and demo.",
+			"actorId": 1794099,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763526816",
+			"kind": "comment",
+			"actor": "flodiebold",
+			"createdAt": "2021-01-20T11:05:49Z",
+			"editedAt": "2021-01-20T11:09:22Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763526816",
+			"summary": "A maintainer opposes showing or hiding hints based on cursor position, expecting distracting churn, and says any such logic belongs in the editor.",
+			"actorId": 906069,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:763568263",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-01-20T12:21:36Z",
+			"editedAt": "2021-01-20T12:23:27Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-763568263",
+			"summary": "The maintainer accepts the margin explanation but suggests grouping style fields, asks how a mismatched range would render, drops the caret idea, and agrees to a meeting with others invited.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:765304124",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-01-22T10:21:46Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-765304124",
+			"summary": "The maintainer offers to prototype rust-analyzer's hints on the proposed API and asks what client versions are needed.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:765341765",
+			"kind": "comment",
+			"actor": "jrieken",
+			"createdAt": "2021-01-22T11:38:30Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-765341765",
+			"summary": "The VS Code maintainer explains the proposal is not in LSP yet, so the prototype must use custom messages and the proposed API directly.",
+			"actorId": 1794099,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:765342346",
+			"kind": "comment",
+			"actor": "jrieken",
+			"createdAt": "2021-01-22T11:39:57Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-765342346",
+			"summary": "The VS Code maintainer proposes meeting late the following week and wants a demo plus likes and dislikes.",
+			"actorId": 1794099,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:765636262",
+			"kind": "comment",
+			"actor": "lnicola",
+			"createdAt": "2021-01-22T19:29:37Z",
+			"editedAt": "2021-01-22T19:33:38Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-765636262",
+			"summary": "A maintainer links related issues.",
+			"actorId": 308347,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:765648595",
+			"kind": "comment",
+			"actor": "d4h0",
+			"createdAt": "2021-01-22T19:54:10Z",
+			"editedAt": "2021-01-22T19:56:00Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-765648595",
+			"summary": "A user asks that hints respect word wrap and suggests an option to show type hints above the line instead of inline.",
+			"actorId": 183805,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:772611554",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2021-02-03T15:51:55Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-772611554",
+			"summary": "The opener pings to make sure the work is not forgotten and that a VS Code issue links back.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:772634417",
+			"kind": "comment",
+			"actor": "IWANABETHATGUY",
+			"createdAt": "2021-02-03T16:22:37Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-772634417",
+			"summary": "A user shows the current caret jumping around hints compared with IntelliJ's smoother behaviour.",
+			"actorId": 17974631,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:772656010",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-02-03T16:50:33Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-772656010",
+			"summary": "The maintainer says a short meeting with the VS Code team is set for Friday and offers the link privately.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:811344566",
+			"kind": "comment",
+			"actor": "kjeremy",
+			"createdAt": "2021-03-31T18:55:27Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-811344566",
+			"summary": "The opener asks whether a newly stabilised VS Code API is the hints one.",
+			"actorId": 4325700,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:811902058",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-04-01T13:18:48Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-811902058",
+			"summary": "The maintainer clarifies that was the debugger inline-values API, a different feature.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:811902290",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-04-01T13:19:12Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-811902290",
+			"summary": "The maintainer describes a branch that uses VS Code's proposed hints API and how to try it.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:811904617",
+			"kind": "comment",
+			"actor": "SomeoneToIgnore",
+			"createdAt": "2021-04-01T13:23:01Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-811904617",
+			"summary": "The maintainer reports the VS Code proposal seems stalled with display and performance limits, says feedback was shared, and concludes they must wait longer.",
+			"actorId": 2690773,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:896607286",
+			"kind": "comment",
+			"actor": "rami3l",
+			"createdAt": "2021-08-11T08:12:54Z",
+			"editedAt": "2021-09-05T08:17:59Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-896607286",
+			"summary": "A member notes TypeScript now ships inlay hints via VS Code's injected-text support, then concludes rust-analyzer should still wait for the upstream API.",
+			"actorId": 33851577,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:898033205",
+			"kind": "comment",
+			"actor": "Walther",
+			"createdAt": "2021-08-12T23:14:15Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-898033205",
+			"summary": "A contributor illustrates with screenshots that hints break soft wrapping and cause horizontal scrolling.",
+			"actorId": 2943750,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:898041797",
+			"kind": "comment",
+			"actor": "Walther",
+			"createdAt": "2021-08-12T23:34:41Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-898041797",
+			"summary": "The contributor finds a related VS Code issue.",
+			"actorId": 2943750,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:898043038",
+			"kind": "comment",
+			"actor": "Walther",
+			"createdAt": "2021-08-12T23:38:04Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-898043038",
+			"summary": "The contributor notes a VS Code PR that may fix it soon.",
+			"actorId": 2943750,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:898237347",
+			"kind": "comment",
+			"actor": "rami3l",
+			"createdAt": "2021-08-13T07:02:42Z",
+			"editedAt": "2021-08-13T15:01:15Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-898237347",
+			"summary": "The member confirms injected text is what makes TypeScript's hints wrap properly.",
+			"actorId": 33851577,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:1034004339",
+			"kind": "comment",
+			"actor": "lnicola",
+			"createdAt": "2022-02-09T17:18:30Z",
+			"editedAt": "2022-02-09T17:18:48Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-1034004339",
+			"summary": "A maintainer says the hints API will be stable in the next VS Code release and opens a draft PR that does not work yet.",
+			"actorId": 308347,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:process:cross-referenced:2022-02-12T13:43:01Z",
+			"kind": "process",
+			"actor": "lnicola",
+			"createdAt": "2022-02-12T13:43:01Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"summary": "The maintainer links PR #11445 to adopt the upstream inlay hints.",
+			"actorId": 308347,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:process:closed:2022-03-07T16:57:35Z",
+			"kind": "process",
+			"actor": "bors[bot]",
+			"createdAt": "2022-03-07T16:57:35Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"summary": "The merge bot closes the issue as PR #11445 lands.",
+			"actorId": 26634292,
+			"actorType": "bot",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:comment:1061594139",
+			"kind": "comment",
+			"actor": "rami3l",
+			"createdAt": "2022-03-08T09:50:09Z",
+			"editedAt": "2022-03-08T09:51:42Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797#issuecomment-1061594139",
+			"summary": "A member likes the result but asks whether the old style with a leading colon can return, finding the bare type confusing.",
+			"actorId": 33851577,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		},
+		{
+			"id": "rust-analyzer-2797:process:cross-referenced:2022-03-08T10:02:29Z",
+			"kind": "process",
+			"actor": "lnicola",
+			"createdAt": "2022-03-08T10:02:29Z",
+			"url": "https://github.com/rust-lang/rust-analyzer/issues/2797",
+			"summary": "A maintainer links PR #11658 restoring colons around type hints.",
+			"actorId": 308347,
+			"actorType": "human",
+			"parentId": "rust-analyzer-2797:issue:2797"
+		}
+	]
+}

@@ -1,0 +1,387 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "frontend-section-border-background",
+	"title": "Borders and backgrounds for dashboard sections",
+	"source": {
+		"url": "https://github.com/home-assistant/frontend/discussions/22288",
+		"retrievedAt": "2026-10-18T07:11:46.882772+00:00",
+		"repository": "home-assistant/frontend",
+		"number": 22288,
+		"nodeId": "D_kwDOAlLUS84Abz3y"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2024-10-08T14:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2025-07-28T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-03-26T15:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-05-12T17:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOAlLUS84Abz3y",
+			"kind": "opening",
+			"actor": "BBE-FR",
+			"createdAt": "2024-10-08T12:06:46Z",
+			"editedAt": "2024-10-09T12:28:26Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288",
+			"summary": "The opener requests per-section options in sections dashboards to show a border and/or background, either as two toggles or with colour pickers, so basic users can visually group cards.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOAlLUS84ApgYz",
+			"kind": "comment",
+			"actor": "BBE-FR",
+			"createdAt": "2024-10-08T13:48:55Z",
+			"editedAt": "2024-10-30T10:10:15Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-10880563",
+			"summary": "The opener shows a mock-up of grouped cards replacing custom stack-in-card setups.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Arrci",
+			"kind": "comment",
+			"actor": "awilsonhass",
+			"createdAt": "2024-12-03T15:42:14Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11450146",
+			"summary": "A user says they achieve this with card-mod and want it native because it is too hard today.",
+			"actorId": "MDQ6VXNlcjkxNDg3MTM3",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Ar3sZ",
+			"kind": "reply",
+			"actor": "ndom91",
+			"createdAt": "2024-12-08T16:34:17Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11500313",
+			"summary": "A user asks how they targeted the section with card-mod.",
+			"actorId": "MDQ6VXNlcjc0MTU5ODQ=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Arrci"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Ar5kG",
+			"kind": "reply",
+			"actor": "BBE-FR",
+			"createdAt": "2024-12-09T12:54:09Z",
+			"editedAt": "2024-12-09T12:54:42Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11507974",
+			"summary": "The opener links the community code, notes it wraps a custom card rather than styling the section, and restates the goal of avoiding custom components.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Arrci"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AsExB",
+			"kind": "reply",
+			"actor": "ndom91",
+			"createdAt": "2024-12-13T08:37:00Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11553857",
+			"summary": "The asking user thanks them.",
+			"actorId": "MDQ6VXNlcjc0MTU5ODQ=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84Arrci"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Asl4Z",
+			"kind": "comment",
+			"actor": "nagtegaal",
+			"createdAt": "2024-12-29T10:07:40Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11689497",
+			"summary": "A user proposes a general `style:` attribute on all cards, sections and views instead, to make card-mod unnecessary.",
+			"actorId": "U_kgDOBkPeuA",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AszeI",
+			"kind": "comment",
+			"actor": "ghost",
+			"createdAt": "2025-01-06T07:14:46Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11745160",
+			"summary": "A user agrees section borders and backgrounds should be easy to set.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AtByx",
+			"kind": "comment",
+			"actor": "bucky2780",
+			"createdAt": "2025-01-11T00:45:54Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11803825",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjYwNzE1MTE=",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AtgFJ",
+			"kind": "comment",
+			"actor": "ZorK766",
+			"createdAt": "2025-01-23T10:23:28Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-11927881",
+			"summary": "A user adds support.",
+			"actorId": "MDQ6VXNlcjIyMjkxNTM3",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AuFr2",
+			"kind": "comment",
+			"actor": "marcinbauer-ohf",
+			"createdAt": "2025-02-06T13:23:42Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12081910",
+			"summary": "A maintainer says the team will explore the feature for sections and share initial designs soon.",
+			"actorId": "MDQ6VXNlcjY3MTk1NzU=",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AuLhf",
+			"kind": "comment",
+			"actor": "officedrone",
+			"createdAt": "2025-02-08T23:20:02Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12105823",
+			"summary": "A user welcomes the news.",
+			"actorId": "MDQ6VXNlcjY3MDI0Mzcy",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AvHpH",
+			"kind": "reply",
+			"actor": "BBE-FR",
+			"createdAt": "2025-02-28T14:03:31Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12352071",
+			"summary": "The opener welcomes the teaser.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AuFr2"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AvqYp",
+			"kind": "comment",
+			"actor": "butterford",
+			"createdAt": "2025-03-13T22:36:01Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12494377",
+			"summary": "A user asks for implementation.",
+			"actorId": "MDQ6VXNlcjU0OTc2NDI=",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AvsC9",
+			"kind": "comment",
+			"actor": "alexsaas",
+			"createdAt": "2025-03-14T13:36:56Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12501181",
+			"summary": "A user adds enthusiastic support.",
+			"actorId": "U_kgDOCSVNnQ",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Av3ZJ",
+			"kind": "reply",
+			"actor": "pcan08",
+			"createdAt": "2025-03-19T07:21:08Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12547657",
+			"summary": "A contributor asks for an update after the teaser.",
+			"actorId": "U_kgDOCUDuyA",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AuFr2"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AwiTv",
+			"kind": "reply",
+			"actor": "BBE-FR",
+			"createdAt": "2025-04-04T08:31:30Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-12723439",
+			"summary": "The opener notes nothing appeared in two monthly releases and asks for news.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AuFr2"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AyN4w",
+			"kind": "comment",
+			"actor": "NPo1973",
+			"createdAt": "2025-05-15T21:56:22Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13164080",
+			"summary": "A user wants a red section to warn against tapping a critical switch.",
+			"actorId": "U_kgDODD8wpg",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AyOaA",
+			"kind": "reply",
+			"actor": "Misiu",
+			"createdAt": "2025-05-16T04:33:18Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13166208",
+			"summary": "A contributor suggests tap confirmation as a better fit for that case.",
+			"actorId": "MDQ6VXNlcjE3NDE4Mzg=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AyN4w"
+		},
+		{
+			"id": "DC_kwDOAlLUS84AyrWs",
+			"kind": "comment",
+			"actor": "TidjyDev",
+			"createdAt": "2025-05-27T14:34:01Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13284780",
+			"summary": "A user complains the feature is easy and asks why it is not done yet.",
+			"actorId": "U_kgDODHxcsg",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84Ayt62",
+			"kind": "reply",
+			"actor": "silamon",
+			"createdAt": "2025-05-28T10:23:46Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13295286",
+			"summary": "A contributor pings the maintainer who promised designs.",
+			"actorId": "MDQ6VXNlcjMyNDc3NDYz",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AuFr2"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A07Mx",
+			"kind": "reply",
+			"actor": "BBE-FR",
+			"createdAt": "2025-07-24T08:33:57Z",
+			"editedAt": "2025-07-24T08:38:25Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13873969",
+			"summary": "The opener explains it is harder than it looks: a background on some sections needs extra padding, otherwise spacing is wasted for everyone or cards touch the edges.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AyrWs"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A1CHA",
+			"kind": "reply",
+			"actor": "vatioz",
+			"createdAt": "2025-07-27T15:40:46Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13902272",
+			"summary": "A user proposes a dashboard-wide mode where all sections get borders, trading space for clarity.",
+			"actorId": "MDQ6VXNlcjE0MjAzNDI4",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84AyrWs"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A1Xx7",
+			"kind": "comment",
+			"actor": "BBE-FR",
+			"createdAt": "2025-08-04T15:53:43Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13991035",
+			"summary": "The opener says the topic moved to an organisation-level discussion.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A1X0p",
+			"kind": "reply",
+			"actor": "silamon",
+			"createdAt": "2025-08-04T16:12:45Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-13991209",
+			"summary": "A contributor mentions an open pull request that may cover part of the request.",
+			"actorId": "MDQ6VXNlcjMyNDc3NDYz",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A1Xx7"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A1aj0",
+			"kind": "reply",
+			"actor": "BBE-FR",
+			"createdAt": "2025-08-05T08:40:12Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-14002420",
+			"summary": "The opener links that PR (#26369).",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A1Xx7"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A9y_T",
+			"kind": "reply",
+			"actor": "Nickduino",
+			"createdAt": "2026-03-18T23:38:57Z",
+			"editedAt": "2026-03-18T23:42:51Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-16199635",
+			"summary": "A user reports that PR was merged to dev, then reverted and never returned.",
+			"actorId": "MDQ6VXNlcjk3ODQyMzc=",
+			"actorType": "human",
+			"parentId": "DC_kwDOAlLUS84A1Xx7"
+		},
+		{
+			"id": "DC_kwDOAlLUS84A-SjR",
+			"kind": "comment",
+			"actor": "alexsaas",
+			"createdAt": "2026-03-26T15:25:17Z",
+			"editedAt": "2026-03-26T15:25:58Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-16328913",
+			"summary": "A user announces a new PR (#30228) by a maintainer bringing the feature, and asks for using the card background colour and turning off inner card borders and shadows.",
+			"actorId": "U_kgDOCSVNnQ",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84BAco3",
+			"kind": "comment",
+			"actor": "BBE-FR",
+			"createdAt": "2026-05-12T16:02:41Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-16894519",
+			"summary": "The opener marks the feature as implemented by that maintainer.",
+			"actorId": "U_kgDOBub8Aw",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "D_kwDOAlLUS84Abz3y:process:answered:2026-05-12T16:02:44Z",
+			"kind": "process",
+			"actor": "BBE-FR",
+			"createdAt": "2026-05-12T16:02:44Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288",
+			"summary": "The opener marks the implementation comment as the answer.",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "D_kwDOAlLUS84Abz3y:process:closed:2026-05-12T16:02:59Z",
+			"kind": "process",
+			"actor": "unknown",
+			"createdAt": "2026-05-12T16:02:59Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288",
+			"summary": "The discussion is closed as resolved.",
+			"actorType": "unknown",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		},
+		{
+			"id": "DC_kwDOAlLUS84BAc_y",
+			"kind": "comment",
+			"actor": "Nickduino",
+			"createdAt": "2026-05-12T18:45:41Z",
+			"url": "https://github.com/home-assistant/frontend/discussions/22288#discussioncomment-16895986",
+			"summary": "A user praises the feature and links follow-up issues it exposed.",
+			"actorId": "MDQ6VXNlcjk3ODQyMzc=",
+			"actorType": "human",
+			"parentId": "D_kwDOAlLUS84Abz3y"
+		}
+	]
+}

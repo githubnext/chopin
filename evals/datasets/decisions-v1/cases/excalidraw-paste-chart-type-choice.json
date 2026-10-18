@@ -1,0 +1,199 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "excalidraw-paste-chart-type-choice",
+	"title": "How users choose a chart type when pasting data into Excalidraw",
+	"source": {
+		"url": "https://github.com/excalidraw/excalidraw/discussions/2533",
+		"retrievedAt": "2026-10-18T07:20:16.073854+00:00",
+		"repository": "excalidraw/excalidraw",
+		"number": 2533,
+		"nodeId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-12-13T23:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2020-12-21T20:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2020-12-27T16:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2020-12-27T17:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "MDEwOkRpc2N1c3Npb242NjQxOQ==",
+			"kind": "opening",
+			"actor": "mwufi",
+			"createdAt": "2020-12-13T22:08:22Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533",
+			"summary": "The opener asks whether supporting line and pie charts alongside the default bar chart justifies the added complexity, and offers two implementations: keep the raw data so the chart type can be switched later, or ask for the chart type before the elements are inserted.",
+			"actorId": "MDQ6VXNlcjMwMjE5MjUz",
+			"actorType": "human"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTQx",
+			"kind": "comment",
+			"actor": "lipis",
+			"createdAt": "2020-12-14T13:49:28Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-204941",
+			"summary": "A maintainer finds line charts appealing but warns pie charts need many colours and labels, and argues against both a paste-time prompt and stored chart metadata since nothing supports them yet.",
+			"actorId": "MDQ6VXNlcjEyNTY3Ng==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTU0",
+			"kind": "reply",
+			"actor": "dwelle",
+			"createdAt": "2020-12-14T13:52:52Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-204954",
+			"summary": "A second maintainer suggests a 'paste special' context-menu submenu listing chart types, which avoids storing metadata because converting an existing chart would not be supported.",
+			"actorId": "MDQ6VXNlcjUxNTM4NDY=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTQx"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA1MDEy",
+			"kind": "reply",
+			"actor": "lipis",
+			"createdAt": "2020-12-14T14:11:13Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-205012",
+			"summary": "The first maintainer notes the app cannot tell whether the clipboard holds chart data until the user pastes, so such a menu item cannot be shown selectively.",
+			"actorId": "MDQ6VXNlcjEyNTY3Ng==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTQx"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA1MDIz",
+			"kind": "reply",
+			"actor": "dwelle",
+			"createdAt": "2020-12-14T14:17:17Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-205023",
+			"summary": "The second maintainer replies that the newer Clipboard API can read on right-click, but new users would then see a permission prompt when opening the menu.",
+			"actorId": "MDQ6VXNlcjUxNTM4NDY=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTQx"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA1MDY2",
+			"kind": "reply",
+			"actor": "dwelle",
+			"createdAt": "2020-12-14T14:24:18Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-205066",
+			"summary": "The second maintainer adds that the menu could appear only when clipboard permission is already granted, while admitting the UX cost and limited browser support.",
+			"actorId": "MDQ6VXNlcjUxNTM4NDY=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjA0OTQx"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjE3NzY5",
+			"kind": "comment",
+			"actor": "andyczerwonka",
+			"createdAt": "2020-12-17T00:54:14Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-217769",
+			"summary": "A user says charts without at least simple grouping will stay a novelty and backs storing the raw data so types can be switched.",
+			"actorId": "MDQ6VXNlcjEzODg5OA==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjI3MDg3",
+			"kind": "reply",
+			"actor": "dwelle",
+			"createdAt": "2020-12-20T11:51:54Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-227087",
+			"summary": "A maintainer rejects stored metadata because it would go stale once the chart is edited by hand; users wanting another type can paste again.",
+			"actorId": "MDQ6VXNlcjUxNTM4NDY=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjE3NzY5"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjMwNjE4",
+			"kind": "comment",
+			"actor": "petehunt",
+			"createdAt": "2020-12-21T19:03:01Z",
+			"editedAt": "2020-12-21T19:03:15Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-230618",
+			"summary": "The contributor who built the original chart feature favours letting users pick bar, single-line or donut at paste time, wants complexity kept low, and agrees no metadata should be stored so the elements stay freely editable.",
+			"actorId": "MDQ6VXNlcjIzOTc0Mg==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjMyNDQ3",
+			"kind": "comment",
+			"actor": "lipis",
+			"createdAt": "2020-12-21T22:59:28Z",
+			"editedAt": "2020-12-21T23:05:12Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-232447",
+			"summary": "A maintainer proposes a fading notice shown right after a paste that lets the user swap the just-inserted chart for another type, remembering the last choice in app state, with no permanent UI change.",
+			"actorId": "MDQ6VXNlcjEyNTY3Ng==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjM0NTQy",
+			"kind": "reply",
+			"actor": "lipis",
+			"createdAt": "2020-12-22T14:10:37Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-234542",
+			"summary": "The same maintainer links PR #2658 as an experiment with the idea.",
+			"actorId": "MDQ6VXNlcjEyNTY3Ng==",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjMyNDQ3"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjQ1MDk1",
+			"kind": "comment",
+			"actor": "lipis",
+			"createdAt": "2020-12-27T16:30:55Z",
+			"editedAt": "2020-12-27T16:31:16Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-245095",
+			"summary": "A maintainer announces that line charts have shipped and says the groundwork for more types is in place; this is marked as the answer.",
+			"actorId": "MDQ6VXNlcjEyNTY3Ng==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDEwOkRpc2N1c3Npb242NjQxOQ==:process:answered:2020-12-27T16:31:17Z",
+			"kind": "process",
+			"actor": "lipis",
+			"createdAt": "2020-12-27T16:31:17Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533",
+			"summary": "A maintainer marks the release announcement as the discussion's answer.",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50MjQ1MTQw",
+			"kind": "reply",
+			"actor": "OrenMe",
+			"createdAt": "2020-12-27T17:12:48Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-245140",
+			"summary": "A contributor praises the chart preview selection in the release.",
+			"actorId": "MDQ6VXNlcjU0NjE4NjI=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50MjQ1MDk1"
+		},
+		{
+			"id": "DC_kwDODcka_M4A_5Zf",
+			"kind": "comment",
+			"actor": "kinthaiofficial",
+			"createdAt": "2026-04-29T01:34:07Z",
+			"url": "https://github.com/excalidraw/excalidraw/discussions/2533#discussioncomment-16750175",
+			"summary": "Years later, a user lists ideas such as data-bound charts, data export and AI-generated layouts, while cautioning that heavy chart editing would undercut the sketch-first simplicity.",
+			"actorId": "U_kgDOEBiFPw",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb242NjQxOQ=="
+		}
+	]
+}

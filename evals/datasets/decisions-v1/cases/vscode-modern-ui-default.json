@@ -1,0 +1,549 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "vscode-modern-ui-default",
+	"title": "Whether VS Code's Modern UI should become the only default",
+	"source": {
+		"url": "https://github.com/microsoft/vscode/issues/326328",
+		"retrievedAt": "2026-10-18T07:35:24.400218+00:00",
+		"repository": "microsoft/vscode",
+		"number": 326328
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-07-17T12:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-08-14T02:20:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-09-23T14:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-09-23T14:50:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "vscode-326328:issue:326328",
+			"kind": "opening",
+			"actor": "piscopancer",
+			"createdAt": "2026-07-17T11:39:30Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328",
+			"summary": "The opener asks to revert the Modern UI update, arguing its rounded tabs and extra spacing suit a website rather than a dense editor where flat split views are clearer.",
+			"actorId": 109352196,
+			"actorType": "human"
+		},
+		{
+			"id": "vscode-326328:comment:5003143350",
+			"kind": "comment",
+			"actor": "jdraggy",
+			"createdAt": "2026-07-17T12:13:12Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5003143350",
+			"summary": "A user disagrees, liking that the UI matches the Agents window and saying a revert would force the team to redo that window too.",
+			"actorId": 202416335,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5003160677",
+			"kind": "comment",
+			"actor": "gjsjohnmurray",
+			"createdAt": "2026-07-17T12:15:17Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5003160677",
+			"summary": "A contributor asks whether the opener tried turning it off via the `workbench.experimental.modernUI` setting.",
+			"actorId": 6726799,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5003209409",
+			"kind": "comment",
+			"actor": "jozefizso",
+			"createdAt": "2026-07-17T12:21:13Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5003209409",
+			"summary": "A user dislikes the added margins and padding, which take space from the editor and terminal.",
+			"actorId": 287778,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5003385642",
+			"kind": "comment",
+			"actor": "piscopancer",
+			"createdAt": "2026-07-17T12:41:38Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5003385642",
+			"summary": "The opener says they enabled it to try and saw no benefit; they prefer the square, thin-bordered old UI and do not want the experiment to become the default.",
+			"actorId": 109352196,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5015823934",
+			"kind": "comment",
+			"actor": "johnpapa",
+			"createdAt": "2026-07-19T13:04:57Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5015823934",
+			"summary": "A user reports the new UI breaks workbench colour customisations and extensions such as Peacock.",
+			"actorId": 1202528,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5094619964",
+			"kind": "comment",
+			"actor": "Josh65-2201",
+			"createdAt": "2026-07-27T17:31:24Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5094619964",
+			"summary": "A user dislikes the padding around the window, calling it wasted space.",
+			"actorId": 26977075,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5138321154",
+			"kind": "comment",
+			"actor": "oliver139",
+			"createdAt": "2026-07-31T01:53:01Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5138321154",
+			"summary": "A user dislikes the look and asks why every tab label is bold.",
+			"actorId": 45283723,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5140771111",
+			"kind": "comment",
+			"actor": "stevebeauge",
+			"createdAt": "2026-07-31T08:11:01Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5140771111",
+			"summary": "A user suggests the team run a poll, acknowledging their dislike is personal and the majority might prefer it.",
+			"actorId": 184604,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5140939089",
+			"kind": "comment",
+			"actor": "Archomeda",
+			"createdAt": "2026-07-31T08:31:54Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5140939089",
+			"summary": "A user objects that the experimental setting flipped on for them without notice, costing time to discover how to revert it.",
+			"actorId": 1467127,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5141359602",
+			"kind": "comment",
+			"actor": "stevebeauge",
+			"createdAt": "2026-07-31T09:23:12Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5141359602",
+			"summary": "A user compares it to a past Visual Studio redesign that was walked back after community feedback.",
+			"actorId": 184604,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5143173399",
+			"kind": "comment",
+			"actor": "auguzsto",
+			"createdAt": "2026-07-31T13:05:54Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5143173399",
+			"summary": "A user adds their dislike.",
+			"actorId": 40308971,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5146424431",
+			"kind": "comment",
+			"actor": "TotalNerdGamer",
+			"createdAt": "2026-07-31T18:53:56Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5146424431",
+			"summary": "A user suggests keeping it as an option that people can turn off.",
+			"actorId": 134813229,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5146863098",
+			"kind": "comment",
+			"actor": "ganlvtech",
+			"createdAt": "2026-07-31T19:49:44Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5146863098",
+			"summary": "A user posts the setting value that disables it.",
+			"actorId": 8651285,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5148617228",
+			"kind": "comment",
+			"actor": "TotalNerdGamer",
+			"createdAt": "2026-08-01T00:34:34Z",
+			"editedAt": "2026-08-04T22:16:36Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5148617228",
+			"summary": "The earlier user clarifies they already disabled it and want the opt-out to remain once it leaves experimental status.",
+			"actorId": 134813229,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5169736564",
+			"kind": "comment",
+			"actor": "mrleblanc101",
+			"createdAt": "2026-08-03T17:37:15Z",
+			"editedAt": "2026-08-03T17:37:38Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5169736564",
+			"summary": "A user asks why the main editor should match the Agents window rather than the reverse.",
+			"actorId": 17392251,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5172018211",
+			"kind": "comment",
+			"actor": "EXtremeExploit",
+			"createdAt": "2026-08-03T21:38:02Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5172018211",
+			"summary": "A user agrees, criticises the extra padding, and says they would leave VS Code if the setting became permanent with no opt-out.",
+			"actorId": 30161277,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5174213319",
+			"kind": "comment",
+			"actor": "raihanmd",
+			"createdAt": "2026-08-04T03:19:03Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5174213319",
+			"summary": "A user objects to rounded borders across the workspace and asks for a revert.",
+			"actorId": 100277303,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5174227168",
+			"kind": "comment",
+			"actor": "raihanmd",
+			"createdAt": "2026-08-04T03:21:09Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5174227168",
+			"summary": "The user thanks someone for the disabling setting.",
+			"actorId": 100277303,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5175451479",
+			"kind": "comment",
+			"actor": "gj1279",
+			"createdAt": "2026-08-04T06:34:22Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5175451479",
+			"summary": "A user adds their dislike.",
+			"actorId": 32349321,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5190085870",
+			"kind": "comment",
+			"actor": "maciej-klemarczyk-se",
+			"createdAt": "2026-08-05T09:32:12Z",
+			"editedAt": "2026-08-05T09:40:47Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5190085870",
+			"summary": "A user argues an IDE should prioritise function over looks, shares side-by-side screenshots, and suggests the Agents window adopt the classic look instead.",
+			"actorId": 205806114,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5204937543",
+			"kind": "comment",
+			"actor": "BraveCaperCat2",
+			"createdAt": "2026-08-06T12:59:19Z",
+			"editedAt": "2026-08-06T13:02:49Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5204937543",
+			"summary": "A user says Microsoft keeps pushing unwanted visual changes and questions who uses the Agents window.",
+			"actorId": 113925022,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5214470272",
+			"kind": "comment",
+			"actor": "vivodi",
+			"createdAt": "2026-08-07T08:23:07Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5214470272",
+			"summary": "A user defends the Modern UI as easier to parse, notes selection bias among complainers, and cites JetBrains testing a similar islands design with users where it won and became default.",
+			"actorId": 103735539,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5218936533",
+			"kind": "comment",
+			"actor": "TotalNerdGamer",
+			"createdAt": "2026-08-07T15:27:31Z",
+			"editedAt": "2026-08-07T15:30:27Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5218936533",
+			"summary": "A user acknowledges the selection-bias point but repeats they personally prefer the old look.",
+			"actorId": 134813229,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5226225730",
+			"kind": "comment",
+			"actor": "BraveCaperCat2",
+			"createdAt": "2026-08-08T13:04:21Z",
+			"editedAt": "2026-08-08T13:05:45Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5226225730",
+			"summary": "A user quotes the JetBrains comparison, critical of that direction.",
+			"actorId": 113925022,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5237331129",
+			"kind": "comment",
+			"actor": "maciej-klemarczyk-se",
+			"createdAt": "2026-08-10T07:48:36Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5237331129",
+			"summary": "A user says JetBrains' style is why they avoided it, and warns VS Code is losing its identity, e.g. tab headers now look like buttons.",
+			"actorId": 205806114,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5282054819",
+			"kind": "comment",
+			"actor": "lornova",
+			"createdAt": "2026-08-13T14:54:14Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5282054819",
+			"summary": "A user rejects the Agents-window argument and calls the change bad for usability and change for its own sake.",
+			"actorId": 31110535,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5282117761",
+			"kind": "comment",
+			"actor": "lornova",
+			"createdAt": "2026-08-13T14:59:37Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5282117761",
+			"summary": "The same user argues only non-engineers would like it and asks that programmers be left alone.",
+			"actorId": 31110535,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5284833497",
+			"kind": "comment",
+			"actor": "initplatform",
+			"createdAt": "2026-08-13T18:31:46Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5284833497",
+			"summary": "A user pleads that the existing minimal UI never be abandoned.",
+			"actorId": 47506789,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5285320771",
+			"kind": "comment",
+			"actor": "SleepyG11",
+			"createdAt": "2026-08-13T19:18:41Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5285320771",
+			"summary": "A user likes the look but reports the right-edge padding makes the scrollbar hard to hit.",
+			"actorId": 35398172,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5288641974",
+			"kind": "comment",
+			"actor": "torinonegai",
+			"createdAt": "2026-08-14T02:15:47Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5288641974",
+			"summary": "A user gives structured feedback that extra borders and gaps cost space on small screens, and asks for either a compact variant of the new UI or a retained flat layout.",
+			"actorId": 51768820,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5288686070",
+			"kind": "comment",
+			"actor": "duskmoon314",
+			"createdAt": "2026-08-14T02:22:56Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5288686070",
+			"summary": "A user notes it became the default on update and asks not to make an experimental, heavily criticised UI the default.",
+			"actorId": 20477228,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5302087352",
+			"kind": "comment",
+			"actor": "brokeboiflex",
+			"createdAt": "2026-08-15T11:49:29Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5302087352",
+			"summary": "A user objects to changing the look without asking users.",
+			"actorId": 50945071,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5306576138",
+			"kind": "comment",
+			"actor": "robertrussell-dev",
+			"createdAt": "2026-08-16T08:40:25Z",
+			"editedAt": "2026-08-16T08:47:03Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5306576138",
+			"summary": "A user calls the gaps wasted space and says they have stopped using VS Code for JetBrains.",
+			"actorId": 1861258,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5306683886",
+			"kind": "comment",
+			"actor": "robertrussell-dev",
+			"createdAt": "2026-08-16T09:10:22Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5306683886",
+			"summary": "The same user criticises another commenter's reasoning.",
+			"actorId": 1861258,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5309946627",
+			"kind": "comment",
+			"actor": "BraveCaperCat2",
+			"createdAt": "2026-08-16T22:16:15Z",
+			"editedAt": "2026-08-16T22:18:06Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5309946627",
+			"summary": "A user notes JetBrains made a similar change, so it is no refuge.",
+			"actorId": 113925022,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5318130372",
+			"kind": "comment",
+			"actor": "TotalNerdGamer",
+			"createdAt": "2026-08-17T17:20:22Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5318130372",
+			"summary": "A user responds to an earlier insult, defending their right to an opinion while still disliking the UI.",
+			"actorId": 134813229,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5319667268",
+			"kind": "comment",
+			"actor": "BraveCaperCat2",
+			"createdAt": "2026-08-17T20:07:32Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5319667268",
+			"summary": "A user clarifies that the opt-out exists; the complaint is that it is on by default.",
+			"actorId": 113925022,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5362760888",
+			"kind": "comment",
+			"actor": "TotalNerdGamer",
+			"createdAt": "2026-08-20T22:24:44Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5362760888",
+			"summary": "A user repeats that the opt-out should outlive the experimental phase.",
+			"actorId": 134813229,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5384982706",
+			"kind": "comment",
+			"actor": "Reizoukodesu",
+			"createdAt": "2026-08-23T08:08:03Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5384982706",
+			"summary": "A user dismisses the selection-bias argument and asks why Microsoft has not run a survey like JetBrains.",
+			"actorId": 2463962,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5398059494",
+			"kind": "comment",
+			"actor": "ganlvtech",
+			"createdAt": "2026-08-24T16:16:24Z",
+			"editedAt": "2026-08-24T16:17:25Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5398059494",
+			"summary": "A user lists incompatibilities with a top activity bar and the Light+ theme and edge-click padding issues.",
+			"actorId": 8651285,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5499959965",
+			"kind": "comment",
+			"actor": "Xunnamius",
+			"createdAt": "2026-09-01T20:26:09Z",
+			"editedAt": "2026-09-01T20:26:43Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5499959965",
+			"summary": "A user complains that bold tabs make it hard to tell focused and unsaved tabs apart.",
+			"actorId": 656017,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5796970979",
+			"kind": "comment",
+			"actor": "Nils85",
+			"createdAt": "2026-09-23T14:45:43Z",
+			"editedAt": "2026-09-23T14:47:50Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5796970979",
+			"summary": "A user relays the team's announcement in issue #334285: everyone will move to the new UI, the classic UI will be removed after a transition period during which the setting still reverts it, and notice will precede removal.",
+			"actorId": 11949055,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5797162330",
+			"kind": "comment",
+			"actor": "D7x7z49",
+			"createdAt": "2026-09-23T14:56:54Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5797162330",
+			"summary": "A user suggests the community fork the editor.",
+			"actorId": 85430783,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5807713649",
+			"kind": "comment",
+			"actor": "adambenhassen",
+			"createdAt": "2026-09-24T04:30:05Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5807713649",
+			"summary": "A user objects to the change's phone-like styling.",
+			"actorId": 91687975,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		},
+		{
+			"id": "vscode-326328:comment:5812110476",
+			"kind": "comment",
+			"actor": "maciej-klemarczyk-se",
+			"createdAt": "2026-09-24T10:09:03Z",
+			"editedAt": "2026-09-24T10:09:30Z",
+			"url": "https://github.com/microsoft/vscode/issues/326328#issuecomment-5812110476",
+			"summary": "A user links it to unpopular Visual Studio UI changes and predicts forks.",
+			"actorId": 205806114,
+			"actorType": "human",
+			"parentId": "vscode-326328:issue:326328"
+		}
+	]
+}

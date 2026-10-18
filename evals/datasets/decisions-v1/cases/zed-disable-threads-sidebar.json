@@ -1,0 +1,513 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "zed-disable-threads-sidebar",
+	"title": "Whether users can disable Zed's agent threads sidebar",
+	"source": {
+		"url": "https://github.com/zed-industries/zed/discussions/55157",
+		"retrievedAt": "2026-10-18T07:19:23.546979+00:00",
+		"repository": "zed-industries/zed",
+		"number": 55157,
+		"nodeId": "D_kwDOFExXwM4AmDVB"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2026-04-26T00:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2026-05-01T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2026-06-01T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2026-06-02T18:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "D_kwDOFExXwM4AmDVB",
+			"kind": "opening",
+			"actor": "Haume0",
+			"createdAt": "2026-04-25T13:22:35Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157",
+			"summary": "The opener complains that projects now open into a new sidebar, that closing it closes the editor, and that its button displaced the project panel; they ask for a setting to hide or disable it without turning off all AI features.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_6LQ",
+			"kind": "comment",
+			"actor": "anilpai",
+			"createdAt": "2026-04-25T13:46:33Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16753360",
+			"summary": "A contributor wants to fully disable the agent session sidebar.",
+			"actorId": "MDQ6VXNlcjI0NDc4MTE=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_6LR",
+			"kind": "comment",
+			"actor": "zambetti",
+			"createdAt": "2026-04-28T13:35:55Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16753361",
+			"summary": "A user shows how to dock the threads sidebar on the right and argues it should be configured like other panels under a `threads_panel` key.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_6LS",
+			"kind": "comment",
+			"actor": "jameslkingsley",
+			"createdAt": "2026-04-29T08:14:58Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16753362",
+			"summary": "A user says the sidebar replaced native macOS window tabs, so opening another project swaps out the current one, and asks for the old behaviour.",
+			"actorId": "MDQ6VXNlcjExMDE1Nzg0",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_6PO",
+			"kind": "comment",
+			"actor": "franciskafyi",
+			"createdAt": "2026-04-29T09:12:46Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16753614",
+			"summary": "A maintainer says the team will add opening a project in a new window from the picker and a setting to default to new windows, while defending the sidebar as useful for agentic work.",
+			"actorId": "MDQ6VXNlcjEwNDU4MjEy",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_6eO",
+			"kind": "comment",
+			"actor": "zambetti",
+			"createdAt": "2026-04-29T10:30:32Z",
+			"editedAt": "2026-04-29T22:07:16Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16754574",
+			"summary": "A user proposes folding the threads list into the Agent Panel behind a toolbar toggle, with visibility settings and in-panel search, and criticises the separate surface and its global-looking search field.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_70E",
+			"kind": "reply",
+			"actor": "domindel",
+			"createdAt": "2026-04-29T19:12:51Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16760068",
+			"summary": "A user strongly agrees the two should merge, at least as an option.",
+			"actorId": "U_kgDOCTcCeQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6eO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_8iw",
+			"kind": "reply",
+			"actor": "Haume0",
+			"createdAt": "2026-04-30T00:11:09Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16763056",
+			"summary": "The opener expresses appreciation for Zed and its contributors.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_9fd",
+			"kind": "reply",
+			"actor": "danilo-leal",
+			"createdAt": "2026-04-30T08:58:54Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16766941",
+			"summary": "A maintainer says the team explored merging several times, but the sidebar navigates across projects and worktrees whose panel layouts differ, so it cannot live inside one workspace's panel.",
+			"actorId": "MDQ6VXNlcjY3MTI5MzE0",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6eO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_-CC",
+			"kind": "reply",
+			"actor": "domindel",
+			"createdAt": "2026-04-30T12:13:55Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16769154",
+			"summary": "A user replies that for many people the sidebar wastes space and asks for an option to keep threads in the agent panel and hide the sidebar.",
+			"actorId": "U_kgDOCTcCeQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6eO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4A_-Vd",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-04-30T14:14:34Z",
+			"editedAt": "2026-04-30T15:23:24Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16770397",
+			"summary": "A user argues most people run a single project and worktree, so a global sidebar is overhead; they suggest making it optional and offering a lighter thread switcher inside the Agent Panel.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6eO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAMiI",
+			"kind": "reply",
+			"actor": "ArturAronov",
+			"createdAt": "2026-05-06T14:45:50Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16828552",
+			"summary": "A user asks whether the sidebar can be fully disabled.",
+			"actorId": "MDQ6VXNlcjUyNjIwMDE2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAM0W",
+			"kind": "comment",
+			"actor": "zambetti",
+			"createdAt": "2026-05-06T16:29:48Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16829718",
+			"summary": "A user links a separate related discussion they opened.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAQYn",
+			"kind": "reply",
+			"actor": "macraig",
+			"createdAt": "2026-05-07T18:00:36Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16844327",
+			"summary": "A maintainer says it cannot be disabled yet but the team is working on it.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BAQZX",
+			"kind": "comment",
+			"actor": "macraig",
+			"createdAt": "2026-05-07T18:06:16Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16844375",
+			"summary": "A maintainer announces that a way to turn the sidebar off is in progress.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BARTG",
+			"kind": "reply",
+			"actor": "ArturAronov",
+			"createdAt": "2026-05-08T02:26:30Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16848070",
+			"summary": "A user asks for a tracking issue.",
+			"actorId": "MDQ6VXNlcjUyNjIwMDE2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BASgu",
+			"kind": "reply",
+			"actor": "macraig",
+			"createdAt": "2026-05-08T13:05:51Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-16853038",
+			"summary": "The maintainer says it is being discussed internally and updates will come in this thread.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BA6Iw",
+			"kind": "comment",
+			"actor": "skorobogatydmitry",
+			"createdAt": "2026-05-22T07:33:05Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17015344",
+			"summary": "A user notes the sidebar still appears when the agent is disabled in settings.",
+			"actorId": "MDQ6VXNlcjcyODUzNTE0",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBFJQ",
+			"kind": "reply",
+			"actor": "Haume0",
+			"createdAt": "2026-05-26T09:57:27Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17060432",
+			"summary": "The opener says disabling AI removes too much and wants to disable only the sidebar.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BA6Iw"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBUr4",
+			"kind": "reply",
+			"actor": "Andersos",
+			"createdAt": "2026-05-31T16:49:55Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17124088",
+			"summary": "A user asks for an issue to follow.",
+			"actorId": "MDQ6VXNlcjI4ODk3Nw==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4A_6PO"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBbWb",
+			"kind": "comment",
+			"actor": "macraig",
+			"createdAt": "2026-06-02T12:26:25Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17151387",
+			"summary": "A maintainer announces the outcome: an `open_behavior` setting with existing or new window options, consistent new-window handling, and no option to disable the sidebar on its own, because maintaining two thread-history surfaces was too costly; it stays tied to AI being enabled.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBeJc",
+			"kind": "reply",
+			"actor": "Haume0",
+			"createdAt": "2026-06-03T09:06:59Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17162844",
+			"summary": "The opener welcomes the changes.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBeQI",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-06-03T09:41:40Z",
+			"editedAt": "2026-06-03T09:47:43Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17163272",
+			"summary": "A user notes that threads can still only be navigated from the sidebar and proposes a dropdown thread switcher in the Agent Panel title plus a setting to hide the sidebar button.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBhrc",
+			"kind": "reply",
+			"actor": "DenysVuika",
+			"createdAt": "2026-06-04T08:07:33Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17177308",
+			"summary": "A user asks when the changes will ship.",
+			"actorId": "MDQ6VXNlcjUwMzk5MQ==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBjZj",
+			"kind": "reply",
+			"actor": "macraig",
+			"createdAt": "2026-06-04T18:18:44Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17184355",
+			"summary": "The maintainer says even a light switcher would need to handle concurrent threads and worktrees, effectively a second sidebar, so they prefer one place; they estimate two to three weeks to Stable.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBlKn",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-06-05T10:38:08Z",
+			"editedAt": "2026-06-15T10:17:27Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17191591",
+			"summary": "The user accepts that reasoning and instead proposes docking the Agent Panel under the sidebar to save horizontal space, with mockups.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BBlMb",
+			"kind": "reply",
+			"actor": "Haume0",
+			"createdAt": "2026-06-05T10:47:54Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17191707",
+			"summary": "The opener likes the mockup.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BB7hO",
+			"kind": "reply",
+			"actor": "domindel",
+			"createdAt": "2026-06-12T18:39:36Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17283150",
+			"summary": "A user backs placing threads above the chat and suggests a separate discussion.",
+			"actorId": "U_kgDOCTcCeQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BB_Qy",
+			"kind": "reply",
+			"actor": "brodmo",
+			"createdAt": "2026-06-14T15:17:20Z",
+			"editedAt": "2026-06-15T08:13:45Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17298482",
+			"summary": "A user asks for a third `open_behavior` value that replaces the project in the current window.",
+			"actorId": "MDQ6VXNlcjUwNTQ4OTI5",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCMxS",
+			"kind": "comment",
+			"actor": "domindel",
+			"createdAt": "2026-06-18T15:36:45Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17353810",
+			"summary": "A user shares a fork that adds an option to place the threads list inside the Agent Panel above the chat, as a demonstration.",
+			"actorId": "U_kgDOCTcCeQ",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCX6V",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-06-22T21:49:06Z",
+			"editedAt": "2026-06-23T13:36:25Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17399445",
+			"summary": "A user builds and tries the fork, praises it, and suggests the team may prefer embedding the panel in the sidebar rather than the reverse.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMxS"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCa2R",
+			"kind": "reply",
+			"actor": "domindel",
+			"createdAt": "2026-06-23T18:54:43Z",
+			"editedAt": "2026-06-24T14:51:34Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17411473",
+			"summary": "The fork author explains why they embedded the threads in the panel and says the team overlooked users who treat AI as a secondary helper.",
+			"actorId": "U_kgDOCTcCeQ",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMxS"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCf1s",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-06-25T09:43:07Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17431916",
+			"summary": "The user says the demo works well on a laptop screen.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMxS"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCjRc",
+			"kind": "reply",
+			"actor": "Blond11516",
+			"createdAt": "2026-06-26T14:01:42Z",
+			"editedAt": "2026-06-26T14:02:41Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17445980",
+			"summary": "A user supports the replace-in-current-window option, describing confusing window behaviour.",
+			"actorId": "MDQ6VXNlcjQ0NzM0NDg0",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BBbWb"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCwoW",
+			"kind": "comment",
+			"actor": "macraig",
+			"createdAt": "2026-07-01T18:14:03Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17500694",
+			"summary": "The maintainer reports the announced changes have shipped and will reach Stable the next week.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCwo8",
+			"kind": "reply",
+			"actor": "macraig",
+			"createdAt": "2026-07-01T18:18:20Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17500732",
+			"summary": "The maintainer says the team will consider the fork's idea but lacks bandwidth and suggests a new discussion.",
+			"actorId": "MDQ6VXNlcjE2NTcyMTM=",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMxS"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BCxTJ",
+			"kind": "reply",
+			"actor": "zambetti",
+			"createdAt": "2026-07-02T00:34:44Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17503433",
+			"summary": "A user opens a new discussion for that idea.",
+			"actorId": "MDQ6VXNlcjk4NTE1",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCMxS"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDYB1",
+			"kind": "comment",
+			"actor": "nguyen-vo",
+			"createdAt": "2026-07-16T13:21:43Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17662069",
+			"summary": "A user asks when `open_behavior` will be released.",
+			"actorId": "MDQ6VXNlcjY1MTc1ODkx",
+			"actorType": "human",
+			"parentId": "D_kwDOFExXwM4AmDVB"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDaTp",
+			"kind": "reply",
+			"actor": "Haume0",
+			"createdAt": "2026-07-17T09:52:24Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17671401",
+			"summary": "The opener shows where the setting appears in settings.",
+			"actorId": "MDQ6VXNlcjcwMDk0ODQ2",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BDYB1"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDe9A",
+			"kind": "reply",
+			"actor": "nguyen-vo",
+			"createdAt": "2026-07-19T17:40:39Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17690432",
+			"summary": "The user thanks them.",
+			"actorId": "MDQ6VXNlcjY1MTc1ODkx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BDYB1"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BDlrN",
+			"kind": "reply",
+			"actor": "nguyen-vo",
+			"createdAt": "2026-07-21T14:15:05Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17717965",
+			"summary": "The user asks for a mode that opens a new window unless the project is already open.",
+			"actorId": "MDQ6VXNlcjY1MTc1ODkx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BDYB1"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEFYl",
+			"kind": "reply",
+			"actor": "phocks",
+			"createdAt": "2026-07-31T02:51:36Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17847845",
+			"summary": "A contributor says the sidebar opening unprompted was annoying and welcomes the changes.",
+			"actorId": "MDQ6VXNlcjQzNzU2Ng==",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BCwoW"
+		},
+		{
+			"id": "DC_kwDOFExXwM4BEo53",
+			"kind": "reply",
+			"actor": "nguyen-vo",
+			"createdAt": "2026-08-12T19:46:57Z",
+			"url": "https://github.com/zed-industries/zed/discussions/55157#discussioncomment-17993335",
+			"summary": "A user links an existing issue for the reuse-existing-window request.",
+			"actorId": "MDQ6VXNlcjY1MTc1ODkx",
+			"actorType": "human",
+			"parentId": "DC_kwDOFExXwM4BDYB1"
+		}
+	]
+}

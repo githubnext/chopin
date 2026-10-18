@@ -1,0 +1,274 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "fzf-default-opts-file",
+	"title": "Config file for fzf options",
+	"source": {
+		"url": "https://github.com/junegunn/fzf/discussions/2528",
+		"retrievedAt": "2026-10-18T07:35:03.796709+00:00",
+		"repository": "junegunn/fzf",
+		"number": 2528,
+		"nodeId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2021-06-14T12:00:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2024-02-07T00:00:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2024-02-08T04:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "MDEwOkRpc2N1c3Npb24zNDEwNTEx",
+			"kind": "opening",
+			"actor": "j-xella",
+			"createdAt": "2021-06-14T00:16:29Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528",
+			"summary": "The opener says their FZF_DEFAULT_OPTS value has grown unwieldy and asks whether fzf should read options from a dedicated config file such as ~/.fzfrc or ~/.config/fzf/config.",
+			"actorId": "MDQ6VXNlcjg5NTk4MTk=",
+			"actorType": "human"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50ODY2NzE4",
+			"kind": "comment",
+			"actor": "rayiik",
+			"createdAt": "2021-06-14T07:13:11Z",
+			"editedAt": "2021-06-14T07:17:12Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-866718",
+			"summary": "A user argues a config file already exists in practice: they keep their fzf options in a shell script sourced at startup and share a long example.",
+			"actorId": "MDQ6VXNlcjMyNTU3MjEx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50ODY3MjQ2",
+			"kind": "reply",
+			"actor": "j-xella",
+			"createdAt": "2021-06-14T09:37:33Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-867246",
+			"summary": "The opener still wants an optional native file and lists reasons: shell independence, variable size limits, less environment pollution, comments and no escaping, and room for future settings.",
+			"actorId": "MDQ6VXNlcjg5NTk4MTk=",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50ODY2NzE4"
+		},
+		{
+			"id": "MDE3OkRpc2N1c3Npb25Db21tZW50ODgyNjkw",
+			"kind": "comment",
+			"actor": "rayiik",
+			"createdAt": "2021-06-17T11:09:28Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-882690",
+			"summary": "The first user doubts a shell-independent file is possible without rebuilding and worries a file would lose the per-situation flexibility of manipulating an environment variable.",
+			"actorId": "MDQ6VXNlcjMyNTU3MjEx",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4AO0b9",
+			"kind": "comment",
+			"actor": "fritzrehde",
+			"createdAt": "2022-10-15T10:54:22Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-3884797",
+			"summary": "A user notes that without a global file, switching light and dark themes cannot reach fzf instances already spawned from other terminals or tools.",
+			"actorId": "MDQ6VXNlcjgwNDcxMjY1",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4ARvYS",
+			"kind": "comment",
+			"actor": "ivanlan9",
+			"createdAt": "2023-01-10T22:39:23Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-4650514",
+			"summary": "A user already sources a defaults file from ~/.config and would prefer fzf to know where to look, so edits apply without re-sourcing.",
+			"actorId": "MDQ6VXNlcjc5NzcxNTg=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4AVhe3",
+			"kind": "reply",
+			"actor": "tuskiie",
+			"createdAt": "2023-04-17T21:55:47Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-5642167",
+			"summary": "A user asks the theme-switching commenter whether they found a fix.",
+			"actorId": "MDQ6VXNlcjQwMTc4ODIx",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4AO0b9"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Af9vF",
+			"kind": "reply",
+			"actor": "weirdgiraffe",
+			"createdAt": "2024-02-06T08:07:39Z",
+			"editedAt": "2024-02-06T12:20:51Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-8379333",
+			"summary": "A user suggests a shell function wrapper that sources an options file in a subshell on every run, keeping the environment clean.",
+			"actorId": "MDQ6VXNlcjgyODI1MzA=",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4AO0b9"
+		},
+		{
+			"id": "DC_kwDOANKv9s4AgDbD",
+			"kind": "comment",
+			"actor": "junegunn",
+			"createdAt": "2024-02-08T02:37:25Z",
+			"editedAt": "2024-02-08T02:42:17Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-8402627",
+			"summary": "The maintainer accepts some points and proposes a new variable, FZF_DEFAULT_OPTS_FILE, naming the file path, since there is no agreed default location and fzf should not probe for a file nobody uses.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4AgDdf",
+			"kind": "reply",
+			"actor": "junegunn",
+			"createdAt": "2024-02-08T03:05:57Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-8402783",
+			"summary": "The maintainer links the pull request implementing that variable.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4AgDbD"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai09b",
+			"kind": "comment",
+			"actor": "yujinyuz",
+			"createdAt": "2024-04-16T12:45:39Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9129819",
+			"summary": "A user reports that the CTRL-T binding seems to ignore options from FZF_DEFAULT_OPTS_FILE and asks if this is intended.",
+			"actorId": "MDQ6VXNlcjEwOTcyMDI3",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai4VB",
+			"kind": "reply",
+			"actor": "junegunn",
+			"createdAt": "2024-04-17T14:07:05Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9143617",
+			"summary": "The maintainer says it works for them and shows a minimal reproduction with a colour option.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai4Y1",
+			"kind": "reply",
+			"actor": "yujinyuz",
+			"createdAt": "2024-04-17T14:22:54Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9143861",
+			"summary": "The user shares their layout and colour file plus a video showing CTRL-R honours it but CTRL-T does not apply the reverse layout.",
+			"actorId": "MDQ6VXNlcjEwOTcyMDI3",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai4Zy",
+			"kind": "reply",
+			"actor": "yujinyuz",
+			"createdAt": "2024-04-17T14:27:32Z",
+			"editedAt": "2024-04-17T14:28:21Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9143922",
+			"summary": "The user adds that a colour option works but a layout option is not applied.",
+			"actorId": "MDQ6VXNlcjEwOTcyMDI3",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai4gQ",
+			"kind": "reply",
+			"actor": "junegunn",
+			"createdAt": "2024-04-17T15:02:11Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9144336",
+			"summary": "The maintainer explains the key bindings predate the file variable and override some options, so they do not merge the file's contents yet; they suggest the older variables for now.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai5yX",
+			"kind": "reply",
+			"actor": "yujinyuz",
+			"createdAt": "2024-04-18T02:25:02Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9149591",
+			"summary": "The user accepts the explanation.",
+			"actorId": "MDQ6VXNlcjEwOTcyMDI3",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Ai7OA",
+			"kind": "reply",
+			"actor": "junegunn",
+			"createdAt": "2024-04-18T13:55:15Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9155456",
+			"summary": "The maintainer links a work-in-progress pull request that makes the bindings honour the file and asks for testing.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Ai09b"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Akv5K",
+			"kind": "comment",
+			"actor": "backpropper",
+			"createdAt": "2024-06-01T23:55:59Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-9633354",
+			"summary": "A user gets an invalid command line string error when setting the file variable before sourcing the bindings, even with an empty file, and asks for help.",
+			"actorId": "MDQ6VXNlcjU0MjIyMjg=",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Awada",
+			"kind": "comment",
+			"actor": "tasuki",
+			"createdAt": "2025-04-01T17:05:39Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-12691290",
+			"summary": "A user running nvim without a login shell says fzf misses their shell variables and asks for a separate config file.",
+			"actorId": "MDQ6VXNlcjMzNDQ5MA==",
+			"actorType": "human",
+			"parentId": "MDEwOkRpc2N1c3Npb24zNDEwNTEx"
+		},
+		{
+			"id": "DC_kwDOANKv9s4AwbIq",
+			"kind": "reply",
+			"actor": "junegunn",
+			"createdAt": "2025-04-01T23:25:13Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-12694058",
+			"summary": "The maintainer points to FZF_DEFAULT_OPTS_FILE and notes the variable can be set from the editor's own configuration.",
+			"actorId": "MDQ6VXNlcjcwMDgyNg==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Awada"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Awbqo",
+			"kind": "reply",
+			"actor": "tasuki",
+			"createdAt": "2025-04-02T05:46:45Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-12696232",
+			"summary": "The user realises the answer was already given several times in the thread and thanks the maintainer.",
+			"actorId": "MDQ6VXNlcjMzNDQ5MA==",
+			"actorType": "human",
+			"parentId": "DC_kwDOANKv9s4Awada"
+		},
+		{
+			"id": "DC_kwDOANKv9s4Azwtn",
+			"kind": "reply",
+			"actor": "danielwerg",
+			"createdAt": "2025-06-25T04:07:00Z",
+			"url": "https://github.com/junegunn/fzf/discussions/2528#discussioncomment-13568871",
+			"summary": "A user asks how FZF_ALT_COMMAND is used in the early example config.",
+			"actorId": "MDQ6VXNlcjM1MDUyMzk5",
+			"actorType": "human",
+			"parentId": "MDE3OkRpc2N1c3Npb25Db21tZW50ODY2NzE4"
+		}
+	]
+}

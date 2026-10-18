@@ -1,0 +1,514 @@
+{
+	"schemaVersion": 2,
+	"origin": "adapted",
+	"id": "mastodon-quote-toots",
+	"title": "Whether Mastodon should add quote toots",
+	"source": {
+		"url": "https://github.com/mastodon/mastodon/issues/12753",
+		"retrievedAt": "2026-10-18T07:02:20.634890+00:00",
+		"repository": "mastodon/mastodon",
+		"number": 12753
+	},
+	"cutoffs": [
+		{
+			"id": "c1",
+			"at": "2020-01-03T19:15:00Z"
+		},
+		{
+			"id": "c2",
+			"at": "2020-01-09T19:20:00Z"
+		},
+		{
+			"id": "c3",
+			"at": "2020-01-15T00:00:00Z"
+		},
+		{
+			"id": "c4",
+			"at": "2020-01-20T00:00:00Z"
+		}
+	],
+	"events": [
+		{
+			"id": "mastodon-12753:issue:12753",
+			"kind": "opening",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-03T19:12:41Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753",
+			"summary": "The opener asks for a quote button in the web client plus a notification to the quoted person, arguing that link previews already allow unnoticed quoting that may be worse than a visible feature.",
+			"actorId": 8227641,
+			"actorType": "human"
+		},
+		{
+			"id": "mastodon-12753:comment:570671670",
+			"kind": "comment",
+			"actor": "nuklearfiziks",
+			"createdAt": "2020-01-03T19:21:42Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570671670",
+			"summary": "A user flags a likely duplicate of #309 and strongly opposes quoting, saying it worsened discourse on Twitter.",
+			"actorId": 40371794,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570678300",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-03T19:46:25Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570678300",
+			"summary": "The opener replies that quoting already happens via links, and that a proper feature would improve workflows, let quoted people respond, and reduce permanent screenshots.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570753110",
+			"kind": "comment",
+			"actor": "shleeable",
+			"createdAt": "2020-01-04T03:36:11Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570753110",
+			"summary": "A contributor likes the mockup and supports quoting.",
+			"actorId": 17537000,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570760752",
+			"kind": "comment",
+			"actor": "trwnh",
+			"createdAt": "2020-01-04T06:18:49Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570760752",
+			"summary": "A maintainer says the friction is deliberate: people should mention or reply rather than quote, and calls it a duplicate of #309.",
+			"actorId": 10606431,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570760989",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-04T06:23:18Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570760989",
+			"summary": "The opener asks why users should be pushed to reply rather than quote.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570762044",
+			"kind": "comment",
+			"actor": "trwnh",
+			"createdAt": "2020-01-04T06:46:43Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570762044",
+			"summary": "The maintainer says broadcasting to followers is no more productive than arguing.",
+			"actorId": 10606431,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570796584",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-04T15:58:33Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570796584",
+			"summary": "The opener adds an accessibility argument: screenshots often lack alt text, while native quotes would be readable.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570814161",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-04T19:47:37Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570814161",
+			"summary": "The opener points out that the project's own Twitter account uses quote tweets.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570821865",
+			"kind": "comment",
+			"actor": "wakest",
+			"createdAt": "2020-01-04T21:34:52Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570821865",
+			"summary": "A user notes forks such as fedibird already support quotes and argues moderation, not missing features, should handle abuse.",
+			"actorId": 7890201,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570822434",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-04T21:44:00Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570822434",
+			"summary": "The opener agrees and calls the stance hypocritical given the project's Twitter use.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570835995",
+			"kind": "comment",
+			"actor": "codesections",
+			"createdAt": "2020-01-05T01:42:12Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570835995",
+			"summary": "A contributor sees the absence of quoting as a key Mastodon strength, since quoting plus notifying invites pile-ons, while subtoots do less harm.",
+			"actorId": 35405463,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570842405",
+			"kind": "comment",
+			"actor": "trwnh",
+			"createdAt": "2020-01-05T03:02:35Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570842405",
+			"summary": "The maintainer rebuts the accessibility argument and lists harms of quote boosting: broken threads, nested quotes and performative posting; they cite the 2018 project blog post rejecting quotes.",
+			"actorId": 10606431,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570899279",
+			"kind": "comment",
+			"actor": "Cassolotl",
+			"createdAt": "2020-01-05T10:48:04Z",
+			"editedAt": "2020-01-05T13:47:13Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570899279",
+			"summary": "A user objects that the maintainer's alt-text reply dismisses a systemic accessibility point.",
+			"actorId": 6607512,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:570899541",
+			"kind": "comment",
+			"actor": "Cassolotl",
+			"createdAt": "2020-01-05T10:51:28Z",
+			"editedAt": "2020-01-05T10:55:57Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-570899541",
+			"summary": "A user says the project founder has repeatedly refused quoting, notes #309 was closed as won't-fix despite being among the most upvoted issues, and suggests keeping this one open.",
+			"actorId": 6607512,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572712409",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T19:18:42Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572712409",
+			"summary": "A contributor proposes quoting with consent: a per-user setting allowing quotes, admin defaults, and a way to withdraw quotes later.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572713823",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-09T19:21:51Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572713823",
+			"summary": "The opener objects that authors should not be able to delete criticism by removing quotes.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572719101",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T19:33:59Z",
+			"editedAt": "2020-01-09T19:35:48Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572719101",
+			"summary": "The contributor insists deleting a post must remove its quotes too, leaving a placeholder, with a mockup.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572721163",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-09T19:39:10Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572721163",
+			"summary": "The opener compares quotes to quoting in blogs and argues retaining them serves the public interest, citing politicians.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572729108",
+			"kind": "comment",
+			"actor": "CoWinkKeyDinkInc",
+			"createdAt": "2020-01-09T19:57:33Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572729108",
+			"summary": "A user supports quotes to help news sharing.",
+			"actorId": 7586568,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572729916",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T19:59:34Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572729916",
+			"summary": "The contributor says retaining quotes is an abuse vector and opt-in plus removal are needed for safety.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572733690",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-09T20:09:16Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572733690",
+			"summary": "The opener argues kept quote text is no less safe than web archives.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572747670",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T20:46:55Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572747670",
+			"summary": "The contributor argues users have a right to delete their data and quotes should drop identifying content.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572751403",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-09T20:55:56Z",
+			"editedAt": "2020-01-09T20:56:30Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572751403",
+			"summary": "The opener argues people should not be able to erase references to their posts, citing fair use.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572762359",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T21:22:27Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572762359",
+			"summary": "The contributor rejects call-out culture and describes how quoting can drive pile-ons.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572766307",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-09T21:32:52Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572766307",
+			"summary": "The opener defends call-outs and argues moderation tools are the answer.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:572777290",
+			"kind": "comment",
+			"actor": "brawaru",
+			"createdAt": "2020-01-09T22:03:27Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-572777290",
+			"summary": "The contributor quotes the founder's 2018 blog rationale against quoting and concludes the issue should be closed.",
+			"actorId": 10401817,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:573501101",
+			"kind": "comment",
+			"actor": "wakest",
+			"createdAt": "2020-01-13T04:10:48Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-573501101",
+			"summary": "A user says other fediverse software already has quotes, so the real question is how mainline Mastodon handles them safely.",
+			"actorId": 7890201,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:573501951",
+			"kind": "comment",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-13T04:17:04Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-573501951",
+			"summary": "The opener says they will take suggestions to other projects instead.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:process:closed:2020-01-19T02:54:47Z",
+			"kind": "process",
+			"actor": "thehonkinggoose",
+			"createdAt": "2020-01-19T02:54:47Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753",
+			"summary": "The opener closes the issue.",
+			"actorId": 8227641,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1307280362",
+			"kind": "comment",
+			"actor": "zichy",
+			"createdAt": "2022-11-08T14:09:27Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1307280362",
+			"summary": "Nearly three years later, a user suggests allowing quotes only by one's followers.",
+			"actorId": 173749,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1307345895",
+			"kind": "comment",
+			"actor": "lorenzlm",
+			"createdAt": "2022-11-08T14:55:24Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1307345895",
+			"summary": "A user argues quoting enables curation that replies and boosts cannot, and asks developers to reconsider.",
+			"actorId": 10097702,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315841593",
+			"kind": "comment",
+			"actor": "ell1e",
+			"createdAt": "2022-11-15T20:45:05Z",
+			"editedAt": "2022-11-15T20:48:55Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315841593",
+			"summary": "A user agrees curation matters, especially for educational accounts.",
+			"actorId": 64124388,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315882537",
+			"kind": "comment",
+			"actor": "mattwynne",
+			"createdAt": "2022-11-15T21:25:18Z",
+			"editedAt": "2022-11-15T21:25:47Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315882537",
+			"summary": "A user cites a thread on quotes building communities and asks to discuss adding them with moderation limits.",
+			"actorId": 19260,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315884654",
+			"kind": "comment",
+			"actor": "mattwynne",
+			"createdAt": "2022-11-15T21:27:25Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315884654",
+			"summary": "The user links #20673, a new proposal for user-controlled quoting.",
+			"actorId": 19260,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315884708",
+			"kind": "comment",
+			"actor": "ell1e",
+			"createdAt": "2022-11-15T21:27:29Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315884708",
+			"summary": "A user says a followers-only rule would not work for quoting news posts.",
+			"actorId": 64124388,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315906708",
+			"kind": "comment",
+			"actor": "jmturner",
+			"createdAt": "2022-11-15T21:50:57Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315906708",
+			"summary": "A user suggests at least allowing quotes of bot accounts.",
+			"actorId": 1367784,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315909729",
+			"kind": "comment",
+			"actor": "lorenzlm",
+			"createdAt": "2022-11-15T21:54:33Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315909729",
+			"summary": "A user rejects the followers-only rule because curation is about reaching new audiences.",
+			"actorId": 10097702,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1315909837",
+			"kind": "comment",
+			"actor": "ell1e",
+			"createdAt": "2022-11-15T21:54:41Z",
+			"editedAt": "2022-11-15T21:56:14Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1315909837",
+			"summary": "A user says journalists will need quoting for nuanced reporting.",
+			"actorId": 64124388,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1317268653",
+			"kind": "comment",
+			"actor": "ThatOneCalculator",
+			"createdAt": "2022-11-16T16:10:55Z",
+			"editedAt": "2022-11-16T16:11:01Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1317268653",
+			"summary": "A user notes other fediverse software supports quotes and asks Mastodon to federate with them.",
+			"actorId": 44733677,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1322224640",
+			"kind": "comment",
+			"actor": "noqqe",
+			"createdAt": "2022-11-21T15:20:47Z",
+			"editedAt": "2022-11-21T15:21:19Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1322224640",
+			"summary": "A user cites a former Twitter designer saying quote tweets did not increase abuse.",
+			"actorId": 203902,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1322293837",
+			"kind": "comment",
+			"actor": "trwnh",
+			"createdAt": "2022-11-21T16:07:38Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1322293837",
+			"summary": "A maintainer disputes that claim and says abuse must be defined first.",
+			"actorId": 10606431,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		},
+		{
+			"id": "mastodon-12753:comment:1357410960",
+			"kind": "comment",
+			"actor": "pljakobs",
+			"createdAt": "2022-12-19T10:15:13Z",
+			"editedAt": "2022-12-19T10:43:04Z",
+			"url": "https://github.com/mastodon/mastodon/issues/12753#issuecomment-1357410960",
+			"summary": "A comment whose content was removed.",
+			"actorId": 13985375,
+			"actorType": "human",
+			"parentId": "mastodon-12753:issue:12753"
+		}
+	]
+}
