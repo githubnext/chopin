@@ -22,9 +22,9 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@bastani/atomic";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fullPlanner, workflowRuns } from "./full";
 
 import type {
@@ -154,6 +154,13 @@ export type AtomicSettings = {
 	 * sessions never load them.
 	 */
 	extensions?: readonly string[];
+	/**
+	 * The SQLite file the workflows of Planner sessions are journaled in, in place
+	 * of Atomic's default beside its agent directory. Atomic reads the journal
+	 * location only from `ATOMIC_WORKFLOW_JOURNAL_PATH` and the on-disk settings,
+	 * so the adapter sets that variable until it shuts down.
+	 */
+	journal?: string;
 };
 
 export class ToolBoundaryError extends Error {
@@ -465,6 +472,8 @@ export function createAtomicAdapter(
 	}
 	let runtime: Promise<ModelRuntime> | undefined;
 	let open = new Set<HarnessV1Session>();
+	let journal = process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
+	if (settings.journal) process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = settings.journal;
 
 	return {
 		specificationVersion: "harness-v1",
@@ -615,6 +624,10 @@ export function createAtomicAdapter(
 					let cwd = full?.cwd ?? directory!;
 					let agentDir = full ? getAgentDir() : directory!;
 					if (full) settingsManager = await fullSettings(agentDir, cwd);
+					// The journal holds workflow inputs and outputs; Atomic would create its directory world-readable.
+					if (full && settings.journal) {
+						await mkdir(dirname(settings.journal), { recursive: true, mode: 0o700 });
+					}
 					sessionManager ??= SessionManager.inMemory(cwd);
 					let loader = new DefaultResourceLoader({
 						cwd,
@@ -825,6 +838,9 @@ export function createAtomicAdapter(
 
 		async shutdown() {
 			await Promise.allSettled([...open].map(session => session.doDestroy()));
+			if (!settings.journal) return;
+			if (journal === undefined) delete process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
+			else process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = journal;
 		},
 	};
 }

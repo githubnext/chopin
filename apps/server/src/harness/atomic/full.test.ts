@@ -116,9 +116,11 @@ async function run(
 	let previous = process.env.ATOMIC_CODING_AGENT_DIR;
 	let received: QuestionParams[] = [];
 	let operatorPackageDir = join(root, "operator-package");
+	let journal = join(root, "state", "workflows.sqlite");
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
 		model: "stub/model",
+		journal,
 		extensions: operatorPackage || askingWorkflow ? [operatorPackageDir] : undefined,
 		providers: {
 			stub: {
@@ -316,6 +318,8 @@ export default workflow({
 			if (!worker) {
 				let files = {
 					operator: await Bun.file(join(agentDir, "settings.json")).exists(),
+					journal: await Bun.file(journal).exists(),
+					defaultJournal: await Bun.file(join(root, "workflows", "journal.sqlite")).exists(),
 					project: projectPackage
 						? await Bun.file(join(cwd, ".atomic", "settings.json")).text()
 						: undefined,
@@ -443,7 +447,7 @@ test("a checkout's project settings add its packages without writing either sett
 	expect(plain.requests[0]!.system).not.toContain("PROJECT-SKILL-MARKER");
 });
 
-/** The first workflow tool call starts Atomic's durable backend, which falls back slowly without Postgres. */
+/** The first workflow tool call loads Atomic's workflow runtime and opens its journal. */
 const WORKFLOW_TOOL_TIMEOUT_MS = 30_000;
 
 test(
@@ -490,7 +494,7 @@ test(
 		delete process.env.NODE_ENV;
 		try {
 			let seen: string[] = [];
-			await run(true, "launch", {
+			let result = await run(true, "launch", {
 				host: room.input,
 				askingWorkflow: true,
 				afterTurn: async () => {
@@ -527,6 +531,8 @@ test(
 			expect(stage.toolNames).toContain("write");
 			expect(stage.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
 			expect(stage.system).not.toContain("CHOPIN-INSTRUCTIONS-MARKER");
+			// The run is journaled where Chopin chose, not in Atomic's default beside its agent directory.
+			expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
 		} finally {
 			if (environment !== undefined) process.env.NODE_ENV = environment;
 			await room.close();

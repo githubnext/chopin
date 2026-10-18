@@ -257,7 +257,7 @@ them. Chopin's compaction, summary, and cache overrides still apply on top.
 Chopin appends its Planner
 instructions to Atomic's assembled prompt. Session, settings, and model
 credentials remain in memory; Atomic's own enabled tools, extensions, MCP
-servers, and workflow storage can perform writes as the server process's user.
+servers, and workflow journal can perform writes as the server process's user.
 Background summary and research workers still use the isolated sessions described
 above.
 
@@ -603,8 +603,13 @@ stopped comes back stopped. Ended rows stay until the next workflow starts in th
 document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
-workflow store, so runs interrupted that way can be resumed from a later
-session. A Build is not a workflow run and has no card in Chat: its tasks, their
+workflow journal, so runs interrupted that way can be resumed from a later
+session. Chopin keeps that journal at
+`$XDG_STATE_HOME/chopin/atomic/workflows.sqlite` under the same per-user state
+directory as the documents' own directories, because a run resumes only with
+the journal and working directory it started in. A non-empty
+`ATOMIC_WORKFLOW_JOURNAL_PATH` names another file instead; Atomic's
+`workflows.journal` setting is not used for Planner sessions. A Build is not a workflow run and has no card in Chat: its tasks, their
 state and pull requests show under **Build**, whichever machine runs it. The
 Planner's instructions say so, so it does not point people to Chat for a Build.
 
