@@ -2,7 +2,15 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { defaultOpen, displayStages, elapsed, orderRuns, RunStack, visibleRuns } from "./run-card";
+import {
+	defaultOpen,
+	displayStages,
+	elapsed,
+	orderRuns,
+	RunStack,
+	stageWindow,
+	visibleRuns,
+} from "./run-card";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -180,4 +188,105 @@ test("elapsed switches to days instead of printing hundreds of hours", () => {
 	expect(elapsed(24 * 3600)).toBe("1d 0h");
 	expect(elapsed(3 * 86_400 + 4 * 3600)).toBe("3d 4h");
 	expect(elapsed(497_550 * 3600)).toBe("20731d 6h");
+});
+
+function longRun(count: number, earlierStages?: number): Wire.Run {
+	let long = run("long", "running", 10);
+	long.stages = Array.from({ length: count }, (_, index) => ({
+		id: `long:s${index}`,
+		name: `stage-${index}`,
+		status: index === count - 1 ? "running" as const : "completed" as const,
+		started: 10 + index,
+	}));
+	if (earlierStages) long.earlierStages = earlierStages;
+	return long;
+}
+
+test("a long run folds to its latest stages behind a real button that names what it shows", () => {
+	let folded = stageWindow(longRun(16, 4), false);
+	expect(folded.stages.map(stage => stage.name)).toEqual([
+		"stage-10",
+		"stage-11",
+		"stage-12",
+		"stage-13",
+		"stage-14",
+		"stage-15",
+	]);
+	expect(folded).toMatchObject({ earlier: 14, unreported: 4 });
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [longRun(16, 4)] }));
+	let button = /<button[^>]*data-run-earlier=""[^>]*>(.*?)<\/button>/.exec(markup);
+	expect(button?.[0]).toContain('aria-expanded="false"');
+	expect(button?.[0]).toContain('aria-controls="run-stage-list-long"');
+	expect(button?.[1]?.replace(/<[^>]+>/g, "")).toBe("+Show 14 earlier stages");
+	expect(markup.match(/data-run-stage=/g)).toHaveLength(6);
+});
+
+test("expanding lists every reported stage and says how many the run never reported", () => {
+	let open = stageWindow(longRun(16, 4), true);
+	expect(open.stages.map(stage => stage.name)).toEqual(
+		Array.from({ length: 16 }, (_, index) => `stage-${index}`),
+	);
+	expect(open).toMatchObject({ earlier: 14, unreported: 4 });
+	expect(stageWindow(longRun(16), true).unreported).toBe(0);
+	expect(stageWindow(longRun(16), false).stages).toHaveLength(6);
+});
+
+test("collapsing returns to the latest stages, and a short run has nothing to expand", () => {
+	let long = longRun(16);
+	expect(stageWindow(long, true).stages.length).toBeGreaterThan(
+		stageWindow(long, false).stages.length,
+	);
+	let short = stageWindow(longRun(4), false);
+	expect(short).toMatchObject({ earlier: 0, unreported: 0 });
+	expect(short.stages).toHaveLength(4);
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [longRun(4)] }));
+	expect(markup).not.toContain("data-run-earlier");
+	expect(markup).not.toContain("earlier");
+});
+
+test("nested stages keep their parents and stopped descendants on both sides of the fold", () => {
+	let nested = longRun(16);
+	nested.stages[1] = { id: "long:s1", name: "stage-1", status: "failed", started: 11 };
+	nested.stages[2] = {
+		id: "long:s2",
+		name: "stage-2",
+		status: "running",
+		started: 12,
+		parentIds: ["long:s1"],
+	};
+	nested.stages[14] = {
+		id: "long:s14",
+		name: "stage-14",
+		status: "pending",
+		parentIds: ["long:s2"],
+	};
+	nested.stages[15] = { ...nested.stages[15]!, parentIds: ["long:s0"] };
+	let folded = stageWindow(nested, false).stages;
+	let open = stageWindow(nested, true).stages;
+	expect(folded.find(stage => stage.id === "long:s14")?.status).toBe("stopped");
+	expect(open.find(stage => stage.id === "long:s14")).toMatchObject({
+		status: "stopped",
+		parentIds: ["long:s2"],
+	});
+	expect(open.find(stage => stage.id === "long:s2")).toMatchObject({
+		status: "stopped",
+		parentIds: ["long:s1"],
+	});
+	expect(open.find(stage => stage.id === "long:s15")?.status).toBe("running");
+	let order = open.map(stage => stage.id);
+	for (let stage of open) {
+		for (let parent of stage.parentIds ?? []) {
+			expect(order.indexOf(parent)).toBeLessThan(order.indexOf(stage.id));
+		}
+	}
+});
+
+test("a run whose earlier stages all went unreported still offers the expand button", () => {
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [longRun(3, 9)] }));
+	let button = /<button[^>]*data-run-earlier=""[^>]*>(.*?)<\/button>/.exec(markup);
+	expect(button?.[0]).toContain('aria-expanded="false"');
+	expect(button?.[1]?.replace(/<[^>]+>/g, "")).toBe("+Show 9 earlier stages");
+	let open = stageWindow(longRun(3, 9), true);
+	expect(open).toMatchObject({ earlier: 9, unreported: 9 });
+	expect(open.stages).toHaveLength(3);
 });

@@ -25,6 +25,8 @@ export type SeedState = {
 	parent?: string;
 	/** Seed the sidecar marker of a decision's page. */
 	questionPage?: { recordId: string };
+	/** Workflow run cards Chat showed before the document was last stored. */
+	workflowRuns?: unknown[];
 };
 
 export function storedQuestion(definition: Definition): number[] {

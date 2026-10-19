@@ -109,8 +109,11 @@ export function classifyRuns(
 	return runs;
 }
 
-/** Stages kept per run; earlier ones are counted, not listed. */
-const STORED_STAGES = 12;
+/**
+ * Stages kept per run, the same bound the agent connection allows a reported card; earlier
+ * ones are counted, not listed.
+ */
+const STORED_STAGES = 64;
 
 type Card = Wire.Run & { stageIndex: Map<string, number>; prompts: Set<string> };
 

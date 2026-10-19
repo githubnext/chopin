@@ -98,6 +98,25 @@ export function displayStages(run: Wire.Run): Wire.RunStage[] {
 	);
 }
 
+/**
+ * The stages a row lists: the latest few, or every reported one once expanded. `earlier` counts
+ * the stages folded away plus those the run report never listed; `unreported` is the latter.
+ */
+export function stageWindow(run: Wire.Run, expanded: boolean): {
+	stages: Wire.RunStage[];
+	earlier: number;
+	unreported: number;
+} {
+	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
+	let unreported = run.earlierStages ?? 0;
+	let stages = displayStages(run);
+	return {
+		stages: expanded ? stages : stages.slice(hidden),
+		earlier: hidden + unreported,
+		unreported,
+	};
+}
+
 function useNow(live: boolean): number {
 	let [now, setNow] = useState(() => Date.now() / 1000);
 	useEffect(() => {
@@ -161,11 +180,12 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 }) {
 	let live = run.status === "running" || run.status === "waiting";
 	let now = useNow(live);
+	let [expanded, setExpanded] = useState(false);
+	let { stages, earlier, unreported } = stageWindow(run, expanded);
+	let all = expanded && earlier > 0;
 	let end = run.ended ?? (live ? now : run.updated);
-	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
-	let stages = displayStages(run).slice(hidden);
-	let earlier = hidden + (run.earlierStages ?? 0);
 	let stagesId = `run-stages-${run.id}`;
+	let listId = `run-stage-list-${run.id}`;
 	let title = tag ? `${run.name} ${tag}` : run.name;
 	let control = live && onPause
 		? { label: `Pause ${title}`, icon: plannerStop, act: () => onPause(run.id), kind: "pause" }
@@ -227,9 +247,36 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 			</div>
 			{open && (
 				<div className="pb-1 pl-[22px]" id={stagesId}>
-					<ol className="flex flex-col gap-0.5">
-						{earlier > 0 && (
-							<li className="text-text-quaternary tabular-nums">+{earlier} earlier</li>
+					{earlier > 0 && (
+						<button
+							aria-controls={listId}
+							aria-expanded={all}
+							className="btn btn-sm btn-ghost -ml-2 text-text-tertiary tabular-nums"
+							data-run-earlier=""
+							onClick={() => setExpanded(!all)}
+							type="button"
+						>
+							{all ? "Show fewer" : (
+								// One span, so the button's gap does not split "+" from the count.
+								<span>
+									<span aria-hidden="true">+</span>
+									<span className="sr-only">{"Show "}</span>
+									{earlier} earlier
+									<span className="sr-only">{" stages"}</span>
+								</span>
+							)}
+						</button>
+					)}
+					<ol
+						aria-label={all ? `All stages of ${title}` : undefined}
+						className={`flex flex-col gap-0.5 ${all ? "run-stages-all" : ""}`}
+						id={listId}
+						tabIndex={all ? 0 : undefined}
+					>
+						{all && unreported > 0 && (
+							<li className="text-text-quaternary tabular-nums" data-run-unreported="">
+								{unreported} earlier {unreported === 1 ? "stage was" : "stages were"} not reported
+							</li>
 						)}
 						{stages.map(stage => (
 							<li

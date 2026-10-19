@@ -244,6 +244,7 @@ async function seed(
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
 		...(state.lifecycle ? { lifecycle: state.lifecycle } : {}),
+		...(state.workflowRuns ? { workflowRuns: state.workflowRuns } : {}),
 	};
 	await sql(port, async database => {
 		await database`

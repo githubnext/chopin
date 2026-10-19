@@ -630,11 +630,14 @@ elapsed time. Several runs can be live at once. Runs waiting on Decisions come
 first, then running, paused, and ended runs, newest first within each, and more
 than three rows fold behind "more" without ever hiding a waiting run. Only the
 first waiting run, or else the newest live one, shows its stages; any row opens
-on click to show its most recent stages with their status and duration, and a
-waiting row links to its Decisions. Each live row can be paused, and each paused
-row resumed, on its own; Chat records who did. The stack is stored with the
-document, so a reload or restart keeps it; a run that was live when the server
-stopped comes back stopped. Ended rows stay until the next workflow starts in the
+on click to show its six most recent stages with their status and duration, and
+a waiting row links to its Decisions. Its "+N earlier" button unfolds every
+stage the run reported (up to the latest 64) in a list that scrolls inside the
+card, and says how many earlier stages the run did not report; "Show fewer"
+folds it back. Each live row can be paused, and each paused row resumed, on its
+own; Chat records who did. The stack is stored with the document, so a reload
+or restart keeps it; a run that was live when the server stopped comes back
+stopped. Ended rows stay until the next workflow starts in the
 document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
