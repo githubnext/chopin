@@ -39,7 +39,6 @@ describe("background Planner job scope", () => {
 		for (
 			let name of [
 				"edit_plan",
-				"open_decision",
 				"open_decisions",
 				"ask",
 				"anchor_plan",

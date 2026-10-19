@@ -27,6 +27,26 @@ let choice = {
 	multiple: false,
 };
 
+test("Planner sessions advertise anchored captures and reject the retired unanchored tool", async () => {
+	let fixture = await coachingFixture([
+		() => ({
+			tool: "open_decision",
+			input: { revision: 0, key: "legacy-decision", question: "Which order should we use?" },
+		}),
+		() => "The choice remains unresolved.",
+	]);
+	opened.push(fixture);
+	await fixture.run();
+	expect(fixture.names()).toContain("open_decisions");
+	expect(fixture.names()).toContain("ask");
+	expect(fixture.names()).not.toContain("open_decision");
+	expect(fixture.results[0]).toMatchObject({
+		tool: "open_decision",
+		output: { type: "execution-denied" },
+	});
+	expect(fixture.host.plan.records.size).toBe(0);
+});
+
 test("a new draft leaves six mixed inline decisions open after its turn finishes", async () => {
 	let subjects = ["Audience", "Scope", "Deployment", "Data", "Access", "Rollout"];
 	let source = "# New plan\n\n"

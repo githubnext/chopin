@@ -37,12 +37,9 @@ lost or ambiguous, the update fails without guessing a new passage. Pending work
 authorized Planner owner after restart. Draft edits and research findings do not start this
 write-up. Child-focused Planner turns cannot create decisions in the root document.
 
-`open_decision` captures a written decision and returns its identity immediately.
-It takes the current document revision, a stable request key, a concise question
-and optional context. Repeating a request returns the same card. The Planner
-can continue inspecting or developing the document while the choice remains
-open. This tool cannot confirm an answer. It creates an unanchored card without the scoped
-follow-up above; the Planner uses `open_decisions` for questions beside plan prose.
+The Planner uses `open_decisions` for a single decision too. The former unanchored
+`open_decision` tool is no longer available. Existing unanchored records remain
+readable and can be reopened, but do not gain an automatic prose update retroactively.
 
 `ask` also accepts `response: "text"` when the Planner needs to wait for a
 person's answer. Set `options` to an empty array;

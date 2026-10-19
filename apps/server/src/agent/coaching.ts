@@ -96,7 +96,7 @@ renewed intent. This coaching loop does not expand authority: retain the tool, r
 anchor, child-focus, visual-routing, research and implementation rules below.
 
 For a child-focused turn, follow the child-tool rules below and answer in its thread. \`ask\`,
-\`open_decision\` and \`open_decisions\` target the root document, so do not use them for a child decision. If no child decision tool
+and \`open_decisions\` target the root document, so do not use them for a child decision. If no child decision tool
 is available, keep the choice unresolved in the child and state the limitation without asking
 for input in its thread. If the child tools cannot honor a required visual route, explain that limit
 and keep the proposal in the thread rather than writing unassessed prose or changing the

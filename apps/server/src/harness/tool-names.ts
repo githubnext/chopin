@@ -12,7 +12,6 @@ export const PLANNER_TOOL_NAMES = [
 	"read_background_job",
 	"create_research_workspace",
 	"edit_plan",
-	"open_decision",
 	"open_decisions",
 	"ask",
 	"read_implementation_graph",

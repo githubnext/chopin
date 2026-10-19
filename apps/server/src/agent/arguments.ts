@@ -345,24 +345,6 @@ export function openDecisions(raw: unknown) {
 	};
 }
 
-export function openDecision(raw: unknown) {
-	let args = record(raw, "open_decision arguments");
-	fields(
-		args,
-		["revision", "key", "question", "description"],
-		["revision", "key", "question"],
-		"open_decision arguments",
-	);
-	return {
-		revision: integer(args.revision, "revision"),
-		key: text(args.key, "key"),
-		question: text(args.question, "question"),
-		...(Object.hasOwn(args, "description")
-			? { description: args.description === "" ? "" : text(args.description, "description", 300) }
-			: {}),
-	};
-}
-
 const GRAPH_OPERATION_FIELDS = ["op", "id", "task", "ids"];
 
 /** Every field a graph task carries; `tools.ts` advertises exactly these. */

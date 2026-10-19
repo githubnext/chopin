@@ -451,46 +451,6 @@ export const documentTools = {
 			}),
 	}),
 
-	open_decision: tool({
-		contextSchema: ownerContext,
-		description: "Capture a named human decision before alternatives or an answer are known. "
-			+ "Creates an open card with a shared working answer and returns immediately. "
-			+ "Use for choices such as how onboarding should work, not factual questions the "
-			+ "repository or research can settle. A recommendation is not agreement: only a "
-			+ "person pressing Save resolves this card. For planning questions beside prose, prefer "
-			+ "open_decisions, which also follows saved answers into the related prose. Reuse the same key when "
-			+ "retrying the same capture. Do not use ask for the same decision as well.",
-		inputSchema: jsonSchema({
-			type: "object",
-			properties: {
-				revision: { type: "integer", minimum: 0 },
-				key: {
-					type: "string",
-					pattern: "^[A-Za-z0-9_-]{8,64}$",
-					description: "Stable request key for this decision, such as onboarding-approach.",
-				},
-				question: { type: "string", minLength: 1, maxLength: 100 },
-				description: { type: "string", maxLength: 300 },
-			},
-			required: ["revision", "key", "question"],
-			additionalProperties: false,
-		}),
-		metadata: { skipPermission: true },
-		execute: (raw, { context: { room: context } }) =>
-			answer("open_decision", async () => {
-				if (context.focusedChild?.() || context.plan.chat.actingChannel) {
-					return { ok: false, reason: "child-decision-unavailable" };
-				}
-				let { revision, ...input } = Arguments.openDecision(raw);
-				let id = await Questions.capture(context.plan, context.server, context.id, input, {
-					revision,
-				});
-				context.anchors();
-				let status = Questions.meta(context.plan, context.plan.records.get(id)!).status;
-				return { id, status };
-			}),
-	}),
-
 	open_decisions: tool({
 		contextSchema: ownerContext,
 		description: "Create all known independent human decisions beside provisional prose and "
