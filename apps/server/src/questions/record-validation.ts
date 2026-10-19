@@ -193,6 +193,7 @@ const FINDING_KEYS = new Set([
 	"sources",
 	"sourceCount",
 	"verdict",
+	"stance",
 	"branch",
 	"childId",
 	"by",
@@ -221,6 +222,13 @@ export function findings(value: unknown): Question.Finding[] {
 		if (Object.hasOwn(finding, "focus")) text(finding.focus, MAX_FINDING_FOCUS);
 		if (Object.hasOwn(finding, "title")) text(finding.title, MAX_FINDING_TITLE);
 		if (Object.hasOwn(finding, "summary")) text(finding.summary, MAX_FINDING_SUMMARY);
+		if (Object.hasOwn(finding, "stance")) {
+			if (
+				finding.kind !== "ask" || (finding.stance !== "supports" && finding.stance !== "objects")
+			) {
+				invalid();
+			}
+		}
 		if (Object.hasOwn(finding, "verdict")) text(finding.verdict, MAX_FINDING_TITLE);
 		if (Object.hasOwn(finding, "branch")) text(finding.branch, 256);
 		if (Object.hasOwn(finding, "childId")) text(finding.childId, 128);

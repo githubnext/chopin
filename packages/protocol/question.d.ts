@@ -110,6 +110,8 @@ export declare namespace Question {
 		/** One-line result once ready. */
 		title?: string;
 		summary?: string;
+		/** An ask's own position, given with the take. */
+		stance?: "supports" | "objects";
 		sources?: Array<{ title: string; url: string }>;
 		sourceCount?: number;
 		verdict?: string;
@@ -447,7 +449,12 @@ export declare namespace Question {
 			& ({ ok: true } | { ok: false; message: string });
 
 		/** The asked member's reply, which settles their `ask` finding. */
-		export type Take = KIND<"question:take"> & { id: string; finding: string; text: string };
+		export type Take = KIND<"question:take"> & {
+			id: string;
+			finding: string;
+			text: string;
+			stance?: "supports" | "objects";
+		};
 
 		export type Taken =
 			& KIND<"question:take">

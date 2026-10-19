@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import * as Explore from "./explore";
 import { normalizeRecord } from "./records";
+import { findings } from "./record-validation";
 import { member, opened, restart, seed } from "./text-response.test-fixtures";
 
 import type { ExploreDeps } from "./explore";
@@ -169,6 +170,53 @@ test("asking posts a notice, and only the asked member can reply", async () => {
 		status: "ready",
 		summary: "Objects.",
 	});
+});
+
+test("a take carries an optional stance, and only the two known ones", async () => {
+	let context = await opened();
+	let sam = member("sam");
+	await Explore.explore(context.plan, context.server, context.channel.id, member("ana").ws, {
+		kind: "question:explore",
+		ts: 0,
+		rid: "r",
+		id: context.id,
+		key: KEY,
+		action: "ask",
+		login: "sam",
+	}, deps().deps);
+	let reply = {
+		kind: "question:take",
+		ts: 0,
+		id: context.id,
+		finding: KEY,
+		text: "Support resets get hard.",
+	} as const;
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		...reply,
+		rid: "a",
+		stance: "maybe",
+	} as never);
+	expect(sam.frames.at(-1)).toMatchObject({ ok: false });
+	expect(context.plan.records.get(context.id)!.findings?.[0]).toMatchObject({ status: "running" });
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		...reply,
+		rid: "b",
+		stance: "objects",
+	});
+	expect(sam.frames.at(-1)).toMatchObject({ ok: true });
+	expect(context.plan.records.get(context.id)!.findings?.[0]).toMatchObject({
+		status: "ready",
+		stance: "objects",
+	});
+	let plan = await restart(context);
+	expect(plan.records.get(context.id)!.findings?.[0]).toMatchObject({ stance: "objects" });
+});
+
+test("a stance is valid only on an ask finding, and only as supports or objects", () => {
+	let base = { id: "f", status: "ready", ref: "sam", by: "ana", at: 1 };
+	expect(findings([{ ...base, kind: "ask", stance: "supports" }])).toHaveLength(1);
+	expect(() => findings([{ ...base, kind: "ask", stance: "neutral" }])).toThrow();
+	expect(() => findings([{ ...base, kind: "research", stance: "supports" }])).toThrow();
 });
 
 test("stopping a running finding stops its work and marks it stopped", async () => {

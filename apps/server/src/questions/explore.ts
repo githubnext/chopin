@@ -219,6 +219,10 @@ export async function take(
 	if (!text || text.length > MAX_FINDING_SUMMARY) {
 		return answer({ ok: false, message: "Write a reply first" });
 	}
+	if (msg.stance !== undefined && msg.stance !== "supports" && msg.stance !== "objects") {
+		return answer({ ok: false, message: "Choose Supports or Objects, or neither" });
+	}
+	let stance = msg.stance;
 	try {
 		let stored = await updateFinding(
 			plan,
@@ -228,7 +232,7 @@ export async function take(
 			msg.finding,
 			value =>
 				value.kind === "ask" && value.ref === ws.data.handle
-					? { ...value, status: "ready", summary: text }
+					? { ...value, status: "ready", summary: text, ...(stance ? { stance } : {}) }
 					: undefined,
 		);
 		answer(stored ? { ok: true } : { ok: false, message: "You were not asked about this" });
