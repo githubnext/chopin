@@ -195,6 +195,9 @@
 	--text-xs--line-height: 1.35;
 	--text-sm: clamp(0.837054rem, 0.823674rem + 0.059466vw, 0.877193rem);
 	--text-sm--line-height: 1.5;
+	/* Pixel-tuned document chrome, independent of the fluid prose scale. */
+	--text-document-control: 0.875rem;
+	--text-build-blocker: 0.8125rem;
 	--text-base: clamp(0.9375rem, 0.916667rem + 0.092593vw, 1rem);
 	--text-base--line-height: 1.5;
 	--text-lg: clamp(1.176rem, 1.1348rem + 0.183111vw, 1.2996rem);
@@ -245,6 +248,21 @@
 	--panel-header-height: calc(var(--control-height-compact) + var(--spacing) * 4);
 	--panel-header-padding-inline: calc(var(--spacing) * 3.5);
 	--panel-toolbar-padding-inline: calc(var(--spacing) * 2);
+	--document-control-padding-block: calc(var(--spacing) * 0.75);
+	--document-control-padding-inline: calc(var(--spacing) * 2);
+	--document-tab-gap: calc(var(--spacing) / 2);
+	--document-views-inset: calc(var(--spacing) * 1.75);
+	--document-title-inset: calc(var(--spacing) * 3);
+	--document-title-label-padding: var(--spacing);
+	--document-header-content-height: calc(var(--panel-header-height) - var(--edge-width));
+	--document-expand-inset: calc(
+		(var(--document-header-content-height) - var(--icon-button-size)) / 2
+	);
+	--document-presence-inset: calc(
+		(var(--document-header-content-height) - var(--control-height-compact)) / 2
+	);
+	--build-blocker-height: calc(var(--spacing) * 5.75);
+	--build-blocker-gap: calc(var(--spacing) * 0.75);
 	--panel-header-gap: calc(var(--spacing) / 2);
 	--panel-header-control-offset: calc(var(--icon-button-padding) - var(--panel-header-gap));
 	--scroll-edge-fade-size: calc(var(--spacing) * 14);

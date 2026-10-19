@@ -799,7 +799,8 @@ body {
  */
 .document-title-bar {
 	position: relative;
-	gap: calc(var(--spacing) * 2);
+	gap: 0;
+	padding-inline: 0;
 	container: document-title-bar / inline-size;
 }
 
@@ -808,14 +809,15 @@ body {
 	min-width: 0;
 	flex: 1;
 	align-items: center;
+	padding-inline-start: var(--panel-toolbar-padding-inline);
 }
 
 /* After the Chat toggle's rule, the project sits as far in as the toggle's glyph sits from the edge. */
 .workspace-surface-toggle-slot + .document-title-slot {
-	padding-inline-start: var(--control-padding-inline);
+	padding-inline-start: var(--document-title-inset);
 }
 
-/* Both bars read at one size: the views' btn-md text. */
+/* Title text stays on the common interface scale; the view controls have their tuned role. */
 .document-title-bar
 	:is(.document-project-prefix, .document-project-separator, .document-title-crumb, .title-control) {
 	font-size: var(--text-sm);
@@ -837,8 +839,7 @@ body {
 
 /*
  * Status keeps its live regions mounted, so the rule before the faces follows visible notices and
- * Build. The rule sits 8px from each side, so the faces get 8px on every side and Build stays
- * more than 12px from them.
+ * Build. The face inset derives from the bar's inner height, including its hairline divider.
  */
 .document-title-status {
 	display: flex;
@@ -851,13 +852,25 @@ body {
 }
 
 .document-title-status:has(> :not(.sr-only, [data-level="hidden"])) + .room-members {
-	align-self: stretch;
-	padding-inline-start: calc(var(--spacing) * 2);
 	border-inline-start: var(--edge-width) solid var(--color-divider);
+}
+
+.document-title-trailing > .room-members {
+	align-self: stretch;
+	padding-inline: var(--document-presence-inset);
 }
 
 .document-title-bar .title-control {
 	color: var(--color-text-primary);
+}
+
+.document-title-bar .title-control-label {
+	padding-inline: var(--document-title-label-padding);
+}
+
+.document-title-bar .build-plan {
+	height: auto;
+	padding: var(--document-control-padding-block) var(--document-control-padding-inline);
 }
 
 /* A covered Lift root's title dims with the rest of its bar. */
@@ -873,14 +886,45 @@ body {
 /* Bar 2 holds the views and sits directly on the paper, so it has no rule beneath it. */
 .document-views-bar {
 	gap: calc(var(--spacing) * 1.5);
+	block-size: calc(
+		var(--text-document-control) * var(--text-sm--line-height) +
+			var(--document-control-padding-block) * 2 +
+			var(--document-views-inset) * 2
+	);
+	padding: var(--document-views-inset);
 	transition:
 		block-size var(--child-close-dur) var(--child-ease),
 		opacity var(--child-close-dur) var(--child-ease);
 }
 
+.document-views-bar [data-document-view-control] {
+	gap: var(--document-tab-gap);
+}
+
+.document-views-bar [data-document-view-control] .btn {
+	height: auto;
+	min-height: 0;
+	padding: var(--document-control-padding-block) var(--document-control-padding-inline);
+	font-size: var(--text-document-control);
+	line-height: var(--text-sm--line-height);
+}
+
+.document-views-bar > .btn-icon {
+	width: calc(
+		var(--text-document-control) * var(--text-sm--line-height) +
+			var(--document-control-padding-block) * 2
+	);
+	height: calc(
+		var(--text-document-control) * var(--text-sm--line-height) +
+			var(--document-control-padding-block) * 2
+	);
+	padding: 0;
+}
+
 /* A Zoom child has no views of its own, so the root's fold away while it is open. */
 .document-views-bar[data-folded] {
 	block-size: 0;
+	padding-block: 0;
 	opacity: 0;
 	transition-duration: var(--child-open-dur);
 }
@@ -959,15 +1003,15 @@ body {
 /* The divider spans the bar's full height, so the slot stretches rather than centring. */
 .workspace-surface-toggle-slot {
 	align-self: stretch;
-	padding-inline-end: calc(var(--spacing) * 2);
+	padding-inline: var(--document-expand-inset);
 	border-inline-end: var(--edge-width) solid var(--color-divider);
 }
 
 /* Compact, to match the tabs' height and keep an equal inset inside the bar. */
 .workspace-surface-toggle-slot .chat-toggle {
-	width: var(--icon-button-size-compact);
-	height: var(--icon-button-size-compact);
-	padding: calc((var(--icon-button-size-compact) - var(--icon-size-default)) / 2);
+	width: var(--icon-button-size);
+	height: var(--icon-button-size);
+	padding: var(--icon-button-padding);
 }
 
 /* The restore state carries a label, so it trades the square icon size for padding. */

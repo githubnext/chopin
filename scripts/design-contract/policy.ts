@@ -10,7 +10,17 @@ export type TokenPolicy = {
 	typographyProperties?: Map<string, "font-size" | "font-family">;
 };
 
-let roles = new Set(["2xs", "xs", "sm", "base", "lg", "xl", "2xl"]);
+let roles = new Set([
+	"2xs",
+	"xs",
+	"sm",
+	"base",
+	"lg",
+	"xl",
+	"2xl",
+	"document-control",
+	"build-blocker",
+]);
 let neutral = new Set(["inherit", "initial", "unset", "revert", "revert-layer"]);
 let colorWords = new Set(["transparent", "currentcolor", "none"]);
 

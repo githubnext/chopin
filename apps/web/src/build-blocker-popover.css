@@ -22,7 +22,16 @@
 	color: var(--blocker-ink, var(--color-text-secondary));
 }
 .build-blocker-capsule.build-capsule {
+	height: var(--build-blocker-height);
+	gap: var(--build-blocker-gap);
+	padding-inline: var(--document-control-padding-inline);
 	background: var(--blocker-wash, var(--color-inset));
+	font-size: var(--text-build-blocker);
+}
+
+.build-blocker-capsule.build-capsule .build-blocker-glyphs svg {
+	width: calc(var(--spacing) * 3.5);
+	height: calc(var(--spacing) * 3.5);
 }
 .build-blocker-capsule.build-capsule:is(:hover, [data-hot]) {
 	background: color-mix(

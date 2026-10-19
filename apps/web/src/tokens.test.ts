@@ -225,7 +225,13 @@ describe("type", () => {
 		] as const;
 		let found = [...SHARED_THEME.matchAll(/\n\s*(--text-(?![\w-]*--line-height)[\w-]+):/g)]
 			.map(match => match[1]);
-		expect(found).toEqual(steps.map(([name]) => `--text-${name}`));
+		expect(found.toSorted()).toEqual([
+			...steps.map(([name]) => `--text-${name}`),
+			"--text-document-control",
+			"--text-build-blocker",
+		].toSorted());
+		expect(declared("--text-document-control")).toBe("0.875rem");
+		expect(declared("--text-build-blocker")).toBe("0.8125rem");
 		for (let [name, step] of steps) {
 			let value = declared(`--text-${name}`);
 			let match = /^clamp\(([\d.]+)rem, ([\d.]+)rem \+ ([\d.]+)vw, ([\d.]+)rem\)$/.exec(value);

@@ -140,7 +140,8 @@ export function scan(
 		let declarations = extracted.declarations.filter(({ property, context }) => {
 			if (!property.startsWith("--") || !/^CSS > @theme(?: static)?$/.test(context)) return true;
 			return property.startsWith("--text-")
-				&& !/^--text-(\*|(?:2xs|xs|sm|base|lg|xl|2xl)(?:--line-height)?)$/.test(property);
+				&& !/^--text-(\*|(?:2xs|xs|sm|base|lg|xl|2xl|document-control|build-blocker)(?:--line-height)?)$/
+					.test(property);
 		});
 		return inspect(file, { ...extracted, declarations }, policy);
 	});
