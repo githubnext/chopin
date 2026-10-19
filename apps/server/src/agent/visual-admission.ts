@@ -79,7 +79,7 @@ function passages(source: string, path: string): Passage[] {
 					path: at,
 					visual,
 					key,
-					fingerprint: hash(JSON.stringify([key, visual ? canonical(visual) : null])),
+					fingerprint: hash(JSON.stringify([prose, visual ? canonical(visual) : null])),
 				});
 			} else if (
 				node.type !== "table"

@@ -178,3 +178,59 @@ test("unchanged human prose does not block an unrelated write or consume classif
 	expect(await admit({ before, sources: [`${before}\n\n## New heading`] })).toEqual([]);
 	expect(requests).toEqual([]);
 });
+
+test.each(["Original title", "Original section"])(
+	"renaming %s preserves an unchanged oversized human paragraph",
+	async heading => {
+		let before = `# Original title\n\n## Original section\n\n${"A".repeat(2_001)}`;
+		let after = before.replace(heading, "Renamed heading");
+		expect(await createVisualAdmission(undefined)({ before, sources: [after] })).toEqual([]);
+	},
+);
+
+test("heading-only renames preserve an existing passage and visual without a classifier", async () => {
+	let before = `# Original title\n\n## Original section\n\n${passage}\n\n${diagram()}`;
+	let after = before.replace("Original title", "New title").replace(
+		"Original section",
+		"New section",
+	);
+	expect(await createVisualAdmission(undefined)({ before, sources: [after] })).toEqual([]);
+});
+
+test.each(["changed", "new"])(
+	"a heading rename still assesses %s prose with its new context",
+	async kind => {
+		let before = `# Original title\n\n## Transport\n\n${passage}`;
+		let after = `# Renamed title\n\n## Transport\n\n${
+			kind === "new" ? `${passage}\n\n${second}` : second
+		}`;
+		let requests: JevRequest[] = [];
+		let issues = await createVisualAdmission(classifier("sequence", requests))({
+			before,
+			sources: [after],
+		});
+		expect(issues).toHaveLength(1);
+		expect(issues[0]!.code).toBe("E_VISUAL_REQUIRED");
+		expect((requests[0]!.state as { passages: unknown[] }).passages).toEqual([{
+			index: 0,
+			source: `# Renamed title\n## Transport\n\n${second}`,
+		}]);
+	},
+);
+
+test.each(["removed", "changed"])(
+	"renaming a heading still reassesses a passage whose visual was %s",
+	async kind => {
+		let before = `# Original title\n\n${passage}\n\n${diagram()}`;
+		let after = `# Renamed title\n\n${passage}${
+			kind === "changed" ? `\n\n${diagram("flowchart")}` : ""
+		}`;
+		let requests: JevRequest[] = [];
+		let issues = await createVisualAdmission(classifier("sequence", requests))({
+			before,
+			sources: [after],
+		});
+		expect(issues[0]!.code).toBe("E_VISUAL_REQUIRED");
+		expect(requests).toHaveLength(3);
+	},
+);
