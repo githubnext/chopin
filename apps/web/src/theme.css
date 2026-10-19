@@ -810,6 +810,9 @@ body {
 	flex: 1;
 	align-items: center;
 	padding-inline-start: var(--panel-toolbar-padding-inline);
+	/* Whatever cannot truncate is cut, never painted under the actions; rings keep their room. */
+	overflow: clip;
+	overflow-clip-margin: 4px;
 }
 
 /* After the Chat toggle's rule, the project sits as far in as the toggle's glyph sits from the edge. */
@@ -967,6 +970,11 @@ body {
 /* The title truncates first; then status labels fold to their glyphs; then one face remains. */
 @container document-title-bar (max-width: 40rem) {
 	.document-title-status [data-status-label] {
+		display: none;
+	}
+
+	/* A question page's waiting pill keeps its face and gives the words back to the title. */
+	.child-actions-slot .explore-waiting-names {
 		display: none;
 	}
 }

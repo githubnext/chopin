@@ -53,6 +53,27 @@
 	line-height: var(--text-xs--line-height);
 }
 
+/* A status pill: 24px tall, a 14px glyph and the xs text role, with no visible edge. */
+.cv-badge[data-text-size="xs"]:not([data-size="sm"]) {
+	border-color: transparent;
+	padding-block: 0;
+	font-weight: var(--font-weight-medium);
+}
+
+.cv-badge[data-text-size="xs"]:not([data-size="sm"]) .cv-icon-label {
+	gap: calc(var(--spacing) * 1.5);
+}
+
+.cv-badge[data-text-size="xs"]:not([data-size="sm"]) .cv-icon-label-icon-frame {
+	width: auto;
+	height: auto;
+}
+
+.cv-badge[data-text-size="xs"]:not([data-size="sm"]) .cv-icon-label-icon {
+	width: calc(var(--spacing) * 3.5);
+	height: calc(var(--spacing) * 3.5);
+}
+
 .cv-badge[data-text-size="2xs"] {
 	font-size: var(--text-2xs);
 	line-height: var(--text-2xs--line-height);

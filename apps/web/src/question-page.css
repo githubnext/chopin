@@ -17,9 +17,30 @@
 	line-height: var(--text-xl--line-height);
 }
 
+/* The page starts 16px higher than the document's own top inset; the design's pill sits 84px from the pane top. */
+.question-page {
+	margin-block-start: -1rem;
+}
+
+/* The status row is one 24px line, so the question sits at the same height in every state. */
+.question-page-status-row {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+}
+
+.question-page-note {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing);
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
 /* Pill, then the question, sit at the same heights whether the decision is open or settled. */
 .question-page .question-page-title {
-	margin-block-start: 1.75rem;
+	margin-block-start: 0.875rem;
 	font-size: var(--text-2xl);
 	line-height: var(--text-2xl--line-height);
 }
@@ -74,12 +95,6 @@
 	font-family: var(--font-document-heading);
 	font-size: var(--text-lg);
 	line-height: var(--text-lg--line-height);
-}
-
-.question-page-answer-meta {
-	margin: 0;
-	font-size: var(--text-xs);
-	color: var(--color-text-tertiary);
 }
 
 /* What was considered reads as a plain list on the paper, with the chosen option tinted. */

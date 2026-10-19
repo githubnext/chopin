@@ -18,7 +18,6 @@ import {
 	useQuestionPageDraft,
 	waitingNames,
 	waitingOn,
-	WaitingStatus,
 } from "@chopin/editor";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CheckIcon, ClockIcon, CloseIcon, LoaderIcon, RestartIcon } from "@chopin/icons";
@@ -33,7 +32,7 @@ import type { ReactNode } from "react";
 
 import { motionImmediately } from "./motion-input";
 import { NavigationDialog } from "./navigation-dialog";
-import { settledLine } from "./question-page-format";
+import { settledBy } from "./question-page-format";
 
 import "./question-page.css";
 
@@ -71,7 +70,7 @@ export function pageStatus(meta: Question.CardMeta): Status {
 	}
 	let waiting = waitingOn(meta.findings);
 	if (waiting.length > 0) {
-		return { label: `Waiting for ${waitingNames(waiting.map(personName))}`, tone: "waiting" };
+		return { label: "Waiting for", tone: "waiting" };
 	}
 	return { label: "Open", tone: "open" };
 }
@@ -185,7 +184,6 @@ function OpenActions(
 		&& entry.value.questions.length === 1;
 	return (
 		<>
-			<WaitingStatus logins={waitingOn(meta.findings)} />
 			{explorable && (
 				<ExploreMenu
 					findings={meta.findings}
@@ -260,13 +258,11 @@ export function QuestionPageActions(
 	);
 }
 
-/** A settled decision on its page: the answer once, and who settled it. */
-function Settled({ entry, meta }: { entry: QuestionnaireEntry; meta: Question.CardMeta }) {
-	let line = settledLine(meta, personName);
+/** A settled decision on its page: the answer, once. */
+function Settled({ entry }: { entry: QuestionnaireEntry }) {
 	return (
 		<div className="question-page-answer">
 			<p className="question-page-answer-text">{answer(entry) ?? "Decided"}</p>
-			{line && <p className="question-page-answer-meta">{line}</p>}
 		</div>
 	);
 }
@@ -318,21 +314,39 @@ export function QuestionPagePanel(
 	let settled = meta.status === "decided";
 	let status = pageStatus(meta);
 	let badge = STATUS_BADGE[status.tone];
+	let settler = settled ? settledBy(meta, personName) : undefined;
+	let waiting = settled ? [] : waitingOn(meta.findings);
 	let findings = (meta.findings ?? []).filter(finding => finding.kind !== "ask");
 	let takes = (meta.findings ?? []).filter(finding => finding.kind === "ask");
 	return (
 		<div className="question-page" data-question-page={entry.id}>
 			{actions && <div className="question-page-inline-actions">{actions}</div>}
-			<Badge
-				className="question-page-status"
-				icon={badge.icon}
-				label={status.label}
-				textSize="xs"
-				tone={badge.tone}
-			/>
+			<div className="question-page-status-row">
+				<Badge
+					className="question-page-status"
+					icon={badge.icon}
+					label={status.label}
+					textSize="xs"
+					tone={badge.tone}
+				/>
+				{settler && (
+					<span className="question-page-note">
+						<Face decorative handle={settler.handle} size={16} />
+						{settler.text}
+					</span>
+				)}
+				{waiting.length > 0 && status.tone === "waiting" && (
+					<span className="question-page-note">
+						{waiting.slice(0, 3).map(login => (
+							<Face decorative handle={login} key={login} size={16} />
+						))}
+						{waitingNames(waiting.map(personName))}
+					</span>
+				)}
+			</div>
 			<h1 className="question-page-title">{question?.prompt ?? "Decision"}</h1>
 			{settled
-				? <Settled entry={entry} meta={meta} />
+				? <Settled entry={entry} />
 				: (
 					<div className="question-page-control">
 						<QuestionnaireCard
@@ -459,7 +473,8 @@ function Take(
 							className="question-page-stance"
 							icon={take.stance === "supports" ? CheckIcon : CloseIcon}
 							label={take.stance === "supports" ? "Supports" : "Objects"}
-							textSize="xs"
+							size="sm"
+							textSize="2xs"
 							tone={take.stance === "supports" ? "success" : "danger"}
 						/>
 					)}

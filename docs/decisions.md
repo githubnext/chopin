@@ -84,14 +84,14 @@ channel id is deterministic (`question:<recordId>` within the repository), so a 
 member finds the same page; the record learns `childId` only after the channel exists. The child's
 body is the decision's Notes. The page's actions sit in the child's title bar, after Back, the
 parent's crumb and the question: a **⋯** menu (Copy link, and **Discard decision…**, which asks
-for confirmation), then at the end who the decision is waiting for, **Research**, and **Save**.
+for confirmation), then at the end **Research** and **Save**.
 Save submits the same shared draft as the control in the body and stays disabled until the
 decision is answerable. When settled, an outline **Reopen** replaces them. Phones and compact
 layouts, which have no such bar, show the same actions above the status pill.
 
 Above the Notes, the page shows what the root's record says, on the paper with no card around it,
-in this order: a status pill (Open, Exploring, Waiting for a member, or Settled), the question,
-the answer block when settled (the answer, then "Settled by Ada, 19 Oct" with the display name),
+in this order: a status row (a pill reading Open, Exploring, Waiting for or Settled; waiting is followed by the asked people's faces and names, settled by the settler's face and "by Ada, 19 Oct"; the card footer keeps its own waiting pill), the question,
+the answer when settled,
 and the control, which is the options or written-answer field at page width with no box and no
 footer. A settled choice question lists what was considered under **What we considered**, with
 the chosen option tinted; a written answer has no such list. **Findings** (hidden when empty)

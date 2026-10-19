@@ -48,9 +48,10 @@ test(
 		await card(ana).getByRole("button", { name: "Expand decision" }).click();
 		await expect(questionPage(ana).getByRole("heading", { level: 1, name: QUESTION }))
 			.toBeVisible();
-		await expect(questionPage(ana)).toContainText("Waiting for ben");
+		await expect(questionPage(ana).locator(".cv-badge")).toHaveText("Waiting for");
+		await expect(questionPage(ana).locator(".question-page-note")).toHaveText("ben");
 		let bar = ana.locator("[data-question-page-actions]");
-		await expect(bar.getByText("Waiting for ben")).toBeVisible();
+		await expect(bar.getByText(/^Waiting for/)).toHaveCount(0);
 		await expect(bar.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 		await expect(questionPage(ana).getByRole("heading", { name: "Takes" })).toBeVisible();
 		await expect(questionPage(ana).getByRole("heading", { name: "Notes" })).toBeVisible();
@@ -71,8 +72,8 @@ test(
 		);
 		await bar.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(questionPage(ana)).toContainText("Settled");
-		await expect(questionPage(ana)).toContainText("Settled by ana");
-		await expect(questionPage(ben)).toContainText("Settled by ana");
+		await expect(questionPage(ana)).toContainText("by ana");
+		await expect(questionPage(ben)).toContainText("by ana");
 		await ana.screenshot({ path: info.outputPath("settled-page.png") });
 
 		await ana.getByRole("button", { name: "Reopen", exact: true }).click();

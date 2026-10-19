@@ -21,15 +21,16 @@ export function dayMonth(at: number): string {
 	return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
 
-/** "Settled by Ada, 19 Oct", naming the person by display name rather than @handle. */
-export function settledLine(
+/** Who settled a decision and when: the display name without an @, and "19 Oct" when known. */
+export function settledBy(
 	meta: Pick<Question.CardMeta, "owner" | "resolver" | "decidedAt">,
 	name: (handle: string) => string,
-): string | undefined {
-	let who = meta.resolver ?? meta.owner;
-	if (!who) return undefined;
-	let by = name(who).replace(/^@/, "");
-	return meta.decidedAt === undefined
-		? `Settled by ${by}`
-		: `Settled by ${by}, ${dayMonth(meta.decidedAt)}`;
+): { handle: string; text: string } | undefined {
+	let handle = meta.resolver ?? meta.owner;
+	if (!handle) return undefined;
+	let by = `by ${name(handle).replace(/^@/, "")}`;
+	return {
+		handle,
+		text: meta.decidedAt === undefined ? by : `${by}, ${dayMonth(meta.decidedAt)}`,
+	};
 }
