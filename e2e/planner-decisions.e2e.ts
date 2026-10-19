@@ -37,7 +37,12 @@ test("captured decisions outlive the turn and each saved answer updates their sh
 	let document = content(opened);
 	await expect(document.getByRole("group", { name: "2 decisions", exact: true })).toHaveCount(1);
 	let writtenCard = document.locator("article[data-plan-sidecar-questionnaire]")
-		.filter({ has: opened.getByRole("heading", { name: CONSTRAINT, exact: true }) });
+		.filter({
+			has: opened.getByRole("heading", {
+				name: `${CONSTRAINT} — show in document`,
+				exact: true,
+			}),
+		});
 	await expect(writtenCard.getByRole("textbox", { name: "Answer", exact: true })).toHaveValue("");
 	await written(
 		opened,
@@ -58,7 +63,12 @@ test("captured decisions outlive the turn and each saved answer updates their sh
 		.toBeVisible();
 
 	let choiceCard = document.locator("article[data-plan-sidecar-questionnaire]")
-		.filter({ has: opened.getByRole("heading", { name: ROLLOUT, exact: true }) });
+		.filter({
+			has: opened.getByRole("heading", {
+				name: `${ROLLOUT} — show in document`,
+				exact: true,
+			}),
+		});
 	await expect(choiceCard).toBeVisible();
 	await choiceCard.getByText("Small pilot", { exact: true }).click();
 	await expect(choiceCard.getByRole("radio", { name: /^Small pilot/ })).toBeChecked();
