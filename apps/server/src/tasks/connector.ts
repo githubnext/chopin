@@ -6,16 +6,25 @@ import { fail } from "../experiments/service";
 import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
+import type { BuildRequest } from "@chopin/protocol/implementation";
 import { claimImplementation, reportImplementationLifecycle } from "./plan-graphs";
 import {
 	pickBuild,
 	readRebuild,
+	rebindBuild,
 	rebuildReportSchema,
 	renewQueued,
 	reportBuild,
 	reportRebuild,
 } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
+
+/** Why a build claimed before the server restarted ended: the server forgot it. */
+export const RESTARTED = "Chopin restarted, so this build ended.";
+/** A connection ended and its machine has no other: the connector disconnected or was stopped. */
+export const DISCONNECTED = "Your local agent disconnected.";
+/** The build's heartbeat stopped while its machine may still be connected. */
+export const UNRESPONSIVE = "Your local agent stopped responding.";
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
 
@@ -198,6 +207,17 @@ export function implementationConnector(
 				}
 			}
 		},
+		/**
+		 * The document a connector call is about: its run credential's, the run this process handed
+		 * out under that build id, or the build its connection was given.
+		 */
+		document(connection: Connection, grant: Grant, name: string, args: Record<string, unknown>) {
+			let runId = typeof args.id === "string" && name !== "claim_implementation_build"
+				? args.id
+				: undefined;
+			return grant.run?.documentId ?? (runId && connections.runDocument(runId))
+				?? connections.assigned(connection.id);
+		},
 		/** One connector call, unserialized. */
 		async invoke(
 			connection: Connection,
@@ -205,10 +225,34 @@ export function implementationConnector(
 			name: string,
 			args: Record<string, unknown>,
 		) {
-			let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
-			if (!documentId) fail("build-forbidden");
+			let runId = grant.run?.id ?? (typeof args.id === "string" ? args.id : undefined);
+			let caller = `connection ${connection.id} of machine ${connection.machineId}`;
+			let documentId = api.document(connection, grant, name, args);
+			if (!documentId) {
+				// A build this process never handed out was claimed before Chopin restarted, which
+				// forgot every connection and run with it.
+				if (runId && !grant.run && name !== "claim_implementation_build") {
+					console.warn(
+						`chopin: refused ${name} for build ${runId} from ${caller} - server-restarted`,
+					);
+					fail("server-restarted", RESTARTED);
+				}
+				console.warn(`chopin: refused ${name} from ${caller} - build-forbidden, no build`);
+				fail("build-forbidden");
+			}
 			tracked.add(documentId);
 			return withPlan(documentId, async plan => {
+				function refuse(code: string, build?: BuildRequest): never {
+					console.warn(
+						`chopin: refused ${name} for build ${runId ?? "none"} of document ${plan.id} from `
+							+ `${caller} - ${code}`
+							+ (build
+								? `; build ${build.id} is ${build.state} on connection ${build.connectionId} `
+									+ `of machine ${build.machineId ?? "unknown"}`
+								: ""),
+					);
+					fail(code);
+				}
 				// Only a landed report stops a rebuild, so a retried report after that is the same
 				// success, even once a newer rebuild has queued behind it.
 				if (grant.run?.kind === "rebuild" && name === "report_rebuild") {
@@ -234,18 +278,38 @@ export function implementationConnector(
 					}
 				}
 				let build = plan.builds.at(-1);
+				// The connector registered its machine again, as after a dropped request, so the build's
+				// heartbeat and reports now come on a newer connection of the same machine and owner.
+				if (
+					build && !grant.run && build.connectionId !== connection.id && build.id === args.id
+					&& build.machineId === connection.machineId && build.user === connection.owner
+					&& serves(connection, build.repositoryId)
+					&& ["renew_implementation_build", "report_implementation_build"].includes(name)
+					&& ["starting", "running"].includes(build.state) && build.expiresAt > Date.now()
+				) {
+					let from = build.connectionId;
+					if (await rebindBuild(plan, build.id, from, connection.id)) {
+						connections.rebind(from, connection, plan.id, build.id);
+						console.info(
+							`chopin: build ${build.id} of document ${plan.id} moved from connection ${from} `
+								+ `to ${connection.id} of machine ${connection.machineId}, which registered `
+								+ `again; ${name} continues it`,
+						);
+						build = plan.builds.at(-1)!;
+					}
+				}
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
 					|| !serves(connection, build.repositoryId)
 					|| build.id !== (grant.run?.id ?? args.id)
-				) fail("build-forbidden");
+				) refuse("build-forbidden", build);
 				if (grant.run) {
 					let rebuild = build.kind === "rebuild";
 					if (
 						grant.run.kind !== (rebuild ? "rebuild" : "implementation")
 						|| grant.run.generation !== 1
 						|| build.state !== "running" || build.expiresAt <= Date.now()
-					) fail("build-inactive");
+					) refuse("build-inactive", build);
 					if (rebuild) {
 						if (name === "read_rebuild") {
 							return await readRebuild(plan, build.id) ?? fail("build-inactive");
@@ -316,7 +380,7 @@ export function implementationConnector(
 					return { accepted: true };
 				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
-					fail("build-inactive");
+					refuse("build-inactive", build);
 				}
 				if (name === "renew_implementation_build") {
 					await reportBuild(plan, connection.owner, connection.id, build.id, {
@@ -384,7 +448,7 @@ export function implementationConnector(
 					) return;
 					await reportBuild(plan, build.user, connectionId, build.id, {
 						state: "failed",
-						error: "Your local agent disconnected.",
+						error: DISCONNECTED,
 					});
 					connections.release(connectionId, id);
 					tracked.delete(id);
@@ -416,9 +480,22 @@ export function implementationConnector(
 						return;
 					}
 					if (!connected || build.expiresAt <= Date.now()) {
+						// Say what happened: Chopin restarted since the build's connection opened, the
+						// machine is gone, or its agent went quiet while the machine stayed connected.
+						let error = connected
+							? UNRESPONSIVE
+							: !connections.known(build.connectionId)
+							? RESTARTED
+							: build.machineId && connections.machine(build.machineId).length
+							? UNRESPONSIVE
+							: DISCONNECTED;
+						console.warn(
+							`chopin: build ${build.id} of document ${id} on connection ${build.connectionId} `
+								+ `of machine ${build.machineId ?? "unknown"} ended - ${error}`,
+						);
 						await reportBuild(plan, build.user, build.connectionId, build.id, {
 							state: "failed",
-							error: "Workspace disconnected or agent stopped responding. No automatic replay.",
+							error,
 						});
 						connections.release(build.connectionId, id);
 						tracked.delete(id);

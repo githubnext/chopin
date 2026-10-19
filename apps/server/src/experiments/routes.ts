@@ -1705,7 +1705,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				value ??= { waiting: true };
 			} else if (implementationRun || Object.hasOwn(implementationSchemas(false), name)) {
 				if (!implementation) fail("tool-forbidden");
-				let documentId = grant.run?.documentId ?? connections.assigned(connection.id);
+				let documentId = implementation.document(connection, grant, name, args);
 				let channel = documentId ? await target(caller, connection, documentId) : undefined;
 				if (name === "claim_implementation_build") {
 					value = await connections.locked(connection.id, async () => {

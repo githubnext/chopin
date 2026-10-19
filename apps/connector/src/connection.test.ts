@@ -448,6 +448,47 @@ test("a run's reports reach a restarted server through a fresh connection", asyn
 	expect(second!.calls).toEqual(["renew_experiment", "disconnect_workspace"]);
 });
 
+test("a connection dropped during a run is said in the terminal, and so is registering again", async () => {
+	let flaky = true;
+	let fake = chopin({
+		wait_for_work: () => ({ id: "work-1", kind: "experiment" }),
+		claim_experiment: () => ({}),
+		renew_experiment() {
+			if (!flaky) return { accepted: true };
+			flaky = false;
+			throw new Error("unavailable: Chopin is busy");
+		},
+	});
+	let abort = new AbortController();
+	let connects = 0;
+	let { output, text } = terminal();
+	let renewed: string[] = [];
+	await serveWork({
+		connect: () => remote(fake.url, `token-${++connects}`),
+		signal: abort.signal,
+		output,
+		async run(api) {
+			for (let attempt = 0; attempt < 2; attempt++) {
+				renewed.push(
+					await api.call("renew_experiment", { id: "work-1" }).then(
+						() => "ok",
+						() => "failed",
+					),
+				);
+			}
+			abort.abort();
+		},
+	});
+	expect(renewed).toEqual(["failed", "ok"]);
+	expect(connects).toBe(2);
+	let lines = text().split("\n");
+	expect(lines).toContain(
+		"  … Lost the connection to Chopin during a run (unavailable). Registering this machine "
+			+ "again; the agent keeps working.",
+	);
+	expect(lines).toContain("  ✓ Registered this machine with Chopin again; the run goes on.");
+});
+
 test("a run's call that waits for a new connection gives up when its signal aborts", async () => {
 	let first = chopin({
 		wait_for_work: () => ({ id: "work-1", kind: "experiment" }),

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
@@ -168,31 +168,39 @@ async function setup(
 		}),
 		pairings: {},
 	};
-	let router = new Router();
-	let implementations: ReturnType<typeof registerImplementationRoutes>;
-	let experiments = registerExperimentRoutes(router, auth, {
-		lease: () => context.lease,
-		changed: () => {},
-		context: async () => ({ source: "# Launcher plan", revision: 0 }),
-		implementations: () => implementations,
-	});
-	implementations = registerImplementationRoutes(router, auth, {
-		assess: options.assess,
-		liveBuild: options.liveBuild ?? false,
-		connections: experiments.connections,
-		refuseOffline: experiments.refuseOffline,
-		machineChoices: experiments.machineChoices,
-		busy: async connectionId =>
-			(await experiments.service.store.active()).some(item =>
-				item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
-			),
-		withPlan: async (id, action) => {
-			let plan = plans.get(id);
-			if (!plan) throw new Error("document is unavailable");
-			return action(plan);
-		},
-	});
 	let plans = new Map([[context.plan.id, context.plan]]);
+	let router!: Router;
+	let implementations!: ReturnType<typeof registerImplementationRoutes>;
+	let experiments!: ReturnType<typeof registerExperimentRoutes>;
+	// Connections, run tokens and build assignments live in the process: a restart starts anew
+	// over the same storage and documents.
+	let start = () => {
+		router = new Router();
+		let current = registerExperimentRoutes(router, auth, {
+			lease: () => context.lease,
+			changed: () => {},
+			context: async () => ({ source: "# Launcher plan", revision: 0 }),
+			implementations: () => implementations,
+		});
+		experiments = current;
+		implementations = registerImplementationRoutes(router, auth, {
+			assess: options.assess,
+			liveBuild: options.liveBuild ?? false,
+			connections: current.connections,
+			refuseOffline: current.refuseOffline,
+			machineChoices: current.machineChoices,
+			busy: async connectionId =>
+				(await current.service.store.active()).some(item =>
+					item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
+				),
+			withPlan: async (id, action) => {
+				let plan = plans.get(id);
+				if (!plan) throw new Error("document is unavailable");
+				return action(plan);
+			},
+		});
+	};
+	start();
 	await prepare(context.plan);
 	let path = `/api/channels/${context.plan.id}/implementation`;
 	let call = async (
@@ -221,14 +229,22 @@ async function setup(
 	return {
 		...context,
 		auth,
-		router,
+		get router() {
+			return router;
+		},
 		path,
 		call,
 		cookie: issued.cookie,
 		otherCookie: other.cookie,
-		implementations,
-		experiments,
+		get implementations() {
+			return implementations;
+		},
+		get experiments() {
+			return experiments;
+		},
 		plans,
+		/** The server restarts: everything it kept in memory is gone. */
+		restart: start,
 	};
 }
 
@@ -250,10 +266,19 @@ async function paired(
 		secret: pairing.secret,
 	})).json();
 	// `chopin connect` registers the checkout with the machine token.
+	let connection = await reconnect(context, machine.token, cookie);
+	return { ...connection, machineToken: machine.token as string };
+}
+/** The paired machine registers again with its machine token, as the connector does after a drop. */
+async function reconnect(
+	context: Awaited<ReturnType<typeof setup>>,
+	machine: string,
+	cookie?: string,
+) {
 	return (await context.call(
 		"/api/connector/connections",
 		{ ...checkout, label: "Laptop" },
-		machine.token,
+		machine,
 		undefined,
 		cookie,
 	)).json();
@@ -654,6 +679,143 @@ test("disconnecting fails a running build at once and announces it after persist
 	expect(stored.length).toBeGreaterThan(0);
 	expect(((await stored[0]) as { sidecar: { builds: unknown[] } }).sidecar.builds.at(-1))
 		.toMatchObject({ id: built.id, state: "failed" });
+	await Plan.close(context.plan);
+});
+
+test("a build carries on when its machine registers again mid-run, as after a dropped long poll", async () => {
+	let clock = Date.now();
+	setSystemTime(new Date(clock));
+	let context = await setup();
+	try {
+		let first = await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		let claim = await tool(context, first.token, "claim_implementation_build", { id: built.id });
+		await tool(context, first.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "acp-session",
+		});
+		let heartbeat = first.token;
+		// The connector renews every 10 seconds; the server sweeps as it does in production.
+		let run = async (minutes: number) => {
+			for (let beat = 0; beat < minutes * 6; beat++) {
+				// The process renews its writer lease as time passes, as in production.
+				await context.storage.leases.renew(context.lease, 60_000);
+				clock += 10_000;
+				setSystemTime(new Date(clock));
+				expect(
+					await tool(context, heartbeat, "renew_implementation_build", {
+						id: built.id,
+						progress: "Working",
+					}),
+				).toEqual({ accepted: true });
+				await context.implementations.sweep();
+			}
+		};
+		await run(55);
+		await tool(context, claim.runToken, "start_task", { taskId: "first", idempotencyKey: "s" });
+		// The Planner poll's long poll is cut; the connector drops that connection and registers the
+		// machine again, so the run's next heartbeat arrives on a new connection.
+		let second = await reconnect(context, first.machineToken);
+		expect(second.connection.id).not.toBe(first.connection.id);
+		heartbeat = second.token;
+		// Past the old connection's expiry, and on to more than an hour in all.
+		await run(10);
+		expect(context.plan.builds.at(-1)).toMatchObject({
+			state: "running",
+			connectionId: second.connection.id,
+		});
+		// The agent's own run credential still reports.
+		expect(
+			await tool(context, claim.runToken, "report_pr", {
+				taskId: "first",
+				idempotencyKey: "pr",
+				url: "https://github.com/owner/repository/pull/7",
+				state: "open",
+			}),
+		).toEqual({ state: "accepted" });
+		// Another machine of the same owner, and another owner's machine, still cannot report into it.
+		for (let other of [await paired(context), await paired(context, context.otherCookie)]) {
+			let refused = await tool(context, other.token, "renew_implementation_build", {
+				id: built.id,
+			});
+			expect(refused.content[0].text).toMatch(/^build-forbidden:/);
+		}
+		expect(
+			await tool(context, claim.runToken, "complete_task", {
+				taskId: "first",
+				idempotencyKey: "done",
+				summary: "Done",
+			}),
+		).toEqual({ state: "accepted" });
+		await tool(context, heartbeat, "report_implementation_build", {
+			id: built.id,
+			state: "stopped",
+		});
+		expect(context.plan.builds.at(-1)).toMatchObject({ state: "stopped" });
+		expect(context.plan.builds.at(-1)!.error).toBeUndefined();
+	} finally {
+		setSystemTime();
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build Chopin forgot by restarting ends saying so, never that the agent disconnected", async () => {
+	let context = await setup();
+	let first = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	await tool(context, first.token, "claim_implementation_build", { id: built.id });
+	await tool(context, first.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "acp-session",
+	});
+	context.restart();
+	// Its connection is forgotten, so the connector registers the machine again.
+	let forgotten = await context.call("/connector/mcp", {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/call",
+		params: { name: "renew_implementation_build", arguments: { id: built.id } },
+	}, first.token);
+	expect(await forgotten.text()).toContain("connection-unavailable");
+	// The connector registers again and its heartbeat goes on, which Chopin can no longer place.
+	let second = await reconnect(context, first.machineToken);
+	let ended = "Chopin restarted, so this build ended.";
+	expect(
+		(await tool(context, second.token, "renew_implementation_build", { id: built.id }))
+			.content[0].text,
+	).toBe(`server-restarted: ${ended}`);
+	// Opening the document tracks its build again, and the sweep ends it with the same reason.
+	await context.call(context.path);
+	await context.implementations.sweep();
+	expect(context.plan.builds.at(-1)).toMatchObject({ state: "failed", error: ended });
+	await Plan.close(context.plan);
+});
+
+test("a build whose heartbeat stops while its machine stays connected says the agent stopped responding", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	context.plan.builds.at(-1)!.expiresAt = Date.now() - 1;
+	await context.implementations.sweep();
+	expect(context.plan.builds.at(-1)).toMatchObject({
+		state: "failed",
+		error: "Your local agent stopped responding.",
+	});
 	await Plan.close(context.plan);
 });
 

@@ -200,9 +200,20 @@ connector renews it continuously. Connections live in the server's memory, but
 the machine does not: after a server restart or a deploy, a running connector
 registers again with the machine token and carries on
 without pairing, and a stopped one does the same when you start `connect` again.
-A run that was going at the restart cannot go on: Chopin refuses it on the new
-connection, so the connector stops its agent with **Chopin ended this run
-(connection-forbidden).** and waits for the next work. When Chopin has answered
+The connector also registers again, mid-run, when one of its requests fails
+on the way (a long poll cut by a proxy, a timeout, a 5xx answer); the terminal says
+**Lost the connection to Chopin during a run** and **Registered this machine with
+Chopin again**. A build carries on through that: its next heartbeat comes on the
+new connection of the same paired machine and owner, and Chopin moves the build,
+and the agent's run credential, to it. A connection of any other machine, or of
+another person, is still refused (`build-forbidden`). A build that was going at a
+restart cannot go on, as Chopin forgot it with every connection: the connector
+stops its agent with **Chopin restarted, so it ended this run.** (an older
+connector says **Chopin ended this run (server-restarted).**) and waits for the
+next work, and Build says **Build stopped — Chopin restarted.** Build says **your
+local agent disconnected** only when the machine has no connection left, and
+**your local agent stopped responding** when its heartbeat stopped while the
+machine stayed connected. When Chopin has answered
 only that it does not know the connection (`connection-unavailable`, or HTTP 401)
 for two minutes, the connector stops any running agent, reports why, and exits
 with **Chopin no longer recognizes this

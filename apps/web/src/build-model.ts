@@ -136,16 +136,27 @@ function quote(raw: string): string {
 }
 
 /**
- * Why an ended build stopped, when its local agent said so: Ctrl-C in the connector terminal, or
- * the connector disconnecting or going quiet. Other failures keep the phase's own words.
+ * Why an ended build stopped, when Chopin knows: Ctrl-C in the connector terminal, the connector
+ * disconnecting, its agent going quiet while the machine stayed connected, or Chopin restarting.
+ * Other failures keep the phase's own words.
  */
 export function endedReason(build: { error?: string } | undefined): string | undefined {
 	let error = build?.error;
 	if (error === "Stopped from the connector terminal.") {
 		return "Build stopped from the connector terminal.";
 	}
-	if (error === "Your local agent disconnected." || error?.startsWith("Workspace disconnected")) {
+	if (error === "Your local agent disconnected.") {
 		return "Build stopped — your local agent disconnected.";
+	}
+	if (error === "Your local agent stopped responding.") {
+		return "Build stopped — your local agent stopped responding.";
+	}
+	if (error === "Chopin restarted, so this build ended.") {
+		return "Build stopped — Chopin restarted.";
+	}
+	// Builds that ended before Chopin told these apart.
+	if (error?.startsWith("Workspace disconnected")) {
+		return "Build stopped — your local agent disconnected or stopped responding.";
 	}
 }
 

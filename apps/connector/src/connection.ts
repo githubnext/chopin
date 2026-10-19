@@ -159,6 +159,16 @@ export async function serveWork(options: {
 	let connected = false;
 	let current: Api | undefined;
 	let connecting: Promise<Api> | undefined;
+	/** Runs in progress; a connection that drops under one is said, since Chopin may see a new one. */
+	let running = 0;
+	let run: typeof options.run = async (api, kind, claim) => {
+		running++;
+		try {
+			return await options.run(api, kind, claim);
+		} finally {
+			running--;
+		}
+	};
 	let drop = (api: Api) => {
 		if (current === api) current = undefined;
 		void api.close().catch(() => {});
@@ -190,14 +200,19 @@ export async function serveWork(options: {
 	let link: Link = {
 		async call(name, args, callSignal) {
 			let api = current ?? await abandoned(
-				connecting ??= open().then(value => current = value)
-					.finally(() => connecting = undefined),
+				connecting ??= open().then(value => {
+					if (running) output.runReconnected();
+					return current = value;
+				}).finally(() => connecting = undefined),
 				callSignal,
 			);
 			try {
 				return await api.call(name, args, callSignal);
 			} catch (error) {
-				if (!signal.aborted && transient(classify(error))) drop(api);
+				if (!signal.aborted && transient(classify(error))) {
+					if (running && current === api) output.runConnectionLost(failureCause(error));
+					drop(api);
+				}
 				throw error;
 			}
 		},
@@ -211,7 +226,7 @@ export async function serveWork(options: {
 			forgottenSince = undefined;
 			connected = true;
 			connectedAt = now();
-			await serveBoth(link, { ...options, classify });
+			await serveBoth(link, { ...options, run, classify });
 			// Leaving promptly matters more than being heard: a silent connection also expires.
 			let last = current;
 			if (last) {

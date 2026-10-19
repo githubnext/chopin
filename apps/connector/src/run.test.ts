@@ -658,6 +658,19 @@ test("a run Chopin has ended stops its agent at once", async () => {
 	}]);
 });
 
+test("a build Chopin forgot by restarting stops saying so", async () => {
+	let { calls } = await run({}, ["--hang"], name => {
+		if (name === "renew_implementation_build") {
+			throw new ConnectorError(
+				"server-restarted",
+				"server-restarted: Chopin restarted, so this build ended.",
+			);
+		}
+		return {};
+	});
+	expect(calls.at(-1)?.[1].error).toBe("Chopin restarted, so it ended this run.");
+});
+
 test(
 	"a build carries agent activity on its heartbeat and stops when Chopin cancels it",
 	async () => {

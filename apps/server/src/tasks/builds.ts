@@ -489,6 +489,32 @@ export function pickBuild(
 	});
 }
 
+/**
+ * Hand a running build to a newer connection of the machine it runs on, as when the connector
+ * registers again after a dropped request; the run itself carries on.
+ */
+export function rebindBuild(
+	plan: Plan,
+	id: string,
+	from: string,
+	to: string,
+): Promise<boolean> {
+	return exclusive(plan, async () => {
+		let build = plan.builds.at(-1);
+		if (!build || build.id !== id || build.connectionId !== from) return false;
+		let previous = plan.builds;
+		plan.builds = [...previous.slice(0, -1), { ...build, connectionId: to }];
+		try {
+			await persistExclusive(plan, true);
+		} catch (error) {
+			plan.builds = previous;
+			throw error;
+		}
+		announceImplementation(plan);
+		return true;
+	});
+}
+
 export function reportBuild(
 	plan: Plan,
 	user: string,

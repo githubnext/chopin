@@ -890,9 +890,17 @@ describe("endedReason", () => {
 			.toBe("Build stopped from the connector terminal.");
 		expect(endedReason({ error: "Your local agent disconnected." }))
 			.toBe("Build stopped — your local agent disconnected.");
+	});
+
+	it("says a disconnect only when the agent disconnected", () => {
+		expect(endedReason({ error: "Your local agent stopped responding." }))
+			.toBe("Build stopped — your local agent stopped responding.");
+		expect(endedReason({ error: "Chopin restarted, so this build ended." }))
+			.toBe("Build stopped — Chopin restarted.");
+		// Builds that ended before Chopin could tell these apart.
 		expect(endedReason({
 			error: "Workspace disconnected or agent stopped responding. No automatic replay.",
-		})).toBe("Build stopped — your local agent disconnected.");
+		})).toBe("Build stopped — your local agent disconnected or stopped responding.");
 	});
 
 	it("leaves other failures to the phase's own words", () => {

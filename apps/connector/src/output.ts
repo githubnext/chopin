@@ -97,6 +97,21 @@ export function createOutput(
 		job(kind: JobKind, title: string, path: string) {
 			say(`› ${VERBS[kind]} ${headline(title)}`, s.dim(`  ${path}`));
 		},
+		/**
+		 * A call failed during a run and dropped the connection, so the next call registers this
+		 * machine again and Chopin sees a new connection carry on the run.
+		 */
+		runConnectionLost(cause: string) {
+			say(
+				s.dim(
+					`  … Lost the connection to Chopin during a run (${cause}). Registering this machine `
+						+ "again; the agent keeps working.",
+				),
+			);
+		},
+		runReconnected() {
+			say(s.dim("  ✓ Registered this machine with Chopin again; the run goes on."));
+		},
 		/** A run lost contact with Chopin; its agent keeps working. */
 		offline() {
 			say(

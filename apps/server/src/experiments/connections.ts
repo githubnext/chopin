@@ -96,6 +96,10 @@ const ANY = "*";
 
 /** How many live connections one owner may have at once. */
 const OWNER_CONNECTIONS = 32;
+/** How many runs' documents a process remembers, newest first, so a moved run can be found. */
+const RUNS = 1000;
+/** How long a process remembers a connection that ended, to tell it from one it never knew. */
+const ENDED_MS = 60 * 60_000;
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function confirmation() {
@@ -111,6 +115,10 @@ export class Connections {
 	/** Tokens of revoked machines' connections, so they keep saying why instead of vanishing. */
 	#revoked = new Map<string, string>();
 	#runTokens = new Map<string, string>();
+	/** Each run's document, by run id, for the newest runs this process handed out. */
+	#runs = new Map<string, string>();
+	/** When each connection that ended in the last hour ended, by id. */
+	#ended = new Map<string, number>();
 	#waiters = new Map<string, Set<() => void>>();
 	#builds = new Map<string, string>();
 	/** Documents whose builds wait behind a connection's current one, first queued first. */
@@ -409,11 +417,49 @@ export class Connections {
 			connectionId,
 			run: { id, documentId, generation, ...(kind ? { kind } : {}) },
 		});
+		this.#runs.delete(id);
+		this.#runs.set(id, documentId);
+		for (let old of this.#runs.keys()) {
+			if (this.#runs.size <= RUNS) break;
+			this.#runs.delete(old);
+		}
 		return token;
+	}
+	/** The document of a run this process handed out, whichever connection holds it now. */
+	runDocument(id: string) {
+		return this.#runs.get(id);
+	}
+	/**
+	 * Whether this process opened the connection, connected or ended within the last hour. One it
+	 * never knew was opened before the server restarted.
+	 */
+	known(id: string) {
+		return this.#connections.has(id) || this.#ended.has(id);
+	}
+	/**
+	 * Move a run from one connection of a machine to a newer one of the same machine: its document's
+	 * assignment, and the run credential the agent holds, which keeps working once the old
+	 * connection ends.
+	 */
+	rebind(from: string, to: Connection, documentId: string, runId: string) {
+		if (this.#builds.get(from) === documentId) {
+			this.#builds.delete(from);
+			this.#builds.set(to.id, documentId);
+		}
+		if (this.#used.get(documentId) === from) this.#used.set(documentId, to.id);
+		for (let [key, token] of this.#runTokens) {
+			if (!key.startsWith(`${from}:${runId}:`)) continue;
+			this.#runTokens.delete(key);
+			this.#runTokens.set(`${to.id}:${key.slice(from.length + 1)}`, token);
+		}
+		for (let grant of this.#tokens.values()) {
+			if (grant.connectionId === from && grant.run?.id === runId) grant.connectionId = to.id;
+		}
 	}
 	revoke(id: string) {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
+		if (connection) this.#ended.set(id, this.now());
 		this.#builds.delete(id);
 		this.#queued.delete(id);
 		for (let [document, used] of this.#used) if (used === id) this.#used.delete(document);
@@ -442,6 +488,7 @@ export class Connections {
 		for (let [id, connection] of this.#connections) {
 			if (connection.expiresAt <= this.now()) this.revoke(id);
 		}
+		for (let [id, at] of this.#ended) if (at <= this.now() - ENDED_MS) this.#ended.delete(id);
 	}
 	/** Wake every connector waiting for work in a repository, and every one serving any. */
 	wake(repositoryId: string) {

@@ -171,7 +171,11 @@ export async function runWork(
 					failures++;
 					continue;
 				}
-				ended ??= `Chopin ended this run (${errorCode(error) ?? "refused"}).`;
+				let code = errorCode(error);
+				// A build claimed before Chopin restarted is one it no longer knows.
+				ended ??= code === "server-restarted"
+					? "Chopin restarted, so it ended this run."
+					: `Chopin ended this run (${code ?? "refused"}).`;
 				abort.abort();
 				return;
 			}
