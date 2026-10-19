@@ -22,7 +22,7 @@
 	margin-block-start: calc(var(--spacing) * -4);
 }
 
-/* The status row is one 24px line, so the question sits at the same height in every state. */
+/* The status row is one 24px line (faces are 20px), so the question sits at the same height in every state. */
 .question-page-status-row {
 	display: flex;
 	align-items: center;

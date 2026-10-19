@@ -276,14 +276,14 @@ export function QuestionPagePanel(
 				/>
 				{settler && (
 					<span className="question-page-note">
-						<Face decorative handle={settler.handle} size={16} />
+						<Face decorative handle={settler.handle} size={20} />
 						{settler.text}
 					</span>
 				)}
 				{waiting.length > 0 && status.tone === "waiting" && (
 					<span className="question-page-note">
 						{waiting.slice(0, 3).map(login => (
-							<Face decorative handle={login} key={login} size={16} />
+							<Face decorative handle={login} key={login} size={20} />
 						))}
 						{waitingNames(waiting.map(personName))}
 					</span>

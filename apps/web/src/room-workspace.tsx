@@ -359,7 +359,11 @@ export function DocumentTitle(
 							<span className="truncate">{label}</span>
 						</button>
 					)
-					: <span className="title-control-label truncate">{label}</span>}
+					: (
+						<span className="title-control-label">
+							<span className="truncate">{label}</span>
+						</span>
+					)}
 				{(canManage || decision) && (
 					<DocumentActionsMenu
 						openDocument
