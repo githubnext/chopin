@@ -249,7 +249,8 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await addMachine(page, "Cloud");
 	await expect(page).toHaveURL(/\/machines\?server$/);
 	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a cloud machine");
-	await expect(page.getByText("Choose settings, then generate an install script.")).toBeVisible();
+	await expect(page.getByText("Choose its settings, then copy the install script to the server."))
+		.toBeVisible();
 	// Opening the page makes no key; Generate does.
 	expect(minted).toEqual([]);
 	let background = page.getByRole("switch", { name: "Stay connected", exact: true });
@@ -457,7 +458,8 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	let search = page.getByRole("searchbox", { name: "Search machines" });
 	await search.fill("atomic");
 	await expect(page.getByText("1 of 3 machines", { exact: true })).toBeVisible();
-	await expect(table.getByRole("row")).toHaveCount(2);
+	// The header row, the match's Local or Cloud heading, and the match.
+	await expect(table.getByRole("row")).toHaveCount(3);
 	await search.fill(login);
 	await expect(page.getByText("3 of 3 machines", { exact: true })).toBeVisible();
 	await search.fill("octo-org/score");

@@ -139,6 +139,11 @@
 	-webkit-tap-highlight-color: transparent;
 }
 
+/* The sheet has no inline padding for the menu divider to run through, so it spans the sheet. */
+.machine-sheet-group .app-menu-separator {
+	margin-inline: 0;
+}
+
 .machine-sheet-item[aria-checked="true"] {
 	background: var(--color-selected);
 }

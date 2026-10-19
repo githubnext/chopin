@@ -5,7 +5,13 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloudIcon, MachineIcon, PlusIcon } from "@chopin/icons";
 
 import { documentMenuKeyAction } from "./document-actions-menu";
-import { machineButtonLabel, machineRows, machineState, shownMachine } from "./machine-choice";
+import {
+	chosenMachine,
+	machineButtonLabel,
+	machineRows,
+	machineState,
+	shownMachine,
+} from "./machine-choice";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import { useNavigationMenu } from "./navigation-shell";
@@ -93,7 +99,8 @@ export function MachineButton(
 		if (row.disabled) return;
 		// A phone's sheet closes itself first, then forgets it was open.
 		if (!phone) close(true);
-		if (!row.checked) void choice.choose(row.id);
+		// The default's machine shows checked too; choosing it pins it to the document.
+		if (row.id !== chosenMachine(state)?.id) void choice.choose(row.id);
 	};
 	let add = () => {
 		close(false);

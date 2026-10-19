@@ -188,8 +188,8 @@ test("the machine button left of Build plan chooses where work runs, and an offl
 	await expect(menu.getByRole("menuitemradio", { checked: true })).toHaveCount(1);
 	await expect(menu.getByRole("menuitemradio", { checked: true })).toBeFocused();
 	await expect(menu.getByRole("menuitem", { name: "Add machine", exact: true })).toBeVisible();
-	expect(await menu.evaluate(element => getComputedStyle(element).boxShadow))
-		.toContain("0px 0px 0px 1px");
+	// The hairline edge every menu surface draws, as an outline.
+	expect(await menu.evaluate(element => getComputedStyle(element).outlineStyle)).toBe("solid");
 	await shoot(page, "desktop-machine");
 	await page.keyboard.press("End");
 	await expect(menu.getByRole("menuitem", { name: "Add machine", exact: true })).toBeFocused();
@@ -406,7 +406,7 @@ async function machines(page: Page, count: number) {
 			url: string;
 		};
 		await page.goto(pending.url);
-		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
 			"Connected",
 		);
