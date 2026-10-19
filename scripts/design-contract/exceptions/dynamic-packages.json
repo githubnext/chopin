@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "4d1ecf61630936e58e1ca0d64fea63b729ff5bb59623b40d2d03a1c62f7043c7"
+		"sourceHash": "1650d1e0291f64a911971e9ba8ebdb8d404c01de3d27d4a0d01a17c63fd1e9c8"
 	},
 	{
 		"file": "packages/question/src/react/resolved-actions.tsx",
@@ -91,13 +91,6 @@
 				"dynamic",
 				"*",
 				"props",
-				"unresolved JSX props > CloudIcon > <LineIcon>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
 				"unresolved JSX props > ServerIcon > <LineIcon>",
 				1
 			],
@@ -116,7 +109,7 @@
 				1
 			]
 		],
-		"sourceHash": "89fd70bb78c40ef8f00d55fb202dca85108945bca00983e7880bc44772bae190"
+		"sourceHash": "d437ae11044c046716a6df5efcd040835bb6f732aae5d99e7bdefbedebd55c65"
 	},
 	{
 		"file": "packages/icons/src/line.tsx",
@@ -422,9 +415,16 @@
 				"props",
 				"unresolved JSX props > CollapseIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ProgressHalfIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "ff0dccde87b5d7d52fe7df839f4b7d55a07ac1e1de73384b6acce853dcefcd4c"
+		"sourceHash": "7682cc5a91547e815aa28d1be3b669526d8e161030d1827e17859377b636005c"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",
