@@ -406,7 +406,8 @@ export async function sweep(
 		) ?? [];
 	if (![...plan.records.values()].some(record => follows(record).length > 0)) return;
 	let seen = new Set<string>();
-	for (let record of [...plan.records.values()]) {
+	// Settling swaps in a new records map, so the one read here stays stable.
+	for (let record of plan.records.values()) {
 		for (let finding of follows(record)) {
 			let key = `${finding.kind}:${finding.ref}`;
 			if (seen.has(key)) continue;
