@@ -480,7 +480,7 @@ export function Decisions(
 									? "Decisions unavailable"
 									: undefined}
 								description={readiness === "ready"
-									? "Capture a question before you know the answer. Record the decision when you agree."
+									? "Questions from Chopin will appear here, with your answers kept for reference."
 									: readiness === "unavailable"
 									? "The document couldn’t be opened. Try again to load its decisions."
 									: <span aria-hidden="true">Loading decisions…</span>}
