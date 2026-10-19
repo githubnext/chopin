@@ -119,7 +119,6 @@ export type QuestionViewProps = {
 	aside?: ReactNode;
 	/** Controls in the trailing header, beside question-specific presence. */
 	headerActions?: ReactNode;
-	/** Host content under the answer control, such as the latest finding. */
 	/** Host controls at the start of the footer, before Discard and Save. */
 	footerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
@@ -410,10 +409,7 @@ function AddOption(
 		try {
 			result = await onAdd(label);
 		} catch {
-			result = {
-				ok: false,
-				message: "Could not add this option.",
-			};
+			result = { ok: false, message: "Could not add this option." };
 		}
 		setPending(null);
 		if (edit.current !== submittedEdit) return;
@@ -424,9 +420,8 @@ function AddOption(
 		if (result.ok) {
 			onCommitEdit?.();
 			setText(null);
-			if (result.option) {
-				onAdded(result.option, label, ownsFocus);
-			} else if (ownsFocus) focus.current = "trigger";
+			if (result.option) onAdded(result.option, label, ownsFocus);
+			else if (ownsFocus) focus.current = "trigger";
 		} else {
 			onFailed(result.message);
 			if (ownsFocus) focus.current = "field";
@@ -520,11 +515,7 @@ function AddOption(
 					rows={1}
 					value={text}
 				/>
-				{pending !== null && (
-					<span className="sr-only" role="status">
-						Adding option
-					</span>
-				)}
+				{pending !== null && <span className="sr-only" role="status">Adding option</span>}
 			</div>
 			<p
 				className="question-add-hint"

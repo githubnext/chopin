@@ -266,7 +266,7 @@ export function QuestionPagePanel(
 	return (
 		<div className="question-page" data-question-page={entry.id}>
 			{actions && <div className="question-page-inline-actions">{actions}</div>}
-			<div className="question-page-status-row">
+			<div className="question-page-status-row" data-question-page-status="">
 				<Badge
 					className="question-page-status"
 					icon={badge.icon}
