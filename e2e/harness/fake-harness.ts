@@ -12,6 +12,7 @@ import type {
 } from "../../apps/server/src/harness/harness-v1";
 import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
 import { nameDocument } from "./fake-heading";
+import type { scopeSnapshot } from "../../apps/server/src/questions/decision-followup";
 
 type FakeHarnessSettings = {
 	credentials: (id: string) => string | undefined;
@@ -43,6 +44,15 @@ const STEP_MS = 2_500;
 /** Proposes an investigation after the block that mentions this phrase. */
 const INVESTIGATE_PROMPT = "INVESTIGATE-ANCHOR";
 const INVESTIGATE_TARGET = "Cold start";
+const CAPTURE_PROMPT = "ANCHORED-DECISIONS";
+const PROVISIONAL = "The first version remains provisional.";
+
+function checked<T>(name: string, result: { output: unknown; isError?: boolean }): T {
+	if (result.isError || String(result.output).startsWith("Error")) {
+		throw new Error(`${name} failed: ${String(result.output)}`);
+	}
+	return JSON.parse(String(result.output)) as T;
+}
 
 function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 	if (typeof prompt === "string") return prompt;
@@ -100,10 +110,17 @@ export function createFakeHarness(
 						? turn.instructions?.split("\n").findLast(line => line.startsWith("@")) ?? prompt
 						: prompt;
 					let heading = prompt.startsWith("[Background job: heading]\n");
+					let followup = prompt.startsWith("[Background job: decision-followup]\n");
 					if (heading && available.size !== HEADING_TOOL_NAMES.length) {
 						throw new Error("e2e-fake heading job received tools outside its scope");
 					}
-					for (let toolName of heading ? HEADING_TOOL_NAMES : SCRIPTED_TOOLS) {
+					for (
+						let toolName of heading
+							? HEADING_TOOL_NAMES
+							: followup
+							? ["read_decision_scope", "write_decision_scope"]
+							: SCRIPTED_TOOLS
+					) {
 						if (!available.has(toolName)) {
 							throw new Error(`e2e-fake harness expected host tool ${toolName}`);
 						}
@@ -202,6 +219,115 @@ export function createFakeHarness(
 							} catch (err) {
 								turn.emit({ type: "error", error: err });
 								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (followup) {
+						void (async () => {
+							try {
+								if (available.has("edit_plan")) {
+									throw new Error("follow-up received ordinary writing tools");
+								}
+								let snapshot = checked<Omit<ReturnType<typeof scopeSnapshot>, "indices">>(
+									"read_decision_scope",
+									await callTool("read_decision_scope"),
+								);
+								let saved = snapshot.decisions.filter(decision => decision.status === "answered")
+									.sort((a, b) => a.questions[0]!.header.localeCompare(b.questions[0]!.header));
+								let source = saved.flatMap(decision =>
+									decision.questions.map(question => {
+										let answer = decision.answers?.[question.id];
+										if (!answer) throw new Error("saved scope omitted an authoritative answer");
+										return `${question.header}: ${answer.replace(/[.!?]\s*$/u, "")}.`;
+									})
+								).join(" ");
+								checked(
+									"write_decision_scope",
+									await callTool("write_decision_scope", undefined, {
+										id: snapshot.id,
+										revision: snapshot.revision,
+										answersHash: snapshot.answersHash,
+										source,
+									}),
+								);
+								finish();
+								settled.resolve();
+							} catch (error) {
+								turn.emit({ type: "error", error });
+								settled.reject(error);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (requested.includes(CAPTURE_PROMPT)) {
+						void (async () => {
+							try {
+								if (!available.has("open_decisions")) {
+									throw new Error("capture tool is unavailable");
+								}
+								let plan = checked<{ revision: number }>("read_plan", await callTool("read_plan"));
+								let edited = checked<{
+									ok: boolean;
+									revision: number;
+									blocks: Array<{ index: number; type: string; preview: string; digest: string }>;
+								}>(
+									"edit_plan",
+									await callTool("edit_plan", undefined, {
+										revision: plan.revision,
+										operations: [{ op: "insert_root", source: PROVISIONAL }],
+									}),
+								);
+								if (!edited.ok) throw new Error("the provisional passage was refused");
+								let block = edited.blocks.find(item =>
+									item.type === "paragraph" && item.preview === PROVISIONAL
+								);
+								if (!block) throw new Error("the provisional passage has no block address");
+								let blocks = [{ index: block.index, digest: block.digest }];
+								let captured = checked<{ decisions: Array<{ status: string }> }>(
+									"open_decisions",
+									await callTool("open_decisions", undefined, {
+										revision: edited.revision,
+										questions: [{
+											key: "constraints-first-version",
+											header: "Constraints",
+											question: "What constraints must the first version preserve?",
+											response: "text",
+											options: [],
+											multiple: false,
+											blocks,
+										}, {
+											key: "rollout-first-version",
+											header: "Rollout",
+											question: "How should the first version reach the team?",
+											multiple: false,
+											blocks,
+											options: [
+												{ label: "Small pilot", description: "Start with a few collaborators" },
+												{ label: "Whole team", description: "Make it available to everyone" },
+											],
+										}],
+									}),
+								);
+								if (
+									captured.decisions.length !== 2
+									|| captured.decisions.some(item => item.status !== "open")
+								) {
+									throw new Error("the capture did not return two open decisions");
+								}
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: "I drafted the passage and opened two decisions.",
+								});
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (error) {
+								turn.emit({ type: "error", error });
+								settled.reject(error);
 							} finally {
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}

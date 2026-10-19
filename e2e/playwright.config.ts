@@ -177,6 +177,7 @@ export default defineConfig({
 				"**/responsive*.e2e.ts",
 				"**/sidecar.e2e.ts",
 				"**/harness.e2e.ts",
+				"**/planner-decisions.e2e.ts",
 				"**/conversation-initiative.e2e.ts",
 				"**/document-title-naming.e2e.ts",
 				"**/harness-comments.e2e.ts",
@@ -212,6 +213,7 @@ export default defineConfig({
 			name: "harness",
 			testMatch: [
 				"**/harness.e2e.ts",
+				"**/planner-decisions.e2e.ts",
 				"**/conversation-initiative.e2e.ts",
 				"**/document-title-naming.e2e.ts",
 				"**/harness-comments.e2e.ts",
