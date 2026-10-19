@@ -46,35 +46,61 @@ test("the live list is asked again every few seconds while something polls, and 
 		return [machineOf("box", online)];
 	}, { interval: 20 });
 	let heard: boolean[] = [];
-	let unwatch = feed.watch(() => heard.push(feed.snapshot().machines![0]!.connected));
+	let initial = Promise.withResolvers<void>();
+	let refreshed = Promise.withResolvers<void>();
+	let unwatch = feed.watch(() => {
+		heard.push(feed.snapshot().machines![0]!.connected);
+		if (heard.length === 1) initial.resolve();
+		if (heard.length === 3) refreshed.resolve();
+	});
 	let stop = feed.poll();
-	await Bun.sleep(5);
-	expect(answers).toBe(1);
-	online = false;
-	await Bun.sleep(60);
-	expect(answers).toBeGreaterThanOrEqual(3);
-	expect(heard[0]).toBe(true);
-	expect(heard.at(-1)).toBe(false);
-	stop();
-	let after = answers;
-	await Bun.sleep(60);
-	expect(answers).toBe(after);
-	unwatch();
+	let stopped = false;
+	try {
+		await initial.promise;
+		expect(answers).toBe(1);
+		online = false;
+		await refreshed.promise;
+		expect(answers).toBe(3);
+		expect(heard).toEqual([true, false, false]);
+		stop();
+		stopped = true;
+		let after = answers;
+		await Bun.sleep(60);
+		expect(answers).toBe(after);
+	} finally {
+		unwatch();
+		if (!stopped) stop();
+	}
 });
 
 test("two pollers share one list, which keeps polling until both stop", async () => {
 	let answers = 0;
 	let feed = machineFeed(async () => (answers++, []), { interval: 20 });
+	let initial = Promise.withResolvers<void>();
+	let refreshed = Promise.withResolvers<void>();
+	let heard = 0;
+	let unwatch = feed.watch(() => {
+		if (++heard === 1) initial.resolve();
+		if (heard === 2) refreshed.resolve();
+	});
 	let first = feed.poll();
 	let second = feed.poll();
 	first();
-	let before = answers;
-	await Bun.sleep(50);
-	expect(answers).toBeGreaterThan(before);
-	second();
-	let after = answers;
-	await Bun.sleep(50);
-	expect(answers).toBe(after);
+	let stopped = false;
+	try {
+		await initial.promise;
+		let before = answers;
+		await refreshed.promise;
+		expect(answers).toBeGreaterThan(before);
+		second();
+		stopped = true;
+		let after = answers;
+		await Bun.sleep(50);
+		expect(answers).toBe(after);
+	} finally {
+		unwatch();
+		if (!stopped) second();
+	}
 });
 
 test("a failed answer keeps the list it had and says why; a hidden page asks nothing", async () => {
