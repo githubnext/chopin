@@ -101,6 +101,7 @@ import type { Research as ResearchWire } from "@chopin/protocol";
 import { investigationFinding } from "./experiments/document";
 import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
+import { demoRoster } from "./demo/roster";
 import {
 	ResearchWorkspaceError,
 	ResearchWorkspaceService,
@@ -2177,6 +2178,7 @@ const exploreDeps: Explore.ExploreDeps = {
 			await experiments?.service.stop(finding.ref, "cancelled");
 		}
 	},
+	demo: id => demoRoster(config.auth).get(id) !== undefined,
 	notice: decisionNotice,
 };
 

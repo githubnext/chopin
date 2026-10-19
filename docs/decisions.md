@@ -87,15 +87,19 @@ marks the finding stopped.
 
 A running finding never waits on a missed event. Attaching work that has already ended settles the
 finding at once. Cancelling a research request settles it as stopped, and a failed request that is
-retried to ready updates its failed finding. A sweep also runs whenever a top-level document opens
-(rooms open lazily, so that covers startup), settling any running research or investigation
+retried to ready updates its failed finding. A failed job ends its request the same way a completed one does, and a failed request posts a
+quiet Chat notice. A sweep also runs whenever a top-level document opens and whenever a member
+(re)opens it while the room stays loaded, settling any running research or investigation
 finding whose work is terminal; a failed settle commit is logged and retried by the next sweep.
-Only the person who started a running finding can stop it, and an ask is stopped by its asker.
+Stopping work that already ended, or that refuses to cancel, still settles the finding: failed if
+the work failed, completed work as its result, stopped otherwise. Only the person who started a
+running finding can stop it, and an ask is stopped by its asker.
 `question:take`, stop and page refuse while an implementation is active, and a take also needs
 the ask to be running on an open decision. Logins compare case-insensitively. At 20 findings the
 oldest settled research or investigation makes room; takes and running work are never dropped, and
 adding refuses when nothing can go.
 
+With demo personas enabled, a roster persona (`demo:lily`) can be asked and replies as itself.
 Asking someone records a running `ask` finding, shows an amber "Waiting for Sam" status in the card footer, and
 posts a Chat notice that names them. Only the asked member can answer, with `question:take`;
 their reply becomes the finding's summary and appears under **Takes** on the decision's page. The reply may carry a `stance`, `supports` or `objects`, which the page shows as a chip beside their name; the server stores only those two values, and only on an `ask` finding.

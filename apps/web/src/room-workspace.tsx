@@ -61,7 +61,8 @@ import {
 	useMachineChoice,
 } from "./machine-choice";
 import { MachineButton } from "./machine-button";
-import { machines as machineStore, useLiveMachines } from "./machine-summary";
+import { machines as machineStore, summarizeMachines, useLiveMachines } from "./machine-summary";
+import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
@@ -707,7 +708,7 @@ export function RoomWorkspace(
 	);
 	// The choice shows only while the person has a paired machine, live: it appears with their
 	// first and goes with their last.
-	let ownsMachine = showsMachineChoice(useLiveMachines().machines);
+	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines);
 	// Refresh the machine choice when the Planner moves to another machine.
 	let refreshMachine = machineChoice.refresh;
 	useEffect(() => {
@@ -1337,11 +1338,15 @@ export function RoomWorkspace(
 			let seen = new Set<string>(handle ? [handle.toLowerCase()] : []);
 			let found: string[] = [];
 			let add = (login: string) => {
-				if (seen.has(login.toLowerCase()) || !/^[A-Za-z0-9-]{1,39}$/.test(login)) return;
+				if (
+					seen.has(login.toLowerCase())
+					|| !/^(?:[A-Za-z0-9-]{1,39}|demo:[a-z0-9-]{1,32})$/.test(login)
+				) return;
 				seen.add(login.toLowerCase());
 				found.push(login);
 			};
-			for (let member of members) if (!member.actor) add(member.handle);
+			// A demo persona's handle is its roster id; the server checks it against the roster.
+			for (let member of members) if (!member.actor || member.handle.startsWith("demo:")) add(member.handle);
 			for (let card of cardMetadata.values()) card.involved.forEach(add);
 			return found;
 		};
@@ -1352,7 +1357,7 @@ export function RoomWorkspace(
 				await experiments.action(id, "run", {});
 			},
 			spikeUnavailable: () =>
-				showsMachineChoice(machineStore.snapshot().machines)
+				summarizeMachines(machineStore.snapshot().machines ?? []).connected > 0
 					? undefined
 					: "No paired machine is online",
 			people,

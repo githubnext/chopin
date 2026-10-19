@@ -687,3 +687,57 @@ test("stopping an investigation that already failed settles it failed", async ()
 	}, ended);
 	expect(status(context)).toBe("failed");
 });
+
+test("a demo persona can be asked only when the roster has it, and replies as itself", async () => {
+	let context = await opened();
+	let ask = (login: string) => ({
+		kind: "question:explore",
+		ts: 0,
+		rid: "r",
+		id: context.id,
+		key: KEY,
+		action: "ask",
+		login,
+	}) as const;
+	let { ws, frames } = member("ana");
+	let roster = (id: string) => id === "demo:lily";
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		ask("demo:lily"),
+		deps().deps,
+	);
+	expect(frames.at(-1)).toMatchObject({ ok: false, reason: "invalid" });
+	let { deps: explore } = deps({ demo: roster });
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		ask("demo:nobody"),
+		explore,
+	);
+	expect(frames.at(-1)).toMatchObject({ ok: false, reason: "invalid" });
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		ask("demo:lily"),
+		explore,
+	);
+	expect(frames.at(-1)).toMatchObject({ ok: true, finding: { ref: "demo:lily" } });
+	let lily = member("demo:lily");
+	await Explore.take(context.plan, context.server, context.channel.id, lily.ws, {
+		kind: "question:take",
+		ts: 0,
+		rid: "t",
+		id: context.id,
+		finding: KEY,
+		text: "Use the checklist",
+	});
+	expect(lily.frames.at(-1)).toMatchObject({ ok: true });
+	expect(status(context)).toBe("ready");
+});

@@ -40,6 +40,8 @@ export type ExploreDeps = {
 	spike: (roomId: string, ref: string) => Promise<SpikeSnapshot | undefined>;
 	/** Stop the external work behind a running finding. */
 	stop: (roomId: string, finding: Wire.Finding, ws: Socket) => Promise<void>;
+	/** Whether `id` is a roster persona, which only a demo deployment has. */
+	demo?: (id: string) => boolean;
 	/** Post a system notice in the document's Chat about decision `id`. */
 	notice: (plan: Plan, roomId: string, id: string, text: string, label: string) => Promise<void>;
 };
@@ -84,7 +86,8 @@ export async function explore(
 		typeof msg.id !== "string" || typeof msg.key !== "string" || !UUID.test(msg.key)
 		|| focus.length > MAX_FINDING_FOCUS
 		|| (msg.action !== "research" && msg.action !== "spike" && msg.action !== "ask")
-		|| msg.action === "ask" && (typeof msg.login !== "string" || !LOGIN.test(msg.login))
+		|| msg.action === "ask"
+			&& (typeof msg.login !== "string" || !LOGIN.test(msg.login) && !deps.demo?.(msg.login))
 		|| msg.action === "research" && (typeof msg.ref !== "string" || !UUID.test(msg.ref))
 	) return refuse("invalid", "This exploration is not valid");
 	if (Service.implementationActive(plan)) {
