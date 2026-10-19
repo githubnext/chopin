@@ -1,3 +1,4 @@
+import { writtenSeed } from "./decision-deck-fixtures";
 import { expect, test } from "./room";
 import type { Page } from "@playwright/test";
 
@@ -21,13 +22,12 @@ function questionPage(page: Page) {
 
 test(
 	"a decision is explored, opened as its own page, answered by the asked member and settled",
-	async ({ join }, info) => {
+	async ({ join, seed }, info) => {
+		let decision = writtenSeed(QUESTION);
+		await seed(decision.source, decision.state);
 		let ana = await join("ana");
 		let ben = await join("ben");
-		let view = await decisions(ana);
-		await view.getByRole("button", { name: "New decision", exact: true }).click();
-		await view.getByRole("textbox", { name: "Decision question" }).fill(QUESTION);
-		await view.getByRole("button", { name: "Create decision", exact: true }).click();
+		await decisions(ana);
 		await expect(card(ana).getByRole("textbox", { name: "Answer" })).toBeVisible();
 		await decisions(ben);
 		await expect(card(ben)).toBeVisible();

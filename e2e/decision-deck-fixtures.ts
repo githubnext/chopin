@@ -124,3 +124,55 @@ export async function openDecisionDocument(page: Page) {
 	await page.getByRole("group", { name: "Document view" })
 		.getByRole("button", { name: /^Document(?:,|$)/ }).click();
 }
+
+/** Seed one open written (`response: "text"`) decision, as a person's own would be recorded. */
+export function writtenSeed(
+	prompt: string,
+	description?: string,
+): { source: string; state: SeedState; id: string } {
+	let widget = "01K0N4TR8K7JGM4R1J7PW4R8W0";
+	let question = "01K0N4V4E7Y6P4MJ5WD8XZF3W0";
+	let definition = {
+		questions: [{
+			id: question,
+			header: "Decision",
+			question: prompt,
+			...(description ? { description } : {}),
+			response: "text" as const,
+			multiple: false,
+			options: [],
+		}],
+	};
+	let source = `<Questionnaire id="${widget}">
+<Question id="${question}" header="Decision" prompt="${prompt}"${
+		description ? ` description="${description}"` : ""
+	} response="text" multiple="false">
+
+</Question>
+</Questionnaire>
+`;
+	return {
+		source,
+		id: widget,
+		state: {
+			revision: 1,
+			questions: [{
+				id: widget,
+				definition,
+				status: "open",
+				origin: "human",
+				owner: "ana",
+				history: [],
+				optionOrigins: {},
+				editors: ["ana"],
+			}],
+			openQuestions: [{
+				definition,
+				id: widget,
+				model: storedQuestion(definition),
+				revision: 0,
+				widget,
+			}],
+		},
+	};
+}

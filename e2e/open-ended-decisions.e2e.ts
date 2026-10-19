@@ -1,4 +1,6 @@
+import { writtenSeed } from "./decision-deck-fixtures";
 import { authenticate, expect, ready, roomPath, test, written } from "./room";
+import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Page } from "@playwright/test";
 
 const QUESTION = "How should onboarding work?";
@@ -19,28 +21,19 @@ function card(page: Page) {
 		.filter({ has: page.getByRole("heading", { name: QUESTION, exact: true }) });
 }
 
-async function create(page: Page) {
-	let view = await decisions(page);
-	await view.getByRole("button", { name: "New decision", exact: true }).click();
-	await expect(view.getByRole("textbox", { name: "Decision question" })).toBeFocused();
-	await view.getByRole("textbox", { name: "Decision question" }).fill(QUESTION);
-	await view.getByRole("textbox", { name: "Context (optional)" }).fill(CONTEXT);
-	await view.getByRole("button", { name: "Create decision", exact: true }).click();
-	await expect(card(page).getByRole("textbox", { name: "Answer" })).toBeVisible();
+function seeded() {
+	let decision = writtenSeed(QUESTION, CONTEXT);
+	return (seed: (source: string, state?: SeedState) => Promise<void>) =>
+		seed(decision.source, decision.state);
 }
 
 test(
-	"people create, collaborate on and save a written answer, then reopen with history",
-	async ({ join, room }, info) => {
+	"people collaborate on and save a written answer, then reopen with history",
+	async ({ join, room, seed }, info) => {
+		await seeded()(seed);
 		let ana = await join("ana");
 		let ben = await join("ben");
-		let view = await decisions(ana);
-		await view.getByRole("button", { name: "New decision", exact: true }).click();
-		await expect(view.getByRole("textbox", { name: "Decision question" })).toBeFocused();
-		await view.getByRole("textbox", { name: "Decision question" }).fill(QUESTION);
-		await view.getByRole("textbox", { name: "Context (optional)" }).fill(CONTEXT);
-		await ana.screenshot({ path: info.outputPath("create-decision.png") });
-		await view.getByRole("button", { name: "Create decision", exact: true }).click();
+		await decisions(ana);
 		await expect(card(ana).getByRole("textbox", { name: "Answer", exact: true })).toHaveValue("");
 		await decisions(ben);
 		let first = card(ana);
@@ -91,14 +84,16 @@ test(
 );
 
 test(
-	"phone creation and working answers remain usable with the shared save bar",
-	async ({ join }, info) => {
+	"phone working answers remain usable with the shared save bar",
+	async ({ join, seed }, info) => {
+		await seeded()(seed);
 		let page = await join("ana", {
 			hasTouch: true,
 			isMobile: true,
 			viewport: { width: 390, height: 844 },
 		});
-		await create(page);
+		await decisions(page);
+		await expect(card(page).getByRole("textbox", { name: "Answer" })).toBeVisible();
 		let decision = card(page);
 		await decision.getByRole("textbox", { name: "Answer" }).fill(ANSWER);
 		let pending = page.getByRole("region", { name: "Unsaved answers" });
@@ -117,9 +112,9 @@ test(
 	},
 );
 
-test("readers see an open decision but cannot create or record one", async ({ join, browser, baseURL, room }) => {
-	let ana = await join("ana");
-	await create(ana);
+test("readers see an open decision but cannot record one", async ({ join, browser, baseURL, room, seed }) => {
+	await seeded()(seed);
+	await join("ana");
 	let context = await browser.newContext({ baseURL });
 	try {
 		let reader = await context.newPage();

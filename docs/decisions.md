@@ -4,9 +4,8 @@ A decision can be open before anyone knows the alternatives. Use it for a choice
 people need to make, such as “How should onboarding work?” Use repository
 inspection or research for factual questions such as “When does onboarding run?”
 
-In **Decisions**, choose **New decision**, write the question and optionally add
-context. The new card starts open. Everyone with write access shares its working
-answer. Written decisions have one answer field; choice decisions have selectable
+A decision appears in **Decisions** as an open card when someone asks the Planner
+to raise it. Everyone with write access shares its working answer. Written decisions have one answer field; choice decisions have selectable
 options.
 
 Press **Save** to submit the written answer, just like a choice decision. On a

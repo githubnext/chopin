@@ -8,11 +8,10 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { CheckIcon, DecisionIcon, PlusIcon } from "@chopin/icons";
+import { CheckIcon, DecisionIcon } from "@chopin/icons";
 import { EmptyState, UnfoldSection } from "@chopin/visuals";
 
 import { decisionsDeck } from "./decision-state";
-import { CreateDecision } from "./create-decision";
 import { Deck, revealDeckItem } from "./deck";
 import { usePhone } from "./pointer";
 import { useQuestionnaires, useRelations } from "./questionnaires";
@@ -239,24 +238,6 @@ export function Decisions(
 	let heading = useRef<HTMLHeadingElement>(null);
 	let focusedQuestionnaire = useRef<HTMLElement | undefined>(undefined);
 	let revealed = useRef<number | undefined>(undefined);
-	let [creating, setCreating] = useState(false);
-	let [created, setCreated] = useState<string>();
-	let mayCreate = canEdit && connected && !!wire && readiness === "ready";
-	useEffect(() => {
-		if (!created) return;
-		let target = content.current?.querySelector<HTMLElement>(
-			`[data-plan-sidecar-questionnaire="${CSS.escape(created)}"]`,
-		);
-		if (!target) return;
-		let deck = target.closest<HTMLElement>("[data-deck]");
-		if (deck) revealDeckItem(target);
-		let focusTarget = deck?.querySelector<HTMLElement>("[data-deck-top]") ?? target;
-		focusTarget.scrollIntoView({ block: "center" });
-		focusTarget.tabIndex = -1;
-		focusTarget.focus({ preventScroll: true });
-		setCreated(undefined);
-	}, [created, entries]);
-
 	// Leaving the pane should not leave the prose lit. A highlight belongs to
 	// the pointer that asked for it, and a pin to the pane that set it.
 	useEffect(() => () => {
@@ -392,7 +373,7 @@ export function Decisions(
 	let outstanding = pending.length;
 	// Settled cards not waiting in the deck; a folding card already counts as resolved.
 	let resolved = listed.length + closing.size;
-	let empty = outstanding === 0 && resolved === 0 && !hasAdditional && !creating;
+	let empty = outstanding === 0 && resolved === 0 && !hasAdditional;
 
 	let question = (entry: QuestionnaireEntry) => (
 		<QuestionnaireCard
@@ -440,29 +421,6 @@ export function Decisions(
 				}}
 				ref={content}
 			>
-				{!empty && mayCreate && !creating && (
-					<div className="decision-create-trigger">
-						<button
-							className="btn btn-sm btn-outline"
-							onClick={() => setCreating(true)}
-							type="button"
-						>
-							<PlusIcon aria-hidden="true" size={14} />
-							New decision
-						</button>
-					</div>
-				)}
-				{creating && (
-					<CreateDecision
-						disabled={!mayCreate}
-						onCancel={() => setCreating(false)}
-						onCreated={id => {
-							setCreating(false);
-							setCreated(id);
-						}}
-						wire={wire}
-					/>
-				)}
 				{additional}
 				{empty
 					? (
@@ -488,25 +446,15 @@ export function Decisions(
 									: readiness === "unavailable"
 									? "The document couldn’t be opened. Try again to load its decisions."
 									: <span aria-hidden="true">Loading decisions…</span>}
-								action={mayCreate
-									? (
-										<button
-											className="btn btn-sm btn-primary"
-											onClick={() => setCreating(true)}
-											type="button"
-										>
-											New decision
-										</button>
-									)
-									: readiness === "unavailable" && (
-										<button
-											className="btn btn-sm btn-secondary"
-											onClick={() => store.retryOpen()}
-											type="button"
-										>
-											Try again
-										</button>
-									)}
+								action={readiness === "unavailable" && (
+									<button
+										className="btn btn-sm btn-secondary"
+										onClick={() => store.retryOpen()}
+										type="button"
+									>
+										Try again
+									</button>
+								)}
 							/>
 						</>
 					)

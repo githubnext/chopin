@@ -2051,24 +2051,6 @@ textarea.question-written-field {
 	color: var(--color-text-tertiary);
 }
 
-.decision-create {
-	margin-block-end: calc(var(--spacing) * 3);
-}
-
-.decision-create-trigger {
-	display: flex;
-	justify-content: flex-end;
-	margin-block-end: calc(var(--spacing) * 3);
-}
-
-.decision-create-fields {
-	margin-block-start: calc(var(--spacing) * 3);
-}
-
-.question-written-field.decision-create-context {
-	min-block-size: calc(2lh + var(--spacing) * 4);
-}
-
 .question-card[data-saving] .question-options {
 	opacity: 0.6;
 }
