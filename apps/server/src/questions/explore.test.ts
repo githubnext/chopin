@@ -701,7 +701,6 @@ test("a demo persona can be asked only when the roster has it, and replies as it
 			login,
 		}) as const;
 	let { ws, frames } = member("ana");
-	let roster = (id: string) => id === "demo:lily";
 	await Explore.explore(
 		context.plan,
 		context.server,
@@ -711,7 +710,7 @@ test("a demo persona can be asked only when the roster has it, and replies as it
 		deps().deps,
 	);
 	expect(frames.at(-1)).toMatchObject({ ok: false, reason: "invalid" });
-	let { deps: explore } = deps({ demo: roster });
+	let { deps: explore } = deps({ demo: id => id === "demo:lily" });
 	await Explore.explore(
 		context.plan,
 		context.server,

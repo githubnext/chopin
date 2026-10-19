@@ -429,7 +429,7 @@ describe("anchored child lifecycle", () => {
 
 		expect(document).toContain('aria-label="Document stack"');
 		expect(document).toContain('aria-label="Back to Root"');
-		expect(document).toContain('aria-current="page">Source review<');
+		expect(document).toContain('aria-current="page" class="truncate">Source review<');
 		expect(document).not.toContain("data-document-title-bar");
 		expect(decisions).toContain('aria-label="Document stack"');
 		expect(decisions).toMatch(/<button aria-current="page"[^>]*><span[^>]*>Source review</);
