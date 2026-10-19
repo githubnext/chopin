@@ -43,7 +43,7 @@ test(
 		await menu.getByRole("button", { name: "Ask someone" }).click();
 		await menu.getByRole("button", { name: "@ben" }).click();
 		await expect(menu).toHaveCount(0);
-		await expect(card(ana).getByRole("group", { name: "Waiting for: ben" })).toBeVisible();
+		await expect(card(ana).getByText("Waiting for ben")).toBeVisible();
 
 		await card(ana).getByRole("button", { name: "Open as a page" }).click();
 		await expect(questionPage(ana).getByRole("heading", { level: 1, name: QUESTION }))
@@ -69,7 +69,7 @@ test(
 		await expect(questionPage(ben)).toContainText("Settled by @ana");
 		await ana.screenshot({ path: info.outputPath("settled-page.png") });
 
-		await control.getByRole("button", { name: "Reopen", exact: true }).click();
+		await questionPage(ana).getByRole("button", { name: "Reopen", exact: true }).click();
 		await expect(control.getByRole("textbox", { name: "Answer" })).toBeVisible();
 		await expect(control).toContainText("Inferred from their documents.");
 	},

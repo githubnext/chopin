@@ -55,7 +55,10 @@ and a **Start research** or **Start investigation** button; Cmd/Ctrl+Enter in th
 starts it, and the details become the finding's focus. Investigating runs on the viewer's paired
 machine and is disabled, with its reason, when none is online. Ask someone folds open into the
 list of other members. While research or an investigation runs, the button reads **Researching**
-and the menu shows what it is focused on, **Stop** and Ask someone; Save stays enabled.
+and the menu shows what it is focused on, **Stop** and Ask someone; Save stays enabled. The
+button becomes a quiet capsule ("Researching" or "Investigating" with a spinner). Nothing shows in
+the card body: once work has finished, a quiet "N findings" button at the footer's left opens the
+decision's page.
 
 What comes back is a **finding** on the decision's record:
 `{ id, kind: "research" | "spike" | "ask", status, focus?, ref, title?, summary?, sources?,
@@ -68,7 +71,7 @@ ready or failed, or an investigation finishes, the server settles every running 
 follows it, idempotently, and posts a Chat notice. `question:explore-stop` stops the work and
 marks the finding stopped.
 
-Asking someone records a running `ask` finding, shows the person as waiting on the card, and
+Asking someone records a running `ask` finding, shows an amber "Waiting for Sam" status in the card footer, and
 posts a Chat notice that names them. Only the asked member can answer, with `question:take`;
 their reply becomes the finding's summary and appears under **Takes** on the decision's page.
 
@@ -79,7 +82,11 @@ Ready findings feed the settle write-up's prompt as context, beside the discussi
 **Open as a page** turns a decision in a top-level document into its own child document. The
 channel id is deterministic (`question:<recordId>` within the repository), so a retry or a second
 member finds the same page; the record learns `childId` only after the channel exists. The child's
-body is the decision's Notes. Above it, the page shows what the root's record says: a status pill
-(Open, Exploring, Waiting for a member, or Settled), the question, the answer and who settled it,
-the card's control at page width, Findings and Takes. A child document's own decisions cannot
-open as pages.
+body is the decision's Notes. Above it, the page shows what the root's record says, on the paper
+with no card around it. A top row holds the status pill (Open, Exploring, Waiting for a member,
+or Settled) and the faces of the people in the decision, then the question. An open decision shows
+its options or written-answer field and one action row (Research, Discard, Save); who it is
+waiting for appears only in the pill. A settled decision shows its answer once with who settled
+it and a **Reopen** button, and for a choice question a plain list of what was considered with the
+chosen option tinted; a written answer has no such list. Findings and Takes follow. A child
+document's own decisions cannot open as pages.

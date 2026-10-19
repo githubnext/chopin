@@ -11,6 +11,7 @@ import {
 	FindingIcon,
 	findingLine,
 	findingMeta,
+	PresenceFaces,
 	QuestionnaireCard,
 	runningFindings,
 	waitingOn,
@@ -62,6 +63,16 @@ export function pageStatus(meta: Question.CardMeta): Status {
 	return { label: "Open", tone: "open" };
 }
 
+function withoutSelf(handles: readonly string[], self?: string): string[] {
+	let seen = new Set<string>();
+	return handles.filter(handle => {
+		let key = handle.toLowerCase();
+		if (key === self?.toLowerCase() || seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
 function settledOn(at: number): string {
 	return new Date(at * 1_000).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
@@ -72,6 +83,92 @@ function answer(entry: QuestionnaireEntry): string | undefined {
 	let chosen = question.options.filter(option => question.choices?.includes(option.id))
 		.map(option => option.label);
 	return chosen.length > 0 ? chosen.join(", ") : question.answer;
+}
+
+function letter(index: number): string {
+	return String.fromCharCode(65 + index);
+}
+
+/** A settled decision on its page: the answer once, who settled it, and the way to reopen it. */
+function Settled(
+	{ entry, meta, root }: {
+		entry: QuestionnaireEntry;
+		meta: Question.CardMeta;
+		root: QuestionPageRoot;
+	},
+) {
+	let question = entry.value.questions[0];
+	let [busy, setBusy] = useState(false);
+	let [error, setError] = useState<string>();
+	let reopen = async () => {
+		if (!root.wire || busy) return;
+		setBusy(true);
+		setError(undefined);
+		try {
+			let reply = await root.wire.ask<{ ok?: boolean }>("question:reopen", { id: entry.id });
+			if (!reply.ok) throw new Error("Could not reopen it. Try again.");
+		} catch (failure) {
+			setError(failure instanceof Error ? failure.message : "Could not reopen it. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	let written = !!question && question.options.length === 0 || question?.response === "text";
+	return (
+		<>
+			<div className="question-page-answer">
+				<p className="question-page-answer-text">{answer(entry) ?? "Decided"}</p>
+				<div className="question-page-answer-foot">
+					{meta.owner && meta.decidedAt !== undefined && (
+						<p className="question-page-answer-meta">
+							Settled by @{meta.owner}, {settledOn(meta.decidedAt)}
+						</p>
+					)}
+					{root.canEdit && root.connected && root.wire && (
+						<button
+							className="btn btn-sm btn-outline"
+							disabled={busy}
+							onClick={() => void reopen()}
+							type="button"
+						>
+							Reopen
+						</button>
+					)}
+				</div>
+				{error && <p className="question-page-take-error" role="alert">{error}</p>}
+			</div>
+			{!written && question && (
+				<>
+					<h2>What we considered</h2>
+					<div className="question-options question-page-considered">
+						{question.options.map((option, index) => {
+							let chosen = question.choices?.includes(option.id);
+							return (
+								<div
+									className="question-choice-row question-option"
+									data-selected={chosen ? "" : undefined}
+									key={option.id}
+								>
+									<span aria-hidden="true" className="question-key">
+										<span>{letter(index)}</span>
+									</span>
+									<span className="question-text">
+										<span className="question-label">
+											{chosen && <span className="sr-only">Chosen:</span>}
+											{option.label}
+										</span>
+										{option.description && (
+											<span className="question-desc">{option.description}</span>
+										)}
+									</span>
+								</div>
+							);
+						})}
+					</div>
+				</>
+			)}
+		</>
+	);
 }
 
 export function QuestionPagePanel(
@@ -86,36 +183,35 @@ export function QuestionPagePanel(
 	let status = pageStatus(meta);
 	let findings = (meta.findings ?? []).filter(finding => finding.kind !== "ask");
 	let takes = (meta.findings ?? []).filter(finding => finding.kind === "ask");
-	let settledAnswer = settled ? answer(entry) : undefined;
-	// The page is already open; its card offers no way back to itself.
+	// The page is already open; its control offers no way back to itself.
 	let explore = root.explore && { ...root.explore, openPage: undefined };
 	return (
 		<div className="question-page" data-question-page={entry.id}>
-			<span className="question-page-status" data-tone={status.tone}>{status.label}</span>
-			<h1 className="question-page-title">{question?.prompt ?? "Decision"}</h1>
-			{settled && settledAnswer && (
-				<div className="question-page-answer">
-					<p className="question-page-answer-text">{settledAnswer}</p>
-					{meta.owner && meta.decidedAt !== undefined && (
-						<p className="question-page-answer-meta">
-							Settled by @{meta.owner}, {settledOn(meta.decidedAt)}
-						</p>
-					)}
-				</div>
-			)}
-			{settled && question && question.options.length > 0 && <h2>What we considered</h2>}
-			<div className="question-page-control">
-				<QuestionnaireCard
-					canEdit={root.canEdit}
-					connected={root.connected}
-					explore={explore}
-					meta={meta}
-					presentation="list"
-					self={root.self}
-					value={entry.value}
-					wire={root.wire}
+			<div className="question-page-top">
+				<span className="question-page-status" data-tone={status.tone}>{status.label}</span>
+				<PresenceFaces
+					handles={withoutSelf(meta.involved, root.self)}
+					label="In this decision"
 				/>
 			</div>
+			<h1 className="question-page-title">{question?.prompt ?? "Decision"}</h1>
+			{settled
+				? <Settled entry={entry} meta={meta} root={root} />
+				: (
+					<div className="question-page-control">
+						<QuestionnaireCard
+							canEdit={root.canEdit}
+							connected={root.connected}
+							explore={explore}
+							meta={meta}
+							page
+							presentation="list"
+							self={root.self}
+							value={entry.value}
+							wire={root.wire}
+						/>
+					</div>
+				)}
 			{findings.length > 0 && (
 				<section aria-label="Findings" className="question-page-section">
 					<h2>Findings</h2>

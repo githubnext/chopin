@@ -5862,8 +5862,18 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 .question-footer-start {
 	display: flex;
 	align-items: center;
-	margin-inline-end: auto;
+	gap: calc(var(--spacing) * 2);
+	flex: 1 1 100%;
 	min-width: 0;
+}
+
+.question-footer-start:empty {
+	display: none;
+}
+
+/* The status and count take their own row above the actions: a card is too narrow to share. */
+.question-actions:has(> .question-footer-start) {
+	flex-wrap: wrap;
 }
 
 .explore-trigger[data-exploring] {
@@ -5960,12 +5970,6 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
 	resize: none;
-	transition: border-color var(--duration-fast) var(--ease-out);
-}
-
-.explore-details:focus {
-	border-color: var(--color-brand);
-	outline: none;
 }
 
 .explore-details::placeholder {
@@ -6005,48 +6009,78 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-danger-text);
 }
 
-/* The newest finding, under the control: one line that opens the decision's page. */
-.explore-finding {
-	display: flex;
+/* Researching: a quiet capsule, after the Build status capsule, that still opens the menu. */
+.explore-capsule {
+	display: inline-flex;
 	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	inline-size: 100%;
-	min-width: 0;
-	margin-block-start: calc(var(--spacing) * 2);
-	border-radius: var(--radius-md);
-	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+	gap: var(--spacing);
+	height: var(--control-height-compact);
+	padding-inline: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	background: var(--color-inset);
 	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-	text-align: start;
+	font-weight: 500;
+	white-space: nowrap;
 	color: var(--color-text-secondary);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
 }
 
-button.explore-finding:is(:hover, :focus-visible) {
+.explore-capsule:is(:hover, [data-popup-open]) {
+	background: var(--color-selected);
+	color: var(--color-text-primary);
+}
+
+/* What exploring found: a quiet count at the footer's start that opens the decision's page. */
+.explore-count {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing);
+	min-width: 0;
+	border-radius: var(--radius-md);
+	padding: var(--spacing) calc(var(--spacing) * 1.5);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	white-space: nowrap;
+	color: var(--color-text-tertiary);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out);
+}
+
+.explore-count:is(:hover, :focus-visible) {
 	background: var(--color-hover);
 	color: var(--color-text-primary);
 }
 
-.explore-finding-icon {
-	display: flex;
-	flex: none;
-	color: var(--color-text-tertiary);
+.explore-count-chevron {
+	transform: rotate(90deg);
 }
 
-.explore-finding-line {
-	flex: 1;
+/* Waiting on a person is amber: the same quiet capsule family as the count and the Research status. */
+.explore-waiting {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing);
+	min-width: 0;
+	height: var(--control-height-compact);
+	padding-inline: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-full);
+	background: var(--color-warning-surface);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	font-weight: 500;
+	color: var(--color-warning-text);
+}
+
+.explore-waiting-names {
 	min-width: 0;
 	overflow: hidden;
-	white-space: nowrap;
 	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.explore-finding-meta {
-	flex: none;
-	font-size: var(--text-xs);
-	color: var(--color-text-tertiary);
-}
-
-.explore-finding-chevron {
-	flex: none;
-	color: var(--color-text-tertiary);
+button.explore-waiting:is(:hover, :focus-visible) {
+	filter: brightness(0.97);
 }

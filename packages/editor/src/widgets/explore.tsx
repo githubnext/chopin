@@ -93,48 +93,52 @@ export function FindingIcon({ finding }: { finding: Finding }) {
 		: <GlobeSearchIcon aria-hidden="true" />;
 }
 
+/** "Sam", "Sam and Lily", "Sam and 2 others". */
+export function waitingNames(logins: readonly string[]): string {
+	if (logins.length <= 2) return logins.join(" and ");
+	let rest = logins.length - 1;
+	return `${logins[0]} and ${rest} others`;
+}
+
+/** Who a decision is waiting on: an amber capsule, the first face then the words. */
+export function WaitingStatus(
+	{ logins, onOpen }: { logins: readonly string[]; onOpen?: () => void },
+) {
+	if (logins.length === 0) return null;
+	let content = (
+		<>
+			<Face decorative handle={logins[0]!} size={16} />
+			<span className="explore-waiting-names">Waiting for {waitingNames(logins)}</span>
+		</>
+	);
+	return onOpen
+		? (
+			<button className="explore-waiting" data-decision-waiting="" onClick={onOpen} type="button">
+				{content}
+			</button>
+		)
+		: <span className="explore-waiting" data-decision-waiting="">{content}</span>;
+}
+
+/** Findings that count toward the card's quiet "N findings" button: all but unanswered asks. */
+export function shownFindings(findings: readonly Finding[] | undefined): Finding[] {
+	return (findings ?? []).filter(finding => finding.kind !== "ask" || finding.status === "ready");
+}
+
 /**
- * The newest finding under the card's control, or a count when there are several. The row opens
- * the decision's page, where every finding is listed.
+ * The card footer's count of what exploring found. It opens the decision's page, where every
+ * finding is listed; nothing shows while research runs, since the trigger says so.
  */
-export function FindingRow(
+export function FindingsCount(
 	{ findings, onOpen }: { findings: readonly Finding[] | undefined; onOpen?: () => void },
 ) {
-	let shown = (findings ?? []).filter(finding =>
-		finding.kind !== "ask" || finding.status === "ready"
-	);
-	if (shown.length === 0) return null;
-	let latest = shown.at(-1)!;
-	let content = shown.length > 1
-		? (
-			<>
-				<span aria-hidden="true" className="explore-finding-icon">
-					<MagnifierIcon />
-				</span>
-				<span className="explore-finding-line">{shown.length} findings</span>
-			</>
-		)
-		: (
-			<>
-				<span aria-hidden="true" className="explore-finding-icon">
-					<FindingIcon finding={latest} />
-				</span>
-				<span className="explore-finding-line">{findingLine(latest)}</span>
-				{findingMeta(latest) && <span className="explore-finding-meta">{findingMeta(latest)}</span>}
-			</>
-		);
-	if (!onOpen) {
-		return <div className="explore-finding" data-decision-finding="">{content}</div>;
-	}
+	let count = shownFindings(findings).length;
+	if (count === 0 || !onOpen || working(findings).length > 0) return null;
 	return (
-		<button
-			className="explore-finding"
-			data-decision-finding=""
-			onClick={onOpen}
-			type="button"
-		>
-			{content}
-			<ChevronIcon aria-hidden="true" className="explore-finding-chevron" />
+		<button className="explore-count" data-decision-findings="" onClick={onOpen} type="button">
+			<MagnifierIcon aria-hidden="true" size={14} />
+			{count === 1 ? "1 finding" : `${count} findings`}
+			<ChevronIcon aria-hidden="true" className="explore-count-chevron" size={14} />
 		</button>
 	);
 }
@@ -291,15 +295,17 @@ export function ExploreMenu(
 		>
 			<Popover.Trigger
 				aria-busy={exploring || undefined}
-				className="btn btn-sm btn-outline explore-trigger"
+				className={exploring ? "explore-capsule" : "btn btn-sm btn-outline explore-trigger"}
 				disabled={disabled}
 				data-exploring={exploring ? "" : undefined}
 			>
 				{exploring
 					? <LoaderIcon aria-hidden="true" className="explore-spin" />
 					: <MagnifierIcon aria-hidden="true" />}
-				{exploring ? "Researching" : "Research"}
-				<ChevronIcon aria-hidden="true" className="explore-trigger-chevron" />
+				{exploring
+					? active.some(finding => finding.kind === "spike") ? "Investigating" : "Researching"
+					: "Research"}
+				{!exploring && <ChevronIcon aria-hidden="true" className="explore-trigger-chevron" />}
 			</Popover.Trigger>
 			<Popover.Portal>
 				<Popover.Positioner align="end" className="explore-positioner" sideOffset={4}>

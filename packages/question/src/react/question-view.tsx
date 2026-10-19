@@ -118,7 +118,6 @@ export type QuestionViewProps = {
 	/** Controls in the trailing header, beside question-specific presence. */
 	headerActions?: ReactNode;
 	/** Host content under the answer control, such as the latest finding. */
-	belowControl?: ReactNode;
 	/** Host controls at the start of the footer, before Discard and Save. */
 	footerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
@@ -813,7 +812,6 @@ export function QuestionView(props: QuestionViewProps) {
 		errorClassName,
 		aside,
 		headerActions,
-		belowControl,
 		footerActions,
 		places,
 		relations,
@@ -1210,7 +1208,6 @@ export function QuestionView(props: QuestionViewProps) {
 								/>
 							)}
 						</fieldset>
-						{belowControl}
 					</section>
 				);
 

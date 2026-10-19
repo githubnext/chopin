@@ -21,7 +21,7 @@ import { Deck } from "../deck";
 import { leaveDeck } from "../deck-leave";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
-import { ExploreMenu, FindingRow, waitingOn } from "./explore";
+import { ExploreMenu, FindingsCount, shownFindings, waitingOn, WaitingStatus } from "./explore";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "../pointer";
 import { PendingAnswersContext } from "../save-bar";
@@ -81,6 +81,8 @@ export type QuestionnaireCardProps = {
 	/** Durable lifecycle state can arrive separately from the document node. */
 	meta?: Question.CardMeta;
 	presentation?: "inline" | "deck" | "list";
+	/** A decision's own page: the answer control sits on the paper, with no card box or head. */
+	page?: boolean;
 	motionImmediately?: () => boolean;
 	onCardSource?: (questionnaireId: string) => void;
 	/** The viewer's own handle, who is never shown as present on a card. */
@@ -175,6 +177,7 @@ export function QuestionnaireCard(
 		explore,
 		motionImmediately,
 		onCardSource,
+		page,
 		presentation = "inline",
 		self,
 		onQuestionEnter,
@@ -229,6 +232,7 @@ export function QuestionnaireCard(
 		: (
 			<Undecided
 				explore={explore}
+				page={page}
 				onCardSource={onCardSource}
 				self={self}
 				canEdit={canEdit}
@@ -341,7 +345,7 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, explore, meta, motion, onCardSource, self, value, wire, ...pointing }:
+	{ canEdit, connected, explore, meta, motion, onCardSource, page, self, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
@@ -349,6 +353,7 @@ function Undecided(
 			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
 			onCardSource?: (questionnaireId: string) => void;
+			page?: boolean;
 			self?: string;
 			value: Questionnaire;
 			wire?: Transport;
@@ -374,8 +379,9 @@ function Undecided(
 	let question = value.questions[0];
 	let explorable = !!explore && !!wire && editable && value.questions.length === 1 && !!question;
 
+	let Shell = page ? PageShell : SidecarCard;
 	return (
-		<SidecarCard
+		<Shell
 			data-plan-sidecar-questionnaire={value.id}
 			label={value.questions.length === 1 ? "Decision" : "Question"}
 			padded={false}
@@ -407,24 +413,32 @@ function Undecided(
 						)}
 					</>
 				}
-				belowControl={<FindingRow findings={meta?.findings} onOpen={openPage} />}
-				footerActions={(waiting.length > 0 || explorable) && (
-					<>
-						<span className="question-footer-start">
-							<PresenceFaces handles={waiting} label="Waiting for" />
-						</span>
-						{explorable && (
-							<ExploreMenu
-								findings={meta?.findings}
-								id={value.id}
-								options={question.options.map(option => option.label)}
-								question={question.prompt}
-								resources={explore!}
-								wire={wire!}
-							/>
-						)}
-					</>
-				)}
+				footerActions={(explorable
+					|| (!page
+						&& (waiting.length > 0 || (!!openPage && shownFindings(meta?.findings).length > 0))))
+					&& (
+						<>
+							<span className="question-footer-start">
+								{!page && <WaitingStatus logins={waiting} onOpen={openPage || undefined} />}
+								{!page && (
+									<FindingsCount
+										findings={meta?.findings}
+										onOpen={openPage || undefined}
+									/>
+								)}
+							</span>
+							{explorable && (
+								<ExploreMenu
+									findings={meta?.findings}
+									id={value.id}
+									options={question.options.map(option => option.label)}
+									question={question.prompt}
+									resources={explore!}
+									wire={wire!}
+								/>
+							)}
+						</>
+					)}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
@@ -474,7 +488,27 @@ function Undecided(
 				onPending={pending && (answers => pending.set(value.id, answers))}
 				{...pointing}
 			/>
-		</SidecarCard>
+		</Shell>
+	);
+}
+
+/** The answer control of a decision's own page: the card's content with no box around it. */
+function PageShell(
+	{ children, label, ...rest }: {
+		children: ReactNode;
+		label: string;
+		padded?: boolean;
+		"data-plan-sidecar-questionnaire"?: string;
+	},
+) {
+	return (
+		<section
+			aria-label={label}
+			className="question-page-shell"
+			data-plan-sidecar-questionnaire={rest["data-plan-sidecar-questionnaire"]}
+		>
+			{children}
+		</section>
 	);
 }
 

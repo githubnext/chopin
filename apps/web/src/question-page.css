@@ -3,6 +3,7 @@
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
+	gap: calc(var(--spacing) * 6);
 	color: var(--color-text-primary);
 }
 
@@ -13,9 +14,17 @@
 }
 
 .question-page h2 {
-	margin-block: calc(var(--spacing) * 10) calc(var(--spacing) * 3);
+	margin: 0;
 	font-size: var(--text-xl);
 	line-height: var(--text-xl--line-height);
+}
+
+.question-page-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 2);
+	align-self: stretch;
 }
 
 .question-page-status {
@@ -39,14 +48,37 @@
 	color: var(--color-success-text);
 }
 
+.question-page > h2 {
+	margin-block-end: calc(var(--spacing) * -4);
+}
+
+.question-page-section h2 {
+	margin-block-end: calc(var(--spacing) * 2);
+}
+
 .question-page .question-page-title {
-	margin-block-start: calc(var(--spacing) * 3);
+	margin-block-start: calc(var(--spacing) * -3);
 	font-size: var(--text-2xl);
 	line-height: var(--text-2xl--line-height);
 }
 
 .question-page-answer {
-	margin-block-start: calc(var(--spacing) * 4);
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+	justify-items: start;
+}
+
+.question-page-answer-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+}
+
+/* What was considered reads as a plain list on the paper, with the chosen option tinted. */
+.question-page-considered {
+	align-self: stretch;
+	margin: 0 calc(var(--spacing) * -2);
 }
 
 .question-page-answer-text {
@@ -57,18 +89,13 @@
 }
 
 .question-page-answer-meta {
-	margin: var(--spacing) 0 0;
+	margin: 0;
 	font-size: var(--text-xs);
 	color: var(--color-text-tertiary);
 }
 
 .question-page-control {
 	align-self: stretch;
-	margin-block-start: calc(var(--spacing) * 6);
-}
-
-.question-page h2 + .question-page-control {
-	margin-block-start: 0;
 }
 
 .question-page-section {
@@ -77,6 +104,88 @@
 
 .question-page-findings,
 .question-page-takes,
+.question-page-sources {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.question-page-findings > li + li {
+	border-block-start: var(--edge-width) solid var(--color-edge);
+}
+
+/*
+ * One row geometry for every finding, folding or not: the toggle's own padding is the row's,
+ * the icon column and the title start match, and the icon, meta and chevron are each centred
+ * on the title's first line.
+ */
+.question-page-findings {
+	/* The title's line box as a length: the token itself is a bare ratio. */
+	--finding-line: calc(1rem * var(--text-base--line-height));
+	margin-inline: calc(var(--spacing) * -2);
+}
+
+.question-page-finding-head {
+	display: flex;
+	flex: 1;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 2);
+	min-width: 0;
+}
+
+.question-page-finding-static {
+	display: flex;
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+}
+
+.question-page-finding .cv-unfold-section-toggle {
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 2);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+}
+
+.question-page-finding .cv-unfold-chevron {
+	margin-block: calc((var(--finding-line) - 0.75rem) / 2);
+}
+
+.question-page-finding-icon {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	inline-size: 1rem;
+	block-size: var(--finding-line);
+	color: var(--color-text-tertiary);
+}
+
+.question-page-finding-title {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+	font-weight: var(--font-weight-medium);
+	text-align: start;
+	color: var(--color-text-primary);
+}
+
+.question-page-finding-meta {
+	display: flex;
+	flex: none;
+	align-items: center;
+	block-size: var(--finding-line);
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+/* The panel's text lines up with the title, past the icon column. */
+.question-page-finding-summary,
+.question-page-finding-branch {
+	margin: 0 0 calc(var(--spacing) * 3);
+	padding-inline-start: calc(var(--spacing) * 2 + 1rem + var(--spacing) * 2);
+	color: var(--color-text-secondary);
+}
+
 .question-page-sources {
 	margin: 0;
 	padding: 0;
@@ -130,6 +239,7 @@
 	display: grid;
 	gap: var(--spacing);
 	padding-block-end: calc(var(--spacing) * 3);
+	padding-inline-start: calc(var(--spacing) * 2 + 1rem + var(--spacing) * 2);
 }
 
 .question-page-sources a {
@@ -153,6 +263,9 @@
 }
 
 .question-page-take-name {
+	display: flex;
+	align-items: center;
+	min-block-size: 1.5rem;
 	font-size: var(--text-sm);
 	font-weight: var(--font-weight-medium);
 }
@@ -200,8 +313,24 @@
 	display: none;
 }
 
-/* The page already names the question and lists its findings; its control shows only the answer. */
-.question-page-control
-	:is(.question-mark, .question-title, .question-resolved-meta, [data-decision-finding]) {
+/* The page names the question above and lists its findings: its control is the options and actions. */
+.question-page-shell .question-head {
 	display: none;
+}
+
+/* The rows' own inset lines their letters up with the title; the tint reaches past it. */
+.question-page-shell {
+	margin-inline: calc(var(--spacing) * -2);
+}
+
+.question-page-shell .question-card {
+	padding: 0;
+}
+
+.question-page-shell .question-options {
+	margin-block-start: 0;
+}
+
+.question-page-shell .question-actions {
+	margin-block-start: calc(var(--spacing) * 3);
 }
