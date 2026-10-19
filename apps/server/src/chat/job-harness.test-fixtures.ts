@@ -13,7 +13,7 @@ export function harness(agent = true, chats: Chat.Chat[]) {
 	let repository = { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" };
 	let context = {
 		chat,
-		plan: { chat },
+		plan: { chat, records: new Map() },
 		server: {
 			publish(_topic: string, body: string) {
 				let frame = JSON.parse(body) as Record<string, unknown>;
