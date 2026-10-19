@@ -2176,7 +2176,7 @@ async function createQuestionPage(
 		repositoryName: parent.repositoryName,
 		parentChannelId: parent.id,
 		title,
-		initial: await Service.initial("", undefined, title),
+		initial: await Service.initial("", undefined, title, { recordId: input.recordId }),
 		createdBy: input.by,
 		now: new Date(),
 	}).catch(async error => {

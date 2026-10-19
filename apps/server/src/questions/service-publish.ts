@@ -59,6 +59,7 @@ export async function publishQuestions(
 		created?: () => void;
 	} = {},
 ) {
+	if (Service.isQuestionPage(plan)) Question.reject(Service.QUESTION_PAGE_REFUSAL);
 	if (Service.implementationActive(plan)) throw new Error("implementation is active");
 	if (definition.questions.length === 0 || options.identity && definition.questions.length !== 1) {
 		Question.reject("Invalid decision count");

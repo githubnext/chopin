@@ -8,8 +8,9 @@ afterEach(() => {
 	process.env = { ...saved };
 });
 
-function plan(records = 0, threads = 0) {
+function plan(records = 0, threads = 0, parentChannelId?: string) {
 	return {
+		...(parentChannelId ? { parentChannelId } : {}),
 		records: new Map(Array.from({ length: records }, (_, i) => [String(i), {}])),
 		threads: new Map(Array.from({ length: threads }, (_, i) => [String(i), {}])),
 	} as never;
@@ -36,4 +37,11 @@ test("dev seeding is off without its flag and in production", () => {
 	process.env.NODE_ENV = "production";
 	expect(Inject.enabled(plan())).toBe(false);
 	expect(Marks.enabled(plan())).toBe(false);
+});
+
+test("dev seeding never puts sample decisions in a child document", () => {
+	process.env.NODE_ENV = "development";
+	process.env.DEV_QUESTIONS = "1";
+	expect(Inject.enabled(plan(0, 0))).toBe(true);
+	expect(Inject.enabled(plan(0, 0, "parent"))).toBe(false);
 });

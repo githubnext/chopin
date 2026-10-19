@@ -160,6 +160,26 @@ export type CreationMetadata = {
 	origin: CreationOrigin;
 };
 
+/** Marks a child as the page of one decision record in its parent. */
+export type QuestionPage = { recordId: string };
+
+/** A decision page holds Notes, never decisions: those live in its parent. */
+export function isQuestionPage(plan: Pick<Plan, "questionPage">): boolean {
+	return plan.questionPage !== undefined;
+}
+
+export const QUESTION_PAGE_REFUSAL = "Decisions live in the parent document";
+
+function questionPage(value: JsonValue | undefined): QuestionPage | undefined {
+	if (value === undefined) return undefined;
+	if (
+		!value || typeof value !== "object" || Array.isArray(value)
+		|| Object.keys(value).length !== 1 || typeof value.recordId !== "string"
+		|| !value.recordId.trim()
+	) throw new Error("hosted channel has an invalid question page marker");
+	return { recordId: value.recordId };
+}
+
 /** Durable result of one accepted MCP document rewrite. */
 export type McpUpdateRecord = {
 	idempotencyKey: string;
@@ -217,6 +237,8 @@ export type Plan = {
 	readonly parentChannelId?: string;
 	/** Context retained for plans created through MCP. */
 	creation?: CreationMetadata;
+	/** Set when this child is a decision's page; its decisions live in the parent. */
+	questionPage?: QuestionPage;
 	/** Idempotent MCP rewrites retained so later edits do not change a replay. */
 	mcpUpdates: McpUpdateRecord[];
 	server: Server<SocketData>;
@@ -310,6 +332,7 @@ type Sidecar = {
 	revision: number;
 	documentSeq: number;
 	creation?: CreationMetadata;
+	questionPage?: QuestionPage;
 	graph?: Graph;
 	execution?: Run;
 	lifecycle?: Lifecycle;
@@ -338,6 +361,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		revision: plan.revision,
 		documentSeq: plan.document.seq,
 		...(plan.creation ? { creation: plan.creation } : {}),
+		...(plan.questionPage ? { questionPage: plan.questionPage } : {}),
 		...(plan.graph ? { graph: plan.graph } : {}),
 		...(plan.builds.length ? { builds: plan.builds } : {}),
 		...(plan.execution ? { execution: plan.execution } : {}),
@@ -529,6 +553,7 @@ function restoredState(
 	let created = item.creation === undefined
 		? legacyCreation(item.brief, item.origin)
 		: creation(item.creation);
+	let page = questionPage(item.questionPage);
 	let graph = restoreGraph(item.graph);
 	let expected = [
 		"documentSeq",
@@ -540,6 +565,7 @@ function restoredState(
 		"version",
 	];
 	if (created) expected.push(...(legacy ? ["brief", "origin"] : ["creation"]));
+	if (page) expected.push("questionPage");
 	if (Object.hasOwn(item, "builds")) expected.push("builds");
 	let builds = restoreBuilds(item.builds, scope?.repositoryId);
 	if (Object.hasOwn(item, "graph")) expected.push("graph");
@@ -731,6 +757,7 @@ function restoredState(
 		revision: item.revision,
 		documentSeq: item.documentSeq,
 		...(created ? { creation: created } : {}),
+		...(page ? { questionPage: page } : {}),
 		...(graph ? { graph } : {}),
 		...(builds.length ? { builds } : {}),
 		...(execution ? { execution } : {}),
@@ -901,6 +928,7 @@ export async function initial(
 	source: string,
 	creation?: CreationMetadata,
 	title?: string,
+	page?: QuestionPage,
 ): Promise<InitialChannel> {
 	// A new document has no stored links to spare from the newer URL rules.
 	assertIntroducedUrls([], parse(source).children);
@@ -913,6 +941,7 @@ export async function initial(
 			revision: 0,
 			documentSeq: document.seq,
 			...(creation ? { creation } : {}),
+			...(page ? { questionPage: page } : {}),
 			questions: [],
 			openQuestions: [],
 			threads: [],
@@ -1474,6 +1503,7 @@ export async function open(
 			: {}),
 		builds: sidecar.builds ?? [],
 		...(sidecar.creation ? { creation: sidecar.creation } : {}),
+		...(sidecar.questionPage ? { questionPage: sidecar.questionPage } : {}),
 		mcpUpdates: sidecar.mcpUpdates ?? [],
 		server,
 		document,

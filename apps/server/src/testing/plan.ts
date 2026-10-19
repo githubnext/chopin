@@ -23,6 +23,8 @@ export type SeedState = {
 	threads?: unknown[];
 	transcript?: unknown[];
 	parent?: string;
+	/** Seed the sidecar marker of a decision's page. */
+	questionPage?: { recordId: string };
 };
 
 export function storedQuestion(definition: Definition): number[] {
@@ -186,6 +188,7 @@ export async function checkpointSource(
 		openQuestions: state.openQuestions ?? [],
 		threads: state.threads ?? [],
 		transcript: state.transcript ?? [],
+		...(state.questionPage ? { questionPage: state.questionPage } : {}),
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
 		...(state.lifecycle ? { lifecycle: state.lifecycle } : {}),
