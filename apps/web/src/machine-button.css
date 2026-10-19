@@ -63,10 +63,10 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	padding: var(--menu-padding);
-	/* A popover's hairline edge, with the raised shadow. */
-	box-shadow:
-		var(--shadow-raised),
-		0 0 0 var(--edge-width) var(--color-edge);
+	/* A popover's hairline edge, as the shared menu surface draws it, with the raised shadow. */
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	box-shadow: var(--shadow-raised);
 	transform-origin: var(--motion-origin-x, left) top;
 }
 
