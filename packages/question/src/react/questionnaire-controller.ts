@@ -1,5 +1,6 @@
 import { derive } from "../answer";
 import { crdt, setMark } from "../draft";
+import type { Model as DraftModel } from "../draft";
 import { decision, identified } from "../schema";
 import { textSplice } from "./text-splice";
 import type { Definition, Drafts, Mark } from "../index";
@@ -183,7 +184,9 @@ export class QuestionnaireController {
 		let doc = this.#model;
 		if (!doc || this.#snapshot.closed || this.#terminal || this.#snapshot.submitting) return;
 		this.#set({ error: undefined, focus: undefined });
-		doc.api.transaction(() => setMark(doc, question, option, criterion, mark));
+		doc.api.transaction(() =>
+			setMark(doc as unknown as DraftModel, question, option, criterion, mark)
+		);
 	};
 
 	/** Report the question this person is working on; undefined when they leave it. */

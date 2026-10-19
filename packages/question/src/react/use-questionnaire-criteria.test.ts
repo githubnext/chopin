@@ -74,7 +74,10 @@ describe("QuestionnaireController criteria", () => {
 		let controller = new QuestionnaireController(wire, "w", DEFINITION, true);
 		let off = controller.subscribe(() => {});
 		await Bun.sleep(0);
-		expect(await controller.addCriterion("q0", "Easy reset")).toEqual({ ok: true, criterion: "c1" });
+		expect(await controller.addCriterion("q0", "Easy reset")).toEqual({
+			ok: true,
+			criterion: "c1",
+		});
 		let [call] = asked.filter(each => each.kind === "question:criterion");
 		expect(call?.payload).toMatchObject({ id: "w", question: "q0", label: "Easy reset" });
 		expect(call?.payload.key).toEqual(expect.any(String));
@@ -87,7 +90,11 @@ describe("QuestionnaireController criteria", () => {
 		let controller = new QuestionnaireController(wire, "w", DEFINITION, true);
 		let off = controller.subscribe(() => {});
 		await Bun.sleep(0);
-		let grown = appendCriterion(DEFINITION, { question: "q0", key: crypto.randomUUID(), label: "Easy reset" }, "c1");
+		let grown = appendCriterion(DEFINITION, {
+			question: "q0",
+			key: crypto.randomUUID(),
+			label: "Easy reset",
+		}, "c1");
 		if (!grown.ok) throw new Error("setup");
 		for (let handler of handlers.get("question:criterion-added") ?? []) {
 			handler({ id: "w", definition: grown.definition } as never);
