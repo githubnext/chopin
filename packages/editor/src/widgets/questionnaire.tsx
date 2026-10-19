@@ -27,6 +27,7 @@ import { Provenance, SidecarCard } from "../card";
 import { useCardMeta } from "../card-meta";
 import { ContentSwapLayer } from "../content-swap";
 import { Deck } from "../deck";
+import { CriteriaTable } from "./criteria-table";
 import { leaveDeck } from "../deck-leave";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
@@ -52,7 +53,7 @@ import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { LexicalEditor } from "lexical";
 import type { Transport } from "@chopin/question/react";
-import type { Answer, Drafts, Relation } from "@chopin/question";
+import type { Answer, Drafts, Marks, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { ExploreResources, QuestionStepMotion } from "../widget-options";
 import type { MemberState } from "../deck-runs";
@@ -89,6 +90,9 @@ function definition(value: Questionnaire) {
 				label: option.label,
 				description: option.description ?? "",
 			})),
+			...(question.criteria
+				? { criteria: question.criteria.map(({ id, label }) => ({ id, label })) }
+				: {}),
 		})),
 	};
 }
@@ -236,7 +240,7 @@ export function QuestionnaireCard(
 	let presence = useTransitionPresence(shown === "hidden" ? undefined : value.id, 200, immediate);
 	let lastVisible = useRef<{ id: string; content: ReactNode } | undefined>(undefined);
 	let content = shown === "resolved" && page
-		? <PageAnswer value={value} />
+		? <PageAnswer marks={meta?.marks} value={value} />
 		: shown === "resolved"
 		? (
 			<Decided
@@ -473,6 +477,8 @@ function Undecided(
 				refining={meta?.refining}
 				previous={previous}
 				onAddOption={editable ? state.addOption : undefined}
+				onAddCriterion={editable ? state.addCriterion : undefined}
+				onMark={editable ? state.mark : undefined}
 				onDiscard={editable ? state.discard : undefined}
 				onChange={editable ? state.change : undefined}
 				onQuestionFocus={editable ? state.focusQuestion : undefined}
@@ -550,7 +556,16 @@ export function useQuestionPageDraft(
 }
 
 /** A settled decision's page shows the open control, read-only, with the saved answer selected. */
-function PageAnswer({ value }: { value: Questionnaire }) {
+function PageAnswer({ marks, value }: { marks?: Marks; value: Questionnaire }) {
+	let [question] = value.questions;
+	// With criteria the table replaces the options list: it shows every option and the chosen row.
+	if (value.questions.length === 1 && question?.criteria?.length) {
+		return (
+			<PageShell label="Decision">
+				<CriteriaTable marks={marks ?? question.marks} question={question} />
+			</PageShell>
+		);
+	}
 	let drafts: Drafts = {};
 	for (let question of value.questions) {
 		let chosen = question.choices ?? [];
