@@ -2094,7 +2094,7 @@ textarea.question-written-field {
    squeezing the link off the attribution's edge. */
 .question-actions[data-resolved-actions] {
 	flex-wrap: wrap;
-	gap: var(--spacing);
+	gap: 0.375rem;
 	margin-block-start: var(--spacing);
 	padding-block-end: 0;
 }

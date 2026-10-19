@@ -858,18 +858,19 @@ export function ResolvedLayer(
 										</p>
 									)}
 									<ResolvedActions
-										className="mt-3 flex flex-wrap items-center justify-end gap-2"
+										className="question-actions"
 										disabled={options.canEdit === false || options.connected !== true
 											|| !actionable || !options.wire}
 										key={`${decision.key}:${intent.current}`}
 										note={options.explore?.openPage && (
 											<button
-												className="btn btn-sm btn-ghost"
+												aria-label="Expand decision"
+												className="btn btn-icon btn-ghost corner-bottom-start"
+												data-tooltip="Expand decision"
 												onClick={() => options.explore?.openPage?.(decision.widget)}
 												type="button"
 											>
-												<ExpandIcon aria-hidden="true" />
-												Expand decision
+												<ExpandIcon aria-hidden="true" size={16} />
 											</button>
 										)}
 										onDiscard={() => actions.request("discard", decision)}

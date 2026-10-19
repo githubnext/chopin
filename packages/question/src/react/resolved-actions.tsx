@@ -30,7 +30,7 @@ export function ResolvedActions(
 					<>
 						<p className="m-0 mr-auto text-xs text-text-secondary">Discard this decision?</p>
 						<button
-							className="btn btn-sm btn-secondary"
+							className="btn btn-sm btn-outline"
 							data-resolved-action="keep"
 							disabled={submitting}
 							onClick={keep}
@@ -54,7 +54,7 @@ export function ResolvedActions(
 						{note && <div className="mr-auto flex min-w-0">{note}</div>}
 						{onDiscard && (
 							<button
-								className="btn btn-sm btn-secondary"
+								className="btn btn-sm btn-outline"
 								data-resolved-action="discard"
 								disabled={disabled || submitting}
 								onClick={beginResolvedDiscard}

@@ -5442,10 +5442,9 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-decision-meta {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	column-gap: 1rem;
-	row-gap: 0.5rem;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.375rem;
 	/* A clear space separates what was decided from who and when. */
 	margin-block-start: 1rem;
 	font-size: var(--text-xs);
@@ -6076,4 +6075,27 @@ button.explore-count:is(:hover, :focus-visible) {
 
 button.explore-waiting:is(:hover, :focus-visible) {
 	filter: brightness(0.97);
+}
+
+/*
+ * A bottom-left corner button sits the shared inset from the card's left and bottom edges, by
+ * undoing the container's padding (--corner-pad). Mirrors the top-right rule.
+ */
+.corner-bottom-start {
+	margin-inline-start: calc(var(--card-corner-inset) - var(--corner-pad, 0px));
+	margin-block-end: calc(var(--card-corner-inset) - var(--corner-pad, 0px));
+}
+
+.question-actions > :has(> .corner-bottom-start) {
+	align-self: flex-end;
+}
+
+.plan-decision-pop {
+	--corner-pad: 0.75rem;
+}
+
+/* Actions in the popover read as the card's footer, inside the popover's own padding. */
+.plan-decision-pop .question-actions[data-resolved-actions] {
+	margin-block-start: 0.75rem;
+	padding-inline: 0;
 }
