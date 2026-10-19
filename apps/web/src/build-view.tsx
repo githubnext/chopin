@@ -7,7 +7,7 @@ import {
 	ServerIcon,
 	WarningIcon,
 } from "@chopin/icons";
-import { useEffect, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 
 import { BuildGlyph } from "./build-plan-button";
 import {
@@ -36,6 +36,7 @@ import {
 	implementationResponse as response,
 	stopBuild,
 } from "./build-start";
+import { InlineMarkdown } from "./chat/markdown";
 import { LocalAgentNote } from "./local-agent-note";
 import { MachineGlyph } from "./machine-button";
 
@@ -640,7 +641,9 @@ function TaskRow(
 					type="button"
 				>
 					<span aria-hidden="true" className="build-task-dot" data-state={state} />
-					<span className="build-task-title">{task.title}</span>
+					<span className="build-task-title">
+						<InlineMarkdown links={false} source={task.title} />
+					</span>
 					<span className="sr-only">, {TASK_STATE_LABEL[state]}</span>
 				</button>
 				{pullRequest && (
@@ -661,14 +664,33 @@ function TaskRow(
 			<div className="build-task-fold" data-open={expanded || undefined} id={panel}>
 				<div inert={!expanded}>
 					<div className="build-task-detail">
-						<p className="m-0">{task.goal}</p>
-						{summary && <p className="build-task-summary">{summary}</p>}
+						<p className="m-0">
+							<InlineMarkdown source={task.goal} />
+						</p>
+						{summary && (
+							<p className="build-task-summary">
+								<InlineMarkdown source={summary} />
+							</p>
+						)}
 						{!summary && task.acceptance.length > 0 && (
 							<ul className="build-task-acceptance">
-								{task.acceptance.map((item, index) => <li key={index}>{item}</li>)}
+								{task.acceptance.map((item, index) => (
+									<li key={index}>
+										<InlineMarkdown source={item} />
+									</li>
+								))}
 							</ul>
 						)}
-						{after.length > 0 && <p className="m-0 text-text-tertiary">After {after.join(", ")}</p>}
+						{after.length > 0 && (
+							<p className="m-0 text-text-tertiary">
+								After {after.map((title, index) => (
+									<Fragment key={index}>
+										{index > 0 && ", "}
+										<InlineMarkdown links={false} source={title} />
+									</Fragment>
+								))}
+							</p>
+						)}
 						{reason && (
 							<p className="build-task-blocker">
 								{!blockerLabelled(reason) && "Blocked: "}

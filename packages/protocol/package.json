@@ -13,6 +13,10 @@
 		"./implementation": {
 			"types": "./implementation.d.ts"
 		},
+		"./activity": {
+			"types": "./activity.ts",
+			"default": "./activity.ts"
+		},
 		"./address": {
 			"types": "./address.ts",
 			"default": "./address.ts"

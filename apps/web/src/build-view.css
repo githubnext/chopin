@@ -472,6 +472,27 @@
 	list-style: disc;
 }
 
+/* An agent's task text keeps Chat's inline code: a quiet inset chip at the surrounding size. */
+.build-task-title code,
+.build-task-detail code {
+	border-radius: var(--radius-sm);
+	background: var(--color-inset);
+	padding: calc(var(--spacing) / 2) var(--spacing);
+	font-family: var(--font-mono);
+	overflow-wrap: anywhere;
+}
+
+.build-task-detail a:not(.build-task-sha) {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-underline-offset: 2px;
+}
+
+.build-task-detail a:not(.build-task-sha):hover {
+	text-decoration-color: currentColor;
+}
+
 .build-task-blocker {
 	margin: 0;
 	color: var(--color-warning-ink);

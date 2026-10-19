@@ -683,6 +683,26 @@ test(
 	20_000,
 );
 
+test("a build's activity names a shell command's step without the command", async () => {
+	let abort = new AbortController();
+	let timer = setTimeout(() => abort.abort(), 15_000);
+	try {
+		let { calls } = await run({}, ["--hang", "--activity", "--command-activity"], (name, args) => {
+			if (name === "renew_implementation_build" && args.progress === "Running a command") {
+				throw new ConnectorError("build-inactive", "build-inactive");
+			}
+			return {};
+		}, abort.signal);
+		let progress = calls
+			.filter(([name]) => name === "renew_implementation_build")
+			.map(([, args]) => args.progress);
+		expect(progress).toContain("Running a command");
+		expect(progress.join("\n")).not.toContain("sleep");
+	} finally {
+		clearTimeout(timer);
+	}
+}, 20_000);
+
 test("activity follows tool updates after a permission is answered", async () => {
 	let descriptor = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
 	Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });

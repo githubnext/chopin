@@ -147,6 +147,61 @@ test("Build shares the document pane beside Chat and a task link reopens it afte
 		.toBeInViewport();
 });
 
+test(
+	"Build shows an agent's inline Markdown in task text as formatting",
+	async ({ seed, join: enter }, testInfo) => {
+		let graph = preparedGraph();
+		let [connect, review] = graph.versions[0]!.definition.tasks;
+		Object.assign(connect!, { title: "Prove the decision core in `verified/src/login.rs`" });
+		Object.assign(review!, {
+			title: "Rewire `login` to call `plan_lookup` and `role_claim`",
+			goal: "`POST /api/auth/login` decides every outcome through **the proved code**.",
+			acceptance: [
+				"`backend/Cargo.toml` depends on `verified` and `cargo build -p backend` succeeds.",
+				"See [the plan](https://example.com/plan) for the _exact_ status codes.",
+			],
+		});
+		await seed("# Build review\n\nShow task text the way Chat would.\n", {
+			graph,
+			builds: [failedBuild(graph)],
+		});
+		let page = await enter("ana");
+		await page.getByRole("group", { name: "Document view", exact: true })
+			.getByRole("button", { name: "Build", exact: true }).click();
+		let view = page.getByRole("region", { name: "Build", exact: true });
+		let toggle = view.getByRole("button", { name: /^Rewire .*login.* to call/ });
+		await toggle.click();
+		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		let detail = page.locator(`#${await toggle.getAttribute("aria-controls")}`);
+		await expect(detail).toContainText("status codes");
+		await page.waitForFunction(() =>
+			document.getAnimations().every(animation => animation.playState !== "running")
+		);
+		let screenshot = testInfo.outputPath("task-markdown.png");
+		await view.getByRole("list", { name: "Tasks", exact: true }).screenshot({ path: screenshot });
+		await testInfo.attach("task-markdown", { path: screenshot, contentType: "image/png" });
+		await expect(toggle).toHaveAccessibleName(/^Rewire login to call plan_lookup and role_claim/);
+		await expect(toggle.locator("code")).toHaveText(["login", "plan_lookup", "role_claim"]);
+		await expect(detail.locator("code")).toHaveText([
+			"POST /api/auth/login",
+			"backend/Cargo.toml",
+			"verified",
+			"cargo build -p backend",
+			// The task it waits for, by its title.
+			"verified/src/login.rs",
+		]);
+		await expect(detail.locator("strong")).toHaveText("the proved code");
+		await expect(detail.locator("em")).toHaveText("exact");
+		await expect(detail.getByRole("link", { name: "the plan", exact: true }))
+			.toHaveAttribute("href", "https://example.com/plan");
+		// A link inside the task's own button would nest one control in another.
+		await expect(toggle.getByRole("link")).toHaveCount(0);
+		await expect(view).not.toContainText("`");
+		let code = detail.locator("code").first();
+		expect(await code.evaluate(element => getComputedStyle(element).fontFamily)).toMatch(/mono/i);
+	},
+);
+
 async function connector(baseURL: string, command: string[], env: Record<string, string> = {}) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-implementation-checkout-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-implementation-state-"));
@@ -229,6 +284,7 @@ for (let width of [1280, 390]) {
 			join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
 			"--hang",
 			"--activity",
+			"--command-activity",
 		]);
 		try {
 			let page = await enter(person(), { viewport: { width, height: 844 } });
@@ -244,10 +300,12 @@ for (let width of [1280, 390]) {
 					(await (await page.request.get(`/api/channels/${room}/implementation`)).json())
 						.build?.activity?.text,
 				{ timeout: 25_000 },
-			).toBe("Running server tests");
+			).toBe("Running a command");
 			await page.getByRole("button", { name: "Build", exact: true }).click();
 			let view = page.getByRole("region", { name: "Build", exact: true });
-			await expect(view.getByText("Running server tests", { exact: true })).toBeVisible();
+			// The agent's shell tool was titled with its raw command; Build names the step instead.
+			await expect(view.getByText("Running a command", { exact: true })).toBeVisible();
+			await expect(view).not.toContainText("sleep 900");
 			let stop = view.getByRole("button", { name: "Stop build", exact: true });
 			await expect(stop).toBeInViewport({ ratio: 1 });
 			await stop.focus();

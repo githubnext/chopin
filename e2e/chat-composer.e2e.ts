@@ -246,6 +246,36 @@ test("a sent message keeps its nested list nested", async ({ join }) => {
 	expect(await left(grandchild)).toBeGreaterThan(await left(child));
 });
 
+test(
+	"a sent message keeps numbered items after a lead-in line as a list",
+	async ({ join }, testInfo) => {
+		let chat = chatPane(await join("ana"));
+		let input = chatInput(chat);
+		await fillChat(
+			input,
+			"Start now:\n1. `prove-core`: prove it.\n2. `add-tests`: add tests.\n\nNeeds task 1 first:\n3. `rewire`: rewire the handler.\n\nNeed task 3 first:\n4. `table-tests`: check tables.\n5. `secret-test`: check the secret.",
+		);
+		await input.press("Enter");
+
+		let message = chat.locator("[data-chat-markdown]").filter({ hasText: "secret-test" });
+		await expect(message).toBeVisible();
+		let screenshot = testInfo.outputPath("numbered-continuation.png");
+		await message.screenshot({ path: screenshot });
+		await testInfo.attach("numbered-continuation", { path: screenshot, contentType: "image/png" });
+		await expect(message.locator("ol")).toHaveCount(3);
+		await expect(message.locator("ol").nth(1)).toHaveAttribute("start", "3");
+		await expect(message.locator("ol").nth(2).getByRole("listitem")).toHaveText([
+			"table-tests: check tables.",
+			"secret-test: check the secret.",
+		]);
+		await expect(message.locator("p")).toHaveText([
+			"Start now:",
+			"Needs task 1 first:",
+			"Need task 3 first:",
+		]);
+	},
+);
+
 test("context-menu paste undo restores the replaced native selection", async ({ join, page }) => {
 	let input = chatInput(chatPane(await join("ana")));
 	await input.fill("hello world");

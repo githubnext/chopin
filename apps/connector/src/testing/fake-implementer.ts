@@ -113,6 +113,23 @@ let app = new AgentApp()
 						status: "in_progress",
 					},
 				});
+				if (process.argv.includes("--command-activity")) {
+					// A shell tool titled with its raw command, as Atomic's is; its update has no kind.
+					let command = "sleep 900; git -C $CHOPIN_RUN_WORKTREES/rewire status --short";
+					for (let sessionUpdate of ["tool_call", "tool_call_update"] as const) {
+						await ownerClient.notify("session/update", {
+							sessionId: params.sessionId,
+							update: {
+								sessionUpdate,
+								toolCallId: "status",
+								title: command,
+								...(sessionUpdate === "tool_call" ? { kind: "execute" as const } : {}),
+								status: "in_progress",
+								rawInput: { command },
+							},
+						});
+					}
+				}
 				if (process.argv.includes("--permission-activity")) {
 					let answer = await ownerClient.request("session/request_permission", {
 						sessionId: params.sessionId,

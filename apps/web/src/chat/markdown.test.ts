@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { MessageMarkdown } from "./markdown";
+import { InlineMarkdown, MessageMarkdown } from "./markdown";
 import { referenceRenderModel } from "./references";
 
 import type { Chat } from "@chopin/protocol";
@@ -81,6 +81,37 @@ test("indentation keeps nested lists and code blocks intact", () => {
 	expect(markdown("1. parent\n   - child\n   - sibling\n2. next")).toMatch(nested);
 	expect(markdown("```py\nif ready:\n    run()\n```")).toContain("if ready:\n    run()");
 	expect(markdown("Ask @chopin about it")).toContain("Ask about it");
+});
+
+test("a numbered list that continues after a lead-in line still renders as a list", () => {
+	let source = [
+		"Can start right away:",
+		"1. `prove-core`: prove it.",
+		"2. `add-tests`: add the tests.",
+		"",
+		"Needs task 1 first:",
+		"3. `rewire-handler`: rewire it.",
+		"",
+		"Need task 3 first:",
+		"4. `table-tests`: check tables",
+		"   and statuses.",
+		"5. `secret-test`: check the secret.",
+	].join("\n");
+	let markup = markdown(source);
+
+	expect(markup).toContain("<p>Needs task 1 first:</p>");
+	expect(markup).toContain(
+		'<ol start="3">\n<li><code>rewire-handler</code>: rewire it.</li>\n</ol>',
+	);
+	expect(markup).toContain("<p>Need task 3 first:</p>");
+	expect(markup).toMatch(
+		/<ol start="4">\s*<li><code>table-tests<\/code>: check tables\s+and statuses\.<\/li>\s*<li><code>secret-test<\/code>: check the secret\.<\/li>\s*<\/ol>/,
+	);
+	// An escaped marker, a number inside a sentence, and code stay as written.
+	expect(markdown("Released in\n2024\\. Then more")).toContain(
+		"<p>Released in\n2024. Then more</p>",
+	);
+	expect(markdown("Step\n`3. code`")).not.toContain("<ol");
 });
 
 test("authoritative ranges render internal chips inside ordinary Markdown", () => {
@@ -213,4 +244,24 @@ test("invalid and overlapping ranges remain safe ordinary text", () => {
 
 	expect(markup).not.toContain("data-chat-reference");
 	expect(markup).toContain("See #Alpha and #Beta");
+});
+
+function inline(source: string, links?: boolean): string {
+	return renderToStaticMarkup(createElement(InlineMarkdown, { source, links }));
+}
+
+test("inline Markdown formats code, emphasis and links without blocks", () => {
+	expect(inline("Rewire `login` to **call** _three_ [helpers](https://example.com)")).toBe(
+		'Rewire <code>login</code> to <strong>call</strong> <em>three</em> <a href="https://example.com" rel="noopener noreferrer" target="_blank">helpers</a>',
+	);
+	// A task title sits inside a button, so its links read as text.
+	expect(inline("See [the docs](https://example.com)", false)).toBe("See the docs");
+	// What would open a block in a message stays the text it is.
+	expect(inline("1. First")).toBe("1. First");
+	expect(inline("- item")).toBe("- item");
+	expect(inline("# Heading")).toBe("# Heading");
+	expect(inline("> quote")).toBe("&gt; quote");
+	expect(inline("    indented `code`")).toBe("indented <code>code</code>");
+	expect(inline("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw ");
+	expect(inline("one\n\ntwo")).toBe("one two");
 });

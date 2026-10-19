@@ -387,6 +387,26 @@ test("build heartbeats persist changed activity without resetting its age on eve
 		.toBe("Opening the pull request");
 });
 
+test("a heartbeat's raw shell command never reaches the build's activity", async () => {
+	let context = await setup();
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+	})).json();
+	await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	// An older connector forwards the agent's tool title, which for a shell tool is the command.
+	await tool(context, connection.token, "renew_implementation_build", {
+		id: built.id,
+		progress: "sleep 900; git -C $CHOPIN_RUN_WORKTREES/rewire status --short",
+	});
+	let snapshot = await (await context.call(context.path)).json();
+	expect(snapshot.build.activity.text).toBe("Running a command");
+	expect(JSON.stringify(snapshot)).not.toContain("sleep 900");
+	await Plan.close(context.plan);
+});
+
 test("a paired workspace claims a browser build once and reports through run-scoped MCP", async () => {
 	let context = await setup();
 	let connection = await paired(context);

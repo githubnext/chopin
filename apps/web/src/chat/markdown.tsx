@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 
+import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
 import "./markdown.css";
@@ -42,6 +43,35 @@ let COMPONENTS: Components = {
 	h5: paragraph,
 	h6: paragraph,
 };
+
+let INLINE = ["a", "code", "em", "strong"];
+
+/** Escapes what would open a block at the start of a line, so one line stays one line of text. */
+function inlineSource(source: string): string {
+	let text = source.replace(/\s+/g, " ").trim();
+	if (/^([-*_])( ?\1){2,}$/.test(text)) return `\\${text}`;
+	return text
+		.replace(/^(\d{1,9})([.)])(?= |$)/, "$1\\$2")
+		.replace(/^([-+*]|#{1,6})(?= |$)/, "\\$1")
+		.replace(/^>/, "\\>");
+}
+
+/**
+ * One line of agent-written text, such as a task's title or criterion, with Chat's inline
+ * Markdown: code spans, emphasis and links. Pass `links={false}` inside another control.
+ */
+export function InlineMarkdown({ links = true, source }: { links?: boolean; source: string }) {
+	return (
+		<ReactMarkdown
+			allowedElements={links ? INLINE : INLINE.filter(name => name !== "a")}
+			components={COMPONENTS}
+			skipHtml
+			unwrapDisallowed
+		>
+			{inlineSource(source)}
+		</ReactMarkdown>
+	);
+}
 
 /** The deliberately small Markdown dialect understood by Chat. */
 export function MessageMarkdown(
@@ -107,7 +137,7 @@ export function MessageMarkdown(
 			<ReactMarkdown
 				allowedElements={ELEMENTS}
 				components={components}
-				remarkPlugins={[[referenceRemarkPlugin, model]]}
+				remarkPlugins={[[referenceRemarkPlugin, model], orderedRunsRemarkPlugin]}
 				skipHtml
 				unwrapDisallowed
 			>

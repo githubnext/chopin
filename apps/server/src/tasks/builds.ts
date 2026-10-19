@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { activityText } from "@chopin/protocol/activity";
 import { changedBlocks } from "./changes";
 import { approveGraph, validate } from "./graphs";
 import { planningReadiness } from "./plan-graphs";
@@ -519,7 +520,9 @@ export function reportBuild(
 		) {
 			throw new Error("build report is out of order");
 		}
-		let { progress, stoppedByUser, ...fields } = report;
+		let { progress: reported, stoppedByUser, ...fields } = report;
+		// Whatever a connector sends, the progress line never shows a raw command or a credential.
+		let progress = reported === undefined ? undefined : activityText(reported);
 		let next = buildSchema.parse({
 			...current,
 			...fields,
