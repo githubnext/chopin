@@ -53,6 +53,7 @@ export {
 	PencilIcon,
 	PlayIcon,
 	PlusIcon,
+	ProgressHalfIcon,
 	RestartIcon,
 	SignInIcon,
 	SirenIcon,

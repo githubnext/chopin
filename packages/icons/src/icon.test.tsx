@@ -33,3 +33,11 @@ test("GitHub reference glyphs share the 16px octicon grid and stay decorative", 
 	}
 	expect(drawn.size).toBe(glyphs.length);
 });
+
+test("the half-progress icon is a ring with a filled half, in the current colour", () => {
+	let html = renderToStaticMarkup(<icons.ProgressHalfIcon />);
+	expect(html).toContain('viewBox="0 0 18 18"');
+	expect(html).toContain('aria-hidden="true"');
+	expect(html).toContain('fill="currentColor"');
+	expect(html).not.toContain("#212121");
+});

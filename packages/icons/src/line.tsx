@@ -238,6 +238,16 @@ export function CircleCloseIcon(props: IconProps) {
 	);
 }
 
+/** A circle with its right half filled: a thing that is met in part. */
+export function ProgressHalfIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="m9,16.25c4.0041,0,7.25-3.246,7.25-7.25S13.0041,1.75,9,1.75,1.75,4.996,1.75,9s3.2459,7.25,7.25,7.25Z" />
+			<path d="m9,4v10c2.7615,0,5-2.2388,5-5s-2.2385-5-5-5Z" fill="currentColor" strokeWidth="0" />
+		</LineIcon>
+	);
+}
+
 export function TableIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
