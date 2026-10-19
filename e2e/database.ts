@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { SQL } from "bun";
-import { withDocumentTitle } from "../packages/dialect/src/index";
+import { ulid, withDocumentTitle } from "../packages/dialect/src/index";
 import { storedDocument, storedLegacyCallout } from "../apps/server/src/testing/plan";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
@@ -131,6 +131,52 @@ export async function seedChildChannel(
 		return `/documents/${parent!.owner}/${parent!.repository}/${parent!.slug}`;
 	});
 	return { id, path: `${parentPath}/children/${slug}`, slug };
+}
+
+/** Before opening the root, give its Chat a document reference to this fixture child. */
+export async function seedLinkedChildChannel(
+	...args: Parameters<typeof seedChildChannel>
+): ReturnType<typeof seedChildChannel> {
+	let child = await seedChildChannel(...args);
+	let [port, parentId, , title] = args;
+	let entry: NonNullable<SeedState["transcript"]>[number] = {
+		id: `child-link:${child.id}`,
+		author: { kind: "member", handle: "ana" },
+		text: `#${title}`,
+		references: [{
+			id: ulid(),
+			kind: "document",
+			channelId: child.id,
+			label: `#${title}`,
+			href: child.path,
+			start: 0,
+			end: title.length + 1,
+			repositoryId: SCORE.id,
+			observedRevision: 0,
+			observedSourceHash: `sha256:${
+				createHash("sha256").update(await readSource(port, child.id)).digest("hex")
+			}`,
+		}],
+		ts: Math.floor(Date.now() / 1000),
+	};
+	let [snapshot] = await sql(port, database =>
+		database<{ sidecar: SeedState | string }[]>`
+		SELECT sidecar FROM channel_snapshots WHERE channel_id = ${parentId}
+	`);
+	if (!snapshot) {
+		await seedChannel(port, parentId, `# Test ${parentId.slice(0, 8)}\n`, { transcript: [entry] });
+	} else {
+		let sidecar: SeedState = typeof snapshot.sidecar === "string"
+			? JSON.parse(snapshot.sidecar)
+			: snapshot.sidecar;
+		let next = { ...sidecar, transcript: [...sidecar.transcript ?? [], entry] };
+		await sql(port, database =>
+			database`
+			UPDATE channel_snapshots SET sidecar = ${JSON.stringify(next)}::jsonb
+			WHERE channel_id = ${parentId}
+		`);
+	}
+	return child;
 }
 
 export async function countChildChannels(port: number, parentId: string): Promise<number> {

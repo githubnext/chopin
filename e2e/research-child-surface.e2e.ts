@@ -1,6 +1,6 @@
 import { normalizeDocumentTitle, withDocumentTitle } from "../packages/dialect/src/index";
 import { chatInput } from "./chat-input";
-import { seedChildChannel } from "./database";
+import { seedChildChannel, seedLinkedChildChannel } from "./database";
 import { installPointerMedia } from "./pointer-media";
 import { recordRoomMounts } from "./room-mounts";
 import { authenticate, expect, test } from "./room";
@@ -32,6 +32,11 @@ function rootSheet(page: Page, room: string) {
 	return page.locator(
 		`[data-workspace-room="${room}"] > .workspace-frame > .workspace-document-stack > .workspace-document-panel`,
 	);
+}
+
+// Generic Chat reference links can remount; child closing then uses the document fallback.
+function parentDocumentHeading(page: Page, room: string) {
+	return rootSheet(page, room).getByRole("heading", { name: "Document", exact: true });
 }
 
 function titleBar(page: Page, room: string) {
@@ -80,7 +85,7 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 		route => route.fulfill({ contentType: "text/html", body: "<title>Authored source</title>" }),
 	);
 	await seed(withDocumentTitle(LINKED_PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -100,9 +105,7 @@ test("authored links open from parent and child documents", async ({ baseURL, jo
 	expect(await parentPopup.evaluate(() => opener === null)).toBe(true);
 	await parentPopup.close();
 
-	let sidebar = page.getByRole("complementary", { name: "Projects" });
-	await sidebar.getByRole("link", { name: `Linked child ${room.slice(0, 8)}`, exact: true })
-		.click();
+	await page.goto(child.path);
 	let surface = page.getByRole("region", {
 		name: `Child document: Linked child ${room.slice(0, 8)}`,
 	});
@@ -148,7 +151,6 @@ async function captureChatSends(page: Page) {
 }
 
 test("a Lift child keeps the parent title bar as its stack and nested geometry", async ({ baseURL, join, page, room, seed }) => {
-	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Chrome source ${room.slice(0, 8)}`;
 	let child = await seedChildChannel(
 		port(baseURL!),
@@ -157,13 +159,18 @@ test("a Lift child keeps the parent title bar as its stack and nested geometry",
 		childTitle,
 		CHILD_SOURCE,
 	);
+	await seed(
+		withDocumentTitle(
+			`${PARENT_SOURCE}\n[${childTitle}](${child.path})\n`,
+			`Test ${room.slice(0, 8)}`,
+		),
+	);
 	// A child inherits the parent's Chat state; closed here so the parent is expanded.
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await useLift(page);
 	await join("ana");
 	await page.setViewportSize({ width: 1920, height: 1080 });
-	let sidebar = page.getByRole("complementary", { name: "Projects" });
-	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
+	let childLink = page.getByRole("link", { name: childTitle, exact: true });
 	await childLink.focus();
 	await childLink.click();
 
@@ -211,14 +218,15 @@ test("a Lift child keeps the parent title bar as its stack and nested geometry",
 
 	await returnToRoot(page, room);
 	await expect(surface).toHaveCount(0);
-	await expect(childLink).toBeFocused();
+	await expect(rootSheet(page, room).getByRole("textbox", { name: "editable markdown" }))
+		.toBeFocused();
 });
 
 test("the root's Chat stays live while a child is open, across every close path", async ({ baseURL, join, page, room, seed }) => {
 	test.slow();
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Isolated source ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -243,8 +251,7 @@ test("the root's Chat stays live while a child is open, across every close path"
 	let parentScroll = parent.locator("[data-plan-scroll]");
 	await parentScroll.evaluate(element => element.scrollTop = 180);
 	let parentScrollTop = await parentScroll.evaluate(element => element.scrollTop);
-	let sidebar = page.getByRole("complementary", { name: "Projects" });
-	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
+	let childLink = page.getByRole("link", { name: `#${childTitle}`, exact: true });
 	await childLink.focus();
 	await childLink.click();
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
@@ -271,7 +278,7 @@ test("the root's Chat stays live while a child is open, across every close path"
 
 	async function expectClosed() {
 		await expect(surface).toHaveCount(0);
-		await expect(childLink).toBeFocused();
+		await expect(parentDocumentHeading(page, room)).toBeFocused();
 		await expect(page).toHaveURL(url => url.pathname === child.path.replace(/\/children\/.*$/, ""));
 		await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(
 			parentScrollTop,
@@ -312,13 +319,12 @@ test("the root's Chat stays live while a child is open, across every close path"
 test("Escape in root Chat stays in Chat while a child is open", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Chat escape source ${room.slice(0, 8)}`;
-	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await seedLinkedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let parentChat = page.locator(`[data-workspace-room="${room}"]`)
 		.getByRole("complementary", { name: "Chat" });
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true }).click();
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(surface).toBeVisible();
 
@@ -339,13 +345,12 @@ test("Escape in root Chat stays in Chat while a child is open", async ({ baseURL
 test("Tab from an open child never reaches covered root content, and root Chat stays reachable", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Tab source ${room.slice(0, 8)}`;
-	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await seedLinkedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
 	let parentChat = parent.getByRole("complementary", { name: "Chat" });
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true }).click();
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(surface).toBeFocused();
 	let reachedChat = false;
@@ -369,13 +374,12 @@ test("Tab from an open child never reaches covered root content, and root Chat s
 test("Lift keeps the child for the surface toggle and presence, returns for the title bar and the child's close", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Lift source ${room.slice(0, 8)}`;
-	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await seedLinkedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await useLift(page);
 	await join("ana");
 	let tabs = titleBar(page, room);
-	let childLink = page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true });
+	let childLink = page.getByRole("link", { name: `#${childTitle}`, exact: true });
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await childLink.focus();
 	await childLink.click();
@@ -405,7 +409,7 @@ test("Lift keeps the child for the surface toggle and presence, returns for the 
 	});
 	await page.keyboard.press("Enter");
 	await expect(surface).toHaveCount(0);
-	await expect(childLink).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 	// Focus stays on the return control through the 250ms close, then lands on the opener.
 	expect(
 		await focusTrail.evaluate(trail => {
@@ -436,7 +440,7 @@ test("Lift keeps the child for the surface toggle and presence, returns for the 
 test("an in-app child preserves and restores its mounted parent", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Source review ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -466,8 +470,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await parentScroll.evaluate(element => element.scrollTop = 240);
 	let originalScroll = await parentScroll.evaluate(element => element.scrollTop);
 	await page.evaluate(() => history.replaceState({ navigation: 4 }, "", "?view=plan#note"));
-	let childLink = page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true });
+	let childLink = page.getByRole("link", { name: `#${childTitle}`, exact: true });
 	await childLink.focus();
 	await childLink.click();
 
@@ -502,7 +505,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 		&& url.hash === "#note"
 	);
 	await expect(surface).toHaveCount(0);
-	await expect(childLink).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 	await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(originalScroll);
 	await expect(parentChat).toBeVisible();
 
@@ -511,20 +514,20 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(parentChat).toBeVisible();
 	await page.goBack();
 	await expect(surface).toHaveCount(0);
-	await expect(childLink).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 
 	await childLink.click();
 	await expect(surface).toBeVisible();
 	await returnToRoot(page, room);
 	await expect(surface).toHaveCount(0);
-	await expect(childLink).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 });
 
 test("an in-app child opens and submits its own comment composer", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Commentable child ${room.slice(0, 8)}`;
 	let passage = "This ordinary child has its own editable document, Decisions, and Chat.";
-	await seedChildChannel(
+	await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -533,8 +536,7 @@ test("an in-app child opens and submits its own comment composer", async ({ base
 	);
 	await join("ana");
 
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true })
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true })
 		.click();
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(surface).toBeFocused();
@@ -556,14 +558,14 @@ test("mobile child requests reveal Document while canonical renames preserve a l
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First mobile source ${room.slice(0, 8)}`;
 	let secondTitle = `Second mobile source ${room.slice(0, 8)}`;
-	let first = await seedChildChannel(
+	let first = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
 		firstTitle,
 		CHILD_SOURCE,
 	);
-	let second = await seedChildChannel(
+	let second = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -623,14 +625,14 @@ test("a pending mobile sibling reveals Document once and settling preserves a la
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First pending source ${room.slice(0, 8)}`;
 	let secondTitle = `Second pending source ${room.slice(0, 8)}`;
-	let first = await seedChildChannel(
+	let first = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
 		firstTitle,
 		CHILD_SOURCE,
 	);
-	let second = await seedChildChannel(
+	let second = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -694,14 +696,14 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `First source ${room.slice(0, 8)}`;
 	let secondTitle = `Second source ${room.slice(0, 8)}`;
-	let first = await seedChildChannel(
+	let first = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
 		firstTitle,
 		CHILD_SOURCE,
 	);
-	let second = await seedChildChannel(
+	let second = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -710,9 +712,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 	);
 	await join("ana");
 	await page.evaluate(() => history.replaceState({ navigation: 9 }, "", "?view=plan#siblings"));
-	let childLink = (title: string) =>
-		page.getByRole("complementary", { name: "Projects" })
-			.getByRole("link", { name: title, exact: true });
+	let childLink = (title: string) => page.getByRole("link", { name: `#${title}`, exact: true });
 	await childLink(firstTitle).click();
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toBeVisible();
 
@@ -742,7 +742,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		&& url.hash === "#siblings"
 	);
 	await expect(secondSurface).toHaveCount(0);
-	await expect(childLink(secondTitle)).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
@@ -802,11 +802,11 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		delete state.__chopinHeldFrames;
 	});
 	await expect(firstSurface).toBeFocused();
-	await expect(childLink(secondTitle)).not.toBeFocused();
+	await expect(parentDocumentHeading(page, room)).not.toBeFocused();
 	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
 	await page.keyboard.press("Escape");
 	await expect(firstSurface).toHaveCount(0);
-	await expect(childLink(firstTitle)).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
@@ -818,21 +818,21 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		&& url.hash === "#siblings"
 	);
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
-	await expect(childLink(secondTitle)).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 });
 
 test("a direct child keeps direct-entry history when opening a sibling", async ({ baseURL, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let firstTitle = `Direct first ${room.slice(0, 8)}`;
 	let secondTitle = `Direct second ${room.slice(0, 8)}`;
-	let first = await seedChildChannel(
+	let first = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
 		firstTitle,
 		CHILD_SOURCE,
 	);
-	let second = await seedChildChannel(
+	let second = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -843,8 +843,7 @@ test("a direct child keeps direct-entry history when opening a sibling", async (
 	await page.goto(first.path);
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toBeVisible();
 	let historyLength = await page.evaluate(() => history.length);
-	let secondLink = page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: secondTitle, exact: true });
+	let secondLink = page.getByRole("link", { name: `#${secondTitle}`, exact: true });
 
 	await secondLink.click();
 	let secondSurface = page.getByRole("region", { name: `Child document: ${secondTitle}` });
@@ -857,13 +856,13 @@ test("a direct child keeps direct-entry history when opening a sibling", async (
 		&& url.hash === ""
 	);
 	await expect(secondSurface).toHaveCount(0);
-	await expect(secondLink).toBeFocused();
+	await expect(parentDocumentHeading(page, room)).toBeFocused();
 });
 
 test("a recovered child id enters the canonical anchored child workspace", async ({ baseURL, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Recovered source ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -902,7 +901,7 @@ test("a recovered child id enters the canonical anchored child workspace", async
 test("a channel link opens one parent room that a child opens and closes over", async ({ baseURL, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Channel link child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -920,8 +919,7 @@ test("a channel link opens one parent room that a child opens and closes over", 
 	await parent.evaluate(element => element.setAttribute("data-mount-token", "preserved"));
 
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true }).click();
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	await expect(page).toHaveURL(url => url.pathname === child.path);
 	await expect(surface.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
 	await page.keyboard.press("Escape");
@@ -938,7 +936,7 @@ test("a channel link opens one parent room that a child opens and closes over", 
 test("a child load failure preserves its mounted parent through back and retry", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Unreliable source ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -964,8 +962,7 @@ test("a child load failure preserves its mounted parent through back and retry",
 			await route.continue();
 		},
 	);
-	let childLink = page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true });
+	let childLink = page.getByRole("link", { name: `#${childTitle}`, exact: true });
 
 	await childLink.click();
 	let surface = page.locator(".anchored-child-card");
@@ -989,7 +986,7 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	let childTitle = normalizeDocumentTitle(
 		`A substantially longer source review title ${room.slice(0, 8)}`,
 	);
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -1024,7 +1021,8 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 	await projects.click();
 	let drawer = page.getByRole("dialog", { name: "Projects" });
 	await expect(drawer).toBeVisible();
-	await drawer.getByRole("link", { name: childTitle, exact: true }).click();
+	await expect(drawer.getByRole("link", { name: childTitle, exact: true })).toHaveCount(0);
+	await drawer.getByRole("button", { name: "Hide sidebar", exact: true }).click();
 	await expect(drawer).toBeHidden();
 	await expect(surface).toBeVisible();
 	let parentHeader = page.locator('[data-workspace-surface="document"] .room-header');
@@ -1063,7 +1061,7 @@ test("a direct compact child fills the canvas and reduces motion to a crossfade"
 test("Escape in a child editor dismisses the innermost thing before the sheet", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let title = `Escape source ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -1099,11 +1097,10 @@ test("Escape in a child editor dismisses the innermost thing before the sheet", 
 test("split Zoom renames the child from the title bar and keeps the caret on its title", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Zoom rename ${room.slice(0, 8)}`;
-	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await seedLinkedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true }).click();
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	let bar = titleBar(page, room);
 	let root = bar.getByRole("group", { name: `Document: Test ${room.slice(0, 8)}`, exact: true });
 	let child = bar.getByRole("group", { name: `Document: ${childTitle}`, exact: true });
@@ -1128,14 +1125,13 @@ test("split Zoom renames the child from the title bar and keeps the caret on its
 test("split Zoom off Document makes the child a crumb back to it, not a rename", async ({ baseURL, join, page, room, seed }) => {
 	await seed(withDocumentTitle(PARENT_SOURCE, `Test ${room.slice(0, 8)}`));
 	let childTitle = `Zoom off Document ${room.slice(0, 8)}`;
-	await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
+	await seedLinkedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, CHILD_SOURCE);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await join("ana");
 	let sheet = rootSheet(page, room);
 	await sheet.locator("[data-document-toolbar]").getByRole("button", { name: /^Decisions/ })
 		.click();
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: childTitle, exact: true }).click();
+	await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
 	await expect(sheet.locator('[data-document-view="decisions"]')).toBeVisible();
 	await expect(surface).toBeHidden();
@@ -1155,7 +1151,13 @@ test("compact Zoom keeps an open child across root view switches without remount
 	let long = `${CHILD_SOURCE}\n${
 		Array.from({ length: 30 }, (_, i) => `Child passage ${i + 1}.`).join("\n\n")
 	}\n`;
-	let child = await seedChildChannel(port(baseURL!), room, crypto.randomUUID(), childTitle, long);
+	let child = await seedLinkedChildChannel(
+		port(baseURL!),
+		room,
+		crypto.randomUUID(),
+		childTitle,
+		long,
+	);
 	let mounts = await recordRoomMounts(page);
 	// Split folds the root's views away under a Zoom child; compact keeps its view navigation.
 	await page.setViewportSize({ width: 600, height: 844 });

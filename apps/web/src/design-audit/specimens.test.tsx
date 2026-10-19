@@ -260,7 +260,7 @@ describe("design audit specimens", () => {
 		let navigation = plate(markup, "navigation");
 		expect(navigation).toContain("project-sidebar-document-current");
 		expect(navigation).toContain("project-sidebar-document-ancestor");
-		expect(navigation).toContain("project-sidebar-child-current");
+		expect(navigation).not.toContain("project-sidebar-child");
 		expect(navigation).toContain('data-sidebar-decision-count=""');
 		expect(navigation).toContain("Loading documents…");
 		expect(navigation).not.toContain("Archived draft");

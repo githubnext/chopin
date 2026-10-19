@@ -14,7 +14,7 @@ import { canManageProject } from "./navigation-model";
 import { currentShortcutPlatform, shortcutLabel } from "./shortcuts";
 import { Count } from "@chopin/editor/count";
 import { MotionDisclosure, MotionDisclosureIcon } from "@chopin/editor/disclosure-motion";
-import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
+import { documentPath } from "@chopin/protocol/document-url";
 import { useSidebarRowPresence } from "./sidebar-row-presence";
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -276,53 +276,6 @@ export function ProjectSidebarProject(
 									)}
 									<UnansweredCount unanswered={documentUnanswered(channel)} />
 								</div>
-								{children.length > 0 && (
-									<ul className="project-sidebar-children">
-										{children.map(child => {
-											let current = child.id === currentDocumentId;
-											return (
-												<li
-													className={`project-sidebar-child group/document ${
-														current ? "project-sidebar-child-current" : ""
-													}`}
-													key={child.id}
-												>
-													<a
-														aria-current={current ? "page" : undefined}
-														aria-label={documentUnanswered(child) > 0
-															? unansweredDecisionsLabel(child.title, documentUnanswered(child))
-															: undefined}
-														className="project-sidebar-child-link"
-														href={childDocumentPath(
-															channel.repositoryOwner,
-															channel.repositoryName,
-															channel.slug,
-															child.slug,
-														)}
-													>
-														<span className="truncate">{child.title}</span>
-													</a>
-													{canManage && (
-														<div className="project-sidebar-document-actions">
-															<DocumentActionsMenu
-																channel={child}
-																iconButton
-																onAction={action => onDocumentAction(child, action)}
-																trigger={
-																	<NavigationIcon
-																		className="h-auto w-3"
-																		src={documentActionsIcon}
-																	/>
-																}
-															/>
-														</div>
-													)}
-													<UnansweredCount unanswered={documentUnanswered(child)} />
-												</li>
-											);
-										})}
-									</ul>
-								)}
 							</DocumentRow>
 						);
 					})}

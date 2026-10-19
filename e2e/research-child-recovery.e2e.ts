@@ -1,5 +1,10 @@
 import { withDocumentTitle } from "../packages/dialect/src/index";
-import { countChildChannels, readSource, seedChildChannel } from "./database";
+import {
+	countChildChannels,
+	readSource,
+	seedChildChannel,
+	seedLinkedChildChannel,
+} from "./database";
 import {
 	markResearchPublished,
 	seedCompletedResearchWorkspace,
@@ -475,8 +480,7 @@ test("inline research publishes one ordinary child and opens it", async ({ baseU
 	expect(catalogueReads).toBe(readsBeforePublication);
 	staleCatalogue.resolve();
 	let childLink = sidebar.getByRole("link", { name: childTitle, exact: true });
-	await expect(childLink).toBeVisible();
-	await expect(childLink).toHaveAttribute("href", child.path);
+	await expect(childLink).toHaveCount(0);
 	await expect.poll(() => catalogueReads).toBe(readsBeforePublication + 1);
 	await opened.waitForTimeout(300);
 	expect(catalogueReads).toBe(readsBeforePublication + 1);
@@ -547,7 +551,7 @@ test("failed research retries by identity while cancelled research never publish
 	await expect(failedCard.getByText("Writing report", { exact: true })).toBeVisible();
 	let recoveredTitle = `Recovered evidence ${room.slice(0, 8)}`;
 	await research.publish(failedBrief, recoveredTitle);
-	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toBeVisible();
+	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(0);
 	await expect.poll(() => countChildChannels(databasePort, room)).toBe(1);
 	let source = await readSource(databasePort, room);
 	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
@@ -575,7 +579,7 @@ test("failed research retries by identity while cancelled research never publish
 	).toBe(2);
 	source = await readSource(databasePort, room);
 	expect(source.match(/<Research\s+id=/g)).toHaveLength(2);
-	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(1);
+	await expect(sidebar.getByRole("link", { name: recoveredTitle, exact: true })).toHaveCount(0);
 	await cancelledCard.getByRole("button", { name: "Remove research reference" }).click();
 	await expect(cancelledCard).toHaveCount(0);
 	await expect.poll(async () =>
@@ -644,7 +648,7 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 		await expect(
 			opened.getByRole("complementary", { name: "Projects" })
 				.getByRole("link", { name: title, exact: true }),
-		).toHaveAttribute("href", child.path);
+		).toHaveCount(0);
 		let chat = opened.getByRole("complementary", { name: "Chat" });
 		await expect(chat.getByRole("link", { name: "Open the research document" }))
 			.toHaveAttribute("href", child.path);
@@ -654,8 +658,8 @@ test("a ready research card and its Chat notice survive reconnect without anothe
 	await opened.reload();
 	await assertRecovered();
 
-	await opened.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: title, exact: true }).click();
+	await opened.getByRole("article", { name: "Research" })
+		.getByRole("button", { name: `Open ${title}`, exact: true }).click();
 	let surface = opened.getByRole("region", { name: `Child document: ${title}` });
 	let provenance = surface.locator("[data-child-provenance]");
 	let parentTitle = `Test ${room.slice(0, 8)}`;
@@ -739,7 +743,7 @@ test("a failed research card and its Chat notice survive reconnect once", async 
 
 test("parent metadata keeps a child route while its document is loading", async ({ baseURL, join, room }) => {
 	let childTitle = `Pending child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -760,8 +764,7 @@ test("parent metadata keeps a child route while its document is loading", async 
 		},
 	);
 	try {
-		await page.getByRole("complementary", { name: "Projects" })
-			.getByRole("link", { name: childTitle, exact: true }).click();
+		await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 		await childRequested;
 		await expect(page).toHaveURL(url => url.pathname === child.path);
 		let title = `Renamed parent ${room.slice(0, 8)}`;

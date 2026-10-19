@@ -118,15 +118,44 @@ describe("sidebar decision counts", () => {
 		unansweredDecisions: 10,
 	};
 
-	it("labels document, child, and project rows with their unanswered counts", () => {
+	it("labels top-level document and project rows with their unanswered counts", () => {
 		let markup = sidebar(loaded);
 
 		expect(markup).toContain('aria-label="Postgres writer lease, 4 unanswered decisions"');
-		expect(markup).toContain('aria-label="Fencing tokens, 1 unanswered decision"');
+		expect(markup).not.toContain("Fencing tokens");
 		expect(markup).toMatch(
 			/<button[^>]*aria-expanded="true"[^>]*aria-label="chopin, 10 unanswered decisions"[^>]*class="project-sidebar-project-disclosure/,
 		);
-		expect(counts(markup)).toEqual(["10", "4", "1"]);
+		expect(counts(markup)).toEqual(["10", "4"]);
+	});
+
+	it("omits every child while highlighting the open child's parent", () => {
+		let markup = sidebar({
+			...loaded,
+			channels: [parent, child, quiet, {
+				...child,
+				id: "another-child",
+				title: "Another child kind",
+				slug: "another-child-kind",
+			}],
+		}, { currentDocumentId: child.id });
+
+		expect(markup).toContain("project-sidebar-document-ancestor");
+		expect(markup).toContain("Postgres writer lease");
+		expect(markup).toContain("Settled plan");
+		expect(markup).not.toContain("Fencing tokens");
+		expect(markup).not.toContain("Another child kind");
+		expect(markup).not.toContain("/children/");
+	});
+
+	it("omits children from the archived sidebar too", () => {
+		let archived = { ...parent, archivedAt: "2026-08-24T00:00:00.000Z" };
+		let markup = sidebar({ ...loaded, channels: [archived, child] }, {
+			catalogueMode: "archived",
+		});
+
+		expect(markup).toContain("Postgres writer lease");
+		expect(markup).not.toContain("Fencing tokens");
 	});
 
 	it("shows the server's project total rather than the loaded rows' sum", () => {
@@ -147,7 +176,7 @@ describe("sidebar decision counts", () => {
 		let markup = sidebar(loaded);
 		let slots = [...markup.matchAll(/<span([^>]*)data-sidebar-decision-count="">(<span[^>]*>)/g)];
 
-		expect(slots).toHaveLength(3);
+		expect(slots).toHaveLength(2);
 		for (let [, attributes, count] of slots) {
 			expect(attributes).toContain('aria-hidden="true"');
 			expect(attributes).toContain('class="project-sidebar-count"');
@@ -165,9 +194,6 @@ describe("sidebar decision counts", () => {
 		);
 		expect(markup).toMatch(
 			/aria-label="Actions for Postgres writer lease".*?<\/div><span aria-hidden="true" class="project-sidebar-count"/s,
-		);
-		expect(markup).toMatch(
-			/aria-label="Actions for Fencing tokens".*?<\/div><span aria-hidden="true" class="project-sidebar-count"/s,
 		);
 	});
 
@@ -359,7 +385,7 @@ describe("decision count catch-up", () => {
 		expect(next.R_chopin!.unansweredDecisions).toBe(8);
 		expect(next.R_chopin!.channels.map(channel => channel.unansweredDecisions)).toEqual([2, 1, 1]);
 		expect(next.R_chopin!.channels[1]).toBe(child);
-		expect(counts(sidebar(next.R_chopin!))).toEqual(["8", "2", "1", "1"]);
+		expect(counts(sidebar(next.R_chopin!))).toEqual(["8", "2", "1"]);
 	});
 
 	it("keeps newer row counts and leaves other repositories alone", () => {

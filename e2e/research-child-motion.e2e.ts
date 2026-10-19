@@ -1,4 +1,6 @@
-import { seedChildChannel } from "./database";
+import { createHash } from "node:crypto";
+import { ulid } from "../packages/dialect/src/index";
+import { readSource, seedChildChannel } from "./database";
 import {
 	markResearchPublished,
 	seedCompletedResearchWorkspace,
@@ -6,6 +8,7 @@ import {
 import { expect, test } from "./room";
 import { researchReportSource } from "../apps/server/src/research/publication";
 
+import type { SeedState } from "../apps/server/src/testing/plan";
 import type { Page } from "@playwright/test";
 
 type Frame = {
@@ -27,7 +30,8 @@ ${Array.from({ length: 12 }, (_, index) => `Parent passage ${index + 1}.`).join(
 async function seedReadyCard(
 	baseURL: string,
 	room: string,
-	seed: (source: string) => Promise<unknown>,
+	seed: (source: string, state?: SeedState) => Promise<unknown>,
+	chatLink = false,
 ): Promise<{ title: string }> {
 	let port = Number(new URL(baseURL).port);
 	let title = `Motion research ${room.slice(0, 8)}`;
@@ -49,7 +53,33 @@ async function seedReadyCard(
 		title,
 		researchReportSource(report, sources),
 	);
-	await seed(`${PARENT}\n<Research id="${workspaceId}" />\n`);
+	await seed(
+		`${PARENT}\n<Research id="${workspaceId}" />\n`,
+		chatLink
+			? {
+				transcript: [{
+					id: `child-link:${room}`,
+					author: { kind: "member", handle: "ana" },
+					text: `#${title}`,
+					references: [{
+						id: ulid(),
+						kind: "document",
+						channelId: child.id,
+						label: `#${title}`,
+						href: child.path,
+						start: 0,
+						end: title.length + 1,
+						repositoryId: "R_score",
+						observedRevision: 0,
+						observedSourceHash: `sha256:${
+							createHash("sha256").update(await readSource(port, child.id)).digest("hex")
+						}`,
+					}],
+					ts: Math.floor(Date.now() / 1000),
+				}],
+			}
+			: undefined,
+	);
 	await seedCompletedResearchWorkspace(port, room, {
 		workspaceId,
 		answerJobId,
@@ -286,12 +316,11 @@ test("Back then Forward during a close finishes fully open", async ({ baseURL, j
 	await expect(opened.locator("[data-child-presentation=closing]")).toHaveCount(0);
 });
 
-test("a sidebar row rises from the lower centre and closes by fading", async ({ baseURL, join, room, seed, page }) => {
+test("a Chat link rises from the lower centre and closes by fading", async ({ baseURL, join, room, seed, page }) => {
 	await setup(page);
-	let { title } = await seedReadyCard(baseURL!, room, seed);
+	let { title } = await seedReadyCard(baseURL!, room, seed, true);
 	let opened = await join("ana");
-	let row = opened.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: title, exact: true });
+	let row = opened.getByRole("link", { name: `#${title}`, exact: true });
 	await expect(row).toBeVisible();
 	let read = await sampleFrames(opened, 900);
 	await row.click();

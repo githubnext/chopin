@@ -1,5 +1,5 @@
 import { chatInput, expectChatValue } from "./chat-input";
-import { readSource, seedChildChannel } from "./database";
+import { readSource, seedLinkedChildChannel } from "./database";
 import { PULL_REQUESTS } from "./harness/fixtures";
 import { expect, openIsolatedRoom, ready, test } from "./room";
 import type { BrowserContext, Page } from "@playwright/test";
@@ -195,7 +195,7 @@ test("losing a send acknowledgement and retrying after reconnect never duplicate
 test("losing a child send acknowledgement then returning to the root and reloading preserves retry context", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Reconnected initiative\n\nCompare export formats for a small pilot.\n");
 	let title = `Retry child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		Number(new URL(baseURL!).port),
 		room,
 		crypto.randomUUID(),
@@ -204,8 +204,7 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	);
 	let frames = await record(page, true);
 	await join("ana");
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: title, exact: true }).click();
+	await page.getByRole("link", { name: `#${title}`, exact: true }).click();
 	let surface = page.getByRole("region", { name: `Child document: ${title}` });
 	await expect(surface.getByText("Original finding.", { exact: true })).toBeVisible();
 	let text = "INITIATIVE-USEFUL retry: compare the export approaches.";
@@ -319,7 +318,7 @@ test("ordinary child discussion stays quiet while natural direct requests preser
 	await seed("# Focused initiative root\n\nCompare export formats for a small pilot.\n");
 	let title = `Focused child ${room.slice(0, 8)}`;
 	let port = Number(new URL(baseURL!).port);
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port,
 		room,
 		crypto.randomUUID(),
@@ -328,8 +327,7 @@ test("ordinary child discussion stays quiet while natural direct requests preser
 	);
 	let frames = await record(page);
 	await join("ana");
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: title, exact: true }).click();
+	await page.getByRole("link", { name: `#${title}`, exact: true }).click();
 	let surface = page.getByRole("region", { name: `Child document: ${title}` });
 	await expect(surface.getByText("Original finding.", { exact: true })).toBeVisible();
 	await send(page, "INITIATIVE-USEFUL focused child: compare the export approaches.");

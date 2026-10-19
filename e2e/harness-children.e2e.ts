@@ -5,7 +5,7 @@
  */
 import { chatInput } from "./chat-input";
 import { startCommentToChopin } from "./comment-input";
-import { readSource, seedChildChannel } from "./database";
+import { readSource, seedLinkedChildChannel } from "./database";
 import { expect, test } from "./room";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -84,8 +84,7 @@ function chatPane(page: Page) {
 }
 
 async function openChild(page: Page, title: string, id: string) {
-	await page.getByRole("complementary", { name: "Projects" })
-		.getByRole("link", { name: title, exact: true })
+	await page.getByRole("link", { name: `#${title}`, exact: true })
 		.click();
 	let surface = page.getByRole("region", { name: `Child document: ${title}` });
 	await expect(surface.locator(`[data-workspace-room="${id}"]`)).toBeVisible();
@@ -95,7 +94,7 @@ async function openChild(page: Page, title: string, id: string) {
 test("the root Planner edits the open child from the root's Chat", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Harness parent\nThe harp needs new strings.\n");
 	let title = `Harness child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -164,7 +163,7 @@ test("the root Planner edits the open child from the root's Chat", async ({ base
 test("Send to Chopin on a child comment runs on the root's Chat and replies in the child thread", async ({ baseURL, join, page, room, seed }) => {
 	await seed("# Harness parent\nThe harp needs new strings.\n");
 	let title = `Commented child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	let child = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -210,7 +209,7 @@ test("Send to Chopin on a child comment runs on the root's Chat and replies in t
 
 test("a notice for another child's thread switches to that child and opens it", async ({ baseURL, join, room, seed }) => {
 	await seed("# Harness parent\nThe harp needs new strings.\n");
-	let first = await seedChildChannel(
+	let first = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -218,7 +217,7 @@ test("a notice for another child's thread switches to that child and opens it", 
 		`# First child ${room.slice(0, 8)}\n\nThe bridge is fine.\n`,
 	);
 	let secondTitle = `Second child ${room.slice(0, 8)}`;
-	let second = await seedChildChannel(
+	let second = await seedLinkedChildChannel(
 		port(baseURL!),
 		room,
 		crypto.randomUUID(),
@@ -233,6 +232,14 @@ test("a notice for another child's thread switches to that child and opens it", 
 	let chat = chatPane(opened);
 	await expect(chat.getByText("I replied in the comment thread.")).toBeVisible({ timeout: 20_000 });
 
+	let thread = opened.getByRole("dialog", { name: "Comment thread", exact: true });
+	if (!await thread.isVisible()) {
+		await secondSurface.getByRole("button", { name: /^Comment on “.*”\. / }).click();
+	}
+	await expect(thread.getByText("Done. I tightened the passage you marked.")).toBeVisible();
+	await opened.keyboard.press("Escape");
+	await expect(thread).toHaveCount(0);
+	await expect(secondSurface).toBeVisible();
 	let firstSurface = await openChild(opened, `First child ${room.slice(0, 8)}`, first.id);
 	await expect(secondSurface).toHaveCount(0);
 

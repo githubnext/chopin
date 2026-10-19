@@ -97,23 +97,17 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 		name: "Postgres writer lease, 4 unanswered decisions",
 		exact: true,
 	});
-	let childLink = projects.getByRole("link", {
-		name: "Fencing tokens, 1 unanswered decision",
-		exact: true,
-	});
 	let quietLink = projects.getByRole("link", { name: "Settled plan", exact: true });
 	let projectRow = disclosure.locator("..");
 	let parentRow = parentLink.locator("..");
-	let childRow = childLink.locator("..");
 	let quietRow = quietLink.locator("..");
 	let newDocument = projects.getByRole("button", { name: "New document in score", exact: true });
 	let parentActions = projects.getByRole("button", { name: "Actions for Postgres writer lease" });
-	let childActions = projects.getByRole("button", { name: "Actions for Fencing tokens" });
 
 	await expect(disclosure).toBeVisible();
 	await expect(count(projectRow)).toHaveText("10");
 	await expect(count(parentRow)).toHaveText("4");
-	await expect(count(childRow)).toHaveText("1");
+	await expect(projects.getByRole("link", { name: /^Fencing tokens/ })).toHaveCount(0);
 	await expect(count(quietRow)).toHaveCount(0);
 	await expect(newDocument).toBeHidden();
 	await expect(parentActions).toBeHidden();
@@ -121,21 +115,13 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 
 	let edge = await right(count(projectRow));
 	expect(Math.abs(await right(count(parentRow)) - edge)).toBeLessThanOrEqual(1);
-	expect(Math.abs(await right(count(childRow)) - edge)).toBeLessThanOrEqual(1);
 
 	await parentRow.hover();
 	await expect(count(parentRow)).toBeHidden();
 	await expect(parentActions).toBeVisible();
 	expect(Math.abs(await right(parentActions) - edge)).toBeLessThanOrEqual(1);
 	await expect(count(projectRow)).toBeVisible();
-	await expect(count(childRow)).toBeVisible();
 	await expect(parentLink).toHaveAccessibleName("Postgres writer lease, 4 unanswered decisions");
-
-	await childRow.hover();
-	await expect(count(childRow)).toBeHidden();
-	await expect(childActions).toBeVisible();
-	await expect(count(parentRow)).toBeVisible();
-	expect(Math.abs(await right(childActions) - edge)).toBeLessThanOrEqual(1);
 
 	await projectRow.hover();
 	await expect(count(projectRow)).toBeHidden();
@@ -145,7 +131,7 @@ test("sidebar counts share one trailing slot with the hover and focus actions", 
 	await movePointerAway(page);
 	await expect(count(projectRow)).toHaveText("10");
 	await expect(count(parentRow)).toHaveText("4");
-	await expect(count(childRow)).toHaveText("1");
+	await expect(projects.getByRole("link", { name: /^Fencing tokens/ })).toHaveCount(0);
 	await expect(newDocument).toBeHidden();
 
 	await disclosure.click();
@@ -209,12 +195,7 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 		exact: true,
 	});
 	let parentRow = parentLink.locator("..");
-	let childRow = projects.getByRole("link", {
-		name: "Fencing tokens, 1 unanswered decision",
-		exact: true,
-	}).locator("..");
 	let parentActions = projects.getByRole("button", { name: "Actions for Postgres writer lease" });
-	let childActions = projects.getByRole("button", { name: "Actions for Fencing tokens" });
 	let disclosure = projects.getByRole("button", {
 		name: "score, 10 unanswered decisions",
 		exact: true,
@@ -224,20 +205,14 @@ test("touch keeps each count visible beside its always-shown action", async ({ j
 
 	await expect(page.locator(":root")).toHaveAttribute("data-plan-coarse-pointer", "");
 	await expect(parentActions).toBeVisible();
-	await expect(childActions).toBeVisible();
 	await expect(count(parentRow)).toHaveText("4");
-	await expect(count(childRow)).toHaveText("1");
 	await expect(newDocument).toBeVisible();
 	await expect(count(projectRow)).toHaveText("10");
 	expect(await right(count(parentRow))).toBeLessThanOrEqual(
 		(await parentActions.boundingBox())!.x + 1,
 	);
-	expect(await right(count(childRow))).toBeLessThanOrEqual(
-		(await childActions.boundingBox())!.x + 1,
-	);
 	let edge = await right(count(projectRow));
 	expect(Math.abs(await right(count(parentRow)) - edge)).toBeLessThanOrEqual(1);
-	expect(Math.abs(await right(count(childRow)) - edge)).toBeLessThanOrEqual(1);
 
 	await parentLink.evaluate(element =>
 		element.addEventListener("click", event => event.preventDefault())

@@ -126,7 +126,7 @@ describe("document sidebar hierarchy", () => {
 			.toEqual([{ parent: archivedParent, children: [archivedChild, activeChild] }]);
 	});
 
-	it("renders an ordinary child row with the same durable route as its ready card", () => {
+	it("shows only the parent when an ordinary child is open", () => {
 		let child = {
 			...channel,
 			id: "child-one",
@@ -143,14 +143,12 @@ describe("document sidebar hierarchy", () => {
 			}],
 		}));
 
-		expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+		expect(markup).not.toContain('aria-current="page"');
 		expect(markup).toContain("project-sidebar-document-ancestor");
-		expect(markup).toContain("project-sidebar-child group/document project-sidebar-child-current");
-		expect(markup).toContain(
-			'aria-current="page" class="project-sidebar-child-link" href="/documents/acme/one/release-plan/children/source-review"',
-		);
-		expect(markup).toContain("Source review");
-		expect(markup).toContain('aria-label="Actions for Source review"');
+		expect(markup).toContain("Release plan");
+		expect(markup).not.toContain("project-sidebar-child");
+		expect(markup).not.toContain("/children/");
+		expect(markup).not.toContain("Source review");
 	});
 
 	it("uses one real current-page link for the document route", () => {
