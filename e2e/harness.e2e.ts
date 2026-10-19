@@ -19,7 +19,7 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 
 	let toolFrames: Chat.Tool[] = [];
 	let stateFrames: Chat.State[] = [];
-	let deltaFrames: Chat.Delta[] = [];
+	let answerFrames: Array<Chat.Message | Chat.Delta> = [];
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => server.send(message));
@@ -28,7 +28,9 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 				let frame = JSON.parse(message) as { kind: string };
 				if (frame.kind === "chat:tool") toolFrames.push(frame as Chat.Tool);
 				if (frame.kind === "chat:state") stateFrames.push(frame as Chat.State);
-				if (frame.kind === "chat:delta") deltaFrames.push(frame as Chat.Delta);
+				if (frame.kind === "chat:message" || frame.kind === "chat:delta") {
+					answerFrames.push(frame as Chat.Message | Chat.Delta);
+				}
 			}
 			route.send(message);
 		});
@@ -66,9 +68,9 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 	await expect.poll(() => stateFrames.at(-1)?.busy).toBe(false);
 
-	let streamedText = deltaFrames.map(frame => frame.text).join("");
-	expect(streamedText).toContain("Harness parent");
-	expect(streamedText).toContain(PULL_REQUESTS[0]!.title);
+	let deliveredText = replyText(answerFrames);
+	expect(deliveredText).toContain("Harness parent");
+	expect(deliveredText).toContain(PULL_REQUESTS[0]!.title);
 
 	let calls = await (await fetch(`http://127.0.0.1:${FAKE_MCP_PORT}/__calls__`)).json() as {
 		method: string;
@@ -159,7 +161,19 @@ test("the composer addresses one message without changing the next message's des
 });
 
 // Frame order and arrival time are the contract; the browser UI is incidental.
-type Seen = { at: number; connection: number; frame: Chat.Outgoing };
+type Seen = { at: number; order: number; connection: number; frame: Chat.Outgoing };
+
+function replyText(frames: Array<Chat.Message | Chat.Delta>): string {
+	let replies = new Map<string, string>();
+	for (let frame of frames) {
+		if (frame.kind === "chat:message" && frame.entry.author.kind === "agent") {
+			replies.set(frame.entry.id, frame.entry.text);
+		} else if (frame.kind === "chat:delta") {
+			replies.set(frame.id, (replies.get(frame.id) ?? "") + frame.text);
+		}
+	}
+	return [...replies.values()].join("\n");
+}
 
 async function recordChat(page: Page) {
 	let seen: Seen[] = [];
@@ -171,7 +185,9 @@ async function recordChat(page: Page) {
 		server.onMessage(message => {
 			if (typeof message === "string") {
 				let frame = JSON.parse(message) as Chat.Outgoing;
-				if (frame.kind.startsWith("chat:")) seen.push({ at: Date.now(), connection, frame });
+				if (frame.kind.startsWith("chat:")) {
+					seen.push({ at: Date.now(), order: seen.length, connection, frame });
+				}
 			}
 			route.send(message);
 		});
@@ -195,18 +211,24 @@ test("a live Planner turn streams state and a tool row that settles at its own e
 	let frames = await recordChat(page);
 	let opened = await join("ana");
 	await sendSlowTurn(opened);
+	let replies = () =>
+		frames("chat:message").filter(item =>
+			item.frame.entry.author.kind === "agent" && item.frame.entry.text.trim()
+		);
 
 	await expect.poll(
 		() =>
 			frames("chat:state").some(item => item.frame.busy)
-			&& frames("chat:state").some(item => !item.frame.busy && frames("chat:delta").length > 0),
+			&& frames("chat:state").some(item => !item.frame.busy && replies().length > 0),
 		{ timeout: 20_000 },
 	).toBe(true);
 
 	let started = frames("chat:state").find(item => item.frame.busy)!;
 	let turn = started.frame.turn!;
 	expect(turn.startedAt).toBeGreaterThan(0);
-	expect(started.at).toBeLessThan(frames("chat:delta")[0]!.at);
+	expect(started.order).toBeLessThan(replies()[0]!.order);
+	expect(replies().at(-1)!.frame.entry.text).toBe("Streaming slowly now.");
+	expect(replies().every(item => !item.frame.entry.text.includes("Considering"))).toBe(true);
 	expect(frames("chat:delta").every(item => !item.frame.text.includes("Considering"))).toBe(true);
 
 	let rows = frames("chat:tool");
@@ -221,11 +243,12 @@ test("a live Planner turn streams state and a tool row that settles at its own e
 	expect(took).toBeGreaterThanOrEqual(2_000);
 	expect(took).toBeLessThan(4_500);
 	expect(Math.abs(settled.at - running.at - took)).toBeLessThan(1_000);
-	expect(settled.at).toBeLessThan(frames("chat:delta").at(-1)!.at);
+	expect(settled.order).toBeLessThan(replies()[0]!.order);
 
 	let idle = frames("chat:state").find(item => !item.frame.busy && item.at > started.at)!;
 	expect(idle.frame.turn).toBeUndefined();
 	expect(idle.at).toBeGreaterThan(settled.at);
+	expect(idle.order).toBeGreaterThan(replies().at(-1)!.order);
 });
 
 test("a reconnect mid-turn restores the running tool and turn start from history without reasoning", async ({ join, page, seed }) => {
