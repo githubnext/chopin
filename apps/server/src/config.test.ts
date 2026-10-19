@@ -83,7 +83,7 @@ describe("configuration", () => {
 			harness: "copilot-sdk",
 			harnessAuth: undefined,
 			agent: true,
-			model: "gpt-6-luna",
+			model: "gpt-6.1-sol",
 		});
 		expect(configured({ HARNESS: "", HARNESS_AUTH: "" })).toMatchObject({
 			harness: "copilot-sdk",

@@ -152,6 +152,104 @@ harnessContract("copilot-sdk", () =>
 	}));
 
 describe("copilot-sdk adapter", () => {
+	it("recovers from an unavailable configured model before sending the prompt", async () => {
+		let source = stubRuntimeSource();
+		let create = source.client.createSession.bind(source.client);
+		let attempts: SessionConfig[] = [];
+		source.client.createSession = async config => {
+			attempts.push(config);
+			if (config.model === "claude-opus-5") {
+				throw new Error(
+					'Request session.create failed with message: Model "claude-opus-5" is not available.',
+				);
+			}
+			return create(config);
+		};
+		let harness = createCopilotSdk({
+			credentials: () => "ghu_test",
+			model: "claude-opus-5",
+			connect: () => source,
+		});
+		let session = await harness.doStart({
+			sessionId: "unavailable-model",
+			sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+			sessionWorkDir: "/tmp",
+		});
+		let parts: Array<{ type: string; delta?: string }> = [];
+		try {
+			let control = await session.doPromptTurn({
+				prompt: "hello",
+				tools: [{ name: "read_plan" }],
+				skills: [],
+				emit: part => parts.push(part),
+			});
+			await control.done;
+			expect(parts.filter(part => part.type === "text-delta").map(part => part.delta))
+				.toEqual(["hello"]);
+			expect(attempts.map(config => config.model)).toEqual(["claude-opus-5", "gpt-6.1-sol"]);
+			expect(attempts[1]).toEqual({ ...attempts[0], model: "gpt-6.1-sol" });
+			expect(source.sessions).toHaveLength(1);
+		} finally {
+			await session.doDestroy();
+			await harness.shutdown();
+		}
+	});
+
+	for (
+		let [model, message, attempts] of [
+			[
+				"gpt-6.1-sol",
+				'Request session.create failed with message: Model "gpt-6.1-sol" is not available.',
+				1,
+			],
+			[
+				"claude-opus-5",
+				'Request session.create failed with message: Model "claude-opus-5" is not available.',
+				2,
+			],
+			["claude-opus-5", "Authentication failed", 1],
+		] as const
+	) {
+		it(`bounds session creation recovery for ${model}: ${message}`, async () => {
+			let source = stubRuntimeSource();
+			let created = 0;
+			source.client.createSession = async config => {
+				created++;
+				throw new Error(
+					message === "Authentication failed"
+						? message
+						: `Request session.create failed with message: Model "${config.model}" is not available.`,
+				);
+			};
+			let harness = createCopilotSdk({
+				credentials: () => "ghu_test",
+				model,
+				connect: () => source,
+			});
+			let session = await harness.doStart({
+				sessionId: "failed-model",
+				sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+				sessionWorkDir: "/tmp",
+			});
+			try {
+				await expect(session.doPromptTurn({
+					prompt: "hello",
+					tools: [],
+					skills: [],
+					emit: () => {},
+				})).rejects.toThrow(
+					message === "Authentication failed"
+						? message
+						: 'Chopin couldn’t start because its model "gpt-6.1-sol" is unavailable. Ask the server administrator to update the model.',
+				);
+				expect(created).toBe(attempts);
+			} finally {
+				await session.doDestroy();
+				await harness.shutdown();
+			}
+		});
+	}
+
 	it("requires a token from the per-session credentials resolver", async () => {
 		let harness = createCopilotSdk({ credentials: () => undefined, connect: stubRuntimeSource });
 		let session = await harness.doStart({

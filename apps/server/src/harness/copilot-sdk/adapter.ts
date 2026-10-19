@@ -18,6 +18,7 @@ import { join } from "node:path";
 
 import { locate } from "../../agent/cli";
 import { Runtime } from "./runtime";
+import { DEFAULT_COPILOT_MODEL } from "./model";
 
 import type {
 	HarnessV1,
@@ -263,7 +264,33 @@ export function createCopilotSdk(
 			}),
 		} as SessionConfig;
 
-		let session = await runtime.open(config);
+		let session: CopilotSession;
+		let model = config.model;
+		for (;;) {
+			try {
+				session = await runtime.open({ ...config, model });
+				break;
+			} catch (error) {
+				if (
+					!model || !(error instanceof Error)
+					|| error.message
+						!== `Request session.create failed with message: Model "${model}" is not available.`
+				) throw error;
+				if (model === DEFAULT_COPILOT_MODEL) {
+					throw new Error(
+						`Chopin couldn’t start because its model "${model}" is unavailable. `
+							+ "Ask the server administrator to update the model.",
+						{ cause: error },
+					);
+				}
+				// Creation failed before any prompt or host tool ran. Retry once with the default;
+				// never replay a running turn, or change its credentials, tools or credit limit.
+				console.warn(
+					`[agent] model ${JSON.stringify(model)} unavailable; using ${DEFAULT_COPILOT_MODEL}`,
+				);
+				model = DEFAULT_COPILOT_MODEL;
+			}
+		}
 		try {
 			await assertHostOnly(session, tools.map(tool => tool.name));
 		} catch (err) {
