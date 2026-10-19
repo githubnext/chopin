@@ -96,6 +96,8 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 		change: controller.change,
 		focusQuestion: controller.focusQuestion,
 		addOption: controller.addOption,
+		addCriterion: controller.addCriterion,
+		mark: controller.mark,
 		submit: controller.submit,
 		discard: controller.discard,
 		reopen: controller.reopen,

@@ -24,6 +24,7 @@ export {
 export type { QuestionMarkdownRenderer } from "./question-markdown";
 export { QuestionView } from "./question-view";
 export type {
+	AddCriterionResult,
 	AddOptionResult,
 	Collaborator,
 	PendingAnswers,

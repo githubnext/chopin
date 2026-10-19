@@ -40,6 +40,9 @@ export type Collaborator = {
 /** `option` is the id the server gave the new option, so the view can select it. */
 export type AddOptionResult = { ok: true; option?: string } | { ok: false; message: string };
 
+/** `criterion` is the id the server gave the new column. */
+export type AddCriterionResult = { ok: true; criterion?: string } | { ok: false; message: string };
+
 export type QuestionStepRenderProps = {
 	children: ReactNode;
 	question: string;

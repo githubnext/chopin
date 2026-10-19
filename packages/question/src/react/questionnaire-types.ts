@@ -1,5 +1,5 @@
-import type { Definition, Drafts } from "../index";
-import type { AddOptionResult, Collaborator } from "./question-view";
+import type { Definition, Drafts, Mark } from "../index";
+import type { AddCriterionResult, AddOptionResult, Collaborator } from "./question-view";
 
 // Archive shared state, with the current cancel API retained.
 export type Unsubscribe = () => void;
@@ -21,6 +21,10 @@ export type QuestionnaireState = {
 	error: string | undefined;
 	change: (question: string, change: Record<string, unknown>) => void;
 	addOption: (question: string, label: string) => Promise<AddOptionResult>;
+	/** Append a criterion for everyone; resolves once the server has made it durable. */
+	addCriterion: (question: string, label: string) => Promise<AddCriterionResult>;
+	/** Mark one option against one criterion in the shared draft; `null` clears the cell. */
+	mark: (question: string, option: string, criterion: string, mark: Mark | null) => void;
 	focusQuestion: (question: string | undefined) => void;
 	submit: (visibleSuggestion?: { optionId: string; revision: number }) => void;
 	/** Set an open decision aside. Terminal — the agent stops waiting. */
@@ -36,7 +40,15 @@ export type QuestionnaireState = {
 export type Snapshot =
 	& Omit<
 		QuestionnaireState,
-		"change" | "focusQuestion" | "addOption" | "submit" | "discard" | "reopen" | "cancel"
+		| "change"
+		| "focusQuestion"
+		| "addOption"
+		| "addCriterion"
+		| "mark"
+		| "submit"
+		| "discard"
+		| "reopen"
+		| "cancel"
 	>
 	& {
 		closed: boolean;
