@@ -32,7 +32,7 @@
 				1
 			]
 		],
-		"sourceHash": "0e82c5e704dba80a19ab52ea3f44ddb1cdf1615569527f284f32a276ba540915"
+		"sourceHash": "2257b5cb893cf81b3f5c6a1eb725fca1152b0e394192bee1635d0a52b79cc4a6"
 	},
 	{
 		"file": "packages/question/src/react/resolved-actions.tsx",
@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "7937988eea411309cd8392a30b460554915453fb1ecce42a3292201789156835"
+		"sourceHash": "f1b955238048ab7a87f1657f3b1205dc3c94f7177901049d2890034558968a5f"
 	},
 	{
 		"file": "packages/icons/src/icon.tsx",
