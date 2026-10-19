@@ -589,3 +589,101 @@ test("stop and page refuse while an implementation is active", async () => {
 	expect(Service.implementationActive(context.plan)).toBe(true);
 	expect(status(context)).toBe("running");
 });
+
+test("stopping a finding whose work already failed settles it failed, with a quiet notice", async () => {
+	let context = await opened();
+	let { ws, frames } = member();
+	let { deps: explore } = deps();
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		explore,
+	);
+	let notices: string[] = [];
+	let ended = deps({
+		research: async () => ({ id: REF, stage: "failed", sources: [] }),
+		stop: async () => {
+			throw new Error("Research turn is not cancellable.");
+		},
+		notice: async (_plan, _room, _id, text) => {
+			notices.push(text);
+		},
+	}).deps;
+	await Explore.stop(context.plan, context.server, context.channel.id, ws, {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	}, ended);
+	expect(frames.at(-1)).toMatchObject({ ok: true });
+	expect(status(context)).toBe("failed");
+	expect(notices).toHaveLength(1);
+	expect(notices[0]).toContain("didn’t finish");
+});
+
+test("a refused cancel still stops the finding, but other errors leave it running", async () => {
+	let context = await opened();
+	let { ws, frames } = member();
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		deps().deps,
+	);
+	let stop = {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	} as const;
+	let down = deps({
+		stop: async () => {
+			throw new Error("database down");
+		},
+	}).deps;
+	await Explore.stop(context.plan, context.server, context.channel.id, ws, stop, down);
+	expect(frames.at(-1)).toMatchObject({ ok: false });
+	expect(status(context)).toBe("running");
+	let refused = deps({
+		stop: async () => {
+			throw new Error("Research turn is not cancellable.");
+		},
+	}).deps;
+	await Explore.stop(context.plan, context.server, context.channel.id, ws, stop, refused);
+	expect(frames.at(-1)).toMatchObject({ ok: true });
+	expect(status(context)).toBe("stopped");
+});
+
+test("stopping an investigation that already failed settles it failed", async () => {
+	let context = await opened();
+	let { ws } = member();
+	await Explore.explore(context.plan, context.server, context.channel.id, ws, {
+		kind: "question:explore",
+		ts: 0,
+		rid: "r",
+		id: context.id,
+		key: KEY,
+		action: "spike",
+	}, deps().deps);
+	let ended = deps({
+		spike: async (_room, ref) => ({ id: ref, state: "failed" }),
+		stop: async () => {
+			throw new Error("Investigation is not running");
+		},
+	}).deps;
+	await Explore.stop(context.plan, context.server, context.channel.id, ws, {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	}, ended);
+	expect(status(context)).toBe("failed");
+});

@@ -216,7 +216,17 @@ export async function stop(
 		);
 	}
 	try {
-		if (finding.kind !== "ask") await deps.stop(roomId, finding, ws);
+		if (finding.kind !== "ask") {
+			try {
+				await deps.stop(roomId, finding, ws);
+			} catch (error) {
+				// Work that already ended, or refuses to cancel, must not leave the finding running.
+				let ended = await settleEnded(plan, server, roomId, finding, deps);
+				if (!ended && !/not cancellable/i.test(error instanceof Error ? error.message : "")) {
+					throw error;
+				}
+			}
+		}
 		await updateFinding(
 			plan,
 			server,
@@ -248,6 +258,29 @@ export async function stop(
 			} satisfies Wire.Explore.Stopped,
 		);
 	}
+}
+
+/** Settle `finding` from its work when that has ended. Returns whether it had. */
+async function settleEnded(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	finding: Wire.Finding,
+	deps: ExploreDeps,
+): Promise<boolean> {
+	if (finding.kind === "research") {
+		let request = await deps.research(roomId, finding.ref).catch(() => undefined);
+		if (!request || !["ready", "failed", "cancelled"].includes(request.stage)) return false;
+		await settleResearch(plan, server, roomId, request, deps.notice);
+		return true;
+	}
+	let investigation = await deps.spike(roomId, finding.ref).catch(() => undefined);
+	if (
+		!investigation
+		|| !["completed", "failed", "cancelled", "interrupted"].includes(investigation.state)
+	) return false;
+	await settleSpike(plan, server, roomId, investigation, deps.notice);
+	return true;
 }
 
 /** The asked member's reply settles their ask. Nobody else may answer for them. */
@@ -339,9 +372,12 @@ export async function settleResearch(
 				childId: request.child.id,
 			};
 		});
-		if (stored && ready) {
+		if (stored && (ready || request.stage === "failed")) {
 			let asked = question(plan, id);
-			await notice(plan, roomId, id, `Research finished for ${label(asked)}`, label(asked))
+			let text = ready
+				? `Research finished for ${label(asked)}`
+				: `Research didn’t finish for ${label(asked)}`;
+			await notice(plan, roomId, id, text, label(asked))
 				.catch(error => console.error("[questions] could not post a research notice:", error));
 		}
 	}

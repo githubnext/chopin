@@ -352,6 +352,12 @@ export function boundedResearchEvidence(evidence: ResearchEvidence[]): ResearchE
 }
 
 /** Coordinates durable workspace state with independently durable background jobs. */
+/** Whether `job` is research work in a state that can end its request: completed or failed. */
+export function researchJobSettles(job: Pick<JobView, "state" | "type">): boolean {
+	return (job.state === "completed" || job.state === "failed")
+		&& (job.type === "research-evidence" || job.type === "research-answer");
+}
+
 export class ResearchWorkspaceService {
 	#storage: StorageAdapter;
 	#jobs: JobService;
@@ -1036,11 +1042,7 @@ export class ResearchWorkspaceService {
 	}
 
 	async jobChanged(job: JobView): Promise<void> {
-		if (
-			(job.state !== "completed" && job.state !== "failed")
-			|| (job.type !== "research-evidence" && job.type !== "research-answer")
-			|| !this.#validId(job.channelId)
-		) return;
+		if (!researchJobSettles(job) || !this.#validId(job.channelId)) return;
 		if (!await this.#isTopLevelChannel(job.channelId)) return;
 		let linked = await this.#storage.research.findTurnByJob(job.channelId, job.id);
 		if (!linked) return;

@@ -101,7 +101,11 @@ import type { Research as ResearchWire } from "@chopin/protocol";
 import { investigationFinding } from "./experiments/document";
 import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
-import { ResearchWorkspaceError, ResearchWorkspaceService } from "./research/service";
+import {
+	ResearchWorkspaceError,
+	ResearchWorkspaceService,
+	researchJobSettles,
+} from "./research/service";
 import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";
 import { admit, admitSidebar } from "./socket/admission";
@@ -1050,6 +1054,11 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						? { working: thread => Chat.workingFor(Rooms.get(parent)?.plan?.chat, thread, room.id) }
 						: undefined,
 				);
+				// A reload while the room stays open settles a finding whose event was missed.
+				if (!parent) {
+					void Explore.sweep(opened, server, room.id, exploreDeps)
+						.catch(error => console.error("[questions] finding sweep failed:", error));
+				}
 			} catch (err) {
 				fail(ws, frame.rid, err instanceof Error ? err.message : "cannot open plan");
 			}
@@ -2511,6 +2520,9 @@ let jobService = new JobService({
 			void descriptionProjector?.jobChanged(job).catch(err => {
 				console.error("chopin: document description reconciliation failed -", err);
 			});
+		}
+		// A failed job ends a request too; only completion used to reach the research service.
+		if (researchJobSettles(job)) {
 			void researchService?.jobChanged(job).catch(err => {
 				console.error("chopin: research workspace reconciliation failed -", err);
 			});
