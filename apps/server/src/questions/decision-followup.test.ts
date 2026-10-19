@@ -21,7 +21,12 @@ test("Save durably requests a generation-keyed continuation only for marked capt
 	});
 	let plain = await fixture(1, false);
 	await plain.save(plain.ids[0]!, "An ordinary answer.");
-	expect(plain.plan.conversationPlanPendingEffects).toEqual([]);
+	// An unmarked answer still gets a why-only draft, but no continuation.
+	expect(
+		plain.plan.conversationPlanPendingEffects.filter(effect =>
+			effect.kind === "job" && effect.intent.kind === "decision-followup"
+		),
+	).toEqual([]);
 });
 
 test("a source commit survives restart before job completion and replays without a new write", async () => {
