@@ -5876,13 +5876,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 .explore-spin {
-	animation: button-loader-spin 800ms linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.explore-spin {
-		animation-duration: 2400ms;
-	}
+	animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
 }
 
 .explore-positioner {

@@ -1037,15 +1037,11 @@ export class ResearchWorkspaceService {
 		if (!linked) return;
 		await this.#exclusive(job.channelId, linked.workspaceId, async () => {
 			let detail = await this.#reconciled(job.channelId, linked.workspaceId);
-			if (!detail || linked.kind !== "initial") return;
+			if (!detail || linked.kind !== "initial" || detail.workspace.inlineReference !== "placed") {
+				return;
+			}
 			let request = await this.#requestView(detail);
 			if (request.stage !== "ready" && request.stage !== "failed") return;
-			if (this.#settled) {
-				await this.#settled(job.channelId, request).catch(error => {
-					console.error("[research] a settled request listener failed:", error);
-				});
-			}
-			if (detail.workspace.inlineReference !== "placed") return;
 			let activeTurn = detail.turns.find(value => value.id === linked.id);
 			if (
 				request.stage === "ready"
@@ -1073,6 +1069,15 @@ export class ResearchWorkspaceService {
 			}
 			await this.#terminalNotice?.(job.channelId, id, text);
 		});
+		if (this.#settled && linked.kind === "initial") {
+			// Outside the workspace lock: a listener opens the document, which may be closing.
+			let request = await this.request(job.channelId, linked.workspaceId).catch(() => undefined);
+			if (request && (request.stage === "ready" || request.stage === "failed")) {
+				await this.#settled(job.channelId, request).catch(error => {
+					console.error("[research] a settled request listener failed:", error);
+				});
+			}
+		}
 	}
 
 	async #requiredView(channelId: string, workspaceId: string): Promise<ResearchWorkspaceView> {

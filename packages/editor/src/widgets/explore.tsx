@@ -166,7 +166,8 @@ export function ExploreMenu(
 	let spikeReason = resources.spikeUnavailable();
 	let active = working(findings);
 	let exploring = active.length > 0;
-	let people = resources.people().filter(person => !waitingOn(findings).includes(person));
+	// Taken when the list opens, so asking someone does not empty it while the menu closes.
+	let [people, setPeople] = useState<readonly string[]>([]);
 
 	let record = async (body: Record<string, unknown>) => {
 		let reply = await wire.ask<Question.Explore.Reply>("question:explore", { id, ...body });
@@ -334,7 +335,12 @@ export function ExploreMenu(
 									<button
 										className="app-menu-item"
 										disabled={busy}
-										onClick={() => setStep("ask")}
+										onClick={() => {
+											setPeople(
+												resources.people().filter(person => !waitingOn(findings).includes(person)),
+											);
+											setStep("ask");
+										}}
 										type="button"
 									>
 										<CommentIcon aria-hidden="true" />

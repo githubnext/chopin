@@ -196,11 +196,12 @@
  * The page's question is the record's, shown above; the child's own title stays in the document
  * for its name and crumb but is not shown twice.
  */
-.question-page-plan .plan-content > h1:first-child {
+.plan:has(.plan-preface [data-question-page]) .plan-content > h1:first-child {
 	display: none;
 }
 
 /* The page already names the question and lists its findings; its control shows only the answer. */
-.question-page-control :is(.question-mark, .question-title, [data-decision-finding]) {
+.question-page-control
+	:is(.question-mark, .question-title, .question-resolved-meta, [data-decision-finding]) {
 	display: none;
 }

@@ -194,3 +194,25 @@ test("stopping a running finding stops its work and marks it stopped", async () 
 	expect(stopped).toEqual([KEY]);
 	expect(context.plan.records.get(context.id)!.findings?.[0]).toMatchObject({ status: "stopped" });
 });
+
+test("a decision opens as one page: created once, then remembered on its record", async () => {
+	let context = await opened();
+	let { ws, frames } = member();
+	let created: string[] = [];
+	let create = async (input: { recordId: string; title: string }) => {
+		created.push(input.title);
+		return `child-${input.recordId}`;
+	};
+	let ask = { kind: "question:page", ts: 0, rid: "p", id: context.id } as const;
+	await Explore.page(context.plan, context.server, context.channel.id, ws, ask, create);
+	expect(frames.at(-1)).toMatchObject({ ok: true, childId: `child-${context.id}` });
+	await Explore.page(context.plan, context.server, context.channel.id, ws, ask, create);
+	expect(created).toEqual(["How should onboarding work?"]);
+	let plan = await restart(context);
+	expect(plan.records.get(context.id)!.childId).toBe(`child-${context.id}`);
+	await Explore.page(context.plan, context.server, context.channel.id, ws, {
+		...ask,
+		id: "missing",
+	}, create);
+	expect(frames.at(-1)).toMatchObject({ ok: false });
+});

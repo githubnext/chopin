@@ -75,6 +75,8 @@ export type ProsePromptInput = {
 	owner: string;
 	involved: string[];
 	reasons: string[];
+	/** One line per ready finding: research, a spike or an asked member's take. */
+	findings?: string[];
 };
 
 function quote(value: string, max: number): string {
@@ -98,6 +100,12 @@ export function prosePrompt(input: ProsePromptInput): string {
 		lines.push(
 			"Reasons given in the discussion:",
 			...input.reasons.slice(0, 12).map(reason => `- ${quote(reason, 300)}`),
+		);
+	}
+	if (input.findings?.length) {
+		lines.push(
+			"What exploring the decision found:",
+			...input.findings.slice(0, 8).map(finding => `- ${quote(finding, 300)}`),
 		);
 	}
 	lines.push(
@@ -132,6 +140,9 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 				|| selected.has(item.targetId))
 		)
 		.map(item => item.text) ?? [];
+	let findings = (record.findings ?? []).filter(finding => finding.status === "ready").map(
+		finding => [finding.title, finding.summary].filter(Boolean).join(": "),
+	).filter(Boolean);
 	return {
 		id,
 		question: question?.question ?? "",
@@ -139,5 +150,6 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 		owner: record.owner!,
 		involved: Questions.involved(plan, record),
 		reasons,
+		...(findings.length ? { findings } : {}),
 	};
 }

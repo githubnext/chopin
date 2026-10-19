@@ -46,8 +46,11 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 		owner: "mina",
 		involved: ["mina", "jules"],
 		reasons: ["We need an organisation-level sign-in flow."],
+		findings: ["Apps scale per installation: rate limits apply per org"],
 	});
 	expect(prompt).toContain("[Background job: prose]");
+	expect(prompt).toContain("What exploring the decision found:");
+	expect(prompt).toContain("rate limits apply per org");
 	expect(prompt).toContain(`Decision card id: ${CARD}`);
 	expect(prompt).toContain("GitHub Apps");
 	expect(prompt).toContain("replacement");
@@ -65,8 +68,9 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 			owner: "O".repeat(1000),
 			involved: Array.from({ length: 30 }, () => "I".repeat(300)),
 			reasons: Array.from({ length: 30 }, () => "R".repeat(1000)),
+			findings: Array.from({ length: 30 }, () => "F".repeat(1000)),
 		}).length,
-	).toBeLessThan(9000);
+	).toBeLessThan(12000);
 });
 
 test("writeup projects only the current saved generation's unfinished prose job", () => {

@@ -26,7 +26,7 @@ import type { CardMetaStore } from "./card-meta";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
-import type { QuestionStepMotion } from "./widget-options";
+import type { ExploreResources, QuestionStepMotion } from "./widget-options";
 
 export type DecisionsProps = {
 	additional?: ReactNode;
@@ -34,6 +34,8 @@ export type DecisionsProps = {
 	store: QuestionnaireStore;
 	cardMeta?: CardMetaStore;
 	canEdit?: boolean;
+	/** Research, spikes and asks for open decisions. */
+	explore?: ExploreResources;
 	/** The viewer's own handle, who is never shown as present on a card. */
 	self?: string;
 	/** False when no Planner will review where decisions live. */
@@ -207,6 +209,7 @@ export function Decisions(
 		cardMeta,
 		canEdit = true,
 		connected,
+		explore,
 		headingId,
 		motionImmediately,
 		onShowPlan,
@@ -398,6 +401,7 @@ export function Decisions(
 			relations={store.relations(entry.id)}
 			canEdit={canEdit}
 			connected={connected}
+			explore={explore}
 			key={entry.id}
 			motion={questionMotion}
 			onQuestionEnter={question => store.highlight(entry.id, question)}

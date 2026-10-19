@@ -31,6 +31,7 @@ import {
 	ClockIcon,
 	CloseIcon,
 	DecisionIcon,
+	ExpandIcon,
 	MessageForwardIcon,
 	MessageIcon,
 } from "@chopin/icons";
@@ -860,6 +861,16 @@ export function ResolvedLayer(
 										disabled={options.canEdit === false || options.connected !== true
 											|| !actionable || !options.wire}
 										key={`${decision.key}:${intent.current}`}
+										note={options.explore?.openPage && (
+											<button
+												className="btn btn-sm btn-ghost"
+												onClick={() => options.explore?.openPage?.(decision.widget)}
+												type="button"
+											>
+												<ExpandIcon aria-hidden="true" />
+												Open page
+											</button>
+										)}
 										onDiscard={() => actions.request("discard", decision)}
 										onReopen={() => actions.request("reopen", decision)}
 										submitting={!!pending}

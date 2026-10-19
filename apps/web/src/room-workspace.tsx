@@ -1342,7 +1342,10 @@ export function RoomWorkspace(
 				let open = presentation.onChildOpen;
 				void wire.ask<Question.Explore.Paged>("question:page", { id: questionnaireId })
 					.then(reply => {
-						if (reply.ok) return open?.(reply.childId);
+						if (!reply.ok) return;
+						// A page opens over the document, so leave Decisions for it.
+						latestSelectDestination.current("plan");
+						return open?.(reply.childId);
 					})
 					.catch(error => console.error("[questions] could not open the page:", error));
 			},
@@ -1518,12 +1521,17 @@ export function RoomWorkspace(
 				onState={setPlanState}
 				// The skeleton's lines continue in the column until the document first arrives; a
 				// later reconnection keeps the document it already shows.
-				className={questionPage ? "question-page-plan" : undefined}
 				preface={presentation.type === "child" && presentation.parent || loading
 					? (
 						<>
 							{questionPage
-								? <QuestionPagePanel {...questionPage} />
+								? (
+									<QuestionPagePanel
+										entry={questionPage.entry}
+										meta={questionPage.meta}
+										root={questionPage.root}
+									/>
+								)
 								: presentation.type === "child" && presentation.parent && (
 									<ChildProvenance channelId={room} parent={presentation.parent} />
 								)}
@@ -1946,6 +1954,7 @@ export function RoomWorkspace(
 						)}
 						decisions={
 							<Decisions
+								explore={explore}
 								key={room}
 								additional={
 									<EvidenceDecisions

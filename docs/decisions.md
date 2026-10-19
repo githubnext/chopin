@@ -45,3 +45,37 @@ Creation commits the record, draft and document projection before announcement.
 Submission claims the displayed draft revision, rejects stale saves, and commits
 the answer and attribution before acknowledging it. Reconnection restores the
 accepted shared draft. Reopening and discarding preserve durable history.
+
+## Exploring a decision
+
+Every open decision in a top-level document has one **Explore** menu. Its field says what to
+find out; Enter researches the web. The menu can also build a spike on the viewer's paired
+machine (disabled, with its reason, when none is online) or ask another member. While research
+or a spike runs, the button reads **Exploring** and the menu offers **Stop**; Save stays enabled.
+
+What comes back is a **finding** on the decision's record:
+`{ id, kind: "research" | "spike" | "ask", status, focus?, ref, title?, summary?, sources?,
+sourceCount?, verdict?, branch?, childId?, by, at }`, at most 20 per record. The browser starts
+research and spikes through their existing HTTP routes, so their authorization, Planner owner and
+paired-machine checks are unchanged, then sends `question:explore` with the request or
+investigation id. The server checks that the work belongs to the document, persists a running
+finding, and only then replies and announces `question:meta`. When a research request reaches
+ready or failed, or an investigation finishes, the server settles every running finding that
+follows it, idempotently, and posts a Chat notice. `question:explore-stop` stops the work and
+marks the finding stopped.
+
+Asking someone records a running `ask` finding, shows the person as waiting on the card, and
+posts a Chat notice that names them. Only the asked member can answer, with `question:take`;
+their reply becomes the finding's summary and appears under **Takes** on the decision's page.
+
+Ready findings feed the settle write-up's prompt as context, beside the discussion's reasons.
+
+## A decision's page
+
+**Open as a page** turns a decision in a top-level document into its own child document. The
+channel id is deterministic (`question:<recordId>` within the repository), so a retry or a second
+member finds the same page; the record learns `childId` only after the channel exists. The child's
+body is the decision's Notes. Above it, the page shows what the root's record says: a status pill
+(Open, Exploring, Waiting for a member, or Settled), the question, the answer and who settled it,
+the card's control at page width, Findings and Takes. A child document's own decisions cannot
+open as pages.
