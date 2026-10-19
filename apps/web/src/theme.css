@@ -2,6 +2,7 @@
 @import "@chopin/visuals/theme.css";
 @import "./conversation-plan/source.css";
 @import "./build-view.css";
+@import "./criteria.css";
 @import "./local-agent-note.css";
 
 /*

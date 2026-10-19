@@ -1,0 +1,431 @@
+/*
+ * The criteria matrix of a choice decision: options are rows, criteria are columns, and each cell
+ * is a mark. Below 30rem the columns give way to chips under each option.
+ */
+
+.crit-wrap {
+	container-type: inline-size;
+	min-width: 0;
+}
+
+.crit-scroll {
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: thin;
+	/* Room for focus rings and the open switch, which the scroll lane would clip. */
+	padding-block: 0.25rem;
+	margin-block: -0.25rem;
+}
+
+.crit {
+	--crit-col: 6.5rem;
+	--crit-tail: 2rem;
+	--crit-cols: minmax(0, 1fr) repeat(var(--crit-n), var(--crit-col)) var(--crit-tail);
+	min-width: 0;
+}
+
+.crit[data-count="1"] {
+	--crit-n: 1;
+}
+
+.crit[data-count="2"] {
+	--crit-n: 2;
+}
+
+.crit[data-count="3"] {
+	--crit-n: 3;
+}
+
+.crit[data-count="4"] {
+	--crit-n: 4;
+}
+
+.crit[data-count="5"] {
+	--crit-n: 5;
+}
+
+.crit[data-layout="columns"] {
+	min-inline-size: calc(12rem + var(--crit-n) * var(--crit-col) + var(--crit-tail));
+}
+
+.crit:not([data-plus], [data-adding]) {
+	--crit-tail: 0rem;
+}
+
+.crit[data-adding] {
+	--crit-tail: 9rem;
+}
+
+@container (max-width: 34rem) {
+	.crit {
+		--crit-col: 4rem;
+	}
+}
+
+.crit-head,
+.crit[data-layout="columns"] .crit-row.question-option {
+	display: grid;
+	grid-template-columns: var(--crit-cols);
+	align-items: start;
+	column-gap: 0;
+	padding: 0 0.75rem 0 0;
+}
+
+.crit-head {
+	align-items: end;
+	padding-block-end: 0.25rem;
+}
+
+.crit-head-label {
+	display: -webkit-box;
+	overflow: hidden;
+	padding-inline: 0.25rem;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	font-weight: 500;
+	color: var(--color-text-tertiary);
+	text-align: center;
+	text-wrap: balance;
+}
+
+.crit-head-label:first-child {
+	grid-column: 2;
+}
+
+.crit-plus {
+	justify-self: center;
+}
+
+.crit-body {
+	display: grid;
+	gap: 0.125rem;
+}
+
+/* The label half of a row. It pins while the marks scroll under it. */
+.crit-pick {
+	--crit-row-bg: var(--color-page);
+	position: sticky;
+	inset-inline-start: 0;
+	z-index: 1;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--choice-content-gap);
+	min-width: 0;
+	padding: 0.375rem 0.75rem 0.375rem 0.5rem;
+	border-radius: var(--radius-md);
+	background: var(--crit-row-bg);
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.crit-pick:has(.question-input:not(:disabled)) {
+	cursor: pointer;
+}
+
+.crit-pick:has(.question-input:focus-visible) {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.crit-row:has(.question-input:not(:disabled)):hover .crit-pick {
+	--crit-row-bg: var(--color-hover);
+}
+
+.crit-row:has(.question-input:checked) .crit-pick,
+.crit-row:has(.question-input:checked:not(:disabled)):hover .crit-pick {
+	--crit-row-bg: var(--color-brand-wash);
+}
+
+/* The row's own tint is the label's too, so it does not double. */
+.crit-row.question-option {
+	background: transparent;
+}
+
+.crit-row.question-option:has(.question-input:not(:disabled)):hover {
+	background: var(--color-hover);
+}
+
+.crit-row.question-option:has(.question-input:checked),
+.crit-row.question-option:has(.question-input:checked:not(:disabled)):hover {
+	background: var(--color-brand-wash);
+}
+
+/* The row itself has no focus ring: the label's radio draws it. */
+.crit-row.question-option:has(.question-input:focus-visible) {
+	outline: 0;
+}
+
+/* A mark's slot is one text line tall, so its glyph centres on the option's first line. */
+.crit-slot {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	block-size: calc(1lh + 0.75rem);
+	min-width: 0;
+}
+
+.crit-slot[data-ghost] {
+	justify-content: flex-start;
+	padding-inline-start: 0.5rem;
+	opacity: 0.45;
+}
+
+.crit-cell {
+	display: grid;
+	place-items: center;
+	min-inline-size: 1.75rem;
+	block-size: 1.75rem;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.crit-cell:hover {
+	background: var(--color-selected);
+}
+
+.crit-cell:focus-visible,
+.crit-seg-btn:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
+.crit-cell[data-chip] {
+	block-size: auto;
+	border-radius: var(--radius-full);
+}
+
+.crit-cell[data-chip]:hover {
+	background: transparent;
+	filter: brightness(0.97);
+}
+
+/* Marks --------------------------------------------------------------------------------------- */
+
+.crit-glyph {
+	--g-bg: transparent;
+	--g-fg: transparent;
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+	border-radius: var(--radius-full);
+	background: var(--g-bg);
+	color: var(--g-fg);
+}
+
+.crit-glyph[data-mark="yes"] {
+	--g-bg: var(--color-success-wash);
+	--g-fg: var(--color-success-ink);
+}
+
+.crit-glyph[data-mark="partly"] {
+	--g-bg: var(--color-warning-wash);
+	--g-fg: var(--color-warning-ink);
+}
+
+.crit-glyph[data-mark="no"] {
+	--g-bg: var(--color-destructive-wash);
+	--g-fg: var(--color-destructive-ink);
+}
+
+.crit-glyph[data-mark="none"] {
+	border: var(--edge-width) solid var(--color-control-edge);
+}
+
+.crit-glyph [data-nucleo-icon] {
+	color: inherit;
+}
+
+/* On the chosen row's tint a wash disc disappears, so it turns into a page-coloured disc. */
+.crit-row:has(.question-input:checked) .crit-cell .crit-glyph,
+.crit-row:has(.question-input:checked) > .crit-slot > [role="img"] .crit-glyph {
+	background: var(--color-page);
+}
+
+/* Inline switch ------------------------------------------------------------------------------- */
+
+.crit-seg {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.125rem;
+	padding: 0.125rem;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting);
+	outline: var(--edge-width) solid var(--color-edge);
+}
+
+/* In a column it opens over its own cell, centred, without moving anything. */
+.crit-slot > .crit-seg {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	z-index: 2;
+	translate: -50% -50%;
+}
+
+.crit-seg-btn {
+	display: grid;
+	place-items: center;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	cursor: pointer;
+}
+
+.crit-seg-btn[aria-checked="false"] .crit-glyph {
+	background: transparent;
+	color: var(--color-text-tertiary);
+}
+
+.crit-seg-btn[aria-checked="false"]:is(:hover, :focus-visible) .crit-glyph {
+	background: var(--g-bg);
+	color: var(--g-fg);
+}
+
+.crit-seg-label {
+	padding-inline: 0.375rem 0.25rem;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-secondary);
+}
+
+/* Adding a criterion -------------------------------------------------------------------------- */
+
+.crit-add-field {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	min-width: 0;
+	padding: 0.125rem 0.25rem 0.125rem 0.125rem;
+	border-radius: var(--radius-md);
+	outline: var(--edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.crit-add-field:focus-within {
+	outline-color: var(--color-brand);
+}
+
+.crit-input {
+	min-width: 0;
+}
+
+.crit-hint {
+	margin-block-start: 0.25rem;
+}
+
+/* Chips --------------------------------------------------------------------------------------- */
+
+.crit[data-layout="chips"] {
+	display: grid;
+	gap: 0.125rem;
+}
+
+.crit[data-layout="chips"] .crit-row.question-option {
+	display: grid;
+	padding: 0 0.75rem 0.5rem 0;
+}
+
+.crit[data-layout="chips"] .crit-pick {
+	position: static;
+	padding-block-end: 0.125rem;
+}
+
+.crit-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	padding-inline-start: calc(0.5rem + 1.5rem + var(--choice-content-gap));
+}
+
+.crit-chip {
+	display: inline-flex;
+	min-width: 0;
+}
+
+/* On touch the columns get a 44px target; chips keep their look and wrap with room between them. */
+:root[data-plan-coarse-pointer] .crit-cell:not([data-chip]) {
+	min-inline-size: var(--control-target-coarse);
+	min-block-size: var(--control-target-coarse);
+}
+
+:root[data-plan-coarse-pointer] .crit-seg:not([data-chip]) .crit-seg-btn {
+	inline-size: var(--control-target-coarse);
+	block-size: var(--control-target-coarse);
+}
+
+:root[data-plan-coarse-pointer] .crit-seg[data-chip] .crit-seg-btn {
+	inline-size: calc(var(--spacing) * 9);
+	block-size: calc(var(--spacing) * 9);
+}
+
+:root[data-plan-coarse-pointer] .crit-chips {
+	gap: calc(var(--spacing) * 2) var(--spacing);
+}
+
+/* Settled table ------------------------------------------------------------------------------- */
+
+.crit-table {
+	min-width: 28rem;
+}
+
+.crit-table .cv-table-head,
+.crit-table .cv-table-cell {
+	vertical-align: middle;
+}
+
+.crit-table .cv-table-head {
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+.crit-table .crit-table-mark {
+	text-align: center;
+}
+
+.crit-table .crit-table-mark > span {
+	display: inline-grid;
+	place-items: center;
+}
+
+.crit-table-option {
+	display: flex;
+	align-items: center;
+	gap: var(--choice-content-gap);
+}
+
+.crit-table-option .question-key {
+	block-size: auto;
+}
+
+.crit-table tr[data-chosen] {
+	background: var(--color-brand-wash);
+}
+
+.crit-table tr[data-chosen] .question-key > span {
+	background: var(--color-brand);
+	color: var(--color-white);
+}
+
+.crit-table tr[data-chosen] .crit-glyph {
+	background: var(--color-page);
+}
+
+/* The page's control sits half a gutter past the prose edge; the table keeps to the prose. */
+.crit-settled {
+	padding-inline: calc(var(--spacing) * 2);
+}
