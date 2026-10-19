@@ -66,6 +66,7 @@ export { ListIcon } from "./list";
 export { ProgressRingIcon } from "./progress";
 export {
 	ArchiveIcon,
+	CloudIcon,
 	DocumentIcon,
 	LoaderIcon,
 	MachineIcon,
