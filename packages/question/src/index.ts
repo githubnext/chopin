@@ -25,8 +25,8 @@ export {
 export type {
 	Answer,
 	Appended,
-	CriterionAppended,
 	Criterion,
+	CriterionAppended,
 	DecisionDefinition,
 	Definition,
 	Item,
@@ -43,6 +43,7 @@ export {
 	read,
 	restore,
 	setMark,
+	upgrade,
 } from "./draft";
 export type { Applied, Draft, Drafts, Mark, Marks, Mode, Model } from "./draft";
 

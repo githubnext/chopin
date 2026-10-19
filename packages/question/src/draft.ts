@@ -110,8 +110,29 @@ export function markable(question: Item): boolean {
 	return question.response !== "text" && !question.verbatim;
 }
 
+/**
+ * Give a draft stored before criteria existed its empty `marks` object.
+ *
+ * For the authoritative model only, at restore: clients receive the upgraded model when
+ * they open, so nobody holds a draft without it once criteria can be appended.
+ */
+export function upgrade(model: Model, definition: Definition): void {
+	let root = model.root.child();
+	if (!(root instanceof crdt.ObjNode)) return;
+	let changed = false;
+	for (let question of definition.questions) {
+		let node = root.get(question.id);
+		if (!(node instanceof crdt.ObjNode) || !markable(question) || node.keys.has("marks")) continue;
+		model.api.obj([question.id]).set({ marks: crdt.schema.obj({}) });
+		changed = true;
+	}
+	if (changed) model.api.flush();
+}
+
 function keys(node: crdt.ObjNode, expected: string[], name: string, optional: string[] = []): void {
-	let actual = [...node.keys.keys()].filter(key => !optional.includes(key) || expected.includes(key))
+	let actual = [...node.keys.keys()].filter(key =>
+		!optional.includes(key) || expected.includes(key)
+	)
 		.sort();
 	let sorted = expected.toSorted();
 	if (actual.length !== sorted.length || actual.some((key, index) => key !== sorted[index])) {

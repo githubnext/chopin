@@ -77,7 +77,11 @@ export function addCriterion(
 	label: string,
 ): CriterionAdded {
 	let question = definition.questions[0]!;
-	let result = appendCriterion(definition, { question: question.id, key: "x".repeat(8), label }, id);
+	let result = appendCriterion(
+		definition,
+		{ question: question.id, key: "x".repeat(8), label },
+		id,
+	);
 	if (!result.ok) return result;
 
 	let copy = model.clone();

@@ -103,7 +103,9 @@ function checkCriteria(question: Partial<Question>): void {
 	}
 	if (!Object.hasOwn(question, "marks")) return;
 	let marks = question.marks;
-	if (!marks || typeof marks !== "object" || Array.isArray(marks) || question.answer === undefined) {
+	if (
+		!marks || typeof marks !== "object" || Array.isArray(marks) || question.answer === undefined
+	) {
 		throw invalid();
 	}
 	let options = new Set(question.options.map(option => option?.id));

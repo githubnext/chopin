@@ -2,7 +2,16 @@ import { expect, it } from "bun:test";
 import { $getRoot } from "lexical";
 import { exportPlan, importPlan } from "../convert";
 import { $isQuestionnaireNode } from "./questionnaire";
-import { BLUE, CANARY, editor, ID, OPEN, QUESTION, REGISTRY, through } from "./questionnaire.test-fixtures";
+import {
+	BLUE,
+	CANARY,
+	editor,
+	ID,
+	OPEN,
+	QUESTION,
+	REGISTRY,
+	through,
+} from "./questionnaire.test-fixtures";
 
 const SPEED = "01K0N5A1B2C3D4E5F6G7H8J9KM";
 const COST = "01K0N5A1B2C3D4E5F6G7H8J9KN";
@@ -12,7 +21,10 @@ const CRITERIA = `<Criterion id="${SPEED}" label="New device" />\n`
 
 const ASKED = OPEN.replace("</Question>", `${CRITERIA}</Question>`);
 const SETTLED = ASKED
-	.replace(`<Questionnaire id="${ID}">`, `<Questionnaire id="${ID}" status="decided" by="ana" at="2026-09-23T17:30:00.000Z">`)
+	.replace(
+		`<Questionnaire id="${ID}">`,
+		`<Questionnaire id="${ID}" status="decided" by="ana" at="2026-09-23T17:30:00.000Z">`,
+	)
 	.replace(
 		"</Question>",
 		`<Answer value="Canary" choices="${CANARY}" marks="${CANARY}/${SPEED}:yes ${CANARY}/${COST}:partly ${BLUE}/${SPEED}:no" />\n</Question>`,
@@ -73,7 +85,16 @@ it("leaves questionnaires without criteria unchanged", () => {
 it("rejects invalid criteria and marks", () => {
 	expect(problems(ASKED.replace(`id="${COST}"`, `id="${SPEED}"`))).toContain("distinct criteria");
 	expect(problems(SETTLED.replace(`/${COST}:partly`, `/${COST}:maybe`))).toContain("Answer marks");
-	expect(problems(SETTLED.replace(`${BLUE}/${SPEED}:no`, `${BLUE}/${QUESTION}:no`))).toContain("Answer marks");
-	expect(problems(OPEN.replace("</Question>", `<Answer value="Canary" marks="${CANARY}/${SPEED}:yes" />\n</Question>`)))
+	expect(problems(SETTLED.replace(`${BLUE}/${SPEED}:no`, `${BLUE}/${QUESTION}:no`))).toContain(
+		"Answer marks",
+	);
+	expect(
+		problems(
+			OPEN.replace(
+				"</Question>",
+				`<Answer value="Canary" marks="${CANARY}/${SPEED}:yes" />\n</Question>`,
+			),
+		),
+	)
 		.toContain("Answer marks");
 });

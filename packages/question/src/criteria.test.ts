@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { derive } from "./answer";
-import { apply, create, crdt, read, restore, setMark } from "./draft";
+import { apply, crdt, create, read, restore, setMark } from "./draft";
 import * as limits from "./limits";
 import { addCriterion, addOption } from "./options";
 import { appendCriterion, decision, identified, normalize } from "./schema";
@@ -99,7 +99,10 @@ describe("marks", () => {
 		setMark(again, "q0", "o0", "c0", "partly");
 		setMark(again, "q0", "o1", "c1", null);
 		let next = apply(applied.model, definition, [...again.api.flush().toBinary()]);
-		expect(next.ok && read(next.model, definition).q0!.marks).toEqual({ "o0/c0": "partly", "o1/c1": null });
+		expect(next.ok && read(next.model, definition).q0!.marks).toEqual({
+			"o0/c0": "partly",
+			"o1/c1": null,
+		});
 	});
 
 	it("rejects an invalid value, unknown cell or missing container", () => {
@@ -197,7 +200,9 @@ describe("appendCriterion", () => {
 		let later = restore([...client.toBinary()], result.definition);
 		setMark(later, "q0", "o0", "c0", "no");
 		let applied = apply(result.model, result.definition, [...later.api.flush().toBinary()]);
-		expect(applied.ok && read(applied.model, result.definition).q0!.marks).toEqual({ "o0/c0": "no" });
+		expect(applied.ok && read(applied.model, result.definition).q0!.marks).toEqual({
+			"o0/c0": "no",
+		});
 	});
 
 	it("keeps working when an option is appended afterwards", () => {
@@ -215,7 +220,10 @@ describe("appendCriterion", () => {
 			ok: false,
 			reason: "duplicate",
 		});
-		expect(addCriterion(definition, model, "c9", "")).toMatchObject({ ok: false, reason: "invalid" });
+		expect(addCriterion(definition, model, "c9", "")).toMatchObject({
+			ok: false,
+			reason: "invalid",
+		});
 		expect(addCriterion(definition, model, "c9", "x".repeat(41))).toMatchObject({
 			ok: false,
 			reason: "invalid",
