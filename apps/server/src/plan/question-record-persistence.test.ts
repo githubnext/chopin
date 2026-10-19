@@ -147,6 +147,13 @@ describe("durable question record restoration", () => {
 		expect(await rejected(stored([], [draft()]))).toBeInstanceOf(Error);
 	});
 
+	it("rejects a terminal record with an open draft even when its definition is identical", async () => {
+		for (let status of ["answered", "discarded", "cancelled"]) {
+			expect(await rejected(stored([{ ...legacyRecord(), status }], [draft()])))
+				.toMatchObject({ message: "hosted channel question records disagree with their drafts" });
+		}
+	});
+
 	it("requires identical saved question IDs, option IDs, order and display text", async () => {
 		for (
 			let field of [

@@ -6,11 +6,14 @@
  * same validated, persisted-before-published batch as a root edit.
  */
 import * as Arguments from "./arguments";
+import * as Y from "yjs";
 import * as Comments from "../comments/service";
 import * as Store from "../comments/store";
 import * as edit from "../plan/edit";
+import * as room from "../plan/room";
 import * as Questions from "../questions/service";
-import { documentIdentity, implementationActive } from "../plan/service";
+import * as QuestionStore from "../questions/store";
+import { documentIdentity, implementationActive, publishStaged } from "../plan/service";
 
 import type { Plan } from "../plan/service";
 import type { DocumentRoom } from "./tools";
@@ -158,11 +161,72 @@ export async function applyBlockEdit(
 ) {
 	if (options.signal?.aborted) return { ok: false as const, reason: "cancelled" };
 	if (implementationActive(target.plan)) return { ok: false as const, reason: "locked" };
+	if (args.operations.some(operation => operation.op === "detach_question")) {
+		let document = await room.restore(
+			target.plan.document.epoch,
+			Y.encodeStateAsUpdate(target.plan.document.doc),
+			room.project(target.plan.document),
+			[],
+		);
+		if (target.plan.document.titleKey !== undefined) room.trackTitle(document);
+		document.seq = target.plan.document.seq;
+		let candidate: Plan = {
+			...target.plan,
+			document,
+			records: new Map(target.plan.records),
+			threads: new Map(target.plan.threads),
+			outlines: new Map(target.plan.outlines),
+			questions: {
+				open: new Map(target.plan.questions.open),
+				closed: new Map(target.plan.questions.closed),
+			},
+		};
+		try {
+			return await editBlocks(
+				{
+					...target,
+					plan: candidate,
+					publish: mutation =>
+						publishStaged(target.plan, target.server, target.id, candidate, mutation, {
+							agent: true,
+						}),
+				},
+				args,
+				options,
+			);
+		} finally {
+			document.doc.destroy();
+		}
+	}
+	return editBlocks(target, args, options);
+}
+
+async function editBlocks(
+	target: DocumentRoom,
+	args: { revision: number; operations: Parameters<typeof edit.apply>[2] },
+	options: { acting?: string; applied?: () => void; signal?: AbortSignal },
+) {
+	if (options.signal?.aborted) return { ok: false as const, reason: "cancelled" };
 	let outcome = edit.apply(target.plan, args.revision, args.operations);
 	if (!outcome.ok) return outcome;
-	options.applied?.();
+	if (!outcome.detached.length) options.applied?.();
 
+	let completed: Array<() => QuestionStore.Ended> = [];
 	for (let id of outcome.detached) {
+		let entry = QuestionStore.get(target.plan.questions, id);
+		if (entry) {
+			// Claims mutate entries; leave the live draft and its waiter untouched until commit.
+			target.plan.questions.open.set(id, { ...entry, editors: new Set(entry.editors) });
+			let claimed = QuestionStore.claimCancel(target.plan.questions, id, "chopin");
+			if (!claimed.ok) {
+				return {
+					ok: false as const,
+					reason: "invalid" as const,
+					message: "Questionnaire is resolving",
+				};
+			}
+			completed.push(QuestionStore.stage(target.plan.questions, claimed.claim));
+		}
 		let record = target.plan.records.get(id);
 		if (record) target.plan.records.set(id, { ...record, status: "cancelled" });
 	}
@@ -184,6 +248,8 @@ export async function applyBlockEdit(
 	if (options.acting) Comments.attribute(target.plan, options.acting, outcome.touched);
 
 	if (outcome.mutation) await target.publish(outcome.mutation);
+	for (let finish of completed) finish();
+	if (outcome.detached.length) options.applied?.();
 
 	// After the update that created them, never before it. Both
 	// go to the same topic in order, so by the time this arrives
