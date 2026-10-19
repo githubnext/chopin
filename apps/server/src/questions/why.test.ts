@@ -66,13 +66,14 @@ test("a record keeps a bounded plain why, and whyBy needs one", () => {
 		why: "Because.",
 		whyBy: "ana",
 	});
+	// A person who cleared it leaves whyBy with no why.
+	expect(normalizeRecord({ ...base, whyBy: "ana" }).why).toBeUndefined();
 	for (
 		let bad of [
 			{ why: "" },
 			{ why: " padded " },
 			{ why: "two\nlines" },
 			{ why: "a".repeat(MAX_WHY + 1) },
-			{ whyBy: "ana" },
 			{ why: "Because.", whyBy: "" },
 		]
 	) expect(() => normalizeRecord({ ...base, ...bad })).toThrow(/invalid/);
@@ -124,7 +125,8 @@ test("an empty edit clears the why, and only a settled decision has one", async 
 	expect(frames.at(-1)).not.toHaveProperty("why");
 	let record = context.plan.records.get(context.id)!;
 	expect(record.why).toBeUndefined();
-	expect(record.whyBy).toBeUndefined();
+	// The clearing is remembered, so a draft for this settle cannot refill it.
+	expect(record.whyBy).toBe("sam");
 
 	await Questions.setWhy(context.plan, context.server, "test", ws, ask("missing", "x"));
 	expect(frames.at(-1)).toMatchObject({ ok: false, message: "Decision not found" });

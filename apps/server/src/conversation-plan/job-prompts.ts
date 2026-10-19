@@ -7,7 +7,7 @@ import { source as planSource } from "../plan/service";
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import { draftableTitle } from "../channels/document-title";
 import * as edit from "../plan/edit";
-import { proseInput, prosePrompt } from "./prose-job";
+import { settlePrompt } from "./prose-job";
 import type { Plan } from "../plan/service";
 
 function quote(value: string, max = 500): string {
@@ -225,6 +225,6 @@ export const PROMPT_FOR: Record<
 	},
 	refine: (plan, job) => card(plan, job, "refine"),
 	suggest: (plan, job) => card(plan, job, "suggest"),
-	prose: (plan, job) => prosePrompt(proseInput(plan, job.target)),
+	prose: (plan, job) => settlePrompt(plan, job),
 	"decision-followup": (_plan, job) => followupPrompt(job.target),
 };

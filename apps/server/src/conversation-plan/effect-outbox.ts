@@ -150,6 +150,7 @@ export function restoreEffectOutbox(pendingValue: unknown, receiptValue: unknown
 				!String(item.key).startsWith("job:")
 				|| item.threadId !== undefined && !bounded(item.threadId, 200)
 				|| intent.kind === "prose" && !bounded(item.threadId, 200)
+					&& !(item.threadId === undefined && String(intent.trigger).startsWith("why:"))
 				|| !["heading", "refine", "suggest", "prose", "decision-followup"].includes(
 					intent.kind as string,
 				)

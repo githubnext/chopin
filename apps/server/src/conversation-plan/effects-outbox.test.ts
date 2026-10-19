@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { type Effect, restoreEffectOutbox } from "./effects";
-import { LATER, OPTION } from "./effects.test-fixtures";
+import { type Effect, restoreEffectOutbox, runEffects } from "./effects";
+import { LATER, OPTION, sink } from "./effects.test-fixtures";
 
 // Whole callbacks from archive446a9779a937fa5be7cd3eb52fd7f3023d691ed2, effects.test.ts.
 test("restored pending effects and receipts are strictly bounded", () => {
@@ -84,4 +84,22 @@ test("restored prose effects require their linked thread", () => {
 			intent: { kind: "prose", target: "Q", trigger: "decided:Q:1" },
 		}], [])
 	).toThrow("conversation effect");
+});
+
+test("a why-only job effect has no thread, survives restore, and enqueues once", async () => {
+	let effect: Effect = {
+		key: "job:why:C:1",
+		kind: "job",
+		intent: { kind: "prose", target: "C", trigger: "why:C:1" },
+	};
+	expect(restoreEffectOutbox([effect], [])).toEqual({ pending: [effect], receipts: [] });
+	// A paragraph write-up still needs its conversation thread.
+	expect(() =>
+		restoreEffectOutbox([{ ...effect, intent: { ...effect.intent, trigger: "decided:C:1" } }], [])
+	).toThrow("conversation effect");
+	let jobs: string[] = [];
+	let state = sink({ enqueueJob: async intent => void jobs.push(intent.trigger) });
+	expect(await runEffects(state.deps, [effect])).toBe(1);
+	expect(await runEffects(state.deps, [effect])).toBe(0);
+	expect(jobs).toEqual(["why:C:1"]);
 });

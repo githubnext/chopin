@@ -10,7 +10,8 @@ export function createProseTools() {
 			description: "Background job only. Write one grounded paragraph for a saved conversation "
 				+ "decision. At most 600 characters; inline Markdown is allowed. Re-decisions replace the "
 				+ "existing paragraph. Optionally also pass why: one plain sentence, at most 300 characters, "
-				+ "saying why the decision went this way.",
+				+ "saying why the decision went this way. For a Planner or human decision, pass only "
+				+ "revision, id and why.",
 			inputSchema: jsonSchema<Record<string, unknown>>({
 				type: "object",
 				properties: {
@@ -19,7 +20,7 @@ export function createProseTools() {
 					text: { type: "string", minLength: 1, maxLength: 600 },
 					why: { type: "string", minLength: 1, maxLength: 300 },
 				},
-				required: ["revision", "id", "text"],
+				required: ["revision", "id"],
 				additionalProperties: false,
 			}),
 			contextSchema: cardToolSchema,

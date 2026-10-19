@@ -34,9 +34,11 @@ export async function setWhy(
 			if (text === (record.why ?? "") && (!text || record.whyBy)) return undefined;
 			let { why: _why, whyBy: _whyBy, ...rest } = record;
 			let previous = plan.records;
+			// Clearing a why a person or Chopin wrote keeps `whyBy` with no `why`, so a draft that
+			// lands later for the same settle never refills what they emptied.
 			plan.records = new Map(previous).set(
 				msg.id,
-				text ? { ...rest, why: text, whyBy: ws.data.handle } : rest,
+				text ? { ...rest, why: text, whyBy: ws.data.handle } : { ...rest, whyBy: ws.data.handle },
 			);
 			try {
 				await Service.persistExclusive(plan);

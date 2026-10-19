@@ -19,7 +19,7 @@ import type { Plan } from "../plan/service";
 import type { Socket, SocketData } from "../wire";
 
 import type { Record } from "./records";
-import { appendProseEffect, proseIntent } from "../conversation-plan/prose-job";
+import { appendProseEffect, settleIntent } from "../conversation-plan/prose-job";
 import { appendFollowupEffect } from "./decision-followup";
 
 import type { CardEvent } from "./card-event";
@@ -33,7 +33,7 @@ export async function submit(
 	roomId: string,
 	ws: Socket,
 	msg: Request<Wire.Submit.Ask>,
-	onCommitted?: (intent: NonNullable<ReturnType<typeof proseIntent>>) => void,
+	onCommitted?: (intent: NonNullable<ReturnType<typeof settleIntent>>) => void,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	let paused = () => {
@@ -123,7 +123,7 @@ export async function submit(
 					anchors: Anchors.answer(record),
 				};
 				records.set(msg.id, answered);
-				let intent = proseIntent(answered);
+				let intent = settleIntent(answered);
 				let effects = appendFollowupEffect(
 					appendProseEffect(
 						plan.conversationPlanPendingEffects,

@@ -24,6 +24,11 @@ export function proseJobTrigger(cardId: string, generation: number): string {
 	return `decided:${cardId}:${generation}`;
 }
 
+/** The why-only draft of a settled Planner or human decision; one per saved generation. */
+export function whyJobTrigger(cardId: string, generation: number): string {
+	return `why:${cardId}:${generation}`;
+}
+
 export type PendingCardAction =
 	& Base
 	& (

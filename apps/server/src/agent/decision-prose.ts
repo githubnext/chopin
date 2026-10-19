@@ -3,7 +3,9 @@ import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as room from "../plan/room";
 import * as Service from "../plan/service";
-import { decisionGeneration, proseJobTrigger } from "../questions/card-actions";
+import { isWhyTrigger } from "../conversation-plan/prose-job";
+import { announce } from "../questions/card-notifications";
+import { decisionGeneration, proseJobTrigger, whyJobTrigger } from "../questions/card-actions";
 import * as Questions from "../questions/service";
 import { proseOperation } from "../questions/write-prose";
 import { input } from "./decision-prose-fields";
@@ -15,20 +17,47 @@ export async function write(
 	job: ConversationPlan.Job,
 	turn: Context["plan"]["chat"]["turn"],
 	raw: unknown,
-): Promise<{ output: { title: string; mode: "insert" | "replace" }; revision: number }> {
+): Promise<{ output: { title: string; mode: "insert" | "replace" | "why" }; revision: number }> {
 	return context.exclusive(async () => {
 		let { plan } = context;
 		let args = input(raw);
+		// A Planner or human decision gets the why-only job: no paragraph, only the why.
+		let whyOnly = isWhyTrigger(job.trigger);
 		let active = () => {
 			let record = plan.records.get(args.id);
 			return plan.chat.job === job && plan.chat.turn === turn
 				&& job.status === "running" && job.kind === "prose" && job.target === args.id
-				&& record?.origin === "conversation" && record.status === "answered"
-				&& !!record.owner && !!record.threadId
-				&& job.trigger === proseJobTrigger(args.id, decisionGeneration(record));
+				&& !!record && record.status === "answered" && !!record.owner
+				&& (whyOnly
+					? record.origin !== "conversation"
+						&& job.trigger === whyJobTrigger(args.id, decisionGeneration(record))
+					: record.origin === "conversation" && !!record.threadId
+						&& job.trigger === proseJobTrigger(args.id, decisionGeneration(record)));
 		};
 		if (job.target !== args.id) throw new Error("This job writes up a different decision.");
 		if (!active()) throw new Error("background Planner job generation is no longer current");
+		if (whyOnly) {
+			if (args.text !== undefined || !args.why) {
+				throw new Error("This job writes only the why: pass revision, id and why.");
+			}
+			let current = plan.records.get(args.id)!;
+			let title = current.definition.questions[0]?.question ?? "a decision";
+			// A person's words, or their clearing, always win over a draft.
+			if (!current.whyBy) {
+				let previous = plan.records;
+				plan.records = new Map(previous).set(args.id, { ...current, why: args.why });
+				try {
+					await Service.persistExclusive(plan);
+				} catch (error) {
+					plan.records = previous;
+					throw error;
+				}
+				announce(plan, context.server, context.room, args.id);
+			}
+			return { output: { title, mode: "why" }, revision: plan.revision };
+		}
+		if (args.text === undefined) throw new Error("write_decision_prose needs the paragraph text");
+		let text = args.text;
 		if (args.revision !== plan.revision) throw new Error("stale; read_plan again");
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
 
@@ -52,7 +81,7 @@ export async function write(
 		stagedDocument.seq = plan.document.seq;
 		candidate.document = stagedDocument;
 		try {
-			let planned = proseOperation(candidate, args.id, args.text);
+			let planned = proseOperation(candidate, args.id, text);
 			if (!planned.ok) throw new Error(planned.message);
 			for (let operations of planned.steps) {
 				let outcome = edit.apply(candidate, args.revision, operations);

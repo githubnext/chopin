@@ -45,6 +45,9 @@ export type Record = {
 	childId?: string;
 	/** One plain sentence on why the decision went this way; only a settled decision has one. */
 	why?: string;
-	/** Who wrote `why`. Absent when Chopin drafted it, so a person's words are never replaced. */
+	/**
+	 * Who wrote `why`, or, with no `why`, who cleared it. Absent when Chopin drafted it, so a
+	 * person's words, or their clearing, are never replaced by a later draft.
+	 */
 	whyBy?: string;
 };

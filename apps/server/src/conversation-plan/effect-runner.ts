@@ -35,7 +35,10 @@ export async function runEffects(deps: EffectDeps, effects: readonly Effect[]): 
 				}, effect.key);
 				blocked.add(effect.threadId);
 			} else if (effect.kind === "job") {
-				if (effect.intent.kind === "prose" && !effect.threadId) {
+				if (
+					effect.intent.kind === "prose" && !effect.threadId
+					&& !effect.intent.trigger.startsWith("why:")
+				) {
 					throw new Error("prose job effect has no linked thread");
 				}
 				if (effect.threadId) {

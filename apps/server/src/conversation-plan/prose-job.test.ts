@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { appendProseEffect, proseIntent, prosePrompt, writeup } from "./prose-job";
+import {
+	appendProseEffect,
+	proseIntent,
+	prosePrompt,
+	whyIntent,
+	whyPrompt,
+	writeup,
+} from "./prose-job";
 import { CARD, record } from "./prose-job.test-fixtures";
 
 test("proseIntent uses the immutable Save generation, even for same-second re-decisions", () => {
@@ -101,4 +108,62 @@ test("writeup projects only the current saved generation's unfinished prose job"
 	expect(writeup(plan([job("failed", `decided:${CARD}:0`)]), record())).toBeUndefined();
 	expect(writeup(plan([job("failed")]), record({ status: "reopened" }))).toBeUndefined();
 	expect(writeup(plan([job("failed")]), record({ origin: "planner" }))).toBeUndefined();
+});
+
+test("a conversation decision's write-up is unchanged and keeps its thread", () => {
+	let effects = appendProseEffect([], [], record());
+	expect(effects).toHaveLength(1);
+	expect(effects[0]).toMatchObject({
+		threadId: "thread-a",
+		intent: { trigger: `decided:${CARD}:1` },
+	});
+	expect(whyIntent(record())).toBeUndefined();
+});
+
+test("a planner or human decision enqueues one why-only draft per saved generation", () => {
+	for (let origin of ["planner", "human"]) {
+		let saved = record({ origin, threadId: undefined });
+		expect(proseIntent(saved)).toBeUndefined();
+		expect(whyIntent(saved)).toEqual({ kind: "prose", target: CARD, trigger: `why:${CARD}:1` });
+		let first = appendProseEffect([], [], saved);
+		expect(first).toEqual([{
+			key: `job:why:${CARD}:1`,
+			kind: "job",
+			intent: { kind: "prose", target: CARD, trigger: `why:${CARD}:1` },
+		}]);
+		// Saving again, or replaying after the effect was applied, adds nothing.
+		expect(appendProseEffect(first, [], saved)).toEqual(first);
+		expect(appendProseEffect([], [first[0]!.key], saved)).toEqual([]);
+		let again = record({
+			origin,
+			threadId: undefined,
+			history: [{ choices: [], owner: "mina", at: 1_758_645_000 }],
+		});
+		expect(appendProseEffect(first, [], again)).toMatchObject([
+			{ key: `job:why:${CARD}:1` },
+			{ key: `job:why:${CARD}:2` },
+		]);
+	}
+	expect(whyIntent(record({ origin: "human", status: "reopened" }))).toBeUndefined();
+	expect(whyIntent(record({ origin: "human", owner: undefined }))).toBeUndefined();
+	expect(appendProseEffect([], [], record({ origin: "human", status: "open" }))).toEqual([]);
+});
+
+test("the why-only prompt asks for no paragraph and lists the findings and takes", () => {
+	let text = whyPrompt({
+		id: CARD,
+		question: "Where should it live?",
+		chosen: ["In the account"],
+		owner: "mina",
+		involved: ["mina"],
+		reasons: [],
+		research: ["Docs: the account store is shared"],
+		takes: ["supports: It is simplest"],
+	});
+	expect(text).toContain("Write no paragraph");
+	expect(text).toContain("Question: Where should it live?");
+	expect(text).toContain("Chosen: In the account");
+	expect(text).toContain("- Docs: the account store is shared");
+	expect(text).toContain("- supports: It is simplest");
+	expect(text).toContain("at most 300 characters");
 });

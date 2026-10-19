@@ -133,9 +133,16 @@ commits the record, then announces `question:meta` and replies. Only a settled d
 
 Chopin drafts it. The settle write-up job (`write_decision_prose`) takes an optional `why`, checked
 as exactly one plain sentence with no Markdown, and saves it in the same commit as the paragraph.
-A draft has no `whyBy`; a person's words (`whyBy` set) are never replaced by a later draft, and a
-draft is replaced by a redraft. That job runs only for conversation decisions, so a Planner or
-human decision has a why only when a person writes one.
+That job runs for conversation decisions. Settling a Planner or human decision enqueues a
+**why-only** run of the same job instead (trigger `why:<id>:<generation>`, no thread): it writes no
+paragraph, only the `why`, from the question, the chosen answer, ready findings and takes with
+their stances. It follows the same queue and Planner-ownership rules as the write-up: it needs the
+settler's captured session, never claims an owner, waits for an attached Planner under
+`HARNESS=remote`, and with none available the decision simply has no draft. It is keyed by saved
+generation, so it runs once per settle and never loops.
+
+A draft has no `whyBy`. A person's words, or their clearing of it (`whyBy` set with no `why`), are
+never replaced by a later draft for the same settle; a draft is replaced by a redraft.
 
 Reopening moves the why into the answer's history entry and clears it from the record: it
 explained that answer, and the next settle drafts its own.

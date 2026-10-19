@@ -62,7 +62,6 @@ export function normalizeRecord(raw: unknown): Record {
 	if (Object.hasOwn(value, "findings")) findings(value.findings);
 	if (Object.hasOwn(value, "childId")) text(value.childId, 128);
 	if (Object.hasOwn(value, "why")) why(value.why);
-	if (Object.hasOwn(value, "whyBy") && !Object.hasOwn(value, "why")) invalid();
 	if (Object.hasOwn(value, "whyBy")) text(value.whyBy);
 	if (Object.hasOwn(value, "appended")) {
 		let appended = object(value.appended);

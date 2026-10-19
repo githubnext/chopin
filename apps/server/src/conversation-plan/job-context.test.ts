@@ -324,3 +324,14 @@ test("card insertion keeps the original question claimant until linking creates 
 	opened.conversationPlanPendingEffects = [];
 	expect(contexts.claim(opened, job(source.messageId))).toBeUndefined();
 });
+
+test("a why-only job with no captured Planner claimant has no draft to run", () => {
+	let contexts = createJobContexts();
+	let opened = plan();
+	let why = { ...job("why:C:1"), id: "prose:C:why:C:1", kind: "prose", target: "C" } as Job;
+	opened.conversationPlanJobs = [why];
+	expect(contexts.claim(opened, why)).toBeUndefined();
+	let saver = context("saver");
+	contexts.remember(opened, "why:C:1", saver);
+	expect(contexts.claim(opened, why)).toEqual({ context: saver, claimantSessionId: "saver" });
+});

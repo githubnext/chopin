@@ -1,7 +1,7 @@
 import type { JobIntent } from "./effects";
 import type { Job, JobOutcome } from "./jobs";
 import type { PlannerJobDeps } from "./planner-job-types";
-import { proseIntent } from "./prose-job";
+import { isWhyTrigger, settleIntent } from "./prose-job";
 import { followupIntent } from "../questions/decision-followup";
 
 export function reason(value: unknown, fallback: string): string {
@@ -34,7 +34,7 @@ function title(plan: PlannerJobDeps["plan"], id: string): string {
 export function currentProse(plan: PlannerJobDeps["plan"], job: Job): boolean {
 	let record = plan.records.get(job.target);
 	return !!record
-		&& (job.kind === "decision-followup" ? followupIntent(record) : proseIntent(record))?.trigger
+		&& (job.kind === "decision-followup" ? followupIntent(record) : settleIntent(record))?.trigger
 			=== job.trigger;
 }
 
@@ -114,6 +114,8 @@ export function line(
 	if (job.kind === "suggest" && added > 0) {
 		return [`Chopin suggested ${added} options for ${named}`, job.target, named];
 	}
+	// A why-only draft is quiet: it appears on the decision's page, not as a Chat notice.
+	if (job.kind === "prose" && isWhyTrigger(job.trigger)) return undefined;
 	if (job.kind === "prose") return [`Chopin wrote up ${named}`, job.target, named];
 	if (job.kind === "decision-followup") {
 		return [`Chopin updated the passage for ${named}`, job.target, named];
