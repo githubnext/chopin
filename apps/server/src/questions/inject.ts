@@ -45,10 +45,10 @@ const SAMPLE = {
  * Seed a document once. Its records outlive reopening, renaming and other
  * clients, so an empty record map means the sample was never asked.
  */
-export function enabled(plan: Pick<Plan, "records" | "parentChannelId">): boolean {
-	// A child's decisions live in its parent, so a child is never seeded.
+export function enabled(plan: Pick<Plan, "records" | "questionPage">): boolean {
+	// A decision's page keeps its decisions in the parent, so it is never seeded.
 	return !!process.env.DEV_QUESTIONS && process.env.NODE_ENV !== "production"
-		&& !plan.parentChannelId && plan.records.size === 0;
+		&& !plan.questionPage && plan.records.size === 0;
 }
 
 /** Ask the sample questionnaire, and log what comes back. */

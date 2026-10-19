@@ -156,12 +156,13 @@ test("a late add reply does not steal focus after reopening and tabbing away", a
 	await expect(field).toHaveJSProperty("readOnly", true);
 	await field.focus();
 	await ana.keyboard.press("Tab");
-	let discard = card.getByRole("button", { name: "Discard", exact: true });
-	await expect(discard).toBeFocused();
+	// The footer's Research trigger now sits before Discard in tab order.
+	let away = card.getByRole("button", { name: "Research", exact: true });
+	await expect(away).toBeFocused();
 	held.releaseReply();
 
 	await expect(field).toHaveJSProperty("readOnly", false);
-	await expect(discard).toBeFocused();
+	await expect(away).toBeFocused();
 	await expect(card.getByRole("alert")).toHaveCount(0);
 });
 
@@ -172,12 +173,13 @@ test("a successful delayed reply does not steal focus after tabbing away", async
 	let { card, field } = await openOption(ana, held, "Keep focus outside the composer");
 	await expect(field).toBeFocused();
 	await ana.keyboard.press("Tab");
-	let discard = card.getByRole("button", { name: "Discard", exact: true });
-	await expect(discard).toBeFocused();
+	// The footer's Research trigger now sits before Discard in tab order.
+	let away = card.getByRole("button", { name: "Research", exact: true });
+	await expect(away).toBeFocused();
 	held.releaseReply();
 
 	await expect(field).toHaveCount(0);
 	await expect(card.getByRole("radio", { name: "Keep focus outside the composer", exact: true }))
 		.toBeVisible();
-	await expect(discard).toBeFocused();
+	await expect(away).toBeFocused();
 });
