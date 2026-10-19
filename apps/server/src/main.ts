@@ -2224,6 +2224,17 @@ function researchSettled(channelId: string, request: ResearchRequestView): Promi
 	});
 }
 
+/** Whether a decision's research finding follows `workspaceId`, whatever its status. */
+async function researchFollowed(channelId: string, workspaceId: string): Promise<boolean> {
+	let followed = false;
+	await withDecisionPlan(channelId, async plan => {
+		followed = [...plan.records.values()].some(record =>
+			record.findings?.some(finding => finding.kind === "research" && finding.ref === workspaceId)
+		);
+	});
+	return followed;
+}
+
 /** An investigation as its finding follows it. */
 function spikeSnapshot(
 	value: NonNullable<
@@ -2554,6 +2565,7 @@ researchService = new ResearchWorkspaceService({
 	publish: announceResearchChanged,
 	terminalNotice: announceResearchTerminal,
 	settled: researchSettled,
+	followedByDecision: researchFollowed,
 });
 referenceService = new ReferenceService({
 	storage,

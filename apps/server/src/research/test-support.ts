@@ -16,8 +16,8 @@ import type { ResearchReport } from "../jobs/research-workspace";
 import type { BackgroundJob, ChannelRecord, JsonValue, Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
-const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
-const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
+export const SOURCE = "# Parent document\n\nThe private compatibility plan is current.\n";
+export const SOURCE_HASH = `sha256:${createHash("sha256").update(SOURCE).digest("hex")}`;
 export const USER_ID = "MDQ6VXNlcjU0MjcwODM=";
 export const REPOSITORY_ID = "MDEwOlJlcG9zaXRvcnkxMjM=";
 export const PUBLIC_SOURCE = {

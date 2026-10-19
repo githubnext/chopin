@@ -78,9 +78,9 @@ it("recovers missed ready and failed notices across repeated startup scans", asy
 	expect(notices.size).toBe(2);
 });
 
-it("does not announce terminal legacy research without an inline card", async () => {
+it("announces a failed request without an inline card", async () => {
 	let context = await setup();
-	await context.service.start({
+	let started = await context.service.start({
 		channelId: context.channelId,
 		question: "Old research",
 		requestId: requestId(75),
@@ -91,7 +91,10 @@ it("does not announce terminal legacy research without an inline card", async ()
 	if (!failed) throw new Error("failed research job is missing");
 	let { service, notices } = terminalNotices(context);
 	await service.jobChanged(failed.job);
-	expect(notices).toEqual([]);
+	expect(notices.map(notice => notice.id)).toEqual([
+		`research-failed:${started.request.id}:${failedJobId}`,
+	]);
+	expect(notices).toHaveLength(1);
 });
 
 it("places one inline Planner request before queueing or publishing it", async () => {

@@ -64,6 +64,11 @@ export type ResearchWorkspaceServiceOptions = {
 		revision: number,
 	) => void | Promise<void>;
 	terminalNotice?: (channelId: string, id: string, text: string) => Promise<void>;
+	/**
+	 * Whether a decision finding follows this request. That finding posts its own notice when the
+	 * request settles, so the generic failure notice is skipped for it.
+	 */
+	followedByDecision?: (channelId: string, workspaceId: string) => Promise<boolean>;
 	/** Every request that reached ready or failed, whatever started it. Must be idempotent. */
 	settled?: (channelId: string, request: Research.RequestView) => Promise<void>;
 	clock?: () => Date;
@@ -366,6 +371,7 @@ export class ResearchWorkspaceService {
 	#publish: ResearchWorkspaceServiceOptions["publish"];
 	#terminalNotice: ResearchWorkspaceServiceOptions["terminalNotice"];
 	#settled: ResearchWorkspaceServiceOptions["settled"];
+	#followedByDecision: ResearchWorkspaceServiceOptions["followedByDecision"];
 	#clock: () => Date;
 	#id: () => string;
 	#tails = new Map<string, Promise<void>>();
@@ -378,6 +384,7 @@ export class ResearchWorkspaceService {
 		this.#publish = options.publish;
 		this.#terminalNotice = options.terminalNotice;
 		this.#settled = options.settled;
+		this.#followedByDecision = options.followedByDecision;
 		this.#clock = options.clock ?? (() => new Date());
 		this.#id = options.id ?? (() => crypto.randomUUID());
 	}
@@ -1048,9 +1055,8 @@ export class ResearchWorkspaceService {
 		if (!linked) return;
 		await this.#exclusive(job.channelId, linked.workspaceId, async () => {
 			let detail = await this.#reconciled(job.channelId, linked.workspaceId);
-			if (!detail || linked.kind !== "initial" || detail.workspace.inlineReference !== "placed") {
-				return;
-			}
+			if (!detail || linked.kind !== "initial") return;
+			let placed = detail.workspace.inlineReference === "placed";
 			let request = await this.#requestView(detail);
 			if (request.stage !== "ready" && request.stage !== "failed") return;
 			let activeTurn = detail.turns.find(value => value.id === linked.id);
@@ -1063,6 +1069,13 @@ export class ResearchWorkspaceService {
 			) {
 				return;
 			}
+			// Every terminal failure gets one notice. A ready notice stays with the placed
+			// reference, which is what it links; a decision finding speaks for its own request.
+			if (request.stage === "ready" && !placed) return;
+			if (
+				request.stage === "failed"
+				&& await this.#followedByDecision?.(job.channelId, detail.workspace.id)
+			) return;
 			let id = `research-${request.stage}:${detail.workspace.id}:${job.id}`;
 			let text = "Research could not be completed. You can retry it from the research card.";
 			if (request.stage === "ready") {

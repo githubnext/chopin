@@ -159,3 +159,8 @@ with `web-search-timeout`, retaining its identity and sealed brief. This confirm
 the bounded failure and retry path; successful report publication for that
 request remains unverified. The diagnostics locate the delay inside the MCP
 call but do not establish whether its cause is the transport or remote service.
+
+A failed request posts one quiet Chat notice, "Research could not be completed", for every
+initial request, placed inline or not, with an idempotent id per workspace and job. A request that
+a decision finding follows is the exception: the decision's own "Research didn’t finish for ..."
+notice covers it, so the generic one is skipped.
