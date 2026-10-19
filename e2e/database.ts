@@ -197,6 +197,30 @@ export async function seedChannel(
 	return seed(port, id, source, state, storedDocument);
 }
 
+/** Store an image as this channel's own upload, as `upload_image` would, by an e2e account. */
+export async function seedChannelImage(
+	port: number,
+	id: string,
+	bytes: Uint8Array,
+	mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif",
+): Promise<string> {
+	let sha256 = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+	let now = new Date();
+	await sql(port, async database => {
+		await database`
+			INSERT INTO users (id, login, avatar_url, created_at, updated_at)
+			VALUES ('U_e2e-image-uploader', 'e2e-image-uploader', '', ${now}, ${now})
+			ON CONFLICT (id) DO NOTHING
+		`;
+		await database`
+			INSERT INTO plan_images (sha256, channel_id, mime_type, bytes, size, uploaded_by, created_at)
+			VALUES (${sha256}, ${id}, ${mimeType}, ${bytes}, ${bytes.byteLength}, 'U_e2e-image-uploader', ${now})
+			ON CONFLICT DO NOTHING
+		`;
+	});
+	return `/images/${sha256}.${mimeType === "image/jpeg" ? "jpg" : mimeType.slice(6)}`;
+}
+
 export async function seedChannelDescription(
 	port: number,
 	id: string,

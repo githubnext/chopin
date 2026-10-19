@@ -8,7 +8,7 @@ import "./markdown.css";
 import type { Chat } from "@chopin/protocol";
 import type { Components } from "react-markdown";
 
-let ELEMENTS = [
+export const CHAT_ELEMENTS = [
 	"a",
 	"blockquote",
 	"br",
@@ -30,7 +30,7 @@ let ELEMENTS = [
 
 let paragraph: NonNullable<Components["p"]> = ({ children }) => <p>{children}</p>;
 
-let COMPONENTS: Components = {
+export const CHAT_COMPONENTS: Components = {
 	a: ({ children, href }) => (
 		<a href={href} rel="noopener noreferrer" target="_blank">
 			{children}
@@ -44,10 +44,10 @@ let COMPONENTS: Components = {
 	h6: paragraph,
 };
 
-let INLINE = ["a", "code", "em", "strong"];
+export const CHAT_INLINE = ["a", "code", "em", "strong"];
 
 /** Escapes what would open a block at the start of a line, so one line stays one line of text. */
-function inlineSource(source: string): string {
+export function inlineSource(source: string): string {
 	let text = source.replace(/\s+/g, " ").trim();
 	if (/^([-*_])( ?\1){2,}$/.test(text)) return `\\${text}`;
 	return text
@@ -63,8 +63,8 @@ function inlineSource(source: string): string {
 export function InlineMarkdown({ links = true, source }: { links?: boolean; source: string }) {
 	return (
 		<ReactMarkdown
-			allowedElements={links ? INLINE : INLINE.filter(name => name !== "a")}
-			components={COMPONENTS}
+			allowedElements={links ? CHAT_INLINE : CHAT_INLINE.filter(name => name !== "a")}
+			components={CHAT_COMPONENTS}
 			skipHtml
 			unwrapDisallowed
 		>
@@ -90,7 +90,7 @@ export function MessageMarkdown(
 ) {
 	let model = referenceRenderModel(source, references);
 	let components: Components = {
-		...COMPONENTS,
+		...CHAT_COMPONENTS,
 		a: ({ children, href, node }) => {
 			let property = node?.properties?.dataChatReferenceIndex
 				?? node?.properties?.["data-chat-reference-index"];
@@ -135,7 +135,7 @@ export function MessageMarkdown(
 				</>
 			)}
 			<ReactMarkdown
-				allowedElements={ELEMENTS}
+				allowedElements={CHAT_ELEMENTS}
 				components={components}
 				remarkPlugins={[[referenceRemarkPlugin, model], orderedRunsRemarkPlugin]}
 				skipHtml

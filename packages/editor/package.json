@@ -11,6 +11,10 @@
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
+		"./card-diagram": {
+			"types": "./src/widgets/card-diagram.tsx",
+			"default": "./src/widgets/card-diagram.tsx"
+		},
 		"./content-swap": {
 			"types": "./src/content-swap.tsx",
 			"default": "./src/content-swap.tsx"

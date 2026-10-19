@@ -56,6 +56,14 @@ const UNSAFE: Unsafe[] = [{
 	],
 }];
 
+/** Whitespace that starts a continued line of an attribute value, as character references. */
+function keepIndentation(value: string): string {
+	return value.replace(
+		/\n([ \t]+)/g,
+		(_, indent: string) => `\n${indent.replace(/ /g, "&#32;").replace(/\t/g, "&#9;")}`,
+	);
+}
+
 /**
  * How each node type is written.
  *
@@ -68,18 +76,30 @@ export function extensions() {
 	let jsx = mdxJsxToMarkdown();
 	let original = jsx.handlers!.mdxJsxTextElement!;
 	let image: Handle = (node: Nodes, parent, state, info) => {
-		let component = (node.type === "mdxJsxTextElement" || node.type === "mdxJsxFlowElement")
-				&& node.name === "Image"
+		let element = node.type === "mdxJsxTextElement" || node.type === "mdxJsxFlowElement"
 			? node
 			: undefined;
+		let component = element?.name === "Image" ? element : undefined;
 		let escaped = node;
+		if (element) {
+			// The parser drops a value's indentation after a line break, which would flatten a
+			// nested list or a diagram in a question's Markdown. As references, it survives.
+			escaped = {
+				...element,
+				attributes: element.attributes.map(attribute =>
+					attribute.type === "mdxJsxAttribute" && typeof attribute.value === "string"
+						? { ...attribute, value: keepIndentation(attribute.value) }
+						: attribute
+				),
+			};
+		}
 		if (component) {
 			// Upstream escapes quotes but leaves authored entity-like strings open to decoding.
 			escaped = {
 				...component,
 				attributes: component.attributes.map(attribute =>
 					attribute.type === "mdxJsxAttribute" && typeof attribute.value === "string"
-						? { ...attribute, value: attribute.value.replace(/&/g, "&#38;") }
+						? { ...attribute, value: keepIndentation(attribute.value.replace(/&/g, "&#38;")) }
 						: attribute
 				),
 			};

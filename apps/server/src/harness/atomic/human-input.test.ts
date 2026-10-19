@@ -124,6 +124,39 @@ test("HostInput appends one ordered questionnaire batch and returns typed answer
 	});
 });
 
+test("a Markdown question keeps its exact text, indentation included, in its record and its card", async () => {
+	let f = await fixture();
+	let question = [
+		"Confirm the earlier answers",
+		"",
+		"- Storage: **PostgreSQL**",
+		"  - kept for drafts",
+		"- Rollout: `pilot`",
+		"",
+		"```mermaid",
+		"flowchart LR",
+		"  A[Before] --> B[After]",
+		"```",
+	].join("\n");
+	let response = f.input.questionnaire({
+		questions: [{
+			header: "Confirm",
+			question,
+			options: [{ label: "Confirm all", description: "Keeps:\n  (1) storage\n  (2) pilot" }],
+		}],
+	}, f.options);
+	let [card] = await f.cards(1);
+	expect(card!.definition.questions[0].question).toBe(question);
+	// The canonical document, re-imported, says the same.
+	let projected = await documentCards(Plan.source(f.plan));
+	expect(projected[0]?.questions[0]?.prompt).toBe(question);
+	expect(projected[0]?.questions[0]?.options[0]?.description).toBe(
+		"Keeps:\n  (1) storage\n  (2) pilot",
+	);
+	await f.answer(card!.id, [0]);
+	expect((await response).answers[0]).toMatchObject({ question, answer: "Confirm all" });
+});
+
 test("Atomic's own HostInput validator accepts every answer a member can give", async () => {
 	let { HostInputBridge, getHostQuestionnaire } = await import(
 		new URL("./core/extensions/host-input.js", import.meta.resolve("@bastani/atomic")).href

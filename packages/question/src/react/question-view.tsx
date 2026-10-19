@@ -15,6 +15,8 @@ import { CheckIcon, ChevronIcon, DecisionIcon, PlusIcon, WarningIcon } from "@ch
 import { MAX_NEW_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
+import { MarkdownBlocks, MarkdownLine, MarkdownText } from "./question-markdown";
+import { questionHeading, questionParts } from "../text";
 import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { cardRelation, RelationNote } from "./relation-note";
@@ -247,16 +249,12 @@ function Choices(
 						<Key>{letter(index)}</Key>
 						<span className="question-text">
 							<span className="question-label">
-								<InlineCode text={option.label} />
+								<MarkdownLine links={false} text={option.label} />
 							</span>
 							{!custom && selected && option.id === suggestedOptionId && (
 								<span className="text-sm text-text-tertiary">{" from chat"}</span>
 							)}
-							{option.description && (
-								<span className="question-desc">
-									<InlineCode text={option.description} />
-								</span>
-							)}
+							{option.description && <MarkdownText place="desc" text={option.description} />}
 						</span>
 						<span aria-hidden="true" className="question-check">
 							<CheckIcon />
@@ -584,6 +582,38 @@ function Related(
 	);
 }
 
+/** A body longer than this many characters or lines folds away once the question is answered. */
+const RESOLVED_BODY_CHARS = 360;
+const RESOLVED_BODY_LINES = 6;
+
+/**
+ * What an answered question showed beneath its heading. The answer is what a
+ * reader comes back for, so a long body folds behind a disclosure rather than
+ * pushing the answer out of view.
+ */
+function ResolvedBody({ text }: { text: string }) {
+	let [open, setOpen] = useState(false);
+	let id = useId();
+	let long = text.length > RESOLVED_BODY_CHARS || text.split("\n").length > RESOLVED_BODY_LINES;
+	if (!long) return <MarkdownBlocks place="body" text={text} />;
+	return (
+		<div className="question-body-more">
+			<button
+				aria-controls={id}
+				aria-expanded={open}
+				className="question-body-toggle"
+				onClick={() => setOpen(!open)}
+				type="button"
+			>
+				{open ? "Hide details" : "Show details"}
+			</button>
+			<div hidden={!open} id={id}>
+				<MarkdownBlocks place="body" text={text} />
+			</div>
+		</div>
+	);
+}
+
 function Resolved(
 	{
 		answers,
@@ -621,6 +651,8 @@ function Resolved(
 					let unmatched = answer.custom
 						? [answer.custom]
 						: (answer.choices ?? []).filter(label => !matchedLabels.has(label));
+					let { heading, body } = questionParts(answer.question);
+					let linked = !!id && (places?.[id] ?? 0) > 0;
 					return (
 						<section className="question-resolved-section" key={id ?? index}>
 							<header className="question-head">
@@ -632,20 +664,19 @@ function Resolved(
 										<Related
 											id={id}
 											count={(id ? places?.[id] : undefined) ?? 0}
-											label={answer.question}
+											label={heading}
 											className="question-title-link"
 											inline
 											onEnter={onQuestionEnter}
 											onLeave={onQuestionLeave}
 											onSelect={onQuestionSelect}
 										>
-											<InlineCode text={answer.question} />
+											<MarkdownLine links={!linked} text={heading} />
 										</Related>
 									</h4>
+									{body && <ResolvedBody text={body} />}
 									{question?.description && (
-										<p className="question-hint">
-											<InlineCode text={question.description} />
-										</p>
+										<MarkdownText place="hint" text={question.description} />
 									)}
 								</div>
 							</header>
@@ -670,12 +701,10 @@ function Resolved(
 													<span className="question-text">
 														<span className="question-label">
 															{isSelected && <span className="sr-only">{"Selected: "}</span>}
-															<InlineCode text={option.label} />
+															<MarkdownLine links={false} text={option.label} />
 														</span>
 														{option.description && (
-															<span className="question-desc">
-																<InlineCode text={option.description} />
-															</span>
+															<MarkdownText place="desc" text={option.description} />
 														)}
 													</span>
 													<span aria-hidden="true" className="question-check">
@@ -729,7 +758,9 @@ function Cancelled({ resolver }: { resolver?: string }) {
 }
 
 function Discarded({ definition, resolver }: { definition: Definition; resolver?: string }) {
-	let questions = definition.questions.map(question => question.question).join(", ");
+	let questions = definition.questions.map(question => questionHeading(question.question)).join(
+		", ",
+	);
 	let discarded = resolver && resolver !== "system" ? `Discarded by @${resolver}` : "Discarded";
 	return (
 		<div className="px-3 py-2.5">
@@ -772,11 +803,17 @@ const EXPIRED_NOTE =
 function Expired({ definition }: { definition: Definition }) {
 	return (
 		<div className="space-y-2 px-3 py-2.5">
-			{definition.questions.map(question => (
-				<p key={question.id} className="m-0 text-sm text-text-secondary">
-					<InlineCode text={question.question} />
-				</p>
-			))}
+			{definition.questions.map(question => {
+				let { heading, body } = questionParts(question.question);
+				return (
+					<div key={question.id}>
+						<p className="m-0 text-sm text-text-secondary">
+							<MarkdownLine text={heading} />
+						</p>
+						{body && <MarkdownBlocks place="body" text={body} />}
+					</div>
+				);
+			})}
 			<p className="m-0 text-sm text-text-primary">{EXPIRED_NOTE}</p>
 		</div>
 	);
@@ -857,6 +894,7 @@ export function QuestionView(props: QuestionViewProps) {
 	let single = definition.questions.length === 1;
 	let [selected, setActive] = useState(() => definition.questions[0]?.id);
 	let current = currentQuestion(definition, selected);
+	let currentParts = questionParts(current.question);
 	let active = current.id;
 	let panelId = `${base}-panel-${active}`;
 	if (active !== selected) setActive(active);
@@ -1129,19 +1167,19 @@ export function QuestionView(props: QuestionViewProps) {
 										<Related
 											id={current.id}
 											count={places?.[current.id] ?? 0}
-											label={plainInlineText(current.question)}
+											label={plainInlineText(currentParts.heading)}
 											className="question-title-link"
 											inline
 											onSelect={onQuestionSelect}
 										>
-											<InlineCode text={current.question} />
+											<MarkdownLine
+												links={!(places?.[current.id] ?? 0)}
+												text={currentParts.heading}
+											/>
 										</Related>
 									</h4>
-									{current.description && (
-										<p className="question-hint">
-											<InlineCode text={current.description} />
-										</p>
-									)}
+									{currentParts.body && <MarkdownBlocks place="body" text={currentParts.body} />}
+									{current.description && <MarkdownText place="hint" text={current.description} />}
 									{current.multiple && <p className="question-hint">Choose any</p>}
 									{previousAnswer && (
 										<p className="question-hint">

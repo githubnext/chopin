@@ -200,7 +200,7 @@ async function renderMath(source: string, inline: boolean): Promise<string> {
 	});
 }
 
-async function renderMermaid(key: string, source: string): Promise<string> {
+export async function renderMermaid(key: string, source: string): Promise<string> {
 	let [mermaid, { mermaidConfig, refineDiagram }] = await Promise.all([
 		import("mermaid"),
 		import("./mermaid-theme"),
@@ -569,7 +569,7 @@ function sidesOf(element: HTMLElement): ReturnType<typeof hiddenSides> {
  * anything wider keeps its size and scrolls from its start, fading the side
  * with more to see, and offers its whole shape scaled to the frame's width.
  */
-function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean }) {
+export function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean }) {
 	let region = useRef<HTMLDivElement>(null);
 	let [fit, setFit] = useState(false);
 	/** A reader asked for the whole shape at the frame's width. */

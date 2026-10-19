@@ -18,9 +18,10 @@ function plain(status: number, message: string): Response {
 /**
  * Serve uploaded document images to people who can read a document holding
  * them. Every refusal is the same 404, so a URL reveals nothing to anyone else.
+ * `?document=<id>` serves only that document's own upload of the image.
  */
 export function registerImageRoutes(router: Router, auth: HostedAuth): void {
-	router.on("GET", "/images/:file", async (request, _url, params) => {
+	router.on("GET", "/images/:file", async (request, url, params) => {
 		let missing = plain(404, "image not found");
 		let match = HOSTED_IMAGE_FILE.exec(params.file!);
 		let type = match ? extensionType(match[2]!) : undefined;
@@ -30,7 +31,10 @@ export function registerImageRoutes(router: Router, auth: HostedAuth): void {
 			let session = await auth.sessions.authenticate(request);
 			if (!session) return missing;
 			let denied = new Set<string>();
-			for (let channelId of await auth.storage.images.channels(sha256)) {
+			// A decision card asks for its own document's image, never one another document holds.
+			let scope = url.searchParams.get("document");
+			let channels = await auth.storage.images.channels(sha256);
+			for (let channelId of scope === null ? channels : channels.filter(id => id === scope)) {
 				let channel = await auth.storage.channels.get(channelId);
 				if (!channel || denied.has(channel.repositoryId)) continue;
 				let { value: repository } = await auth.sessions.use(

@@ -80,6 +80,7 @@ import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
 import { rememberChannel } from "./channel-recovery";
+import { QuestionMarkdownProvider } from "./question-markdown";
 import {
 	BUILD_UNAVAILABLE,
 	DecisionViewControl,
@@ -143,6 +144,7 @@ import type { DocumentVersionSummary } from "./document-history";
 import type { TitleEdit } from "./title-edit";
 import type { HostedWorkspaceProps } from "./hosted";
 import type { ReactNode } from "react";
+import type { QuestionPageRoot } from "./question-page";
 import type { Status } from "./wire";
 import type { ChatDestination } from "./conversation-plan/source";
 import type { SourceDestination } from "./conversation-plan/card-parts";
@@ -1810,7 +1812,7 @@ export function RoomWorkspace(
 		: editMode && { docked, editing: editMode === "editing", toggle: toggleEditing };
 
 	return (
-		<QuestionPageContext.Provider value={questionPageRoot}>
+		<DecisionContexts document={room} page={questionPageRoot}>
 			<ChildPhoneChromeContext.Provider value={childChromeValue}>
 				<ChildTitleContext.Provider value={childTitleValue}>
 					<p aria-live="polite" className="sr-only" role="status">
@@ -2072,6 +2074,21 @@ export function RoomWorkspace(
 					/>
 				</ChildTitleContext.Provider>
 			</ChildPhoneChromeContext.Provider>
+		</DecisionContexts>
+	);
+}
+
+/** A decision's own page, and card text read as Markdown with this document's images. */
+function DecisionContexts(
+	{ children, document, page }: {
+		children: ReactNode;
+		document: string;
+		page: QuestionPageRoot | undefined;
+	},
+) {
+	return (
+		<QuestionPageContext.Provider value={page}>
+			<QuestionMarkdownProvider document={document}>{children}</QuestionMarkdownProvider>
 		</QuestionPageContext.Provider>
 	);
 }

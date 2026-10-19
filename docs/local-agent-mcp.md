@@ -313,7 +313,9 @@ serves an image only to someone who can currently read a document it was
 uploaded to, which is the same pull access and GitHub App installation check as
 opening that document. Anyone else, including a signed-out browser and another
 MCP client fetching the path, receives `404`. Plans that leave Chopin therefore
-cannot display hosted images.
+cannot display hosted images. A decision card loads its images as
+`/images/<sha256>.<ext>?document=<id>`, which serves only the named document's
+own upload of the image, so a card never shows an image from another document.
 
 `list_documents` excludes archived documents by default. Set
 `includeArchived: true` to include them; archived document summaries and direct

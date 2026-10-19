@@ -3,8 +3,10 @@
 import { DecisionIcon, DocumentIcon, SparkleIcon } from "@chopin/icons";
 import {
 	InlineCode,
+	MarkdownLine,
 	plainInlineText,
 	projectSuggestion,
+	questionHeading,
 	useQuestionnaire,
 } from "@chopin/question/react";
 
@@ -128,7 +130,9 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 	let id = entry.decision.questionnaireId;
 	let view = promptView({ entry: entry as PromptEntry, latest, meta, value });
 	let definitionValue = definition(value);
-	let title = value?.questions[0]?.prompt ?? entry.text.replace(/^Ready to decide:\s*/, "");
+	let title = questionHeading(
+		value?.questions[0]?.prompt ?? entry.text.replace(/^Ready to decide:\s*/, ""),
+	);
 	let live = view.state === "live";
 	let state = useQuestionnaire({
 		id,
@@ -164,7 +168,7 @@ export function DecisionPrompt(props: DecisionEntryProps) {
 					<DecisionIcon aria-hidden="true" size={12} />
 				</span>
 				<p className="m-0 min-w-0 flex-1 text-sm font-medium text-text-primary">
-					<InlineCode text={title} />
+					<MarkdownLine text={title} />
 				</p>
 				<OpenInPlan id={id} onOpenCard={onOpenCard} />
 			</div>

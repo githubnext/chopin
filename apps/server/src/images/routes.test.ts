@@ -204,6 +204,29 @@ describe("hosted image routes", () => {
 		expect((await router.handle(get(`/images/${sha256}.png`, cookie)))?.status).toBe(200);
 	});
 
+	it("serves a document-scoped request only from that document's own uploads", async () => {
+		let { router, github, upload, sha256, cookie } = await setup();
+		let own = await upload("score");
+		let other = await upload("other");
+		github.access.set("score", { pull: true, push: false, admin: false });
+		github.access.set("other", { pull: true, push: false, admin: false });
+
+		let scoped = await router.handle(get(`/images/${sha256}.png?document=${own.id}`, cookie));
+		expect(scoped?.status).toBe(200);
+		expect(github.checked).toEqual(["score"]);
+		// Readable, but the card asking is in a document that never uploaded it.
+		let foreign = crypto.randomUUID();
+		await expectNotFound(
+			await router.handle(get(`/images/${sha256}.png?document=${foreign}`, cookie)),
+		);
+		github.access.delete("score");
+		await expectNotFound(
+			await router.handle(get(`/images/${sha256}.png?document=${own.id}`, cookie)),
+		);
+		expect((await router.handle(get(`/images/${sha256}.png?document=${other.id}`, cookie)))?.status)
+			.toBe(200);
+	});
+
 	it("refuses an extension that does not match the stored type or a malformed name", async () => {
 		let { router, github, upload, sha256, cookie } = await setup();
 		await upload("score");

@@ -32,6 +32,8 @@ export type { Outcome } from "./answer";
 export { addOption } from "./options";
 export type { Added } from "./options";
 export type { Relation } from "./relation";
+export { multiline, questionHeading, questionParts } from "./text";
+export type { QuestionParts } from "./text";
 
 /**
  * The CRDT itself.

@@ -22,6 +22,7 @@ import { labels, QuestionnaireCard } from "./widgets/questionnaire";
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
+import { MarkdownLine, questionHeading } from "@chopin/question/react";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
@@ -171,7 +172,7 @@ function Confirmed(
 	{ by, closing, entry }: { by?: string; closing: Closing; entry: QuestionnaireEntry },
 ) {
 	let chosen = labels(entry.value);
-	let question = entry.value.questions.map(item => item.prompt).join(" ");
+	let question = entry.value.questions.map(item => questionHeading(item.prompt)).join(" ");
 	return (
 		<div
 			aria-hidden={closing.mine ? undefined : true}
@@ -190,7 +191,9 @@ function Confirmed(
 						<span className="decision-confirmed-label">
 							{by ? `Decided by ${by === "You" ? "you" : by}` : "Decided"}
 						</span>
-						<span className="decision-confirmed-question">{question}</span>
+						<span className="decision-confirmed-question">
+							<MarkdownLine links={false} text={question} />
+						</span>
 						<span className="decision-confirmed-answer">
 							{chosen.length ? chosen.join(", ") : "Saved decision"}
 						</span>

@@ -9,11 +9,13 @@ import { spawn } from "node:child_process";
 import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
+import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { HARNESS, HOST, ROOT } from "./servers";
 
 import type { Page } from "@playwright/test";
+import type { AgentClient } from "../packages/agent-link/src/client";
 
 const PORT = 8793;
 const ORIGIN = `http://${HOST}:${PORT}`;
@@ -306,6 +308,85 @@ test("signing out closes that login's sockets at once, and the Planner is never 
 	await client.detach();
 	await other.close();
 	await leaving.close();
+});
+
+test("an attached Planner's Markdown question reads as a heading over a list, and its answer returns", async ({ page }) => {
+	test.setTimeout(90_000);
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	registerTestDatabase(PORT, database);
+	let room = crypto.randomUUID();
+	await createChannel(PORT, room);
+	await seedChannel(PORT, room, "# Rollout\nThe pilot plan.\n");
+	await authenticate(page, HANDLE, ORIGIN);
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+
+	let question = [
+		"Confirm the earlier answers",
+		"",
+		"- Storage: **PostgreSQL**",
+		"  - kept for drafts",
+		"- Rollout: `one team first`",
+	].join("\n");
+	let result = Promise.withResolvers<unknown>();
+	let link: AgentClient | undefined;
+	let client = await connectAgent({
+		url: ORIGIN,
+		token: `ghu_e2e_${HANDLE}_1`,
+		document: room,
+		handlers: {
+			async turn(context) {
+				let answered = await link!.ask(context.message.session, {
+					method: "questionnaire",
+					params: {
+						questions: [{
+							question,
+							header: "Confirm",
+							options: [
+								{ label: "Confirm all", description: "" },
+								{ label: "Change some", description: "" },
+							],
+						}],
+					},
+				});
+				result.resolve(answered);
+			},
+		},
+	});
+	link = client;
+	try {
+		await expect(plannerStatus(page)).toHaveText(`Planner: ${HANDLE} attached`);
+		let input = chatInput(page);
+		await fillChat(input, "@chopin confirm the earlier answers");
+		await input.press("Enter");
+
+		let card = content(page).locator("article[data-plan-sidecar-questionnaire]");
+		await expect(card.locator(".question-title")).toHaveText("Confirm the earlier answers");
+		let body = card.locator(".question-body");
+		await expect(body.locator(":scope > ul > li > p, :scope > ul > li").first())
+			.toContainText("Storage: PostgreSQL");
+		await expect(body.locator("ul ul > li")).toHaveText("kept for drafts");
+		await expect(body.locator("code")).toHaveText("one team first");
+		await test.info().attach("remote-planner-markdown-question", {
+			body: await card.screenshot({ animations: "disabled" }),
+			contentType: "image/png",
+		});
+
+		await card.getByText("Confirm all", { exact: true }).click();
+		await card.getByRole("button", { name: "Save", exact: true }).click();
+		expect(await result.promise).toMatchObject({
+			status: "answered",
+			value: {
+				cancelled: false,
+				answers: [{ questionIndex: 0, question, kind: "option", answer: "Confirm all" }],
+			},
+		});
+	} finally {
+		await client.detach();
+	}
 });
 
 /** A bare WebSocket upgrade request as the member, offering `subprotocol` when given. */

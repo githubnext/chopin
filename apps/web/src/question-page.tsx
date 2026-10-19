@@ -24,6 +24,7 @@ import { CheckIcon, ClockIcon, CloseIcon, LoaderIcon, RestartIcon } from "@chopi
 import { Badge } from "@chopin/visuals";
 import { UnfoldSection } from "@chopin/visuals/unfold";
 import { createContext, useContext, useRef, useState } from "react";
+import { MarkdownBlocks, MarkdownLine, questionParts } from "@chopin/question/react";
 
 import type { ExploreResources, QuestionnaireEntry, Transport } from "@chopin/editor";
 import type { IconProps } from "@chopin/icons";
@@ -256,6 +257,7 @@ export function QuestionPagePanel(
 	},
 ) {
 	let question = entry.value.questions[0];
+	let parts = question ? questionParts(question.prompt) : undefined;
 	let settled = meta.status === "decided";
 	let status = pageStatus(meta);
 	let badge = STATUS_BADGE[status.tone];
@@ -289,7 +291,10 @@ export function QuestionPagePanel(
 					</span>
 				)}
 			</div>
-			<h1 className="question-page-title">{question?.prompt ?? "Decision"}</h1>
+			<h1 className="question-page-title">
+				{parts ? <MarkdownLine text={parts.heading} /> : "Decision"}
+			</h1>
+			{parts?.body && <MarkdownBlocks place="page" text={parts.body} />}
 			<div className="question-page-control">
 				<QuestionnaireCard
 					canEdit={root.canEdit}

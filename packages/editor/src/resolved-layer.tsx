@@ -35,7 +35,7 @@ import {
 	MessageForwardIcon,
 	MessageIcon,
 } from "@chopin/icons";
-import { InlineCode, ResolvedActions } from "@chopin/question/react";
+import { MarkdownLine, questionHeading, ResolvedActions } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { currentDecision, releaseDecision, subscribeDecision } from "./decision-pin";
@@ -201,7 +201,7 @@ export function Popover(
 		<>
 			<div className="plan-decision-head">
 				<p className="plan-decision-question">
-					<InlineCode text={decision.prompt} />
+					<MarkdownLine text={questionHeading(decision.prompt)} />
 				</p>
 				<span className="plan-decision-tools" inert={!pinned}>
 					{onSource && (

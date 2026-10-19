@@ -35,6 +35,35 @@ describe("questionnaire", () => {
 		});
 	});
 
+	it("round-trips a Markdown prompt with a body, a list, a diagram and an image", () => {
+		let prompt = [
+			"Confirm the earlier answers",
+			"",
+			"- Storage: **PostgreSQL**",
+			"- Rollout: `pilot`",
+			"",
+			"```mermaid",
+			"flowchart LR",
+			"  A[Before] --> B[After]",
+			"```",
+			"",
+			`![Current layout](/images/${"a".repeat(64)}.png)`,
+		].join("\n");
+		// A continued line's indentation is written as references, which the parser keeps.
+		let written = prompt.replace("\n  A[", "\n&#32;&#32;A[");
+		let source = OPEN.replace('prompt="How should we deploy?"', `prompt="${written}"`);
+		let out = through(source);
+		expect(through(out)).toBe(out);
+		expect(out).toContain(`prompt="${written}"`);
+		let instance = editor();
+		importPlan(instance, out, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let node = $getRoot().getFirstChild();
+			if (!$isQuestionnaireNode(node)) throw new Error("expected questionnaire");
+			expect(node.getQuestionnaire().questions[0]?.prompt).toBe(prompt);
+		});
+	});
+
 	it("round-trips a resolved answer projection", () => {
 		let source = OPEN.replace(
 			"</Question>",

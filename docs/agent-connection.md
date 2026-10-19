@@ -528,7 +528,8 @@ connection closes), and only then gets its `input-result`:
 
 A questionnaire has 1 to 16 questions of up to 32 options; `preview` may be
 16,000 characters; `select` offers up to 32 choices. The document's own limits
-still apply. Text is shown verbatim.
+still apply. Text is stored verbatim and shown as Markdown; see
+[Card text](#card-text).
 
 `block` names the block of the document the question concerns, by the `index`
 and `digest` the Planner's latest `read_plan` or `edit_plan` result gave it. Its
@@ -613,6 +614,40 @@ as stopped, while preserving finished outcomes. A stopped, failed or blocked run
 stops all unfinished stage displays even without parent links. `active` and
 `paused` list at most 64 root run IDs. When the connection closes, the server
 shows the reported live runs as stopped.
+
+### Card text
+
+A question's text is Markdown, and so is an option's `description`. The first
+line of `question` is the card's heading; everything after the first line break
+is the body beneath it:
+
+```json
+{
+	"question": "Confirm the earlier answers\n\n- Storage: PostgreSQL\n- Rollout: a small pilot",
+	"header": "Confirm",
+	"options": [{ "label": "Confirm all", "description": "" }]
+}
+```
+
+- The heading takes inline Markdown only: code spans, emphasis and links. A
+  line that only looks like a list or heading, such as `1. Ship it?`, stays
+  text. Keep it short; it is the card's bold title.
+- The body, and an option `description` of more than one line, take the
+  Markdown Chat renders: paragraphs, lists, block quotes, code and links. A line
+  break is a line break. A one-line description reads as one phrase, like the
+  heading.
+- A fence named `mermaid` (`` ```mermaid ``) is drawn as a diagram by the same
+  renderer, theme and strict security level the document uses, held to a
+  bounded height until the reader expands it. Source Mermaid cannot draw is shown
+  as code.
+- An image shows only when it is this document's own upload: `![alt](/images/<sha256>.<ext>)`,
+  the `path` [`upload_image`](local-agent-mcp.md) returned for the same
+  document. Alternative text is required. Any other image, remote, `data:` or
+  uploaded to another document, shows its alternative text instead.
+- Raw HTML is shown as the text it is, never rendered.
+
+Text without a line break is a heading alone, as it always was, so a client
+needs no feature check: an older Chopin shows the same text unformatted.
 
 ## Closing
 

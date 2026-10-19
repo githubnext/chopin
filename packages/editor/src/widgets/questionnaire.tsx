@@ -7,11 +7,19 @@
  * the source reads correctly on its own.
  */
 
-import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
 import { answered } from "@chopin/question";
 import { ChevronIcon, DecisionIcon, ExpandIcon, MessageForwardIcon } from "@chopin/icons";
-import { cardRelation, NOT_LINKED, QuestionView, useQuestionnaire } from "@chopin/question/react";
+import {
+	cardRelation,
+	MarkdownLine,
+	NOT_LINKED,
+	plainInlineText,
+	questionHeading,
+	QuestionView,
+	useQuestionnaire,
+} from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 
@@ -282,7 +290,7 @@ export function QuestionnaireCard(
 		<EvidenceHover
 			active={evidenceActive}
 			content={evidence ?? null}
-			question={value.questions[0]?.prompt ?? "this decision"}
+			question={questionHeading(value.questions[0]?.prompt ?? "this decision")}
 		>
 			<div
 				aria-hidden={closing || undefined}
@@ -954,7 +962,8 @@ function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionna
 function DecisionChip(
 	{ onShow, value }: { onShow: (questionnaireId: string) => void; value: Questionnaire },
 ) {
-	let question = value.questions.map(item => item.prompt).join(" ");
+	let headings = value.questions.map(item => questionHeading(item.prompt));
+	let question = headings.map(plainInlineText).join(" ");
 	return (
 		<button
 			aria-label={`Decision: ${question}, answer in Decisions`}
@@ -965,7 +974,14 @@ function DecisionChip(
 			type="button"
 		>
 			<DecisionIcon aria-hidden="true" className="decision-chip-icon" size={16} />
-			<span className="decision-chip-question">{question}</span>
+			<span className="decision-chip-question">
+				{headings.map((heading, index) => (
+					<Fragment key={index}>
+						{index > 0 && " "}
+						<MarkdownLine links={false} text={heading} />
+					</Fragment>
+				))}
+			</span>
 			<ChevronIcon aria-hidden="true" className="decision-chip-chevron" size={16} />
 		</button>
 	);
