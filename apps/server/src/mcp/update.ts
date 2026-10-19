@@ -88,5 +88,6 @@ export type UpdateDocument<Caller> = {
 		| { kind: "archived" }
 		| { kind: "forbidden" }
 		| { kind: "unavailable" }
+		| { kind: "visuals-required"; issues: Issue[] }
 	>;
 };

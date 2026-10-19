@@ -151,11 +151,56 @@ type Seen = {
 	tools: readonly string[];
 };
 
+test("withholds a fragmented Chat question and repairs within the same Planner session", async () => {
+	let { context, events } = await setup();
+	let prompts: string[] = [];
+	let checked: string[] = [];
+	context.decide = async request => {
+		let text = (request.state as { reply: string }).reply;
+		checked.push(text);
+		return {
+			model: "test/classifier",
+			answers: { input: { type: "noul", noul: checked.length === 1 ? 1 : 0 } },
+			usage: { input_tokens: 0, output_tokens: 0 },
+			latencyMs: 0,
+		};
+	};
+	let session = {
+		async stream(prompt: string) {
+			prompts.push(prompt);
+			return {
+				fullStream: (async function*() {
+					yield { type: "text-start", id: "reply" };
+					for (
+						let text of prompts.length === 1
+							? ["What are you ", "trying to accomplish?"]
+							: ["I updated the document."]
+					) {
+						yield { type: "text-delta", id: "reply", text };
+					}
+					yield { type: "text-end", id: "reply" };
+				})(),
+			} as never;
+		},
+		async destroy() {},
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: session });
+	await browserTurn(context, "Help me draft a new plan.");
+	expect(events.some(event => JSON.stringify(event).includes("trying to accomplish"))).toBe(false);
+	expect(
+		context.chat.entries.filter(entry => entry.author.kind === "agent").map(entry => entry.text),
+	)
+		.toContain("I updated the document.");
+	expect(checked).toEqual(["What are you trying to accomplish?", "I updated the document."]);
+	expect(prompts).toHaveLength(2);
+	expect(prompts[1]).toContain("inline decision cards");
+});
+
 /** The real session opener, over a harness stub that records what each turn runs with. */
 function observe(context: Chat.Room): Seen[] {
 	let seen: Seen[] = [];
-	context.openPlannerSession = (owner, channel) =>
-		openPlannerSession(owner, channel, {
+	context.openPlannerSession = async (owner, channel) => {
+		let result = await openPlannerSession(owner, channel, {
 			githubTools: async () => ({ ok: true, value: {} }),
 			createSandbox: async () => ({ destroy: async () => {} }) as never,
 			registerCredential: () => () => {},
@@ -181,6 +226,9 @@ function observe(context: Chat.Room): Seen[] {
 				},
 			} as never,
 		});
+		if (!result.ok) throw "cause" in result.error ? result.error.cause : result.error;
+		return result;
+	};
 	return seen;
 }
 
@@ -615,6 +663,24 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 	await Chat.resume(context, ws);
 	await Chat.abort(context, ws);
 	expect(planner.calls.at(-1)).toBe("destroy");
+});
+
+test("a failed foreground turn aborts late work and releases a Planner with workflow runs", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	let signal: AbortSignal | undefined;
+	planner.session.stream = async (_prompt: string, turnSignal?: AbortSignal) => {
+		signal = turnSignal;
+		throw new Error("The reply could not be verified.");
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	expect(signal?.aborted).toBe(true);
+	expect(planner.calls).toEqual(["destroy"]);
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.chat.busy).toBe(false);
+	expect(context.chat.entries.at(-1)?.text).toBe("The reply could not be verified.");
 });
 
 test("concurrent Stop requests pause a retained Planner's workflows only once", async () => {

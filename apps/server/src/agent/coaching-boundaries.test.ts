@@ -27,31 +27,56 @@ let choice = {
 	multiple: false,
 };
 
-test("a Planner persists provisional understanding before an open intent question in Chat", async () => {
+test("a new draft publishes six separate inline decisions before waiting for any answers", async () => {
+	let subjects = ["Audience", "Scope", "Deployment", "Data", "Access", "Rollout"];
+	let source = "# New plan\n\n"
+		+ subjects.map(subject => `${subject} remains provisional.\n`).join("\n");
 	let fixture = await coachingFixture([
 		() => ({ tool: "read_plan", input: {} }),
 		output => ({
 			tool: "edit_plan",
 			input: {
 				revision: decoded<View>(output).revision,
-				operations: [{ op: "insert_root", source: provisional }],
+				operations: [{ op: "insert_root", source }],
 			},
 		}),
-		async output => {
-			expect(decoded<{ ok: boolean }>(output).ok).toBe(true);
-			expect((await fixture.saved()).source).toContain("Hypothesis: people may miss");
-			expect(fixture.host.plan.records.size).toBe(0);
-			return "What were you trying to accomplish when you looked for a decision?";
+		output => {
+			let view = decoded<View>(output);
+			return {
+				tool: "ask",
+				input: {
+					revision: view.revision,
+					questions: subjects.map(subject => ({
+						...choice,
+						header: subject,
+						question: `Which ${subject.toLowerCase()} should the first version support?`,
+						blocks: [address(view, `${subject} remains provisional.`)],
+					})),
+				},
+			};
 		},
+		() => "The document contains the team's decisions.",
 	]);
 	opened.push(fixture);
-	let parts = await fixture.run();
-	expect(fixture.calls.map(call => call.tool)).toEqual(["read_plan", "edit_plan"]);
-	expect(
-		parts.some(part => part.type === "text-delta" && part.text.includes("trying to accomplish")),
-	)
-		.toBe(true);
-	expect(fixture.host.plan.records.size).toBe(0);
+	let running = fixture.run();
+	let cards = await fixture.host.cards(6);
+	let saved = await fixture.saved();
+	expect(fixture.texts).toEqual([]);
+	expect(fixture.host.plan.records.size).toBe(6);
+	for (let [index, card] of cards.entries()) {
+		expect(fixture.host.plan.records.get(card.id)?.status).toBe("open");
+		let before = saved.source.indexOf(`${subjects[index]} remains provisional.`);
+		let position = saved.source.indexOf(card.id);
+		expect(position).toBeGreaterThan(before);
+		if (index < subjects.length - 1) {
+			expect(position).toBeLessThan(
+				saved.source.indexOf(`${subjects[index + 1]} remains provisional.`),
+			);
+		}
+	}
+	for (let card of cards) await fixture.host.answer(card.id, [0]);
+	await running;
+	expect(fixture.calls.map(call => call.tool)).toEqual(["read_plan", "edit_plan", "ask"]);
 });
 
 test("a shared answer drives a current revision edit and settled anchors before the turn ends", async () => {

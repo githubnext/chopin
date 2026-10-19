@@ -34,13 +34,15 @@ import type {
 } from "../mcp";
 import type { UpdateClient, UpdateDocumentInput } from "./update";
 import type { LifecycleArguments } from "./lifecycle";
-import type { ChannelArchiveResult, ChannelRecord, Lease } from "../storage/model";
+import type { ChannelArchiveResult, ChannelRecord, Lease, StoredChannel } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
 import type { SocketData } from "../wire";
+import type { VisualAdmission } from "../agent/visual-admission";
 
 export type HostedCaller = {
 	oauthToken: string;
 	user: GitHubUser;
+	signal?: AbortSignal;
 };
 
 export type PlannerInvocation = {
@@ -58,6 +60,7 @@ export type PlannerInvocation = {
 
 export type ImplementationPersistence = { lease(): Lease };
 export type HostedCallbacks = {
+	visualAdmission?: VisualAdmission;
 	archiveChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 	restoreChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 	isChannelDeleting?: (channelId: string) => boolean;
@@ -366,7 +369,7 @@ export function hosted(
 			if (!match) return undefined;
 			let oauthToken = match[1]!;
 			try {
-				return { oauthToken, user: await auth.admission.user(oauthToken) };
+				return { oauthToken, user: await auth.admission.user(oauthToken), signal: request.signal };
 			} catch (err) {
 				if (err instanceof GitHubError && err.status === 401) return undefined;
 				throw err;
@@ -535,6 +538,53 @@ export function hosted(
 				}
 				let id = deterministicChannelId(repository.id, input.idempotencyKey);
 				if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
+				let replay = async (stored: StoredChannel) => {
+					if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" as const };
+					let restored = await Plan.readStored(stored);
+					if (
+						!restored.creation
+						|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
+						|| restored.creation.origin.fingerprint !== input.fingerprint
+					) return { kind: "conflict" as const };
+					callbacks.onDocumentPersisted?.({
+						channelId: id,
+						revision: restored.revision,
+						source: restored.source,
+						sourceHash: Plan.sourceHash(restored.source),
+					});
+					return {
+						kind: "replayed" as const,
+						document: document({
+							id,
+							title: stored.channel.title,
+							...(stored.channel.description
+								? { description: stored.channel.description.value }
+								: {}),
+							creation: restored.creation,
+							source: restored.source,
+							revision: restored.revision,
+							archivedAt: stored.channel.archivedAt,
+							url: documentPath(repository.owner, repository.name, stored.channel.slug),
+						}),
+					};
+				};
+				// A durable replay must not rerun model judgments or reject a previously saved import.
+				let stored = await auth.storage.collaboration.load(id, auth.clock());
+				if (stored) return replay(stored);
+				if (callbacks.visualAdmission) {
+					let issues = await callbacks.visualAdmission({
+						sources: [input.plan],
+						signal: caller.signal,
+					});
+					if (issues.length) return { kind: "visuals-required", issues };
+					let current = await directRepository(caller, parts[0], parts[1]);
+					if (
+						!current || current.id !== repository.id
+						|| (!current.permissions.push && !current.permissions.admin)
+					) return { kind: "forbidden" };
+					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
+				}
+				if (caller.signal?.aborted) return { kind: "unavailable" };
 				await auth.storage.users.put({
 					id: caller.user.id,
 					login: caller.user.login,
@@ -562,38 +612,7 @@ export function hosted(
 					let stored = await auth.storage.collaboration.load(id, auth.clock());
 					// Nothing stored under this key's id: the repository already has a document with this title.
 					if (!stored) return { kind: "title-taken" };
-					if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" };
-					let restored = await Plan.readStored(stored);
-					if (
-						!restored.creation
-						|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
-						|| restored.creation.origin.fingerprint !== input.fingerprint
-					) return { kind: "conflict" };
-					callbacks.onDocumentPersisted?.({
-						channelId: id,
-						revision: restored.revision,
-						source: restored.source,
-						sourceHash: Plan.sourceHash(restored.source),
-					});
-					return {
-						kind: "replayed",
-						document: document({
-							id,
-							title: stored.channel.title,
-							...(stored.channel.description
-								? { description: stored.channel.description.value }
-								: {}),
-							creation: restored.creation,
-							source: restored.source,
-							revision: restored.revision,
-							archivedAt: stored.channel.archivedAt,
-							url: documentPath(
-								repository.owner,
-								repository.name,
-								stored.channel.slug,
-							),
-						}),
-					};
+					return replay(stored);
 				}
 				callbacks.onDocumentPersisted?.({
 					channelId: id,
@@ -619,7 +638,37 @@ export function hosted(
 			async update(caller, input: UpdateDocumentInput, client: UpdateClient) {
 				let access = await writableChannel(caller, input.id);
 				if (access.kind !== "allowed") return access;
+				let assessed = !callbacks.visualAdmission;
 				try {
+					if (callbacks.visualAdmission) {
+						let preflight = await serializeDocument(access.channel.id, async () => {
+							let channel = await auth.storage.channels.get(access.channel.id);
+							if (!channel || callbacks.isChannelDeleting?.(channel.id)) {
+								return { kind: "unavailable" as const };
+							}
+							return withPlan(channel.id, async plan => {
+								if (plan.mcpUpdates.some(entry => entry.idempotencyKey === input.idempotencyKey)) {
+									return { kind: "replay" as const };
+								}
+								if (channel.archivedAt) return { kind: "archived" as const };
+								if (Plan.implementationActive(plan)) return { kind: "locked" as const };
+								if (plan.revision !== input.revision) {
+									return { kind: "revision-conflict" as const, revision: plan.revision };
+								}
+								return { kind: "assess" as const, before: Plan.source(plan) };
+							});
+						});
+						if (preflight.kind === "assess") {
+							// Classifier I/O must not hold the room queue or block collaborators.
+							let issues = await callbacks.visualAdmission({
+								before: preflight.before,
+								sources: [input.plan],
+								signal: caller.signal,
+							});
+							if (issues.length) return { kind: "visuals-required" as const, issues };
+							assessed = true;
+						} else if (preflight.kind !== "replay") return preflight;
+					}
 					return await serializeDocument(access.channel.id, async () => {
 						let current = await writableChannel(caller, access.channel.id);
 						if (current.kind !== "allowed") return current;
@@ -648,6 +697,7 @@ export function hosted(
 							}
 							if (channel.archivedAt) return { kind: "archived" as const };
 							if (Plan.implementationActive(plan)) return { kind: "locked" as const };
+							if (!assessed || caller.signal?.aborted) return { kind: "unavailable" as const };
 							// History credits the rewrite to this person, so they need a user row.
 							await auth.storage.users.put({
 								id: caller.user.id,

@@ -60,7 +60,7 @@ to compare it with the final live source.
 A real `ask` waits for a person. At the configured decision bound the runner aborts
 the turn, production cleanup withdraws the unanswered card, and the case stops as
 `awaiting-human`; its canned next Chat message is not submitted as an answer. A
-Chat question can be followed by the next frozen human turn. Tool/time limits abort
+Chat question is a policy failure; frozen human turns remain historical inputs. Tool/time limits abort
 work, and streams/tools must settle before another turn. Failed cleanup stops the
 case. These paths are visible in the traces and are not silently scored as success.
 

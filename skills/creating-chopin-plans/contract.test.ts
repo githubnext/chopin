@@ -59,10 +59,16 @@ test.each([false, true])(
 		expect(initialization.result.instructions).toBe(
 			[
 				"Chopin's MCP contract and current tool descriptions are authoritative.",
-				"create_document: Create a Chopin document from a structured brief and canonical plan.",
+				"create_document: Create a Chopin document from a structured brief and canonical plan. "
+				+ "New prose is assessed for useful visuals before saving. If issues name required "
+				+ "diagrams or tables, add them beside their passages and retry; the refused draft "
+				+ "was not saved.",
 				...(updating
 					? [
-						"update_document: Replace a Chopin document's canonical plan against the revision last read.",
+						"update_document: Replace a Chopin document's canonical plan against the revision "
+						+ "last read. New prose is assessed for useful visuals before saving. Repair any "
+						+ "returned visual issues beside the named passages and retry against the current "
+						+ "revision.",
 					]
 					: []),
 			].join("\n"),

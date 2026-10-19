@@ -5,6 +5,7 @@ import { ActiveOwnerBindings } from "../agent/active-owner";
 import { createPlannerAgent } from "../harness/agents";
 import { openPlannerSession } from "../harness/session";
 import { headingHarness } from "./job-heading-harness.test-fixtures";
+import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { HostedAuth } from "../auth/routes";
 import type { openPlan } from "../testing/plan";
@@ -50,6 +51,7 @@ export async function authenticatedMemory(
 	let headingAgent = createPlannerAgent(driver.fake, kind);
 	let sandboxDestroys = 0;
 	let context: Chat.Room = {
+		decide: decideReplying({ input: { type: "noul", noul: 0 } }),
 		chat: plan.chat,
 		plan,
 		server: opened.server,

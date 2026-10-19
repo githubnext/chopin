@@ -157,6 +157,18 @@ test("makes Jev the only visual decision maker in routed Planner sessions", () =
 	expect(plannerInstructions("octo-org/score")).not.toContain("call assess_visual");
 });
 
+test("every harness receives proactive visual guidance and shared admission repairs", () => {
+	for (let workspace of [undefined, { remote: true } as const, { cwd: "/tmp", checkout: false }]) {
+		let prompt = plannerInstructions("octo-org/score", undefined, workspace);
+		expect(prompt).toContain("Add useful diagrams proactively");
+		expect(prompt).toContain("every new passage");
+		expect(prompt).toContain("visuals-required");
+		expect(prompt).toContain("required type and authoring instructions");
+		expect(prompt).toContain("beside the factual prose");
+		expect(prompt).toContain(DIAGRAM_AUTHORING);
+	}
+});
+
 test("offers native composition recipes with valid table and Callout examples", () => {
 	expect(DIAGRAM_AUTHORING).toContain("Native document composition");
 	expect(DIAGRAM_AUTHORING).toContain("If evidence is uneven, use prose or bullets");

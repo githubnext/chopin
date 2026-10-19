@@ -83,6 +83,7 @@ import { spikeHost } from "./experiments/spike-host";
 import { spikeSettler, startSettle } from "./experiments/spike-settle";
 import { resolveInstruction } from "./experiments/spikes";
 import { openDecisions } from "./conversation-plan/decisions";
+import { createVisualAdmission } from "./agent/visual-admission";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
@@ -142,6 +143,7 @@ type ResearchRequestView = ResearchWire.RequestView;
 const config = load();
 /** The one decisions boundary, checked against Atomic's registry before anything starts. */
 const decide = await openDecisions(config);
+const visualAdmission = createVisualAdmission(decide);
 harnessFor(config);
 const storage = createStorage(config.storage);
 const documentHistory = new DocumentHistory(storage);
@@ -552,6 +554,7 @@ function conversation(
 		room: room.id,
 		config,
 		decide,
+		visualAdmission,
 		auth: hostedAuth,
 		claimantSessionId,
 		repository,
@@ -2640,6 +2643,7 @@ registerMcpRoutes(router, hostedAuth, {
 	},
 }, {
 	// A child's instruction runs on its root's Chat with the child as focus.
+	visualAdmission,
 	invokePlanner: input =>
 		invokeRouted({
 			channels: storage.channels,

@@ -51,6 +51,29 @@ let params: QuestionParams = {
 	],
 };
 
+test("Atomic and remote input cannot put a child-focused choice into the root", async () => {
+	for (let thread of [false, true]) {
+		let f = await fixture();
+		if (thread) f.plan.chat.actingChannel = crypto.randomUUID();
+		else f.room.focusedChild = () => "child";
+		let opened = Promise.withResolvers<void>();
+		let publish = f.server.publish.bind(f.server);
+		f.server.publish = (topic, body, ...rest) => {
+			if (typeof body === "string" && JSON.parse(body).kind === "question:asked") opened.resolve();
+			return publish(topic, body, ...rest);
+		};
+		let pending = f.input.questionnaire(params, f.options);
+		let result = await Promise.race([
+			pending.then(() => "cancelled"),
+			opened.promise.then(() => "opened"),
+		]);
+		if (result === "opened") f.controller.abort();
+		await pending;
+		expect(f.plan.records.size).toBe(0);
+		expect(result).toBe("cancelled");
+	}
+});
+
 test("HostInput appends one ordered questionnaire batch and returns typed answers verbatim", async () => {
 	let f = await fixture();
 	let edited = Edit.apply(f.plan, f.plan.revision, [{

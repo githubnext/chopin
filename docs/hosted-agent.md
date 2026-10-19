@@ -34,11 +34,20 @@ experience, verified behavior, hypotheses, its own recommendations, and human
 decisions. A suggested remedy, such as onboarding, does not become an agreed
 requirement merely because someone mentioned it.
 
-When intent is missing, it asks one useful open question in Chat. Concrete human
-choices with grounded alternatives use the existing `ask` decision tool; the
-Planner must not invent alternatives just to fit that tool. A factual question
-that repository evidence answers needs an answer, not a decision card. Optional
+Every request for human input, including missing intent and clarification, uses
+the `ask` decision tool. The Planner drafts provisional prose, then batches the
+known independent questions (up to ten) into separate cards beside the passages
+they inform before waiting. Alternatives are proposals, not assumed commitments;
+members can add options. Repository facts need answers, not votes. Optional
 exploration can remain provisional without becoming a Build blocker.
+
+On every harness, Chat buffers each complete Planner text message and checks it
+with the deployment's decisions classifier before publication. Requests for input
+are withheld and the same session gets one continuation to create inline cards.
+Completed tools and the original request are not replayed. Failed, missing,
+malformed or interrupted checks never publish unchecked prose; uncertain judgments
+also withhold it. Chat prose therefore arrives after validation rather than token
+by token. This is a semantic check and can misclassify language.
 
 An answer, correction, or contradictory finding should change the affected
 prose and its anchors, followed by the next useful authorized action. Disagreement
@@ -53,8 +62,7 @@ and does not edit prose; only people approve and start implementation.
 
 This policy changes behavior **inside an invoked turn**. It does not schedule
 turns, start background research without an explicit current request, or change
-tool authority. An open question in Chat ends the turn; a later invoked turn can
-follow the reply through. The `ask` tool instead keeps its current turn waiting
+tool authority. The `ask` tool keeps its current turn waiting
 for a shared answer or cancellation. Ordinary unaddressed Chat still follows the
 existing addressing and title-maintenance behavior.
 
@@ -202,15 +210,22 @@ REST tools construct owner and repository coordinates on the server, bound
 response sizes and line ranges, reject path escape, and post-filter code search
 by GitHub repository node ID.
 
-With `PLANNER_VISUALS=on` and a decisions model, foreground `copilot-sdk`
-sessions for an explicit member request of at most 1,000 characters also
-receive `assess_visual`. It routes one explanatory paragraph through
-possibility, comprehension, and type choices before `edit_plan` can publish it.
-The route is bound to the member turn, document revision, passage, and placement.
-Comment turns, longer requests, background jobs, and `atomic` sessions
-keep their existing authoring prompt, tool set, and edit path. Atomic sessions
-may retain workflow ownership across turns and are outside this disposable-session
-prototype. This path is opt-in while the bounded authoring workflow is evaluated.
+Foreground Planner writes on every harness and MCP document creation and updates
+share a server-owned visual admission check. New prose, lists and nested passages
+are assessed for whether a faithful visual is possible, helpful, and which native
+type fits. A selected diagram or comparison table must appear beside its passage
+before the write is accepted. A successful prose judgment permits prose; there is
+no diagram quota. This applies to blank drafts, long requests, and imported plans
+without requiring `PLANNER_VISUALS`.
+
+Assessments run in bounded batches outside the room queue. Failed or uncertain
+assessments refuse the write; they do not silently select prose. Refusals identify
+the passage and required representation and include syntax guidance for repair.
+Successful assessments are cached by passage and context while diagrams are
+repaired. Unchanged prose with its existing visual is preserved. A concurrent edit
+still invalidates the proposed revision. Background jobs retain their isolated
+contracts. The legacy `assess_visual` single-paragraph handoff remains available
+to sessions without the shared gate.
 
 The isolated Planner does not see a user's local checkout, current branch, working tree,
 or uncommitted changes. A coding agent must compare the repository context
@@ -676,8 +691,8 @@ the full native catalog, including bar, line, scatter, radar, polar, waterfall,
 treemap, heatmap, and Sankey. Numerical aliases have variant-specific purpose
 and data requirements; the guide includes labelled synthetic bar, Marimekko and
 dumbbell examples that are checked against the renderer.
-This capability does not require `PLANNER_VISUALS`; that flag selects the
-experimental Jev routing workflow described above. Ordinary and Atomic Planners
+This capability and the shared visual admission check do not require `PLANNER_VISUALS`.
+Ordinary and Atomic Planners
 prefer native `seecode` whenever a registered type can represent the required
 information. Mermaid is a fallback only for a representation the native catalogue
 cannot provide or an explicit user request; it supports numerical charts such as

@@ -52,17 +52,96 @@ async function rooted(options: { access?: () => Promise<boolean>; focus?: boolea
 		signal: new AbortController().signal,
 		revalidate: options.access ?? (async () => true),
 	};
-	let call = async (name: keyof typeof documentTools, input: unknown) => {
+	let call = async (
+		name: keyof typeof documentTools,
+		input: unknown,
+		abortSignal?: AbortSignal,
+	) => {
 		let output = await documentTools[name].execute!(input as never, {
 			context: { room, owner, repository: { id: "R_test" } },
 			toolCallId: "call",
 			messages: [],
+			abortSignal,
 		} as never);
 		let text = String(output);
 		return text.startsWith("Error:") ? text : JSON.parse(text);
 	};
-	return { child, root, rootId, call, committedAtBroadcast };
+	return { child, root, rootId, room, call, committedAtBroadcast };
 }
+
+test("edit_child assesses child source through the shared root admission before publishing", async () => {
+	let { call, child, root, room, committedAtBroadcast } = await rooted();
+	let before = child.plan.persistence.committedSource;
+	let rootBefore = root.plan.persistence.committedSource;
+	let sources: string[] = [];
+	room.visualAdmission = async input => {
+		expect(input.before).toBe(before);
+		sources = input.sources;
+		return [{ code: "E_VISUAL_REQUIRED", path: "sources[0]", message: "Add a sequence diagram." }];
+	};
+	let result = await call("edit_child", {
+		child: child.channel.id,
+		revision: child.plan.revision,
+		operations: [{ op: "insert_root", source: "The client sends a request to the server." }],
+	});
+	expect(result).toMatchObject({ ok: false, reason: "visuals-required", child: child.channel.id });
+	expect(sources).toHaveLength(1);
+	expect(sources[0]).toContain("Original finding.");
+	expect(sources[0]).toContain("The client sends a request to the server.");
+	expect(child.plan.persistence.committedSource).toBe(before);
+	expect(root.plan.persistence.committedSource).toBe(rootBefore);
+	expect(committedAtBroadcast).toHaveLength(0);
+});
+
+test("a child edit cancelled during visual admission leaves both documents and publication alone", async () => {
+	let { call, child, root, room, committedAtBroadcast } = await rooted();
+	let before = child.plan.persistence.committedSource;
+	let rootBefore = root.plan.persistence.committedSource;
+	let controller = new AbortController();
+	let entered = Promise.withResolvers<void>();
+	let finish = Promise.withResolvers<void>();
+	let seen: AbortSignal | undefined;
+	room.visualAdmission = async input => {
+		seen = input.signal;
+		entered.resolve();
+		await finish.promise;
+		return [];
+	};
+	let pending = call("edit_child", {
+		child: child.channel.id,
+		revision: child.plan.revision,
+		operations: [{ op: "insert_root", source: "This passage must not be published." }],
+	}, controller.signal);
+	await entered.promise;
+	controller.abort();
+	finish.resolve();
+	expect(await pending).toMatchObject({ ok: false, reason: "cancelled" });
+	expect(seen?.aborted).toBe(true);
+	expect(child.plan.persistence.committedSource).toBe(before);
+	expect((await call("read_child", { child: child.channel.id })).source).not.toContain(
+		"must not be published",
+	);
+	expect(root.plan.persistence.committedSource).toBe(rootBefore);
+	expect(committedAtBroadcast).toHaveLength(0);
+});
+
+test("root ask refuses child-focused choices before creating a decision", async () => {
+	let { call, root } = await rooted({ focus: true });
+	expect(await call("ask", {})).toMatchObject({ ok: false, reason: "child-decision-unavailable" });
+	expect(root.plan.records.size).toBe(0);
+});
+
+test("reply_comment refuses a child-thread solicitation before publishing it", async () => {
+	let { call, child, root, room } = await rooted();
+	let thread = seedOpenThread(child.plan);
+	root.plan.chat.acting = thread;
+	root.plan.chat.actingChannel = child.channel.id;
+	let before = structuredClone(child.plan.threads.get(thread));
+	room.checkReply = async () => false;
+	expect(await call("reply_comment", { thread, text: "Which option should we use?" }))
+		.toMatchObject({ ok: false, reason: "inline-decision-required" });
+	expect(child.plan.threads.get(thread)).toEqual(before);
+});
 
 test("list_children lists the root's children without focus", async () => {
 	let { call, child } = await rooted();

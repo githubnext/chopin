@@ -12,6 +12,14 @@ let aliases = Object.entries(DIAGRAM_ALIASES)
 /** Chopin-owned guidance loaded with the Planner on every supported harness. */
 export const DIAGRAM_AUTHORING = `Chopin visual authoring guide v1
 
+Add useful diagrams proactively while developing the document. The server checks
+every new passage with Jev before accepting an edit, including multi-paragraph
+batches, lists and nested MDX. A refused write returns \`visuals-required\` with the
+required type and authoring instructions. Repair the write by adding that visual
+beside the factual prose, keeping every claim grounded in the evidence. Submit the
+prose and its diagram together; no separate assessment call is needed. If the
+document changes during assessment, read it again and retry against its revision.
+
 Start from the reader's question and the available evidence. Choose the smallest
 representation that answers it:
 - Architecture shows named parts, boundaries, dependencies, or data paths whose

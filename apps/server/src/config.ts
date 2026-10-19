@@ -68,7 +68,7 @@ export type Config = {
 	 */
 	decisionsModel?: string;
 	decisionsTimeoutMs?: number;
-	/** Explicitly enables decision-routed foreground visual authoring. */
+	/** Legacy single-paragraph visual tool; shared write admission is always enabled. */
 	plannerVisuals?: boolean;
 	/** The chopin release `chopin update` installs from this server, and a refusal names. */
 	connectorVersion?: string;
@@ -339,9 +339,7 @@ export function describe(config: Config): string {
 		config.conversationPlan
 			? `conversation plan: ${config.decisionsModel}`
 			: "conversation plan: off",
-		config.plannerVisuals
-			? `Planner visuals: ${config.decisionsModel}`
-			: "Planner visuals: off",
+		`visual assessment: ${config.decisionsModel ?? "unavailable"}`,
 		config.liveBuild ? "live build: on" : "live build: off",
 		config.liveSpikes ? "live spikes: on" : "live spikes: off",
 		admission,

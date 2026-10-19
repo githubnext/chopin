@@ -44,7 +44,7 @@ export function createHumanInput(
 		params: QuestionParams,
 		options: HumanInputOptions,
 	): Promise<QuestionnaireResult> {
-		if (options.signal.aborted) {
+		if (options.signal.aborted || room.focusedChild?.() || room.plan.chat?.actingChannel) {
 			report?.("cancelled");
 			return { answers: [], cancelled: true };
 		}

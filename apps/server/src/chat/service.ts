@@ -27,6 +27,7 @@ import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
+import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
@@ -45,6 +46,7 @@ import { isChannelId } from "../channels/id";
 import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
+import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
 import type { Server } from "bun";
@@ -609,6 +611,8 @@ export type Room = {
 	config: Config;
 	/** The deployment's decisions boundary; absent when no decisions model is configured. */
 	decide?: Decide;
+	/** Shared admission for new Planner-authored passages, independent of harness or request kind. */
+	visualAdmission?: VisualAdmission;
 	auth: HostedAuth;
 	/**
 	 * Login session that may claim Planner ownership for this room's turns.
@@ -1639,7 +1643,8 @@ function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
 
 function visualRouting(context: Room): boolean {
 	if (
-		!context.config?.plannerVisuals || !context.decide || context.chat.job
+		context.visualAdmission || !context.config?.plannerVisuals || !context.decide
+		|| context.chat.job
 		|| context.config.harness !== "copilot-sdk"
 	) return false;
 	let request = currentMemberRequest(context.chat);
@@ -1660,6 +1665,28 @@ export function documentRoom(context: Room): DocumentRoom {
 		changes: found => Service.changes(plan, server, room, found),
 		jobs: context.jobs,
 		children: context.children,
+		turnSignal: () => chat.turnController?.signal,
+		...(!chat.job && context.visualAdmission && {
+			visualAdmission: input => {
+				let signals = [input.signal, chat.turnController?.signal].filter(
+					(signal): signal is AbortSignal => !!signal,
+				);
+				return context.visualAdmission!({
+					...input,
+					signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0],
+				});
+			},
+		}),
+		...(!chat.job && {
+			checkReply: (text, signal) =>
+				checkPlannerReply(
+					text,
+					context.decide,
+					signal && chat.turnController
+						? AbortSignal.any([signal, chat.turnController.signal])
+						: signal ?? chat.turnController?.signal ?? new AbortController().signal,
+				),
+		}),
 		currentMemberRequest: () => currentMemberRequest(chat),
 		focusedChild: () =>
 			!chat.closed && chat.busy && chat.turnController && !chat.turnController.signal.aborted
@@ -2121,10 +2148,20 @@ async function run(
 		}
 		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
 		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
-		let result = await opened.session.stream(prompt, signal);
-		for await (let part of result.fullStream) {
-			if (turnController.signal.aborted) break;
-			translate(context, part);
+		if (jobTurn) {
+			let result = await opened.session.stream(prompt, signal);
+			for await (let part of result.fullStream) {
+				if (turnController.signal.aborted) break;
+				translate(context, part);
+			}
+		} else {
+			await publishPlannerReplies({
+				session: opened.session,
+				prompt,
+				signal,
+				decide: context.decide,
+				publish: part => translate(context, part),
+			});
 		}
 		if (jobTurn && chat.closed) throw new Error("The document closed.");
 		if (chat.interruption) throw new Error(chat.interruption);
@@ -2142,6 +2179,7 @@ async function run(
 		console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
 		failed = !turnController.signal.aborted || !!chat.interruption;
+		turnController.abort();
 		if (jobTurn) {
 			outcome = chat.closed
 				? { status: "failed", reason: "The document closed." }
@@ -2149,7 +2187,7 @@ async function run(
 					status: sendStarted || chat.interruption ? "failed" : "skipped",
 					reason: jobReason(err),
 				};
-		} else if (!chat.closed && (!turnController.signal.aborted || chat.interruption)) {
+		} else if (!chat.closed && failed) {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
@@ -2169,7 +2207,7 @@ async function run(
 		chat.toolProgress = undefined;
 		let kept = false;
 		try {
-			if (opened && !chat.closed && !jobTurn) kept = retain(context, opened);
+			if (opened && !chat.closed && !jobTurn && !failed) kept = retain(context, opened);
 			if (!kept) {
 				if (!jobTurn && chat.retained?.session === opened?.session) await chat.retained?.release();
 				else await opened?.session.destroy();
@@ -2211,7 +2249,7 @@ async function run(
 		chat.messageIds = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
-		settle(chat, server, room, turnController.signal.aborted);
+		settle(chat, server, room, turnController.signal.aborted && !failed);
 		if (jobTurn) {
 			chat.job = undefined;
 			chat.jobOutput = undefined;

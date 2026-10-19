@@ -13,6 +13,7 @@ import { documentTools } from "./agent/tools";
 import { createRootChat } from "./chat/root";
 import * as Chat from "./chat/service";
 import * as Comments from "./comments/service";
+import { decideReplying } from "./conversation-plan/decisions.test-fixtures";
 import * as Service from "./plan/service";
 import * as room from "./plan/room";
 import { openPlan } from "./testing/plan";
@@ -555,6 +556,7 @@ async function rootAndChild() {
 	let fixture = await rooted({ root: SOURCE, child: SOURCE });
 	cleanups.push(fixture.close);
 	let { root, child, turns, repository } = fixture;
+	root.context.decide = decideReplying({ input: { type: "noul", noul: 0 } });
 	let committedAtBroadcast: string[] = [];
 	fixture.listen((topic, frame) => {
 		if (topic === Wire.topic(child.channel.id) && frame.kind === "comment:said") {

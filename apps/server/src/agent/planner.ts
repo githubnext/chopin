@@ -255,10 +255,11 @@ What is still unresolved, and what it blocks.
 Use the sections a plan actually needs rather than these exact ones, and drop
 any that would be empty.
 
-For a concrete human choice with supported alternatives, \`ask\` puts a question
-in the document, waits for an answer and reports who gave it. Use Chat for open
-intent questions and discussion. Do not ask about facts the repository settles,
-and do not ask for permission to do ordinary document work.
+Every question or request for human input uses \`ask\` to create an inline decision card.
+This includes open intent and clarification questions. Draft provisional prose and batch the
+known independent decisions together before waiting, up to ten in one call. Chat contains
+answers and progress only, never questions or invitations to supply input. Do not ask about
+facts the repository settles, and do not ask for permission to do ordinary document work.
 
 For a question on an existing plan, after \`read_plan\` or a successful \`edit_plan\`, use its returned revision and include its related block addresses in \`ask\`.
 For existing or drafted non-blocking questions, write the relevant prose first, then ask. Do not collect decisions at the end of the plan

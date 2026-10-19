@@ -10,6 +10,7 @@ import type { ActiveMemberRequest } from "../chat/service";
 
 import * as Arguments from "./arguments";
 import {
+	admitBlockEdit,
 	answer,
 	applyAnchors,
 	applyBlockEdit,
@@ -29,6 +30,7 @@ import type { InvestigationTools } from "./experiment-tools";
 
 import type { ActiveOwnerBinding } from "./active-owner";
 import type { VisualSession } from "./visual-handoff";
+import type { VisualAdmission } from "./visual-admission";
 
 import type { Server } from "bun";
 import { jsonSchema, tool } from "ai";
@@ -167,6 +169,12 @@ export type DocumentRoom = {
 	readReference?: (id: string, repositoryId: string) => Promise<unknown>;
 	/** Experimental foreground visual handoff; absent from production sessions. */
 	visual?: VisualSession;
+	/** Server-owned assessment of every new foreground Planner passage. */
+	visualAdmission?: VisualAdmission;
+	/** The current turn's cancellation, read per call when a session is retained. */
+	turnSignal?: () => AbortSignal | undefined;
+	/** The same server-owned prose check used before publishing ordinary Planner replies. */
+	checkReply?: (text: string, signal?: AbortSignal) => Promise<boolean>;
 	/** This root's children; absent in a child room and in tests that do not need them. */
 	children?: import("../chat/children").ChildDocuments;
 };
@@ -360,7 +368,7 @@ export const documentTools = {
 	}),
 
 	edit_plan: tool({
-		contextSchema: roomContext,
+		contextSchema: ownerContext,
 		description: "Edit the plan as an atomic batch against the revision you last read. Indices "
 			+ "address top-level blocks and are resolved against that revision, so they do "
 			+ "not shift under each other within one batch. If the plan changed since you "
@@ -386,15 +394,22 @@ export const documentTools = {
 			required: ["revision", "operations"],
 			additionalProperties: false,
 		}),
-		execute: (raw, { context: { room: context } }) =>
+		execute: (raw, { context: { room: context, owner }, abortSignal }) =>
 			answer("edit_plan", async () => {
+				let signals = [abortSignal, owner?.signal, context.turnSignal?.()].filter(
+					(signal): signal is AbortSignal => !!signal,
+				);
+				let signal = signals.length ? AbortSignal.any(signals) : undefined;
 				let visual = context.visual
 					? await Promise.all([import("./visual-handoff"), import("./visual-receipt")])
 					: undefined;
 				let document = await documentIdentity(context.plan);
+				let args = Arguments.editPlan(raw);
+				let refusal = await admitBlockEdit(context, args, signal);
+				if (refusal) return { ...refusal, document };
 				let result = await context.exclusive(async () => {
+					if (signal?.aborted) return { ok: false, reason: "cancelled" };
 					if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
-					let args = Arguments.editPlan(raw);
 					if (context.visual) {
 						let written = visual![0].visualWrite(args.operations);
 						if (written) {
@@ -422,6 +437,7 @@ export const documentTools = {
 					}
 					let { acting, actingChannel } = context.plan.chat;
 					return applyBlockEdit(context, args, {
+						signal,
 						// A thread in a child is answered by `edit_child`, not by an edit here.
 						acting: actingChannel ? undefined : acting,
 						applied: () => {
@@ -474,8 +490,10 @@ export const documentTools = {
 		description: "Ask the people in the room one or more decisions and wait for "
 			+ "their shared answer. Use response: text with options: [] for a written answer; "
 			+ "omit response for existing multiple-choice questions. Use open_decision "
-			+ "to capture a decision without waiting. Batch related "
-			+ "questions into one call. The questionnaire is recorded in the plan and the "
+			+ "to capture a decision without waiting. All requests for human input, including "
+			+ "intent and clarification, use these inline cards, never plain Chat. Batch all known "
+			+ "independent questions into one call before waiting. Each question becomes a separate "
+			+ "card beside its related prose. The questionnaire is recorded in the plan and the "
 			+ "answer is attributed to whoever gave it. If current_plan is present after "
 			+ "an answer, it has read_plan's revision, source, and blocks; edit from that "
 			+ "revision. Otherwise call read_plan before editing. Reread if an edit is stale. "
@@ -550,6 +568,14 @@ export const documentTools = {
 		execute: (raw, { context: { room: context, owner }, abortSignal }) =>
 			answer("ask", async () => {
 				if (implementationActive(context.plan)) return { ok: false, reason: "locked" };
+				if (context.focusedChild?.() || context.plan.chat.actingChannel) {
+					return {
+						ok: false,
+						reason: "child-decision-unavailable",
+						message: "This turn concerns a child document. Its choices cannot be placed in "
+							+ "the root's Decisions. State what remains unresolved without asking in prose.",
+					};
+				}
 				let args = Arguments.askPlan(raw);
 				let definition = Questions.identify({
 					questions: args.questions.map(({ blocks, ...question }) => question),
@@ -765,7 +791,7 @@ export const documentTools = {
 			required: ["thread", "text"],
 			additionalProperties: false,
 		}),
-		execute: (raw, { context: { room: context, owner } }) =>
+		execute: (raw, { context: { room: context, owner }, abortSignal }) =>
 			answer("reply_comment", async () => {
 				let args = raw as Record<string, unknown>;
 				if (
@@ -774,6 +800,14 @@ export const documentTools = {
 					|| Object.keys(args).some(key => key !== "thread" && key !== "text")
 				) throw new Error("reply_comment takes only `thread` and `text`, both text");
 				let { thread, text } = args;
+				if (context.checkReply && !await context.checkReply(text, abortSignal)) {
+					return {
+						ok: false,
+						reason: "inline-decision-required",
+						message: "Requests for human input belong in inline decision cards. "
+							+ "Reply with factual context only; do not ask for input in comment prose.",
+					};
+				}
 				let { acting, actingChannel } = context.plan.chat;
 				// A comment sent from a child: its thread, and the reply, live in that child.
 				if (actingChannel) {
@@ -783,8 +817,10 @@ export const documentTools = {
 						if (!owner || owner.signal.aborted || !await owner.revalidate()) {
 							throw new Refusal("the Planner's repository access could not be confirmed");
 						}
-						return children.open(actingChannel, child =>
-							Comments.answer(child.plan, child.server, child.id, thread, text, acting));
+						return children.open(
+							actingChannel,
+							child => Comments.answer(child.plan, child.server, child.id, thread, text, acting),
+						);
 					});
 				}
 				return Comments.answer(context.plan, context.server, context.id, thread, text, acting);

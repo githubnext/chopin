@@ -10,7 +10,7 @@ export const rubric = [
 	{
 		id: "intent",
 		question:
-			"Does it elicit the next useful intent with at most one open Chat question, avoiding invented options and interrogation?",
+			"Does it put all needed human input in inline decision cards, batch independent questions before waiting, and keep requests for input out of Chat?",
 	},
 	{
 		id: "document",

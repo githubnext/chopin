@@ -7,6 +7,7 @@ import { notAttachedMessage } from "../harness/remote/attachments";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { configured } from "../testing/config";
+import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import {
 	attach,
 	finishTurn,
@@ -70,6 +71,7 @@ async function remoteRoom() {
 	let url = `https://chopin.test/documents/octo-org/score/${channel.slug}`;
 	let agent = createPlannerAgent(createRemoteAdapter());
 	let context: Chat.Room = {
+		decide: decideReplying({ input: { type: "noul", noul: 0 } }),
 		chat: plan.chat,
 		plan,
 		room: channel.id,

@@ -47,6 +47,45 @@ function envelope(code: string, message: string, kind?: string) {
 }
 
 describe("AI SDK stream projection", () => {
+	it("forwards both a tool signal and the live turn signal to shared visual admission", async () => {
+		for (let source of ["tool", "turn"]) {
+			let context = room(create()).context;
+			let tool = new AbortController();
+			let turn = new AbortController();
+			context.chat.turnController = turn;
+			let seen: AbortSignal | undefined;
+			context.visualAdmission = async input => {
+				seen = input.signal;
+				return [];
+			};
+			await documentRoom(context).visualAdmission!({ sources: ["Prose."], signal: tool.signal });
+			(source === "tool" ? tool : turn).abort();
+			expect(seen?.aborted).toBe(true);
+		}
+	});
+
+	it("shares visual admission across harnesses and natural or long foreground turns", async () => {
+		for (let harness of ["copilot-sdk", "atomic", "remote"] as const) {
+			let context = room(create()).context;
+			context.config.harness = harness;
+			context.config.plannerVisuals = false;
+			let seen: unknown;
+			context.visualAdmission = async input => {
+				seen = input;
+				return [];
+			};
+			let controller = new AbortController();
+			context.chat.turnController = controller;
+			let gate = documentRoom(context).visualAdmission;
+			expect(gate).toBeDefined();
+			let input = { before: "Old prose.", sources: ["Long factual prose. ".repeat(100)] };
+			await gate!(input);
+			expect(seen).toEqual({ ...input, signal: controller.signal });
+			context.chat.job = { kind: "heading" } as never;
+			expect(documentRoom(context).visualAdmission).toBeUndefined();
+		}
+	});
+
 	it("does not add Jev without an active member request", () => {
 		let chat = create();
 		let context = room(chat).context;

@@ -357,19 +357,16 @@ document. Group turn-taking asks the decisions model; solo replies bypass it.
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
 
-`PLANNER_VISUALS` defaults to off. Set it exactly to `on` alongside `AGENT=on`
-to enable the bounded foreground visual handoff. The decisions model makes
-three decisions for each assessed paragraph: whether visualization is possible,
-whether it improves comprehension, and which SeeCode type or table fits. The
-Planner writes and validates the selected visual. This experimental path
-currently accepts one explanatory paragraph per edit, optionally followed by
-its selected visual; headings can be separate edits. Lists and nested MDX
-paragraphs are not yet supported in a routed edit.
+Foreground Planner writes on every harness and MCP document imports share visual
+assessment before acceptance. The decisions model judges whether a faithful
+visual is possible and helpful, then selects its native type or a comparison
+table. The author must supply the selected visual beside its passage before the
+write succeeds. Lists and nested prose are included, and there is no diagram
+quota. Failed or uncertain assessments refuse the write. Prose imports require a
+decisions model even with `AGENT=off`.
 
-Routing is limited to explicit member requests of at most 1,000 characters under
-`copilot-sdk`. Comment turns, longer member requests, background
-jobs, and `atomic` sessions retain their ordinary authoring behavior. Atomic's
-retained workflow sessions are outside this disposable-session prototype.
+`PLANNER_VISUALS` controls only the legacy single-paragraph tool for sessions
+without the shared admission check; it does not disable the shared check.
 
 Conversation-derived cards default to off. When enabled, interpretation sends
 current and recent Chat messages and selected decision context to the decisions

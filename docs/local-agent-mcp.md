@@ -67,6 +67,13 @@ The MCP surface uses document-oriented tool names, but `create_document` remains
 shaped around the current planning workflow: it requires a planning brief and a
 `plan` field. That API shape does not define Chopin's broader document model.
 
+`create_document` and `update_document` assess new passages for useful visuals
+before saving. If the response returns visual `issues`, add the selected diagrams
+or tables beside the named passages using the included syntax guidance and retry.
+A refused write creates no document or revision. Reuse its idempotency key and
+read the current revision before retrying an update. The deployment needs a
+decisions classifier for prose imports even when `AGENT=off`.
+
 Implementation remains experimental. A browser document can now use the
 [local launcher tracer](local-launcher.md): review prepared tasks, approve and
 build on an owner-paired ACP workspace, then watch task progress. That workflow

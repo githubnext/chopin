@@ -13,6 +13,7 @@ import * as Rooms from "../rooms";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { implementationGraphs } from "../tasks/plan-graphs";
 import { hosted } from "./hosted";
+import { deterministicChannelId } from "../channels/id";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
@@ -212,6 +213,61 @@ async function plan(context: ReturnType<typeof setup>) {
 }
 
 describe("the hosted MCP adapter", () => {
+	it("refuses an imported plan before creating its channel when selected visuals are missing", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let lease = (await context.storage.leases.acquire("writer", "visual-create", 60_000))!;
+		let issue = {
+			code: "visual-required",
+			path: "sources[0]",
+			message: "Add an architecture diagram.",
+		};
+		let blocked = true;
+		let adapter = hosted(context.auth, { lease: () => lease }, {
+			visualAdmission: async () => blocked ? [issue] : [],
+		});
+		let caller = (await adapter.caller(request("Bearer allowed")))!;
+		expect(await adapter.create!.create(caller, creation))
+			.toEqual({ kind: "visuals-required", issues: [issue] });
+		let id = deterministicChannelId("R_score", creation.idempotencyKey);
+		expect(await context.storage.channels.get(id)).toBeUndefined();
+		blocked = false;
+		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "created" });
+		blocked = true;
+		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
+	});
+
+	it("never recreates an import deleted after its durable replay was read", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let initial = hosted(context.auth);
+		let caller = (await initial.caller(request("Bearer allowed")))!;
+		let created = await initial.create!.create(caller, creation);
+		expect(created.kind).toBe("created");
+		let id = deterministicChannelId("R_score", creation.idempotencyKey);
+		let load = context.storage.collaboration.load;
+		let deleted = false;
+		context.storage.collaboration.load = async (channelId, now) => {
+			let snapshot = await load(channelId, now);
+			if (channelId === id && snapshot && !deleted) {
+				deleted = true;
+				await context.storage.channels.archive({ id, now });
+				await context.storage.channels.delete(id);
+			}
+			return snapshot;
+		};
+		let checks = 0;
+		let api = hosted(context.auth, undefined, {
+			visualAdmission: async () => {
+				checks++;
+				return [{ code: "E_VISUAL_REQUIRED", path: "sources[0]", message: "Add a diagram." }];
+			},
+		});
+		expect(await api.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
+		expect(await context.storage.channels.get(id)).toBeUndefined();
+		expect(checks).toBe(0);
+	});
+
 	it("offers invoke_planner in hosted and local configuration, passing the caller and any live login", async () => {
 		for (let local of [false, true]) {
 			let context = setup();
@@ -392,8 +448,10 @@ describe("the hosted MCP adapter", () => {
 		expect(await adapter.caller(request("Basic token"))).toBeUndefined();
 		expect(await adapter.caller(request(duplicate))).toBeUndefined();
 		expect(await adapter.caller(request("Bearer denied"))).toBeUndefined();
-		expect(await adapter.caller(request("Bearer allowed"))).toEqual({
+		let allowed = request("Bearer allowed");
+		expect(await adapter.caller(allowed)).toEqual({
 			oauthToken: "allowed",
+			signal: allowed.signal,
 			user: {
 				id: "U_allowed",
 				login: "allowed",

@@ -112,6 +112,40 @@ export function documentSnapshot(
 	});
 }
 
+/** Snapshot under the queue, assess outside it, then refuse any intervening edit. */
+export async function admitBlockEdit(
+	target: DocumentRoom,
+	args: { revision: number; operations: Parameters<typeof edit.apply>[2] },
+	signal?: AbortSignal,
+) {
+	if (signal?.aborted) return { ok: false as const, reason: "cancelled" };
+	if (!target.visualAdmission) return;
+	let snapshot = await target.exclusive(async () => {
+		if (signal?.aborted) return { ok: false as const, reason: "cancelled" };
+		if (implementationActive(target.plan)) return { ok: false as const, reason: "locked" };
+		let proposed = edit.prepare(target.plan, args.revision, args.operations);
+		if (!proposed.ok) return proposed;
+		return { ok: true as const, before: edit.source(target.plan), source: proposed.source };
+	});
+	if (!snapshot.ok) return snapshot;
+	if (signal?.aborted) return { ok: false as const, reason: "cancelled" };
+	let issues = await target.visualAdmission({
+		before: snapshot.before,
+		sources: [snapshot.source],
+		signal,
+	});
+	if (signal?.aborted) return { ok: false as const, reason: "cancelled" };
+	return target.exclusive(async () => {
+		if (signal?.aborted) return { ok: false as const, reason: "cancelled" };
+		if (implementationActive(target.plan)) return { ok: false as const, reason: "locked" };
+		if (args.revision !== target.plan.revision) {
+			let changed = edit.prepare(target.plan, args.revision, args.operations);
+			if (!changed.ok) return changed;
+		}
+		if (issues.length) return { ok: false as const, reason: "visuals-required", issues };
+	});
+}
+
 /**
  * Apply one structural batch to `target`'s document. Run it inside `target.exclusive`.
  *
@@ -120,8 +154,9 @@ export function documentSnapshot(
 export async function applyBlockEdit(
 	target: DocumentRoom,
 	args: { revision: number; operations: Parameters<typeof edit.apply>[2] },
-	options: { acting?: string; applied?: () => void } = {},
+	options: { acting?: string; applied?: () => void; signal?: AbortSignal } = {},
 ) {
+	if (options.signal?.aborted) return { ok: false as const, reason: "cancelled" };
 	if (implementationActive(target.plan)) return { ok: false as const, reason: "locked" };
 	let outcome = edit.apply(target.plan, args.revision, args.operations);
 	if (!outcome.ok) return outcome;
