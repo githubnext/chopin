@@ -45,6 +45,41 @@
 	line-height: var(--text-2xl--line-height);
 }
 
+/* The reason reads as the question's caption: close under it, then the control at its usual gap. */
+.question-page-why {
+	align-self: stretch;
+	margin: calc(var(--spacing) * 3) calc(var(--spacing) * -1.5) 0;
+	padding-inline: calc(var(--spacing) * 1.5);
+	min-height: var(--text-base--line-height);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+	color: var(--color-text-secondary);
+	overflow-wrap: anywhere;
+	text-size-adjust: 100%;
+}
+
+.question-page-why[data-editable] {
+	cursor: text;
+}
+
+.question-page-why[data-editable]:empty::before {
+	content: attr(data-placeholder);
+	color: var(--color-text-quaternary);
+}
+
+.question-page-why[data-editable]:hover,
+.question-page-why[data-editable]:focus {
+	background: var(--color-hover);
+}
+
+.question-page-why-error {
+	margin: var(--spacing) 0 0;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-danger-text);
+}
+
 .question-page-control {
 	align-self: stretch;
 	margin-block-start: calc(var(--spacing) * 6);

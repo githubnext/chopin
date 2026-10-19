@@ -44,6 +44,7 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionImmediately } from "./motion-input";
 import { NavigationDialog } from "./navigation-dialog";
 import { settledBy } from "./question-page-format";
+import { QuestionWhy } from "./question-why";
 
 import "./question-page.css";
 
@@ -316,6 +317,9 @@ export function QuestionPagePanel(
 				{parts ? <MarkdownLine text={parts.heading} /> : "Decision"}
 			</h1>
 			{parts?.body && <MarkdownBlocks place="page" text={parts.body} />}
+			{settled && (
+				<QuestionWhy canEdit={root.canEdit} id={entry.id} why={meta.why} wire={root.wire} />
+			)}
 			<div className="question-page-control">
 				<QuestionnaireCard
 					canEdit={root.canEdit}

@@ -80,6 +80,24 @@ test(
 		await expect(questionPage(ben)).toContainText("by ana");
 		await ana.screenshot({ path: info.outputPath("settled-page.png") });
 
+		let why = (page: Page) => questionPage(page).getByRole("textbox", { name: "Why" });
+		await expect(why(ana)).toHaveAttribute("data-placeholder", "Add a reason");
+		await expect(why(ana)).toHaveText("");
+		await why(ana).click();
+		await ana.keyboard.type("Inferring adds no second store.");
+		await ana.keyboard.press("Enter");
+		await expect(why(ben)).toHaveText("Inferring adds no second store.");
+		await why(ben).click();
+		await ben.keyboard.type(" Draft that is abandoned");
+		await ben.keyboard.press("Escape");
+		await expect(why(ben)).toHaveText("Inferring adds no second store.");
+		await expect(why(ana)).toHaveText("Inferring adds no second store.");
+		await why(ana).click();
+		await ana.keyboard.press(`${process.platform === "darwin" ? "Meta" : "Control"}+a`);
+		await ana.keyboard.press("Backspace");
+		await ana.keyboard.press("Enter");
+		await expect(why(ben)).toHaveText("");
+
 		await bar.getByRole("button", { name: "Reopen", exact: true }).click();
 		await expect(questionPage(ana).getByRole("textbox", { name: "Answer" })).toBeVisible();
 		await expect(questionPage(ana)).toContainText("Inferred from their documents.");

@@ -201,6 +201,10 @@ export function whyPrompt(input: ProsePromptInput): string {
 	return lines.join("\n");
 }
 
+function findingLine(finding: { title?: string; summary?: string }): string {
+	return [finding.title, finding.summary].filter(Boolean).join(": ");
+}
+
 export function proseInput(plan: Plan, id: string): ProsePromptInput {
 	let record = plan.records.get(id);
 	if (!record || !settleIntent(record)) throw new Error("decision is no longer saved");
@@ -220,10 +224,8 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 		)
 		.map(item => item.text) ?? [];
 	let ready = (record.findings ?? []).filter(finding => finding.status === "ready");
-	let line = (finding: (typeof ready)[number]) =>
-		[finding.title, finding.summary].filter(Boolean).join(": ");
-	let findings = ready.map(line).filter(Boolean);
-	let research = ready.filter(finding => finding.kind !== "ask").map(line).filter(Boolean);
+	let findings = ready.map(findingLine).filter(Boolean);
+	let research = ready.filter(finding => finding.kind !== "ask").map(findingLine).filter(Boolean);
 	let takes = ready.filter(finding => finding.kind === "ask" && finding.summary).map(finding =>
 		`${finding.stance ? `${finding.stance}: ` : ""}${finding.summary}`
 	);
