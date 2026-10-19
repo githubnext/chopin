@@ -2034,21 +2034,28 @@ textarea.question-written-field {
 	color: var(--color-text-tertiary);
 }
 
-.question-written-answer {
+.question-final-answer {
+	display: grid;
+	gap: var(--spacing);
 	margin: calc(var(--spacing) * 3) calc(var(--spacing) * 2) 0;
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+}
+
+.question-final-answer-label {
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
+.question-written-answer {
+	margin: 0;
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 	color: var(--color-text-primary);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-}
-
-.question-response-state {
-	flex: none;
-	padding-block: calc(var(--spacing) / 2);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	color: var(--color-text-tertiary);
 }
 
 .question-card[data-saving] .question-options {

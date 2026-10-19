@@ -55,9 +55,11 @@ test("recorded prose preserves newlines and context instead of showing a selecte
 		onReopen() {},
 	}));
 	expect(html).toContain('class="question-written-answer"');
+	expect(html).toContain('class="question-final-answer"');
+	expect(html).toContain(">Final answer<");
 	expect(html).toContain("Start small.\nThen explain.");
 	expect(html).toContain(definition.questions[0]!.description!);
-	expect(html).toContain(">Decided<");
+	expect(html).not.toContain(">Decided<");
 	expect(html).toContain(">Reopen<");
 	expect(html).not.toContain("Selected:");
 	expect(html).not.toContain("<textarea");

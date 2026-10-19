@@ -648,12 +648,14 @@ function Resolved(
 										</p>
 									)}
 								</div>
-								{question?.response === "text" && (
-									<span className="question-response-state">Decided</span>
-								)}
 							</header>
 							{question?.response === "text"
-								? <p className="question-written-answer">{answer.custom}</p>
+								? (
+									<div className="question-final-answer">
+										<span className="question-final-answer-label">Final answer</span>
+										<p className="question-written-answer">{answer.custom}</p>
+									</div>
+								)
 								: (
 									<div className="question-options">
 										{options.map((option, optionIndex) => {
