@@ -549,7 +549,7 @@ export function Workspace(
 												{index > 0 && <ChevronIcon aria-hidden="true" size={12} />}
 												{index === nested!.path.length - 1
 													? view === "plan"
-														? <span aria-current="page">{entry.label}</span>
+														? <span aria-current="page" className="truncate">{entry.label}</span>
 														: (
 															<button
 																aria-current="page"
