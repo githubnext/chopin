@@ -225,8 +225,10 @@ before the write is accepted. A successful prose judgment permits prose; there i
 no diagram quota. This applies to blank drafts, long requests, and imported plans
 without requiring `PLANNER_VISUALS`.
 
-Assessments run in bounded batches outside the room queue. Failed or uncertain
-assessments refuse the write; they do not silently select prose. Refusals identify
+Assessments run in bounded batches outside the room queue. Failed assessments,
+uncertain possibility or helpfulness judgments, and uncertain selections of no
+suitable type refuse the write; they do not silently select prose. When several
+native types compete, the selected type is still required and validated. Refusals identify
 the passage and required representation and include syntax guidance for repair.
 Successful assessments are cached by passage and context while diagrams are
 repaired. Unchanged prose with its existing visual is preserved. A concurrent edit

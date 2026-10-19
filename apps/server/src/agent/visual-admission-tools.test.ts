@@ -103,6 +103,54 @@ test("refuses new prose before mutation and accepts a visual repair in the same 
 	expect(sources[1]![0]).toContain("```seecode");
 });
 
+test("a draft with competing visual types can save prose and open its anchored decisions", async () => {
+	let setup = await fixture();
+	setup.room.visualAdmission = createVisualAdmission(async request => ({
+		model: "admission-test",
+		answers: Object.fromEntries(
+			Object.entries(request.questions).map(([key, question]) => [
+				key,
+				question.type === "choice"
+					? {
+						type: "choice" as const,
+						choice: "sequence",
+						confidence: 0.2,
+						probabilities: { sequence: 0.36, "data-flow": 0.34, architecture: 0.3 },
+					}
+					: { type: "noul" as const, noul: 0.9 },
+			]),
+		),
+		usage: { input_tokens: 1, output_tokens: 1 },
+		latencyMs: 1,
+	}));
+	let passage = "The client sends the request to the server, which responds to the client.";
+	expect((await setup.call(passage)).issues[0].code).toBe("E_VISUAL_REQUIRED");
+	let saved = await setup.call(
+		`${passage}\n\n\`\`\`seecode\n${JSON.stringify(visualExample("sequence"))}\n\`\`\``,
+	);
+	expect(saved.ok).toBe(true);
+	let block = saved.blocks.find((block: Edit.Block) => block.preview.includes(passage));
+	let result = await documentTools.open_decisions.execute!({
+		revision: saved.revision,
+		questions: [{
+			key: "dashboard-value",
+			header: "Useful curation",
+			question: "What would make a Today suggestion useful to you?",
+			response: "text",
+			options: [],
+			multiple: false,
+			blocks: [{ index: block.index, digest: block.digest }],
+		}],
+	}, { context: { room: setup.room }, toolCallId: "decisions", messages: [] } as never);
+	let captured = JSON.parse(result as string);
+	expect(captured.decisions).toHaveLength(1);
+	expect(captured.decisions[0].status).toBe("open");
+	let record = setup.room.plan.records.get(captured.decisions[0].id)!;
+	expect(record.followUp?.target).toHaveLength(2);
+	expect(Edit.source(setup.room.plan)).toContain(passage);
+	expect(Edit.source(setup.room.plan)).toContain(captured.decisions[0].id);
+});
+
 test.each(["before-assessment", "during-assessment", "before-apply"])(
 	"an edit cancelled %s never mutates or publishes",
 	async phase => {

@@ -103,6 +103,39 @@ test("a successful prose judgment accepts prose without a diagram quota", async 
 		.toEqual([]);
 });
 
+test("competing valid diagram types still require the selected visual and accept its repair", async () => {
+	let decide = classifier();
+	let admit = createVisualAdmission(async (request, options) => {
+		let result = await decide(request, options);
+		for (let answer of Object.values(result.answers)) {
+			if (answer.type === "choice") {
+				answer.confidence = 0.2;
+				answer.probabilities = { sequence: 0.36, "data-flow": 0.34, architecture: 0.3 };
+			}
+		}
+		return result;
+	});
+	expect((await admit({ sources: [passage] }))[0]).toMatchObject({
+		code: "E_VISUAL_REQUIRED",
+		message: expect.stringContaining("sequence"),
+	});
+	expect((await admit({ sources: [`${passage}\n\n${diagram("flowchart")}`] }))[0]!.code)
+		.toBe("E_VISUAL_REQUIRED");
+	expect(await admit({ sources: [`${passage}\n\n${diagram()}`] })).toEqual([]);
+});
+
+test.each(["none", "unknown"])("an uncertain %s selection never permits prose", async choice => {
+	let decide = classifier(choice);
+	let admit = createVisualAdmission(async (request, options) => {
+		let result = await decide(request, options);
+		for (let answer of Object.values(result.answers)) {
+			if (answer.type === "choice") answer.confidence = 0.2;
+		}
+		return result;
+	});
+	expect((await admit({ sources: [passage] }))[0]!.code).toBe("E_VISUAL_ASSESSMENT");
+});
+
 test("nested prose and complete lists reach assessment", async () => {
 	let requests: JevRequest[] = [];
 	let sources = [
