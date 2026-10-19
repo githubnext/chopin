@@ -4,9 +4,9 @@ anchor: function registerImplementationRoutes
 created: 2026-10-13T12:47:34Z
 norm: '1'
 sig: 70f1bffb7546c5a7
-body_hash: 92174f3b4333b82a
-raw_hash: 2d751fd16f482b80
-vouched: 2026-10-13T20:10:47Z
+body_hash: 535a37cfbb68e6ca
+raw_hash: 83b1220bbb93f4db
+vouched: 2026-10-19T11:55:21Z
 lines: 69-421
 ---
 

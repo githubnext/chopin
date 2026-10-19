@@ -4,8 +4,9 @@ anchor: function documentRoom
 created: 2026-10-15T09:40:01Z
 norm: '1'
 sig: 53e03244f155a74c
-body_hash: 33e8c1adbf6fdb2b
-raw_hash: 8c727ccaef738df7
+body_hash: c0324a612844d5ce
+raw_hash: 5ae749ff18c411c2
+vouched: 2026-10-19T11:55:21Z
 lines: 1609-1688
 ---
 
