@@ -82,8 +82,11 @@ export type ExploreResources = {
 	spikeUnavailable(): string | undefined;
 	/** People the viewer can ask, excluding themselves. */
 	people(): readonly string[];
-	/** Open the decision as its own page; absent where it cannot have one. */
-	openPage?(questionnaireId: string): void;
+	/**
+	 * Open the decision as its own document; absent where it cannot have one. Rejects with a message
+	 * to show when it cannot open. A reply made stale by a later call resolves without navigating.
+	 */
+	openPage?(questionnaireId: string): Promise<void>;
 	subscribe(listener: () => void): () => void;
 };
 

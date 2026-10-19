@@ -346,6 +346,7 @@ export function ResolvedLayer(
 		noResolved,
 	);
 	let [reopening, setReopening] = useState<{ key: string; error?: string }>();
+	let [pageError, setPageError] = useState<{ key: string; message: string }>();
 	let options = useCellValue(widgets$);
 	let entries = useQuestionnaires(store);
 	let relations = useRelations(store);
@@ -836,6 +837,7 @@ export function ResolvedLayer(
 					}
 					let decision = current.item.decision;
 					let error = actions.error?.key === decision.key ? actions.error.message : undefined;
+					error ??= pageError?.key === decision.key ? pageError.message : undefined;
 					let pending = actions.pending?.key === decision.key
 						? actions.pending.kind
 						: undefined;
@@ -867,7 +869,17 @@ export function ResolvedLayer(
 												aria-label="Expand decision"
 												className="btn btn-icon btn-ghost corner-bottom-start"
 												data-tooltip="Expand decision"
-												onClick={() => options.explore?.openPage?.(decision.widget)}
+												onClick={() => {
+													setPageError(undefined);
+													options.explore?.openPage?.(decision.widget).catch(failure =>
+														setPageError({
+															key: decision.key,
+															message: failure instanceof Error
+																? failure.message
+																: "Couldn’t open this decision",
+														})
+													);
+												}}
 												type="button"
 											>
 												<ExpandIcon aria-hidden="true" size={16} />

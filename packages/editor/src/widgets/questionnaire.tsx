@@ -22,7 +22,15 @@ import { Deck } from "../deck";
 import { leaveDeck } from "../deck-leave";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
-import { ExploreMenu, FindingsCount, shownFindings, waitingOn, WaitingStatus } from "./explore";
+import {
+	ExploreMenu,
+	FindingsCount,
+	shownFindings,
+	useOpenPage,
+	waitingOn,
+	WaitingStatus,
+} from "./explore";
+import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "../pointer";
 import { PendingAnswersContext } from "../save-bar";
@@ -377,7 +385,7 @@ function Undecided(
 	// Counted in the save bar only while the shared draft still says what this person chose.
 	let selections = useSelections(value.id);
 	let touched = stillMine(selections, state.drafts);
-	let openPage = explore?.openPage && (() => explore.openPage!(value.id));
+	let { open: openPage, error: pageError } = useOpenPage(explore, value.id);
 	let waiting = waitingOn(meta?.findings);
 	let question = value.questions[0];
 	let explorable = !!explore && !!wire && editable && value.questions.length === 1 && !!question;
@@ -492,6 +500,11 @@ function Undecided(
 				onPending={pending && (answers => pending.set(value.id, answers))}
 				{...pointing}
 			/>
+			{pageError && (
+				<div className="explore-notice">
+					<InlineNotice message={pageError} tone="danger" />
+				</div>
+			)}
 		</Shell>
 	);
 }

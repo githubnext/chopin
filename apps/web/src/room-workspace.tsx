@@ -60,7 +60,7 @@ import {
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
-import { useLiveMachines } from "./machine-summary";
+import { machines as machineStore, useLiveMachines } from "./machine-summary";
 import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
@@ -1325,8 +1325,9 @@ export function RoomWorkspace(
 	);
 	let investigationsEditable = !!workspaceCanEdit && status === "connected";
 	// Read through a ref so the editor keeps one stable set of resources while people come and go.
-	let exploreState = useRef({ cardMetadata, handle, members, ownsMachine, presentation, wire });
-	exploreState.current = { cardMetadata, handle, members, ownsMachine, presentation, wire };
+	let pageRequest = useRef(0);
+	let exploreState = useRef({ cardMetadata, handle, members, presentation, wire });
+	exploreState.current = { cardMetadata, handle, members, presentation, wire };
 	let explore = useMemo<ExploreResources | undefined>(() => {
 		if (!profile.research || !workspaceCanEdit) return undefined;
 		let people = () => {
@@ -1349,22 +1350,26 @@ export function RoomWorkspace(
 				await experiments.action(id, "run", {});
 			},
 			spikeUnavailable: () =>
-				exploreState.current.ownsMachine ? undefined : "No paired machine is online",
+				showsMachineChoice(machineStore.snapshot().machines)
+					? undefined
+					: "No paired machine is online",
 			people,
-			openPage: questionnaireId => {
+			openPage: async questionnaireId => {
 				let { presentation, wire } = exploreState.current;
 				if (!wire || presentation.type === "child") return;
-				let open = presentation.onChildOpen;
-				void wire.ask<Question.Explore.Paged>("question:page", { id: questionnaireId })
-					.then(reply => {
-						if (!reply.ok) return;
-						// A page opens over the document, so leave Decisions for it.
-						latestSelectDestination.current("plan");
-						return open?.(reply.childId);
-					})
-					.catch(error => console.error("[questions] could not open the decision:", error));
+				// Only the latest click may navigate; an older reply is dropped.
+				let request = ++pageRequest.current;
+				let reply = await wire.ask<Question.Explore.Paged>("question:page", { id: questionnaireId })
+					.catch(() => undefined);
+				if (request !== pageRequest.current) return;
+				if (!reply?.ok) {
+					throw new Error(reply?.message ?? "Couldn’t open this decision. Try again.");
+				}
+				// A page opens over the document, so leave Decisions for it.
+				latestSelectDestination.current("plan");
+				presentation.onChildOpen?.(reply.childId);
 			},
-			subscribe: () => () => {},
+			subscribe: listener => machineStore.watch(listener),
 		};
 	}, [experiments, profile.research, research, workspaceCanEdit]);
 	let investigations = useMemo<InvestigationResources>(() => ({
@@ -1473,6 +1478,19 @@ export function RoomWorkspace(
 			setResearchBusy(new Set(pendingResearchActions.current));
 		});
 	};
+	// Hooks stay above every early return: a live delete must render the same hooks.
+	let questionPageRoot = useMemo(
+		() => ({
+			entries,
+			metadata: cardMetadata,
+			wire,
+			explore,
+			self: handle,
+			canEdit: !!workspaceCanEdit,
+			connected: status === "connected",
+		}),
+		[cardMetadata, entries, explore, handle, status, wire, workspaceCanEdit],
+	);
 	if (deleted) {
 		return (
 			<div className="flex h-full items-center justify-center bg-ground p-4 text-sm text-text-secondary">
@@ -1623,18 +1641,6 @@ export function RoomWorkspace(
 		room,
 	};
 
-	let questionPageRoot = useMemo(
-		() => ({
-			entries,
-			metadata: cardMetadata,
-			wire,
-			explore,
-			self: handle,
-			canEdit: !!workspaceCanEdit,
-			connected: status === "connected",
-		}),
-		[cardMetadata, entries, explore, handle, status, wire, workspaceCanEdit],
-	);
 	if (presentation.type === "child") {
 		let childTitleControl = (
 			<DocumentTitle

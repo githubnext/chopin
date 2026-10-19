@@ -143,6 +143,25 @@ export function FindingsCount(
 	);
 }
 
+/** Opens a decision's own document and holds the message to show when that fails. */
+export function useOpenPage(
+	explore: ExploreResources | undefined,
+	id: string,
+): { open?: () => void; error?: string } {
+	let [error, setError] = useState<string>();
+	let openPage = explore?.openPage;
+	if (!openPage) return {};
+	return {
+		open: () => {
+			setError(undefined);
+			openPage(id).catch(failure =>
+				setError(failure instanceof Error ? failure.message : "Couldn’t open this decision")
+			);
+		},
+		error,
+	};
+}
+
 type Section = "research" | "spike" | "ask";
 
 /** Folds open inside the popover; collapsed content is inert so focus never lands in it. */
@@ -214,17 +233,27 @@ export function ExploreMenu(
 		}
 	};
 	let brief = () => exploreBrief(question, options, focus);
+	// One attempt keeps its key, and the work it already started, until it succeeds, so a retry after
+	// a failed `question:explore` records the same work instead of starting more.
+	let attempt = useRef<{ kind: Section; key: string; ref?: string; started?: boolean }>(undefined);
+	let begin = (kind: Section) => {
+		if (attempt.current?.kind !== kind) attempt.current = { kind, key: crypto.randomUUID() };
+		return attempt.current;
+	};
 	let research = () =>
 		run(async () => {
-			let key = crypto.randomUUID();
-			let ref = await resources.research(brief(), key);
-			await record({ key, action: "research", ref, focus });
+			let current = begin("research");
+			current.ref ??= await resources.research(brief(), current.key);
+			await record({ key: current.key, action: "research", ref: current.ref, focus });
+			attempt.current = undefined;
 		});
 	let spike = () =>
 		run(async () => {
-			let key = crypto.randomUUID();
-			await resources.spike(brief(), key);
-			await record({ key, action: "spike", focus });
+			let current = begin("spike");
+			if (!current.started) await resources.spike(brief(), current.key);
+			current.started = true;
+			await record({ key: current.key, action: "spike", focus });
+			attempt.current = undefined;
 		});
 	let ask = (login: string) =>
 		run(() => record({ key: crypto.randomUUID(), action: "ask", login, focus }));
