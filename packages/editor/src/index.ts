@@ -109,9 +109,13 @@ export {
 export type { InvestigationCardProps } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
 export {
+	ExploreMenu,
 	FindingIcon,
 	findingLine,
 	findingMeta,
 	runningFindings,
+	waitingNames,
 	waitingOn,
+	WaitingStatus,
 } from "./widgets/explore";
+export { useQuestionPageDraft } from "./widgets/questionnaire";

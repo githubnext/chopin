@@ -71,6 +71,8 @@ export type QuestionViewProps = {
 	previous?: PreviousAnswer | Record<string, PreviousAnswer>;
 	refining?: boolean;
 	showActions?: boolean;
+	/** Only the options or written answer: no head and no footer, for a host that owns both. */
+	bare?: boolean;
 	onCancel?: () => void;
 	/**
 	 * Append an option for everyone. Absent where the viewer may not write; the
@@ -800,6 +802,7 @@ export function QuestionView(props: QuestionViewProps) {
 		previous: priorAnswers,
 		refining,
 		showActions = false,
+		bare = false,
 		onAddOption,
 		disabled = false,
 		submitting = false,
@@ -1123,48 +1126,55 @@ export function QuestionView(props: QuestionViewProps) {
 							}
 						}}
 					>
-						<header className="question-head" data-refining={refining ? "true" : undefined}>
-							<span className="question-mark" title="Decision">
-								<DecisionIcon />
-							</span>
-							<div className="question-head-text">
-								<h4 className="question-title" id={titleId}>
-									<Related
-										id={current.id}
-										count={places?.[current.id] ?? 0}
-										label={plainInlineText(current.question)}
-										className="question-title-link"
-										inline
-										onSelect={onQuestionSelect}
-									>
-										<InlineCode text={current.question} />
-									</Related>
-								</h4>
-								{current.description && (
-									<p className="question-hint">
-										<InlineCode text={current.description} />
-									</p>
-								)}
-								{current.multiple && <p className="question-hint">Choose any</p>}
-								{previousAnswer && (
-									<p className="question-hint">
-										Previously chosen by @{previousAnswer.by}:{" "}
-										{plainInlineList(previousAnswer.labels)}
-									</p>
-								)}
-								{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
-							</div>
-							<span className="question-head-actions">
-								<Presence
-									people={collaborators.filter(person =>
-										person.question === current.id
+						{!bare && (
+							<header className="question-head" data-refining={refining ? "true" : undefined}>
+								<span className="question-mark" title="Decision">
+									<DecisionIcon />
+								</span>
+								<div className="question-head-text">
+									<h4 className="question-title" id={titleId}>
+										<Related
+											id={current.id}
+											count={places?.[current.id] ?? 0}
+											label={plainInlineText(current.question)}
+											className="question-title-link"
+											inline
+											onSelect={onQuestionSelect}
+										>
+											<InlineCode text={current.question} />
+										</Related>
+									</h4>
+									{current.description && (
+										<p className="question-hint">
+											<InlineCode text={current.description} />
+										</p>
 									)}
-									render={renderPeople}
-								/>
-								{headerActions}
-							</span>
-						</header>
+									{current.multiple && <p className="question-hint">Choose any</p>}
+									{previousAnswer && (
+										<p className="question-hint">
+											Previously chosen by @{previousAnswer.by}:{" "}
+											{plainInlineList(previousAnswer.labels)}
+										</p>
+									)}
+									{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
+								</div>
+								<span className="question-head-actions">
+									<Presence
+										people={collaborators.filter(person =>
+											person.question === current.id
+										)}
+										render={renderPeople}
+									/>
+									{headerActions}
+								</span>
+							</header>
+						)}
 
+						{bare && previousAnswer && (
+							<p className="question-hint">
+								Previously chosen by @{previousAnswer.by}: {plainInlineList(previousAnswer.labels)}
+							</p>
+						)}
 						<fieldset disabled={disabled} className="question-options" ref={options}>
 							<legend className="sr-only">{current.header}</legend>
 							{written
@@ -1229,7 +1239,7 @@ export function QuestionView(props: QuestionViewProps) {
 				/>
 			)}
 
-			{(onSubmit || discard || multiple || showActions || footerActions) && (
+			{!bare && (onSubmit || discard || multiple || showActions || footerActions) && (
 				<footer
 					className="question-actions"
 					data-confirm={discard && confirming ? "" : undefined}

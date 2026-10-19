@@ -9,6 +9,7 @@
 
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
+import { answered } from "@chopin/question";
 import { ChevronIcon, DecisionIcon, ExpandIcon, MessageForwardIcon } from "@chopin/icons";
 import { cardRelation, NOT_LINKED, QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
@@ -387,6 +388,7 @@ function Undecided(
 			padded={false}
 		>
 			<QuestionView
+				bare={page}
 				headerActions={
 					<>
 						<EvidenceTrigger />
@@ -490,6 +492,36 @@ function Undecided(
 			/>
 		</Shell>
 	);
+}
+
+/**
+ * The shared draft of an open decision, for chrome outside its card. The controller is shared
+ * per connection and decision, so this reads the same draft the control on the page edits.
+ */
+export function useQuestionPageDraft(
+	{ canEdit, connected, value, wire }: {
+		canEdit: boolean;
+		connected: boolean;
+		value: Questionnaire;
+		wire?: Transport;
+	},
+) {
+	let state = useQuestionnaire({
+		id: value.id,
+		bridge: wire,
+		connected: connected && canEdit,
+		definition: definition(value),
+	});
+	let item = (state.definition ?? definition(value)).questions[0];
+	let editable = canEdit && connected && !!state.definition;
+	return {
+		editable,
+		error: state.error,
+		ready: !!item && answered(item, state.drafts[item.id]),
+		save: () => state.submit(),
+		submitting: state.submitting,
+		syncing: state.syncing,
+	};
 }
 
 /** The answer control of a decision's own page: the card's content with no box around it. */
