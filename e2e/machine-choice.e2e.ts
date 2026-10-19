@@ -323,7 +323,8 @@ test("a phone's Machine sheet keeps a long machine name inside its rows", async 
 		};
 	});
 	expect(measured.scroll).toBeLessThanOrEqual(measured.client);
-	expect(measured.rights.length).toBeGreaterThanOrEqual(4);
+	// The one machine's row and its state.
+	expect(measured.rights.length).toBeGreaterThanOrEqual(2);
 	for (let right of measured.rights) expect(right).toBeLessThanOrEqual(390);
 	await shoot(page, "phone-sheet-long-name");
 	await row.tap();
