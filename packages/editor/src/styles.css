@@ -6045,6 +6045,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-brand-ink);
 }
 
+.explore-count svg {
+	--color-icon: var(--color-brand-ink);
+	color: var(--color-brand-ink);
+}
+
 button.explore-count:is(:hover, :focus-visible) {
 	filter: brightness(0.97);
 }

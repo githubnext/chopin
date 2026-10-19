@@ -10,6 +10,15 @@
 	line-height: var(--text-sm--line-height);
 }
 
+/* Without actions, the icon sits on the first line of a message that may wrap. */
+.cv-inline-notice:not(:has(.cv-inline-notice-actions)) {
+	align-items: flex-start;
+
+	& .cv-inline-notice-icon {
+		translate: 0 calc(0.5lh - 50%);
+	}
+}
+
 .cv-inline-notice-icon {
 	--color-icon: var(--cv-semantic-icon);
 	width: var(--icon-size-default);
