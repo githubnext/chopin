@@ -103,9 +103,9 @@ import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
 import { demoRoster } from "./demo/roster";
 import {
+	researchJobSettles,
 	ResearchWorkspaceError,
 	ResearchWorkspaceService,
-	researchJobSettles,
 } from "./research/service";
 import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";

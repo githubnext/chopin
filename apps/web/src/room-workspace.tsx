@@ -1346,7 +1346,9 @@ export function RoomWorkspace(
 				found.push(login);
 			};
 			// A demo persona's handle is its roster id; the server checks it against the roster.
-			for (let member of members) if (!member.actor || member.handle.startsWith("demo:")) add(member.handle);
+			for (let member of members) {
+				if (!member.actor || member.handle.startsWith("demo:")) add(member.handle);
+			}
 			for (let card of cardMetadata.values()) card.involved.forEach(add);
 			return found;
 		};

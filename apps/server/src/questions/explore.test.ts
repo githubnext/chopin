@@ -690,15 +690,16 @@ test("stopping an investigation that already failed settles it failed", async ()
 
 test("a demo persona can be asked only when the roster has it, and replies as itself", async () => {
 	let context = await opened();
-	let ask = (login: string) => ({
-		kind: "question:explore",
-		ts: 0,
-		rid: "r",
-		id: context.id,
-		key: KEY,
-		action: "ask",
-		login,
-	}) as const;
+	let ask = (login: string) =>
+		({
+			kind: "question:explore",
+			ts: 0,
+			rid: "r",
+			id: context.id,
+			key: KEY,
+			action: "ask",
+			login,
+		}) as const;
 	let { ws, frames } = member("ana");
 	let roster = (id: string) => id === "demo:lily";
 	await Explore.explore(
