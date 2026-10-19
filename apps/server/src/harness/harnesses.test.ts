@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { workflowJournal } from "./atomic/workspace";
 import { harnesses, harnessFor, registerCredential, shutdownHarnesses } from "./harnesses";
 
 afterEach(shutdownHarnesses);
@@ -60,20 +61,22 @@ it("journals Atomic workflow runs in Chopin's state directory unless the operato
 	let state = join(tmpdir(), `chopin-state-${crypto.randomUUID()}`);
 	let restore = (name: string, value: string | undefined) =>
 		value === undefined ? delete process.env[name] : process.env[name] = value;
-	let journal = (): string | undefined => process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
 	try {
 		process.env.XDG_STATE_HOME = state;
 		delete process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
-		harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" });
 		if (process.platform === "linux") {
-			expect(journal()).toBe(join(state, "chopin", "atomic", "workflows.sqlite"));
+			expect(workflowJournal()).toBe(join(state, "chopin", "atomic", "workflows.sqlite"));
 		}
+		// Each Planner session is given its journal; the process environment is left alone.
+		harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" });
+		expect(process.env.ATOMIC_WORKFLOW_JOURNAL_PATH).toBeUndefined();
 		await shutdownHarnesses();
-		expect(journal()).toBeUndefined();
 
 		process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = "/srv/atomic/runs.sqlite";
+		expect(workflowJournal()).toBe("/srv/atomic/runs.sqlite");
 		harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "0.0.0.0" });
-		expect(journal()).toBe("/srv/atomic/runs.sqlite");
+		await shutdownHarnesses();
+		expect(process.env.ATOMIC_WORKFLOW_JOURNAL_PATH).toBe("/srv/atomic/runs.sqlite");
 	} finally {
 		await shutdownHarnesses();
 		restore("XDG_STATE_HOME", previous.state);

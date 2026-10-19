@@ -612,7 +612,9 @@ workflow journal, so runs interrupted that way can be resumed from a later
 session. Chopin keeps that journal at
 `$XDG_STATE_HOME/chopin/atomic/workflows.sqlite` under the same per-user state
 directory as the documents' own directories, because a run resumes only with
-the journal and working directory it started in. A non-empty
+the journal and working directory it started in. Each Planner session is
+given that file through Atomic's `createAgentSession({ journal })`, so the
+server's process environment is left unchanged. An operator's non-empty
 `ATOMIC_WORKFLOW_JOURNAL_PATH` names another file instead; Atomic's
 `workflows.journal` setting is not used for Planner sessions. A Build is not a workflow run and has no card in Chat: its tasks, their
 state and pull requests show under **Build**, whichever machine runs it. The

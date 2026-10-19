@@ -53,10 +53,12 @@ export function stateDirectory(): string {
 /**
  * Where Planner sessions journal their workflow runs. A run resumes only with
  * the journal and working directory it started with, so the journal lives
- * beside the channel directories rather than in Atomic's own home.
+ * beside the channel directories rather than in Atomic's own home. An
+ * operator's non-empty `ATOMIC_WORKFLOW_JOURNAL_PATH` still names the file.
  */
 export function workflowJournal(): string {
-	return join(stateDirectory(), "atomic", "workflows.sqlite");
+	return process.env.ATOMIC_WORKFLOW_JOURNAL_PATH
+		|| join(stateDirectory(), "atomic", "workflows.sqlite");
 }
 
 /**

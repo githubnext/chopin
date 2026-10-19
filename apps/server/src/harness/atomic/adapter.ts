@@ -156,9 +156,9 @@ export type AtomicSettings = {
 	extensions?: readonly string[];
 	/**
 	 * The SQLite file the workflows of Planner sessions are journaled in, in place
-	 * of Atomic's default beside its agent directory. Atomic reads the journal
-	 * location only from `ATOMIC_WORKFLOW_JOURNAL_PATH` and the on-disk settings,
-	 * so the adapter sets that variable until it shuts down.
+	 * of Atomic's default beside its agent directory. Each Planner session is given
+	 * it through `createAgentSession({ journal })`, which takes precedence over
+	 * `ATOMIC_WORKFLOW_JOURNAL_PATH`; the process environment is left unchanged.
 	 */
 	journal?: string;
 };
@@ -472,8 +472,6 @@ export function createAtomicAdapter(
 	}
 	let runtime: Promise<ModelRuntime> | undefined;
 	let open = new Set<HarnessV1Session>();
-	let journal = process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
-	if (settings.journal) process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = settings.journal;
 
 	return {
 		specificationVersion: "harness-v1",
@@ -660,6 +658,7 @@ export function createAtomicAdapter(
 						builtins: full ? undefined : BUILTINS_OFF,
 						tools: full ? undefined : [...hostNames, ATOMIC_RESULT_TOOL_NAME],
 						extensionBindings: full ? { humanInput: full.humanInput } : undefined,
+						journal: full && settings.journal ? { path: settings.journal } : undefined,
 						customTools: turn.tools.map(hostTool),
 					});
 					let session = created.session;
@@ -838,9 +837,6 @@ export function createAtomicAdapter(
 
 		async shutdown() {
 			await Promise.allSettled([...open].map(session => session.doDestroy()));
-			if (!settings.journal) return;
-			if (journal === undefined) delete process.env.ATOMIC_WORKFLOW_JOURNAL_PATH;
-			else process.env.ATOMIC_WORKFLOW_JOURNAL_PATH = journal;
 		},
 	};
 }

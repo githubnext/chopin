@@ -22,7 +22,7 @@ function createAtomicHarness(
 	return createAtomicAdapter({
 		auth: settings.auth as AtomicAuthMode,
 		extensions: settings.extensions,
-		journal: process.env.ATOMIC_WORKFLOW_JOURNAL_PATH || workflowJournal(),
+		journal: workflowJournal(),
 	});
 }
 

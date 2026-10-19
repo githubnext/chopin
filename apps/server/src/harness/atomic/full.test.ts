@@ -320,6 +320,7 @@ export default workflow({
 					operator: await Bun.file(join(agentDir, "settings.json")).exists(),
 					journal: await Bun.file(journal).exists(),
 					defaultJournal: await Bun.file(join(root, "workflows", "journal.sqlite")).exists(),
+					environment: process.env.ATOMIC_WORKFLOW_JOURNAL_PATH,
 					project: projectPackage
 						? await Bun.file(join(cwd, ".atomic", "settings.json")).text()
 						: undefined,
@@ -531,8 +532,10 @@ test(
 			expect(stage.toolNames).toContain("write");
 			expect(stage.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
 			expect(stage.system).not.toContain("CHOPIN-INSTRUCTIONS-MARKER");
-			// The run is journaled where Chopin chose, not in Atomic's default beside its agent directory.
+			// The run is journaled where Chopin chose, not in Atomic's default beside its agent directory,
+			// and through the session rather than the process-wide environment variable.
 			expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
+			expect(result.files?.environment).toBeUndefined();
 		} finally {
 			if (environment !== undefined) process.env.NODE_ENV = environment;
 			await room.close();
