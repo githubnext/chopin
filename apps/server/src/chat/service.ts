@@ -31,6 +31,7 @@ import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
+import { settledStages } from "@chopin/protocol/run-stages";
 
 import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
@@ -56,6 +57,7 @@ import type { Config } from "../config";
 import type { Decide } from "../conversation-plan/decisions";
 import type { JevRequest } from "../conversation-plan/jev";
 import type { HostedAuth } from "../auth/routes";
+import type { PutRunStages } from "../storage/model";
 import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
 import type { Plan } from "../plan/service";
@@ -1449,6 +1451,77 @@ export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefine
 	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
 }
 
+/** The latest stages a run card carries; every stage is stored, and Chat pages in the rest. */
+const CARD_STAGES = 12;
+
+/** What storage holds for each run reported to this chat: stage ids in order, and each as JSON. */
+const storedStages = new WeakMap<Chat, Map<string, { ids: string[]; json: Map<string, string> }>>();
+
+/**
+ * Stores every stage of the reported cards before their window is shown, once a run has more
+ * than its card carries. A report that only adds and changes stages writes those; one that drops
+ * or reorders stages replaces the run's.
+ */
+function storeStages(context: Room, cards: Wire.Run[]): Promise<void> | undefined {
+	let known = storedStages.get(context.chat)
+		?? new Map<string, { ids: string[]; json: Map<string, string> }>();
+	storedStages.set(context.chat, known);
+	let writes: Array<
+		{ card: Wire.Run; ids: string[]; json: Map<string, string>; put: PutRunStages }
+	> = [];
+	for (let card of cards) {
+		let before = known.get(card.id);
+		// The card itself keeps a run that has never outgrown it.
+		if (!before && card.stages.length <= CARD_STAGES && !card.earlierStages) continue;
+		let ids = card.stages.map(stage => stage.id);
+		let json = new Map(card.stages.map(stage => [stage.id, JSON.stringify(stage)]));
+		let appends = before !== undefined && before.ids.length <= ids.length
+			&& before.ids.every((id, index) => ids[index] === id) && json.size === ids.length;
+		let stages = appends
+			? card.stages.filter(stage => before!.json.get(stage.id) !== json.get(stage.id))
+			: card.stages;
+		if (appends && !stages.length) continue;
+		let put = {
+			channelId: context.room,
+			runId: card.id,
+			stages,
+			...(appends ? {} : { replace: true }),
+		};
+		writes.push({ card, ids, json, put });
+	}
+	// Nothing to write leaves publication on the same tick.
+	if (!writes.length) return undefined;
+	return (async () => {
+		for (let { card, ids, json, put } of writes) {
+			await context.auth.storage.runStages.put(put);
+			known.set(card.id, { ids, json });
+		}
+	})();
+}
+
+/** A card as Chat shows it: its latest stages, settled against every earlier one, and a count of the rest. */
+function cardWindow(run: Wire.Run): Wire.Run {
+	if (run.stages.length <= CARD_STAGES) return run;
+	let earlier = run.stages.length - CARD_STAGES;
+	return {
+		...run,
+		stages: settledStages(run.stages).slice(earlier),
+		earlierStages: earlier + (run.earlierStages ?? 0),
+	};
+}
+
+/** Forgets the stored stages of runs Chat no longer shows. */
+async function forgetStages(context: Room, shown: Wire.Run[] | undefined): Promise<void> {
+	let ids = (shown ?? []).map(run => run.id);
+	let known = storedStages.get(context.chat);
+	for (let id of known?.keys() ?? []) if (!ids.includes(id)) known!.delete(id);
+	try {
+		await context.auth.storage.runStages.retain(context.room, ids);
+	} catch (err) {
+		console.error("[chat] forgetting workflow run stages failed:", err);
+	}
+}
+
 const publishing = new WeakMap<Chat, Promise<void>>();
 const owners = new WeakMap<Chat, Map<string, PlannerSession>>();
 const unsaved = new WeakMap<PlannerSession, Runs>();
@@ -1526,8 +1599,10 @@ async function publishReport(
 		}
 		finished.push({ id: ulid(), author: { kind: "system" }, text: said, ts: now() });
 	}
-	let next = cards.length ? cards : undefined;
+	let next = cards.length ? cards.map(cardWindow) : undefined;
 	try {
+		let storing = storeStages(context, runs?.cards ?? []);
+		if (storing) await storing;
 		await context.persist(() => ({ entries: [...chat.entries, ...finished], runs: next }));
 	} catch (err) {
 		console.error("[chat] storing workflow runs failed:", err);
@@ -1540,6 +1615,7 @@ async function publishReport(
 	chat.runs = next;
 	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
+	if (prior.some(run => !shown.has(run.id))) await forgetStages(context, next);
 	for (let { run, said } of attention) await followUpEndedRun(context, run, said);
 }
 

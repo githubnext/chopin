@@ -7,7 +7,15 @@
  * nobody is silenced because a colleague prompted first.
  */
 
-import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useReducer,
+	useRef,
+	useState,
+} from "react";
 
 import {
 	CONNECTION_GRACE,
@@ -67,6 +75,7 @@ import {
 	withNoticesAfter,
 } from "./references";
 import { RunStack } from "./run-card";
+import { runStages } from "../api";
 import { Transcript } from "./transcript";
 import { initialTranscript, transcriptReducer } from "./transcript-state";
 import type { TranscriptDecisions } from "./transcript";
@@ -230,6 +239,11 @@ export function Chat(
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
+	let loadStages = useCallback(
+		(runId: string, page: { offset: number; limit: number }, signal: AbortSignal) =>
+			runStages(room, runId, page, signal),
+		[room],
+	);
 	let [participation, setParticipation] = useState<{
 		room: string;
 		wire: Socket;
@@ -727,6 +741,7 @@ export function Chat(
 			{agent && !!runs?.length && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
 					<RunStack
+						loadStages={loadStages}
 						onPause={runId =>
 							wire?.send("chat:pause-run", { runId })}
 						onResume={runId =>

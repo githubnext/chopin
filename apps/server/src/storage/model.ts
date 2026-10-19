@@ -34,6 +34,35 @@ export type StoredImage = {
 
 export type PutImage = Omit<StoredImage, "size" | "createdAt"> & { now: Date };
 
+/** One stage of a workflow run whose card Chat shows, as its run last reported it. */
+export type RunStageRecord = {
+	id: string;
+	name: string;
+	parentIds?: string[];
+	kind?: "tool";
+	status:
+		| "pending"
+		| "running"
+		| "awaiting_input"
+		| "paused"
+		| "blocked"
+		| "completed"
+		| "failed"
+		| "skipped"
+		| "stopped";
+	/** Seconds since the epoch. */
+	started?: number;
+	ended?: number;
+};
+
+export type PutRunStages = {
+	channelId: string;
+	runId: string;
+	stages: RunStageRecord[];
+	/** The run keeps only these stages, in this order, instead of adding them to its own. */
+	replace?: boolean;
+};
+
 /**
  * One editing session in a document's history and the source it left behind.
  * Consecutive edits by the same author within the idle gap extend one session.

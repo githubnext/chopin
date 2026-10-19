@@ -15,6 +15,19 @@ export const AGENT_PATH = "/api/v1/agent";
  */
 export const AGENT_SUBPROTOCOL = "chopin.agent.v1";
 
+/**
+ * Optional features a client may ask for on the upgrade request's `Chopin-Agent-Features`
+ * header. A server answers `attached` with the ones it supports in `features`, and only when the
+ * request carried the header, so a client that never asks never sees the field.
+ */
+export const AGENT_FEATURES = {
+	/** `runs` cards may carry `stagesDelta: true` with only new and changed stages, uncounted. */
+	runStageDeltas: "run-stage-deltas",
+} as const;
+
+/** The upgrade request header naming the features a client asks for, comma-separated. */
+export const AGENT_FEATURES_HEADER = "chopin-agent-features";
+
 /** The largest message either side may send, in UTF-8 bytes. */
 export const MAX_LINK_MESSAGE_BYTES = 2 * 1024 * 1024;
 
@@ -185,18 +198,29 @@ const runStage = z.strictObject({
 	ended: seconds.optional(),
 });
 
-/** A workflow run card, as Chat shows it. */
-export const runSchema = z.strictObject({
+const runFields = {
 	id,
 	name: z.string().max(MAX_NOTE),
 	status: z.enum(["running", "waiting", "paused", "finished", "blocked", "failed", "stopped"]),
 	started: seconds,
 	updated: seconds,
 	ended: seconds.optional(),
-	stages: z.array(runStage).max(MAX_STAGES),
-	earlierStages: count.optional(),
 	waiting: count,
-});
+};
+
+/**
+ * A workflow run card, as Chat shows it. A full card's `stages` replace the run's, at most 64,
+ * with `earlierStages` counting those it leaves out. A delta card (`stagesDelta: true`) adds
+ * new stages and replaces changed ones by id, keeping the rest; only the frame bounds how many.
+ */
+export const runSchema = z.union([
+	z.strictObject({
+		...runFields,
+		stages: z.array(runStage).max(MAX_STAGES),
+		earlierStages: count.optional(),
+	}),
+	z.strictObject({ ...runFields, stagesDelta: z.literal(true), stages: z.array(runStage) }),
+]);
 
 const checkout = z.strictObject({
 	origin: z.string().max(2_048).optional(),
@@ -306,6 +330,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 			repository: z.string().max(2 * MAX_NAME + 1),
 			url: z.string().max(2_048).optional(),
 		}),
+		features: z.array(identifier).max(16).optional(),
 	}),
 	z.strictObject({ type: z.literal("refused"), code: refusalCodeSchema, message: note }),
 	z.strictObject({

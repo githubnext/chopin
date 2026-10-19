@@ -14,7 +14,12 @@
  * token and no browser sign-in (see `machine-planners.ts`).
  */
 
-import { AGENT_SUBPROTOCOL, LINK_CLOSE } from "@chopin/agent-link";
+import {
+	AGENT_FEATURES,
+	AGENT_FEATURES_HEADER,
+	AGENT_SUBPROTOCOL,
+	LINK_CLOSE,
+} from "@chopin/agent-link";
 
 import { AdmissionDenied } from "../../auth/admission";
 import { documentUrl } from "../../channels/document-url";
@@ -49,6 +54,8 @@ export type AgentSocketData = {
 	caller: HostedCaller;
 	/** Set when the bearer was a paired machine's Planner credential rather than a GitHub token. */
 	machine?: MachineGrant & { planners: MachinePlanners };
+	/** The features the upgrade asked for that this server supports; absent when it asked for none. */
+	features?: string[];
 	link?: AgentLink;
 	/** The link's liveness: any frame from the client is `heard`; `stop` ends its pings. */
 	alive?: { heard(): void; stop(): void };
@@ -105,6 +112,16 @@ function offersSubprotocol(request: Request): boolean {
 	return offered.split(",").some(protocol => protocol.trim() === AGENT_SUBPROTOCOL);
 }
 
+const SUPPORTED_FEATURES = new Set<string>(Object.values(AGENT_FEATURES));
+
+/** The supported features the request's `Chopin-Agent-Features` header names, if it has one. */
+function requestedFeatures(request: Request): { features?: string[] } {
+	let header = request.headers.get(AGENT_FEATURES_HEADER);
+	if (header === null) return {};
+	let named = new Set(header.split(",").map(feature => feature.trim()));
+	return { features: [...SUPPORTED_FEATURES].filter(feature => named.has(feature)) };
+}
+
 function subprotocolRequired(): Response {
 	return Response.json(
 		{ code: "subprotocol-required", supported: [AGENT_SUBPROTOCOL] },
@@ -150,11 +167,13 @@ export async function admitAgent(
 					user: { id: grant.machine.userId, login: user?.login ?? "", avatarUrl: "" },
 				},
 				machine: { ...grant, planners: planners! },
+				...requestedFeatures(request),
 			};
 		}
 		return {
 			agentLink: true,
 			caller: { oauthToken: token, user: await auth.admission.user(token) },
+			...requestedFeatures(request),
 		};
 	} catch (err) {
 		if (err instanceof MachineError) return refusal(401, "unauthorized");
@@ -180,6 +199,7 @@ export function agentLink(
 	socket: LinkSocket,
 	hooks: AgentHooks,
 	machine?: AgentSocketData["machine"],
+	features?: string[],
 ): AgentLink {
 	let channelId: string | undefined;
 	let link: AgentLink;
@@ -257,6 +277,7 @@ export function agentLink(
 		register: hooks.register,
 		timeoutMs: hooks.timeoutMs,
 		revalidateEveryMs: hooks.revalidateEveryMs,
+		features,
 	});
 	return link;
 }
@@ -285,6 +306,7 @@ export function openAgentSocket(
 		},
 		hooks,
 		ws.data.machine,
+		ws.data.features,
 	);
 	ws.data.link = link;
 	// A network that silently goes away sends no FIN or RST. Bun's server-wide

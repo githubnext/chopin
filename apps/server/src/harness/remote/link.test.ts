@@ -928,6 +928,90 @@ describe("Agent connection protocol", () => {
 		expect(reports).toHaveLength(2);
 	});
 
+	it("names the features a client asked for in attached, and nothing for a client that did not ask", async () => {
+		let { server, channel } = await setup();
+		for (
+			let [header, features] of [
+				[undefined, undefined],
+				["run-stage-deltas", ["run-stage-deltas"]],
+				["future-thing, run-stage-deltas", ["run-stage-deltas"]],
+				["future-thing", []],
+			] as const
+		) {
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			let attached = await raw.next("attached");
+			expect(attached.features).toEqual(features);
+			expect("features" in attached).toBe(features !== undefined);
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
+	});
+
+	it("merges stage deltas into a run's stages, and a full card replaces them", async () => {
+		let { server, channel, client } = await setup({});
+		expect(client.features).toEqual(["run-stage-deltas"]);
+		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+		let session = await adapterFor(server, planner).doStart({
+			sessionId: "deltas",
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		cleanups.push(() => session.doDestroy());
+		let card = {
+			id: "run",
+			name: "plan",
+			status: "running" as const,
+			started: 1,
+			updated: 1,
+			waiting: 0,
+		};
+		let many = Array.from({ length: 500 }, (_, index) => ({
+			id: `s${index}`,
+			name: `stage ${index}`,
+			status: "completed" as const,
+		}));
+		let report = async (cards: Parameters<typeof client.reportRuns>[1]["cards"]) => {
+			client.reportRuns("deltas", { active: ["run"], paused: [], cards });
+			await Bun.sleep(30);
+			return planner.runs?.cards[0];
+		};
+		await report([{ ...card, stagesDelta: true, stages: many }]);
+		let merged = await report([{
+			...card,
+			updated: 5,
+			stagesDelta: true,
+			stages: [
+				{ id: "s1", name: "stage 1", status: "failed", ended: 4 },
+				{ id: "child", name: "child", status: "running", parentIds: ["s1", "s499"] },
+			],
+		}]);
+		expect(merged?.updated).toBe(5);
+		expect(merged?.stages).toHaveLength(501);
+		expect(merged?.stages[1]).toEqual({ id: "s1", name: "stage 1", status: "failed", ended: 4 });
+		expect(merged?.stages.at(-1)).toEqual({
+			id: "child",
+			name: "child",
+			status: "running",
+			parentIds: ["s1", "s499"],
+		});
+		expect(merged?.earlierStages).toBeUndefined();
+
+		let full = await report([{
+			...card,
+			stages: [{ id: "x", name: "x", status: "running" }],
+			earlierStages: 7,
+		}]);
+		expect(full).toMatchObject({ stages: [{ id: "x" }], earlierStages: 7 });
+		let after = await report([{
+			...card,
+			stagesDelta: true,
+			stages: [{ id: "y", name: "y", status: "pending", parentIds: ["x"] }],
+		}]);
+		expect(after?.stages.map(stage => stage.id)).toEqual(["x", "y"]);
+		expect(after?.earlierStages).toBe(7);
+	});
+
 	it("runs Chopin's tools in the server and the client's own tools only once declared", async () => {
 		let reports: unknown[] = [];
 		let { server, channel } = await setup({

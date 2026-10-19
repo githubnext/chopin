@@ -36,6 +36,10 @@
 		"./agents": {
 			"types": "./agents.ts",
 			"default": "./agents.ts"
+		},
+		"./run-stages": {
+			"types": "./run-stages.ts",
+			"default": "./run-stages.ts"
 		}
 	}
 }

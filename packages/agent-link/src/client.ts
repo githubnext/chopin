@@ -23,6 +23,9 @@ export const WIRE = {
 	maxMessageBytes: 2 * 1024 * 1024,
 	maxNoteLength: 4_000,
 	malformedClose: 4400,
+	/** The upgrade request header asking for optional features, and the ones this client knows. */
+	featuresHeader: "chopin-agent-features",
+	runStageDeltas: "run-stage-deltas",
 } as const;
 
 export class AgentRefused extends Error {
@@ -93,12 +96,18 @@ export type InputOptions = {
 
 export type AgentClient = {
 	readonly document: ServerMessageOf<"attached">["document"];
+	/** The optional features the server accepts from this client, from `attached`. */
+	readonly features: readonly string[];
 	/** Asks the document's members through Decisions. */
 	ask(
 		session: string,
 		input: InputCall,
 		options?: InputOptions,
 	): Promise<ServerMessageOf<"input-result">>;
+	/**
+	 * Reports the session's runs. Delta cards need a server that offers `run-stage-deltas`; a
+	 * report too large for one frame is sent as several, splitting the delta cards' stages.
+	 */
 	reportRuns(session: string, runs: { active: string[]; paused: string[]; cards: LinkRun[] }): void;
 	/** Sends one message; false when the link is no longer open. */
 	send(message: ClientMessage): boolean;
@@ -144,9 +153,49 @@ type HeaderWebSocket = new(
  */
 export function linkSocket(url: URL, token: string): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
-		headers: { authorization: `Bearer ${token}` },
+		headers: { authorization: `Bearer ${token}`, [WIRE.featuresHeader]: WIRE.runStageDeltas },
 		protocols: [WIRE.subprotocol],
 	});
+}
+
+type RunsReport = { active: string[]; paused: string[]; cards: LinkRun[] };
+
+const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
+/**
+ * `runs` messages that each fit a frame: every one a complete report, with the delta cards'
+ * stages spread across them in order. Later parts carry every card as a delta, so a full card
+ * replaces the run's stages only once.
+ */
+export function splitRuns(session: string, runs: RunsReport): ClientMessageOf<"runs">[] {
+	let whole: ClientMessageOf<"runs"> = { type: "runs", session, ...runs };
+	if (bytes(whole) <= WIRE.maxMessageBytes) return [whole];
+	let pending = runs.cards.flatMap((card, index) =>
+		"stagesDelta" in card
+			? card.stages.map(stage => ({ index, stage, size: bytes(stage) + 1 }))
+			: []
+	);
+	let parts: ClientMessageOf<"runs">[] = [];
+	let next = 0;
+	while (next < pending.length || !parts.length) {
+		let cards: LinkRun[] = runs.cards.map(card => {
+			if (!parts.length && !("stagesDelta" in card)) return card;
+			let { earlierStages: _, ...fields } = card as Extract<LinkRun, { earlierStages?: number }>;
+			return { ...fields, stagesDelta: true, stages: [] };
+		});
+		let size = bytes({ type: "runs", session, ...runs, cards });
+		let start = next;
+		while (next < pending.length && size + pending[next]!.size <= WIRE.maxMessageBytes) {
+			let { index, stage, size: added } = pending[next++]!;
+			cards[index]!.stages.push(stage);
+			size += added;
+		}
+		if (next === start && next < pending.length) {
+			throw new Error("A run report exceeds the agent connection's size limit.");
+		}
+		parts.push({ type: "runs", session, ...runs, cards });
+	}
+	return parts;
 }
 
 const LINK_CLOSED = "The agent connection closed.";
@@ -333,6 +382,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 	}
 
 	let attachedDocument: ServerMessageOf<"attached">["document"] | undefined;
+	let features: readonly string[] = [];
 	let client: AgentClient = {
 		get document() {
 			return attachedDocument!;
@@ -365,8 +415,16 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			signal?.addEventListener("abort", cancel, { once: true });
 			return answered.promise.finally(() => signal?.removeEventListener("abort", cancel));
 		},
+		get features() {
+			return features;
+		},
 		reportRuns(session, runs) {
-			send({ type: "runs", session, ...runs });
+			if (
+				!features.includes(WIRE.runStageDeltas) && runs.cards.some(card => "stagesDelta" in card)
+			) {
+				throw new Error("This Chopin does not accept stage deltas; report full run cards.");
+			}
+			for (let part of splitRuns(session, runs)) send(part);
 		},
 		send,
 		detach() {
@@ -414,6 +472,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			if (message.type === "attached") {
 				attached = true;
 				attachedDocument = message.document;
+				features = message.features ?? [];
 				attaching.resolve(client);
 			} else if (message.type === "refused") {
 				attaching.reject(new AgentRefused(message.code, message.message));

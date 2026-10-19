@@ -23,6 +23,7 @@ import type {
 	ServerMessage,
 	ServerMessageOf,
 } from "@chopin/agent-link";
+import type { Chat as Wire } from "@chopin/protocol";
 import type { HumanInputStatus } from "../atomic/human-input";
 import type { RemotePlanner } from "./registry";
 
@@ -57,6 +58,8 @@ export type LinkOptions = {
 	timeoutMs?: number;
 	/** How often an attached link's access is rechecked while it stays open. */
 	revalidateEveryMs?: number;
+	/** The features `attached` names; absent when the client asked for none. */
+	features?: string[];
 };
 
 const REFUSAL_CLOSE: Record<RefusalCode, number> = {
@@ -169,6 +172,8 @@ class RemoteSession {
 	#current: Turn | undefined;
 	#closed = false;
 	#roots = new Map<string, string>();
+	/** Every reported stage of each run, by id, in the order first reported. */
+	#stages = new Map<string, Map<string, Wire.RunStage>>();
 
 	constructor(id: string, planner: RemotePlanner, port: Port) {
 		this.id = id;
@@ -204,9 +209,32 @@ class RemoteSession {
 		this.#roots.set(runId, rootRunId);
 	}
 
+	/**
+	 * Takes a report: a full card's stages replace the run's, a delta card's are added by id to
+	 * them. The Planner always sees every stage of each run.
+	 */
 	reportRuns(message: Pick<ClientMessageOf<"runs">, "active" | "paused" | "cards">): void {
 		if (this.#closed || this.planner.isolated) return;
-		this.planner.runs = { active: message.active, paused: message.paused, cards: message.cards };
+		let previous = new Map(this.planner.runs?.cards.map(card => [card.id, card]));
+		let cards = message.cards.map((card): Wire.Run => {
+			if (!("stagesDelta" in card)) {
+				this.#stages.set(card.id, new Map(card.stages.map(stage => [stage.id, stage])));
+				return card;
+			}
+			let { stagesDelta: _, stages: delta, ...fields } = card;
+			let stages = this.#stages.get(card.id) ?? new Map<string, Wire.RunStage>();
+			this.#stages.set(card.id, stages);
+			for (let stage of delta) stages.set(stage.id, stage);
+			let earlierStages = previous.get(card.id)?.earlierStages;
+			return {
+				...fields,
+				stages: [...stages.values()],
+				...(earlierStages ? { earlierStages } : {}),
+			};
+		});
+		let reported = new Set(cards.map(card => card.id));
+		for (let id of this.#stages.keys()) if (!reported.has(id)) this.#stages.delete(id);
+		this.planner.runs = { active: message.active, paused: message.paused, cards };
 		this.planner.onRuns?.(this.planner.runs);
 		for (let wake of this.planner.waiters ?? []) wake();
 	}
@@ -725,7 +753,13 @@ export class AgentLink {
 		if (!outcome.ok) return this.#refuse(outcome.code, outcome.message);
 		this.#channelId = outcome.document.id;
 		this.#state = "attached";
-		this.#send({ type: "attached", version: AGENT_VERSION, document: outcome.document });
+		let features = this.#options.features;
+		this.#send({
+			type: "attached",
+			version: AGENT_VERSION,
+			document: outcome.document,
+			...(features ? { features } : {}),
+		});
 		let unregister = this.#options.register?.(outcome.document.id, this);
 		let detach = outcome.detach;
 		this.#forget = () => {

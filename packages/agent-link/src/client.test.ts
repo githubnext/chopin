@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { connectAgent } from "./client";
-import { MAX_LINK_NOTE_LENGTH, parseClientMessage } from "./protocol";
+import { MAX_LINK_MESSAGE_BYTES, MAX_LINK_NOTE_LENGTH, parseClientMessage } from "./protocol";
 
 import type { ServerWebSocket } from "bun";
 import type { AgentHandlers, HostToolResult, TurnContext } from "./client";
@@ -13,17 +13,19 @@ afterEach(async () => {
 });
 
 /** A server that speaks only the wire format, so each test drives the client frame by frame. */
-function fakeServer() {
+function fakeServer(options: { features?: string[] } = {}) {
 	let socket: ServerWebSocket<unknown> | undefined;
 	let received: ClientMessage[] = [];
 	let upgrades: Array<{ path: string; subprotocol: string | null; authorization: string | null }> =
 		[];
+	let asked: Array<string | null> = [];
 	let arrivals = new Set<() => void>();
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
 		fetch(request, self) {
 			let subprotocol = request.headers.get("sec-websocket-protocol");
+			asked.push(request.headers.get("chopin-agent-features"));
 			upgrades.push({
 				path: new URL(request.url).pathname,
 				subprotocol,
@@ -47,6 +49,7 @@ function fakeServer() {
 						type: "attached",
 						version: 1,
 						document: { id: "d", title: "T", repository: "o/r" },
+						...(options.features ? { features: options.features } : {}),
 					}));
 				}
 				for (let wake of arrivals) wake();
@@ -75,6 +78,7 @@ function fakeServer() {
 		url: `http://127.0.0.1:${server.port}`,
 		received,
 		upgrades,
+		asked,
 		next,
 		send: (message: ServerMessage) => socket!.send(JSON.stringify(message)),
 		close: () => socket!.close(1000, "gone"),
@@ -102,6 +106,78 @@ describe("Agent connection client", () => {
 		expect(server.upgrades).toEqual([
 			{ path: "/api/v1/agent", subprotocol: "chopin.agent.v1", authorization: "Bearer t" },
 		]);
+	});
+
+	it("asks for stage deltas and splits a report too large for one frame across several", async () => {
+		let server = fakeServer({ features: ["run-stage-deltas"] });
+		let client = await connect(server, { turn() {} });
+		expect(server.asked).toEqual(["run-stage-deltas"]);
+		expect(client.features).toEqual(["run-stage-deltas"]);
+		let stages = Array.from({ length: 2_000 }, (_, index) => ({
+			id: `s${index}`,
+			name: `${index} ${"é".repeat(MAX_LINK_NOTE_LENGTH - 8)}`,
+			status: "completed" as const,
+			...(index ? { parentIds: [`s${index - 1}`] } : {}),
+		}));
+		let big = {
+			id: "big",
+			name: "review",
+			status: "running" as const,
+			started: 1,
+			updated: 2,
+			waiting: 0,
+			stagesDelta: true as const,
+			stages,
+		};
+		let { stagesDelta: _, ...fields } = big;
+		let small = { ...fields, id: "small", stages: stages.slice(0, 2) };
+		let quiet = { ...big, id: "quiet", stages: [] };
+		client.reportRuns("s", { active: ["big"], paused: ["small"], cards: [small, big, quiet] });
+
+		let parts: Array<Extract<ClientMessage, { type: "runs" }>> = [];
+		let seen = 0;
+		while (seen < stages.length) {
+			let part = await server.next("runs");
+			parts.push(part);
+			seen += part.cards.find(card => card.id === "big")!.stages.length;
+		}
+		expect(parts.length).toBeGreaterThan(5);
+		for (let [index, part] of parts.entries()) {
+			expect(new TextEncoder().encode(JSON.stringify(part)).byteLength).toBeLessThanOrEqual(
+				MAX_LINK_MESSAGE_BYTES,
+			);
+			expect(part).toMatchObject({ session: "s", active: ["big"], paused: ["small"] });
+			expect(part.cards.map(card => card.id)).toEqual(["small", "big", "quiet"]);
+			let [first, , last] = part.cards;
+			if (index === 0) expect(first).toEqual(small);
+			else expect(first).toEqual({ ...big, id: "small", stages: [] });
+			expect(last).toEqual(quiet);
+		}
+		expect(parts.flatMap(part => part.cards[1]!.stages)).toEqual(stages);
+	});
+
+	it("refuses a stage delta to a server that did not offer them, which gets full cards", async () => {
+		let server = fakeServer();
+		let client = await connect(server, { turn() {} });
+		expect(client.features).toEqual([]);
+		let card = {
+			id: "run",
+			name: "review",
+			status: "running" as const,
+			started: 1,
+			updated: 2,
+			waiting: 0,
+			stages: [{ id: "a", name: "a", status: "running" as const }],
+		};
+		expect(() =>
+			client.reportRuns("s", {
+				active: ["run"],
+				paused: [],
+				cards: [{ ...card, stagesDelta: true }],
+			})
+		).toThrow("stage deltas");
+		client.reportRuns("s", { active: ["run"], paused: [], cards: [card] });
+		expect((await server.next("runs")).cards).toEqual([card]);
 	});
 
 	it("settles a host call the server aborts or destroys instead of answering", async () => {

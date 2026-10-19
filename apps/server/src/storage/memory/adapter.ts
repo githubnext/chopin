@@ -6,6 +6,7 @@ import { childSidecarWithoutConversation } from "../child-conversation";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
 import { MemoryImageStore } from "./images";
+import { MemoryRunStageStore } from "./run-stages";
 import { MemoryDocumentVersionStore } from "./versions";
 import { MemoryMachineStore } from "./machines";
 import { MemoryResearchWorkspaceStore } from "./research";
@@ -55,6 +56,7 @@ import type {
 	MachineStore,
 	NavigationStore,
 	ResearchWorkspaceStore,
+	RunStageStore,
 	SessionStore,
 	StorageAdapter,
 	UserStore,
@@ -163,6 +165,8 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 	});
 	readonly images: ImageStore = this.#images;
+	readonly #runStages = new MemoryRunStageStore(id => this.#channels.has(id));
+	readonly runStages: RunStageStore = this.#runStages;
 	readonly #versions = new MemoryDocumentVersionStore({
 		channelExists: id => this.#channels.has(id),
 		user: id => this.#users.get(id),
@@ -558,6 +562,7 @@ export class MemoryStorage implements StorageAdapter {
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);
+		this.#runStages.deleteChannel(id);
 		this.#versions.deleteChannel(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);

@@ -938,6 +938,92 @@ test("run cards keep ended runs until a new run starts, and a released session's
 	expect(Chat.restoreRuns([])).toBeUndefined();
 });
 
+function longCard(count: number, status: Wire.Run["status"] = "running"): Wire.Run {
+	return {
+		...card(status),
+		stages: Array.from({ length: count }, (_, index) => ({
+			id: `run-1:s${index}`,
+			name: `stage ${index}`,
+			status: "completed" as const,
+			started: 1_000 + index,
+			ended: 1_001 + index,
+		})),
+	};
+}
+
+test("every stage of a run is stored while Chat's card carries only its latest ones", async () => {
+	let { context, events, user, backend } = await setup(configured(ATOMIC));
+	let planner = runningSession({ active: ["run-1"], paused: [], cards: [longCard(500)] });
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	let stored = async (offset = 0, limit = 1_000) =>
+		await context.auth.storage.runStages.list(context.room, "run-1", { offset, limit });
+	let shown = () => events.findLast(event => event.kind === "chat:state")?.runs as Wire.Run[];
+
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	expect((await stored()).stages).toEqual(longCard(500).stages);
+	expect(context.chat.runs?.[0]?.stages.map(stage => stage.name)).toEqual(
+		Array.from({ length: 12 }, (_, index) => `stage ${488 + index}`),
+	);
+	expect(context.chat.runs?.[0]?.earlierStages).toBe(488);
+	expect(shown()[0]).toEqual(context.chat.runs![0]!);
+
+	// A failed early stage stops its unfinished descendant on the card, though it is not listed.
+	let next = longCard(501);
+	next.stages[3] = { ...next.stages[3]!, status: "failed" };
+	next.stages[500] = {
+		id: "run-1:late",
+		name: "late",
+		status: "running",
+		parentIds: ["run-1:s3"],
+	};
+	planner.set({ active: ["run-1"], paused: [], cards: [next] });
+	await tick();
+	await tick();
+	expect((await stored(3, 1)).stages[0]?.status).toBe("failed");
+	expect((await stored(500, 1)).stages[0]).toEqual(next.stages[500]!);
+	expect((await stored()).total).toBe(501);
+	expect(context.chat.runs?.[0]?.stages.at(-1)).toEqual({
+		...next.stages[500]!,
+		status: "stopped",
+	});
+	expect(context.chat.runs?.[0]?.earlierStages).toBe(489);
+
+	// The stored stages and the card survive closing and reopening the document.
+	planner.set({ active: [], paused: [], cards: [{ ...next, status: "finished", ended: 1_600 }] });
+	await tick();
+	await tick();
+	let reopened = await Plan.open(context.room, backend, context.server);
+	expect(reopened.chat.runs?.[0]).toMatchObject({ status: "finished", earlierStages: 489 });
+	expect((await stored()).total).toBe(501);
+	await Plan.close(reopened);
+});
+
+test("a run that replaces an ended card takes that card's stored stages with it", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession({ active: [], paused: [], cards: [longCard(20, "finished")] });
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	let page = { offset: 0, limit: 100 };
+	expect((await context.auth.storage.runStages.list(context.room, "run-1", page)).total).toBe(20);
+	let fresh = runningSession({
+		active: ["run-2"],
+		paused: [],
+		cards: [{ ...longCard(13), id: "run-2" }],
+	});
+	context.openPlannerSession = async () => ({ ok: true, value: fresh.session });
+	await Chat.invoke(context, user, "Run another");
+	await context.chat.running;
+	await tick();
+	await tick();
+	expect(context.chat.runs?.map(run => run.id)).toEqual(["run-2"]);
+	expect((await context.auth.storage.runStages.list(context.room, "run-1", page)).total).toBe(0);
+	expect((await context.auth.storage.runStages.list(context.room, "run-2", page)).total).toBe(13);
+});
+
 test("one run can be paused and resumed by name while others keep going", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();

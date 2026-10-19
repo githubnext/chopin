@@ -1,10 +1,12 @@
 /** Planner-launched workflow runs: which are alive, which need someone, and how the last ones ended. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, CloseIcon, WarningIcon, WrenchIcon } from "@chopin/icons";
 
 import plannerResume from "../assets/icons/planner-resume.svg";
 import plannerStop from "../assets/icons/planner-stop.svg";
+
+import { settledStages } from "@chopin/protocol/run-stages";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -74,47 +76,95 @@ export function visibleRuns(ordered: readonly Wire.Run[], showAll: boolean): Wir
 
 /** Apply ended ancestors before folding the visible rows, without changing the saved report. */
 export function displayStages(run: Wire.Run): Wire.RunStage[] {
-	let ended = new Set(["completed", "failed", "blocked", "skipped", "stopped"]);
-	let stopped = new Set(
-		run.stages.filter(stage => stage.status !== "completed" && ended.has(stage.status)).map(stage =>
-			stage.id
-		),
-	);
-	let changed = true;
-	while (changed) {
-		changed = false;
-		for (let stage of run.stages) {
-			if (!stopped.has(stage.id) && stage.parentIds?.some(id => stopped.has(id))) {
-				stopped.add(stage.id);
-				changed = true;
-			}
-		}
-	}
-	let runStopped = run.status === "stopped" || run.status === "failed" || run.status === "blocked";
-	return run.stages.map(stage =>
-		!ended.has(stage.status) && (runStopped || stopped.has(stage.id))
-			? { ...stage, status: "stopped" }
-			: stage
+	return settledStages(
+		run.stages,
+		run.status === "stopped" || run.status === "failed" || run.status === "blocked",
 	);
 }
 
+/** The stages Chopin stores for a run, as far as they have loaded. */
+export type StoredStages = { stages: readonly Wire.RunStage[]; done: boolean };
+
 /**
- * The stages a row lists: the latest few, or every reported one once expanded. `earlier` counts
- * the stages folded away plus those the run report never listed; `unreported` is the latter.
+ * The stages a row lists: the latest few, or every one once expanded, from the stored stages
+ * loaded so far and the card, which is newer. `earlier` counts the stages folded away plus those
+ * the card does not carry; `unreported` those nobody can list, once loading is done.
  */
-export function stageWindow(run: Wire.Run, expanded: boolean): {
+export function stageWindow(run: Wire.Run, expanded: boolean, stored?: StoredStages): {
 	stages: Wire.RunStage[];
 	earlier: number;
 	unreported: number;
 } {
 	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
-	let unreported = run.earlierStages ?? 0;
-	let stages = displayStages(run);
-	return {
-		stages: expanded ? stages : stages.slice(hidden),
-		earlier: hidden + unreported,
-		unreported,
-	};
+	let earlier = hidden + (run.earlierStages ?? 0);
+	if (!expanded) {
+		return {
+			stages: displayStages(run).slice(hidden),
+			earlier,
+			unreported: run.earlierStages ?? 0,
+		};
+	}
+	let all = new Map(stored?.stages.map(stage => [stage.id, stage]));
+	for (let stage of run.stages) all.set(stage.id, stage);
+	let stages = displayStages({ ...run, stages: [...all.values()] });
+	let unreported = !stored || stored.done
+		? Math.max(0, run.stages.length + (run.earlierStages ?? 0) - stages.length)
+		: 0;
+	return { stages, earlier, unreported };
+}
+
+/** Loads one page of a run's stored stages. */
+export type LoadStages = (
+	runId: string,
+	page: { offset: number; limit: number },
+	signal: AbortSignal,
+) => Promise<{ stages: Wire.RunStage[]; total: number }>;
+
+const STAGE_PAGE = 200;
+
+type Loaded = { runId: string; stored: StoredStages; failed: boolean };
+
+/**
+ * Pages in every stored stage of an expanded run, then the ones it reaches while expanded.
+ * Folding forgets them, so a card stays light until someone asks again.
+ */
+function useStoredStages(run: Wire.Run, active: boolean, load: LoadStages | undefined): Loaded {
+	let [state, setState] = useState<Loaded>();
+	let loaded = useRef<Wire.RunStage[]>([]);
+	let reached = run.stages.length + (run.earlierStages ?? 0);
+	let live = active && !!load;
+	useEffect(() => {
+		if (!live || !load) {
+			loaded.current = [];
+			setState(undefined);
+			return;
+		}
+		let controller = new AbortController();
+		let runId = run.id;
+		void (async () => {
+			let stages = loaded.current;
+			for (;;) {
+				let page = await load(
+					runId,
+					{ offset: stages.length, limit: STAGE_PAGE },
+					controller.signal,
+				);
+				if (controller.signal.aborted) return;
+				stages = stages.concat(page.stages);
+				loaded.current = stages;
+				let done = !page.stages.length || stages.length >= page.total;
+				setState({ runId, stored: { stages, done }, failed: false });
+				if (done) return;
+			}
+		})().catch(() => {
+			if (controller.signal.aborted) return;
+			setState({ runId, stored: { stages: loaded.current, done: true }, failed: true });
+		});
+		return () => controller.abort();
+	}, [live, load, run.id, reached]);
+	return state?.runId === run.id
+		? state
+		: { runId: run.id, stored: { stages: [], done: !live }, failed: false };
 }
 
 function useNow(live: boolean): number {
@@ -166,22 +216,28 @@ function StageGlyph({ status }: { status: Wire.RunStage["status"] }) {
 }
 
 type RunControls = {
+	/** Pages in a run's stored stages; without it, expanding lists the stages the card carries. */
+	loadStages?: LoadStages;
 	onShowDecisions?: () => void;
 	onPause?: (runId: string) => void;
 	onResume?: (runId: string) => void;
 };
 
-function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }: RunControls & {
-	run: Wire.Run;
-	/** Tells apart runs of the same workflow. */
-	tag?: string;
-	open: boolean;
-	onToggle: () => void;
-}) {
+function RunRow(
+	{ run, tag, open, onToggle, loadStages, onShowDecisions, onPause, onResume }: RunControls & {
+		run: Wire.Run;
+		/** Tells apart runs of the same workflow. */
+		tag?: string;
+		open: boolean;
+		onToggle: () => void;
+	},
+) {
 	let live = run.status === "running" || run.status === "waiting";
 	let now = useNow(live);
 	let [expanded, setExpanded] = useState(false);
-	let { stages, earlier, unreported } = stageWindow(run, expanded);
+	let unfolded = open && expanded && stageWindow(run, false).earlier > 0;
+	let { stored, failed } = useStoredStages(run, unfolded, loadStages);
+	let { stages, earlier, unreported } = stageWindow(run, expanded, stored);
 	let all = expanded && earlier > 0;
 	let end = run.ended ?? (live ? now : run.updated);
 	let stagesId = `run-stages-${run.id}`;
@@ -273,7 +329,17 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 						id={listId}
 						tabIndex={all ? 0 : undefined}
 					>
-						{all && unreported > 0 && (
+						{all && !stored.done && (
+							<li className="text-text-quaternary" data-run-loading="" role="status">
+								Loading earlier stages…
+							</li>
+						)}
+						{all && failed && (
+							<li className="text-text-quaternary" data-run-load-failed="" role="status">
+								Earlier stages could not be loaded.
+							</li>
+						)}
+						{all && !failed && unreported > 0 && (
 							<li className="text-text-quaternary tabular-nums" data-run-unreported="">
 								{unreported} earlier {unreported === 1 ? "stage was" : "stages were"} not reported
 							</li>
@@ -332,7 +398,9 @@ function RunRow({ run, tag, open, onToggle, onShowDecisions, onPause, onResume }
 }
 
 export function RunStack(
-	{ runs, onShowDecisions, onPause, onResume }: RunControls & { runs: readonly Wire.Run[] },
+	{ runs, loadStages, onShowDecisions, onPause, onResume }: RunControls & {
+		runs: readonly Wire.Run[];
+	},
 ) {
 	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
 	let [showAll, setShowAll] = useState(false);
@@ -355,6 +423,7 @@ export function RunStack(
 					return (
 						<RunRow
 							key={run.id}
+							loadStages={loadStages}
 							onPause={onPause}
 							onResume={onResume}
 							onShowDecisions={onShowDecisions}

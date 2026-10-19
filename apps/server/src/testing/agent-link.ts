@@ -1,7 +1,7 @@
 import { createConnection, createServer } from "node:net";
 
 import { AGENT_PATH, AGENT_SUBPROTOCOL } from "@chopin/agent-link";
-import { agentUrl, connectAgent, linkSocket } from "@chopin/agent-link/client";
+import { agentUrl, connectAgent } from "@chopin/agent-link/client";
 
 import { AdmissionDenied } from "../auth/admission";
 import { GitHubError } from "../github/client";
@@ -260,8 +260,21 @@ export function upgradeRequest(
 }
 
 /** Raw frames over a socket that authenticated as the member, for protocol violations. */
-export async function rawLink(url: string, token = MEMBER_TOKEN) {
-	let socket = linkSocket(agentUrl(url), token);
+/**
+ * A link driven frame by frame. `features` is the `Chopin-Agent-Features` header it sends; by
+ * default none, as a client written before that header existed.
+ */
+export async function rawLink(url: string, token = MEMBER_TOKEN, features?: string) {
+	let socket = new (WebSocket as unknown as new(
+		url: URL,
+		init: { headers: Record<string, string>; protocols: string[] },
+	) => WebSocket)(agentUrl(url), {
+		headers: {
+			authorization: `Bearer ${token}`,
+			...(features === undefined ? {} : { "chopin-agent-features": features }),
+		},
+		protocols: [AGENT_SUBPROTOCOL],
+	});
 	let messages: any[] = [];
 	let arrivals = new Set<() => void>();
 	let closed = Promise.withResolvers<{ code: number; reason: string }>();

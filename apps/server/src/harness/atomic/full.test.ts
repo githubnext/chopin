@@ -761,7 +761,7 @@ test("a run whose stage waits on a question counts as waiting even without promp
 	});
 });
 
-test("a new run clears ended cards, keeps live ones, and lists the 64 most recent stages", async () => {
+test("a new run clears ended cards, keeps live ones, and lists every stage of a long run", async () => {
 	let { foldLifecycle } = await import("./full");
 	let cards = new Map();
 	let event = (rootRunId: string, target: object, at: number) =>
@@ -796,7 +796,7 @@ test("a new run clears ended cards, keeps live ones, and lists the 64 most recen
 	);
 	expect([...cards.keys()]).toEqual(["live", "other"]);
 
-	for (let index = 0; index < 70; index++) {
+	for (let index = 0; index < 500; index++) {
 		foldLifecycle(
 			cards,
 			event("live", {
@@ -809,9 +809,10 @@ test("a new run clears ended cards, keeps live ones, and lists the 64 most recen
 		);
 	}
 	let [card] = runCards(cards, { active: ["live", "other"], paused: [] });
-	expect(card?.stages).toHaveLength(64);
-	expect(card?.stages[0]?.name).toBe("stage-6");
-	expect(card?.earlierStages).toBe(6);
+	expect(card?.stages).toHaveLength(500);
+	expect(card?.stages[0]?.name).toBe("stage-0");
+	expect(card?.stages.at(-1)?.name).toBe("stage-499");
+	expect(card?.earlierStages).toBeUndefined();
 });
 
 test("run cards retain graph parent links after the root leaves the live activity snapshot", () => {

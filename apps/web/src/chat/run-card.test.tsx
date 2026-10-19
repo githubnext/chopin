@@ -290,3 +290,30 @@ test("a run whose earlier stages all went unreported still offers the expand but
 	expect(open).toMatchObject({ earlier: 9, unreported: 9 });
 	expect(open.stages).toHaveLength(3);
 });
+
+test("expanding a run whose card carries only its latest stages lists every stored one", () => {
+	// The server stores 500 stages and the card carries the latest 12, settled against the rest.
+	let stored = longRun(500).stages;
+	stored[2] = { ...stored[2]!, status: "failed" };
+	stored[3] = { ...stored[3]!, status: "running", parentIds: [stored[2]!.id] };
+	let card = longRun(12, 488);
+	card.stages = stored.slice(488).map(stage => ({ ...stage }));
+	card.stages[11] = { ...card.stages[11]!, status: "completed", ended: 600 };
+
+	expect(stageWindow(card, false)).toMatchObject({ earlier: 494, unreported: 488 });
+	let loading = stageWindow(card, true, { stages: stored.slice(0, 200), done: false });
+	expect(loading.stages).toHaveLength(212);
+	expect(loading.unreported).toBe(0);
+
+	let open = stageWindow(card, true, { stages: stored, done: true });
+	expect(open.stages.map(stage => stage.id)).toEqual(stored.map(stage => stage.id));
+	expect(open).toMatchObject({ earlier: 494, unreported: 0 });
+	// The card is newer than the page it was loaded with.
+	expect(open.stages[499]).toMatchObject({ status: "completed", ended: 600 });
+	expect(open.stages[3]?.status).toBe("stopped");
+
+	// Stages the server never stored, such as a card saved before it stored them, stay counted.
+	let older = stageWindow(card, true, { stages: [], done: true });
+	expect(older.stages).toHaveLength(12);
+	expect(older.unreported).toBe(488);
+});

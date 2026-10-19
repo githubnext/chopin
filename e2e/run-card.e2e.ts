@@ -139,3 +139,75 @@ for (
 		await unfoldAndFold(page, phone);
 	});
 }
+
+const STORED = 500;
+
+/** A finished run whose card carries its latest 12 stages while Chopin stores all 500. */
+function storedRun(): { card: Chat.Run; stages: Chat.RunStage[] } {
+	let started = Math.floor(Date.now() / 1000) - 7_200;
+	let stages: Chat.RunStage[] = Array.from({ length: STORED }, (_, index) => ({
+		id: `run-huge:s${index}`,
+		name: `step-${String(index + 1).padStart(3, "0")}`,
+		status: "completed",
+		started: started + index * 10,
+		ended: started + index * 10 + 5,
+	}));
+	stages[1] = { ...stages[1]!, parentIds: ["run-huge:s0"] };
+	return {
+		card: {
+			id: "run-huge",
+			name: "huge-workflow",
+			status: "finished",
+			started,
+			updated: started + STORED * 10,
+			ended: started + STORED * 10,
+			stages: stages.slice(STORED - 12),
+			earlierStages: STORED - 12,
+			waiting: 0,
+		},
+		stages,
+	};
+}
+
+test("a run's +N earlier loads all 500 stored stages a page at a time into its lane, and again after a reload", async ({ join, seed }) => {
+	let { card, stages } = storedRun();
+	await seed("# Huge run\n\nThe workflow ran for a long while.\n", {
+		workflowRuns: [card],
+		runStages: { "run-huge": stages },
+	});
+	let page = await join("ana", DESKTOP);
+	let pages: string[] = [];
+	page.on("request", request => {
+		if (request.url().includes("/runs/run-huge/stages")) pages.push(request.url());
+	});
+	for (let round = 0; round < 2; round++) {
+		pages.length = 0;
+		let runs = chatPane(page).getByRole("region", { name: "Workflow runs" });
+		await runs.getByRole("button", { name: /^huge-workflow, finished/ }).click();
+		let rows = runs.locator("[data-run-stage]");
+		await expect(rows).toHaveCount(6);
+		await runs.getByRole("button", { name: `Show ${STORED - 6} earlier stages`, exact: true })
+			.click();
+		let lane = runs.getByRole("list", { name: "All stages of huge-workflow" });
+		await expect(rows).toHaveCount(STORED);
+		await expect(lane.locator("[data-run-loading]")).toHaveCount(0);
+		await expect(lane.locator("[data-run-unreported]")).toHaveCount(0);
+		await expect(rows.first()).toContainText("step-001");
+		await expect(rows.last()).toContainText(`step-${STORED}`);
+		expect(pages.length).toBeGreaterThanOrEqual(3);
+		expect(new Set(pages.map(url => new URL(url).searchParams.get("offset")))).toEqual(
+			new Set(["0", "200", "400"]),
+		);
+		let metrics = await lane.evaluate(element => ({
+			scrollHeight: element.scrollHeight,
+			clientHeight: element.clientHeight,
+		}));
+		expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight * 10);
+		await lane.evaluate(element => element.scrollTo({ top: element.scrollHeight }));
+		await expect(rows.last()).toBeInViewport();
+		if (round === 0) {
+			await page.reload();
+			await ready(page);
+		}
+	}
+});

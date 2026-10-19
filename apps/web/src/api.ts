@@ -1,3 +1,4 @@
+import type { Chat as ChatWire } from "@chopin/protocol";
 import type { SetupAgent } from "@chopin/protocol/agents";
 
 export type User = {
@@ -295,4 +296,18 @@ export async function resetAgent(id: string): Promise<void> {
 export async function logout(): Promise<void> {
 	let result = await fetch("/auth/logout", { method: "POST" });
 	if (!result.ok) throw new ApiError(`logout failed (${result.status})`, result.status);
+}
+
+/** One page of the stages Chopin stores for a document's workflow run, in run order. */
+export function runStages(
+	channelId: string,
+	runId: string,
+	page: { offset: number; limit: number },
+	signal?: AbortSignal,
+): Promise<{ stages: ChatWire.RunStage[]; total: number }> {
+	return response(
+		`/api/channels/${encodeURIComponent(channelId)}/runs/${encodeURIComponent(runId)}/stages`
+			+ `?offset=${page.offset}&limit=${page.limit}`,
+		{ signal },
+	);
 }

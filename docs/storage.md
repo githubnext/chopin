@@ -113,6 +113,7 @@ applied migration. The application schema contains:
 | `machine_choices` | Each person's chosen machine for one document; no row is automatic. Revoking the machine or deleting the document removes it. |
 | `machine_favorites` | Each person's one favorite machine, which Automatic prefers; no row is none. Revoking the machine removes it. |
 | `document_versions` | Activity history: one row per editing session with its author (absent for Chopin), the canonical MDX it left, revision, hash, and start and end times. |
+| `workflow_run_stages` | Every stage of each workflow run a document's Chat shows, keyed by document, run ID and stage ID, with its order, status, name, kind, parent stage IDs and start and end seconds. Bounded per stage, not per run. A run's rows go when Chat stops showing its card, or with the document. |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
 generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16

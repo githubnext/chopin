@@ -47,6 +47,7 @@ import type {
 	PublishInitialResearchReport,
 	PublishInitialResearchReportResult,
 	PutImage,
+	PutRunStages,
 	PutUser,
 	RecordDocumentVersion,
 	RecordNavigationVisit,
@@ -64,6 +65,7 @@ import type {
 	ResetInitialResearchAttempt,
 	ResetInitialResearchAttemptResult,
 	ResumeBackgroundJob,
+	RunStageRecord,
 	SaveCheckpoint,
 	SessionCredentials,
 	SettleBackgroundJob,
@@ -143,6 +145,27 @@ export interface ImageStore {
 	get(channelId: string, sha256: string): Promise<StoredImage | undefined>;
 	/** Every document these bytes were uploaded to, oldest upload first. */
 	channels(sha256: string): Promise<string[]>;
+}
+
+/**
+ * Every stage of each workflow run a document's Chat shows, in the order the run first reported
+ * them. Bounded per stage, not per run.
+ */
+export interface RunStageStore {
+	/**
+	 * Adds stages by id: a known one is replaced whole where it stands, a new one follows the
+	 * run's others in input order; a repeated id keeps its last value. With `replace` the run keeps
+	 * exactly these. Returns how many stages the run then has.
+	 */
+	put(input: PutRunStages): Promise<number>;
+	/** The run's stages from `offset`, at most `limit`, and how many it has. */
+	list(
+		channelId: string,
+		runId: string,
+		page: { offset: number; limit: number },
+	): Promise<{ stages: RunStageRecord[]; total: number }>;
+	/** Forgets the stages of every run in the document but these. */
+	retain(channelId: string, runIds: string[]): Promise<void>;
 }
 
 /** A document's editing sessions, newest first. History is derived; nothing replays it. */
@@ -329,6 +352,7 @@ export interface StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: ImageStore;
+	readonly runStages: RunStageStore;
 	readonly versions: DocumentVersionStore;
 	readonly machines: MachineStore;
 

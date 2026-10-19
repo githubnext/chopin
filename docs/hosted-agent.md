@@ -517,7 +517,11 @@ for an Atomic Planner. **Stop Planner** and **Resume Planner** send `stop` and
 `resume`, optionally for one run, and wait for `control-result`. Unlike an
 Atomic Planner's, a reported run that ends blocked or failed between turns gets
 only its Chat notice: the reports are the client's word, so they never start a
-Planner turn that no writer asked for.
+Planner turn that no writer asked for. A client that asks for the `run-stage-deltas`
+feature sends only new and changed stages, so a run's stages have no count
+limit; Chopin merges them into the run's stored stages as it does an Atomic
+Planner's (see
+[Agent connection](agent-connection.md#run-stage-deltas)).
 
 **Trust boundary.** The server never holds the client's model credentials and
 gains no shell or filesystem access from this harness. The client, in turn,
@@ -631,13 +635,20 @@ first, then running, paused, and ended runs, newest first within each, and more
 than three rows fold behind "more" without ever hiding a waiting run. Only the
 first waiting run, or else the newest live one, shows its stages; any row opens
 on click to show its six most recent stages with their status and duration, and
-a waiting row links to its Decisions. Its "+N earlier" button unfolds every
-stage the run reported (up to the latest 64) in a list that scrolls inside the
-card, and says how many earlier stages the run did not report; "Show fewer"
-folds it back. Each live row can be paused, and each paused row resumed, on its
-own; Chat records who did. The stack is stored with the document, so a reload
-or restart keeps it; a run that was live when the server stopped comes back
-stopped. Ended rows stay until the next workflow starts in the
+a waiting row links to its Decisions. Chopin stores every stage of a run, with
+no limit on how many, in `workflow_run_stages` (see
+[Storage](storage.md#postgresql-schema)); the card itself carries only the latest
+12, with an unfinished stage under an ended ancestor already shown as stopped.
+Its "+N earlier" button unfolds every stage in a list that scrolls inside the
+card, loading the stored ones 200 at a time from
+`GET /api/channels/<id>/runs/<run id>/stages?offset=&limit=` (for anyone who can
+read the document; at most 500 a page) only when someone unfolds it, and says
+how many earlier stages nobody reported; "Show fewer" folds it back and forgets
+them. Each live row can be paused, and each paused row resumed, on its own; Chat
+records who did. The stack and every stage are stored with the document, so a
+reload or restart keeps them, including for finished runs; a run that was live
+when the server stopped comes back stopped. A stored run's stages go when its
+card does. Ended rows stay until the next workflow starts in the
 document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's

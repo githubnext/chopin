@@ -33,6 +33,9 @@ The upgrade request needs two headers:
 - `Authorization: Bearer <GitHub token>`, the same bearer
   [local agent MCP](local-agent-mcp.md) uses.
 
+It may also send `Chopin-Agent-Features`, naming optional [features](#features)
+it wants.
+
 ```http
 GET /api/v1/agent HTTP/1.1
 Host: chopin.example
@@ -88,6 +91,27 @@ ones it speaks.
 
 The `version` in [`attach`](#handshake) is the same number: `1` for
 `chopin.agent.v1`.
+
+### Features
+
+An additive change a client must know the server accepts is an optional
+feature instead of a new version. The client names the features it wants,
+comma-separated, in the upgrade request's `Chopin-Agent-Features` header:
+
+```http
+Chopin-Agent-Features: run-stage-deltas
+```
+
+The server ignores names it does not know. When the request has the header,
+`attached` carries `features`: the requested features this server supports,
+possibly none. Without the header `attached` has no `features`, so a client
+that validates `attached` strictly and never asks never sees the field. A server
+from before features ignores the header and answers without `features`; a
+client must then use none of them.
+
+| Feature            | What it allows                                                  |
+| ------------------ | --------------------------------------------------------------- |
+| `run-stage-deltas` | [Delta run cards](#run-stage-deltas), with no stage count limit |
 
 ### Pings
 
@@ -178,12 +202,14 @@ until the server answers with `attached` or `refused`.
 The server answers:
 
 ```text
-{ "type": "attached", "version": 1, "document": { "id": "", "title": "", "repository": "owner/name", "url?": "" } }
+{ "type": "attached", "version": 1, "document": { "id": "", "title": "", "repository": "owner/name", "url?": "" }, "features?": [] }
 { "type": "refused", "code": "<refusal code>", "message": "" }
 ```
 
 `attached.document.repository` is `owner/name`, at most 257 characters, and
-`url` at most 2048. After `refused` the server closes the connection.
+`url` at most 2048. `features`, present only when the client
+[asked for features](#features), lists at most 16 names, each an ASCII letter or
+digit then up to 127 letters, digits, `.`, `_` or `-`. After `refused` the server closes the connection.
 
 ### Ownership
 
@@ -595,7 +621,8 @@ A workflow-stage question names its `workflowRunId` and, when it differs, the
 root as paused, an answer is held and sent only once the root is no longer
 paused, so a paused run stays stopped.
 
-`runs.cards` are run cards as Chat shows them, at most 64:
+`runs.cards` are run cards as Chat shows them, at most 64. Each `runs` is a
+complete report: it lists every card of the session. A full card is:
 
 ```text
 { "id": "", "name": "", "status": "running", "started": 0, "updated": 0, "ended?": 0, "stages": [], "earlierStages?": 0, "waiting": 0 }
@@ -617,6 +644,48 @@ as stopped, while preserving finished outcomes. A stopped, failed or blocked run
 stops all unfinished stage displays even without parent links. `active` and
 `paused` list at most 64 root run IDs. When the connection closes, the server
 shows the reported live runs as stopped.
+
+A full card's `stages` replace every stage Chopin stores for the run. Chopin
+stores all of a run's stages, not only those a card lists, and keeps them
+across reconnects and restarts until Chat stops showing the run's card, when a
+later run replaces ended cards.
+
+### Run stage deltas
+
+With the `run-stage-deltas` [feature](#features), a card may instead be a delta
+card, with `stagesDelta` and without `earlierStages`:
+
+```text
+{ "id": "", "name": "", "status": "running", "started": 0, "updated": 0, "ended?": 0, "stagesDelta": true, "stages": [], "waiting": 0 }
+```
+
+- `stagesDelta` is always `true`. A delta card's other fields replace the
+  card's, as a full card's do.
+- `stages` holds only the run's new and changed stages, in the stage shape
+  above, with no count limit; only the frame's 2 MiB bounds them. Chopin adds
+  them by `id` within the run: a known `id` is replaced whole, where it stands,
+  so an optional field left out is gone; a new one follows the run's other
+  stages, in the order sent. A repeated `id` keeps its last value. Stages a
+  delta does not name are kept, and `"stages": []` changes none.
+- The run keeps the `earlierStages` of its last full card.
+- A delta never removes a stage. To start a run's stages over, send a full card
+  (its `stages` may be empty), then delta cards.
+- `parentIds` may name any stage of the same run, sent in this message, an
+  earlier one or a later one. Chopin refuses no parent ID; Chat shows a stage
+  whose parent it does not know at the top level until the parent arrives, and
+  applies the stopped rule above over all of the run's stages.
+- A report too large for one frame goes as several `runs` in a row, each a
+  complete report with the same `active`, `paused` and cards, splitting the
+  stages between them. Make every card of every part after the first a delta
+  card (`"stages": []` when nothing is left for it), so no full card replaces
+  the run's stages twice. The package client's `reportRuns` does this.
+- After each `attach`, send every stage of each run once, then only what
+  changes; adding a stage Chopin already stores again changes nothing.
+
+A server that did not list `run-stage-deltas` in `attached.features`, including
+every server from before features, refuses a delta card as `malformed-message`
+and closes the connection with 1008. Send such a server full cards: the 64 most
+recent stages, with `earlierStages` counting the rest.
 
 ### Card text
 

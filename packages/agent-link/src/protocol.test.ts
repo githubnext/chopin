@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { agentUrl, WIRE } from "./client";
 import {
+	AGENT_FEATURES,
+	AGENT_FEATURES_HEADER,
 	AGENT_PATH,
 	AGENT_SUBPROTOCOL,
 	AGENT_VERSION,
@@ -122,6 +124,62 @@ describe("Agent connection messages", () => {
 		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
 		message.cards[0]!.stages[1]!.parentIds = Array(65).fill("parent");
 		expect(parseClientMessage(JSON.stringify(message))).toMatchObject({ ok: false });
+	});
+
+	it("accepts a delta card with any number of stages, bounded only by the frame", () => {
+		let stages = Array.from({ length: 500 }, (_, index) => ({
+			id: `s${index}`,
+			name: `stage ${index}`,
+			status: "completed" as const,
+			...(index ? { parentIds: [`s${index - 1}`] } : {}),
+		}));
+		let card = {
+			id: "run",
+			name: "review",
+			status: "running" as const,
+			started: 1,
+			updated: 2,
+			waiting: 0,
+			stagesDelta: true as const,
+			stages,
+		};
+		let message = {
+			type: "runs" as const,
+			session: "s",
+			active: ["run"],
+			paused: [],
+			cards: [card],
+		};
+		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
+		let { stagesDelta: _, ...full } = card;
+		expect(parseClientMessage(JSON.stringify({ ...message, cards: [full] }))).toMatchObject({
+			ok: false,
+			code: "malformed-message",
+		});
+		let short = { ...full, stages: stages.slice(0, 64) };
+		expect(parseClientMessage(JSON.stringify({ ...message, cards: [short] }))).toMatchObject({
+			ok: true,
+		});
+		for (let wrong of [{ ...card, earlierStages: 3 }, { ...card, stagesDelta: false }]) {
+			expect(parseClientMessage(JSON.stringify({ ...message, cards: [wrong] }))).toMatchObject({
+				ok: false,
+				code: "malformed-message",
+			});
+		}
+	});
+
+	it("lets attached name the features a client asked for, without changing the version", () => {
+		let attached = {
+			type: "attached" as const,
+			version: AGENT_VERSION,
+			document: { id: "d", title: "T", repository: "o/r" },
+			features: [AGENT_FEATURES.runStageDeltas],
+		};
+		expect(AGENT_FEATURES.runStageDeltas).toBe("run-stage-deltas");
+		expect(AGENT_FEATURES_HEADER).toBe("chopin-agent-features");
+		expect(parseServerMessage(encodeMessage(attached))).toEqual({ ok: true, message: attached });
+		expect(parseServerMessage(encodeMessage({ ...attached, features: ["has space"] })))
+			.toMatchObject({ ok: false });
 	});
 
 	it("refuses text that is not JSON, binary frames, unknown types, and undeclared fields", () => {
@@ -256,6 +314,8 @@ describe("Agent connection messages", () => {
 			maxMessageBytes: MAX_LINK_MESSAGE_BYTES,
 			maxNoteLength: MAX_LINK_NOTE_LENGTH,
 			malformedClose: 4400,
+			featuresHeader: AGENT_FEATURES_HEADER,
+			runStageDeltas: AGENT_FEATURES.runStageDeltas,
 		});
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];

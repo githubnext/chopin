@@ -2,6 +2,7 @@ import { researchWorkspace } from "./research-inline-contract-fixtures";
 import { childChannelContract } from "./child-channel-contract";
 import { experimentContract } from "./experiment-contract";
 import { imageContract } from "./image-contract";
+import { runStageContract } from "./run-stage-contract";
 import { versionContract } from "./version-contract";
 import { machineContract } from "./machine-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
@@ -39,6 +40,7 @@ function attempt<T>(action: () => Promise<T>): Promise<T> {
 export function storageContract(name: string, factory: Factory): void {
 	experimentContract(name, factory);
 	imageContract(name, factory);
+	runStageContract(name, factory);
 	versionContract(name, factory);
 	machineContract(name, factory);
 	childChannelContract(name, factory);

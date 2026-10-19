@@ -197,6 +197,9 @@ async function authorizedRepository(
 
 /** Enough editing sessions to cover a document's recent life without paging. */
 const VERSION_LIMIT = 200;
+/** Stages of a workflow run per page, by default and at most. */
+const RUN_STAGE_PAGE = 200;
+const MAX_RUN_STAGE_PAGE = 500;
 
 /** The newest sessions History asks summaries for; the version-summary job accepts no more. */
 const MAX_SUMMARIZED_VERSIONS = 20;
@@ -475,6 +478,31 @@ export function registerChannelRoutes(
 			return failure(err, request, auth);
 		}
 	});
+
+	/** Every stored stage of one of the document's workflow runs, a page at a time, in run order. */
+	router.on(
+		"GET",
+		"/api/channels/:channelId/runs/:runId/stages",
+		async (request, url, params) => {
+			try {
+				let readable = await readableChannel(auth, request, params.channelId!);
+				if (readable instanceof Response) return readable;
+				let number = (name: string, fallback: number) => {
+					let text = url.searchParams.get(name);
+					return text === null ? fallback : /^\d+$/.test(text) ? Number(text) : -1;
+				};
+				let offset = number("offset", 0);
+				let limit = Math.min(number("limit", RUN_STAGE_PAGE), MAX_RUN_STAGE_PAGE);
+				let runId = params.runId!;
+				if (offset < 0 || limit < 1 || !runId || runId.length > 128) {
+					return json({ error: "invalid page" }, 400);
+				}
+				return json(await auth.storage.runStages.list(readable.id, runId, { offset, limit }));
+			} catch (err) {
+				return failure(err, request, auth);
+			}
+		},
+	);
 
 	router.on(
 		"GET",

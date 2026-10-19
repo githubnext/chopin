@@ -1149,6 +1149,39 @@ describe("channel routes", () => {
 		expect(denied!.status).toBe(404);
 	});
 
+	it("pages through every stored stage of a workflow run for a reader", async () => {
+		let { router, storage, github, cookie, now } = await setup();
+		let channel = await createChannel(storage, now, "Runs");
+		let stages = Array.from({ length: 500 }, (_, index) => ({
+			id: `s${index}`,
+			name: `stage ${index}`,
+			status: "completed" as const,
+		}));
+		await storage.runStages.put({ channelId: channel.id, runId: "run-1", stages });
+		let page = (query: string, from: string | undefined = cookie) =>
+			router.handle(request(`/api/channels/${channel.id}/runs/run-1/stages${query}`, from));
+
+		let first = await page("");
+		expect(first!.status).toBe(200);
+		expect(await first!.json()).toEqual({ stages: stages.slice(0, 200), total: 500 });
+		expect(await (await page("?offset=400&limit=500"))!.json()).toEqual({
+			stages: stages.slice(400),
+			total: 500,
+		});
+		expect((await (await page("?limit=9999"))!.json()).stages).toHaveLength(500);
+		for (let query of ["?offset=-1", "?limit=0", "?offset=x"]) {
+			expect((await page(query))!.status).toBe(400);
+		}
+		let missing = await router.handle(
+			request(`/api/channels/${channel.id}/runs/unknown/stages`, cookie),
+		);
+		expect(await missing!.json()).toEqual({ stages: [], total: 0 });
+
+		expect((await page("", ""))!.status).toBe(401);
+		github.repo = { ...github.repo, permissions: { pull: false, push: false, admin: false } };
+		expect((await page(""))!.status).toBe(404);
+	});
+
 	it("asks for summaries of the newest sessions that have none", async () => {
 		let { router, storage, cookie, now, summaryRequests } = await setup();
 		let channel = await createChannel(storage, now, "Summaries");
