@@ -252,6 +252,7 @@
       "dependencies": {
         "@chopin/icons": "workspace:*",
         "@chopin/protocol": "workspace:*",
+        "@chopin/visuals": "workspace:*",
         "json-joy": "catalog:mdx",
       },
       "devDependencies": {

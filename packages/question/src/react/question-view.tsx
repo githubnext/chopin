@@ -17,6 +17,8 @@ import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
 import { MarkdownBlocks, MarkdownLine, MarkdownText } from "./question-markdown";
 import { questionHeading, questionParts } from "../text";
+import { CriteriaGrid } from "./criteria";
+import { Key, letter } from "./option-key";
 import { plainInlineList, plainInlineText } from "./inline-segments";
 import { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
 import { cardRelation, RelationNote } from "./relation-note";
@@ -27,7 +29,7 @@ import type { Relation } from "../relation";
 
 import type { ReactNode } from "react";
 import type { Question } from "@chopin/protocol";
-import type { Draft, Drafts } from "../draft";
+import type { Draft, Drafts, Mark } from "../draft";
 import type { Answer, Definition, Item } from "../schema";
 
 export type Collaborator = {
@@ -84,6 +86,13 @@ export type QuestionViewProps = {
 	 * row is then shown disabled. Resolves once the server has made it durable.
 	 */
 	onAddOption?: (question: string, label: string) => Promise<AddOptionResult>;
+	/**
+	 * Append a criterion for everyone. Absent where the viewer may not write, and a decision
+	 * without criteria never offers one: only the Planner starts a matrix.
+	 */
+	onAddCriterion?: (question: string, label: string) => Promise<AddCriterionResult>;
+	/** Mark one option against one criterion in the shared draft; `null` clears the cell. */
+	onMark?: (question: string, option: string, criterion: string, mark: Mark | null) => void;
 	disabled?: boolean;
 	submitting?: boolean;
 	status?: "open" | Question.Status | "discarded";
@@ -195,78 +204,84 @@ function DecisionHeading() {
 	);
 }
 
-function letter(index: number): string {
-	return String.fromCharCode(65 + index);
-}
-
-/** A line-tall slot, so the tile centres on the label's first line, not the whole row. */
-function Key({ children }: { children: ReactNode }) {
-	return (
-		<span aria-hidden="true" className="question-key">
-			<span>{children}</span>
-		</span>
-	);
-}
-
 function Choices(
-	{ question, draft, disabled, name, onChange, suggestedOptionId }: {
+	{ question, draft, disabled, name, onChange, suggestedOptionId, onMark, onAddCriterion }: {
 		question: Item;
 		draft: Draft | undefined;
 		disabled: boolean;
 		name: string;
 		onChange?: (change: Partial<Draft>) => void;
 		suggestedOptionId?: string;
+		/** Absent where the viewer may not mark; the matrix then only shows marks. */
+		onMark?: (option: string, criterion: string, mark: Mark | null) => void;
+		onAddCriterion?: (label: string) => Promise<AddCriterionResult>;
 	},
 ) {
 	let custom = draft?.mode === "custom";
 
-	return (
-		<>
-			{question.options.map((option, index) => {
-				let selected = question.multiple
-					? !!draft?.options[option.id]
-					: draft?.choice === option.id;
+	let row = (option: Item["options"][number], index: number, matrix: boolean) => {
+		let selected = question.multiple
+			? !!draft?.options[option.id]
+			: draft?.choice === option.id;
 
-				return (
-					<label key={option.id} className="question-choice-row question-option">
-						<input
-							type={question.multiple ? "checkbox" : "radio"}
-							name={question.multiple ? undefined : name}
-							value={option.id}
-							checked={!custom && selected}
-							disabled={disabled}
-							onChange={event => {
-								// Choosing an option leaves custom mode; the two are
-								// alternatives, not additions.
-								onChange?.(
-									question.multiple
-										? {
-											mode: "choices",
-											options: { ...draft?.options, [option.id]: event.currentTarget.checked },
-										}
-										: { mode: "choices", choice: option.id },
-								);
-							}}
-							className="question-input"
-						/>
-						<Key>{letter(index)}</Key>
-						<span className="question-text">
-							<span className="question-label">
-								<MarkdownLine links={false} text={option.label} />
-							</span>
-							{!custom && selected && option.id === suggestedOptionId && (
-								<span className="text-sm text-text-tertiary">{" from chat"}</span>
-							)}
-							{option.description && <MarkdownText place="desc" text={option.description} />}
-						</span>
-						<span aria-hidden="true" className="question-check">
-							<CheckIcon />
-						</span>
-					</label>
-				);
-			})}
-		</>
-	);
+		return (
+			<label
+				key={option.id}
+				className={matrix ? "crit-pick" : "question-choice-row question-option"}
+			>
+				<input
+					type={question.multiple ? "checkbox" : "radio"}
+					name={question.multiple ? undefined : name}
+					value={option.id}
+					checked={!custom && selected}
+					disabled={disabled}
+					onChange={event => {
+						// Choosing an option leaves custom mode; the two are
+						// alternatives, not additions.
+						onChange?.(
+							question.multiple
+								? {
+									mode: "choices",
+									options: { ...draft?.options, [option.id]: event.currentTarget.checked },
+								}
+								: { mode: "choices", choice: option.id },
+						);
+					}}
+					className="question-input"
+				/>
+				<Key>{letter(index)}</Key>
+				<span className="question-text">
+					<span className="question-label">
+						<MarkdownLine links={false} text={option.label} />
+					</span>
+					{!custom && selected && option.id === suggestedOptionId && (
+						<span className="text-sm text-text-tertiary">{" from chat"}</span>
+					)}
+					{option.description && <MarkdownText place="desc" text={option.description} />}
+				</span>
+				{!matrix && (
+					<span aria-hidden="true" className="question-check">
+						<CheckIcon />
+					</span>
+				)}
+			</label>
+		);
+	};
+
+	if (question.criteria?.length) {
+		return (
+			<CriteriaGrid
+				criteria={question.criteria}
+				marks={draft?.marks}
+				onAddCriterion={onAddCriterion}
+				onMark={disabled ? undefined : onMark}
+				options={question.options}
+				renderPick={(option, index) => row(option, index, true)}
+			/>
+		);
+	}
+
+	return <>{question.options.map((option, index) => row(option, index, false))}</>;
 }
 
 /**
@@ -837,6 +852,8 @@ export function QuestionView(props: QuestionViewProps) {
 		showActions = false,
 		bare = false,
 		onAddOption,
+		onAddCriterion,
+		onMark,
 		disabled = false,
 		submitting = false,
 		status = "open",
@@ -1227,6 +1244,15 @@ export function QuestionView(props: QuestionViewProps) {
 										name={`${base}-${current.id}`}
 										onChange={change => choose(current.id, change)}
 										suggestedOptionId={projection.suggestion?.optionId}
+										onMark={onMark
+											? (option, criterion, mark) => {
+												onMark(current.id, option, criterion, mark);
+											}
+											: undefined}
+										onAddCriterion={onAddCriterion
+											? label =>
+												onAddCriterion(current.id, label)
+											: undefined}
 									/>
 								)}
 							{!written && drafts[current.id]?.mode === "custom"
@@ -1243,8 +1269,7 @@ export function QuestionView(props: QuestionViewProps) {
 									question={current}
 									disabled={disabled}
 									onAdd={label => onAddOption(current.id, label)}
-									onAdded={(option, label, focus) =>
-										added(current.id, option, label, focus)}
+									onAdded={(option, label, focus) => added(current.id, option, label, focus)}
 									onFailed={setAddError}
 									onEdit={markComposerEdit}
 									onCancelEdit={cancelComposerEdit}

@@ -6,6 +6,7 @@
  */
 
 export { questionHeading, questionParts } from "../text";
+export { MarkGlyph, markName, MARKS, ReadOnlyMark } from "./criteria";
 export { InlineCode, InlineCodeList } from "./inline-code";
 export { plainInlineList, plainInlineText } from "./inline-segments";
 export { projectSuggestion, reduceSuggestionEditState } from "./project-suggestion";
