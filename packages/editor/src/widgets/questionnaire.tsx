@@ -9,7 +9,7 @@
 
 import { useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardStatus } from "@chopin/dialect";
-import { ChevronIcon, DecisionIcon, MessageForwardIcon } from "@chopin/icons";
+import { ChevronIcon, DecisionIcon, ExpandIcon, MessageForwardIcon } from "@chopin/icons";
 import { cardRelation, NOT_LINKED, QuestionView, useQuestionnaire } from "@chopin/question/react";
 import { useCellValue } from "@mdxeditor/gurx";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -21,6 +21,7 @@ import { Deck } from "../deck";
 import { leaveDeck } from "../deck-leave";
 import { deckLayout } from "../deck-runs";
 import { EvidenceHover, EvidenceTrigger } from "./evidence-hover";
+import { ExploreMenu, FindingRow, waitingOn } from "./explore";
 import { PresenceFaces, withoutSelf } from "../presence-faces";
 import { usePhone } from "../pointer";
 import { PendingAnswersContext } from "../save-bar";
@@ -36,7 +37,7 @@ import type { LexicalEditor } from "lexical";
 import type { Transport } from "@chopin/question/react";
 import type { Answer, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
-import type { QuestionStepMotion } from "../widget-options";
+import type { ExploreResources, QuestionStepMotion } from "../widget-options";
 import type { MemberState } from "../deck-runs";
 import type { QuestionnaireEntry, QuestionnaireStore } from "../questionnaires";
 
@@ -102,6 +103,8 @@ export type QuestionnaireCardProps = {
 	motion?: QuestionStepMotion;
 	/** How many hidden decisions are being written up, when this card speaks for them all. */
 	writing?: number;
+	/** Research, spikes and asks; absent where the viewer cannot explore. */
+	explore?: ExploreResources;
 };
 
 export type CardPresentation = "hidden" | "resolved" | "open";
@@ -169,6 +172,7 @@ export function QuestionnaireCard(
 		canEdit = true,
 		connected = false,
 		evidence,
+		explore,
 		motionImmediately,
 		onCardSource,
 		presentation = "inline",
@@ -224,6 +228,7 @@ export function QuestionnaireCard(
 		)
 		: (
 			<Undecided
+				explore={explore}
 				onCardSource={onCardSource}
 				self={self}
 				canEdit={canEdit}
@@ -336,10 +341,11 @@ function QuestionStepSwap(
 }
 
 function Undecided(
-	{ canEdit, connected, meta, motion, onCardSource, self, value, wire, ...pointing }:
+	{ canEdit, connected, explore, meta, motion, onCardSource, self, value, wire, ...pointing }:
 		& {
 			canEdit: boolean;
 			connected: boolean;
+			explore?: ExploreResources;
 			meta?: Question.CardMeta;
 			motion?: QuestionStepMotion;
 			onCardSource?: (questionnaireId: string) => void;
@@ -363,6 +369,10 @@ function Undecided(
 	// Counted in the save bar only while the shared draft still says what this person chose.
 	let selections = useSelections(value.id);
 	let touched = stillMine(selections, state.drafts);
+	let openPage = explore?.openPage && (() => explore.openPage!(value.id));
+	let waiting = waitingOn(meta?.findings);
+	let question = value.questions[0];
+	let explorable = !!explore && !!wire && editable && value.questions.length === 1 && !!question;
 
 	return (
 		<SidecarCard
@@ -374,6 +384,17 @@ function Undecided(
 				headerActions={
 					<>
 						<EvidenceTrigger />
+						{openPage && (
+							<button
+								aria-label="Open as a page"
+								className="btn btn-icon btn-ghost"
+								onClick={openPage}
+								title="Open as a page"
+								type="button"
+							>
+								<ExpandIcon aria-hidden="true" size={16} />
+							</button>
+						)}
 						{meta?.thread && onCardSource && (
 							<button
 								aria-label="Show source in chat"
@@ -386,6 +407,24 @@ function Undecided(
 						)}
 					</>
 				}
+				belowControl={<FindingRow findings={meta?.findings} onOpen={openPage} />}
+				footerActions={(waiting.length > 0 || explorable) && (
+					<>
+						<span className="question-footer-start">
+							<PresenceFaces handles={waiting} label="Waiting for" />
+						</span>
+						{explorable && (
+							<ExploreMenu
+								findings={meta?.findings}
+								id={value.id}
+								options={question.options.map(option => option.label)}
+								question={question.prompt}
+								resources={explore!}
+								wire={wire!}
+							/>
+						)}
+					</>
+				)}
 				collaborators={state.collaborators}
 				definition={state.definition ?? definition(value)}
 				// A draft that has not synced cannot be edited without discarding
@@ -784,6 +823,7 @@ function InlineCard({ deck = false, value }: { deck?: boolean; value: Questionna
 			canEdit={options.canEdit}
 			connected={options.connected}
 			evidence={evidence}
+			explore={options.explore}
 			motion={options.questionMotion}
 			motionImmediately={options.motionImmediately}
 			onCardSource={source}

@@ -6,6 +6,7 @@ import type { Plan } from "../plan/service";
 import { fail, reply } from "../wire";
 import type { Socket, SocketData } from "../wire";
 
+import { announce } from "./card-notifications";
 import { isOpenStatus } from "./records";
 import { MAX_FINDING_FOCUS, MAX_FINDING_SUMMARY } from "./record-validation";
 import { changeFindings, updateFinding } from "./service-findings";
@@ -334,4 +335,59 @@ export async function settleSpike(
 function clip(text: string, max: number): string {
 	let value = text.trim();
 	return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+/**
+ * Open a decision as its own child document. The channel id is deterministic, so a retry or a
+ * second member finds the same page; the record learns its child only after the channel exists.
+ */
+export async function page(
+	plan: Plan,
+	server: Server<SocketData>,
+	roomId: string,
+	ws: Socket,
+	msg: Request<Wire.Explore.Page>,
+	create: (input: { roomId: string; recordId: string; title: string; by: string }) => Promise<
+		string
+	>,
+): Promise<void> {
+	let answer = (body: { ok: true; childId: string } | { ok: false; message: string }) =>
+		reply(
+			ws,
+			msg.rid,
+			{
+				kind: "question:page",
+				ts: 0,
+				id: msg.id,
+				...body,
+			} satisfies Wire.Explore.Paged,
+		);
+	let record = plan.records.get(msg.id);
+	if (!record || record.status === "discarded" || record.status === "cancelled") {
+		return answer({ ok: false, message: "This decision is no longer here" });
+	}
+	if (plan.parentChannelId) {
+		return answer({ ok: false, message: "A child document’s decisions can’t open as pages" });
+	}
+	if (record.childId) return answer({ ok: true, childId: record.childId });
+	try {
+		let title = record.definition.questions[0]?.question.trim() || "Decision";
+		let childId = await create({ roomId, recordId: msg.id, title, by: ws.data.principalId });
+		await Service.exclusive(plan, async () => {
+			let current = plan.records.get(msg.id);
+			if (!current || current.childId === childId) return;
+			let previous = plan.records;
+			plan.records = new Map(previous).set(msg.id, { ...current, childId });
+			try {
+				await Service.persistExclusive(plan);
+			} catch (error) {
+				plan.records = previous;
+				throw error;
+			}
+		});
+		announce(plan, server, roomId, msg.id);
+		answer({ ok: true, childId });
+	} catch (error) {
+		answer({ ok: false, message: error instanceof Error ? error.message : "cannot open page" });
+	}
 }

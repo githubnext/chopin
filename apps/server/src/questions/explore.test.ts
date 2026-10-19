@@ -38,7 +38,9 @@ test("records keep findings within bounds and reject unknown or malformed fields
 		by: "ana",
 		at: 1,
 	};
-	expect(normalizeRecord({ ...value.record, findings: [finding] }).findings).toEqual([finding] as never);
+	expect(normalizeRecord({ ...value.record, findings: [finding] }).findings).toEqual(
+		[finding] as never,
+	);
 	for (
 		let invalid of [
 			[{ ...finding, kind: "check" }],

@@ -109,6 +109,7 @@ import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
+import { QuestionPageContext, QuestionPagePanel, useQuestionPage } from "./question-page";
 import { ResearchRequestStore } from "./research-requests";
 import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
@@ -123,6 +124,7 @@ import type {
 	DecisionView,
 	DecisionViewState,
 	ExperimentResources,
+	ExploreResources,
 	InvestigationResources,
 	PlanState,
 	ResearchLaunchResult,
@@ -604,6 +606,7 @@ export function RoomWorkspace(
 		};
 	}, [room, wire]);
 	let researchEnabled = profile.research;
+	let questionPage = useQuestionPage(room);
 	let [workspace, dispatch] = useWorkspaceState(profile);
 	// A `#task-` link waits for Build to be available, then opens it once.
 	let [taskLink, setTaskLink] = useState(false);
@@ -1306,6 +1309,46 @@ export function RoomWorkspace(
 		[formatDock, planVisible, reportChildEdit],
 	);
 	let investigationsEditable = !!workspaceCanEdit && status === "connected";
+	// Read through a ref so the editor keeps one stable set of resources while people come and go.
+	let exploreState = useRef({ cardMetadata, handle, members, ownsMachine, presentation, wire });
+	exploreState.current = { cardMetadata, handle, members, ownsMachine, presentation, wire };
+	let explore = useMemo<ExploreResources | undefined>(() => {
+		if (!profile.research || !workspaceCanEdit) return undefined;
+		let people = () => {
+			let { cardMetadata, handle, members } = exploreState.current;
+			let seen = new Set<string>(handle ? [handle.toLowerCase()] : []);
+			let found: string[] = [];
+			let add = (login: string) => {
+				if (seen.has(login.toLowerCase()) || !/^[A-Za-z0-9-]{1,39}$/.test(login)) return;
+				seen.add(login.toLowerCase());
+				found.push(login);
+			};
+			for (let member of members) if (!member.actor) add(member.handle);
+			for (let card of cardMetadata.values()) card.involved.forEach(add);
+			return found;
+		};
+		return {
+			research: async (brief, requestId) => (await research.create(brief, requestId)).id,
+			spike: async (brief, id) => {
+				await experiments.action("", "", { id, brief });
+				await experiments.action(id, "run", {});
+			},
+			spikeUnavailable: () =>
+				exploreState.current.ownsMachine ? undefined : "No paired machine is online",
+			people,
+			openPage: questionnaireId => {
+				let { presentation, wire } = exploreState.current;
+				if (!wire || presentation.type === "child") return;
+				let open = presentation.onChildOpen;
+				void wire.ask<Question.Explore.Paged>("question:page", { id: questionnaireId })
+					.then(reply => {
+						if (reply.ok) return open?.(reply.childId);
+					})
+					.catch(error => console.error("[questions] could not open the page:", error));
+			},
+			subscribe: () => () => {},
+		};
+	}, [experiments, profile.research, research, workspaceCanEdit]);
 	let investigations = useMemo<InvestigationResources>(() => ({
 		create: (brief, requestId) => experiments.action("", "", { id: requestId, brief }),
 		cancel: id => experiments.action(id, "cancel", {}),
@@ -1475,12 +1518,15 @@ export function RoomWorkspace(
 				onState={setPlanState}
 				// The skeleton's lines continue in the column until the document first arrives; a
 				// later reconnection keeps the document it already shows.
+				className={questionPage ? "question-page-plan" : undefined}
 				preface={presentation.type === "child" && presentation.parent || loading
 					? (
 						<>
-							{presentation.type === "child" && presentation.parent && (
-								<ChildProvenance channelId={room} parent={presentation.parent} />
-							)}
+							{questionPage
+								? <QuestionPagePanel {...questionPage} />
+								: presentation.type === "child" && presentation.parent && (
+									<ChildProvenance channelId={room} parent={presentation.parent} />
+								)}
 							{loading && <DocumentSkeleton />}
 						</>
 					)
@@ -1490,6 +1536,7 @@ export function RoomWorkspace(
 				readOnly={!workspaceCanEdit || implementation.locked}
 				research={profile.research ? research : undefined}
 				researchLauncher={researchLauncher}
+				explore={explore}
 				scrollTop={planScrollTop}
 				threads={threads}
 				user={user}
@@ -1544,6 +1591,18 @@ export function RoomWorkspace(
 		room,
 	};
 
+	let questionPageRoot = useMemo(
+		() => ({
+			entries,
+			metadata: cardMetadata,
+			wire,
+			explore,
+			self: handle,
+			canEdit: !!workspaceCanEdit,
+			connected: status === "connected",
+		}),
+		[cardMetadata, entries, explore, handle, status, wire, workspaceCanEdit],
+	);
 	if (presentation.type === "child") {
 		let childTitleControl = <DocumentTitle {...titleProps} project={undefined} />;
 		return (
@@ -1665,259 +1724,261 @@ export function RoomWorkspace(
 		: editMode && { docked, editing: editMode === "editing", toggle: toggleEditing };
 
 	return (
-		<ChildPhoneChromeContext.Provider value={childChromeValue}>
-			<ChildTitleContext.Provider value={childTitleValue}>
-				<p aria-live="polite" className="sr-only" role="status">
-					<span key={announcement.sequence}>{announcement.text}</span>
-				</p>
-				<Workspace
-					available={available}
-					buildEnabled={build.tabReady}
-					buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
-					buildHot={buildHover === "capsule"}
-					buildUnavailable={buildUnavailable}
-					onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
-					onBuildUnavailable={() => explainBuild()}
-					phoneHint={buildHint?.text}
-					frame={frame}
-					chat={
-						<Chat
-							active={chatActive}
-							agent={agent}
-							focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
-							onOpenChild={presentation.onChildOpen}
-							connected={status === "connected"}
-							readonly={!workspaceCanEdit}
-							archived={!!workspaceArchivedAt}
-							handle={handle}
-							onActivity={onChatActivity}
-							notice={workspaceArchivedAt
-								? effectiveCanManage
-									? "Archived. Restore it to keep chatting."
-									: "This document is archived."
-								: !workspaceCanEdit
-								? "You have read-only access to this document."
-								: undefined}
-							onShowDecisions={() => selectDestination("decisions")}
-							onResearch={researchEnabled ? startResearch : undefined}
-							onShowResearch={showResearchDraft}
-							people={peopleHere(members)}
-							conversationPlan={conversation.state}
-							conversationPlanJobs={conversation.jobs}
-							onCardLink={showCard}
-							onAddExcerpt={addExcerpt}
-							onRetryAnalysis={retryAnalysis}
-							onRetryJob={retryJob}
-							sourceDestination={sourceDestination}
-							researchOffers={researchEnabled && conversation.enabled
-								? {
-									links: researchLinks.links,
-									busy: researchBusy,
-									errors: researchErrors,
-									canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
-									canCheckLink: status === "connected" && !!wire?.connected,
-									canExecute: researchExecution,
-									wire,
-									controllers: researchDrafts,
-									handle,
-									onSource: source =>
-										showSource({
-											source: { ...source, role: "support" },
-											itemId: source.messageId,
-										}),
-									store: research,
-									onAction: actOnResearchOffer,
-									onRetryLink: offerId => researchLinks.refresh(offerId, true),
-								}
-								: undefined}
-							decisions={{
-								questions,
-								meta: cardMeta,
-								wire,
-								connected: treatAsConnected,
-								canEdit: workspaceCanEdit,
-								onOpenCard: showDecisionCard,
-							}}
-							referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
-							repository={repository}
-							room={room}
-							sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
-							planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
-							plannerMachine={plannerStartingOn(machineChoice.state)}
-							wire={wire}
-						/>
-					}
-					chatActivity={chatActivity}
-					documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-					header={phone
-						? (
-							<PhoneHeader
-								// The child's bar goes with its document: Chat, Decisions and Build are this room's.
-								child={presentation.type === "parent-with-child" && planVisible
-									? { onReturn: presentation.onChildClose, slot: setChildTitleSlot }
+		<QuestionPageContext.Provider value={questionPageRoot}>
+			<ChildPhoneChromeContext.Provider value={childChromeValue}>
+				<ChildTitleContext.Provider value={childTitleValue}>
+					<p aria-live="polite" className="sr-only" role="status">
+						<span key={announcement.sequence}>{announcement.text}</span>
+					</p>
+					<Workspace
+						available={available}
+						buildEnabled={build.tabReady}
+						buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
+						buildHot={buildHover === "capsule"}
+						buildUnavailable={buildUnavailable}
+						onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+						onBuildUnavailable={() => explainBuild()}
+						phoneHint={buildHint?.text}
+						frame={frame}
+						chat={
+							<Chat
+								active={chatActive}
+								agent={agent}
+								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
+								onOpenChild={presentation.onChildOpen}
+								connected={status === "connected"}
+								readonly={!workspaceCanEdit}
+								archived={!!workspaceArchivedAt}
+								handle={handle}
+								onActivity={onChatActivity}
+								notice={workspaceArchivedAt
+									? effectiveCanManage
+										? "Archived. Restore it to keep chatting."
+										: "This document is archived."
+									: !workspaceCanEdit
+									? "You have read-only access to this document."
 									: undefined}
-								label={metadata.title}
-								presentation={presentation}
-							>
-								<PhoneHeaderContent
-									archivedAt={workspaceArchivedAt}
-									canManage={effectiveCanManage}
-									comments={openComments}
-									context={buildSlot}
-									editing={titleEdit}
-									editingDocument={!childOpen && !!barEdit?.editing}
+								onShowDecisions={() => selectDestination("decisions")}
+								onResearch={researchEnabled ? startResearch : undefined}
+								onShowResearch={showResearchDraft}
+								people={peopleHere(members)}
+								conversationPlan={conversation.state}
+								conversationPlanJobs={conversation.jobs}
+								onCardLink={showCard}
+								onAddExcerpt={addExcerpt}
+								onRetryAnalysis={retryAnalysis}
+								onRetryJob={retryJob}
+								sourceDestination={sourceDestination}
+								researchOffers={researchEnabled && conversation.enabled
+									? {
+										links: researchLinks.links,
+										busy: researchBusy,
+										errors: researchErrors,
+										canAct: status === "connected" && !!wire?.connected && !!workspaceCanEdit,
+										canCheckLink: status === "connected" && !!wire?.connected,
+										canExecute: researchExecution,
+										wire,
+										controllers: researchDrafts,
+										handle,
+										onSource: source =>
+											showSource({
+												source: { ...source, role: "support" },
+												itemId: source.messageId,
+											}),
+										store: research,
+										onAction: actOnResearchOffer,
+										onRetryLink: offerId => researchLinks.refresh(offerId, true),
+									}
+									: undefined}
+								decisions={{
+									questions,
+									meta: cardMeta,
+									wire,
+									connected: treatAsConnected,
+									canEdit: workspaceCanEdit,
+									onOpenCard: showDecisionCard,
+								}}
+								referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
+								repository={repository}
+								room={room}
+								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
+								planner={plannerAttachment.wire === wire ? plannerAttachment.planner : undefined}
+								plannerMachine={plannerStartingOn(machineChoice.state)}
+								wire={wire}
+							/>
+						}
+						chatActivity={chatActivity}
+						documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+						header={phone
+							? (
+								<PhoneHeader
+									// The child's bar goes with its document: Chat, Decisions and Build are this room's.
+									child={presentation.type === "parent-with-child" && planVisible
+										? { onReturn: presentation.onChildClose, slot: setChildTitleSlot }
+										: undefined}
 									label={metadata.title}
-									machine={titleProps.machine}
-									members={members}
-									onAction={action => onDocumentAction(room, action)}
-									onComments={() => {
-										// The list stands over the document, so it opens from any tab onto it.
-										selectDestination("plan");
-										openCommentList(room);
-									}}
-									onEditingChange={setTitleEdit}
-									onRenamed={updateMetadata}
-									lead={repository.name}
-									room={room}
-								/>
-							</PhoneHeader>
-						)
-						: <Header {...titleProps} build={buildSlot} members={members} />}
-					title={
-						<DocumentTitle
-							{...titleProps}
-							icon
-							path={zoomChild}
-						/>
-					}
-					controls={
-						<>
-							{viewedVersion
-								? (
-									<DocumentVersionBar
-										channelId={room}
-										key={`${room}:${viewedVersion.id}`}
-										onBack={() => setViewedVersion(undefined)}
-										{...(effectiveCanEdit && !archivedAt
-											? {
-												onRestored: () => {
-													setViewedVersion(undefined);
-													setHistoryReload(count => count + 1);
-												},
-											}
-											: {})}
-										self={handle}
-										version={viewedVersion}
-									/>
-								)
-								: (
-									<DecisionViewControl
-										attention={attention}
-										buildEnabled={profile.implementation ? build.tabReady : undefined}
-										buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
-										buildHot={buildHover === "capsule"}
-										onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
-										documentActivity={documentActivity(documentWatch, chatActivity.busy)}
-										onView={selectDestination}
-										unanswered={unanswered}
-										view={view}
-									/>
-								)}
-							<div className="views-bar-tools">
-								<button
-									aria-controls={activityOpen ? activityId : undefined}
-									aria-expanded={activityOpen && !activityClosing}
-									aria-label="History"
-									className="btn btn-icon btn-ghost"
-									ref={historyToggle}
-									onClick={() => {
-										if (activityOpen && !activityClosing) {
-											closeActivity();
-											return;
-										}
-										if (view !== "plan") selectDestination("plan");
-										setActivityClosing(false);
-										setActivityOpen(true);
-									}}
-									type="button"
+									presentation={presentation}
 								>
-									<ClockIcon />
-								</button>
-							</div>
-						</>
-					}
-					// Build plan or its capsule closes the status, so the rule before the faces follows it.
-					status={<>{statusNotices}{mode === "split" && buildSlot}</>}
-					ids={workspaceIds}
-					phoneAction={barEdit && (
-						<button
-							aria-label={barEdit.editing ? "Done editing" : "Edit document"}
-							className="phone-tab-action"
-							data-editing={barEdit.editing || undefined}
-							onClick={barEdit.toggle}
-							type="button"
-						>
-							<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
-							<CheckIcon aria-hidden="true" data-edit-icon="done" size={24} />
-						</button>
-					)}
-					// Formatting rides above the keyboard while typing. With the keyboard down the tabs
-					// return, and a selection gets the ordinary bubble instead.
-					phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
-					identity={room}
-					mode={mode}
-					presence={<RoomMembers members={members} ring="page" />}
-					phone={phone}
-					onDesktopChatOpen={setDesktopChatOpen}
-					onChatOpen={open => dispatch({ type: "set-chat", open })}
-					onDestination={selectDestination}
-					build={profile.implementation && (
-						<BuildView
-							active={workspacePresentation.documentVisible && view === "build"}
-							build={build}
-							canEdit={!!workspaceCanEdit && status === "connected"}
-							comments={acceptedComments}
-							onShowDecisions={() => selectDestination("decisions")}
-							onShowDocument={() => selectDestination("plan")}
-							room={room}
-							unanswered={unanswered}
-							userId={userId}
-						/>
-					)}
-					decisions={
-						<Decisions
-							key={room}
-							additional={
-								<EvidenceDecisions
-									store={experiments}
-									canEdit={!!workspaceCanEdit && status === "connected"}
-								/>
-							}
-							hasAdditional={[...experiments.values.values()].some(item =>
-								item.decisions.length > 0
-							)}
-							cardMeta={cardMeta}
-							canEdit={workspaceCanEdit}
-							connected={treatAsConnected && workspaceCanEdit}
-							headingId={workspaceIds.heading.decisions}
-							motion={motionContract("collapse")}
-							motionImmediately={settleMotionImmediately}
-							onShowPlan={showPlan}
-							planner={agent}
-							questionMotion={QUESTION_MOTION}
-							reveal={reveal}
-							self={handle}
-							store={questions}
-							wire={wire}
-						/>
-					}
-					plan={planArea}
-					state={workspace}
-					presentation={presentation}
-					unanswered={unanswered}
-					view={view}
-				/>
-			</ChildTitleContext.Provider>
-		</ChildPhoneChromeContext.Provider>
+									<PhoneHeaderContent
+										archivedAt={workspaceArchivedAt}
+										canManage={effectiveCanManage}
+										comments={openComments}
+										context={buildSlot}
+										editing={titleEdit}
+										editingDocument={!childOpen && !!barEdit?.editing}
+										label={metadata.title}
+										machine={titleProps.machine}
+										members={members}
+										onAction={action => onDocumentAction(room, action)}
+										onComments={() => {
+											// The list stands over the document, so it opens from any tab onto it.
+											selectDestination("plan");
+											openCommentList(room);
+										}}
+										onEditingChange={setTitleEdit}
+										onRenamed={updateMetadata}
+										lead={repository.name}
+										room={room}
+									/>
+								</PhoneHeader>
+							)
+							: <Header {...titleProps} build={buildSlot} members={members} />}
+						title={
+							<DocumentTitle
+								{...titleProps}
+								icon
+								path={zoomChild}
+							/>
+						}
+						controls={
+							<>
+								{viewedVersion
+									? (
+										<DocumentVersionBar
+											channelId={room}
+											key={`${room}:${viewedVersion.id}`}
+											onBack={() => setViewedVersion(undefined)}
+											{...(effectiveCanEdit && !archivedAt
+												? {
+													onRestored: () => {
+														setViewedVersion(undefined);
+														setHistoryReload(count => count + 1);
+													},
+												}
+												: {})}
+											self={handle}
+											version={viewedVersion}
+										/>
+									)
+									: (
+										<DecisionViewControl
+											attention={attention}
+											buildEnabled={profile.implementation ? build.tabReady : undefined}
+											buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
+											buildHot={buildHover === "capsule"}
+											onBuildHover={on => setBuildHover(on ? "tab" : undefined)}
+											documentActivity={documentActivity(documentWatch, chatActivity.busy)}
+											onView={selectDestination}
+											unanswered={unanswered}
+											view={view}
+										/>
+									)}
+								<div className="views-bar-tools">
+									<button
+										aria-controls={activityOpen ? activityId : undefined}
+										aria-expanded={activityOpen && !activityClosing}
+										aria-label="History"
+										className="btn btn-icon btn-ghost"
+										ref={historyToggle}
+										onClick={() => {
+											if (activityOpen && !activityClosing) {
+												closeActivity();
+												return;
+											}
+											if (view !== "plan") selectDestination("plan");
+											setActivityClosing(false);
+											setActivityOpen(true);
+										}}
+										type="button"
+									>
+										<ClockIcon />
+									</button>
+								</div>
+							</>
+						}
+						// Build plan or its capsule closes the status, so the rule before the faces follows it.
+						status={<>{statusNotices}{mode === "split" && buildSlot}</>}
+						ids={workspaceIds}
+						phoneAction={barEdit && (
+							<button
+								aria-label={barEdit.editing ? "Done editing" : "Edit document"}
+								className="phone-tab-action"
+								data-editing={barEdit.editing || undefined}
+								onClick={barEdit.toggle}
+								type="button"
+							>
+								<PencilIcon aria-hidden="true" data-edit-icon="edit" size={24} />
+								<CheckIcon aria-hidden="true" data-edit-icon="done" size={24} />
+							</button>
+						)}
+						// Formatting rides above the keyboard while typing. With the keyboard down the tabs
+						// return, and a selection gets the ordinary bubble instead.
+						phoneToolbar={barEdit?.docked && <div className="contents" ref={setFormatDock} />}
+						identity={room}
+						mode={mode}
+						presence={<RoomMembers members={members} ring="page" />}
+						phone={phone}
+						onDesktopChatOpen={setDesktopChatOpen}
+						onChatOpen={open => dispatch({ type: "set-chat", open })}
+						onDestination={selectDestination}
+						build={profile.implementation && (
+							<BuildView
+								active={workspacePresentation.documentVisible && view === "build"}
+								build={build}
+								canEdit={!!workspaceCanEdit && status === "connected"}
+								comments={acceptedComments}
+								onShowDecisions={() => selectDestination("decisions")}
+								onShowDocument={() => selectDestination("plan")}
+								room={room}
+								unanswered={unanswered}
+								userId={userId}
+							/>
+						)}
+						decisions={
+							<Decisions
+								key={room}
+								additional={
+									<EvidenceDecisions
+										store={experiments}
+										canEdit={!!workspaceCanEdit && status === "connected"}
+									/>
+								}
+								hasAdditional={[...experiments.values.values()].some(item =>
+									item.decisions.length > 0
+								)}
+								cardMeta={cardMeta}
+								canEdit={workspaceCanEdit}
+								connected={treatAsConnected && workspaceCanEdit}
+								headingId={workspaceIds.heading.decisions}
+								motion={motionContract("collapse")}
+								motionImmediately={settleMotionImmediately}
+								onShowPlan={showPlan}
+								planner={agent}
+								questionMotion={QUESTION_MOTION}
+								reveal={reveal}
+								self={handle}
+								store={questions}
+								wire={wire}
+							/>
+						}
+						plan={planArea}
+						state={workspace}
+						presentation={presentation}
+						unanswered={unanswered}
+						view={view}
+					/>
+				</ChildTitleContext.Provider>
+			</ChildPhoneChromeContext.Provider>
+		</QuestionPageContext.Provider>
 	);
 }

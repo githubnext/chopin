@@ -117,6 +117,10 @@ export type QuestionViewProps = {
 	aside?: ReactNode;
 	/** Controls in the trailing header, beside question-specific presence. */
 	headerActions?: ReactNode;
+	/** Host content under the answer control, such as the latest finding. */
+	belowControl?: ReactNode;
+	/** Host controls at the start of the footer, before Discard and Save. */
+	footerActions?: ReactNode;
 	/** Lets a host retain bounded steps for presentation without owning question state. */
 	renderStep?: (props: QuestionStepRenderProps) => ReactNode;
 	/**
@@ -809,6 +813,8 @@ export function QuestionView(props: QuestionViewProps) {
 		errorClassName,
 		aside,
 		headerActions,
+		belowControl,
+		footerActions,
 		places,
 		relations,
 		pendingRelation,
@@ -1204,6 +1210,7 @@ export function QuestionView(props: QuestionViewProps) {
 								/>
 							)}
 						</fieldset>
+						{belowControl}
 					</section>
 				);
 
@@ -1225,7 +1232,7 @@ export function QuestionView(props: QuestionViewProps) {
 				/>
 			)}
 
-			{(onSubmit || discard || multiple || showActions) && (
+			{(onSubmit || discard || multiple || showActions || footerActions) && (
 				<footer
 					className="question-actions"
 					data-confirm={discard && confirming ? "" : undefined}
@@ -1256,6 +1263,7 @@ export function QuestionView(props: QuestionViewProps) {
 						)
 						: (
 							<>
+								{footerActions}
 								{multiple && (
 									<div role="group" aria-label="Questions" className="question-stepper">
 										<button

@@ -5857,3 +5857,144 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 .plan-format-panel-choice[aria-pressed="true"] .plan-format-panel-glyph {
 	color: inherit;
 }
+
+/* Exploring a decision: the footer's waiting faces lead; Explore sits before the save action. */
+.question-footer-start {
+	display: flex;
+	align-items: center;
+	margin-inline-end: auto;
+	min-width: 0;
+}
+
+.explore-trigger[data-exploring] {
+	color: var(--color-text-primary);
+}
+
+.explore-trigger-chevron {
+	transform: rotate(90deg);
+	color: var(--color-text-tertiary);
+}
+
+.explore-spin {
+	animation: button-loader-spin 800ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.explore-spin {
+		animation-duration: 2400ms;
+	}
+}
+
+.explore-positioner {
+	z-index: 60;
+}
+
+.explore-menu {
+	width: 18rem;
+	max-width: calc(100vw - var(--spacing) * 4);
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	transform-origin: var(--transform-origin, top right);
+	transition:
+		opacity var(--duration-fast) var(--ease-out),
+		scale var(--duration-fast) var(--ease-out);
+}
+
+.explore-menu:is([data-starting-style], [data-ending-style]) {
+	opacity: 0;
+	scale: 0.98;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.explore-menu {
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+
+	.explore-menu:is([data-starting-style], [data-ending-style]) {
+		scale: 1;
+	}
+}
+
+.explore-focus {
+	margin-block-end: var(--spacing);
+}
+
+.explore-focus-field {
+	inline-size: 100%;
+	min-height: var(--menu-item-height-normal);
+	border-radius: var(--radius-md);
+	background: var(--color-inset);
+	padding: var(--spacing) calc(var(--spacing) * 1.5);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-primary);
+}
+
+.explore-focus-field::placeholder {
+	color: var(--color-text-tertiary);
+}
+
+.explore-focus-field:disabled {
+	color: var(--color-text-tertiary);
+}
+
+.explore-empty,
+.explore-error {
+	margin: 0;
+	padding: var(--spacing) calc(var(--spacing) * 1.5);
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+.explore-error {
+	color: var(--color-danger-text);
+}
+
+/* The newest finding, under the control: one line that opens the decision's page. */
+.explore-finding {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	inline-size: 100%;
+	min-width: 0;
+	margin-block-start: calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	text-align: start;
+	color: var(--color-text-secondary);
+}
+
+button.explore-finding:is(:hover, :focus-visible) {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.explore-finding-icon {
+	display: flex;
+	flex: none;
+	color: var(--color-text-tertiary);
+}
+
+.explore-finding-line {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.explore-finding-meta {
+	flex: none;
+	font-size: var(--text-xs);
+	color: var(--color-text-tertiary);
+}
+
+.explore-finding-chevron {
+	flex: none;
+	color: var(--color-text-tertiary);
+}

@@ -89,6 +89,7 @@ export type { Connection, Transport, Unsubscribe } from "./transport";
 export type {
 	CommentPresentation,
 	ExperimentResources,
+	ExploreResources,
 	GitHubReferenceEntry,
 	GitHubReferenceStore,
 	InvestigationResources,
@@ -107,3 +108,10 @@ export {
 } from "./widgets";
 export type { InvestigationCardProps } from "./widgets";
 export { DecisionCard } from "./widgets/decision";
+export {
+	FindingIcon,
+	findingLine,
+	findingMeta,
+	runningFindings,
+	waitingOn,
+} from "./widgets/explore";

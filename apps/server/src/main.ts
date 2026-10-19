@@ -13,7 +13,7 @@ import { ReadinessReviews } from "./tasks/readiness-review";
  */
 
 import { join } from "node:path";
-import { parse, ulid } from "@chopin/dialect";
+import { displayTitle, parse, ulid } from "@chopin/dialect";
 
 import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
 import {
@@ -94,6 +94,7 @@ import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Explore from "./questions/explore";
+import { deterministicChannelId } from "./channels/id";
 import type { Research as ResearchWire } from "@chopin/protocol";
 type ResearchRequestView = ResearchWire.RequestView;
 import { investigationFinding } from "./experiments/document";
@@ -1252,6 +1253,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Explore.take(room.plan, server, room.id, ws, frame);
 			return;
 
+		case "question:page":
+			if (room.plan) await Explore.page(room.plan, server, room.id, ws, frame, createQuestionPage);
+			return;
+
 		// A note sent to the Planner starts a turn on the sender's entitlement, so
 		// their authority to do that is rechecked first, exactly as for Chat; the
 		// sender's session is the turn's claimant.
@@ -2148,6 +2153,40 @@ const exploreDeps: Explore.ExploreDeps = {
 	},
 	notice: decisionNotice,
 };
+
+/** The child document a decision opens as, created once under its deterministic id. */
+async function createQuestionPage(
+	input: { roomId: string; recordId: string; title: string; by: string },
+): Promise<string> {
+	let parent = await storage.channels.get(input.roomId);
+	if (!parent || parent.parentChannelId || parent.archivedAt) {
+		throw new Error("Only an open top-level document's decisions can open as pages");
+	}
+	let id = deterministicChannelId(parent.repositoryId, `question:${input.recordId}`);
+	let existing = await storage.channels.get(id);
+	if (existing) {
+		if (existing.parentChannelId !== parent.id) throw new Error("cannot open page");
+		return id;
+	}
+	let title = displayTitle(input.title);
+	let created = await storage.channels.create({
+		id,
+		repositoryId: parent.repositoryId,
+		repositoryOwner: parent.repositoryOwner,
+		repositoryName: parent.repositoryName,
+		parentChannelId: parent.id,
+		title,
+		initial: await Service.initial("", undefined, title),
+		createdBy: input.by,
+		now: new Date(),
+	}).catch(async error => {
+		// A concurrent open created it first.
+		if (await storage.channels.get(id)) return undefined;
+		throw error;
+	});
+	if (created) announceChannel(created);
+	return id;
+}
 
 /** A research request reached ready or failed: settle the findings that follow it. */
 function researchSettled(channelId: string, request: ResearchRequestView): Promise<void> {

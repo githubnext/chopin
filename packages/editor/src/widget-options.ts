@@ -69,6 +69,24 @@ export type GitHubReferenceStore = {
 	load(reference: GitHubReference): Promise<GitHubReferenceResult>;
 };
 
+/**
+ * App-owned ways to explore an open decision. The editor records findings over the question
+ * transport; the host starts the external work, which runs on the top-level document.
+ */
+export type ExploreResources = {
+	/** Start web research from `brief`; resolves with the request's id. */
+	research(brief: string, requestId: string): Promise<string>;
+	/** Build a spike on the viewer's paired machine; `id` becomes the investigation's id. */
+	spike(brief: string, id: string): Promise<void>;
+	/** Why a spike cannot run now, or undefined when it can. */
+	spikeUnavailable(): string | undefined;
+	/** People the viewer can ask, excluding themselves. */
+	people(): readonly string[];
+	/** Open the decision as its own page; absent where it cannot have one. */
+	openPage?(questionnaireId: string): void;
+	subscribe(listener: () => void): () => void;
+};
+
 export type WidgetOptions = {
 	experiments?: ExperimentResources;
 	binding?: Binding;
@@ -89,6 +107,7 @@ export type WidgetOptions = {
 	commentPlanner?: boolean;
 	evidence?: (questionnaireId: string) => ReactNode | null;
 	research?: ResearchStore;
+	explore?: ExploreResources;
 	researchDrafts?: ResearchDraftStore;
 	investigations?: InvestigationResources;
 	investigationDrafts?: ResearchDraftStore;
