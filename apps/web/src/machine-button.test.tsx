@@ -29,28 +29,43 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 		},
 		saving: false,
 		choose: async () => {},
-		favor: async () => {},
 		refresh: () => {},
 	};
 }
 
-test("the button shows the chosen machine's icon, its state dot and its name", () => {
+test("the button is an icon with the machine's state dot, named for where the document runs", () => {
 	let markup = renderToStaticMarkup(createElement(MachineButton, { choice: choice(true, true) }));
-	expect(markup).toContain('aria-label="Machine: build-box, connected"');
+	expect(markup).toContain('aria-label="Runs on build-box"');
+	expect(markup).toContain('data-tooltip="Runs on build-box"');
 	expect(markup).toContain('aria-haspopup="menu"');
 	expect(markup).toContain('data-state="connected"');
-	expect(markup).toContain(">build-box<");
+	// Icon only: the name is in the accessible name and tooltip.
+	expect(markup).not.toContain(">build-box<");
 	let offline = renderToStaticMarkup(
-		createElement(MachineButton, { choice: choice(false, false), compact: true, phone: true }),
+		createElement(MachineButton, { choice: choice(false, false), phone: true }),
 	);
-	expect(offline).toContain('aria-label="Machine: build-box, offline"');
+	expect(offline).toContain('aria-label="Runs on build-box"');
 	expect(offline).toContain('data-state="offline"');
-	// The icon alone on a phone; the name is in the accessible name.
-	expect(offline).not.toContain(">build-box<");
 });
 
-test("a service runs on the server icon, a computer on the monitor, Automatic without a dot", () => {
-	let server = renderToStaticMarkup(
+test("with no explicit choice the button shows the machine Automatic uses; none is a bare laptop", () => {
+	let automatic = choice(true, true);
+	automatic.state!.choice = null;
+	automatic.state!.automatic = { id: "M_box", label: "build-box" };
+	let markup = renderToStaticMarkup(createElement(MachineButton, { choice: automatic }));
+	expect(markup).toContain('aria-label="Runs on build-box"');
+	expect(markup).toContain('data-state="connected"');
+	let none = choice(false, false);
+	none.state!.choice = null;
+	none.state!.machines = [];
+	let bare = renderToStaticMarkup(createElement(MachineButton, { choice: none }));
+	expect(bare).toContain('aria-label="Runs on: no machine connected"');
+	expect(bare).not.toContain("status-dot");
+	expect(bare).not.toContain("machine-offline");
+});
+
+test("a service runs on the cloud icon, a computer on the laptop, no machine without a dot", () => {
+	let cloud = renderToStaticMarkup(
 		createElement(MachineGlyph, {
 			machine: { service: true, connected: true, reauthorize: false },
 		}),
@@ -61,7 +76,7 @@ test("a service runs on the server icon, a computer on the monitor, Automatic wi
 		}),
 	);
 	let automatic = renderToStaticMarkup(createElement(MachineGlyph, {}));
-	expect(server).not.toBe(computer);
+	expect(cloud).not.toBe(computer);
 	expect(automatic).toContain("data-automatic");
 	expect(automatic).not.toContain("status-dot");
 });
@@ -71,9 +86,9 @@ test("offline looks the same everywhere: the machine button and Build plan dimme
 		createElement(MachineButton, { choice: choice(true, true) }),
 	);
 	expect(connected).not.toContain("machine-offline");
-	for (let compact of [false, true]) {
+	for (let phone of [false, true]) {
 		let button = renderToStaticMarkup(
-			createElement(MachineButton, { choice: choice(true, false), compact }),
+			createElement(MachineButton, { choice: choice(true, false), phone }),
 		);
 		// Still a button that opens the menu, dimmed; the state is only in its accessible name.
 		expect(button).toContain('class="machine-button machine-offline"');
@@ -99,24 +114,4 @@ test("offline looks the same everywhere: the machine button and Build plan dimme
 	// The reason is its accessible description, not text beside it.
 	let described = /aria-describedby="([^"]+)"/.exec(plan)![1];
 	expect(plan).toContain(`<span class="sr-only" id="${described}">build-box is offline</span>`);
-});
-
-test("in Chat, a Planner another account holds makes the button read-only", () => {
-	let held = choice(true, true);
-	held.state!.planner = { state: "held", login: "rival", machine: null };
-	let markup = renderToStaticMarkup(createElement(MachineButton, { choice: held, planner: true }));
-	expect(markup).toContain('aria-label="Planner held by @rival"');
-	expect(markup).toContain('aria-disabled="true"');
-	expect(markup).not.toContain("aria-haspopup");
-	expect(markup).toContain(">Held by @rival<");
-	// Build plan's button still chooses the machine.
-	let build = renderToStaticMarkup(createElement(MachineButton, { choice: held }));
-	expect(build).toContain('aria-haspopup="menu"');
-	let starting = choice(true, true);
-	starting.state!.planner = { state: "starting", login: null, machine: "M_box" };
-	let shown = renderToStaticMarkup(
-		createElement(MachineButton, { choice: starting, planner: true }),
-	);
-	expect(shown).toContain('aria-label="Machine: build-box, starting the Planner"');
-	expect(shown).toContain(">Starting…<");
 });

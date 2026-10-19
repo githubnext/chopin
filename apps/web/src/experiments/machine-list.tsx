@@ -5,12 +5,12 @@ import {
 	ArrowUpIcon,
 	ChevronIcon,
 	CloseIcon,
+	CloudIcon,
 	CopyIcon,
 	MachineIcon,
 	PencilIcon,
 	PlayIcon,
 	SearchIcon,
-	ServerIcon,
 	StarIcon,
 } from "@chopin/icons";
 import {
@@ -30,7 +30,6 @@ import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { experimentRequest } from "./api";
-import { AddMachineMenu } from "./machine-setup";
 import {
 	DisconnectMachineDialog,
 	goTo,
@@ -43,7 +42,6 @@ import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
 import type { ReactNode } from "react";
 import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
-import type { MachineKind } from "./machine-setup";
 import type { CopyItem, Owner, useMachines } from "./machines";
 
 export type MachineState = "connected" | "offline" | "reauthorize";
@@ -55,7 +53,7 @@ export function machineState(machine: Machine): MachineState {
 /** What the dot means, in words: the status line beside it, and the dot's own name where alone. */
 export function statusWords(machine: Machine, now: number): string {
 	let state = machineState(machine);
-	if (state === "reauthorize") return "Needs pairing again";
+	if (state === "reauthorize") return "Needs reconnecting";
 	if (state === "connected") return "Connected";
 	return `Last seen ${ago(new Date(machine.lastSeenAt).toISOString(), now) ?? "a while ago"}`;
 }
@@ -75,6 +73,22 @@ function agentName(agent: Machine["agent"]): string | undefined {
  * version, agent and system. A machine serves every repository its owner can push to, so no
  * repository identifies it.
  */
+/** Machines by kind, Local then Cloud, each in list order; a kind with none is left out. */
+export function groupMachines(list: Machine[]): { kind: "local" | "cloud"; machines: Machine[] }[] {
+	let groups = [
+		{ kind: "local" as const, machines: list.filter(machine => !machine.service) },
+		{ kind: "cloud" as const, machines: list.filter(machine => machine.service) },
+	];
+	return groups.filter(group => group.machines.length);
+}
+
+const GROUP_LABEL = { local: "Local", cloud: "Cloud" } as const;
+
+function GroupIcon({ kind }: { kind: "local" | "cloud" }) {
+	let Icon = kind === "cloud" ? CloudIcon : MachineIcon;
+	return <Icon aria-hidden="true" className="machines-group-icon" size={16} />;
+}
+
 export function machineMatches(machine: Machine, query: string, login: string | undefined) {
 	let words = query.trim().toLowerCase();
 	if (!words) return true;
@@ -317,102 +331,105 @@ function MachineTable(
 					</TableHead>
 				</TableRow>
 			</TableHeader>
-			<TableBody>
-				{!list.length && (
+			{!list.length && (
+				<TableBody>
 					<TableRow>
 						<TableCell className="machines-empty" colSpan={7}>No machines match.</TableCell>
 					</TableRow>
-				)}
-				{list.map(machine => {
-					return (
-						<TableRow key={machine.id}>
-							<TableCell>
-								<span className="machines-stack">
-									<span className="machines-name-line">
-										<FavoriteStar
-											favorite={machine.favorite}
-											label={machine.label}
-											onToggle={() => void machines.favor(machine.id, !machine.favorite)}
-										/>
-										<span className="machines-name" title={machine.label}>{machine.label}</span>
-										{machine.service && (
-											<Badge
-												icon={ServerIcon}
-												label="Service"
-												size="sm"
-												textSize="2xs"
-												tone="neutral"
+				</TableBody>
+			)}
+			{groupMachines(list).map(group => (
+				<TableBody key={group.kind}>
+					<TableRow>
+						<TableHead className="machines-group-head" colSpan={7} scope="rowgroup">
+							<span className="machines-group-title">
+								<GroupIcon kind={group.kind} />
+								{GROUP_LABEL[group.kind]}
+							</span>
+						</TableHead>
+					</TableRow>
+					{group.machines.map(machine => {
+						return (
+							<TableRow key={machine.id}>
+								<TableCell>
+									<span className="machines-stack">
+										<span className="machines-name-line">
+											<FavoriteStar
+												favorite={machine.favorite}
+												label={machine.label}
+												onToggle={() => void machines.favor(machine.id, !machine.favorite)}
 											/>
-										)}
-										{machine.autoRun && (
-											<Badge
-												icon={PlayIcon}
-												label="Auto builds"
-												size="sm"
-												textSize="2xs"
-												tone="success"
-											/>
+											<span className="machines-name" title={machine.label}>{machine.label}</span>
+											{machine.autoRun && (
+												<Badge
+													icon={PlayIcon}
+													label="Auto builds"
+													size="sm"
+													textSize="2xs"
+													tone="success"
+												/>
+											)}
+										</span>
+									</span>
+								</TableCell>
+								<TableCell>
+									<span className="machines-stack">
+										{owner ? <OwnerName owner={owner} /> : <Dash label="Owner unknown" />}
+									</span>
+								</TableCell>
+								<TableCell>
+									<span className="machines-stack">
+										{machine.hostname
+											? <span>{machine.hostname}</span>
+											: <Dash label="Hostname unknown" />}
+									</span>
+								</TableCell>
+								<TableCell>
+									<span className="machines-stack">
+										<span className="machines-version">
+											{machine.version
+												? <span className="tabular-nums">chopin {machine.version}</span>
+												: <Dash label="Version unknown" />}
+											{updateAvailable(machine.version, machines.recommended) && (
+												<Badge
+													icon={ArrowUpIcon}
+													label="Update"
+													size="sm"
+													textSize="2xs"
+													tone="warning"
+												/>
+											)}
+										</span>
+										{machine.platform && (
+											<span className="machines-secondary">{platformName(machine.platform)}</span>
 										)}
 									</span>
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									{owner ? <OwnerName owner={owner} /> : <Dash label="Owner unknown" />}
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									{machine.hostname
-										? <span>{machine.hostname}</span>
-										: <Dash label="Hostname unknown" />}
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									<span className="machines-version">
-										{machine.version
-											? <span className="tabular-nums">chopin {machine.version}</span>
-											: <Dash label="Version unknown" />}
-										{updateAvailable(machine.version, machines.recommended) && (
-											<Badge
-												icon={ArrowUpIcon}
-												label="Update"
-												size="sm"
-												textSize="2xs"
-												tone="warning"
-											/>
-										)}
+								</TableCell>
+								<TableCell>
+									<span className="machines-stack">
+										{machine.agent
+											? <span>{agentName(machine.agent)}</span>
+											: <Dash label="Agent unknown" />}
+										{machine.planner && <span className="machines-secondary">Planner</span>}
 									</span>
-									{machine.platform && (
-										<span className="machines-secondary">{platformName(machine.platform)}</span>
-									)}
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									{machine.agent
-										? <span>{agentName(machine.agent)}</span>
-										: <Dash label="Agent unknown" />}
-									{machine.planner && <span className="machines-secondary">Planner</span>}
-								</span>
-							</TableCell>
-							<TableCell className="machines-status-column">
-								<Status machine={machine} now={now} />
-							</TableCell>
-							<TableCell className="machines-actions-column">
-								<MachineActions
-									copies={copiesFor(machine, machines.recommended)}
-									machine={machine}
-									onDisconnect={() => onDisconnect(machine)}
-									onFavorite={() => void machines.favor(machine.id, !machine.favorite)}
-									onRename={() => onRename(machine)}
-								/>
-							</TableCell>
-						</TableRow>
-					);
-				})}
-			</TableBody>
+								</TableCell>
+								<TableCell className="machines-status-column">
+									<Status machine={machine} now={now} />
+								</TableCell>
+								<TableCell className="machines-actions-column">
+									<MachineActions
+										copies={copiesFor(machine, machines.recommended)}
+										machine={machine}
+										onDisconnect={() => onDisconnect(machine)}
+										onFavorite={() => void machines.favor(machine.id, !machine.favorite)}
+										onRename={() => onRename(machine)}
+									/>
+								</TableCell>
+							</TableRow>
+						);
+					})}
+				</TableBody>
+			))}
 		</Table>
 	);
 }
@@ -451,68 +468,74 @@ function MachineRows(
 				{owner ? `@${owner.login}` : "Your machines"}
 			</h3>
 			{!list.length && <p className="machines-empty">No machines match.</p>}
-			<ul>
-				{list.map(machine => {
-					let state = machineState(machine);
-					// Who owns it, where it runs and which chopin; its state is the dot's.
-					let parts = [
-						owner?.login,
-						machine.hostname,
-						machine.version && `chopin ${machine.version}`,
-					].filter(Boolean);
-					// Space, never a separator glyph, keeps the parts apart (see DESIGN.md).
-					let detail = parts.length
-						? parts.map((part, index) => (
-							<span className="machines-detail-part" key={index}>
-								{index > 0 && " "}
-								{part}
-							</span>
-						))
-						: statusWords(machine, now);
-					return (
-						<li className="machines-row-item" key={machine.id}>
-							<FavoriteStar
-								favorite={machine.favorite}
-								label={machine.label}
-								onToggle={() => void machines.favor(machine.id, !machine.favorite)}
-								touch
-							/>
-							<button
-								className="machines-row"
-								onClick={() => {
-									sessionStorage.setItem(SCROLL_KEY, String(page()?.scrollTop ?? 0));
-									goTo(`/machines?machine=${encodeURIComponent(machine.id)}`);
-								}}
-								type="button"
-							>
-								<span className="machines-row-text">
-									<span className="machines-row-name">
-										<StatusDot label={statusWords(machine, now)} state={state} />
-										<span className="machines-name" title={machine.label}>{machine.label}</span>
-										<MachineIcon aria-hidden="true" className="machines-row-icon" size={16} />
+			{groupMachines(list).map(group => (
+				<div className="machines-rows-group" key={group.kind}>
+					<h4 className="machines-group-title">
+						<GroupIcon kind={group.kind} />
+						{GROUP_LABEL[group.kind]}
+					</h4>
+					<ul>
+						{group.machines.map(machine => {
+							let state = machineState(machine);
+							// Who owns it, where it runs and which chopin; its state is the dot's.
+							let parts = [
+								owner?.login,
+								machine.hostname,
+								machine.version && `chopin ${machine.version}`,
+							].filter(Boolean);
+							// Space, never a separator glyph, keeps the parts apart (see DESIGN.md).
+							let detail = parts.length
+								? parts.map((part, index) => (
+									<span className="machines-detail-part" key={index}>
+										{index > 0 && " "}
+										{part}
 									</span>
-									<span className="machines-secondary machines-truncate">{detail}</span>
-								</span>
-								<ChevronIcon aria-hidden="true" className="machines-row-chevron" size={12} />
-							</button>
-						</li>
-					);
-				})}
-			</ul>
+								))
+								: statusWords(machine, now);
+							return (
+								<li className="machines-row-item" key={machine.id}>
+									<FavoriteStar
+										favorite={machine.favorite}
+										label={machine.label}
+										onToggle={() => void machines.favor(machine.id, !machine.favorite)}
+										touch
+									/>
+									<button
+										className="machines-row"
+										onClick={() => {
+											sessionStorage.setItem(SCROLL_KEY, String(page()?.scrollTop ?? 0));
+											goTo(`/machines?machine=${encodeURIComponent(machine.id)}`);
+										}}
+										type="button"
+									>
+										<span className="machines-row-text">
+											<span className="machines-row-name">
+												<StatusDot label={statusWords(machine, now)} state={state} />
+												<span className="machines-name" title={machine.label}>{machine.label}</span>
+											</span>
+											<span className="machines-secondary machines-truncate">{detail}</span>
+										</span>
+										<ChevronIcon aria-hidden="true" className="machines-row-chevron" size={12} />
+									</button>
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			))}
 		</section>
 	);
 }
 
 /**
  * The person's machines: a search, how many there are, then the table on a desktop or the list on
- * a phone or a window as narrow as one, and a quiet way to add another. With none yet, nothing: the page's banner offers the
+ * a phone or a window as narrow as one, and With none yet, nothing: the page's banner offers the
  * first. The table asks again every few seconds, so a machine appears as it connects.
  */
 export function YourMachines(
-	{ owner, machines, onChoose }: {
+	{ owner, machines }: {
 		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
-		onChoose: (kind: MachineKind) => void;
 	},
 ) {
 	let headingId = useId();
@@ -564,9 +587,6 @@ export function YourMachines(
 						onRename={rename}
 					/>
 				)}
-			<p className="machines-more">
-				Connect more machines with <AddMachineMenu appearance="link" onChoose={onChoose} />.
-			</p>
 			{dialogs}
 		</section>
 	);
@@ -596,7 +616,7 @@ export function MachineDetail(
 			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
 			: <MachinesLoading />;
 	}
-	if (!machine) return <p className="machines-empty">This machine isn't paired any more.</p>;
+	if (!machine) return <p className="machines-empty">This machine was removed.</p>;
 	let now = Date.now();
 	let facts: [string, ReactNode][] = [
 		["Status", <Status key="status" machine={machine} now={now} />],
@@ -620,7 +640,7 @@ export function MachineDetail(
 		],
 		[
 			"Runs",
-			[machine.service && "as the service", machine.autoRun && "builds automatically"].filter(
+			[machine.service && "stays connected", machine.autoRun && "builds automatically"].filter(
 				Boolean,
 			)
 				.join(", "),

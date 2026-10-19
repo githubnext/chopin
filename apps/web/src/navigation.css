@@ -1439,12 +1439,7 @@
 	}
 }
 
-/* A machine's name gives way before its state in the Machine list. */
-.document-actions-menu .app-menu-item > .truncate {
-	flex: 1 1 0;
-}
-
-/* A long machine list scrolls inside the menu, whose height place() fits to the window. */
+/* A long list scrolls inside the menu, whose height place() fits to the window. */
 .document-actions-menu {
 	position: fixed;
 	z-index: 60;
@@ -1456,41 +1451,6 @@
 	background: var(--color-page);
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
-}
-
-.document-machine-trigger,
-.document-machine-panel {
-	--cv-unfold-duration: calc(var(--duration-base) * 1.1);
-}
-
-.document-machine-options {
-	margin: var(--spacing) var(--spacing) calc(var(--spacing) * 1.5);
-	padding: var(--spacing);
-	border-radius: var(--radius-md);
-	background: var(--color-inset);
-}
-
-.document-machine-panel .cv-unfold-content {
-	transform: translateY(calc(var(--spacing) * -0.75));
-}
-
-.document-machine-panel[data-open] .cv-unfold-content {
-	transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.document-machine-panel,
-	.document-machine-panel .cv-unfold-content,
-	.document-machine-trigger .cv-unfold-chevron {
-		transform: none;
-		transition: none;
-	}
-}
-
-:root[data-motion-input="keyboard"] .document-machine-panel,
-:root[data-motion-input="keyboard"] .document-machine-panel .cv-unfold-content,
-:root[data-motion-input="keyboard"] .document-machine-trigger .cv-unfold-chevron {
-	transition: none;
 }
 
 .document-status-badge {

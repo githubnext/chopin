@@ -562,19 +562,6 @@
 	background: var(--color-hover);
 }
 
-.action-sheet-item[aria-checked="true"] {
-	background: var(--color-selected);
-}
-
-.action-sheet-item[aria-disabled="true"] {
-	opacity: 0.55;
-}
-
-.action-sheet-detail {
-	font-size: var(--text-sm);
-	color: var(--color-text-tertiary);
-}
-
 .action-sheet-cancel {
 	border-radius: var(--radius-sheet);
 	background: var(--color-page);

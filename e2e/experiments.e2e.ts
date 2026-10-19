@@ -93,13 +93,13 @@ test("the clicker's own agent runs work and publishes evidence that survives dis
 		}),
 	})).json();
 	await page.goto(pairing.url);
-	await expect(page.getByRole("heading", { name: "Connect this machine?", exact: true }))
+	await expect(page.getByRole("heading", { name: "Add this machine?", exact: true }))
 		.toBeVisible();
-	await expect(page.getByText("Connect this checkout of octo-org/score so Chopin can run work"))
+	await expect(page.getByText("Add this checkout of octo-org/score so Chopin can plan and build"))
 		.toBeVisible();
 	await expect(page.getByText(pairing.code, { exact: true })).toBeVisible();
 	await expect(page.getByRole("combobox")).toHaveCount(0);
-	await page.getByRole("button", { name: "Connect", exact: true }).click();
+	await page.getByRole("button", { name: "Add machine", exact: true }).click();
 	// The page sits inside the navigation, which has live regions of its own.
 	await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 	await expect(page.getByRole("link", { name: "Open octo-org/score", exact: true }))

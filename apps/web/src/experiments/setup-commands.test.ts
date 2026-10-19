@@ -349,7 +349,7 @@ test("a setup agent's command is its template with the key, name and origin quot
 		.toBe(`acme connect --server https://chopin.example --key ${KEY}`);
 	expect(setupAgentCommand(OTHER, "windows", { origin: ORIGIN, key: KEY }))
 		.toBe(`other.exe -Key ${KEY}`);
-	// Your computer: the keyless template, and none for an entry without one.
+	// Local: the keyless template, and none for an entry without one.
 	expect(setupAgentCommand(ACME, "macos", { origin: ORIGIN }))
 		.toBe("acme connect --server https://chopin.example");
 	expect(setupAgentCommand(OTHER, "macos", { origin: ORIGIN })).toBeUndefined();
@@ -398,7 +398,7 @@ test("the picker lists setup agents first, preselects the default, and keeps a p
 	let ids = (kind: "server" | "computer") =>
 		agentOptions([OTHER, ACME], kind).map(option => option.id);
 	expect(ids("server")).toEqual(["other", "acme-planner", ...AGENTS.map(agent => agent.id)]);
-	// Your computer offers only the setup agents that have a keyless command.
+	// Local offers only the setup agents that have a keyless command.
 	expect(ids("computer")).toEqual(["acme-planner", ...AGENTS.map(agent => agent.id)]);
 	expect(chosenAgent(null, [OTHER, ACME], "server").id).toBe("acme-planner");
 	expect(chosenAgent("atomic", [OTHER, ACME], "server").id).toBe("atomic");

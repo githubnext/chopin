@@ -2,17 +2,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Drawer } from "@base-ui/react/drawer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CheckIcon, ChevronIcon, MachineIcon, PlusIcon, ServerIcon } from "@chopin/icons";
+import { CloudIcon, MachineIcon, PlusIcon } from "@chopin/icons";
 
 import { documentMenuKeyAction } from "./document-actions-menu";
-import { FavoriteStar } from "./favorite-star";
-import {
-	chosenMachine,
-	machineButtonLabel,
-	machineRows,
-	machineState,
-	plannerButton,
-} from "./machine-choice";
+import { machineButtonLabel, machineRows, machineState, shownMachine } from "./machine-choice";
 import { useMenuDismissal } from "./menu-dismissal";
 import { motionImmediately } from "./motion-input";
 import { useNavigationMenu } from "./navigation-shell";
@@ -27,9 +20,9 @@ import type { ChoosableMachine, MachineChoice, MachineRow, MachineState } from "
 export const ADD_MACHINE_PATH = "/machines?add";
 
 /**
- * A machine as an icon with its state as a dot on the icon's corner: the server icon for one the
- * background service runs, the computer icon otherwise, the same two as Add machine's menu. The
- * dot is the Machines page's status dot. Automatic is the server icon in tertiary ink, no dot.
+ * A machine as an icon with its state as a dot on the icon's corner: the cloud icon for one the
+ * background service runs, the laptop otherwise, the same two as Add machine's menu. The dot is
+ * the Machines page's status dot. With no machine it is the laptop in tertiary ink, no dot.
  */
 export function MachineGlyph(
 	{ machine, size = 16 }: {
@@ -37,7 +30,7 @@ export function MachineGlyph(
 		size?: 16 | 18;
 	},
 ) {
-	let Icon = machine && !machine.service ? MachineIcon : ServerIcon;
+	let Icon = machine?.service ? CloudIcon : MachineIcon;
 	let state: MachineState | undefined = machine && machineState(machine);
 	return (
 		<span
@@ -60,34 +53,22 @@ function go(path: string) {
 function RowContent({ row }: { row: MachineRow }) {
 	return (
 		<>
-			<MachineGlyph machine={row.machine} size={18} />
-			<span className="machine-menu-option">
-				<span className="machine-menu-title" title={row.label}>{row.label}</span>
-				<span className="machine-menu-detail" title={row.detail}>{row.detail}</span>
-			</span>
-			<span className="machine-menu-check">
-				{row.checked && <CheckIcon aria-hidden="true" size={14} />}
-			</span>
+			<MachineGlyph machine={row.machine} />
+			<span className="machine-menu-title" title={row.label}>{row.label}</span>
+			<span className="app-menu-item-meta">{row.detail}</span>
 		</>
 	);
 }
 
 /**
- * Which of the person's machines works on this document: the chosen machine's icon, state dot and
- * name, then a chevron, as `[icon] build-box ▾`; Automatic until they choose. Its menu offers
- * Automatic (and the machine it uses now), their machines serving the repository, offline ones
- * disabled, and Add machine. Every button for a document shares one `choice`, so changing one
- * changes all. A phone opens the same rows as a sheet from the bottom edge.
+ * Which machine runs this document's Planner and builds: an icon with its state dot, the chosen
+ * machine's, or the one Automatic uses now. Its menu lists the person's machines serving the
+ * repository under Local and Cloud, offline ones disabled, and Add machine. The sidebar's
+ * Machines menu sets the default. Every button for a document shares one `choice`. A phone opens
+ * the same rows as a sheet from the bottom edge.
  */
 export function MachineButton(
-	{ choice, compact = false, phone = false, planner = false }: {
-		choice: MachineChoice;
-		/** Chat's button: it says who runs the document's Planner. */
-		planner?: boolean;
-		/** The icon and dot alone; the accessible name still says which machine. */
-		compact?: boolean;
-		phone?: boolean;
-	},
+	{ choice, phone = false }: { choice: MachineChoice; phone?: boolean },
 ) {
 	let id = useId();
 	let trigger = useRef<HTMLButtonElement>(null);
@@ -97,9 +78,8 @@ export function MachineButton(
 	let presence = useTransitionPresence(open && !phone ? true : undefined, 150, motionImmediately());
 	let mounted = presence.phase !== "closed";
 	let state = choice.state;
-	let chosen = chosenMachine(state);
-	let rows = state ? machineRows(state, Date.now(), planner) : [];
-	let runner = planner ? plannerButton(state) : undefined;
+	let shown = shownMachine(state);
+	let rows = state ? machineRows(state) : [];
 	let close = (restoreFocus: boolean) => {
 		setOpen(false);
 		if (restoreFocus) trigger.current?.focus();
@@ -113,7 +93,7 @@ export function MachineButton(
 		if (row.disabled) return;
 		// A phone's sheet closes itself first, then forgets it was open.
 		if (!phone) close(true);
-		if (row.id !== (chosen?.id ?? null)) void choice.choose(row.id);
+		if (!row.checked) void choice.choose(row.id);
 	};
 	let add = () => {
 		close(false);
@@ -174,16 +154,6 @@ export function MachineButton(
 			close(false);
 			return;
 		}
-		let active = document.activeElement as HTMLElement | null;
-		// Right from a machine's row reaches its star; Left goes back.
-		if (event.key === "ArrowRight") {
-			let star = active?.parentElement?.querySelector<HTMLElement>("[data-star]");
-			if (star && star !== active) {
-				event.preventDefault();
-				star.focus();
-			}
-			return;
-		}
 		let action = documentMenuKeyAction(event.key);
 		if (!action) return;
 		event.preventDefault();
@@ -193,11 +163,7 @@ export function MachineButton(
 		}
 		let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role^=menuitem]")]
 			.filter(item => item.getAttribute("aria-disabled") !== "true");
-		// From a star, as from its row.
-		let row = active?.hasAttribute("data-star")
-			? active.parentElement?.querySelector<HTMLElement>("[role^=menuitem]")
-			: active;
-		let current = Math.max(0, items.indexOf(row as HTMLElement));
+		let current = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
 		let next = action === "first"
 			? 0
 			: action === "last"
@@ -209,88 +175,53 @@ export function MachineButton(
 		// A row scrolled out of the panel comes into view as it takes focus.
 		items[next]?.scrollIntoView({ block: "nearest" });
 	};
-	let name = runner?.name ?? chosen?.label ?? "Default machine";
-	let label = runner?.label ?? machineButtonLabel(state);
+	let label = machineButtonLabel(state);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
-	// machine can be chosen. Only its accessible name says why.
-	let offline = !!chosen && !chosen.connected;
-	let item = (row: MachineRow, sheet: boolean) => {
-		let button = (
-			<button
-				aria-checked={row.checked}
-				aria-disabled={row.disabled || undefined}
-				className={`${sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}${
-					row.disabled ? " machine-offline" : ""
-				}`}
-				data-density="detailed"
-				data-disabled={row.disabled || undefined}
-				key={row.id ?? "automatic"}
-				onClick={() => pick(row)}
-				role="menuitemradio"
-				type="button"
-			>
-				<RowContent row={row} />
-			</button>
-		);
-		let id = row.id;
-		if (!id) return button;
-		// A machine's star sets or clears the favorite without changing the document's choice.
-		return (
-			<div className="machine-menu-row" key={id}>
-				{button}
-				<FavoriteStar
-					favorite={row.favorite}
-					menu
-					touch={sheet}
-					label={row.label}
-					onKeyDown={event => {
-						if (event.key !== "ArrowLeft") return;
-						event.preventDefault();
-						event.currentTarget.parentElement?.querySelector<HTMLElement>("[role^=menuitem]")
-							?.focus();
-					}}
-					onToggle={() => void choice.favor(id, !row.favorite)}
-				/>
+	// machine can be chosen. The menu row says why.
+	let offline = !!shown && !shown.connected;
+	let item = (row: MachineRow, sheet: boolean) => (
+		<button
+			aria-checked={row.checked}
+			aria-disabled={row.disabled || undefined}
+			className={sheet ? "machine-sheet-item" : "app-menu-item"}
+			data-disabled={row.disabled || undefined}
+			key={row.id}
+			onClick={() => pick(row)}
+			role="menuitemradio"
+			type="button"
+		>
+			<RowContent row={row} />
+		</button>
+	);
+	let group = (name: string, list: MachineRow[], sheet: boolean) =>
+		list.length > 0 && (
+			<div aria-label={name} key={name} role="group">
+				<p aria-hidden="true" className="machine-menu-label">{name}</p>
+				{list.map(row => item(row, sheet))}
 			</div>
 		);
-	};
+	let body = (sheet: boolean) => (
+		<>
+			{group("Local", rows.filter(row => !row.cloud), sheet)}
+			{group("Cloud", rows.filter(row => row.cloud), sheet)}
+			{rows.length > 0 && <div className="app-menu-separator" role="separator" />}
+			{addItem(sheet)}
+		</>
+	);
 	let addItem = (sheet: boolean) => (
 		<button
-			className={sheet ? "machine-sheet-item" : "app-menu-item machine-menu-item"}
-			data-density="detailed"
+			className={sheet ? "machine-sheet-item" : "app-menu-item"}
 			data-add=""
 			onClick={add}
 			role="menuitem"
 			type="button"
 		>
 			<span aria-hidden="true" className="machine-glyph" data-automatic="">
-				<PlusIcon size={18} />
+				<PlusIcon size={16} />
 			</span>
-			<span className="machine-menu-option">
-				<span className="machine-menu-title">Add machine…</span>
-			</span>
+			<span className="machine-menu-title">Add machine</span>
 		</button>
 	);
-	let [automatic, ...machines] = rows;
-	// Another account holds the Planner: Chat's button says so and opens nothing.
-	if (runner?.readOnly) {
-		return (
-			<button
-				aria-disabled="true"
-				aria-label={label}
-				className="machine-button"
-				data-compact={compact || undefined}
-				data-phone={phone || undefined}
-				data-read-only=""
-				data-tooltip={compact ? name : undefined}
-				data-tooltip-verbatim={compact ? "" : undefined}
-				type="button"
-			>
-				<MachineGlyph />
-				{!compact && <span className="machine-button-name">{name}</span>}
-			</button>
-		);
-	}
 	return (
 		<>
 			<button
@@ -300,12 +231,9 @@ export function MachineButton(
 				aria-haspopup="menu"
 				aria-label={label}
 				className={offline ? "machine-button machine-offline" : "machine-button"}
-				data-compact={compact || undefined}
 				data-phone={phone || undefined}
-				data-tooltip={compact
-					? runner?.name ?? chosen?.label ?? label.replace(/^Machine: /, "")
-					: undefined}
-				data-tooltip-verbatim={compact ? "" : undefined}
+				data-tooltip={label}
+				data-tooltip-verbatim=""
 				onClick={() => open ? close(false) : openAt("first")}
 				onKeyDown={event => {
 					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -315,21 +243,13 @@ export function MachineButton(
 				ref={trigger}
 				type="button"
 			>
-				<MachineGlyph machine={chosen} />
-				{!compact && <span className="machine-button-name" title={name}>{name}</span>}
-				{!compact && (
-					<ChevronIcon
-						aria-hidden="true"
-						className="machine-button-chevron"
-						size={12}
-					/>
-				)}
+				<MachineGlyph machine={shown} />
 			</button>
 			{choice.error && <span className="sr-only" role="alert">{choice.error}</span>}
 			{!phone && mounted && createPortal(
 				<div
 					aria-hidden={presence.phase === "closing" ? "true" : undefined}
-					aria-label="Machine for this document"
+					aria-label="Runs on"
 					className={`machine-menu motion-dropdown ${presence.className}`}
 					id={id}
 					inert={presence.phase === "closing"}
@@ -337,23 +257,11 @@ export function MachineButton(
 					ref={menu}
 					role="menu"
 				>
-					{automatic && item(automatic, false)}
-					<div className="machine-menu-separator" role="separator" />
-					{machines.map(row => item(row, false))}
-					{machines.length > 0 && <div className="machine-menu-separator" role="separator" />}
-					{addItem(false)}
+					{body(false)}
 				</div>,
 				document.body,
 			)}
-			{phone && open && (
-				<MachineSheet onClose={() => setOpen(false)}>
-					{automatic && item(automatic, true)}
-					<div className="machine-menu-separator" role="separator" />
-					{machines.map(row => item(row, true))}
-					{machines.length > 0 && <div className="machine-menu-separator" role="separator" />}
-					{addItem(true)}
-				</MachineSheet>
-			)}
+			{phone && open && <MachineSheet onClose={() => setOpen(false)}>{body(true)}</MachineSheet>}
 		</>
 	);
 }
@@ -375,23 +283,19 @@ function MachineSheet({ children, onClose }: { children: ReactNode; onClose: () 
 				<Drawer.Backdrop className="phone-sheet-backdrop" />
 				<Drawer.Viewport className="phone-sheet-viewport">
 					<Drawer.Popup
-						aria-label="Machine for this document"
+						aria-label="Runs on"
 						className="action-sheet machine-sheet"
 					>
-						<Drawer.Title className="sr-only">Machine for this document</Drawer.Title>
+						<Drawer.Title className="sr-only">Runs on</Drawer.Title>
 						<div
 							className="machine-sheet-group"
 							onClick={event => {
 								let target = (event.target as HTMLElement).closest("button");
-								// A star sets the favorite; the sheet stays for the choice.
-								if (
-									target && target.getAttribute("aria-disabled") !== "true"
-									&& !target.hasAttribute("data-star")
-								) setOpen(false);
+								if (target && target.getAttribute("aria-disabled") !== "true") setOpen(false);
 							}}
 							role="menu"
 						>
-							<p aria-hidden="true" className="action-sheet-title">Machine for this document</p>
+							<p aria-hidden="true" className="action-sheet-title">Runs on</p>
 							{children}
 						</div>
 						<Drawer.Close className="action-sheet-cancel">Cancel</Drawer.Close>

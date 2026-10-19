@@ -233,7 +233,7 @@ for (let width of [1280, 390]) {
 		try {
 			let page = await enter(person(), { viewport: { width, height: 844 } });
 			await page.goto(await local.pairing);
-			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await page.getByRole("button", { name: "Add machine", exact: true }).click();
 			await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
 				"Connected",
 			);
@@ -300,7 +300,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 		try {
 			let page = await enter(person());
 			await page.goto(await local.pairing);
-			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await page.getByRole("button", { name: "Add machine", exact: true }).click();
 			await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
 				"Connected",
 			);
@@ -431,7 +431,7 @@ test("a build's agent opens draft pull requests with the machine's own GitHub to
 	try {
 		let page = await enter(handle);
 		await page.goto(await local.pairing);
-		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
 			"Connected",
 		);
@@ -733,7 +733,7 @@ test("a build in progress shows who started it and offers no action", async ({ s
 	try {
 		let page = await enter(person());
 		await page.goto(await local.pairing);
-		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
@@ -821,7 +821,7 @@ test("edits after a build read as changes to build, and Build sends them to the 
 	try {
 		let page = await enter(person());
 		await page.goto(await local.pairing);
-		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();

@@ -443,14 +443,14 @@ Chopin refuses to start when the value is malformed.
 ]
 ```
 
-| Field     | Value                                                                                                             |
-| --------- | ----------------------------------------------------------------------------------------------------------------- |
-| `id`      | Up to 40 lowercase letters, digits and dashes. Unique, and not a built-in agent's id.                             |
-| `name`    | What the picker shows, up to 60 characters.                                                                       |
-| `install` | Up to 20 lines, shown under **Show install steps**.                                                               |
-| `command` | The command for **Server or VM**. It must contain `{key}`.                                                        |
-| `keyless` | Optional. The command for **Your computer**, without `{key}`. Without it, only **Server or VM** offers the entry. |
-| `default` | Optional. `true` on one entry preselects it for anyone who hasn't picked an agent in that browser.                |
+| Field     | Value                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| `id`      | Up to 40 lowercase letters, digits and dashes. Unique, and not a built-in agent's id.              |
+| `name`    | What the picker shows, up to 60 characters.                                                        |
+| `install` | Up to 20 lines, shown under **Show install steps**.                                                |
+| `command` | The command for **Cloud**. It must contain `{key}`.                                                |
+| `keyless` | Optional. The command for **Local**, without `{key}`. Without it, only **Cloud** offers the entry. |
+| `default` | Optional. `true` on one entry preselects it for anyone who hasn't picked an agent in that browser. |
 
 `install`, `command` and `keyless` also take an object with one value each for
 `linux`, `macos` and `windows`. The page fills in `{origin}`, `{key}` and

@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import { Count } from "@chopin/editor/count";
-import { MachineIcon, PlusIcon, ServerIcon, WarningIcon } from "@chopin/icons";
-import { useLayoutEffect, useRef } from "react";
+import { CloudIcon, MachineIcon, PlusIcon, ServerIcon, WarningIcon } from "@chopin/icons";
+import { Fragment, useLayoutEffect, useRef } from "react";
 
 import { ago } from "./build-model";
 import { setFavorite } from "./machine-choice";
@@ -18,7 +18,7 @@ import "./machines-entry.css";
 import type { Machine } from "./machine-summary";
 import type { ReactNode } from "react";
 
-/** Where the Machines page's Add machine flow starts: Add your computer, opened at once. */
+/** Where the Machines page's Add machine flow starts: Add a local machine, opened at once. */
 const ADD_MACHINE_PATH = "/machines?add";
 /** The radio value for no default: Chopin uses whichever machine is free. */
 const ANY = "any";
@@ -112,27 +112,35 @@ export function MachinesEntry(
 							onValueChange={value => void choose(value as string)}
 							value={favorite?.id ?? ANY}
 						>
-							<Menu.GroupLabel className="app-menu-label">Default machine</Menu.GroupLabel>
+							<Menu.GroupLabel className="app-menu-label">Default</Menu.GroupLabel>
 							<Menu.RadioItem className="app-menu-item" closeOnClick value={ANY}>
 								<span aria-hidden="true" className="machines-menu-glyph">
 									<ServerIcon />
 								</span>
-								<span className="truncate">Any available</span>
+								<span className="truncate">Any connected</span>
 								<span className="app-menu-item-meta" title={uses ? `Uses ${uses}` : undefined}>
 									{uses ? `Uses ${uses}` : "None connected"}
 								</span>
 							</Menu.RadioItem>
-							{list.map(machine => (
-								<Menu.RadioItem
-									className="app-menu-item"
-									closeOnClick
-									key={machine.id}
-									value={machine.id}
-								>
-									<MachineMark machine={machine} />
-									<span className="truncate" title={machine.label}>{machine.label}</span>
-									<span className="app-menu-item-meta">{state(machine)}</span>
-								</Menu.RadioItem>
+							{[
+								{ name: "Local", machines: list.filter(machine => !machine.service) },
+								{ name: "Cloud", machines: list.filter(machine => machine.service) },
+							].filter(group => group.machines.length).map(group => (
+								<Fragment key={group.name}>
+									<Menu.GroupLabel className="app-menu-label">{group.name}</Menu.GroupLabel>
+									{group.machines.map(machine => (
+										<Menu.RadioItem
+											className="app-menu-item"
+											closeOnClick
+											key={machine.id}
+											value={machine.id}
+										>
+											<MachineMark machine={machine} />
+											<span className="truncate" title={machine.label}>{machine.label}</span>
+											<span className="app-menu-item-meta">{state(machine)}</span>
+										</Menu.RadioItem>
+									))}
+								</Fragment>
 							))}
 						</Menu.RadioGroup>
 						<Menu.Separator className="app-menu-separator" />
@@ -140,7 +148,7 @@ export function MachinesEntry(
 							<span aria-hidden="true" className="machines-menu-glyph">
 								<PlusIcon />
 							</span>
-							Add machine…
+							Add machine
 						</Menu.LinkItem>
 						<Menu.LinkItem className="app-menu-item" closeOnClick href="/machines">
 							<span aria-hidden="true" className="machines-menu-glyph">
@@ -184,7 +192,7 @@ function MachinesMenuPopup({ children }: { children: ReactNode }) {
 
 /** A machine's icon with its state as a dot on the corner, as the Machines page draws it. */
 function MachineMark({ machine }: { machine: Machine }) {
-	let Icon = machine.service ? ServerIcon : MachineIcon;
+	let Icon = machine.service ? CloudIcon : MachineIcon;
 	let dot = machine.reauthorize ? "reauthorize" : machine.connected ? "connected" : "offline";
 	return (
 		<span aria-hidden="true" className="machines-menu-glyph">
@@ -196,7 +204,7 @@ function MachineMark({ machine }: { machine: Machine }) {
 
 /** A few quiet words on the row: connected, or when an offline machine was last seen. */
 function state(machine: Machine) {
-	if (machine.reauthorize) return "Needs pairing";
+	if (machine.reauthorize) return "Needs reconnecting";
 	if (machine.connected) return "Connected";
 	let seen = ago(new Date(machine.lastSeenAt).toISOString(), Date.now());
 	return seen ? `Last seen ${seen}` : "Offline";

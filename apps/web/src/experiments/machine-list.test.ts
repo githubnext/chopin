@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { machineMatches, machineState, platformName, statusWords } from "./machine-list";
+import {
+	groupMachines,
+	machineMatches,
+	machineState,
+	platformName,
+	statusWords,
+} from "./machine-list";
 
 import type { Machine } from "../machine-summary";
 
@@ -21,13 +27,13 @@ const base: Machine = {
 	favorite: false,
 };
 
-test("a machine's state and its words: connected, last seen, or needing pairing again", () => {
+test("a machine's state and its words: connected, last seen, or needing to reconnect", () => {
 	expect(machineState({ ...base, connected: true })).toBe("connected");
 	expect(statusWords({ ...base, connected: true }, NOW)).toBe("Connected");
 	expect(machineState(base)).toBe("offline");
 	expect(statusWords(base, NOW)).toBe("Last seen 3h ago");
 	expect(machineState({ ...base, connected: true, reauthorize: true })).toBe("reauthorize");
-	expect(statusWords({ ...base, reauthorize: true }, NOW)).toBe("Needs pairing again");
+	expect(statusWords({ ...base, reauthorize: true }, NOW)).toBe("Needs reconnecting");
 });
 
 test("platforms read as people name them", () => {
@@ -59,4 +65,16 @@ test("search never matches a repository a machine has a checkout of; machines se
 	for (let query of ["site", "octo-org/score", "score"]) {
 		expect(machineMatches(listed, query, "ada"), query).toBe(false);
 	}
+});
+
+test("machines group by kind, Local then Cloud, leaving out an empty group", () => {
+	let laptop = { ...base, id: "a", label: "laptop" };
+	let box = { ...base, id: "b", label: "box", service: true };
+	let mini = { ...base, id: "c", label: "mini" };
+	expect(
+		groupMachines([box, laptop, mini]).map(group => [group.kind, group.machines.map(m => m.id)]),
+	)
+		.toEqual([["local", ["a", "c"]], ["cloud", ["b"]]]);
+	expect(groupMachines([box]).map(group => group.kind)).toEqual(["cloud"]);
+	expect(groupMachines([])).toEqual([]);
 });

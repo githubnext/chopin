@@ -189,7 +189,7 @@ function foreground(agent: CodingAgent) {
 }
 
 /**
- * Add a server: name the machine if you like, choose the agent, whether it runs in the background and whether Chopin may build
+ * Add a cloud machine: name the machine if you like, choose the agent, whether it runs in the background and whether Chopin may build
  * and prototype on it by itself, then generate an install script with a single-use key, which
  * pairs the machine with no browser. The key is made only when Generate is pressed. The page ends
  * at the command; the machine appears in the Machines table when it connects.
@@ -232,10 +232,9 @@ export function AddServerPage() {
 							checked={runsInBackground}
 							disabled={foreground(builtIn)}
 							onChange={setBackground}
-							title="Run in the background"
+							title="Stay connected"
 						>
-							chopin runs as a service that starts with the machine and stays connected after you
-							log out.
+							chopin starts with the machine and stays connected after you log out.
 						</Setting>
 					)}
 					<Setting

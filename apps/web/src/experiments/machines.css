@@ -676,12 +676,6 @@
 	text-align: center;
 }
 
-.machines-more {
-	margin: 0;
-	color: var(--color-text-secondary);
-	font-size: var(--text-sm);
-}
-
 .machines-add-link {
 	font: inherit;
 }
@@ -1103,4 +1097,38 @@
 	.machines-settings {
 		padding-inline-start: 0;
 	}
+}
+
+/* A kind's heading in the table and the phone list: its icon, then Local or Cloud. */
+.machines-table .machines-group-head {
+	padding-top: calc(var(--spacing) * 3);
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	font-weight: 600;
+	letter-spacing: normal;
+	text-align: start;
+	text-transform: none;
+}
+
+.machines-group-title {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin: 0;
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.machines-group-icon {
+	flex: none;
+	--color-icon: var(--color-text-tertiary);
+}
+
+.machines-rows-group + .machines-rows-group {
+	margin-top: calc(var(--spacing) * 4);
+}
+
+.machines-rows-group > .machines-group-title {
+	margin-bottom: calc(var(--spacing) * 1);
 }

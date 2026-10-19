@@ -1,14 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import {
-	CheckIcon,
-	ChevronIcon,
-	CloseIcon,
-	CopyIcon,
-	MachineIcon,
-	ServerIcon,
-} from "@chopin/icons";
+import { CheckIcon, ChevronIcon, CloseIcon, CloudIcon, CopyIcon, MachineIcon } from "@chopin/icons";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
@@ -249,15 +242,15 @@ const KINDS: {
 }[] = [
 	{
 		kind: "computer",
-		title: "Your computer",
-		detail: "Connect a laptop or desktop you use. You approve it in this browser.",
+		title: "Local",
+		detail: "A laptop or desktop you work on. Approve it in this browser.",
 		Icon: MachineIcon,
 	},
 	{
 		kind: "server",
-		title: "Server or VM",
-		detail: "Keep a remote machine connected in the background, with a one-time key.",
-		Icon: ServerIcon,
+		title: "Cloud",
+		detail: "A server or VM that stays connected. Set it up with a one-time key.",
+		Icon: CloudIcon,
 	},
 ];
 
@@ -403,7 +396,7 @@ export function AddMachineMenu(
 }
 
 /**
- * Add your computer: install chopin and connect, with no key. The command prints a link to
+ * Add a local machine: install chopin and connect, with no key. The command prints a link to
  * approve in this browser; the machine then appears in the table, as in Tailscale.
  */
 export function AddComputerDialog(
@@ -418,7 +411,7 @@ export function AddComputerDialog(
 			className="machines-computer-dialog"
 			motion={motion}
 			onDismiss={onDismiss}
-			title="Add your computer"
+			title="Add a local machine"
 		>
 			<span className="machines-dialog-close">
 				<IconButton aria-label="Close" data-tooltip="Close" onClick={onDismiss}>

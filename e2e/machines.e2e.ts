@@ -133,7 +133,7 @@ async function machine() {
 }
 
 /** The menu Add machine opens, on the page header or the empty page's banner. */
-async function addMachine(page: Page, kind: "Your computer" | "Server or VM", banner = false) {
+async function addMachine(page: Page, kind: "Local" | "Cloud", banner = false) {
 	let scope = banner
 		? page.getByRole("region", { name: "Add your first machine", exact: true })
 		: page.getByRole("main");
@@ -170,10 +170,10 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 		.toBeVisible();
 	await expect(page.getByRole("searchbox", { name: "Search machines" })).toHaveCount(0);
 	await expect(page.getByRole("table", { name: "Your machines" })).toHaveCount(0);
-	await expect(page.getByText(/^0 machines$|Connect more machines/)).toHaveCount(0);
+	await expect(page.getByText(/^0 machines$|Add more machines/)).toHaveCount(0);
 
-	await addMachine(page, "Your computer", true);
-	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
+	await addMachine(page, "Local", true);
+	let dialog = page.getByRole("dialog", { name: "Add a local machine", exact: true });
 	await expect(dialog).toContainText(`connect as @${handle}.`);
 	let origin = new URL(baseURL!).origin;
 	let command = () => dialog.locator(".machines-run pre code").innerText();
@@ -214,7 +214,7 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 		let approval = await page.context().newPage();
 		await approval.goto(laptop.output().match(PAIRING_LINK)![0]);
 		await expect(approval.getByText(code!, { exact: true })).toBeVisible();
-		await approval.getByRole("button", { name: "Connect", exact: true }).click();
+		await approval.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(approval.getByRole("status").filter({ hasText: "Connected" }))
 			.toHaveText("Connected");
 		await approval.close();
@@ -246,13 +246,13 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	let page = await enter(person());
 	let minted = keyRequests(page);
 	await page.goto("/machines");
-	await addMachine(page, "Server or VM");
+	await addMachine(page, "Cloud");
 	await expect(page).toHaveURL(/\/machines\?server$/);
-	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a server");
+	await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a cloud machine");
 	await expect(page.getByText("Choose settings, then generate an install script.")).toBeVisible();
 	// Opening the page makes no key; Generate does.
 	expect(minted).toEqual([]);
-	let background = page.getByRole("switch", { name: "Run in the background", exact: true });
+	let background = page.getByRole("switch", { name: "Stay connected", exact: true });
 	let automatic = page.getByRole("switch", {
 		name: "Build and prototype automatically",
 		exact: true,
@@ -317,7 +317,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		).toMatchObject([{ label: "ci-runner", hostname: hostname(), autoRun: true }]);
 
 		// Back on Machines, the machine is in the table.
-		await page.getByRole("link", { name: "Back to Machines", exact: true }).click();
+		await page.getByRole("main").getByRole("link", { name: "Machines", exact: true }).click();
 		await expect(page).toHaveURL(/\/machines$/);
 		let row = page.getByRole("table", { name: "Your machines" })
 			.getByRole("row", { name: /ci-runner/ });
@@ -336,8 +336,8 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 test("a phone wraps every command in view", async ({ join: enter }) => {
 	let page = await enter(person(), PHONE);
 	await page.goto("/machines");
-	await addMachine(page, "Your computer", true);
-	let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
+	await addMachine(page, "Local", true);
+	let dialog = page.getByRole("dialog", { name: "Add a local machine", exact: true });
 	await expect(dialog.getByRole("button", { name: "Copy setup command", exact: true }))
 		.toBeVisible();
 
@@ -432,7 +432,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	// A machine is its name, star and badges: no owner or repository under the name. Its owner is
 	// their GitHub login in a column of its own.
 	let cells = (name: string) => row(name).getByRole("cell");
-	await expect(cells("build-box").nth(0)).toHaveText(/^\s*build-box\s*Service\s*$/);
+	await expect(cells("build-box").nth(0)).toHaveText(/^\s*build-box\s*$/);
 	await expect(cells("build-box").nth(1)).toHaveText(login);
 	// Every machine connected with a checkout of octo-org/score, yet no repository shows anywhere.
 	await expect(table).not.toContainText("octo-org");
@@ -441,7 +441,8 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(page.getByRole("searchbox", { name: "Search machines" }))
 		.toHaveAttribute("placeholder", "Search by name, owner, host, version, agent…");
 	await shot(page, "machines-table");
-	await expect(row("build-box")).toContainText("Service");
+	// build-box is a cloud machine, listed under its group's heading; the others are local.
+	await expect(table.getByRole("rowheader", { name: "Cloud", exact: true })).toBeVisible();
 	await expect(row("build-box")).toContainText("build-box.internal");
 	await expect(row("build-box")).toContainText(`chopin ${RELEASE}`);
 	await expect(row("build-box")).toContainText("Linux arm64");
@@ -481,11 +482,6 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await dialog.getByRole("button", { name: "Update name", exact: true }).click();
 	await expect(dialog).toHaveCount(0);
 	await expect(row("Build box")).toContainText("build-box.internal");
-
-	// Under the table, a quiet way to add another.
-	await page.getByRole("main").getByRole("button", { name: "Add machine", exact: true }).last()
-		.click();
-	await expect(page.getByRole("menu", { name: "Add machine" })).toBeVisible();
 });
 
 test("on a phone, machines are rows that open their own view, where they rename", async ({ join: enter }) => {
@@ -583,7 +579,7 @@ test("the sidebar's Machines menu sets the default machine and leads to the page
 	let menu = page.getByRole("menu");
 	let option = (name: string) => menu.getByRole("menuitemradio", { name: new RegExp(`^${name}`) });
 	// Nothing is the default yet: any available machine runs the work.
-	await expect(option("Any available")).toHaveAttribute("aria-checked", "true");
+	await expect(option("Any connected")).toHaveAttribute("aria-checked", "true");
 	await expect(option("studio")).toHaveAttribute("aria-checked", "false");
 	await option("studio").click();
 	await expect(menu).toBeHidden();
@@ -593,7 +589,7 @@ test("the sidebar's Machines menu sets the default machine and leads to the page
 		.toHaveAttribute("aria-pressed", "true");
 	await entry.click();
 	await expect(option("studio")).toHaveAttribute("aria-checked", "true");
-	await option("Any available").click();
+	await option("Any connected").click();
 	await expect(table.locator(".favorite-star[aria-pressed=true]")).toHaveCount(0);
 	// Manage machines is the way to the full page.
 	await page.goto("/");

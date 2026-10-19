@@ -190,7 +190,7 @@ are only ever answered in the connector terminal; a drop never answers one.
 
 **How pairing works.** An unpaired connector prints a link and an
 eight-character code. Signing in at the link with push access, choosing
-**Connect** after checking the code, and the GitHub authorization that follows
+**Add machine** after checking the code, and the GitHub authorization that follows
 hand the machine a long-lived token. Each `connect` then registers the machine
 with that token, naming the repository, commit and branch of each checkout given
 with `--checkout`. One connector process runs for a state directory, and its
@@ -221,7 +221,7 @@ command in [Run without installing](chopin-cli-reference.md#run-without-installi
 
 **"Your local agent isn't connected" (HTTP 409 `no-workspace`).** No connector of
 yours is connected. Start the command shown, open
-its link, choose **Connect**, then press **Run** or **Build on my laptop** again.
+its link, choose **Add machine**, then press **Run** or **Build on my laptop** again.
 Another person's connector never runs your work.
 
 **Wrong repository, not a Git checkout, or a missing commit.** A `--checkout`

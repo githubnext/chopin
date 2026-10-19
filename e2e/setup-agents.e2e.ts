@@ -25,7 +25,7 @@ function person() {
 	return `sam-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-async function addMachine(page: Page, kind: "Your computer" | "Server or VM") {
+async function addMachine(page: Page, kind: "Local" | "Cloud") {
 	await page.goto("/machines");
 	await page.getByRole("main").getByRole("button", { name: "Add machine", exact: true }).first()
 		.click();
@@ -48,8 +48,8 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 	test(`server or VM on a ${device}: the deployment's setup agent comes first and preselected, its command filled with a real key`, async ({ baseURL, join: enter }) => {
 		test.setTimeout(120_000);
 		let page = await enter(person(), use);
-		await addMachine(page, "Server or VM");
-		await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a server");
+		await addMachine(page, "Cloud");
+		await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add a cloud machine");
 		let picker = page.getByRole("combobox", { name: "Coding agent", exact: true });
 		await expect(picker).toHaveValue("acme-planner");
 		expect(await options(page)).toEqual([
@@ -59,7 +59,7 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 			"Atomic",
 		]);
 		// Its own command installs whatever runs in the background; automatic work travels with the key.
-		await expect(page.getByRole("switch", { name: "Run in the background", exact: true }))
+		await expect(page.getByRole("switch", { name: "Stay connected", exact: true }))
 			.toHaveCount(0);
 		let automatic = page.getByRole("switch", {
 			name: "Build and prototype automatically",
@@ -106,7 +106,7 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 		if (device === "phone") return;
 		// A person's own pick wins over the default, here and next time.
 		await picker.selectOption({ label: "GitHub Copilot CLI" });
-		await expect(page.getByRole("switch", { name: "Run in the background", exact: true }))
+		await expect(page.getByRole("switch", { name: "Stay connected", exact: true }))
 			.toBeVisible();
 		await page.reload();
 		await expect(page.getByRole("combobox", { name: "Coding agent", exact: true }))
@@ -115,8 +115,8 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 
 	test(`your computer on a ${device}: a setup agent with a keyless command comes first, the others are left out`, async ({ baseURL, join: enter }) => {
 		let page = await enter(person(), use);
-		await addMachine(page, "Your computer");
-		let dialog = page.getByRole("dialog", { name: "Add your computer", exact: true });
+		await addMachine(page, "Local");
+		let dialog = page.getByRole("dialog", { name: "Add a local machine", exact: true });
 		await expect(dialog.getByRole("combobox", { name: "Coding agent", exact: true }))
 			.toHaveValue("acme-planner");
 		expect(await options(page)).toEqual(["Acme Planner", "GitHub Copilot CLI", "Atomic"]);

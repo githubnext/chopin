@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ago } from "./build-model";
 import { machines as liveMachines } from "./machine-summary";
 
 import type { Machine } from "./machine-summary";
@@ -61,19 +60,18 @@ export function chosenMachine(state: MachineChoiceState | undefined) {
 	return state?.choice ? state.machines.find(machine => machine.id === state.choice) : undefined;
 }
 
-const STATE_WORDS: Record<MachineState, string> = {
-	connected: "connected",
-	offline: "offline",
-	reauthorize: "needs pairing again",
-};
-
-/** The machine button's accessible name: which machine, and whether it can take work now. */
-export function machineButtonLabel(state: MachineChoiceState | undefined): string {
-	if (!state) return "Machine: Default machine";
+/** The machine the document runs on: the person's choice, else the one Automatic uses now. */
+export function shownMachine(state: MachineChoiceState | undefined) {
 	let chosen = chosenMachine(state);
-	if (chosen) return `Machine: ${chosen.label}, ${STATE_WORDS[machineState(chosen)]}`;
-	let using = automaticLabel(state);
-	return `Machine: Default machine, ${using ? `uses ${using}` : "no machine connected"}`;
+	if (chosen || !state?.automatic) return chosen;
+	let id = state.automatic.id;
+	return state.machines.find(machine => machine.id === id);
+}
+
+/** The machine button's accessible name and tooltip: which machine the document runs on. */
+export function machineButtonLabel(state: MachineChoiceState | undefined): string {
+	let name = state && (shownMachine(state)?.label ?? automaticLabel(state));
+	return name ? `Runs on ${name}` : "Runs on: no machine connected";
 }
 
 function automaticLabel(state: MachineChoiceState) {
@@ -83,9 +81,9 @@ function automaticLabel(state: MachineChoiceState) {
 }
 
 /**
- * Whether a document offers the machine choice: its buttons beside Build plan and in Chat, and
- * Machine in its title's menu. Only once the person has paired a machine, connected or not, and
- * whatever repositories its checkouts are of; before that the Machines page is the way to add one.
+ * Whether a document offers the machine choice: its button left of Build plan. Only once the
+ * person has added a machine, connected or not, and whatever repositories its checkouts are of;
+ * before that the Machines page is the way to add one.
  */
 export function showsMachineChoice(machines: readonly Pick<Machine, "id">[] | undefined): boolean {
 	return !!machines?.length;
@@ -97,44 +95,6 @@ export function offlineChoice(state: MachineChoiceState | undefined): string | u
 	return chosen && !chosen.connected ? `${chosen.label} is offline` : undefined;
 }
 
-/**
- * What Chat's machine button says about the document's Planner, or undefined to show the machine
- * as Build plan's button does: "Held by @someone" (read-only) while another account holds it,
- * "Starting…" while the chosen machine's backend has yet to attach, or the machine running it.
- */
-export function plannerButton(
-	state: MachineChoiceState | undefined,
-): { name: string; label: string; readOnly: boolean } | undefined {
-	let planner = state?.planner;
-	if (!state || !planner) return undefined;
-	if (planner.state === "held" && planner.login) {
-		return {
-			name: `Held by @${planner.login}`,
-			label: `Planner held by @${planner.login}`,
-			readOnly: true,
-		};
-	}
-	let machine = planner.machine
-		? state.machines.find(value => value.id === planner.machine)
-		: undefined;
-	if (!machine) return undefined;
-	if (planner.state === "starting") {
-		return {
-			name: "Starting…",
-			label: `Machine: ${machine.label}, starting the Planner`,
-			readOnly: false,
-		};
-	}
-	if (planner.state === "attached") {
-		return {
-			name: machine.label,
-			label: `Machine: ${machine.label}, runs the Planner`,
-			readOnly: false,
-		};
-	}
-	return undefined;
-}
-
 /** The person's own machine that is starting the document's Planner, by name, when one is. */
 export function plannerStartingOn(state: MachineChoiceState | undefined): string | undefined {
 	let planner = state?.planner;
@@ -142,83 +102,38 @@ export function plannerStartingOn(state: MachineChoiceState | undefined): string
 	return state?.machines.find(machine => machine.id === planner.machine)?.label;
 }
 
-const OS: Record<string, string> = { linux: "Linux", darwin: "macOS", win32: "Windows" };
-
-/** A machine's one line under its name: its state, then its chopin release and system. */
-export function machineDetail(machine: ChoosableMachine, now: number): string {
-	let state = machineState(machine);
-	if (state === "reauthorize") return "Needs pairing again";
-	if (state === "offline") {
-		let seen = ago(new Date(machine.lastSeenAt).toISOString(), now);
-		return seen ? `Offline, last seen ${seen}` : "Offline";
-	}
-	let version = machine.version ? ` with chopin ${machine.version}` : "";
-	let os = machine.platform ? ` on ${OS[machine.platform.os] ?? machine.platform.os}` : "";
-	return `Connected${version}${os}`;
-}
-
-export type MachineRow = {
-	/** The machine's id, or null for Automatic. */
-	id: string | null;
-	label: string;
-	/** Its second line as words, as a screen reader hears it. */
-	detail: string;
-	checked: boolean;
-	disabled: boolean;
-	/** It is the person's favorite machine; never Automatic. */
-	favorite: boolean;
-	/** Automatic's: the machine it uses now, and whether that is the favorite. */
-	uses?: { label: string; favorite: boolean };
-	/** Automatic's: why it is not using the favorite, as "build-box is offline". */
-	note?: string;
-	/** Absent for Automatic. */
-	machine?: ChoosableMachine;
+const STATE_WORDS: Record<MachineState, string> = {
+	connected: "Connected",
+	offline: "Offline",
+	reauthorize: "Needs reconnecting",
 };
 
-/**
- * The menu's rows: Automatic and what it uses now (saying when the favorite is offline), then each
- * machine, offline ones disabled, the favorite's row alone starred.
- */
-export function machineRows(
-	state: MachineChoiceState,
-	now: number,
-	/** Chat's menu: a machine without a Planner command can't be chosen there. */
-	planner = false,
-): MachineRow[] {
-	let plannerless = (machine: ChoosableMachine) =>
-		planner && !!state.planner && !machine.runsPlanners;
-	let chosen = chosenMachine(state);
-	let using = automaticLabel(state);
-	let favorite = state.favorite
-		? state.machines.find(machine => machine.id === state.favorite)
-		: undefined;
-	let uses = using ? { label: using, favorite: !!state.automatic?.favorite } : undefined;
-	let note = favorite && !uses?.favorite && machineState(favorite) !== "connected"
-		? `${favorite.label} is offline`
-		: undefined;
-	let detail = uses
-		? `Uses ${uses.label} now${note ? ` because ${note}` : ""}`
-		: "No machine connected now";
-	return [
-		{
-			id: null,
-			label: "Default machine",
-			detail,
-			checked: !chosen,
-			disabled: false,
-			favorite: false,
-			...(uses ? { uses, note } : {}),
-		},
-		...state.machines.map(machine => ({
-			id: machine.id,
-			label: machine.label,
-			detail: plannerless(machine) ? "Can't run a Planner" : machineDetail(machine, now),
-			checked: chosen?.id === machine.id,
-			disabled: !machine.connected || plannerless(machine),
-			favorite: machine.id === state.favorite,
-			machine,
-		})),
-	];
+export type MachineRow = {
+	id: string;
+	label: string;
+	/** Its state as one quiet word or two, as a screen reader hears it. */
+	detail: string;
+	/** The document's machine: the person's choice, else the one Automatic uses now. */
+	checked: boolean;
+	disabled: boolean;
+	/** The machine the background service runs, which the menu lists under Cloud. */
+	cloud: boolean;
+	machine: ChoosableMachine;
+};
+
+/** The menu's rows, one per machine: Local ones first, then Cloud, offline ones disabled. */
+export function machineRows(state: MachineChoiceState): MachineRow[] {
+	let shown = shownMachine(state);
+	let rows = state.machines.map(machine => ({
+		id: machine.id,
+		label: machine.label,
+		detail: STATE_WORDS[machineState(machine)],
+		checked: shown?.id === machine.id,
+		disabled: !machine.connected || machine.reauthorize,
+		cloud: machine.service,
+		machine,
+	}));
+	return [...rows.filter(row => !row.cloud), ...rows.filter(row => row.cloud)];
 }
 
 function endpoint(room: string) {
@@ -247,8 +162,6 @@ export type MachineChoice = {
 	/** Why the last choice was refused. */
 	error?: string;
 	choose: (machine: string | null) => Promise<void>;
-	/** Set or clear the person's favorite machine; the document's choice stays as it is. */
-	favor: (machine: string, favorite: boolean) => Promise<void>;
 	refresh: () => void;
 };
 
@@ -336,23 +249,5 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 			setSaving(false);
 		}
 	};
-	let favor = async (machine: string, favorite: boolean) => {
-		let mine = ++generation.current;
-		setError(undefined);
-		// Starred at once; the server's list replaces it.
-		setState(current =>
-			current && {
-				...current,
-				favorite: favorite ? machine : current.favorite === machine ? null : current.favorite,
-			}
-		);
-		try {
-			await setFavorite(machine, favorite);
-		} catch (failure) {
-			setError(failure instanceof Error ? failure.message : "Chopin couldn’t save that");
-		} finally {
-			if (mine === generation.current) refresh();
-		}
-	};
-	return { state, saving, error, choose, favor, refresh };
+	return { state, saving, error, choose, refresh };
 }

@@ -11,6 +11,7 @@ import { ArrowLeftIcon, CommentIcon, DocumentsIcon, EllipsisIcon } from "@chopin
 import type { ReactNode } from "react";
 
 import { DocumentActionsMenu, loadActionSheet } from "./document-actions-menu";
+import { MachineButton } from "./machine-button";
 import { DocumentRename } from "./document-rename";
 import { loadDocumentsSheet } from "./navigation-shell";
 import { peopleHere } from "./presence";
@@ -38,7 +39,7 @@ function prefetchDocumentsSheet() {
 /** The phone bar's own room: its title, subtitle and trailing controls. */
 type PhoneHeaderDocument = {
 	archivedAt?: string;
-	/** The person's machine choice for this document, offered as Machine in the actions sheet. */
+	/** The person's machine choice for this document: its button opens a sheet from the bar. */
 	machine?: MachineChoice;
 	canManage: boolean;
 	/** Open comment threads in the document; the bar offers a list of them when there are any. */
@@ -235,6 +236,7 @@ export function PhoneHeaderContent(
 						)}
 					</div>
 				)}
+				{machine && <MachineButton choice={machine} phone />}
 				{comments > 0 && onComments && (
 					<button
 						aria-haspopup="dialog"
@@ -252,7 +254,6 @@ export function PhoneHeaderContent(
 					<DocumentActionsMenu
 						openDocument
 						channel={{ archivedAt, title: label }}
-						machine={machine}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={<EllipsisIcon aria-hidden="true" size={18} />}

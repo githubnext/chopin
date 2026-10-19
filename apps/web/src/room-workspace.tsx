@@ -60,8 +60,8 @@ import {
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
+import { MachineButton } from "./machine-button";
 import { machines as machineStore, useLiveMachines } from "./machine-summary";
-import type { MachineChoice } from "./machine-choice";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
 import { Chat } from "./chat/chat";
@@ -216,8 +216,6 @@ type TitleProps = {
 	canManage: boolean;
 	editing?: TitleEdit;
 	label: string;
-	/** The person's machine choice for this document, offered as Machine in the title's menu. */
-	machine?: MachineChoice;
 	onAction: (action: DocumentAction) => void;
 	onEditingChange: (editing?: TitleEdit) => void;
 	onRenamed: (channel: DocumentMetadata) => void;
@@ -249,7 +247,6 @@ export function DocumentTitle(
 		editing,
 		icon,
 		label,
-		machine,
 		onAction,
 		onEditingChange,
 		onRenamed,
@@ -371,7 +368,6 @@ export function DocumentTitle(
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
 						decision={decision}
-						machine={machine}
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={decision
 							? <EllipsisIcon aria-hidden="true" size={14} />
@@ -702,7 +698,7 @@ export function RoomWorkspace(
 	let typing = useDocumentEditing(room);
 	let plannerDetached = plannerAttachment.wire === wire && !!plannerAttachment.planner
 		&& plannerAttachment.planner.state !== "attached";
-	// Machine in the title menu chooses where work runs; Build plan says when it is offline.
+	// The machine button beside Build plan chooses where work runs; Build plan says when it is offline.
 	let machineChoice = useMachineChoice(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
@@ -710,7 +706,7 @@ export function RoomWorkspace(
 	// The choice shows only while the person has a paired machine, live: it appears with their
 	// first and goes with their last.
 	let ownsMachine = showsMachineChoice(useLiveMachines().machines);
-	// Refresh the title menu's choice when the Planner moves to another machine.
+	// Refresh the machine choice when the Planner moves to another machine.
 	let refreshMachine = machineChoice.refresh;
 	useEffect(() => {
 		refreshMachine();
@@ -1630,14 +1626,15 @@ export function RoomWorkspace(
 			)}
 		</div>
 	);
+	let machinePicker = ownsMachine && machineChoice.state && workspaceCanEdit
+			&& status === "connected"
+		? machineChoice
+		: undefined;
 	let titleProps: TitleProps = {
 		archivedAt: workspaceArchivedAt,
 		canManage: effectiveCanManage,
 		editing: titleEdit,
 		label: metadata.title,
-		machine: ownsMachine && machineChoice.state && workspaceCanEdit && status === "connected"
-			? machineChoice
-			: undefined,
 		onAction: action => onDocumentAction(room, action),
 		onEditingChange: setTitleEdit,
 		onRenamed: updateMetadata,
@@ -1798,6 +1795,14 @@ export function RoomWorkspace(
 				tabReady={build.tabReady}
 			/>
 		);
+	// The machine button sits just left of Build plan or the decisions capsule, whichever shows. A
+	// phone's is in its top bar instead.
+	let titleBuild = buildSlot && (
+		<>
+			{!phone && machinePicker && <MachineButton choice={machinePicker} />}
+			{buildSlot}
+		</>
+	);
 
 	// The tab bar's pencil edits the document on screen: an open child, or else this one.
 	let barEdit = childOpen
@@ -1908,7 +1913,7 @@ export function RoomWorkspace(
 										editing={titleEdit}
 										editingDocument={!childOpen && !!barEdit?.editing}
 										label={metadata.title}
-										machine={titleProps.machine}
+										machine={machinePicker}
 										members={members}
 										onAction={action => onDocumentAction(room, action)}
 										onComments={() => {
@@ -1923,7 +1928,7 @@ export function RoomWorkspace(
 									/>
 								</PhoneHeader>
 							)
-							: <Header {...titleProps} build={buildSlot} members={members} />}
+							: <Header {...titleProps} build={titleBuild} members={members} />}
 						title={
 							<DocumentTitle
 								{...titleProps}
@@ -1991,7 +1996,7 @@ export function RoomWorkspace(
 						status={
 							<>
 								{statusNotices}
-								{mode === "split" && buildSlot}
+								{mode === "split" && titleBuild}
 								{zoomChild && <span className="child-actions-slot" ref={setChildActionsSlot} />}
 							</>
 						}

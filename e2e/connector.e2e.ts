@@ -76,7 +76,7 @@ for (let transport of ["stdio", "http"] as const) {
 			await expect.poll(printed).toBeTruthy();
 			let code = printed();
 			await expect(page.getByText(code!, { exact: true })).toBeVisible();
-			await page.getByRole("button", { name: "Connect", exact: true }).click();
+			await page.getByRole("button", { name: "Add machine", exact: true }).click();
 			await expect(page.getByRole("status").filter({ hasText: "Connected" }))
 				.toHaveText("Connected");
 			await page.goto(testChannelPath(room));
@@ -169,7 +169,7 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 				exact: true,
 			}),
 		).not.toBeChecked();
-		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" }))
 			.toHaveText("Connected");
 		await expect.poll(first.output).toContain("✓ Connected.");

@@ -21,7 +21,7 @@ type Pairing = {
 	/** The GitHub login of the person signed in here, who approves the pairing. */
 	owner: string;
 	code: string;
-	/** Connect goes by way of GitHub, which authorizes the machine on its own. */
+	/** Add goes by way of GitHub, which authorizes the machine on its own. */
 	authorize?: boolean;
 	/** Where to go once this pairing has its machine, after GitHub authorized it. */
 	connected?: string;
@@ -73,8 +73,8 @@ function MachinesFrame(
 const SERVER_PATH = "/machines?server";
 
 /**
- * The person's machines, under Add machine: Your computer opens a dialog with the command to run,
- * Server or VM goes to its own page. Neither waits for the machine: it appears in the table, which
+ * The person's machines, under Add machine: Local opens a dialog with the command to run,
+ * Cloud goes to its own page. Neither waits for the machine: it appears in the table, which
  * asks again every few seconds. With no machine yet, the page is only the banner offering the same
  * menu.
  */
@@ -98,7 +98,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 	useEffect(() => {
 		if (!arrived || announced.current === arrived.id) return;
 		announced.current = arrived.id;
-		setAnnouncement(`${arrived.label} ${arrived.connected ? "connected" : "paired"}`);
+		setAnnouncement(`${arrived.label} ${arrived.connected ? "connected" : "added"}`);
 	}, [arrived]);
 	let choose = (kind: MachineKind) => kind === "computer" ? setAdding(true) : onServer();
 	return (
@@ -106,8 +106,8 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 			action={<AddMachineMenu onChoose={choose} />}
 			description={
 				<>
-					Machines run builds, investigations and Planners for your documents, with your own coding
-					agent.{" "}
+					Your documents plan and build on these machines, with your own coding agent. Use a local
+					machine you work on, or a cloud machine that stays on.{" "}
 					<a className="machines-link" href={SETUP_GUIDE} rel="noreferrer" target="_blank">
 						Learn more
 					</a>
@@ -120,15 +120,15 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 				<section aria-labelledby={bannerId} className="machines-banner">
 					<h2 className="text-base font-semibold" id={bannerId}>Add your first machine</h2>
 					<p className="machines-banner-copy">
-						Chopin does its work on your machines. Add the computer you use, or a server that stays
-						connected.
+						Chopin plans and builds on your machines. Add the computer you’re on, or a cloud
+						machine.
 					</p>
 					<div>
 						<AddMachineMenu onChoose={choose} />
 					</div>
 				</section>
 			)}
-			<YourMachines machines={machines} onChoose={choose} owner={owner} />
+			<YourMachines machines={machines} owner={owner} />
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
 					motion={dialog}
@@ -141,7 +141,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 
 /**
  * /machines, or /machines?server for adding a server, read from the address as the navigation shell
- * renders the route again on every move between them. Its links go either way; Server or VM, a
+ * renders the route again on every move between them. Its links go either way; Cloud, a
  * menu item rather than a link, moves through history the way Back does, which the shell follows.
  */
 function MachinesPage() {
@@ -151,14 +151,14 @@ function MachinesPage() {
 	if (search.has("server")) {
 		return (
 			<MachinesFrame
-				description="Choose settings, then generate an install script."
+				description="Choose its settings, then copy the install script to the server."
 				lead={
 					<a className="machines-back" href="/machines">
 						<ArrowLeftIcon aria-hidden="true" size={16} />
-						Back to Machines
+						Machines
 					</a>
 				}
-				title="Add a server"
+				title="Add a cloud machine"
 			>
 				<AddServerPage />
 			</MachinesFrame>
@@ -208,7 +208,7 @@ const FOLLOW_TRIES = 10;
 
 /**
  * After pairing, the person's machines, the new one among them. The machine connects a moment
- * after Connect, so the list is asked again right away until it shows that, rather than a poll
+ * after Add, so the list is asked again right away until it shows that, rather than a poll
  * later.
  */
 function ConnectedMachines({ label }: { label: string }) {
@@ -227,13 +227,7 @@ function ConnectedMachines({ label }: { label: string }) {
 		return () => window.clearTimeout(timer);
 	}, [waiting, machines.machines, retry]);
 	let owner = useOwner();
-	return (
-		<YourMachines
-			owner={owner}
-			machines={machines}
-			onChoose={kind => goTo(kind === "server" ? SERVER_PATH : "/machines")}
-		/>
-	);
+	return <YourMachines owner={owner} machines={machines} />;
 }
 
 /** The pairing card's shape while the pairing is on its way. */
@@ -309,20 +303,20 @@ export default function PairingPage() {
 		: approveError
 		? pairingProblem(approveError, "approve", repository)
 		: undefined;
-	// A link that no longer works gives way to its notice; a failed Connect can be pressed again.
+	// A link that no longer works gives way to its notice; a failed Add can be pressed again.
 	let ended = !!loadError || !!problem && !problem.retry;
 	return (
 		<MachinesFrame
 			description={url
-				? `${label} now runs work for ${repository ?? "you"}.`
+				? `${label} is ready for ${repository ?? "your documents"}.`
 				: ended
-				? "Chopin runs work for you on the machines you connect."
+				? "Chopin plans and builds on the machines you add."
 				: repository
-				? `Connect this checkout of ${repository} so Chopin can run work for you in any of its documents.`
+				? `Add this checkout of ${repository} so Chopin can plan and build in any of its documents.`
 				: pairing
-				? `Connect ${label} so Chopin can run work for you on it.`
-				: "Chopin runs work for you on the machines you connect."}
-			title={url ? "Machine connected" : ended ? "Connect a machine" : "Connect this machine?"}
+				? `Add ${label} so Chopin can plan and build on it.`
+				: "Chopin plans and builds on the machines you add."}
+			title={url ? "Machine added" : ended ? "Add a machine" : "Add this machine?"}
 		>
 			{problem && (
 				<InlineNotice
@@ -403,7 +397,7 @@ export default function PairingPage() {
 										onClick={() => void connect()}
 										type="button"
 									>
-										Connect
+										Add machine
 									</button>
 									{/* Nothing to cancel on the server: an unapproved pairing expires on its own. */}
 									<a className="btn btn-md btn-ghost" href="/machines">Not my machine</a>

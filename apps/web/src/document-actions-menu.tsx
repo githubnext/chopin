@@ -1,4 +1,3 @@
-import { Accordion } from "@base-ui/react/accordion";
 import { createPortal } from "react-dom";
 import {
 	lazy,
@@ -13,15 +12,7 @@ import {
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { Face } from "@chopin/editor/face";
-import {
-	ArchiveIcon,
-	ArrowUpIcon,
-	ChevronIcon,
-	CloseIcon,
-	LinkIcon,
-	PencilIcon,
-	ServerIcon,
-} from "@chopin/icons";
+import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
 
 import { activeActorRoster, launchUrl } from "./demo-actor";
 import { motionContract } from "./motion-contract";
@@ -30,13 +21,10 @@ import { motionImmediately } from "./motion-input";
 import { MenuItem } from "./menu-item";
 import { IconButton } from "./icon-button";
 import { useNavigationMenu } from "./navigation-shell";
-import { MachineGlyph } from "./machine-button";
-import { chosenMachine, machineRows, machineState } from "./machine-choice";
 
 import type { IconProps } from "@chopin/icons";
 import type * as Api from "./api";
 import type { DemoActor } from "./demo-actor";
-import type { MachineChoice, MachineRow } from "./machine-choice";
 import type { ComponentProps, ComponentType, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 // Once prefetched, the sheet renders directly: lazy() would still suspend its first render.
@@ -98,24 +86,6 @@ export function documentMenuItems(
 		];
 }
 
-/** Machine is the title menu's alone: it opens the machine list rather than acting. */
-type MenuEntry = Omit<DocumentMenuItem, "action"> & {
-	action: DocumentMenuItem["action"] | "machine";
-};
-
-const DEFAULT_MACHINE = "default";
-
-function rowLabel(row: MachineRow) {
-	return row.id === null ? "Default machine" : row.label;
-}
-
-/** One quiet word or two beside the name: what the default uses now, or the machine's state. */
-function rowDetail(row: MachineRow) {
-	if (!row.machine) return row.uses?.label ?? "None connected";
-	let state = machineState(row.machine);
-	return state === "connected" ? "Connected" : state === "offline" ? "Offline" : "Needs pairing";
-}
-
 export type DocumentMenuKeyAction = "close" | "first" | "last" | "next" | "previous";
 
 export function documentMenuKeyAction(key: string): DocumentMenuKeyAction | undefined {
@@ -135,7 +105,6 @@ export function DocumentActionsMenu(
 		decision = false,
 		iconButton = false,
 		onAction,
-		machine,
 		openDocument = false,
 		trigger,
 	}: {
@@ -146,11 +115,6 @@ export function DocumentActionsMenu(
 		decision?: boolean;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
-		/**
-		 * The person's machine choice for this document: adds Machine, which expands its picker inside
-		 * the actions menu. A rare override; the sidebar's Machines sets the default.
-		 */
-		machine?: MachineChoice;
 		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
 		openDocument?: boolean;
 		trigger: ReactNode;
@@ -160,7 +124,6 @@ export function DocumentActionsMenu(
 	let button = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
 	let content = useRef<HTMLDivElement>(null);
-	let focusMachine = useRef(false);
 	let initialItem = useRef(0);
 	let phone = usePhone();
 	// Chosen when opened, so a load finishing later never remounts an open sheet.
@@ -171,34 +134,8 @@ export function DocumentActionsMenu(
 	let [open, setOpen] = useNavigationMenu();
 	let [sheetOpen, setSheetOpen] = useNavigationMenu();
 	let [position, setPosition] = useState<CSSProperties>();
-	let [machineExpanded, setMachineExpanded] = useState(false);
-	let [machineSheet, setMachineSheet] = useNavigationMenu();
-	let choice = machine?.state;
-	let hasMachine = choice !== undefined && !channel.archivedAt;
-	let chosen = chosenMachine(choice);
-	let rows = choice ? machineRows(choice, Date.now()) : [];
-	let currentMachine = chosen?.label ?? "Default";
-	let base = documentMenuItems(channel, openDocument ? activeActorRoster() : [], decision);
-	let items: MenuEntry[] = hasMachine
-		? base.flatMap(item =>
-			item.action === "rename"
-				? [item, {
-					action: "machine" as const,
-					label: `Machine: ${currentMachine}`,
-					icon: ServerIcon,
-				}]
-				: [item]
-		)
-		: base;
-	let pickMachine = (row: MachineRow) => {
-		if (row.disabled || !machine) return;
-		if (row.id !== (chosen?.id ?? null)) void machine.choose(row.id);
-	};
-	let select = (action: MenuEntry["action"]) => {
-		if (action === "machine") {
-			setMachineSheet(true);
-			return;
-		}
+	let items = documentMenuItems(channel, openDocument ? activeActorRoster() : [], decision);
+	let select = (action: DocumentMenuItem["action"]) => {
 		if (action.startsWith("collaborator:")) {
 			window.open(
 				launchUrl(location.href, action.slice("collaborator:".length)),
@@ -237,7 +174,7 @@ export function DocumentActionsMenu(
 			let margin = 8;
 			let gap = 4;
 			let width = Math.min(
-				hasMachine ? 280 : 208,
+				208,
 				document.documentElement.clientWidth - margin * 2,
 			);
 			// Its whole height, however much of it scrolls; it opens below the button where that
@@ -296,53 +233,28 @@ export function DocumentActionsMenu(
 			window.removeEventListener("resize", place);
 			document.removeEventListener("scroll", place, true);
 		};
-	}, [align, closeMenu, hasMachine, open]);
+	}, [align, closeMenu, open]);
 
 	useEffect(() => {
 		if (!open) return;
 		let frame = requestAnimationFrame(() => {
 			let controls = panel.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]");
-			if (machineExpanded) {
-				if (focusMachine.current) {
-					panel.current?.querySelector<HTMLButtonElement>("[aria-checked=true]")?.focus();
-					focusMachine.current = false;
-				}
-			} else if (initialItem.current >= 0) controls?.[initialItem.current]?.focus();
+			controls?.[initialItem.current]?.focus();
 		});
 		return () => {
 			cancelAnimationFrame(frame);
 		};
-	}, [open, machineExpanded]);
+	}, [open]);
 	useMenuDismissal(open, [button, panel], closeMenu);
 
 	let openAt = (index: number) => {
 		initialItem.current = index;
-		setMachineExpanded(false);
 		setPosition(undefined);
 		setOpen(true);
 	};
 	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Tab") {
 			closeMenu();
-			return;
-		}
-		let focused = document.activeElement as HTMLElement | null;
-		if (event.key === "ArrowRight" && focused?.dataset.action === "machine") {
-			event.preventDefault();
-			event.stopPropagation();
-			focusMachine.current = !machineExpanded;
-			machine?.refresh();
-			if (machineExpanded) {
-				panel.current?.querySelector<HTMLButtonElement>("[aria-checked=true]")?.focus();
-			} else setMachineExpanded(true);
-			return;
-		}
-		if (event.key === "ArrowLeft" && machineExpanded) {
-			event.preventDefault();
-			event.stopPropagation();
-			initialItem.current = items.findIndex(item => item.action === "machine");
-			setMachineExpanded(false);
-			panel.current?.querySelector<HTMLButtonElement>("[data-action=machine]")?.focus();
 			return;
 		}
 		let action = documentMenuKeyAction(event.key);
@@ -355,10 +267,7 @@ export function DocumentActionsMenu(
 		}
 		let controls = [
 			...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role^=menuitem]"),
-		].filter(control =>
-			control.getAttribute("aria-disabled") !== "true"
-			&& (machineExpanded || !control.closest(".document-machine-panel"))
-		);
+		].filter(control => control.getAttribute("aria-disabled") !== "true");
 		if (controls.length === 0) return;
 		let current = Math.max(0, controls.indexOf(document.activeElement as HTMLButtonElement));
 		let next = action === "first"
@@ -437,28 +346,8 @@ export function DocumentActionsMenu(
 						items={items}
 						label={`Actions for ${channel.title}`}
 						onClose={() => setSheetOpen(false)}
-						onSelect={action => select(action as MenuEntry["action"])}
+						onSelect={action => select(action as DocumentMenuItem["action"])}
 						title={channel.title}
-					/>
-				</Suspense>
-			)}
-			{machineSheet && (
-				<Suspense fallback={null}>
-					<Sheet
-						items={rows.map(row => ({
-							action: row.id ?? DEFAULT_MACHINE,
-							checked: row.checked,
-							detail: rowDetail(row),
-							disabled: row.disabled,
-							label: rowLabel(row),
-						}))}
-						label="Machine"
-						onClose={() => setMachineSheet(false)}
-						onSelect={action => {
-							let row = rows.find(value => (value.id ?? DEFAULT_MACHINE) === action);
-							if (row) pickMachine(row);
-						}}
-						title="Machine for this document"
 					/>
 				</Suspense>
 			)}
@@ -475,84 +364,21 @@ export function DocumentActionsMenu(
 					role="menu"
 					style={presence.value ?? { visibility: "hidden" }}
 				>
-					<Accordion.Root
-						keepMounted
-						onValueChange={value => {
-							initialItem.current = -1;
-							if (value.length) machine?.refresh();
-							setMachineExpanded(value.length > 0);
-						}}
-						ref={content}
-						value={machineExpanded ? ["machine"] : []}
-					>
-						{items.map(item =>
-							item.action === "machine"
-								? (
-									<Accordion.Item key={item.action} value="machine">
-										<Accordion.Header className="cv-unfold-section-heading">
-											<Accordion.Trigger
-												className="app-menu-item cv-unfold-toggle document-machine-trigger"
-												data-action="machine"
-												data-unfold-speed="accordion"
-												role="menuitem"
-											>
-												<item.icon aria-hidden="true" />Machine
-												<span className="app-menu-item-meta">{currentMachine}</span>
-												<ChevronIcon aria-hidden="true" className="cv-unfold-chevron" size={12} />
-											</Accordion.Trigger>
-										</Accordion.Header>
-										<Accordion.Panel className="cv-unfold cv-unfold-accordion document-machine-panel">
-											<div className="cv-unfold-clip">
-												<div className="cv-unfold-content">
-													<div
-														aria-label="Machine choices"
-														className="document-machine-options"
-														role="group"
-													>
-														{rows.map(row => (
-															<button
-																aria-checked={row.checked}
-																aria-disabled={row.disabled || undefined}
-																className="app-menu-item"
-																key={row.id ?? DEFAULT_MACHINE}
-																onClick={() => {
-																	if (row.disabled) return;
-																	closeMenu(true);
-																	pickMachine(row);
-																}}
-																role="menuitemradio"
-																type="button"
-															>
-																<MachineGlyph machine={row.machine} />
-																<span className="truncate" title={rowLabel(row)}>
-																	{rowLabel(row)}
-																</span>
-																<span className="app-menu-item-meta" title={rowDetail(row)}>
-																	{rowDetail(row)}
-																</span>
-															</button>
-														))}
-													</div>
-												</div>
-											</div>
-										</Accordion.Panel>
-									</Accordion.Item>
-								)
-								: (
-									<MenuItem
-										key={item.action}
-										onClick={() => {
-											closeMenu(true);
-											select(item.action);
-										}}
-										tone={item.destructive ? "destructive" : "normal"}
-									>
-										<item.icon aria-hidden="true" size={16} />
-										{item.label}
-									</MenuItem>
-								)
-						)}
-					</Accordion.Root>
+					<div ref={content}>
+						{items.map(item => (
+							<MenuItem
+								key={item.action}
+								onClick={() => {
+									closeMenu(true);
+									select(item.action);
+								}}
+								tone={item.destructive ? "destructive" : "normal"}
+							>
+								<item.icon aria-hidden="true" size={16} />
+								{item.label}
+							</MenuItem>
+						))}
+					</div>
 				</div>,
 				document.body,
 			)}

@@ -367,7 +367,7 @@ retention policy and need the same key protection as the live database.
 
 A paired connector machine holds its own GitHub App user token pair, because
 refresh tokens are single-use and cannot be shared with the browser login that
-approved the pairing. Pressing **Connect** on the pairing page sends the
+approved the pairing. Pressing **Add machine** on the pairing page sends the
 browser through `/auth/github/connector`, a second authorization that GitHub
 grants at once for an App the person already authorized; the callback accepts
 it only for the account that approved the pairing and starts no browser

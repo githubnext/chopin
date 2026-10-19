@@ -30,10 +30,9 @@ operating system.
 
 In Chopin, open **Machines** and choose **Add machine**. It offers two ways:
 
-- **Your computer**, a laptop or desktop you use. You approve it in the
-  browser.
-- **Server or VM**, a remote machine that stays connected in the background.
-  It pairs with a single-use key, so nobody opens a browser on it.
+- **Local**, a laptop or desktop you work on. You approve it in the browser.
+- **Cloud**, a server or VM that stays connected. It uses a single-use key, so
+  nobody opens a browser on it.
 
 Either way you copy one command and run it in a terminal on that machine, in
 any folder. The installer installs `chopin`, then runs `chopin connect` itself. If the install
@@ -44,7 +43,7 @@ command under **Show install command**, and [Coding agents](#coding-agents)
 lists them all. Your server may list its own
 [setup agents](self-hosting.md#setup-agents) first, each with its own steps.
 
-### Your computer
+### Local
 
 Pick the system and your coding agent. On Linux or macOS the command looks like
 this:
@@ -65,11 +64,11 @@ It prints a link and a code. Open the link in the browser you're signed in to,
 check the code and approve. The machine connects, installs the service and
 appears on the page.
 
-### Server or VM
+### Cloud
 
-**Add machine** → **Server or VM** opens **Add a server**. Name the machine if
+**Add machine** → **Cloud** opens **Add a cloud machine**. Name the machine if
 you like (without a name Chopin uses its hostname), choose the agent, whether it
-runs in the background (on by default), and whether Chopin may build and prototype on it automatically (off
+stays connected (on by default), and whether Chopin may build and prototype on it automatically (off
 unless you turn it on; see [Connect](#connect)). Then
 press **Generate install script**. The command carries a single-use key:
 
@@ -155,7 +154,7 @@ your Chopin account in a browser:
 4. Leave **Let Chopin build and prototype automatically on this machine**
    unticked unless you want Chopin to start rebuilds and prototypes here by
    itself. **Build** and **Run** work without it.
-5. Choose **Connect**. The page says **Connected.**
+5. Choose **Add machine**. The page says **Connected.**
 
 The pairing lasts until you [disconnect the machine](#disconnect). It survives
 server restarts, deploys and signing out of the browser.
@@ -252,8 +251,9 @@ Disconnecting a machine clears every choice of it, and clears it as your
 default.
 
 Choose your default machine from **Machines** in the sidebar: it opens a menu
-listing **Any available** and each of your machines with its state, then **Add
-machine…** and **Manage machines** for the full page. The default is the
+listing **Any connected** and each of your machines under **Local** or **Cloud**
+with its state, then **Add
+machine** and **Manage machines** for the full page. The default is the
 machine marked as your favorite on the **Machines** page too (its star, or **Set
 as favorite** in its menu). Only one machine is your
 default. Chopin uses it first whenever it is connected and free, and otherwise
@@ -582,7 +582,7 @@ Each message says what to run next. The first line of each:
 | `… isn't inside a git checkout`                     | Give `--checkout` the folder of a clone from GitHub, or leave it out and `chopin` clones each repository as work needs it.                                                                                                                                                                                                       |
 | `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                                                                                                                                                                                                                                            |
 | `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                                                                                                                                                                                                                                      |
-| `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Server or VM**, then run it.                                                                                                                                                                                                                                       |
+| `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Cloud**, then run it.                                                                                                                                                                                                                                              |
 | `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then generate a new script.                                                                                                                                                                                                                               |
 | `You can't push to … on GitHub`                     | Chopin won't run that repository's work on this machine. Ask an owner for write access, or drop that `--checkout`.                                                                                                                                                                                                               |
 | `This machine has no checkout of …`                 | Your server gives machines no GitHub token to clone with. Run `chopin connect --checkout <path>` with a clone of that repository, then start the work again.                                                                                                                                                                     |
