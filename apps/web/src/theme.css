@@ -951,9 +951,10 @@ body {
 	color: var(--color-text-quaternary);
 }
 
+/* The child's title keeps room for its name and actions; the root crumb gives way first. */
 .document-child-title-slot {
 	display: flex;
-	min-width: 0;
+	min-width: 8rem;
 	flex: 1;
 }
 

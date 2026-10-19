@@ -257,11 +257,16 @@
 	display: none;
 }
 
+/* With the title hidden, the Notes heading is the only head: sit the body just below it. */
+.plan:has(.plan-preface [data-question-page]) .plan-content {
+	padding-block-start: 0;
+}
+
 /* An empty Notes area says where to write; the caret stays at the start of the line. */
 .plan:has(.plan-preface [data-question-page])
 	.plan-content[contenteditable="true"]
 	> h1:first-child
-	+ p:last-child:has(> br:only-child)::before {
+	+ p:has(> br:only-child)::before {
 	content: "Add a note";
 	float: left;
 	block-size: 0;
