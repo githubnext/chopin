@@ -10,6 +10,8 @@ export type OptionOrigin = {
 
 export type DecisionEntry = {
 	choices: string[];
+	/** The matrix the saved answer carried, when the decision had criteria. */
+	marks?: Question.Marks;
 	/** Written answers, including legacy custom answers, keyed by question. */
 	answers?: { [questionId: string]: string };
 	owner: string;
@@ -32,6 +34,8 @@ export type Record = {
 	owner?: string;
 	decidedAt?: number;
 	choices?: string[];
+	/** The settled answer's marks, a snapshot: the read-only table and write-up read this. */
+	marks?: Question.Marks;
 	history: DecisionEntry[];
 	prose?: Wired.Anchor[];
 	/** Anchored Planner captures continue only after an explicitly saved answer. */

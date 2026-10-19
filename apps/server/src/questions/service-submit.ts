@@ -99,7 +99,9 @@ export async function submit(
 				optionIds = Object.values(chosen).flat();
 				let at = Math.floor(Date.now() / 1_000);
 				let settled = { by: ws.data.handle, at: new Date(at * 1_000).toISOString() };
-				let mutation = room.projectAnswer(stagedDocument, msg.id, answers, settled, chosen);
+				// The saved answer keeps a snapshot of the matrix: the draft is replaced on reopen.
+				let marks = claimed.answers[0]?.marks;
+				let mutation = room.projectAnswer(stagedDocument, msg.id, answers, settled, chosen, marks);
 				// A long answer can push the document past its size limit, after which the
 				// Planner can no longer edit it; check the staged copy so a refusal changes nothing.
 				try {
@@ -119,6 +121,7 @@ export async function submit(
 					owner: ws.data.handle,
 					decidedAt: at,
 					choices: optionIds,
+					...(marks ? { marks } : {}),
 					editors: [...new Set([...record.editors, ...claimed.claim.entry.editors])],
 					anchors: Anchors.answer(record),
 				};

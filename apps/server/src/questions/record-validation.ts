@@ -7,6 +7,8 @@ import { invalid, object, ORIGINS, text, unix } from "./record-fields";
 import type { Known } from "./record-fields";
 import { MAX_WHY } from "./why";
 
+type Marks = Question.Marks;
+
 export function options(definition: unknown, pending: boolean): Known {
 	let source = object(definition);
 	if (
@@ -15,6 +17,7 @@ export function options(definition: unknown, pending: boolean): Known {
 			&& !source.questions.every(question => object(question).verbatim === true)
 	) invalid();
 	let ids = new Map<string, string>();
+	let criteria = new Set<string>();
 	let questions: Known["questions"] = new Map();
 	for (let candidate of source.questions) {
 		let question = object(candidate);
@@ -34,10 +37,32 @@ export function options(definition: unknown, pending: boolean): Known {
 			|| question.response === "text" && question.options.length > 0
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) invalid();
+		let held: Set<string> | undefined;
+		if (Object.hasOwn(question, "criteria")) {
+			if (
+				verbatim || question.response === "text" || !Array.isArray(question.criteria)
+				|| question.criteria.length === 0 || question.criteria.length > limits.MAX_CRITERIA
+			) invalid();
+			held = new Set();
+			let labels = new Set<string>();
+			for (let candidate of question.criteria) {
+				let criterion = object(candidate);
+				if (Object.keys(criterion).some(key => key !== "id" && key !== "label")) invalid();
+				let criterionId = text(criterion.id, 64);
+				let label = text(criterion.label, limits.MAX_CRITERION_LABEL).trim().toLowerCase();
+				if (!/^[A-Za-z0-9_-]+$/.test(criterionId) || held.has(criterionId) || labels.has(label)) {
+					invalid();
+				}
+				held.add(criterionId);
+				labels.add(label);
+				criteria.add(criterionId);
+			}
+		}
 		questions.set(id, {
 			multiple: question.multiple as boolean,
 			verbatim,
 			...(question.response === "text" ? { response: "text" } : {}),
+			...(held ? { criteria: held } : {}),
 		});
 		for (let candidate of question.options) {
 			let option = object(candidate);
@@ -46,7 +71,25 @@ export function options(definition: unknown, pending: boolean): Known {
 			ids.set(optionId, id);
 		}
 	}
-	return { questions, options: ids };
+	return { questions, options: ids, criteria };
+}
+
+const MARK_VALUES = new Set(["yes", "partly", "no"]);
+
+/** A saved matrix: `option/criterion` cells of the one question that has criteria. */
+export function marks(value: unknown, known: Known): Marks {
+	let matrix = object(value);
+	let holders = [...known.questions.values()].filter(question => question.criteria);
+	if (holders.length !== 1) invalid();
+	let criteria = holders[0]!.criteria!;
+	for (let [cell, mark] of Object.entries(matrix)) {
+		let slash = cell.lastIndexOf("/");
+		if (
+			slash < 1 || !known.options.has(cell.slice(0, slash)) || !criteria.has(cell.slice(slash + 1))
+			|| !MARK_VALUES.has(mark as string)
+		) invalid();
+	}
+	return value as Marks;
 }
 
 export function choices(value: unknown, known: Known): string[] {
@@ -99,11 +142,14 @@ export function history(value: unknown, known: Known): DecisionEntry[] {
 	for (let candidate of value) {
 		let entry = object(candidate);
 		if (
-			Object.keys(entry).some(key => !["choices", "answers", "owner", "at", "why"].includes(key))
+			Object.keys(entry).some(key =>
+				!["choices", "answers", "owner", "at", "why", "marks"].includes(key)
+			)
 			|| !Object.hasOwn(entry, "choices")
 			|| !Object.hasOwn(entry, "owner") || !Object.hasOwn(entry, "at")
 		) invalid();
 		let selected = choices(entry.choices, known);
+		if (Object.hasOwn(entry, "marks")) marks(entry.marks, known);
 		let legacy = Object.hasOwn(entry, "answers") ? answers(entry.answers, known) : {};
 		let chosenQuestions = new Set(selected.map(id => known.options.get(id)!));
 		for (let id of Object.keys(legacy)) {

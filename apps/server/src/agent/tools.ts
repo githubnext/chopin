@@ -510,7 +510,8 @@ export const documentTools = {
 		contextSchema: ownerContext,
 		description: "Ask the people in the room one or more decisions and wait for "
 			+ "their shared answer. Use response: text with options: [] for a written answer; "
-			+ "omit response for existing multiple-choice questions. Prefer open_decisions "
+			+ "omit response for existing multiple-choice questions. Add criteria only when "
+			+ "the options should be compared on a few named qualities. Prefer open_decisions "
 			+ "to capture anchored decisions without waiting; use ask only for an explicitly "
 			+ "requested synchronous exchange. All requests for human input, including "
 			+ "intent and clarification, use these inline cards, never plain Chat. Batch all known "

@@ -66,6 +66,7 @@ export function meta(plan: Plan, record: Record): Wire.CardMeta {
 		...(decided && record.owner ? { owner: record.owner } : {}),
 		...(decided && record.decidedAt !== undefined ? { decidedAt: record.decidedAt } : {}),
 		...(record.resolver ? { resolver: record.resolver } : {}),
+		...(decided && record.marks ? { marks: record.marks } : {}),
 		involved: involved(plan, record),
 		...(suggested ? { suggested } : {}),
 		history: record.history,

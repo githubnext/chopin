@@ -21,6 +21,9 @@ export function identify(raw: unknown, options?: { verbatim?: boolean }): Defini
 			...question,
 			id: ulid(),
 			options: question.options.map(option => ({ ...option, id: ulid() })),
+			...(question.criteria
+				? { criteria: question.criteria.map(criterion => ({ ...criterion, id: ulid() })) }
+				: {}),
 		})),
 	};
 }

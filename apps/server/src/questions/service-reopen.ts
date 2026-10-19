@@ -135,6 +135,7 @@ export async function reopen(
 					status: "reopened",
 					history: [...record.history, {
 						choices: [...selected],
+						...(record.marks ? { marks: record.marks } : {}),
 						...(Object.keys(text).length ? { answers: text } : {}),
 						owner,
 						at,
@@ -144,6 +145,7 @@ export async function reopen(
 				};
 				delete next.answers;
 				delete next.choices;
+				delete next.marks;
 				delete next.resolver;
 				delete next.at;
 				delete next.owner;

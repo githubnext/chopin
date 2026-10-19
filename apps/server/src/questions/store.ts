@@ -91,6 +91,7 @@ export function restore(entries: StoredOpen[]): Questions {
 			) Question.reject("Questionnaire suggestion is invalid");
 		}
 		let model = Question.restore(entry.model, definition);
+		Question.upgrade(model, definition);
 		if (entry.suggested) {
 			let draft = Question.read(model, definition)[definition.questions[0]!.id]!;
 			if (!untouched(draft)) Question.reject("Questionnaire suggestion is invalid");

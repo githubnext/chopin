@@ -36,6 +36,11 @@ export function unix(value: unknown): number {
 }
 
 export type Known = {
-	questions: Map<string, { multiple: boolean; verbatim: boolean; response?: "text" }>;
+	questions: Map<
+		string,
+		{ multiple: boolean; verbatim: boolean; response?: "text"; criteria?: Set<string> }
+	>;
+	/** Every criterion id, for the shared append-key map. */
+	criteria: Set<string>;
 	options: Map<string, string>;
 };

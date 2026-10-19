@@ -1,13 +1,14 @@
 import { expect, test } from "bun:test";
 import {
 	appendProseEffect,
+	proseInput,
 	proseIntent,
 	prosePrompt,
 	whyIntent,
 	whyPrompt,
 	writeup,
 } from "./prose-job";
-import { CARD, record } from "./prose-job.test-fixtures";
+import { CARD, OPTION, QUESTION, record } from "./prose-job.test-fixtures";
 
 test("proseIntent uses the immutable Save generation, even for same-second re-decisions", () => {
 	expect(proseIntent(record())).toEqual({
@@ -78,6 +79,67 @@ test("prosePrompt stays bounded, grounded, and names only its own writing tool",
 			findings: Array.from({ length: 30 }, () => "F".repeat(1000)),
 		}).length,
 	).toBeLessThan(12000);
+});
+
+test("prosePrompt lists the criteria marks of the chosen option, bounded", () => {
+	let prompt = prosePrompt({
+		id: CARD,
+		question: "How do we sign in?",
+		chosen: ["Passkeys"],
+		owner: "mina",
+		involved: ["mina"],
+		reasons: [],
+		criteria: ["New device: yes", "Easy reset: partly", "No new storage: not marked"],
+	});
+	expect(prompt).toContain("Criteria the chosen option was marked against");
+	expect(prompt).toContain("- New device: yes");
+	expect(prompt).toContain("- No new storage: not marked");
+	expect(
+		prosePrompt({ id: CARD, question: "Q", chosen: ["A"], owner: "m", involved: [], reasons: [] }),
+	)
+		.not.toContain("Criteria");
+	expect(
+		prosePrompt({
+			id: CARD,
+			question: "Q",
+			chosen: ["A"],
+			owner: "m",
+			involved: [],
+			reasons: [],
+			criteria: Array.from({ length: 30 }, () => "C".repeat(500)),
+		}).length,
+	).toBeLessThan(3000);
+});
+
+test("proseInput carries the criteria and the chosen option's marks from the record", () => {
+	let plan = {
+		records: new Map([[
+			CARD,
+			record({
+				definition: {
+					questions: [{
+						id: QUESTION,
+						header: "Auth",
+						question: "How do we sign in?",
+						multiple: false,
+						options: [{ id: OPTION, label: "Passkeys", description: "" }],
+						criteria: [{ id: "c1", label: "New device" }, { id: "c2", label: "Easy reset" }],
+					}],
+				},
+				choices: [OPTION],
+				marks: { [`${OPTION}/c1`]: "yes", "other/c2": "no" },
+			}),
+		]]),
+		conversationPlan: { threads: [], events: [] },
+		conversationPlanJobs: [],
+		conversationPlanPendingEffects: [],
+		questions: { open: new Map(), closed: new Map() },
+	};
+	expect(() => proseInput(plan as never, CARD)).not.toThrow(/saved/);
+	expect(proseInput(plan as never, CARD).criteria).toEqual([
+		"New device: yes",
+		"Easy reset: not marked",
+	]);
 });
 
 test("writeup projects only the current saved generation's unfinished prose job", () => {

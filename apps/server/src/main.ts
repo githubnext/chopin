@@ -1265,6 +1265,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
 			return;
 
+		case "question:criterion":
+			if (room.plan) await Questions.addCriterion(room.plan, server, room.id, ws, frame);
+			return;
+
 		case "question:explore":
 			if (room.plan) await Explore.explore(room.plan, server, room.id, ws, frame, exploreDeps);
 			return;

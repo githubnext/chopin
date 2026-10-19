@@ -65,7 +65,35 @@ let ask = {
 	additionalProperties: false,
 } satisfies Parameters<typeof jsonSchema>[0];
 
-export let ASK_PLAN_SCHEMA = jsonSchema(ask);
+let criteria = {
+	type: "array",
+	minItems: 1,
+	maxItems: 5,
+	description: "Optional columns the options are judged against, such as "
+		+ '"No new storage" or "Easy reset". People mark each option yes, '
+		+ "partly or no per criterion; you do not. Choice questions only.",
+	items: {
+		type: "object",
+		properties: { label: { type: "string", minLength: 1, maxLength: 40 } },
+		required: ["label"],
+		additionalProperties: false,
+	},
+} as const;
+
+// Only ask offers criteria; open_decisions captures a decision without a matrix.
+export let ASK_PLAN_SCHEMA = jsonSchema({
+	...ask,
+	properties: {
+		...ask.properties,
+		questions: {
+			...ask.properties.questions,
+			items: {
+				...ask.properties.questions.items,
+				properties: { ...ask.properties.questions.items.properties, criteria },
+			},
+		},
+	},
+});
 
 let question = ask.properties.questions.items;
 export let OPEN_DECISIONS_SCHEMA = jsonSchema({

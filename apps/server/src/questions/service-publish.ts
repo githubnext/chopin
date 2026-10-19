@@ -243,6 +243,9 @@ export async function publishQuestions(
 						label: option.label,
 						...(option.description ? { description: option.description } : {}),
 					})),
+					...(question.criteria
+						? { criteria: question.criteria.map(({ id, label }) => ({ id, label })) }
+						: {}),
 				}],
 			};
 			let record: Record = {

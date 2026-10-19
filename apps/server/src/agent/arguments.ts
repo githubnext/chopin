@@ -255,6 +255,8 @@ export type PositionedQuestion = {
 	description?: string;
 	response?: "text";
 	options: Array<{ label: string; description: string }>;
+	/** Columns to judge each option against; choice questions only. */
+	criteria?: Array<{ label: string }>;
 	multiple: boolean;
 	blocks: BlockAddress[];
 };
@@ -275,6 +277,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 				"description",
 				"response",
 				"options",
+				"criteria",
 				"multiple",
 				"blocks",
 			], [
@@ -294,6 +297,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 					...(Object.hasOwn(question, "description") ? { description: question.description } : {}),
 					...(Object.hasOwn(question, "response") ? { response: question.response } : {}),
 					options: question.options,
+					...(Object.hasOwn(question, "criteria") ? { criteria: question.criteria } : {}),
 					multiple: question.multiple,
 				}],
 			}).questions[0]!;
@@ -307,6 +311,9 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 					label: option.label,
 					description: option.description,
 				})),
+				...(normalized.criteria
+					? { criteria: normalized.criteria.map(({ label }) => ({ label })) }
+					: {}),
 				multiple: normalized.multiple,
 				blocks,
 			};

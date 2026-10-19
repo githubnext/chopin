@@ -21,6 +21,7 @@ export function createCardProjections(
 		answers: Record<string, string>,
 		settled?: { by: string; at: string },
 		chosen?: Record<string, string[]>,
+		marks?: Question.Marks,
 	): Mutation | undefined {
 		return mutate(target, () => {
 			let matches = $nodesOfType(QuestionnaireNode).filter(node => node.getId() === id);
@@ -45,6 +46,8 @@ export function createCardProjections(
 					let ids = chosen?.[question.id];
 					if (ids?.length) projected.choices = ids;
 					else delete projected.choices;
+					if (marks && question.criteria?.length) projected.marks = marks;
+					else delete projected.marks;
 					return projected;
 				}),
 			});
@@ -76,6 +79,7 @@ export function createCardProjections(
 					if (change.clearAnswers) {
 						delete next.answer;
 						delete next.choices;
+						delete next.marks;
 					}
 					let previous = change.previous?.[question.id];
 					if (previous === null) delete next.previous;

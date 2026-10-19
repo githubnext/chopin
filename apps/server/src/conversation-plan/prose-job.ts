@@ -5,6 +5,7 @@ import * as Questions from "../questions/card-involved";
 import { type Effect, type JobIntent, MAX_EFFECTS } from "./effects";
 import { jobId } from "./jobs";
 
+import { markKey } from "@chopin/question";
 import type { Plan } from "../plan/service";
 import type { Record as CardRecord } from "../questions/records";
 import { followupIntent } from "../questions/decision-followup";
@@ -107,6 +108,8 @@ export type ProsePromptInput = {
 	owner: string;
 	involved: string[];
 	reasons: string[];
+	/** How the chosen option rated on each criterion, as people marked them when saving. */
+	criteria?: string[];
 	/** One line per ready research or spike finding. */
 	findings?: string[];
 	/** The findings that are not takes; the why-only prompt lists takes apart, with stances. */
@@ -132,6 +135,12 @@ export function prosePrompt(input: ProsePromptInput): string {
 			others.length ? `; discussed with ${others.map(value => quote(value, 80)).join(", ")}` : ""
 		}`,
 	];
+	if (input.criteria?.length) {
+		lines.push(
+			"Criteria the chosen option was marked against (yes, partly, no or not marked):",
+			...input.criteria.slice(0, 5).map(line => `- ${quote(line, 120)}`),
+		);
+	}
 	if (input.reasons.length) {
 		lines.push(
 			"Reasons given in the discussion:",
@@ -216,6 +225,13 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 		if (options.length) chosen.push(...options.map(option => option.label));
 		else if (record.answers?.[item.id]) chosen.push(record.answers[item.id]!);
 	}
+	let criteria: string[] = [];
+	for (let criterion of question?.criteria ?? []) {
+		let marks = [...selected].flatMap(option =>
+			record.marks?.[markKey(option, criterion.id)] ?? []
+		);
+		criteria.push(`${criterion.label}: ${marks.length ? marks.join(", ") : "not marked"}`);
+	}
 	let thread = plan.conversationPlan.threads.find(item => item.questionnaireId === id);
 	let reasons = thread?.contributions
 		.filter(item =>
@@ -236,6 +252,7 @@ export function proseInput(plan: Plan, id: string): ProsePromptInput {
 		owner: record.owner!,
 		involved: Questions.involved(plan, record),
 		reasons,
+		...(criteria.length ? { criteria } : {}),
 		...(findings.length ? { findings } : {}),
 		...(research.length ? { research } : {}),
 		...(takes.length ? { takes } : {}),
