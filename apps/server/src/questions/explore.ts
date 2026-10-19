@@ -94,7 +94,7 @@ export async function explore(
 		return refuse("unavailable", "That research request is not part of this document");
 	}
 	if (msg.action === "spike" && !await deps.spike(roomId, ref)) {
-		return refuse("unavailable", "That spike is not part of this document");
+		return refuse("unavailable", "That investigation is not part of this document");
 	}
 	let finding: Wire.Finding = {
 		id: msg.key,
@@ -316,7 +316,7 @@ export async function settleSpike(
 			return {
 				...value,
 				status: "ready",
-				title: clip(investigation.title || "Spike", 300),
+				title: clip(investigation.title || "Investigation", 300),
 				...(investigation.summary?.trim()
 					? { summary: clip(investigation.summary, MAX_FINDING_SUMMARY) }
 					: {}),
@@ -326,8 +326,10 @@ export async function settleSpike(
 		});
 		if (stored && done) {
 			let asked = question(plan, id);
-			await notice(plan, roomId, id, `Spike finished for ${label(asked)}`, label(asked))
-				.catch(error => console.error("[questions] could not post a spike notice:", error));
+			await notice(plan, roomId, id, `Investigation finished for ${label(asked)}`, label(asked))
+				.catch(error =>
+					console.error("[questions] could not post an investigation notice:", error)
+				);
 		}
 	}
 }

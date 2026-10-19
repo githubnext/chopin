@@ -1,11 +1,10 @@
 /**
- * Exploring an open decision: one Explore menu that researches the web, builds a spike, or asks
+ * Exploring an open decision: one Explore menu that researches the web, investigates the codebase, or asks
  * someone, and the compact row that shows what came back.
  */
 
 import { Popover } from "@base-ui/react/popover";
 import {
-	ArrowLeftIcon,
 	ChevronIcon,
 	CircleCloseIcon,
 	CommentIcon,
@@ -14,7 +13,9 @@ import {
 	LoaderIcon,
 	MagnifierIcon,
 } from "@chopin/icons";
-import { useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+
+import type { ReactNode } from "react";
 
 import { Face } from "../face";
 
@@ -51,7 +52,7 @@ export function waitingOn(findings: readonly Finding[] | undefined): string[] {
 	];
 }
 
-/** Explorations that take time and can be stopped: research and spikes. */
+/** Explorations that take time and can be stopped: research and investigations. */
 function working(findings: readonly Finding[] | undefined): Finding[] {
 	return runningFindings(findings).filter(finding => finding.kind !== "ask");
 }
@@ -63,11 +64,11 @@ export function findingLine(finding: Finding): string {
 	}
 	if (finding.status === "ready") return finding.title ?? "Finished";
 	if (finding.status === "failed") {
-		return finding.kind === "spike" ? "The spike didn’t finish" : "Research didn’t finish";
+		return finding.kind === "spike" ? "The investigation didn’t finish" : "Research didn’t finish";
 	}
 	if (finding.status === "stopped") return "Stopped";
 	if (finding.kind === "ask") return `Waiting for @${finding.ref}`;
-	if (finding.kind === "spike") return finding.focus || "Building a spike…";
+	if (finding.kind === "spike") return finding.focus || "Investigating…";
 	return finding.focus || "Researching…";
 }
 
@@ -138,11 +139,21 @@ export function FindingRow(
 	);
 }
 
-type Step = "menu" | "ask";
+type Section = "research" | "spike" | "ask";
+
+/** Folds open inside the popover; collapsed content is inert so focus never lands in it. */
+function Fold({ children, id, open }: { children: ReactNode; id: string; open: boolean }) {
+	return (
+		<div className="explore-fold" data-open={open ? "" : undefined} id={id}>
+			<div className="explore-fold-inner" inert={!open}>{children}</div>
+		</div>
+	);
+}
 
 /**
- * The single Explore action. Its field says what to find out; Enter researches the web. While
- * research or a spike runs, the button reads Exploring and the menu offers Stop instead.
+ * The single Research action. It opens as a list: research the web or investigate the codebase
+ * (each folds open for optional details and a start button), or ask someone. While one runs, the
+ * button reads Researching and the menu offers Stop instead.
  */
 export function ExploreMenu(
 	{ disabled, findings, id, options, question, resources, wire }: {
@@ -156,18 +167,29 @@ export function ExploreMenu(
 	},
 ) {
 	let [open, setOpen] = useState(false);
-	let [step, setStep] = useState<Step>("menu");
+	let [section, setSection] = useState<Section>();
 	let [focus, setFocus] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState<string>();
-	let field = useRef<HTMLInputElement>(null);
-	let fieldId = useId();
+	let first = useRef<HTMLButtonElement>(null);
+	let details = useRef<Partial<Record<Section, HTMLTextAreaElement | null>>>({});
+	let peopleList = useRef<HTMLDivElement>(null);
+	let baseId = useId();
 	useSyncExternalStore(resources.subscribe ?? NOTHING, resources.spikeUnavailable);
 	let spikeReason = resources.spikeUnavailable();
 	let active = working(findings);
 	let exploring = active.length > 0;
-	// Taken when the list opens, so asking someone does not empty it while the menu closes.
+	// Taken when the list expands, so asking someone does not empty it while the menu closes.
 	let [people, setPeople] = useState<readonly string[]>([]);
+
+	useEffect(() => {
+		if (!section) return;
+		if (section === "ask") {
+			peopleList.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
+		} else {
+			details.current[section]?.focus();
+		}
+	}, [section]);
 
 	let record = async (body: Record<string, unknown>) => {
 		let reply = await wire.ask<Question.Explore.Reply>("question:explore", { id, ...body });
@@ -212,13 +234,56 @@ export function ExploreMenu(
 				if (!reply.ok) throw new Error(reply.message);
 			}
 		});
+	let toggle = (next: Section) => {
+		if (next === "ask" && section !== "ask") {
+			setPeople(resources.people().filter(person => !waitingOn(findings).includes(person)));
+		}
+		setSection(section === next ? undefined : next);
+	};
+
+	let form = (kind: "research" | "spike") => {
+		let start = kind === "research" ? research : spike;
+		return (
+			<Fold id={`${baseId}-${kind}`} open={section === kind}>
+				<div className="explore-form">
+					<textarea
+						aria-label="Details (optional)"
+						className="explore-details"
+						disabled={busy}
+						maxLength={500}
+						onChange={event => setFocus(event.target.value)}
+						onKeyDown={event => {
+							if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+								event.preventDefault();
+								void start();
+							}
+						}}
+						placeholder="What should it focus on?"
+						ref={node => {
+							details.current[kind] = node;
+						}}
+						rows={3}
+						value={focus}
+					/>
+					<button
+						className="btn btn-sm btn-primary explore-start"
+						disabled={busy}
+						onClick={() => void start()}
+						type="button"
+					>
+						{kind === "research" ? "Start research" : "Start investigation"}
+					</button>
+				</div>
+			</Fold>
+		);
+	};
 
 	return (
 		<Popover.Root
 			onOpenChange={next => {
 				setOpen(next);
 				if (next) {
-					setStep("menu");
+					setSection(undefined);
 					setError(undefined);
 				}
 			}}
@@ -233,121 +298,88 @@ export function ExploreMenu(
 				{exploring
 					? <LoaderIcon aria-hidden="true" className="explore-spin" />
 					: <MagnifierIcon aria-hidden="true" />}
-				{exploring ? "Exploring" : "Explore"}
+				{exploring ? "Researching" : "Research"}
 				<ChevronIcon aria-hidden="true" className="explore-trigger-chevron" />
 			</Popover.Trigger>
 			<Popover.Portal>
 				<Popover.Positioner align="end" className="explore-positioner" sideOffset={4}>
-					<Popover.Popup
-						aria-label="Explore"
-						className="explore-menu"
-						initialFocus={exploring ? undefined : field}
-					>
-						{step === "ask"
+					<Popover.Popup aria-label="Research" className="explore-menu" initialFocus={first}>
+						{exploring
 							? (
 								<>
+									{active[0]?.focus && <p className="explore-running">{active[0].focus}</p>}
 									<button
 										className="app-menu-item"
-										onClick={() => setStep("menu")}
+										disabled={busy}
+										onClick={() => void stop()}
+										ref={first}
 										type="button"
 									>
-										<ArrowLeftIcon aria-hidden="true" />
-										Ask someone
+										<CircleCloseIcon aria-hidden="true" />
+										Stop
 									</button>
-									<div className="app-menu-separator" role="separator" />
-									{people.length === 0
-										? <p className="explore-empty">Nobody else is here yet</p>
-										: people.map(person => (
-											<button
-												className="app-menu-item"
-												disabled={busy}
-												key={person}
-												onClick={() => void ask(person)}
-												type="button"
-											>
-												<Face decorative handle={person} size={16} />
-												<span className="truncate">@{person}</span>
-											</button>
-										))}
 								</>
 							)
 							: (
 								<>
-									<form
-										className="explore-focus"
-										onSubmit={event => {
-											event.preventDefault();
-											if (!exploring) void research();
-										}}
-									>
-										<label className="sr-only" htmlFor={fieldId}>What should it find out?</label>
-										<input
-											autoComplete="off"
-											className="explore-focus-field"
-											disabled={exploring || busy}
-											id={fieldId}
-											maxLength={500}
-											onChange={event => setFocus(event.target.value)}
-											placeholder="What should it find out?"
-											ref={field}
-											value={exploring ? (active[0]?.focus ?? "") : focus}
-										/>
-									</form>
-									{exploring
-										? (
-											<button
-												className="app-menu-item"
-												disabled={busy}
-												onClick={() => void stop()}
-												type="button"
-											>
-												<CircleCloseIcon aria-hidden="true" />
-												Stop
-											</button>
-										)
-										: (
-											<>
-												<button
-													className="app-menu-item"
-													disabled={busy}
-													onClick={() => void research()}
-													type="button"
-												>
-													<GlobeSearchIcon aria-hidden="true" />
-													Research the web
-												</button>
-												<button
-													aria-disabled={spikeReason ? "true" : undefined}
-													className="app-menu-item"
-													disabled={busy}
-													onClick={() => {
-														if (!spikeReason) void spike();
-													}}
-													title={spikeReason}
-													type="button"
-												>
-													<InvestigationIcon aria-hidden="true" />
-													Build a spike
-													{spikeReason && <span className="sr-only">: {spikeReason}</span>}
-												</button>
-											</>
-										)}
 									<button
+										aria-controls={`${baseId}-research`}
+										aria-expanded={section === "research"}
 										className="app-menu-item"
-										disabled={busy}
-										onClick={() => {
-											setPeople(
-												resources.people().filter(person => !waitingOn(findings).includes(person)),
-											);
-											setStep("ask");
-										}}
+										onClick={() => toggle("research")}
+										ref={first}
 										type="button"
 									>
-										<CommentIcon aria-hidden="true" />
-										Ask someone
+										<GlobeSearchIcon aria-hidden="true" />
+										Research the web
 									</button>
+									{form("research")}
+									<button
+										aria-controls={`${baseId}-spike`}
+										aria-disabled={spikeReason ? "true" : undefined}
+										aria-expanded={spikeReason ? undefined : section === "spike"}
+										className="app-menu-item"
+										onClick={() => {
+											if (!spikeReason) toggle("spike");
+										}}
+										title={spikeReason}
+										type="button"
+									>
+										<InvestigationIcon aria-hidden="true" />
+										Investigate the codebase
+										{spikeReason && <span className="sr-only">: {spikeReason}</span>}
+									</button>
+									{form("spike")}
 								</>
 							)}
+						<button
+							aria-controls={`${baseId}-ask`}
+							aria-expanded={section === "ask"}
+							className="app-menu-item"
+							onClick={() => toggle("ask")}
+							type="button"
+						>
+							<CommentIcon aria-hidden="true" />
+							Ask someone
+						</button>
+						<Fold id={`${baseId}-ask`} open={section === "ask"}>
+							<div className="explore-people" ref={peopleList}>
+								{people.length === 0
+									? <p className="explore-empty">Nobody else is here yet</p>
+									: people.map(person => (
+										<button
+											className="app-menu-item"
+											disabled={busy}
+											key={person}
+											onClick={() => void ask(person)}
+											type="button"
+										>
+											<Face decorative handle={person} size={16} />
+											<span className="truncate">@{person}</span>
+										</button>
+									))}
+							</div>
+						</Fold>
 						{error && <p className="explore-error" role="alert">{error}</p>}
 					</Popover.Popup>
 				</Popover.Positioner>

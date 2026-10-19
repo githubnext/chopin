@@ -32,12 +32,12 @@ test(
 		await decisions(ben);
 		await expect(card(ben)).toBeVisible();
 
-		await card(ana).getByRole("button", { name: "Explore", exact: true }).click();
-		let menu = ana.getByRole("dialog", { name: "Explore" });
-		await expect(menu.getByRole("textbox", { name: "What should it find out?" })).toBeFocused();
+		await card(ana).getByRole("button", { name: "Research", exact: true }).click();
+		let menu = ana.getByRole("dialog", { name: "Research", exact: true });
+		await expect(menu.getByRole("button", { name: "Research the web" })).toBeFocused();
 		await expect(menu.getByRole("button", { name: "Research the web" })).toBeVisible();
-		// Nobody here has a paired machine, so the spike says why it cannot run.
-		await expect(menu.getByRole("button", { name: /^Build a spike/ }))
+		// Nobody here has a paired machine, so the investigation says why it cannot run.
+		await expect(menu.getByRole("button", { name: /^Investigate the codebase/ }))
 			.toHaveAttribute("aria-disabled", "true");
 		await ana.screenshot({ path: info.outputPath("explore-menu.png") });
 		await menu.getByRole("button", { name: "Ask someone" }).click();

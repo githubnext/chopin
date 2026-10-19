@@ -48,15 +48,19 @@ accepted shared draft. Reopening and discarding preserve durable history.
 
 ## Exploring a decision
 
-Every open decision in a top-level document has one **Explore** menu. Its field says what to
-find out; Enter researches the web. The menu can also build a spike on the viewer's paired
-machine (disabled, with its reason, when none is online) or ask another member. While research
-or a spike runs, the button reads **Exploring** and the menu offers **Stop**; Save stays enabled.
+Every open decision in a top-level document has one **Research** menu. It opens as a list:
+**Research the web**, **Investigate the codebase** and **Ask someone**. Choosing research or an
+investigation folds that row open in place (one at a time) with an optional **Details** field
+and a **Start research** or **Start investigation** button; Cmd/Ctrl+Enter in the field also
+starts it, and the details become the finding's focus. Investigating runs on the viewer's paired
+machine and is disabled, with its reason, when none is online. Ask someone folds open into the
+list of other members. While research or an investigation runs, the button reads **Researching**
+and the menu shows what it is focused on, **Stop** and Ask someone; Save stays enabled.
 
 What comes back is a **finding** on the decision's record:
 `{ id, kind: "research" | "spike" | "ask", status, focus?, ref, title?, summary?, sources?,
 sourceCount?, verdict?, branch?, childId?, by, at }`, at most 20 per record. The browser starts
-research and spikes through their existing HTTP routes, so their authorization, Planner owner and
+research and investigations through their existing HTTP routes, so their authorization, Planner owner and
 paired-machine checks are unchanged, then sends `question:explore` with the request or
 investigation id. The server checks that the work belongs to the document, persists a running
 finding, and only then replies and announces `question:meta`. When a research request reaches

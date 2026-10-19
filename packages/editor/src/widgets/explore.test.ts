@@ -18,7 +18,7 @@ test("the brief names the question, its options and what to find out", () => {
 test("running findings say what they are doing; settled ones say what they found", () => {
 	expect(findingLine(research)).toBe("Researching…");
 	expect(findingLine({ ...research, focus: "Drop-off" })).toBe("Drop-off");
-	expect(findingLine(spike)).toBe("Building a spike…");
+	expect(findingLine(spike)).toBe("Investigating…");
 	expect(findingLine(ask)).toBe("Waiting for @sam");
 	expect(findingLine({ ...research, status: "ready", title: "Most edit once" })).toBe(
 		"Most edit once",
