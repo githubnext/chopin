@@ -214,7 +214,7 @@ export function ActivityLine({ entry, onOpenCard }: DecisionEntryProps) {
 					? matchedLabel
 					: (
 						<button
-							className="font-medium text-text-secondary underline-offset-2 hover:underline"
+							className="text-left font-medium text-text-secondary underline-offset-2 hover:underline"
 							onClick={() => onOpenCard(questionnaireId)}
 							type="button"
 						>

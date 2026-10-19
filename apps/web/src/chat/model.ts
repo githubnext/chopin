@@ -197,6 +197,16 @@ export function group(
 			continue;
 		}
 		if (row.author.kind === "system") {
+			// Filter at presentation time so saved turn offsets and comment references stay intact.
+			if (
+				row.decision?.kind === "activity"
+				&& /^Chopin (?:drafted|updated|refined|suggested|wrote up)\b/.test(row.text)
+			) continue;
+			if (
+				!row.decision && !row.comment
+				&& /^(?:@[\w-]+|Chopin) (?:joined|left|connecting|connected|disconnected)\.?$/i
+					.test(row.text)
+			) continue;
 			result.push({
 				kind: "system",
 				id: row.id,

@@ -14,7 +14,7 @@ import { terminalNotices } from "../../../server/src/research/inline.test-fixtur
 
 import type { Chat } from "@chopin/protocol";
 
-test("system presence entries stay immediate when they arrive", () => {
+test("routine presence entries stay out of the conversation", () => {
 	let markup = renderToStaticMarkup(
 		createElement(Transcript, {
 			active: true,
@@ -30,7 +30,8 @@ test("system presence entries stay immediate when they arrive", () => {
 		}),
 	);
 
-	expect(markup).toContain("Sam joined");
+	expect(markup).not.toContain("Sam joined");
+	expect(markup).not.toContain("data-chat-system");
 	expect(markup).not.toContain("data-motion-feedback");
 });
 

@@ -86,11 +86,11 @@ function SystemEntry(
 		: SignInIcon;
 	return (
 		<div
-			className="flex items-center justify-start gap-3 text-text-tertiary"
+			className="flex items-start justify-start gap-3 text-left text-text-tertiary"
 			data-chat-enter={enter || undefined}
 			data-chat-system
 		>
-			<div className="shrink-0">
+			<div className="mt-0.5 shrink-0">
 				<Icon aria-hidden="true" size={16} />
 			</div>
 			{linked
@@ -622,7 +622,7 @@ export function Transcript(
 
 	return (
 		<div
-			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 py-3"
+			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 py-3 text-left"
 			data-chat-scroll=""
 			data-focus-boundary=""
 			ref={scroller}
@@ -649,7 +649,7 @@ export function Transcript(
 			>
 				{empty && (
 					<p
-						className="px-1 text-center text-sm text-balance text-text-tertiary"
+						className="px-1 text-left text-sm text-text-tertiary"
 						data-chat-empty=""
 					>
 						{empty}

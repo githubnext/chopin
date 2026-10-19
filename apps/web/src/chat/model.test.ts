@@ -113,6 +113,47 @@ describe("transcript groups", () => {
 		expect(result.map(item => item.kind)).toEqual(["messages", "system", "messages"]);
 	});
 
+	it("omits routine decision activity without splitting a speaker's messages", () => {
+		let activity: Chat.Entry = {
+			...entry("activity", { kind: "system" }, "Chopin updated the passage for Auth"),
+			decision: { kind: "activity", questionnaireId: "Q", label: "Auth" },
+		};
+		let result = group([
+			entry("m1", { kind: "member", handle: "ana" }),
+			activity,
+			entry("m2", { kind: "member", handle: "ana" }),
+		], []);
+
+		expect(result).toMatchObject([{
+			kind: "messages",
+			messages: [{ id: "m1" }, { id: "m2" }],
+		}]);
+		expect(result).toHaveLength(1);
+	});
+
+	it.each(["@sam joined", "@sam left", "Chopin connected", "Chopin disconnected"])(
+		"omits the routine presence notice %s but preserves messages quoting it",
+		text => {
+			let result = group([
+				entry("presence", { kind: "system" }, text),
+				entry("member", { kind: "member", handle: "ana" }, text),
+				entry("agent", { kind: "agent" }, text),
+			], []);
+			expect(result.map(item => item.kind)).toEqual(["messages", "messages"]);
+		},
+	);
+
+	it.each([
+		"@alice asked @bob about Auth",
+		"Decision paused pending verification: Auth",
+	])("keeps actionable decision activity: %s", text => {
+		let activity: Chat.Entry = {
+			...entry("activity", { kind: "system" }, text),
+			decision: { kind: "activity", questionnaireId: "Q", label: "Auth" },
+		};
+		expect(group([activity], [])).toMatchObject([{ kind: "system", text }]);
+	});
+
 	it("groups queued messages separately from sent messages", () => {
 		let result = group(
 			[entry("m1", { kind: "member", handle: "ana" })],

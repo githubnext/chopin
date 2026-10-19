@@ -9,6 +9,7 @@ import { chatInput, expectChatValue, fillChat } from "./chat-input";
  */
 
 import { content, expect, ready, roomPath, test } from "./room";
+import { ulid } from "../packages/dialect/src/ulid";
 import { storedQuestion } from "../apps/server/src/testing/plan";
 
 import type { Chat } from "../packages/protocol/index";
@@ -1036,6 +1037,13 @@ test(
 					text: "@sam joined",
 					ts: 1_700_000_003,
 				},
+				{
+					id: "s2",
+					author: { kind: "system" },
+					text: "Chopin updated the passage for Rollback",
+					decision: { kind: "activity", questionnaireId: ulid(), label: "Rollback" },
+					ts: 1_700_000_004,
+				},
 			],
 		});
 
@@ -1074,7 +1082,10 @@ test(
 		await expect(toolLog).not.toHaveAttribute("inert", "");
 		await expect(icon).toHaveAttribute("data-state", "open");
 
-		await expect(chat.locator("[data-chat-system]")).toContainText("Sam joined");
+		await expect(chat.locator("[data-chat-system]")).toHaveCount(0);
+		await expect(chat).not.toContainText("Sam joined");
+		await expect(chat).not.toContainText("Chopin updated the passage");
+		await expect(chat.locator("[data-chat-scroll]")).toHaveCSS("text-align", "left");
 
 		await testInfo.attach("finished-turn-with-failure-open", {
 			body: await chat.screenshot(),
