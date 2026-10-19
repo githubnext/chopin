@@ -26,25 +26,14 @@ base = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(base)
 
 NULLABLE = ("durationDays", "comments", "reactionsTotal")
+ENUMS = dict(base.ENUMS, collector={"cloud-git"}, **{"fidelity.method": {"git-file"}})
 
 
 def check_records(records, problems):
-	enums = dict(base.ENUMS, collector={"cloud-git"}, **{"fidelity.method": {"git-file"}})
-	saved, base.ENUMS = base.ENUMS, enums
-	try:
-		found = []
-		base.check_records(records, {None: None}, found)
-	finally:
-		base.ENUMS = saved
-	for problem in found:
-		m = re.match(r"decisions\.jsonl:(\d+) \(.*\): process\.(\w+) must be an integer", problem)
-		if m and m.group(2) in NULLABLE and records[int(m.group(1)) - 1]["process"][m.group(2)] is None:
-			continue
-		problems.append(problem.replace("decisions.jsonl", "documents/decisions.jsonl"))
+	base.check_records(records, {}, problems, enums=ENUMS, nullable=NULLABLE,
+		file="documents/decisions.jsonl", require_case=False)
 	for n, r in enumerate(records, 1):
 		where = f"documents/decisions.jsonl:{n} ({r.get('id')})"
-		if r.get("caseId") is not None:
-			problems.append(f"{where}: caseId must be null for a document record")
 		count = r["participants"].get("count")
 		if count is not None and not isinstance(count, int):
 			problems.append(f"{where}: participants.count must be an integer or null")
@@ -65,19 +54,11 @@ def check_leaks(records, problems):
 				missing.append(s["url"])
 		if missing:
 			print(f"WARNING: {r['id']}: {len(missing)} source(s) not cached; run fetch_docs.py", file=sys.stderr)
-		outcome = r.get("outcome") or {}
-		fields = [r.get("question"), r.get("context"), r.get("title"), outcome.get("decision"),
-			outcome.get("rationale"), outcome.get("dissent"), r.get("notes"), r.get("evalUse"),
-			r["chopinFit"].get("shapeWhy")]
-		fields += [o.get("label") for o in r.get("options", [])] + list(r.get("criteria") or [])
-		fields += r["chopinFit"]["gaps"] + list(r["process"].get("notableMoves") or [])
-		fields += list(r["process"].get("subQuestions") or [])
-		for text in fields:
-			if isinstance(text, str):
-				hits = base.ngrams(text) & source
-				if hits:
-					sample = " ".join(sorted(hits)[0])
-					problems.append(f"LEAK documents/decisions.jsonl {r['id']}: {len(hits)} verbatim 8-word run(s), e.g. \"{sample}\"")
+		for text in base.record_texts(r):
+			hits = base.ngrams(text) & source
+			if hits:
+				sample = " ".join(sorted(hits)[0])
+				problems.append(f"LEAK documents/decisions.jsonl {r['id']}: {len(hits)} verbatim 8-word run(s), e.g. \"{sample}\"")
 
 
 def main():

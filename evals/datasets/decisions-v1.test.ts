@@ -19,6 +19,12 @@ describe("decisions-v1 corpus", () => {
 		expect(result.code).toBe(0);
 	});
 
+	test("passes the document-record validator", () => {
+		let result = validate("documents/validate.py");
+		expect(result.output).toContain(" 0 problems");
+		expect(result.code).toBe(0);
+	});
+
 	test("cuts every case at its checkpoints the way v2 does", async () => {
 		expect(manifest.cases.length).toBeGreaterThan(0);
 		for (let entry of manifest.cases) {
