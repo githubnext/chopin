@@ -7,6 +7,7 @@ import {
 	choices,
 	editors,
 	findings,
+	followUp,
 	history,
 	optionOrigins,
 	options,
@@ -48,6 +49,7 @@ export function normalizeRecord(raw: unknown): Record {
 	}
 	if (Object.hasOwn(value, "history")) history(value.history, known);
 	if (Object.hasOwn(value, "prose")) prose(value.prose);
+	if (Object.hasOwn(value, "followUp")) followUp(value.followUp);
 	if (Object.hasOwn(value, "optionOrigins")) {
 		optionOrigins(
 			value.optionOrigins,

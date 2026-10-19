@@ -1,4 +1,5 @@
 import { limits, parse, ulid } from "@chopin/dialect";
+import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 import * as Question from "@chopin/question";
 import * as Y from "yjs";
 
@@ -43,6 +44,57 @@ function nearBlock(plan: Plan, near: AskNear["near"]) {
 	return { at: { index, digest }, anchor: room.anchorAt(plan.document, index, digest) };
 }
 
+function captureScopes(
+	plan: Plan,
+	placement: AskPlacement,
+	anchors: NonNullable<Record["followUp"]>["target"][],
+): Array<{ followUp: NonNullable<Record["followUp"]>; at: AskNear["near"] }> {
+	let scopes = new Map<string, NonNullable<Record["followUp"]>>();
+	for (let record of plan.records.values()) {
+		if (!record.followUp) continue;
+		let target = room.rebase(plan.document, record.followUp.target);
+		let primary = target[0];
+		let key = primary && !primary.orphaned ? room.resolveAnchor(plan.document, primary) : undefined;
+		if (key) scopes.set(key, { scope: record.followUp.scope, target });
+	}
+	let blocks = parse(room.project(plan.document)).children;
+	let digests = room.digests(plan.document);
+	return anchors.map((related, index) => {
+		let at = placement.blocks[index]?.[0];
+		let target = related[0];
+		if (!at || blocks[at.index]?.type !== "paragraph" || !target) {
+			Question.reject("Relate each captured decision to a provisional paragraph first");
+		}
+		let key = room.resolveAnchor(plan.document, target);
+		if (!key) Question.reject("The captured decision's paragraph could not be resolved");
+		let scope = scopes.get(key);
+		if (!scope) {
+			let targets = [target];
+			for (let next = at.index + 1; next < blocks.length; next++) {
+				let block = blocks[next]!;
+				if (
+					block.type !== "table" && !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+				) break;
+				targets.push(room.anchorAt(plan.document, next, digests[next]!));
+			}
+			scope = { scope: ulid(), target: targets };
+		}
+		let indices = scope.target.map(anchor => {
+			let matches = blocks.flatMap((_, at) =>
+				!anchor.orphaned && room.matchesAnchor(plan.document, anchor, at) ? [at] : []
+			);
+			if (matches.length !== 1) Question.reject("The decision scope target could not be resolved");
+			return matches[0]!;
+		});
+		if (indices.some((at, index) => index > 0 && at !== indices[index - 1]! + 1)) {
+			Question.reject("The decision scope target is no longer contiguous");
+		}
+		scopes.set(key, scope);
+		let last = indices.at(-1)!;
+		return { followUp: structuredClone(scope), at: { index: last, digest: digests[last]! } };
+	});
+}
+
 /** Create records, drafts and their document projections in one durable mutation. */
 export async function publishQuestions(
 	plan: Plan,
@@ -55,6 +107,8 @@ export async function publishQuestions(
 		by?: string;
 		/** Stable identity for a retryable single-card creation. */
 		identity?: string;
+		/** Anchored nonblocking Planner cards, with one retry identity per question. */
+		capture?: { identities: string[]; signal?: AbortSignal };
 		revision?: number;
 		created?: () => void;
 	} = {},
@@ -64,7 +118,11 @@ export async function publishQuestions(
 	if (definition.questions.length === 0 || options.identity && definition.questions.length !== 1) {
 		Question.reject("Invalid decision count");
 	}
-	let placement = options.placement;
+	if (
+		options.capture && (options.identity || !options.placement || !("blocks" in options.placement)
+			|| options.capture.identities.length !== definition.questions.length
+			|| new Set(options.capture.identities).size !== definition.questions.length)
+	) Question.reject("Invalid capture identities or placement");
 	let asked: Array<{
 		id: string;
 		single: DecisionDefinition;
@@ -77,15 +135,36 @@ export async function publishQuestions(
 			// The actor-scoped request identity survives later retitling and resolution.
 			return;
 		}
+		let indices = definition.questions.flatMap((_, index) =>
+			options.capture && plan.records.has(options.capture.identities[index]!) ? [] : [index]
+		);
+		if (!indices.length) return;
+		if (options.capture?.signal?.aborted) Question.reject("Decision capture was cancelled");
 		if (options.revision !== undefined && options.revision !== plan.revision) {
 			Question.reject("The document changed; read it again before opening a decision");
 		}
+		let fresh = { questions: indices.map(index => definition.questions[index]!) };
+		let placement = options.placement;
+		if (options.capture && placement && "blocks" in placement) {
+			if (placement.blocks.length !== definition.questions.length) {
+				Question.reject("Give one placement for every question");
+			}
+			let blocks = placement.blocks;
+			placement = { ...placement, blocks: indices.map(index => blocks[index]!) };
+		}
 		let near = placement && "near" in placement ? nearBlock(plan, placement.near) : undefined;
 		let anchors = placement && "blocks" in placement
-			? validatePlacement(plan, definition, placement)
-			: near && definition.questions.map(() => [near.anchor]);
+			? validatePlacement(plan, fresh, placement)
+			: near && fresh.questions.map(() => [near.anchor]);
+		let followUps = options.capture && placement && "blocks" in placement
+			? captureScopes(plan, placement, anchors!)
+			: undefined;
 		let placedAt = (index: number) =>
-			placement && "blocks" in placement ? placement.blocks[index]?.[0] : near?.at;
+			followUps
+				? followUps[index]!.at
+				: placement && "blocks" in placement
+				? placement.blocks[index]?.[0]
+				: near?.at;
 		if (Service.implementationActive(plan)) throw new Error("implementation is active");
 		let questions: Store.Questions = {
 			open: new Map(plan.questions.open),
@@ -93,10 +172,10 @@ export async function publishQuestions(
 		};
 		let records = new Map(plan.records);
 		let conversationPlan = plan.conversationPlan;
-		asked = definition.questions.map((question, index) => {
+		asked = fresh.questions.map((question, index) => {
 			let single = Question.decision({ questions: [question] });
 			// Widget and question identities are deliberately distinct.
-			let id = options.identity ?? ulid();
+			let id = options.capture?.identities[indices[index]!] ?? options.identity ?? ulid();
 			// Classifier capacity must not prevent an ordinary Planner questionnaire.
 			let available = MAX_EVENTS - conversationPlan.events.length - plan.pendingCardActions.length;
 			// Host dialogs keep their raw text, which conversation events cannot carry.
@@ -176,6 +255,7 @@ export async function publishQuestions(
 				history: [],
 				optionOrigins: {},
 				editors: options.by ? [options.by] : [],
+				...(followUps ? { followUp: followUps[index]!.followUp } : {}),
 			};
 			if (anchors) {
 				record.anchors = Anchors.set(Anchors.read(record), question.id, anchors[index]!);
@@ -198,6 +278,7 @@ export async function publishQuestions(
 		);
 		document.seq = plan.document.seq;
 		try {
+			if (options.capture?.signal?.aborted) Question.reject("Decision capture was cancelled");
 			let mutation = room.insertQuestionnaires(
 				document,
 				asked.map(item => ({

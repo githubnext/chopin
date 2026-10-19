@@ -1,4 +1,5 @@
 import type { ConversationPlan, Plan as Wired, Question } from "@chopin/protocol";
+import { ULID } from "@chopin/dialect";
 import { limits } from "@chopin/question";
 import { assertSourceShape } from "../conversation-plan/sources";
 import type { DecisionEntry, Record } from "./record-types";
@@ -175,6 +176,21 @@ export function prose(value: unknown): Wired.Anchor[] {
 		}
 	}
 	return value as Wired.Anchor[];
+}
+
+export function followUp(value: unknown): NonNullable<Record["followUp"]> {
+	let entry = object(value);
+	if (
+		Object.keys(entry).some(key => !["scope", "target", "appliedGeneration"].includes(key))
+		|| typeof entry.scope !== "string" || !ULID.test(entry.scope)
+		|| !Array.isArray(entry.target) || entry.target.length === 0
+	) invalid();
+	prose(entry.target);
+	if (
+		Object.hasOwn(entry, "appliedGeneration")
+		&& (!Number.isSafeInteger(entry.appliedGeneration) || (entry.appliedGeneration as number) < 0)
+	) invalid();
+	return value as NonNullable<Record["followUp"]>;
 }
 
 export const MAX_FINDINGS = 20;

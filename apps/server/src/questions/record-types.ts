@@ -32,6 +32,8 @@ export type Record = {
 	choices?: string[];
 	history: DecisionEntry[];
 	prose?: Wired.Anchor[];
+	/** Anchored Planner captures continue only after an explicitly saved answer. */
+	followUp?: { scope: string; target: Wired.Anchor[]; appliedGeneration?: number };
 	optionOrigins: { [optionId: string]: OptionOrigin };
 	editors: string[];
 	/** Durable request keys for shared option appends, bounded by the option limit. */
