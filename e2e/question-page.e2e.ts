@@ -73,6 +73,10 @@ test(
 		await bar.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(questionPage(ana)).toContainText("Settled");
 		await expect(questionPage(ana)).toContainText("by ana");
+		await expect(questionPage(ana).getByRole("textbox", { name: "Answer" })).toBeDisabled();
+		await expect(questionPage(ana).getByRole("textbox", { name: "Answer" })).toHaveValue(
+			"Inferred from their documents.",
+		);
 		await expect(questionPage(ben)).toContainText("by ana");
 		await ana.screenshot({ path: info.outputPath("settled-page.png") });
 

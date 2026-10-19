@@ -91,10 +91,9 @@ layouts, which have no such bar, show the same actions above the status pill.
 
 Above the Notes, the page shows what the root's record says, on the paper with no card around it,
 in this order: a status row (a pill reading Open, Exploring, Waiting for or Settled; waiting is followed by the asked people's faces and names, settled by the settler's face and "by Ada, 19 Oct"; the card footer keeps its own waiting pill), the question,
-the answer when settled (a choice in Lora at section-heading size with the chosen option's description beneath it; a written answer under an **Answer** heading, line breaks kept),
 and the control, which is the options or written-answer field at page width with no box and no
-footer. A settled choice question lists what was considered under **What we considered**, with
-the chosen option tinted; a written answer has no such list. **Findings** (hidden when empty)
+footer. Once settled the control stays where it was, read-only, with the saved option selected
+or the written answer in the field; there is no separate answer block or heading. **Findings** (hidden when empty)
 follow, each expanded by default with its summary, plain source links and branch. **Takes**
 appear only if someone was asked. **Notes** is always present and shows an "Add a note"
 placeholder while empty. A child document's own decisions cannot open as pages.

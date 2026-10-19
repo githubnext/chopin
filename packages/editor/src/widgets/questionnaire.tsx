@@ -36,7 +36,7 @@ import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { LexicalEditor } from "lexical";
 import type { Transport } from "@chopin/question/react";
-import type { Answer, Relation } from "@chopin/question";
+import type { Answer, Drafts, Relation } from "@chopin/question";
 import type { Questionnaire, QuestionnaireNode } from "@chopin/dialect";
 import type { ExploreResources, QuestionStepMotion } from "../widget-options";
 import type { MemberState } from "../deck-runs";
@@ -217,7 +217,9 @@ export function QuestionnaireCard(
 	let immediate = motionImmediately?.() ?? false;
 	let presence = useTransitionPresence(shown === "hidden" ? undefined : value.id, 200, immediate);
 	let lastVisible = useRef<{ id: string; content: ReactNode } | undefined>(undefined);
-	let content = shown === "resolved"
+	let content = shown === "resolved" && page
+		? <PageAnswer value={value} />
+		: shown === "resolved"
 		? (
 			<Decided
 				canEdit={canEdit}
@@ -522,6 +524,25 @@ export function useQuestionPageDraft(
 		submitting: state.submitting,
 		syncing: state.syncing,
 	};
+}
+
+/** A settled decision's page shows the open control, read-only, with the saved answer selected. */
+function PageAnswer({ value }: { value: Questionnaire }) {
+	let drafts: Drafts = {};
+	for (let question of value.questions) {
+		let chosen = question.choices ?? [];
+		drafts[question.id] = {
+			mode: question.options.length === 0 || question.response === "text" ? "custom" : "choices",
+			choice: chosen[0] ?? null,
+			options: Object.fromEntries(chosen.map(id => [id, true])),
+			custom: question.answer ?? "",
+		};
+	}
+	return (
+		<PageShell label={value.questions.length === 1 ? "Decision" : "Question"}>
+			<QuestionView bare definition={definition(value)} disabled drafts={drafts} status="open" />
+		</PageShell>
+	);
 }
 
 /** The answer control of a decision's own page: the card's content with no box around it. */

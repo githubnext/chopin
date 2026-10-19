@@ -86,18 +86,6 @@ const STATUS_BADGE = {
 	settled: { icon: CheckIcon, tone: "success" },
 } as const;
 
-function answer(entry: QuestionnaireEntry): string | undefined {
-	let question = entry.value.questions[0];
-	if (!question) return undefined;
-	let chosen = question.options.filter(option => question.choices?.includes(option.id))
-		.map(option => option.label);
-	return chosen.length > 0 ? chosen.join(", ") : question.answer;
-}
-
-function letter(index: number): string {
-	return String.fromCharCode(65 + index);
-}
-
 /** Asks for the decision to be discarded; throws the reason when the server refuses. */
 export async function discardDecision(root: QuestionPageRoot, id: string): Promise<void> {
 	if (!root.wire) throw new Error("Not connected. Try again when you're back online.");
@@ -258,63 +246,6 @@ export function QuestionPageActions(
 	);
 }
 
-/** A settled decision on its page: the answer, once. */
-function Settled({ entry }: { entry: QuestionnaireEntry }) {
-	let question = entry.value.questions[0];
-	if (!question) return null;
-	if (question.options.length === 0 || question.response === "text") {
-		return (
-			<section aria-label="Answer" className="question-page-answer">
-				<h2>Answer</h2>
-				<p className="question-page-answer-body">{question.answer ?? "Decided"}</p>
-			</section>
-		);
-	}
-	let chosen = question.options.filter(option => question.choices?.includes(option.id));
-	// A supporting sentence belongs to one option; several choices have none to share.
-	let description = chosen.length === 1 ? chosen[0]!.description : undefined;
-	return (
-		<div className="question-page-answer">
-			<p className="question-page-answer-text">{answer(entry) ?? "Decided"}</p>
-			{description && <p className="question-page-answer-support">{description}</p>}
-		</div>
-	);
-}
-
-/** What was weighed, read-only, with the chosen option tinted. Written answers have no list. */
-function Considered({ entry }: { entry: QuestionnaireEntry }) {
-	let question = entry.value.questions[0];
-	if (!question || question.options.length === 0 || question.response === "text") return null;
-	return (
-		<section aria-label="What we considered" className="question-page-section">
-			<h2>What we considered</h2>
-			<div className="question-options question-page-considered">
-				{question.options.map((option, index) => {
-					let chosen = question.choices?.includes(option.id);
-					return (
-						<div
-							className="question-choice-row question-option"
-							data-selected={chosen ? "" : undefined}
-							key={option.id}
-						>
-							<span aria-hidden="true" className="question-key">
-								<span>{letter(index)}</span>
-							</span>
-							<span className="question-text">
-								<span className="question-label">
-									{chosen && <span className="sr-only">Chosen:</span>}
-									{option.label}
-								</span>
-								{option.description && <span className="question-desc">{option.description}</span>}
-							</span>
-						</div>
-					);
-				})}
-			</div>
-		</section>
-	);
-}
-
 export function QuestionPagePanel(
 	{ actions, entry, meta, root }: {
 		/** The title bar's actions, when the bar has no room for them (a phone). */
@@ -359,23 +290,18 @@ export function QuestionPagePanel(
 				)}
 			</div>
 			<h1 className="question-page-title">{question?.prompt ?? "Decision"}</h1>
-			{settled
-				? <Settled entry={entry} />
-				: (
-					<div className="question-page-control">
-						<QuestionnaireCard
-							canEdit={root.canEdit}
-							connected={root.connected}
-							meta={meta}
-							page
-							presentation="list"
-							self={root.self}
-							value={entry.value}
-							wire={root.wire}
-						/>
-					</div>
-				)}
-			{settled && <Considered entry={entry} />}
+			<div className="question-page-control">
+				<QuestionnaireCard
+					canEdit={root.canEdit}
+					connected={root.connected}
+					meta={meta}
+					page
+					presentation="list"
+					self={root.self}
+					value={entry.value}
+					wire={root.wire}
+				/>
+			</div>
 			{findings.length > 0 && (
 				<section aria-label="Findings" className="question-page-section">
 					<h2>Findings</h2>
