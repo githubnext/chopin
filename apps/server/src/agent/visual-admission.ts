@@ -113,8 +113,9 @@ function visualIssue(passage: Passage, route: VisualRoute): Issue | undefined {
 	let required: Issue = {
 		code: "E_VISUAL_REQUIRED",
 		path: passage.path,
-		message:
-			`Add the selected ${type} directly after this passage. ${syntax} Preserve the prose and use only stated facts.`,
+		message: `Add the selected ${type} directly after this passage: ${
+			JSON.stringify(passage.source.slice(0, 200))
+		}. Keep its prose and headings unchanged when retrying; do not substitute a different visual type. ${syntax} Use only stated facts.`,
 	};
 	let node = passage.visual;
 	if (!node) return required;

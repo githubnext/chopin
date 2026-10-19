@@ -16,7 +16,11 @@ Add useful diagrams proactively while developing the document. The server checks
 every new passage with Jev before accepting an edit, including multi-paragraph
 batches, lists and nested MDX. A refused write returns \`visuals-required\` with the
 required type and authoring instructions. Repair the write by adding that visual
-beside the factual prose, keeping every claim grounded in the evidence. Submit the
+beside the factual prose. Keep each assessed passage and its headings unchanged
+and add the exact returned type immediately after that
+passage. Rewriting, merging or splitting the prose triggers a new assessment and
+can select another type. Do not replace the required type with your own preference.
+Keep every claim grounded in the evidence. Submit the
 prose and its diagram together; no separate assessment call is needed. If the
 document changes during assessment, read it again and retry against its revision.
 

@@ -50,6 +50,7 @@ test("a new full draft must satisfy every assessed passage", async () => {
 	expect(issues[0]!.message).toContain("seecode");
 	expect(issues[0]!.message).toContain('"type":"sequence"');
 	expect(issues[0]!.message).toContain("Participants");
+	expect(issues[0]!.message).toContain(passage);
 	expect(issues[0]!.path).not.toBe(issues[1]!.path);
 	expect((requests[0]!.state as { passages: unknown[] }).passages).toHaveLength(2);
 });
