@@ -40,6 +40,7 @@ function fixture(turns: Part[][], decide: Decide | undefined = verdict(0)) {
 		prompt: "Draft the document.",
 		signal: controller.signal,
 		decide: decide as Decide | undefined,
+		capturedDecisions: undefined as (() => number) | undefined,
 		publish: (part: Part) => published.push(part),
 	};
 	return { options, published, prompts, controller, run: () => publishPlannerReplies(options) };
@@ -90,6 +91,51 @@ test.each([0.11, 0.5, 1])(
 		expect(f.prompts[1]).toContain("do not repeat completed operations");
 	},
 );
+
+test("saved inline decisions get a factual server summary when both generated replies are withheld", async () => {
+	let f = fixture([
+		text("Four decisions remain open as cards for the team."),
+		text("These are team design choices awaiting Save."),
+	], verdict(0.19));
+	f.options.capturedDecisions = () => 4;
+	await f.run();
+	expect(f.prompts).toHaveLength(2);
+	expect(f.published.filter(part => part.type === "text-delta").map(part => part.text))
+		.toEqual(["Added 4 inline decisions to the document."]);
+});
+
+test.each([0, -1, NaN, 1.5])("a capture count of %s cannot mask a rejected turn", async count => {
+	let f = fixture([text("Which scope?"), text("Tell me the scope.")], verdict(1));
+	f.options.capturedDecisions = () => count;
+	await expect(f.run()).rejects.toThrow("could not move its questions");
+	expect(f.published).toEqual([]);
+});
+
+test("a classifier failure still fails even after inline decisions were captured", async () => {
+	let f = fixture([text("Four decision cards are saved.")], async () => {
+		throw new Error("provider unavailable");
+	});
+	f.options.capturedDecisions = () => 4;
+	await expect(f.run()).rejects.toThrow("could not verify");
+	expect(f.published).toEqual([]);
+});
+
+test("a stream failure after capture cannot become a success summary", async () => {
+	let f = fixture([[{ type: "error", error: new Error("Provider failed") }]]);
+	f.options.capturedDecisions = () => 4;
+	await expect(f.run()).rejects.toThrow("Planner stream failed");
+	expect(f.published).toEqual([]);
+});
+
+test("a stop before the capture summary prevents its publication", async () => {
+	let f = fixture([text("Which scope?"), text("Tell me the scope.")], verdict(1));
+	f.options.capturedDecisions = () => {
+		f.controller.abort();
+		return 4;
+	};
+	await f.run();
+	expect(f.published).toEqual([]);
+});
 
 test.each([NaN, -1, 1.1])(
 	"invalid classifier probability %s never publishes or retries",

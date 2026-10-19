@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ActiveOwnerBindings } from "../agent/active-owner";
+import { documentTools } from "../agent/tools";
 import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -195,6 +196,72 @@ test("withholds a fragmented Chat question and repairs within the same Planner s
 	expect(prompts).toHaveLength(2);
 	expect(prompts[1]).toContain("inline decision cards");
 });
+
+test.each(["new", "existing", "unanchored"])(
+	"a rejected reply reports only new durable captures (%s)",
+	async kind => {
+		let { context } = await setup();
+		let options = {
+			context: { room: Chat.documentRoom(context) },
+			toolCallId: "capture",
+			messages: [],
+		} as never;
+		let saved = JSON.parse(
+			await documentTools.edit_plan.execute!({
+				revision: 0,
+				operations: [{ op: "insert_root", source: "Today remains provisional." }],
+			}, options) as string,
+		);
+		let block = saved.blocks[0];
+		let capture = () =>
+			documentTools.open_decisions.execute!({
+				revision: context.plan.revision,
+				questions: [{
+					key: "today-value",
+					header: "Useful curation",
+					question: "What makes a Today suggestion useful?",
+					response: "text",
+					options: [],
+					multiple: false,
+					blocks: [{ index: block.index, digest: block.digest }],
+				}],
+			}, options);
+		if (kind === "existing") await capture();
+		context.decide = decideReplying({ input: { type: "noul", noul: 0.19 } });
+		let turns = 0;
+		context.openPlannerSession = async () => ({
+			ok: true,
+			value: {
+				async destroy() {},
+				async stream() {
+					if (turns++ === 0) {
+						if (kind === "new") await capture();
+						if (kind === "unanchored") {
+							await documentTools.open_decision.execute!({
+								revision: context.plan.revision,
+								key: "today-value",
+								question: "What makes a Today suggestion useful?",
+							}, options);
+						}
+					}
+					return {
+						fullStream: (async function*() {
+							yield { type: "text-delta", id: "reply", text: "Decisions await Save." };
+						})(),
+					} as never;
+				},
+			},
+		});
+		await browserTurn(context, "Help me draft Today.");
+		expect(turns).toBe(2);
+		let entries = context.chat.entries.map(entry => entry.text);
+		expect(entries).not.toContain("Decisions await Save.");
+		if (kind === "new") {
+			expect(entries).toContain("Added 1 inline decision to the document.");
+			expect(entries.some(text => text?.includes("could not move"))).toBe(false);
+		} else expect(entries.some(text => text?.includes("could not move"))).toBe(true);
+	},
+);
 
 /** The real session opener, over a harness stub that records what each turn runs with. */
 function observe(context: Chat.Room): Seen[] {

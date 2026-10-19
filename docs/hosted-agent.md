@@ -50,6 +50,10 @@ Completed tools and the original request are not replayed. Failed, missing,
 malformed or interrupted checks never publish unchecked prose; uncertain judgments
 also withhold it. Chat prose therefore arrives after validation rather than token
 by token. This is a semantic check and can misclassify language.
+If both generated replies are withheld after the turn durably captured new inline
+decisions, Chat reports their count in a fixed server-authored summary. It never
+publishes the withheld text or claims the whole request succeeded. Without new
+captured decisions, the turn still reports failure.
 
 An answer, correction, or contradictory finding should change the affected
 prose and its anchors, followed by the next useful authorized action. Disagreement

@@ -68,6 +68,8 @@ export async function publishPlannerReplies(options: {
 	prompt: string;
 	signal: AbortSignal;
 	decide: Decide | undefined;
+	/** Count new, durably captured Planner decisions from the authoritative document state. */
+	capturedDecisions?: () => number;
 	publish: (part: Part) => void;
 }): Promise<void> {
 	let { session, decide, publish } = options;
@@ -156,6 +158,19 @@ export async function publishPlannerReplies(options: {
 			throw error;
 		}
 		if (!rejected) return;
+	}
+	let count = options.capturedDecisions?.() ?? 0;
+	if (signal.aborted) return;
+	if (Number.isSafeInteger(count) && count > 0) {
+		let id = crypto.randomUUID();
+		publish({ type: "text-start", id });
+		publish({
+			type: "text-delta",
+			id,
+			text: `Added ${count} inline ${count === 1 ? "decision" : "decisions"} to the document.`,
+		});
+		publish({ type: "text-end", id });
+		return;
 	}
 	throw new Error("The Planner could not move its questions into inline decisions. Try again.");
 }

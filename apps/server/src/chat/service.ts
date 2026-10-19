@@ -2182,11 +2182,16 @@ async function run(
 				translate(context, part);
 			}
 		} else {
+			let existingDecisions = new Set(plan.records.keys());
 			await publishPlannerReplies({
 				session: opened.session,
 				prompt,
 				signal,
 				decide: context.decide,
+				capturedDecisions: () =>
+					[...plan.records.values()].filter(record =>
+						!existingDecisions.has(record.id) && record.origin === "planner" && !!record.followUp
+					).length,
 				publish: part => translate(context, part),
 			});
 		}
