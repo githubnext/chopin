@@ -6029,10 +6029,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 /* What exploring found: a small tinted preview pill at the footer's start; it is not a disclosure. */
+/* A count is never cut short; only waiting names give way. */
 .explore-count {
 	display: inline-flex;
-	min-width: 0;
-	overflow: hidden;
+	flex: none;
 	align-items: center;
 	gap: var(--spacing);
 	height: var(--control-height-compact);
@@ -6067,8 +6067,7 @@ button.explore-count:is(:hover, :focus-visible) {
 	color: var(--color-warning-text);
 }
 
-.explore-waiting-names,
-.explore-count-text {
+.explore-waiting-names {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
