@@ -84,17 +84,26 @@
 	color: var(--color-danger-text);
 }
 
-.question-page-answer {
-	display: grid;
-	gap: calc(var(--spacing) * 2);
-	justify-items: start;
-}
-
 .question-page-answer-text {
 	margin: 0;
 	font-family: var(--font-document-heading);
-	font-size: var(--text-lg);
-	line-height: var(--text-lg--line-height);
+	font-size: var(--text-xl);
+	line-height: var(--text-xl--line-height);
+}
+
+.question-page-answer-support {
+	margin: calc(var(--spacing) * 2) 0 0;
+	color: var(--color-text-secondary);
+}
+
+.question-page-answer > h2 {
+	margin-block-end: 1rem;
+}
+
+.question-page-answer-body {
+	margin: 0;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 }
 
 /* What was considered reads as a plain list on the paper, with the chosen option tinted. */

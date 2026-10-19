@@ -260,9 +260,23 @@ export function QuestionPageActions(
 
 /** A settled decision on its page: the answer, once. */
 function Settled({ entry }: { entry: QuestionnaireEntry }) {
+	let question = entry.value.questions[0];
+	if (!question) return null;
+	if (question.options.length === 0 || question.response === "text") {
+		return (
+			<section aria-label="Answer" className="question-page-answer">
+				<h2>Answer</h2>
+				<p className="question-page-answer-body">{question.answer ?? "Decided"}</p>
+			</section>
+		);
+	}
+	let chosen = question.options.filter(option => question.choices?.includes(option.id));
+	// A supporting sentence belongs to one option; several choices have none to share.
+	let description = chosen.length === 1 ? chosen[0]!.description : undefined;
 	return (
 		<div className="question-page-answer">
 			<p className="question-page-answer-text">{answer(entry) ?? "Decided"}</p>
+			{description && <p className="question-page-answer-support">{description}</p>}
 		</div>
 	);
 }
