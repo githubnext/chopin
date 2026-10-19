@@ -11,6 +11,11 @@ export type Option = {
 /** `expired` is host input an earlier Chopin closed unanswered: settled, but with no answer. */
 export type CardStatus = "open" | "decided" | "reopened" | "discarded" | "expired";
 
+export type Criterion = { id: string; label: string };
+
+/** A settled answer's matrix, keyed `optionId/criterionId`, sparse. */
+export type Marks = { [cell: string]: "yes" | "partly" | "no" };
+
 export type Previous = { choices: string[]; value?: string; by: string; at: string };
 
 export type Question = {
@@ -21,6 +26,10 @@ export type Question = {
 	multiple: boolean;
 	response?: "text";
 	options: Option[];
+	/** Columns the options are judged against. Choice questions only. */
+	criteria?: Criterion[];
+	/** Projection of the settled matrix, when the question has criteria and an answer. */
+	marks?: Marks;
 	/** Projection of the resolved answer, when there is one. */
 	answer?: string;
 	/** Ids of the chosen options, when known. */
@@ -69,6 +78,44 @@ export function cardStatus(value: Questionnaire): CardStatus {
 		: "open";
 }
 
+const MARKS: ReadonlySet<unknown> = new Set(["yes", "partly", "no"]);
+
+function checkCriteria(question: Partial<Question>): void {
+	let hasCriteria = Object.hasOwn(question, "criteria");
+	if (!hasCriteria && !Object.hasOwn(question, "marks")) return;
+	let invalid = () => new Error("invalid questionnaire criteria");
+	if (!hasCriteria || question.response !== undefined || !Array.isArray(question.options)) {
+		throw invalid();
+	}
+	let criteria = question.criteria;
+	if (
+		!Array.isArray(criteria) || criteria.length === 0 || criteria.length > limits.MAX_CRITERIA
+	) throw invalid();
+	let ids = new Set<string>();
+	for (let criterion of criteria) {
+		if (
+			!criterion || typeof criterion !== "object"
+			|| typeof criterion.id !== "string" || !criterion.id || ids.has(criterion.id)
+			|| typeof criterion.label !== "string" || !criterion.label.trim()
+			|| criterion.label.length > limits.MAX_CRITERION_LABEL
+		) throw invalid();
+		ids.add(criterion.id);
+	}
+	if (!Object.hasOwn(question, "marks")) return;
+	let marks = question.marks;
+	if (!marks || typeof marks !== "object" || Array.isArray(marks) || question.answer === undefined) {
+		throw invalid();
+	}
+	let options = new Set(question.options.map(option => option?.id));
+	for (let [cell, mark] of Object.entries(marks)) {
+		let slash = cell.lastIndexOf("/");
+		if (
+			slash < 1 || !options.has(cell.slice(0, slash)) || !ids.has(cell.slice(slash + 1))
+			|| !MARKS.has(mark)
+		) throw invalid();
+	}
+}
+
 export function parse(value: unknown): Questionnaire {
 	if (!value || typeof value !== "object") return EMPTY;
 	let raw = value as Partial<Questionnaire>;
@@ -97,6 +144,7 @@ export function parse(value: unknown): Questionnaire {
 					|| question.answer.length > limits.MAX_CUSTOM_ANSWER)
 			) throw new Error("invalid questionnaire written answer");
 		}
+		if (question && typeof question === "object") checkCriteria(question);
 		if (!question || typeof question !== "object" || !Object.hasOwn(question, "previous")) {
 			continue;
 		}

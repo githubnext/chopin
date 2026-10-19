@@ -142,7 +142,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 	Question: component({
 		name: "Question",
 		kind: "flow",
-		content: { type: "components", names: ["Option", "Answer", "Previous"] },
+		content: { type: "components", names: ["Option", "Criterion", "Answer", "Previous"] },
 		parent: ["Questionnaire"],
 		attributes: {
 			header: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
@@ -164,6 +164,17 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		},
 	}),
 
+	/** A column the options are judged against; the sidecar record is authoritative. */
+	Criterion: component({
+		name: "Criterion",
+		kind: "flow",
+		content: { type: "empty" },
+		parent: ["Question"],
+		attributes: {
+			label: { type: "text", required: true, max: limits.MAX_CRITERION_LABEL },
+		},
+	}),
+
 	/**
 	 * Immutable projection of the resolved answer. The sidecar record is
 	 * authoritative; this exists so the source reads correctly on its own.
@@ -176,6 +187,8 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		attributes: {
 			value: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			choices: { type: "text", required: false, max: limits.MAX_ANSWER_CHOICES },
+			/** Space-separated `option/criterion:yes|partly|no` cells of the settled matrix. */
+			marks: { type: "text", required: false, max: limits.MAX_ANSWER_MARKS },
 		},
 	}),
 
@@ -250,6 +263,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 			"Questionnaire",
 			"Question",
 			"Option",
+			"Criterion",
 			"Answer",
 			"Previous",
 			"Decision",

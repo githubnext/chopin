@@ -39,6 +39,11 @@ export const MAX_QUESTIONS = 10;
 export const MAX_OPTIONS = 20;
 /** A reopened question's previous custom answer, kept at the `ask` tool's bound. */
 export const MAX_CUSTOM_ANSWER = 4_000;
+/** A choice question's criteria, matching `@chopin/question` limits. */
+export const MAX_CRITERIA = 5;
+export const MAX_CRITERION_LABEL = 40;
+/** Every marked option-by-criterion cell of a settled answer: ten options by five criteria. */
+export const MAX_ANSWER_MARKS = 16_000;
 /** Up to twenty ULIDs with separators in one answer. */
 export const MAX_ANSWER_CHOICES = 600;
 

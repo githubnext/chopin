@@ -27,7 +27,15 @@ import type { MdxJsxFlowElement } from "mdast-util-mdx-jsx";
 import { cardStatus, EMPTY, parse, type Questionnaire } from "./questionnaire-fields";
 import { fromElement, toElement } from "./questionnaire-mdx";
 export { cardStatus } from "./questionnaire-fields";
-export type { CardStatus, Option, Previous, Question, Questionnaire } from "./questionnaire-fields";
+export type {
+	CardStatus,
+	Criterion,
+	Marks,
+	Option,
+	Previous,
+	Question,
+	Questionnaire,
+} from "./questionnaire-fields";
 export { fromElement, toElement } from "./questionnaire-mdx";
 
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 node declarations; import/export wrappers only.

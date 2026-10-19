@@ -3,6 +3,8 @@ import type { Jsx } from "./shared";
 import type { MdxJsxFlowElement } from "mdast-util-mdx-jsx";
 import {
 	type CardStatus,
+	type Criterion,
+	type Marks,
 	type Option,
 	parse,
 	type Question,
@@ -17,6 +19,23 @@ function elements(node: Jsx, name: string): MdxJsxFlowElement[] {
 		if (child.type === "mdxJsxFlowElement" && child.name === name) out.push(child);
 	}
 	return out;
+}
+
+/** `option/criterion:mark` tokens. Neither id contains whitespace or `:`; criteria have no `/`. */
+function encodeMarks(marks: Marks): string | undefined {
+	let tokens = Object.entries(marks).map(([cell, mark]) => `${cell}:${mark}`);
+	return tokens.length ? tokens.join(" ") : undefined;
+}
+
+function decodeMarks(value: string | undefined): Marks | undefined {
+	if (value === undefined) return undefined;
+	let marks: Marks = {};
+	for (let token of value.split(/\s+/).filter(Boolean)) {
+		let colon = token.lastIndexOf(":");
+		if (colon < 1) throw new Error("invalid questionnaire marks");
+		marks[token.slice(0, colon)] = token.slice(colon + 1) as "yes";
+	}
+	return marks;
 }
 
 export function fromElement(node: Jsx): Questionnaire {
@@ -34,6 +53,11 @@ export function fromElement(node: Jsx): Questionnaire {
 			options.push(option);
 		}
 
+		let criteria: Criterion[] = elements(element, "Criterion").map(source => ({
+			id: attribute(source, "id") ?? "",
+			label: attribute(source, "label") ?? "",
+		}));
+
 		let question: Question = {
 			id: attribute(element, "id") ?? "",
 			header: attribute(element, "header") ?? "",
@@ -46,11 +70,14 @@ export function fromElement(node: Jsx): Questionnaire {
 				? {}
 				: { response: attribute(element, "response") as "text" }),
 			options,
+			...(criteria.length ? { criteria } : {}),
 		};
 
 		let answer = elements(element, "Answer")[0];
 		if (answer) {
 			question.answer = attribute(answer, "value") ?? "";
+			let marks = decodeMarks(attribute(answer, "marks"));
+			if (marks) question.marks = marks;
 			let chosen = (attribute(answer, "choices") ?? "").split(/\s+/).filter(Boolean);
 			if (chosen.length) question.choices = chosen;
 		}
@@ -125,6 +152,15 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 					],
 					children: [],
 				})),
+				...(question.criteria ?? []).map(criterion => ({
+					type: "mdxJsxFlowElement" as const,
+					name: "Criterion",
+					attributes: [
+						...identity(criterion.id),
+						{ type: "mdxJsxAttribute" as const, name: "label", value: criterion.label },
+					],
+					children: [],
+				})),
 				// A projection of sidecar state: addressed through its Question,
 				// so it carries no identity of its own.
 				...(question.answer === undefined ? [] : [{
@@ -132,7 +168,10 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 					name: "Answer",
 					attributes: [
 						{ type: "mdxJsxAttribute" as const, name: "value", value: question.answer },
-						...attributes({ choices: question.choices?.join(" ") }),
+						...attributes({
+							choices: question.choices?.join(" "),
+							marks: question.marks && encodeMarks(question.marks),
+						}),
 					],
 					children: [],
 				}]),

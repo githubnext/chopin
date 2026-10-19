@@ -98,7 +98,15 @@ export {
 	QuestionnaireNode,
 	toElement as questionnaireElement,
 } from "./nodes/questionnaire";
-export type { CardStatus, Option, Previous, Question, Questionnaire } from "./nodes/questionnaire";
+export type {
+	CardStatus,
+	Criterion,
+	Marks,
+	Option,
+	Previous,
+	Question,
+	Questionnaire,
+} from "./nodes/questionnaire";
 
 export { $createDecisionNode, $isDecisionNode, DecisionNode } from "./nodes/decision";
 export type { Decision, Note } from "./nodes/decision";
