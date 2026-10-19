@@ -482,12 +482,16 @@ async function expectClearOfPeople(build: import("@playwright/test").Locator) {
 		let outer = bar.getBoundingClientRect();
 		let box = group.getBoundingClientRect();
 		let face = group.querySelector(":scope > [data-tooltip]")!.getBoundingClientRect();
+		let end = Math.max(
+			...[...group.children].map(child => child.getBoundingClientRect())
+				.filter(child => child.width > 0).map(child => child.right),
+		);
 		return {
 			rule,
 			start: box.left,
 			first: face.left,
 			left: face.left - box.left - rule,
-			right: outer.right - box.right,
+			right: outer.right - end,
 			top: face.top - outer.top,
 			bottom: outer.bottom - edge - face.bottom,
 		};

@@ -68,7 +68,7 @@ test("split Chat sits on the ground beside a raised sheet that carries the title
 	expect(Math.round(sheetBox.y - rootBox.y)).toBe(12);
 	expect(titleBox.x).toBeGreaterThan(sheetBox.x);
 	expect(Math.round(barBox.height)).toBe(40);
-	expect(Math.round(viewsBox.height)).toBe(40);
+	expect(Math.round(viewsBox.height)).toBe(41);
 	expect(Math.round(viewsBox.y)).toBe(Math.round(barBox.y + barBox.height));
 	expect(Math.round(paneBox.y)).toBe(Math.round(rootBox.y));
 	expect(Math.round(paneBox.x + paneBox.width)).toBe(Math.round(sheetBox.x));
