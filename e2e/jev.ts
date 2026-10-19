@@ -1,6 +1,7 @@
 /** Fake only TypeSafe HTTP. The real adapter, policy, room and wire still run. */
 import { join } from "node:path";
 import { RESEARCH_MESSAGES } from "./research-scenarios";
+import { authoringJudgment } from "./authoring-judgments";
 
 import type { JevQuestion, JevRequest } from "../apps/server/src/conversation-plan/jev";
 
@@ -349,6 +350,8 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		return Response.json({ error: "unexpected TypeSafe credentials" }, { status: 401 });
 	}
 	let request = JSON.parse(String(init.body)) as JevRequest & { model: string };
+	let authoring = authoringJudgment(request);
+	if (authoring) return Response.json(authoring);
 	let current = (request.state as { current?: { id?: string; text?: string } }).current;
 	if (
 		"research_warranted" in request.questions

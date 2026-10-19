@@ -1,5 +1,6 @@
 /** Only the judgment HTTP boundary is fake; scheduler, authorization and turns are real. */
 import type { JevQuestion, JevRequest } from "../apps/server/src/conversation-plan/jev";
+import { authoringJudgment } from "./authoring-judgments";
 
 let network = globalThis.fetch;
 let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -12,6 +13,8 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		return Response.json({ error: "unexpected initiative judgment credential" }, { status: 401 });
 	}
 	let request = JSON.parse(String(init.body)) as JevRequest;
+	let authoring = authoringJudgment(request);
+	if (authoring) return Response.json(authoring);
 	if (request.questions.build_ready?.type === "noul") {
 		return Response.json({
 			model: "jev-e2e-initiative",
