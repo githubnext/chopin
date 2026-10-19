@@ -31,7 +31,7 @@ function classifier(choice = "sequence", requests: JevRequest[] = []): Decide {
 let failing: Decide = async () => {
 	throw new Error("provider unavailable");
 };
-let uncertain: Decide = async request => ({
+let malformed: Decide = async request => ({
 	model: "admission-test",
 	answers: Object.fromEntries(
 		Object.keys(request.questions).map(key => [key, { type: "noul", noul: 0.5 }]),
@@ -124,16 +124,55 @@ test("competing valid diagram types still require the selected visual and accept
 	expect(await admit({ sources: [`${passage}\n\n${diagram()}`] })).toEqual([]);
 });
 
-test.each(["none", "unknown"])("an uncertain %s selection never permits prose", async choice => {
-	let decide = classifier(choice);
+test.each(["none", "unknown"])(
+	"a competing %s selection keeps its routing meaning",
+	async choice => {
+		let decide = classifier(choice);
+		let admit = createVisualAdmission(async (request, options) => {
+			let result = await decide(request, options);
+			for (let answer of Object.values(result.answers)) {
+				if (answer.type === "choice") answer.confidence = 0.2;
+			}
+			return result;
+		});
+		let issues = await admit({ sources: [passage] });
+		if (choice === "none") expect(issues).toEqual([]);
+		else expect(issues[0]!.code).toBe("E_VISUAL_ASSESSMENT");
+	},
+);
+
+test.each([0.45, 0.55])(
+	"visual probability %s follows the assessment instead of a second uncertainty veto",
+	async probability => {
+		let decide = classifier();
+		let admit = createVisualAdmission(async (request, options) => {
+			let result = await decide(request, options);
+			for (let answer of Object.values(result.answers)) {
+				if (answer.type === "noul") answer.noul = probability;
+			}
+			return result;
+		});
+		if (probability < 0.5) {
+			expect(await admit({ sources: [passage] })).toEqual([]);
+			return;
+		}
+		expect((await admit({ sources: [passage] }))[0]!.code).toBe("E_VISUAL_REQUIRED");
+		expect((await admit({ sources: [`${passage}\n\n${diagram("flowchart")}`] }))[0]!.code)
+			.toBe("E_VISUAL_REQUIRED");
+		expect(await admit({ sources: [`${passage}\n\n${diagram()}`] })).toEqual([]);
+	},
+);
+
+test("a valid none judgment accepts prose after positive but uncertain visual need", async () => {
+	let decide = classifier("none");
 	let admit = createVisualAdmission(async (request, options) => {
 		let result = await decide(request, options);
 		for (let answer of Object.values(result.answers)) {
-			if (answer.type === "choice") answer.confidence = 0.2;
+			if (answer.type === "noul") answer.noul = 0.55;
 		}
 		return result;
 	});
-	expect((await admit({ sources: [passage] }))[0]!.code).toBe("E_VISUAL_ASSESSMENT");
+	expect(await admit({ sources: [passage] })).toEqual([]);
 });
 
 test("nested prose and complete lists reach assessment", async () => {
@@ -149,7 +188,7 @@ test("nested prose and complete lists reach assessment", async () => {
 	expect(assessed).toContain(passage);
 });
 
-test("missing, failed, aborted, and uncertain assessment fail closed", async () => {
+test("missing, failed, aborted, and malformed assessments fail closed", async () => {
 	let unavailable = await createVisualAdmission(undefined)({ sources: [passage] });
 	expect(unavailable[0]!.code).toBe("E_VISUAL_ASSESSMENT");
 	expect((await createVisualAdmission(failing)({ sources: [passage] }))[0]!.code)
@@ -162,7 +201,7 @@ test("missing, failed, aborted, and uncertain assessment fail closed", async () 
 			signal: controller.signal,
 		}))[0]!.code,
 	).toBe("E_VISUAL_ASSESSMENT");
-	expect((await createVisualAdmission(uncertain)({ sources: [passage] }))[0]!.code)
+	expect((await createVisualAdmission(malformed)({ sources: [passage] }))[0]!.code)
 		.toBe("E_VISUAL_ASSESSMENT");
 });
 

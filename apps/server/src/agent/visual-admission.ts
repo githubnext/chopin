@@ -205,13 +205,6 @@ export function createVisualAdmission(decide: Decide | undefined): VisualAdmissi
 				if (input.signal?.aborted) throw new Error("visual assessment aborted");
 				let result = await decide(request, { signal: input.signal });
 				if (input.signal?.aborted) throw new Error("visual assessment aborted");
-				for (let answer of Object.values(result.answers)) {
-					// Competing types can fit the same facts; uncertainty cannot permit omitting a visual.
-					if (
-						(answer.type === "noul" && answer.noul > 0.4 && answer.noul < 0.6)
-						|| (answer.type === "choice" && answer.choice === "none" && answer.confidence < 0.6)
-					) throw new Error("invalid decision: uncertain visual assessment");
-				}
 				return result;
 			});
 			if (assessed.failure || input.signal?.aborted) {
