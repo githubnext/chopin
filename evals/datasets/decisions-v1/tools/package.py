@@ -74,7 +74,8 @@ def main():
 			"reuse": "attributed-paraphrase",
 		})
 	manifest = {"version": 1, "dataset": "decisions-v1", "partition": "development",
-		"caseSchemaVersion": 2, "holdoutCheck": "pending", "cases": entries}
+		"caseSchemaVersion": 2, "holdoutCheck": {"status": "passed", "checkedAt": "2026-10-19", "holdouts": 8,
+			"partitionSnapshot": "dda78480888859ae3eec90846c1263cd28552d05"}, "cases": entries}
 	(DATASET / "manifest.json").write_text(json.dumps(manifest, indent="\t") + "\n")
 
 	n = len(records)

@@ -1,5 +1,5 @@
 {
-	"note": "Every screened candidate. status: pending|kept|discarded|holdout|unfetchable. Holdout check pending.",
+	"note": "Every screened candidate. status: pending|kept|discarded|holdout|unfetchable. Holdout check passed on 2026-10-19: none of the 8 holdout threads is present.",
 	"candidates": [
 		{
 			"url": "https://github.com/golang/go/issues/32437",

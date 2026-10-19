@@ -39,10 +39,9 @@ issue and discussion comments outside GitHub, so v2 uses attributed summaries.
 
 [decisions-v1](decisions-v1/README.md) is a larger corpus of 127 adapted GitHub
 decision threads in the same `async-discussion` format. Each thread has a
-decision record annotated for Chopin's questions design. Its holdout check is
-pending, so don't use it for development until its README says otherwise.
-`bun test evals/datasets` runs its structural validator. The verbatim-leak
-check needs the collector's raw cache.
+decision record annotated for Chopin's questions design. It passed the holdout
+check on 2026-10-19. `bun test evals/datasets` runs its structural validator;
+the verbatim-leak check needs the collector's raw cache.
 
 ## Offline use
 

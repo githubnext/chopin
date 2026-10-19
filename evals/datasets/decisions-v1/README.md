@@ -1,11 +1,5 @@
 # decisions-v1
 
-> **Holdout check pending.** The 5 validation and 3 reserved threads from the
-> archived eval-hub partition (snapshot `dda78480888859ae3eec90846c1263cd28552d05`,
-> registry `0c560ea126181bd3c6911a318f9804a029f0c85a`) have not yet been checked
-> against these cases. Do not use this set for development until that check
-> passes and this notice is removed.
-
 A corpus of 127 real software decisions debated on public GitHub threads. It
 has two jobs:
 
@@ -70,6 +64,17 @@ Of the 192 candidates:
   when screening stopped. Six are seeds: the very long Go threads #57001,
   #48429, #49085, #19412 and discussions 58409 and 54763. `candidates.json`
   records every status and reason. The v2 discussion threads were excluded.
+
+## Holdout check
+
+On 2026-10-19 every candidate, case source, related thread, decision-record
+source and implementation link was checked against the 8 holdout threads: 5 for
+validation from eval-hub partition snapshot
+`dda78480888859ae3eec90846c1263cd28552d05`, and 3 sealed for final tests. None
+matched, and no kept thread or source document links to any of them. Every
+thread URL in that snapshot's conversation corpus was also checked, and none
+matched. The holdout URLs are deliberately not recorded here. Rerun
+`tools/holdout_check.py <urls-file>` after adding cases.
 
 ## Licensing approach
 
