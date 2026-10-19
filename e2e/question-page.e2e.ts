@@ -85,3 +85,34 @@ test(
 		await expect(questionPage(ana)).toContainText("Inferred from their documents.");
 	},
 );
+
+const LAYOUTS = [
+	["a phone", { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } }],
+	["a compact layout", { viewport: { width: 640, height: 900 } }],
+] as const;
+
+for (let [name, options] of LAYOUTS) {
+	test(`on ${name} a decision's page keeps Copy link and Discard decision`, async ({ join, seed }) => {
+		let fresh = crypto.randomUUID().replaceAll("-", "").slice(0, 4).toUpperCase();
+		let decision = writtenSeed(QUESTION, undefined, `01K0N4TR8K7JGM4R1J7PW4${fresh}`);
+		await seed(decision.source, decision.state);
+		let page = await join("ana", options);
+		await decisions(page);
+		await card(page).getByRole("button", { name: "Expand decision" }).click();
+		await expect(questionPage(page).getByRole("heading", { level: 1, name: QUESTION }))
+			.toBeVisible();
+		let menu = page.getByRole("button", { name: `Actions for ${QUESTION}`, exact: true });
+		await menu.click();
+		await expect(page.getByText("Copy link", { exact: true })).toBeVisible();
+		await expect(page.getByText("Rename", { exact: true })).toHaveCount(0);
+		await page.getByText("Discard decision…", { exact: true }).click();
+		let dialog = page.getByRole("dialog", { name: "Discard this decision?" });
+		await dialog.getByRole("button", { name: "Keep it" }).click();
+		await expect(dialog).toHaveCount(0);
+		await expect(questionPage(page)).toBeVisible();
+		await menu.click();
+		await page.getByText("Discard decision…", { exact: true }).click();
+		await dialog.getByRole("button", { name: "Discard", exact: true }).click();
+		await expect(questionPage(page)).toHaveCount(0);
+	});
+}

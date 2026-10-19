@@ -112,7 +112,8 @@ parent's crumb and the question: a **⋯** menu (Copy link, and **Discard decisi
 for confirmation), then at the end **Research** and **Save**.
 Save submits the same shared draft as the control in the body and stays disabled until the
 decision is answerable. When settled, an outline **Reopen** replaces them. Phones and compact
-layouts, which have no such bar, show the same actions above the status pill.
+layouts, which have no such bar, show Research, Save or Reopen above the status pill; a phone's top bar
+carries the same **⋯** menu, and a compact layout puts it first among those actions.
 
 Above the Notes, the page shows what the root's record says, on the paper with no card around it,
 in this order: a status row (a pill reading Open, Exploring, Waiting for or Settled; waiting is followed by the asked people's faces and names, settled by the settler's face and "by Ada, 19 Oct"; the card footer keeps its own waiting pill), the question,

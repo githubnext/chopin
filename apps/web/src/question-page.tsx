@@ -20,7 +20,14 @@ import {
 	waitingOn,
 } from "@chopin/editor";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CheckIcon, ClockIcon, CloseIcon, LoaderIcon, RestartIcon } from "@chopin/icons";
+import {
+	CheckIcon,
+	ClockIcon,
+	CloseIcon,
+	EllipsisIcon,
+	LoaderIcon,
+	RestartIcon,
+} from "@chopin/icons";
 import { Badge } from "@chopin/visuals";
 import { UnfoldSection } from "@chopin/visuals/unfold";
 import { createContext, useContext, useRef, useState } from "react";
@@ -31,6 +38,9 @@ import type { IconProps } from "@chopin/icons";
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 
+import type { DocumentAction } from "./document-actions-menu";
+
+import { DocumentActionsMenu } from "./document-actions-menu";
 import { motionImmediately } from "./motion-input";
 import { NavigationDialog } from "./navigation-dialog";
 import { settledBy } from "./question-page-format";
@@ -232,14 +242,25 @@ function SettledActions({ entry, root }: { entry: QuestionnaireEntry; root: Ques
 
 /** What the title bar shows at its end: who is awaited, Research and Save, or Reopen once settled. */
 export function QuestionPageActions(
-	{ entry, meta, root }: {
+	{ entry, meta, onAction, root }: {
 		entry: QuestionnaireEntry;
 		meta: Question.CardMeta;
+		/** Adds the decision's ⋯ menu, for a layout whose title bar does not hold it. */
+		onAction?: (action: DocumentAction) => void;
 		root: QuestionPageRoot;
 	},
 ) {
 	return (
 		<div className="question-page-actions" data-question-page-actions="">
+			{onAction && (
+				<DocumentActionsMenu
+					channel={{ title: entry.value.questions[0]?.prompt ?? "Decision" }}
+					className="btn btn-icon btn-ghost"
+					decision
+					onAction={onAction}
+					trigger={<EllipsisIcon aria-hidden="true" size={16} />}
+				/>
+			)}
 			{meta.status === "decided"
 				? <SettledActions entry={entry} root={root} />
 				: <OpenActions entry={entry} meta={meta} root={root} />}

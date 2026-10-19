@@ -1567,6 +1567,13 @@ export function RoomWorkspace(
 												<QuestionPageActions
 													entry={questionPage.entry}
 													meta={questionPage.meta}
+													// A phone's top bar carries the menu; a compact layout has no bar.
+													onAction={childTitle || !workspaceCanEdit
+														? undefined
+														: action =>
+															action === "discard-decision"
+																? setDiscarding(true)
+																: onDocumentAction(room, action)}
 													root={questionPage.root}
 												/>
 											)
@@ -1681,13 +1688,17 @@ export function RoomWorkspace(
 					? createPortal(
 						<PhoneHeaderContent
 							archivedAt={workspaceArchivedAt}
-							canManage={effectiveCanManage}
+							canManage={questionPage ? !!workspaceCanEdit : effectiveCanManage}
 							comments={openComments}
+							decision={!!questionPage}
 							editing={titleEdit}
 							editingDocument={editMode === "editing"}
 							label={metadata.title}
 							members={members}
-							onAction={action => onDocumentAction(room, action)}
+							onAction={action =>
+								action === "discard-decision"
+									? setDiscarding(true)
+									: onDocumentAction(room, action)}
 							onComments={() => {
 								childChrome?.showDocument();
 								openCommentList(room);

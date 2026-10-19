@@ -129,8 +129,9 @@ export async function openDecisionDocument(page: Page) {
 export function writtenSeed(
 	prompt: string,
 	description?: string,
+	/** A decision's page id comes from its record, so tests that open one in a shared repository need their own. */
+	widget = "01K0N4TR8K7JGM4R1J7PW4R8W0",
 ): { source: string; state: SeedState; id: string } {
-	let widget = "01K0N4TR8K7JGM4R1J7PW4R8W0";
 	let question = "01K0N4V4E7Y6P4MJ5WD8XZF3W0";
 	let definition = {
 		questions: [{

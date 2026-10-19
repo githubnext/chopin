@@ -42,6 +42,8 @@ type PhoneHeaderDocument = {
 	/** The person's machine choice for this document: its button opens a sheet from the bar. */
 	machine?: MachineChoice;
 	canManage: boolean;
+	/** The room is a decision's page: its menu is Copy link and Discard decision only. */
+	decision?: boolean;
 	/** Open comment threads in the document; the bar offers a list of them when there are any. */
 	comments?: number;
 	editing?: TitleEdit;
@@ -126,6 +128,7 @@ export function PhoneHeaderContent(
 		canManage,
 		comments = 0,
 		context,
+		decision,
 		editing,
 		editingDocument,
 		label,
@@ -254,6 +257,7 @@ export function PhoneHeaderContent(
 					<DocumentActionsMenu
 						openDocument
 						channel={{ archivedAt, title: label }}
+						decision={decision}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={<EllipsisIcon aria-hidden="true" size={18} />}
