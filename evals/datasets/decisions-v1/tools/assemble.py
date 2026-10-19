@@ -66,7 +66,7 @@ def main():
 	cases_dir.mkdir(exist_ok=True)
 	for stale in cases_dir.glob("*.json"):
 		stale.unlink()
-	decisions, purposes, errors = [], {}, 0
+	decisions, purposes, errors, merged = [], {}, 0, {}
 	for ann in anns:
 		norm = load_norm(ann["key"])
 		entry = by_url.get(norm["meta"]["url"])
@@ -84,9 +84,7 @@ def main():
 			continue
 		entry.update(status="kept", reason=None, quota=ann["quota"], caseId=ann["caseId"])
 		for part in parts[1:]:
-			linked = by_url.get(part["meta"]["url"])
-			if linked:
-				linked.update(status="merged", reason=f"part of case {ann['caseId']}")
+			merged[part["meta"]["url"]] = ann["caseId"]
 		text = json.dumps(case, indent="\t", ensure_ascii=False) + "\n"
 		(cases_dir / f"{ann['caseId']}.json").write_text(text)
 		purposes[ann["caseId"]] = {"quota": ann["quota"],
@@ -98,6 +96,11 @@ def main():
 				note = f"{dropped} low-signal comments omitted by the 150-event cap."
 				record["notes"] = (record.get("notes") or "").strip() + (" " if record.get("notes") else "") + note
 			decisions.append(record)
+	# Applied after every annotation so a thread kept as its own case is never relabelled.
+	for url, case_id in merged.items():
+		linked = by_url.get(url)
+		if linked and linked.get("status") != "kept":
+			linked.update(status="merged", reason=f"part of case {case_id}")
 	for entry in candidates["candidates"]:
 		if entry.get("status") in (None, "pending"):
 			entry.update(status="not-screened",

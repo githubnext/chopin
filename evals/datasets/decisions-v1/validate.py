@@ -63,6 +63,14 @@ def time(value):
 	return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def parse_time(value):
+	"""The timestamp, or None when it is missing or malformed."""
+	try:
+		return time(value)
+	except (AttributeError, TypeError, ValueError):
+		return None
+
+
 def words(text):
 	return re.findall(r"[a-z0-9']+", text.lower())
 
@@ -90,10 +98,26 @@ def raw_texts(doc):
 	return out
 
 
-def check_records(records, cases, problems):
+def record_texts(r):
+	"""Every free-text field of a decision record that the leak check compares."""
+	outcome = r.get("outcome") or {}
+	fit = r.get("chopinFit") or {}
+	process = r.get("process") or {}
+	fields = [r.get("title"), r.get("question"), r.get("context"), r.get("evalUse"), r.get("notes"),
+		outcome.get("decision"), outcome.get("rationale"), outcome.get("dissent"), fit.get("shapeWhy")]
+	fields += [o.get("label") for o in r.get("options") or []] + list(r.get("criteria") or [])
+	fields += list(fit.get("gaps") or []) + list(process.get("notableMoves") or [])
+	fields += list(process.get("subQuestions") or [])
+	return [f for f in fields if isinstance(f, str)]
+
+
+def check_records(records, cases, problems, enums=ENUMS, nullable=(), file="decisions.jsonl",
+		require_case=True):
+	"""Check record shape. `nullable` names process counts allowed to be null; with
+	`require_case=False` a record carries no case file (document records)."""
 	ids = set()
 	for n, r in enumerate(records, 1):
-		where = f"decisions.jsonl:{n} ({r.get('id')})"
+		where = f"{file}:{n} ({r.get('id')})"
 		for section, keys in REQUIRED.items():
 			node = r if not section else r.get(section)
 			if not isinstance(node, dict):
@@ -102,7 +126,7 @@ def check_records(records, cases, problems):
 			for key in keys:
 				if key not in node:
 					problems.append(f"{where}: missing {section + '.' if section else ''}{key}")
-		for path, allowed in ENUMS.items():
+		for path, allowed in enums.items():
 			head, _, tail = path.partition(".")
 			if not tail:
 				values = [r.get(head)]
@@ -119,20 +143,23 @@ def check_records(records, cases, problems):
 				if value not in allowed:
 					problems.append(f"{where}: {path}={value!r} not in enum")
 		second = (r.get("chopinFit") or {}).get("secondaryShape")
-		if second is not None and second not in ENUMS["chopinFit.shape"]:
+		if second is not None and second not in enums["chopinFit.shape"]:
 			problems.append(f"{where}: chopinFit.secondaryShape={second!r} not in enum")
 		if r.get("id") in ids:
 			problems.append(f"{where}: duplicate id")
 		ids.add(r.get("id"))
-		if r.get("caseId") not in cases:
+		if require_case and r.get("caseId") not in cases:
 			problems.append(f"{where}: caseId {r.get('caseId')!r} has no case file")
+		if not require_case and r.get("caseId") is not None:
+			problems.append(f"{where}: caseId must be null without a case file")
 		if not isinstance(r.get("questionExplicit"), bool):
 			problems.append(f"{where}: questionExplicit must be boolean")
 		for key in ("poll", "deferred", "reopened", "superseded", "decidedOffPlatform"):
 			if not isinstance((r.get("process") or {}).get(key), bool):
 				problems.append(f"{where}: process.{key} must be boolean")
 		for key in ("durationDays", "comments", "reactionsTotal"):
-			if not isinstance((r.get("process") or {}).get(key), int):
+			value = (r.get("process") or {}).get(key)
+			if not isinstance(value, int) and not (value is None and key in nullable):
 				problems.append(f"{where}: process.{key} must be an integer")
 
 
@@ -168,23 +195,25 @@ def check_case(path, problems):
 			problems.append(f"{where}: event {e.get('id')} kind {e.get('kind')!r}")
 		if e.get("parentId") and e["parentId"] not in known:
 			problems.append(f"{where}: event {e.get('id')} parent {e['parentId']} not in case")
-		try:
-			time(e["createdAt"])
-		except (KeyError, ValueError):
+		if parse_time(e.get("createdAt")) is None:
 			problems.append(f"{where}: event {e.get('id')} bad createdAt")
 	cutoffs = case.get("cutoffs") or []
 	if not 2 <= len(cutoffs) <= 4:
 		problems.append(f"{where}: needs 2–4 cutoffs, has {len(cutoffs)}")
 	if [c.get("id") for c in cutoffs] != [f"c{i}" for i in range(1, len(cutoffs) + 1)]:
 		problems.append(f"{where}: cutoff ids must be c1..cN")
-	ats = [c.get("at") for c in cutoffs]
-	if ats != sorted(ats):
+	ats = [parse_time(c.get("at")) for c in cutoffs]
+	for c, at in zip(cutoffs, ats):
+		if at is None:
+			problems.append(f"{where}: cutoff {c.get('id')} bad at")
+	timed = [(c, at) for c, at in zip(cutoffs, ats) if at is not None]
+	if [at for _, at in timed] != sorted(at for _, at in timed):
 		problems.append(f"{where}: cutoffs out of order")
-	if events and cutoffs:
-		first = time(events[0]["createdAt"])
-		for c in cutoffs:
-			if time(c["at"]) < first:
-				problems.append(f"{where}: cutoff {c['id']} precedes the opening")
+	first = parse_time(events[0].get("createdAt")) if events else None
+	if first is not None:
+		for c, at in timed:
+			if at < first:
+				problems.append(f"{where}: cutoff {c.get('id')} precedes the opening")
 	return case
 
 
@@ -207,7 +236,10 @@ def check_manifest(cases, problems):
 
 
 def cache_key(url):
+	"""The raw-cache key for a GitHub thread URL, or None for any other URL."""
 	m = re.match(r"https://github\.com/([^/]+)/([^/]+)/(issues|pull|discussions)/(\d+)", url)
+	if m is None:
+		return None
 	owner, repo, kind, number = m.groups()
 	kind = {"pull": "pr", "issues": "issue", "discussions": "discussion"}[kind]
 	return f"{owner}__{repo}__{kind}__{number}"
@@ -226,21 +258,14 @@ def check_leaks(records, cases, problems):
 			if "github.com" in s.get("url", "")]
 		source = set()
 		for url in set(urls):
-			try:
-				path = CACHE / f"{cache_key(url)}.json"
-			except AttributeError:
-				continue
-			if path.exists():
+			key = cache_key(url)
+			path = CACHE / f"{key}.json"
+			if key and path.exists():
 				for text in raw_texts(json.loads(path.read_text())["raw"]):
 					source |= ngrams(text)
 		texts = [(f"cases/{cid}.json event {e['id']}", e.get("summary", "")) for e in case["events"]]
 		for r in by_case.get(cid, []):
-			outcome = r.get("outcome") or {}
-			fields = [r.get("question"), r.get("context"), outcome.get("decision"),
-				outcome.get("rationale"), outcome.get("dissent"), r.get("notes"), r.get("title")]
-			fields += [o.get("label") for o in r.get("options", [])] + r.get("criteria", [])
-			fields += (r.get("chopinFit") or {}).get("gaps", [])
-			texts += [(f"decisions.jsonl {r.get('id')}", f) for f in fields if isinstance(f, str)]
+			texts += [(f"decisions.jsonl {r.get('id')}", f) for f in record_texts(r)]
 		for where, text in texts:
 			hits = ngrams(text) & source
 			if hits:

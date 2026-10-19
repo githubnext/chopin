@@ -48,5 +48,7 @@ vite.config.ts.timestamp-*
 /apps/web/src/design-jig/
 
 # Raw GitHub responses for evals/datasets/decisions-v1 (never commit)
-.cache/decisions/
+/.cache/decisions/
+
+# Python bytecode from dataset tooling
 __pycache__/

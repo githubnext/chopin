@@ -187,6 +187,7 @@ python3 -I evals/datasets/decisions-v1/tools/normalise.py
 python3 -I evals/datasets/decisions-v1/tools/assemble.py          # needs .cache/decisions/ann/
 python3 -I evals/datasets/decisions-v1/tools/package.py
 python3 -I evals/datasets/decisions-v1/validate.py
+bun test evals/datasets                                           # structural checks, no cache needed
 ```
 
 The annotation files in `.cache/decisions/ann/` are not committed. They contain
