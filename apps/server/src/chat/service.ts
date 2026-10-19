@@ -2386,7 +2386,11 @@ async function run(
 			next.handle,
 			next.text,
 			next,
-			next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId,
+			next.job?.job.kind === "decision-followup"
+				? undefined
+				: next.invokedBy
+				? next.sessionId
+				: next.sessionId ?? context.claimantSessionId,
 			false,
 			next.message && next.userId
 				? { entryId: next.id, userId: next.userId, ...(next.focus ? { focus: next.focus } : {}) }

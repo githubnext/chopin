@@ -1,10 +1,35 @@
 import { installJobCleanup } from "./job.test-fixtures";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import * as Chat from "./service";
 import { runJobTool } from "../agent/job-scope";
 import { harness, JOB, member, socket, until } from "./job.test-fixtures";
 
 installJobCleanup();
+
+test.each([false, true])(
+	"an owner-only follow-up never claims foreground credentials when queued=%s",
+	async queued => {
+		let state = harness();
+		if (queued) {
+			await Chat.send(state.context, socket(), member("Human first"));
+			await until(() => state.prompts.length === 1);
+		}
+		state.context.auth.storage.channels.readAgent = async () => undefined;
+		let claims = spyOn(state.context.auth.storage.channels, "claimAgentOwner");
+		let followup = { ...JOB, id: "decision-followup:W1:m1", kind: "decision-followup" as const };
+		let outcome: Awaited<ReturnType<typeof Chat.job>> | undefined;
+		let pending = Chat.job(state.context, followup, "saved answer", undefined).then(value => {
+			outcome = value;
+		});
+		if (queued) state.emit("session.idle");
+		await until(() => !!outcome || state.prompts.length === 2);
+		if (state.prompts.length === 2) state.emit("session.idle");
+		await pending;
+		expect(outcome).toMatchObject({ status: "deferred" });
+		expect(claims).not.toHaveBeenCalled();
+		expect(state.prompts).toHaveLength(queued ? 1 : 0);
+	},
+);
 
 test("jobs and human turns drain in arrival order without leaking job scope", async () => {
 	let first = harness();
