@@ -209,7 +209,7 @@ test("marks are shared draft state, snapshotted on save, and kept through reopen
 		revision,
 	});
 	expect(saver.frames.find(frame => frame.rid === "submit")).toMatchObject({ ok: true });
-	let marks = {
+	let marks: Question.Marks = {
 		[Question.markKey(passkeys.id, device.id)]: "yes",
 		[Question.markKey(passwords.id, reset.id)]: "partly",
 	};
