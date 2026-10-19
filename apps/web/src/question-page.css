@@ -19,7 +19,7 @@
 
 /* The page starts 16px higher than the document's own top inset; the design's pill sits 84px from the pane top. */
 .question-page {
-	margin-block-start: -1rem;
+	margin-block-start: calc(var(--spacing) * -4);
 }
 
 /* The status row is one 24px line, so the question sits at the same height in every state. */
@@ -40,35 +40,35 @@
 
 /* Pill, then the question, sit at the same heights whether the decision is open or settled. */
 .question-page .question-page-title {
-	margin-block-start: 0.875rem;
+	margin-block-start: calc(var(--spacing) * 3.5);
 	font-size: var(--text-2xl);
 	line-height: var(--text-2xl--line-height);
 }
 
 .question-page-control {
 	align-self: stretch;
-	margin-block-start: 1.5rem;
+	margin-block-start: calc(var(--spacing) * 6);
 }
 
 .question-page-section {
 	align-self: stretch;
-	margin-block-start: 3.5rem;
+	margin-block-start: calc(var(--spacing) * 14);
 }
 
 .question-page-section > h2,
 .question-page h2.question-page-notes {
-	margin-block-end: 1rem;
+	margin-block-end: calc(var(--spacing) * 4);
 }
 
 .question-page h2.question-page-notes {
-	margin-block-start: 3.5rem;
+	margin-block-start: calc(var(--spacing) * 14);
 	margin-block-end: 0;
 }
 
 /* The title bar's actions, when a phone or compact layout has no bar room for them. */
 .question-page-inline-actions {
 	align-self: stretch;
-	margin-block-end: 1rem;
+	margin-block-end: calc(var(--spacing) * 4);
 }
 
 .question-page-actions {
@@ -102,7 +102,7 @@
 .question-page-findings {
 	/* The title's line box as a length: the token itself is a bare ratio. */
 	--finding-line: calc(1rem * var(--text-base--line-height));
-	--finding-indent: calc(1rem + var(--spacing) * 2);
+	--finding-indent: calc(var(--spacing) * 6);
 }
 
 .question-page-finding-head {
@@ -130,7 +130,7 @@
 }
 
 .question-page-finding .cv-unfold-chevron {
-	margin-block: calc((var(--finding-line) - 0.75rem) / 2);
+	margin-block: calc((var(--finding-line) - var(--spacing) * 3) / 2);
 }
 
 .question-page-finding-icon {
@@ -138,7 +138,7 @@
 	flex: none;
 	align-items: center;
 	justify-content: center;
-	inline-size: 1rem;
+	inline-size: calc(var(--spacing) * 4);
 	block-size: var(--finding-line);
 	color: var(--color-text-tertiary);
 }
@@ -180,7 +180,7 @@
 .question-page-sources a {
 	color: var(--color-brand);
 	text-decoration: underline;
-	text-underline-offset: 2px;
+	text-underline-offset: calc(var(--spacing) / 2);
 }
 
 .question-page-take {
@@ -201,7 +201,7 @@
 	display: flex;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	min-block-size: 1.5rem;
+	min-block-size: calc(var(--spacing) * 6);
 }
 
 .question-page-take-name {
@@ -285,4 +285,9 @@
 
 .question-page-shell .question-options {
 	margin-block-start: 0;
+}
+
+/* The editor's own empty-document hint would draw over "Add a note"; show one. */
+.plan:has(.plan-preface [data-question-page]) .plan-body-placeholder {
+	display: none;
 }

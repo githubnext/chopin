@@ -954,8 +954,13 @@ body {
 /* The child's title keeps room for its name and actions; the root crumb gives way first. */
 .document-child-title-slot {
 	display: flex;
-	min-width: 8rem;
+	min-width: 0;
 	flex: 1;
+}
+
+/* A question's actions share the bar, so its title keeps room for a name. */
+.document-title-bar:has(.child-actions-slot:not(:empty)) .document-child-title-slot {
+	min-width: calc(var(--spacing) * 32);
 }
 
 .child-title-icon {
@@ -1601,6 +1606,9 @@ body {
 
 /* The decision card: a question, lettered options, and a quiet footer. */
 .question-card {
+	/* The card's top and its inline padding plus the head's, for a corner rule inside it. */
+	--corner-pad-block: calc(var(--spacing) * 4);
+	--corner-pad-inline: calc(var(--spacing) * 4);
 	padding: 1rem 0.5rem 0.75rem;
 }
 
@@ -1628,14 +1636,18 @@ body {
 	color: var(--color-success);
 }
 
-/* Tucked into the card's corner: undo the card's top and the card and head inline padding. */
+/* Tucked into the card's corner: undo the host's padding, which the host states in --corner-pad-*. */
 .question-head-actions {
 	display: flex;
 	flex: none;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	margin-block-start: calc(var(--card-corner-inset) - 1rem);
-	margin-inline-end: calc(var(--card-corner-inset) - 1rem);
+	margin-block-start: calc(
+		var(--card-corner-inset) - var(--corner-pad-block, var(--card-corner-inset))
+	);
+	margin-inline-end: calc(
+		var(--card-corner-inset) - var(--corner-pad-inline, var(--card-corner-inset))
+	);
 }
 
 .question-head-text {

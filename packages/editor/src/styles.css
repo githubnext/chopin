@@ -5880,8 +5880,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-text-tertiary);
 }
 
-.explore-spin {
-	animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+/* Reduced motion keeps the still loader glyph; the words beside it say it is working. */
+@media (prefers-reduced-motion: no-preference) {
+	.explore-spin {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
 }
 
 .explore-positioner {
@@ -5904,7 +5907,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .explore-menu:is([data-starting-style], [data-ending-style]) {
 	opacity: 0;
-	scale: 0.98;
+	scale: var(--dropdown-pre-scale);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6014,7 +6017,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	border-radius: var(--radius-full);
 	background: var(--color-inset);
 	font-size: var(--text-sm);
-	font-weight: 500;
+	font-weight: var(--font-weight-medium);
 	white-space: nowrap;
 	color: var(--color-text-secondary);
 	transition:
@@ -6040,7 +6043,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	background: var(--color-brand-wash);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
-	font-weight: 500;
+	font-weight: var(--font-weight-medium);
 	white-space: nowrap;
 	color: var(--color-brand-ink);
 }
@@ -6051,7 +6054,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 button.explore-count:is(:hover, :focus-visible) {
-	filter: brightness(0.97);
+	background: color-mix(in oklch, var(--color-brand-wash), var(--color-brand-ink) 8%);
 }
 
 /* Waiting on a person is amber: the same quiet capsule family as the count and the Research status. */
@@ -6067,7 +6070,7 @@ button.explore-count:is(:hover, :focus-visible) {
 	background: var(--color-warning-surface);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
-	font-weight: 500;
+	font-weight: var(--font-weight-medium);
 	color: var(--color-warning-text);
 }
 
@@ -6079,7 +6082,7 @@ button.explore-count:is(:hover, :focus-visible) {
 }
 
 button.explore-waiting:is(:hover, :focus-visible) {
-	filter: brightness(0.97);
+	background: color-mix(in oklch, var(--color-warning-surface), var(--color-warning-text) 8%);
 }
 
 /*
