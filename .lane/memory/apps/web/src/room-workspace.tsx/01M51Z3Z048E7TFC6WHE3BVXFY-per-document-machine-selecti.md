@@ -4,9 +4,9 @@ anchor: function RoomWorkspace
 created: 2026-10-16T09:01:34Z
 norm: '1'
 sig: bd75bf735bc4f7ba
-body_hash: 60823b8893dc2c7a
-raw_hash: 12443de57c56fa53
-vouched: 2026-10-19T11:55:21Z
+body_hash: 1389ca7e934c75f7
+raw_hash: 65fd9445deac2245
+vouched: 2026-10-19T12:54:49Z
 lines: 434-1803
 ---
 
