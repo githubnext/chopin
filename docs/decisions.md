@@ -150,3 +150,66 @@ never replaced by a later draft for the same settle; a draft is replaced by a re
 
 Reopening moves the why into the answer's history entry and clears it from the record: it
 explained that answer, and the next settle drafts its own.
+
+## Criteria
+
+A choice decision may carry **criteria**: up to five named qualities, such as "New device", "No new
+storage" or "Easy reset", that its options are judged against. The UI is a matrix: criteria are
+columns, options are rows, and each cell is marked yes, partly or no. Criteria apply only to choice
+questions, never to `response: "text"` or verbatim host dialogs.
+
+**Definition.** `Question.Item.criteria?: Array<{ id: string; label: string }>` (1–5 entries, labels
+at most 40 characters, case-insensitively unique, ids matching `^[A-Za-z0-9_-]{1,64}$`). The
+Planner's `ask` tool takes `criteria: [{ label }]` per question; ids are minted by the server. The
+`open_decision` tool and `question:create` make written decisions, which have no options to compare,
+so they take no criteria. Criteria are frozen like the rest of the definition, with one exception
+shaped like options: any writer may append one while the decision is open.
+
+```ts
+// request, at most 5 criteria, 40 characters, no case-insensitive duplicate label
+{ kind: "question:criterion", rid, id, question, key, label }
+// reply
+{ kind: "question:criterion", id, ok: true, criterion, definition, repeated? }
+{ kind: "question:criterion", id, ok: false, reason: AddOption.Refusal, message }
+// broadcast, after the commit
+{ kind: "question:criterion-added", id, question, criterion, definition, by }
+```
+
+`key` is an idempotency token as for `question:option`; the server stores it beside option keys in
+the record's `appended` map, so repeating it returns the same criterion with `repeated: true`.
+Reasons are the option refusals: `invalid`, `duplicate`, `full`, `resolved`, `resolving`,
+`implementation`. The definition, record and plan projection change together and commit before the
+reply and broadcast. The shared draft's shape does not change. Clients should adopt the returned
+`definition` forward only (more criteria than they hold), as for options. Changing or removing a
+criterion, or relabelling one, is not supported: ask a new decision.
+
+**Marks are shared draft state**, like choices. Every choice question's draft holds a `marks`
+object (`Question.DraftAnswer.marks`), a flat map of one LWW register per cell, keyed
+`${optionId}/${criterionId}` (`Question.markKey`). A register holds `"yes" | "partly" | "no"`, or
+`null` once cleared; a missing key is unmarked. Keys are created lazily, so appended options and
+criteria never rewrite an existing draft. `marks` is read back only on questions with criteria,
+where it is present; on others it stays empty. Use `Question.setMark(model, questionId, optionId,
+criterionId, mark | null)` on the client's local model, flush, and send the patch with
+`question:edit`; the server rejects any cell the definition does not describe or any other value.
+Marks are optional: a partly filled matrix can be saved and unmarked cells render blank. Drafts
+stored before criteria gain an empty `marks` object when the server restores them.
+
+**Settling.** `question:submit` snapshots the draft's marked cells into the answer, so the settled
+decision keeps the matrix after the draft is replaced:
+
+- `Answer.marks?: Marks` (`Marks = { [cell]: Mark }`, flat and sparse), present when any cell was marked;
+  it comes back in `question:submit` and `question:resolved` replies.
+- The record stores `marks`, and `CardMeta.marks` carries it for decided cards. This is the data for
+  the read-only table: rows are `definition.questions[0].options` (with the chosen one from
+  `answers`/`choices`), columns are `criteria`, cells are `marks[markKey(option, criterion)]`.
+- Reopening starts a fresh draft with no marks. The previous matrix moves to
+  `CardMeta.history[n].marks`.
+
+**Document projection.** The plan's `<Questionnaire>` reads correctly alone: each `<Question>` carries
+`<Criterion id label />` children after its options, and a settled `<Answer>` carries
+`marks="optionId/criterionId:mark ..."`. Records stay authoritative; reopening clears the attribute.
+No Lexical node was added: both ride in the existing questionnaire node's state.
+
+**Planner.** The Planner may propose criteria in `ask`. It cannot mark cells or suggest marks: a
+mark is a human judgement, and the advisory `suggested` choice is the only Planner-authored draft
+input. The settle write-up prompt lists each criterion with the chosen option's mark.
