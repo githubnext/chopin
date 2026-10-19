@@ -79,6 +79,13 @@ Planners it runs, and the server answers with the ones its owner chose the
 machine for. A server older than protocol 4 refuses a protocol 4 connector, so
 deploy the server first, then publish a release built with protocol 4.
 
+Connector protocol 6 includes the claimed document ID on build renewals and
+status reports, so a completed rebuild can finish after assignment cleanup.
+Older servers reject that extra field. Deploy the protocol 6 server first,
+then publish a release built with protocol 6. The server still accepts protocols
+2 through 5; their controllers omit the document ID and keep their existing
+assignment-based behavior.
+
 A server recommends the version in its own `apps/connector/package.json`
 unless `CONNECTOR_VERSION` names another, and `chopin update` with no version
 installs that release. Publish a release before deploying a server whose

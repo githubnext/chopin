@@ -45,19 +45,21 @@ async function run(
 		await writeFile(join(root, "source.txt"), "committed");
 		git(root, "add", ".");
 		git(root, "commit", "-m", "fixture");
-		/** Calls as sent, and without their report keys, which are random. */
+		/** Calls as sent, and with report identity metadata omitted for lifecycle assertions. */
 		let sent: Array<[string, Record<string, unknown>]> = [];
 		let calls: Array<[string, Record<string, unknown>]> = [];
 		let api = {
 			call: async (name: string, args: Record<string, unknown> = {}, signal?: AbortSignal) => {
 				sent.push([name, args]);
-				let { idempotencyKey: _key, ...rest } = args;
+				let { idempotencyKey: _key, documentId: _document, ...rest } = args;
 				calls.push([name, rest]);
 				return respond(name, args, signal);
 			},
 		} as unknown as Awaited<ReturnType<typeof remote>>;
 		let id = crypto.randomUUID();
+		let documentId = crypto.randomUUID();
 		await runWork(api, "implementation", {
+			documentId,
 			build: {
 				id,
 				...(build.kind ? { kind: build.kind } : {}),
@@ -81,7 +83,7 @@ async function run(
 			...options,
 		});
 		await inspect?.({ root, state, id });
-		return { id, calls, sent, branches: git(root, "branch", "--list", "chopin/*") };
+		return { id, documentId, calls, sent, branches: git(root, "branch", "--list", "chopin/*") };
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
@@ -109,6 +111,12 @@ test("a rebuild whose report landed stops renewing and exits cleanly", async () 
 	);
 	expect(calls.filter(([name]) => name === "renew_implementation_build")).toHaveLength(1);
 	expect(calls.at(-1)).toEqual(["report_implementation_build", { id, state: "stopped" }]);
+});
+
+test("the controller keeps the claimed document on every rebuild renewal and status report", async () => {
+	let { documentId, sent } = await run({ kind: "rebuild" }, ["--rebuild", "--slow"]);
+	expect(sent.some(([name]) => name === "renew_implementation_build")).toBe(true);
+	for (let [, args] of sent) expect(args.documentId).toBe(documentId);
 });
 
 test("a living document's first build gets a prompt without verification or revision", async () => {
@@ -541,7 +549,7 @@ function unreachable() {
 test("a network drop mid-run keeps the agent running and delivers its completion once back", async () => {
 	let renewals = 0;
 	let reports = 0;
-	let { id, sent } = await run(
+	let { id, documentId, sent } = await run(
 		{ kind: "rebuild" },
 		["--rebuild", "--slow"],
 		(name, args) => {
@@ -560,12 +568,23 @@ test("a network drop mid-run keeps the agent running and delivers its completion
 	expect(reported).toEqual([
 		["report_implementation_build", {
 			id,
+			documentId,
 			state: "running",
 			session: "implementation-acp-session",
 			idempotencyKey: expect.any(String),
 		}],
-		["report_implementation_build", { id, state: "stopped", idempotencyKey: expect.any(String) }],
-		["report_implementation_build", { id, state: "stopped", idempotencyKey: expect.any(String) }],
+		["report_implementation_build", {
+			id,
+			documentId,
+			state: "stopped",
+			idempotencyKey: expect.any(String),
+		}],
+		["report_implementation_build", {
+			id,
+			documentId,
+			state: "stopped",
+			idempotencyKey: expect.any(String),
+		}],
 	]);
 	// The retry is the same report, so Chopin can tell it from a second one.
 	let [running, stopped, retried] = reported.map(([, args]) => args.idempotencyKey);

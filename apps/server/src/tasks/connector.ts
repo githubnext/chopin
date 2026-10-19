@@ -43,10 +43,12 @@ export function implementationSchemas(
 			claim_implementation_build: z.object({ id }).strict(),
 			renew_implementation_build: z.object({
 				id,
+				documentId: id.optional(),
 				progress: z.string().min(1).max(2000).optional(),
 			}).strict(),
 			report_implementation_build: z.object({
 				id,
+				documentId: id.optional(),
 				state: z.enum(["running", "stopped", "failed"]),
 				session: z.string().min(1).max(128).optional(),
 				error: z.string().max(2000).optional(),
@@ -215,7 +217,8 @@ export function implementationConnector(
 			let runId = typeof args.id === "string" && name !== "claim_implementation_build"
 				? args.id
 				: undefined;
-			return grant.run?.documentId ?? (runId && connections.runDocument(runId))
+			return grant.run?.documentId ?? args.documentId as string | undefined
+				?? (runId && connections.runDocument(runId))
 				?? connections.assigned(connection.id);
 		},
 		/** One connector call, unserialized. */
@@ -242,7 +245,7 @@ export function implementationConnector(
 			}
 			tracked.add(documentId);
 			return withPlan(documentId, async plan => {
-				function refuse(code: string, build?: BuildRequest): never {
+				function refuse(code: string, build?: BuildRequest, message?: string): never {
 					console.warn(
 						`chopin: refused ${name} for build ${runId ?? "none"} of document ${plan.id} from `
 							+ `${caller} - ${code}`
@@ -251,7 +254,7 @@ export function implementationConnector(
 									+ `of machine ${build.machineId ?? "unknown"}`
 								: ""),
 					);
-					fail(code);
+					fail(code, message);
 				}
 				// Only a landed report stops a rebuild, so a retried report after that is the same
 				// success, even once a newer rebuild has queued behind it.
@@ -277,7 +280,28 @@ export function implementationConnector(
 						fail("build-inactive");
 					}
 				}
+				// Cleanup may release this assignment or queue another build before the agent finishes.
+				// Only a landed rebuild accepts the controller's late renewal or successful exit.
+				if (
+					!grant.run && (name === "renew_implementation_build"
+						|| name === "report_implementation_build" && args.state === "stopped")
+				) {
+					let own = plan.builds.find(item => item.id === args.id);
+					if (
+						own?.kind === "rebuild" && own.state === "stopped"
+						&& own.connectionId === connection.id && own.user === connection.owner
+						&& serves(connection, own.repositoryId)
+					) {
+						return name === "renew_implementation_build"
+							? { accepted: true, state: "stopped" }
+							: { accepted: true };
+					}
+				}
 				let build = plan.builds.at(-1);
+				// A document hint survives restart; it must not revive a forgotten connection.
+				if (build && !grant.run && build.id === args.id && !connections.known(build.connectionId)) {
+					refuse("server-restarted", build, RESTARTED);
+				}
 				// The connector registered its machine again, as after a dropped request, so the build's
 				// heartbeat and reports now come on a newer connection of the same machine and owner.
 				if (
@@ -297,6 +321,9 @@ export function implementationConnector(
 						);
 						build = plan.builds.at(-1)!;
 					}
+				}
+				if (!grant.run && connections.assigned(connection.id) !== documentId) {
+					refuse("build-forbidden", build);
 				}
 				if (
 					!build || build.connectionId !== connection.id || build.user !== connection.owner
@@ -364,14 +391,6 @@ export function implementationConnector(
 						),
 					};
 				}
-				// A reported rebuild has already stopped; the connector's own stop report is a no-op and
-				// a heartbeat learns to stop renewing.
-				if (build.kind === "rebuild" && build.state === "stopped") {
-					if (name === "renew_implementation_build") return { accepted: true, state: "stopped" };
-					if (name === "report_implementation_build" && args.state === "stopped") {
-						return { accepted: true };
-					}
-				}
 				// A report whose answer was lost comes again with the same key; the build already shows it.
 				if (
 					name === "report_implementation_build" && args.idempotencyKey !== undefined
@@ -389,7 +408,8 @@ export function implementationConnector(
 						progress: args.progress as string | undefined,
 					});
 				} else if (name === "report_implementation_build") {
-					let { idempotencyKey: reportKey, ...sent } = args as {
+					let { documentId: _document, idempotencyKey: reportKey, ...sent } = args as {
+						documentId?: string;
 						state: "running" | "stopped" | "failed";
 						session?: string;
 						error?: string;

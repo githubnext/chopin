@@ -43,7 +43,7 @@ async function checkout() {
 	return root;
 }
 
-const MESSAGE = "chopin 0.0.1 speaks connector protocol 0, but this server needs protocol 1. "
+const MESSAGE = "chopin 0.0.1 speaks connector protocol 6, but this server needs protocol 2 to 5. "
 	+ "Run `chopin update 0.1.3`, then connect again.";
 
 /**
@@ -154,12 +154,12 @@ async function connect(
 	}
 }
 
-test("connect sends its version and protocol, and stops on a refusal at pairing", async () => {
+test("connect sends protocol 6 and stops when a protocol 5 server refuses it", async () => {
 	let result = await connect("pairing");
 	expect(result.code).toBe(1);
 	expect(result.stderr).toBe(`${MESSAGE}\n`);
 	expect(result.requests).toEqual([
-		["/api/connector/pairings", VERSION, String(CONNECTOR_PROTOCOL)],
+		["/api/connector/pairings", VERSION, "6"],
 	]);
 	// A connect that never connected saves nothing for service install.
 	expect(await Bun.file(join(result.directory, "config.json")).exists()).toBe(false);

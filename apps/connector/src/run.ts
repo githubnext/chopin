@@ -84,6 +84,7 @@ export async function runWork(
 	let implementation = kind === "implementation";
 	let claim = raw as {
 		build: BuildRequest;
+		documentId: string;
 		/** A living document's first build, whose run ends at its last complete_task. */
 		live?: boolean;
 		/** An unprompted prototype under a passage, run on a throwaway branch. */
@@ -108,7 +109,9 @@ export async function runWork(
 	// Kept so a failed start can show why without echoing every agent log line.
 	let agentTail: string[] = [];
 	let agentMessage = "";
-	let identity = implementation ? { id: input.id } : { id: input.id, generation: claim.generation };
+	let identity = implementation
+		? { id: input.id, documentId: claim.documentId }
+		: { id: input.id, generation: claim.generation };
 	let abort = new AbortController();
 	let cancel = () => abort.abort();
 	options.signal.addEventListener("abort", cancel, { once: true });

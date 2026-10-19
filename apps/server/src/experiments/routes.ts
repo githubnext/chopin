@@ -170,8 +170,9 @@ export const PLANNER_IDLE_MS = 30 * 60_000;
  * and those Default machine gives it.
  * Protocol 5 connects the machine rather than one checkout: it takes work in any repository its
  * owner can push to. An older connector still connects, for its one checkout's repository.
+ * Protocol 6 keeps the claimed document ID on build renewals and reports after assignment cleanup.
  */
-export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 5 };
+export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 6 };
 
 /** The chopin release a connector says it runs; a script or source run has none. */
 function releaseVersion(request: Request): string | undefined {

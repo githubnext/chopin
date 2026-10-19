@@ -442,10 +442,9 @@ export class Connections {
 	 * connection ends.
 	 */
 	rebind(from: string, to: Connection, documentId: string, runId: string) {
-		if (this.#builds.get(from) === documentId) {
-			this.#builds.delete(from);
-			this.#builds.set(to.id, documentId);
-		}
+		if (this.#builds.get(from) === documentId) this.#builds.delete(from);
+		// Ending the old MCP session already removed its assignment.
+		this.assign(to.id, documentId);
 		if (this.#used.get(documentId) === from) this.#used.set(documentId, to.id);
 		for (let [key, token] of this.#runTokens) {
 			if (!key.startsWith(`${from}:${runId}:`)) continue;
