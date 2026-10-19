@@ -5,7 +5,7 @@
  * partial result would leave the agent guessing which gaps were deliberate.
  */
 
-import { answered } from "./draft";
+import { answered, marked } from "./draft";
 
 import type { Drafts } from "./draft";
 import type { Answer, Definition } from "./schema";
@@ -60,6 +60,8 @@ export function derive(definition: Definition, drafts: Drafts): Outcome {
 			question: question.question,
 			choices: selected.map(option => option.label),
 			optionIds: selected.map(option => option.id),
+			// Every marked cell, not only the chosen option's: the settled table shows the whole matrix.
+			...(Object.keys(marked(draft)).length ? { marks: marked(draft) } : {}),
 		});
 	}
 

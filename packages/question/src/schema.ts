@@ -15,6 +15,7 @@ import * as limits from "./limits";
 import type { Question } from "@chopin/protocol";
 
 export type Option = Question.Option;
+export type Criterion = Question.Criterion;
 export type Item = Question.Item;
 export type Definition = Question.Definition;
 export type DecisionDefinition = Question.DecisionDefinition;
@@ -105,6 +106,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 			"multiple",
 			...(Object.hasOwn(raw, "description") ? ["description"] : []),
 			...(Object.hasOwn(raw, "response") ? ["response"] : []),
+			...(Object.hasOwn(raw, "criteria") ? ["criteria"] : []),
 		], `Question ${index + 1}`);
 
 		if (Object.hasOwn(raw, "response") && raw.response !== "text") {
@@ -152,6 +154,35 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 		for (let option of options) Object.freeze(option);
 		Object.freeze(options);
 
+		let criteria: Criterion[] | undefined;
+		if (Object.hasOwn(raw, "criteria")) {
+			if (written || verbatim) {
+				fail(`Question ${index + 1} criteria need a choice question`);
+			}
+			if (
+				!Array.isArray(raw.criteria) || raw.criteria.length === 0
+				|| raw.criteria.length > limits.MAX_CRITERIA
+			) {
+				fail(`Question ${index + 1} criteria must hold 1-${limits.MAX_CRITERIA} entries`);
+			}
+			criteria = raw.criteria.map((source, position) => {
+				let name = `Question ${index + 1} criterion ${position + 1}`;
+				let criterion = record(source, name);
+				exact(criterion, ["label"], name);
+				return Object.freeze({
+					id: `c${position}`,
+					label: text(criterion.label, `${name} label`, limits.MAX_CRITERION_LABEL),
+				});
+			});
+			let seen = new Set<string>();
+			for (let criterion of criteria) {
+				let folded = criterion.label.toLowerCase();
+				if (seen.has(folded)) fail(`Question ${index + 1} has duplicate criteria`);
+				seen.add(folded);
+			}
+			Object.freeze(criteria);
+		}
+
 		return {
 			id: `q${index}`,
 			header: text(
@@ -180,6 +211,7 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 				}
 				: {}),
 			options,
+			...(criteria ? { criteria } : {}),
 			multiple: raw.multiple,
 			...(written ? { response: "text" as const } : {}),
 			...(verbatim ? { verbatim: true as const } : {}),
@@ -221,6 +253,7 @@ export function identified(raw: unknown): Definition {
 				"multiple",
 				...(Object.hasOwn(question, "description") ? ["description"] : []),
 				...(Object.hasOwn(question, "response") ? ["response"] : []),
+				...(Object.hasOwn(question, "criteria") ? ["criteria"] : []),
 				...(verbatim ? ["verbatim"] : []),
 			],
 			`Question ${index + 1}`,
@@ -253,6 +286,28 @@ export function identified(raw: unknown): Definition {
 			|| !verbatim && question.options.length > limits.MAX_OPTIONS
 		) {
 			fail(`Question ${index + 1} has invalid options or multiple value`);
+		}
+		if (Object.hasOwn(question, "criteria")) {
+			let criteria = question.criteria;
+			if (
+				verbatim || question.response === "text" || !Array.isArray(criteria)
+				|| criteria.length === 0 || criteria.length > limits.MAX_CRITERIA
+			) fail(`Question ${index + 1} has invalid criteria`);
+			let labels = new Set<string>();
+			let ids = new Set<string>();
+			for (let [position, candidate] of criteria.entries()) {
+				let name = `Question ${index + 1} criterion ${position + 1}`;
+				let criterion = record(candidate, name);
+				exact(criterion, ["id", "label"], name);
+				if (typeof criterion.id !== "string" || !CRITERION_ID.test(criterion.id)) {
+					fail(`${name} has an invalid id`);
+				}
+				storedText(criterion.label, `${name} label`, limits.MAX_CRITERION_LABEL);
+				let folded = (criterion.label as string).trim().toLowerCase();
+				if (ids.has(criterion.id) || labels.has(folded)) fail(`${name} is a duplicate`);
+				ids.add(criterion.id);
+				labels.add(folded);
+			}
 		}
 		for (let [position, candidate] of question.options.entries()) {
 			let option = record(candidate, `Question ${index + 1} option ${position + 1}`);
@@ -297,6 +352,9 @@ export type Appended =
 	};
 
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+/** No separator character, so a mark's `option/criterion` key splits unambiguously. */
+export const CRITERION_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * Append one option to a decision's only question.
@@ -353,6 +411,66 @@ export function appendOption(
 	return {
 		ok: true,
 		option,
+		definition: Object.freeze({ questions: Object.freeze([next]) }) as DecisionDefinition,
+	};
+}
+
+export type CriterionAppended =
+	| { ok: true; definition: DecisionDefinition; criterion: Criterion }
+	| {
+		ok: false;
+		reason: "invalid" | "duplicate" | "full";
+		message: string;
+	};
+
+/**
+ * Append one criterion to a decision's only choice question.
+ *
+ * Mirrors `appendOption`: pure, the caller mints `id` and persists the result.
+ * Existing criteria, options and marks keep their meaning; the new column is
+ * unmarked everywhere.
+ */
+export function appendCriterion(
+	definition: DecisionDefinition,
+	input: { question: string; key: string; label: unknown },
+	id: string,
+): CriterionAppended {
+	let [item] = definition.questions;
+	if (!item || item.id !== input.question) {
+		return { ok: false, reason: "invalid", message: "Unknown question" };
+	}
+	if (item.response === "text" || item.verbatim) {
+		return { ok: false, reason: "invalid", message: "Only choice questions have criteria" };
+	}
+	if (typeof input.key !== "string" || !KEY.test(input.key)) {
+		return { ok: false, reason: "invalid", message: "Criterion request key is invalid" };
+	}
+	let label: string;
+	try {
+		label = text(input.label, "Criterion", limits.MAX_CRITERION_LABEL);
+	} catch (err) {
+		return { ok: false, reason: "invalid", message: (err as Error).message };
+	}
+	let criteria = item.criteria ?? [];
+	let folded = label.toLowerCase();
+	if (criteria.some(criterion => criterion.label.trim().toLowerCase() === folded)) {
+		return { ok: false, reason: "duplicate", message: "That criterion already exists" };
+	}
+	if (criteria.length >= limits.MAX_CRITERIA) {
+		return {
+			ok: false,
+			reason: "full",
+			message: `A question can have at most ${limits.MAX_CRITERIA} criteria`,
+		};
+	}
+	if (!CRITERION_ID.test(id) || criteria.some(criterion => criterion.id === id)) {
+		return { ok: false, reason: "invalid", message: "Criterion id is already in use" };
+	}
+	let criterion: Criterion = Object.freeze({ id, label });
+	let next = Object.freeze({ ...item, criteria: Object.freeze([...criteria, criterion]) }) as Item;
+	return {
+		ok: true,
+		criterion,
 		definition: Object.freeze({ questions: Object.freeze([next]) }) as DecisionDefinition,
 	};
 }

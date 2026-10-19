@@ -8,10 +8,10 @@
 
 import { crdt, read } from "./draft";
 import * as limits from "./limits";
-import { decision } from "./schema";
+import { appendCriterion, decision } from "./schema";
 
 import type { Model } from "./draft";
-import type { DecisionDefinition, Option } from "./schema";
+import type { Criterion, DecisionDefinition, Option } from "./schema";
 
 export type Added =
 	| { ok: true; definition: DecisionDefinition; model: Model; option: Option }
@@ -60,4 +60,31 @@ export function addOption(
 	read(copy, next);
 
 	return { ok: true, definition: next, model: copy, option };
+}
+
+export type CriterionAdded =
+	| { ok: true; definition: DecisionDefinition; model: Model; criterion: Criterion }
+	| { ok: false; reason: "full" | "duplicate" | "invalid"; message: string };
+
+/**
+ * Append a criterion. The draft's shape does not change: its `marks` object already exists
+ * and cells are created lazily, so existing drafts and marks stay valid.
+ */
+export function addCriterion(
+	definition: DecisionDefinition,
+	model: Model,
+	id: string,
+	label: string,
+): CriterionAdded {
+	let question = definition.questions[0]!;
+	let result = appendCriterion(definition, { question: question.id, key: "x".repeat(8), label }, id);
+	if (!result.ok) return result;
+
+	let copy = model.clone();
+	try {
+		read(copy, result.definition);
+	} catch {
+		return { ok: false, reason: "invalid", message: "This draft cannot hold criteria" };
+	}
+	return { ok: true, definition: result.definition, model: copy, criterion: result.criterion };
 }

@@ -7,7 +7,8 @@ type KIND<K extends string> = Frame & { kind: K };
  * Collaborative questions.
  *
  * A questionnaire's definition is frozen once asked, with one exception: any
- * member with write access may append an option while it is open (`AddOption`).
+ * member with write access may append an option (`AddOption`) or a criterion
+ * (`AddCriterion`) while it is open.
  * Its answer is not frozen either: it lives in a
  * shared CRDT owned by the server, so everyone present converges on one draft
  * before somebody submits it back to the agent that is waiting on it.
@@ -26,6 +27,7 @@ export declare namespace Question {
 		| Request<Discard.Ask>
 		| Request<Reopen.Ask>
 		| Request<AddOption.Ask>
+		| Request<AddCriterion.Ask>
 		| Request<Explore.Ask>
 		| Request<Explore.Stop>
 		| Request<Explore.Page>
@@ -47,12 +49,14 @@ export declare namespace Question {
 		| Discard.Reply
 		| Reopen.Reply
 		| AddOption.Reply
+		| AddCriterion.Reply
 		| Explore.Reply
 		| Explore.Stopped
 		| Explore.Paged
 		| Explore.Taken
 		| Why.Reply
 		| OptionAdded
+		| CriterionAdded
 		| Presence.Output
 		| Resolved;
 
@@ -61,6 +65,22 @@ export declare namespace Question {
 		label: string;
 		description: string;
 	};
+
+	/** One thing to judge each option against. Frozen once asked, apart from appends. */
+	export type Criterion = {
+		id: string;
+		label: string;
+	};
+
+	/** How well an option meets a criterion. An unmarked cell has no entry. */
+	export type Mark = "yes" | "partly" | "no";
+
+	/**
+	 * Marked cells, keyed `${optionId}/${criterionId}` (criterion ids never contain `/`).
+	 * Sparse: an unmarked cell has no entry. The same flat shape is the shared draft's,
+	 * the settled snapshot's and `CardMeta.marks`.
+	 */
+	export type Marks = { [cell: string]: Mark };
 
 	export type Item = {
 		id: string;
@@ -71,6 +91,11 @@ export declare namespace Question {
 		/** Written response; options must be empty. */
 		response?: "text";
 		options: Option[];
+		/**
+		 * What each option is judged against, as columns beside the options. Choice questions
+		 * only, at most 5, labels at most 40 characters. Members may append more while open.
+		 */
+		criteria?: Criterion[];
 		multiple: boolean;
 		/** Host dialogs preserve raw text, including an explicitly submitted empty answer. */
 		verbatim?: true;
@@ -92,6 +117,8 @@ export declare namespace Question {
 
 	export type DecisionEntry = {
 		choices: string[];
+		/** The marks the saved answer carried, when the decision had criteria. */
+		marks?: Marks;
 		answers?: { [questionId: string]: string };
 		owner: string;
 		at: number;
@@ -141,6 +168,8 @@ export declare namespace Question {
 		optionOrigins: { [optionId: string]: OptionOrigin };
 		/** A refine job is pending or running for this card. */
 		refining: boolean;
+		/** The settled decision's marks, a snapshot for the read-only table. Decided cards only. */
+		marks?: Marks;
 		hasProse: boolean;
 		proseOrphaned: boolean;
 		/** The saved conversation decision's write-up job while it is queued, running, or failed. */
@@ -177,6 +206,11 @@ export declare namespace Question {
 		choice: string | null;
 		options: Record<string, boolean>;
 		custom: string;
+		/**
+		 * Present only when the question has criteria. Cells are `Mark`s, or `null` once a
+		 * mark was cleared (the CRDT keeps the register); absent cells are unmarked.
+		 */
+		marks?: { [cell: string]: Mark | null };
 	};
 
 	export type Draft = Record<string, DraftAnswer>;
@@ -192,6 +226,8 @@ export declare namespace Question {
 		/** Ids of the chosen options, alongside their labels. */
 		optionIds?: string[];
 		custom?: string;
+		/** Every marked cell at the moment of saving, when the question has criteria. */
+		marks?: Marks;
 	};
 
 	export type Point = { sid: number; time: number };
@@ -413,6 +449,37 @@ export declare namespace Question {
 			);
 	}
 
+	export namespace AddCriterion {
+		/**
+		 * Append one criterion to an open choice question, for everyone. Appended criteria
+		 * add a column; existing criteria and marks never change. `key` is an idempotency
+		 * token chosen by the client, as for `AddOption`. The server mints the criterion's id.
+		 */
+		export type Ask = KIND<"question:criterion"> & {
+			id: string;
+			question: string;
+			key: string;
+			label: string;
+		};
+
+		export type Refusal = AddOption.Refusal;
+
+		export type Reply =
+			& KIND<"question:criterion">
+			& { id: string }
+			& (
+				| {
+					ok: true;
+					criterion: Criterion;
+					/** The whole definition as it now stands. */
+					definition: DecisionDefinition;
+					/** True when this key had already been applied. */
+					repeated?: boolean;
+				}
+				| { ok: false; reason: Refusal; message: string }
+			);
+	}
+
 	export namespace Explore {
 		/**
 		 * Explore an open decision: research the web, build a spike on a paired machine, or ask a
@@ -501,6 +568,15 @@ export declare namespace Question {
 		id: string;
 		question: string;
 		option: Option;
+		definition: DecisionDefinition;
+		by: string;
+	};
+
+	/** A criterion was appended, after it became durable. Carries the whole definition. */
+	export type CriterionAdded = KIND<"question:criterion-added"> & {
+		id: string;
+		question: string;
+		criterion: Criterion;
 		definition: DecisionDefinition;
 		by: string;
 	};

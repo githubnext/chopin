@@ -18,6 +18,28 @@ import type { Definition, Item } from "./schema";
 import type { Question } from "@chopin/protocol";
 
 export type Mode = "choices" | "custom";
+export type Mark = Question.Mark;
+export type Marks = Question.Marks;
+
+/** The marked cells of a draft, without cleared ones. */
+export function marked(draft: Draft | undefined): Marks {
+	return Object.fromEntries(
+		Object.entries(draft?.marks ?? {}).filter((cell): cell is [string, Mark] => cell[1] !== null),
+	);
+}
+
+const MARKS: ReadonlySet<unknown> = new Set(["yes", "partly", "no"]);
+
+/**
+ * The key of one option-by-criterion cell in a question's `marks` object.
+ *
+ * Criterion ids never contain `/`, so the key splits unambiguously at its last one.
+ * A cell is a register holding a mark or `null`, and the key exists only once somebody
+ * marks it, so appended options and criteria never rewrite an existing draft.
+ */
+export function markKey(optionId: string, criterionId: string): string {
+	return `${optionId}/${criterionId}`;
+}
 export type Draft = Question.DraftAnswer;
 export type Drafts = Record<string, Draft>;
 
@@ -39,6 +61,9 @@ export function create(definition: Definition): Model {
 		}
 
 		questions[question.id] = crdt.schema.obj({
+			// Present on every choice question, so appending the first criterion never has to
+			// change the draft's shape for people who already hold it.
+			...(markable(question) ? { marks: crdt.schema.obj({}) } : {}),
 			mode: crdt.schema.val(
 				crdt.schema.con<Mode>(
 					question.response === "text" || question.verbatim && !question.options.length
@@ -80,8 +105,14 @@ export function restore(binary: number[], definition: Definition): Model {
 	return model;
 }
 
-function keys(node: crdt.ObjNode, expected: string[], name: string): void {
-	let actual = [...node.keys.keys()].sort();
+/** Choice questions carry a `marks` object; written and verbatim host questions do not. */
+export function markable(question: Item): boolean {
+	return question.response !== "text" && !question.verbatim;
+}
+
+function keys(node: crdt.ObjNode, expected: string[], name: string, optional: string[] = []): void {
+	let actual = [...node.keys.keys()].filter(key => !optional.includes(key) || expected.includes(key))
+		.sort();
 	let sorted = expected.toSorted();
 	if (actual.length !== sorted.length || actual.some((key, index) => key !== sorted[index])) {
 		reject(`${name} has invalid keys`);
@@ -113,7 +144,14 @@ export function read(model: Model, definition: Definition): Drafts {
 	for (let question of definition.questions) {
 		let node = root.get(question.id);
 		if (!(node instanceof crdt.ObjNode)) reject(`${question.id} must be an object`);
-		keys(node, ["mode", "choice", "options", "custom"], question.id);
+		// Drafts stored before criteria existed have no `marks` object; the server adds one on
+		// restore, and one is required only once the question has criteria.
+		keys(
+			node,
+			["mode", "choice", "options", "custom", ...(question.criteria?.length ? ["marks"] : [])],
+			question.id,
+			markable(question) ? ["marks"] : [],
+		);
 
 		let mode = register(node.get("mode"), `${question.id}.mode`);
 		if (mode !== "choices" && mode !== "custom") reject(`${question.id}.mode is invalid`);
@@ -161,10 +199,51 @@ export function read(model: Model, definition: Definition): Drafts {
 			reject(`${question.id}.custom exceeds ${limits.MAX_CUSTOM} characters`);
 		}
 
-		drafts[question.id] = { mode: mode as Mode, choice, options, custom: value };
+		let draft: Draft = { mode: mode as Mode, choice, options, custom: value };
+		let marksNode = node.get("marks");
+		// Without criteria the object must stay empty, so nothing can be hidden in it.
+		if (question.criteria?.length) draft.marks = readMarks(marksNode, question);
+		else if (marksNode !== undefined) readMarks(marksNode, question);
+		drafts[question.id] = draft;
 	}
 
 	return drafts;
+}
+
+function readMarks(node: unknown, question: Item): Record<string, Mark | null> {
+	if (!(node instanceof crdt.ObjNode)) reject(`${question.id}.marks must be an object`);
+	let cells = node as crdt.ObjNode;
+	let known = new Set<string>();
+	for (let option of question.options) {
+		for (let criterion of question.criteria ?? []) known.add(markKey(option.id, criterion.id));
+	}
+	let marks: Record<string, Mark | null> = {};
+	for (let key of cells.keys.keys()) {
+		if (!known.has(key)) reject(`${question.id}.marks has invalid keys`);
+		let value = register(cells.get(key), `${question.id}.marks.${key}`);
+		if (value !== null && !MARKS.has(value)) reject(`${question.id}.marks.${key} is invalid`);
+		marks[key] = value as Mark | null;
+	}
+	return marks;
+}
+
+/**
+ * Mark one cell on a client's local model: `yes`, `partly`, `no`, or `null` to clear it.
+ *
+ * Mutates through `model.api` without flushing, as the editing controller does; the flushed
+ * patch is what goes to `question:edit`.
+ */
+export function setMark(
+	model: Model,
+	question: string,
+	optionId: string,
+	criterionId: string,
+	mark: Mark | null,
+): void {
+	let key = markKey(optionId, criterionId);
+	let cells = model.api.obj([question, "marks"]);
+	if (Object.hasOwn(cells.view() as object, key)) model.api.val([question, "marks", key]).set(mark);
+	else cells.set({ [key]: crdt.schema.val(crdt.schema.con<Mark | null>(mark)) });
 }
 
 /** Whether a question has enough of an answer to submit. */

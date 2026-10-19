@@ -28,6 +28,10 @@ export const MAX_DESCRIPTION = 1_000;
 export const MAX_NEW_DESCRIPTION = 160;
 export const MAX_CUSTOM = 4_000;
 
+/** Criteria a decision may hold, whether asked with it or appended afterwards. */
+export const MAX_CRITERIA = 5;
+export const MAX_CRITERION_LABEL = 40;
+
 /** Longest idempotency key for appending an option. */
 export const MAX_KEY = 64;
 

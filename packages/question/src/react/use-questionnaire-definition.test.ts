@@ -78,7 +78,7 @@ describe("QuestionnaireController shared definitions", () => {
 			expect(controller.getSnapshot().error).toBeUndefined();
 			expect(controller.getSnapshot().definition).toEqual(definition);
 			expect(controller.getSnapshot().drafts).toEqual({
-				"pending-question": { mode: "choices", choice: null, custom: "", options: {} },
+				"pending-question": { mode: "choices", choice: null, custom: "", options: {}, marks: {} },
 			});
 		} finally {
 			off();
