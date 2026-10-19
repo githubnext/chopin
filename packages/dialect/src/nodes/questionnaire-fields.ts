@@ -80,10 +80,11 @@ export function cardStatus(value: Questionnaire): CardStatus {
 
 const MARKS: ReadonlySet<unknown> = new Set(["yes", "partly", "no"]);
 
+const invalid = () => new Error("invalid questionnaire criteria");
+
 function checkCriteria(question: Partial<Question>): void {
 	let hasCriteria = Object.hasOwn(question, "criteria");
 	if (!hasCriteria && !Object.hasOwn(question, "marks")) return;
-	let invalid = () => new Error("invalid questionnaire criteria");
 	if (!hasCriteria || question.response !== undefined || !Array.isArray(question.options)) {
 		throw invalid();
 	}
