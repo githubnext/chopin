@@ -8,6 +8,7 @@ import * as webSearch from "../harness/web-search";
 import * as workerSession from "./worker-session";
 import { executionDiagnostic, JobExecutionError } from "./registry";
 
+import { WebSearchTimeoutError } from "../harness/web-search";
 import {
 	observedWebSourceUrls,
 	parseResearchAnswerArtifact,
@@ -17,6 +18,7 @@ import {
 	publicResearchResultFailure,
 	researchAnswerDefinition,
 	researchEvidenceDefinition,
+	webCallObserver,
 } from "./research-workspace";
 
 import type { BackgroundJob, JsonValue } from "../storage/model";
@@ -497,7 +499,7 @@ describe("research workspace execution", () => {
 			let { elapsedMs, ...terminal } = last;
 			expect(elapsedMs).toBeGreaterThanOrEqual(0);
 			expect(error.diagnostic).toEqual(terminal);
-			expect(Object.keys(last).length).toBeLessThanOrEqual(16);
+			expect(Object.keys(last).length).toBeLessThanOrEqual(20);
 			expect(JSON.stringify(snapshots)).not.toContain(sensitive);
 			expect(progress).not.toContain("research-result:completed");
 			expect(progress).not.toContain("public-web:completed");
@@ -508,7 +510,7 @@ describe("research workspace execution", () => {
 		}
 	});
 
-	it("keeps the public evidence worker input isolated and uses one attempt", async () => {
+	it("keeps the public evidence worker input isolated and retries once", async () => {
 		let observed: unknown;
 		let progress: string[] = [];
 		let definition = researchEvidenceDefinition({
@@ -537,10 +539,102 @@ describe("research workspace execution", () => {
 			version: 1,
 			origins: ["user", "planner"],
 			credential: "active-planner",
-			limits: { maxAttempts: 1 },
+			limits: { maxAttempts: 2, timeoutMs: 600_000, maxAiCredits: 60 },
 		});
 		expect(progress).toEqual(["public-web:started", "public-web:completed"]);
 		expect(artifact).toMatchObject({ ...input, model: "research-model" });
+	});
+
+	it("takes the evidence attempt deadline from configuration", () => {
+		let definition = researchEvidenceDefinition({
+			config: { agent: true, model: "research-model", researchEvidenceTimeoutMs: 900_000 },
+		});
+		expect(definition.limits.timeoutMs).toBe(900_000);
+	});
+
+	it("counts a timed-out call as failed without aborting the stage", async () => {
+		let metrics: Parameters<typeof webCallObserver>[0]["metrics"] = {
+			phase: "waiting-web-search",
+			webCalls: 0,
+			webSuccesses: 0,
+			webFailures: 0,
+			webRefused: 0,
+			hostedCalls: 0,
+			hostedCompleted: 0,
+			citableSources: 0,
+			outputSources: 0,
+			resultSubmitted: false,
+			resultInvalid: false,
+			webSearchDenied: false,
+		};
+		let observed = new Set<string>();
+		let aborts: unknown[] = [];
+		let onCall = webCallObserver({
+			metrics,
+			observed,
+			aborted: () => false,
+			diagnose: phase => {
+				if (phase) metrics.phase = phase;
+			},
+			progress: async () => {},
+			abort: error => aborts.push(error),
+		});
+		await onCall();
+		await onCall();
+		await onCall(undefined, new WebSearchTimeoutError("request"), {
+			webFailure: "local:request:timeout",
+			webFailureDurationMs: 5,
+		});
+		await onCall({ content: [], citableSources: [{}] });
+		expect(aborts).toEqual([]);
+		expect(metrics).toMatchObject({
+			webCalls: 2,
+			webSuccesses: 1,
+			webFailures: 1,
+			webFailure: { webFailure: "local:request:timeout", webFailureDurationMs: 5 },
+		});
+		expect(publicResearchResultFailure(
+			{ findings: [], sources: [] },
+			observed,
+			metrics,
+		)).toBeUndefined();
+		// With no successful call the stage still fails as a failed search.
+		expect(publicResearchResultFailure(
+			{ findings: [], sources: [] },
+			observed,
+			{ ...metrics, webSuccesses: 0 },
+		)).toBe("web-search-failed");
+		// A stalled authorization means the credential is unusable and does end the stage.
+		await onCall(undefined, new WebSearchTimeoutError("authorization"), {
+			webFailure: "local:authorization:timeout",
+			webFailureDurationMs: 7,
+		});
+		expect(aborts).toHaveLength(1);
+		expect(aborts[0]).toMatchObject({ progressReason: "web-search-authorization-timeout" });
+		expect(metrics.webFailure?.webFailure).toBe("local:authorization:timeout");
+	});
+
+	it("accepts a failing public-web diagnostic with every failure key and the refused count", () => {
+		let diagnostic = executionDiagnostic({
+			stage: "public-web",
+			webFailure: "local:request:mcp-result-error",
+			webFailureDurationMs: 1200,
+			webFailureToolCallId: "d9dc5586-b81f-442c-b9e1-feb5d186f334",
+			phase: "waiting-model",
+			webCalls: 4,
+			webSuccesses: 1,
+			webFailures: 3,
+			webRefused: 2,
+			hostedCalls: 0,
+			hostedCompleted: 0,
+			citableSources: 1,
+			outputSources: 1,
+			resultSubmitted: false,
+			resultInvalid: false,
+			webSearchDenied: false,
+			elapsedMs: 5000,
+		});
+		expect(Object.keys(diagnostic!)).toHaveLength(17);
 	});
 
 	it("separates private document analysis from report synthesis", async () => {

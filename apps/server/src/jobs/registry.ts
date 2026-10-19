@@ -24,7 +24,7 @@ export function executionDiagnostic(
 	}
 	let entries = Object.entries(value ?? {});
 	if (
-		entries.length > 16 || entries.some(([key, item]) =>
+		entries.length > 20 || entries.some(([key, item]) =>
 			!/^[a-z][a-zA-Z0-9]{0,31}$/.test(key)
 			|| typeof item !== "boolean" && typeof item !== "number" && typeof item !== "string"
 			|| typeof item === "number" && (!Number.isSafeInteger(item) || item < 0)

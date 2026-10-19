@@ -57,6 +57,8 @@ export type Config = {
 	agent: boolean;
 	backgroundJobs: boolean;
 	webResearch: boolean;
+	/** Attempt deadline of one public-web evidence attempt, in milliseconds. Defaults to 10 minutes. */
+	researchEvidenceTimeoutMs?: number;
 	/** Explicitly enables the conversation-derived cards prototype. */
 	conversationPlan?: boolean;
 	/** Exact classifier `provider/id` for the turn-taking judge; defaults to `decisionsModel`. */
@@ -152,6 +154,19 @@ function milliseconds(name: string, fallback: number, max = 600_000): number {
 	let value = Number(raw);
 	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 1_000 || value > max) {
 		throw new Error(`${name} must be an integer between 1000 and ${max} milliseconds`);
+	}
+	return value;
+}
+
+/** RESEARCH_EVIDENCE_TIMEOUT_MS: whole milliseconds, 2 minutes to 30 minutes, 10 minutes by default. */
+function researchEvidenceTimeoutMs(): number {
+	let raw = process.env.RESEARCH_EVIDENCE_TIMEOUT_MS;
+	if (raw === undefined) return 600_000;
+	let value = Number(raw);
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 120_000 || value > 1_800_000) {
+		throw new Error(
+			"RESEARCH_EVIDENCE_TIMEOUT_MS must be an integer between 120000 and 1800000 milliseconds",
+		);
 	}
 	return value;
 }
@@ -287,6 +302,7 @@ export function load(): Config {
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
+		researchEvidenceTimeoutMs: researchEvidenceTimeoutMs(),
 		conversationPlan,
 		conversationInitiativeModel,
 		conversationInitiativeSilenceMs,

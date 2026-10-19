@@ -50,3 +50,38 @@ test("running evidence retains searching and exposes its current bounded activit
 		activity: "Waiting for a web-search response",
 	});
 });
+
+test("an evidence job awaiting its retry still reads as searching, not failed", () => {
+	let value = projectRequestView({
+		workspace: {
+			id: "request",
+			channelId: "channel",
+			createdAt: new Date(0),
+			updatedAt: new Date(0),
+		} as never,
+		turn: { question: "Compare public providers", evidenceJobId: "evidence" } as never,
+		evidence: {
+			job: {
+				state: "pending",
+				attempts: 1,
+				failures: 1,
+				reason: "attempt-timeout",
+				progress: [{
+					attempt: 1,
+					stage: "public-web",
+					state: "interrupted",
+					label: "Public web research",
+				}],
+			},
+		} as never,
+		answer: undefined,
+		sources: [],
+		child: undefined,
+	});
+	expect(value).toMatchObject({
+		state: "pending",
+		stage: "searching",
+		activity: "Retrying the web search",
+	});
+	expect(value).not.toHaveProperty("error");
+});

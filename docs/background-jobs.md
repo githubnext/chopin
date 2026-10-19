@@ -401,7 +401,7 @@ diagnostics are bounded but log-only. Neither category may contain:
 - credentials, paths, or raw errors.
 
 Use `JobExecutionError` for a bounded durable machine reason and optional
-operator diagnostic. It accepts at most 16 boolean, nonnegative integer, or
+operator diagnostic. It accepts at most 20 boolean, nonnegative integer, or
 token-like string diagnostic fields. Unknown browser reasons are deliberately
 rendered as a generic interruption.
 
@@ -418,10 +418,22 @@ tool invocation has a three-minute limit, including authorization, and passes it
 abort signal to the MCP client. The upstream tool runs an AI research agent rather
 than a raw search, so valid cited responses can take more than a minute. Its local
 tool description and query schema ask for one focused natural-language question
-per call. A timed-out search ends the research attempt with
-`web-search-timeout`; a stalled authorization check produces
+per call. One evidence attempt budgets its calls against the attempt deadline:
+it starts at most four calls, refuses a new one (with a tool result telling the
+model to submit) when under 90 seconds remain, and clamps each call's timeout to
+the time left minus a 30-second margin so the model can still submit. A call that
+times out or errors counts as a failed call and the attempt continues; the attempt
+fails with `web-search-failed` only when no call succeeded. A stalled
+authorization check still ends the attempt with
 `web-search-authorization-timeout`. Search calls are counted after authorization.
-The overall evidence-stage limit remains five minutes. Use the host wrapper's
+A partial result is never published after the deadline; the model must submit
+before it. The upstream error text of a failed call is sanitized (tokens, auth
+headers and URL queries removed, at most 300 characters) and logged for the
+operator. The diagnostic carries only the sanitized `webFailure` classification. The evidence attempt
+deadline is `RESEARCH_EVIDENCE_TIMEOUT_MS` (ten minutes by default), and the
+job retries once (two attempts, each with its own worker session capped at 30 AI
+credits, so the job may spend 60). The deadline is wall-clock from the runner's
+claim; heartbeats and lease renewal do not depend on it. Use the host wrapper's
 search counters for live progress: the harness can buffer tool lifecycle
 callbacks until the completed step is published.
 

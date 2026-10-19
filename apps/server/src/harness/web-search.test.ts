@@ -3,7 +3,13 @@ import { tool } from "ai";
 import { MCPClientError } from "@ai-sdk/mcp";
 import { z } from "zod";
 
-import { WebSearchTimeoutError, webSearchTool } from "./web-search";
+import {
+	sanitizeUpstream,
+	WEB_SEARCH_MARGIN_MS,
+	WEB_SEARCH_MAX_CALLS,
+	WebSearchTimeoutError,
+	webSearchTool,
+} from "./web-search";
 
 import { executionDiagnostic } from "../jobs/registry";
 
@@ -368,3 +374,152 @@ for (
 		}
 	});
 }
+
+const OK = { content: [{ type: "text", text: "ok" }] };
+
+async function budgeted(
+	deadlineIn: number,
+	extra: Partial<NonNullable<Parameters<typeof webSearchTool>[1]>> = {},
+	execute: () => Promise<unknown> = async () => OK,
+) {
+	let owner = { ...credential(), expiresAt: new Date(Date.now() + 3_600_000) };
+	let at = 1_000_000;
+	let dispatched = 0;
+	let refused: string[] = [];
+	let loaded = await webSearchTool(owner, {
+		now: () => at,
+		budget: { deadline: new Date(at + deadlineIn) },
+		onRefused: reason => refused.push(reason),
+		log: () => {},
+		createClient: async () => ({
+			tools: async () => ({
+				web_search: tool({
+					inputSchema: z.object({ query: z.string() }),
+					execute: async () => {
+						dispatched++;
+						return execute();
+					},
+				}),
+			}),
+			close: async () => {},
+		}),
+		...extra,
+	});
+	if (!loaded.ok) throw new Error("fixture failed");
+	let run = () =>
+		loaded.value.tool.execute!({ query: "q" }, { context: { credential: owner } } as never);
+	return { run, dispatched: () => dispatched, refused, close: loaded.value.close };
+}
+
+it("refuses a call, without dispatching it, when too little time remains", async () => {
+	let search = await budgeted(60_000);
+	try {
+		let result = await search.run();
+		expect(JSON.stringify(result)).toContain("submit your result now");
+		expect(search.dispatched()).toBe(0);
+		expect(search.refused).toEqual(["time"]);
+	} finally {
+		await search.close();
+	}
+});
+
+it("clamps each call's timeout to the remaining time minus the margin", async () => {
+	let timers: number[] = [];
+	let spy = spyOn(AbortSignal, "timeout").mockImplementation(duration => {
+		timers.push(duration);
+		return new AbortController().signal;
+	});
+	let search = await budgeted(150_000);
+	try {
+		await search.run();
+		expect(timers).toEqual([150_000 - WEB_SEARCH_MARGIN_MS]);
+		let roomy = await budgeted(600_000);
+		await roomy.run();
+		expect(timers[1]).toBe(180_000);
+		await roomy.close();
+	} finally {
+		spy.mockRestore();
+		await search.close();
+	}
+});
+
+it("caps the calls one attempt may start, counting calls still in flight", async () => {
+	let pending = Promise.withResolvers<unknown>();
+	let search = await budgeted(600_000, {}, () => pending.promise);
+	try {
+		let started = Array.from({ length: WEB_SEARCH_MAX_CALLS }, () => search.run());
+		let extra = await search.run();
+		expect(JSON.stringify(extra)).toContain("call limit reached");
+		expect(search.refused).toEqual(["calls"]);
+		await new Promise(resolve => setTimeout(resolve, 5));
+		expect(search.dispatched()).toBe(WEB_SEARCH_MAX_CALLS);
+		pending.resolve(OK);
+		await Promise.all(started);
+	} finally {
+		await search.close();
+	}
+});
+
+it("logs a sanitized upstream error and never the token", async () => {
+	let secret = "ghu_abcdefghijklmnopqrstuvwxyz0123456789";
+	let owner = { ...credential(), token: secret };
+	let logs: string[] = [];
+	let loaded = await webSearchTool(owner, {
+		log: line => logs.push(line),
+		createClient: async () => ({
+			tools: async () => ({
+				web_search: tool({
+					inputSchema: z.object({ query: z.string() }),
+					execute: async () => ({
+						isError: true,
+						content: [{
+							type: "text",
+							text: `HTTP 429 rate limited. Authorization: Bearer ${secret} retry ${
+								"x".repeat(900)
+							}`,
+						}],
+					}),
+				}),
+			}),
+			close: async () => {},
+		}),
+	});
+	if (!loaded.ok) throw new Error("fixture failed");
+	try {
+		await expect(
+			loaded.value.tool.execute!({ query: "q" }, { context: { credential: owner } } as never),
+		).rejects.toThrow("MCP web_search returned an error");
+		expect(logs).toHaveLength(1);
+		expect(logs[0]).toContain("HTTP 429 rate limited");
+		expect(logs[0]).not.toContain(secret);
+		expect(logs[0]!.toLowerCase()).not.toContain("bearer ghu");
+		expect(logs[0]!.length).toBeLessThan(400);
+	} finally {
+		await loaded.value.close();
+	}
+});
+
+it("redacts token-like strings and bounds upstream text", () => {
+	let text = sanitizeUpstream(
+		"failed ghp_1234567890abcdefghij github_pat_11AAAA_bbbbbbbbbb token=abc123 "
+			+ "eyJhbGciOiJI.eyJzdWIiOiIx.sigsig https://api.example.com/x?access=SECRET#frag "
+			+ "Cookie: a=b; c=d "
+			+ "0123456789abcdef0123456789abcdef0123456789",
+		["custom-secret"],
+	);
+	for (
+		let leaked of [
+			"ghp_1234",
+			"github_pat_",
+			"abc123",
+			"eyJhbGci",
+			"SECRET",
+			"a=b",
+			"0123456789abcdef0123456789abcdef",
+		]
+	) expect(text).not.toContain(leaked);
+	expect(sanitizeUpstream("boom custom-secret here", ["custom-secret"])).toBe(
+		"boom [redacted] here",
+	);
+	expect(sanitizeUpstream("y ".repeat(500)).length).toBeLessThanOrEqual(300);
+});

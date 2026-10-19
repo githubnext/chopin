@@ -36,7 +36,14 @@ export function projectRequestView(input: {
 		: input.answer?.job.state ?? input.evidence?.job.state ?? "pending";
 	let current = input.answer?.job ?? input.evidence?.job;
 	let progress = current?.progress.findLast(item => item.attempt === current.attempts);
-	let activity = state === "running" && progress?.state === "started" ? progress.label : undefined;
+	// A failed attempt that the runner will retry is still the search, never a failure.
+	let retrying = !input.answer && input.evidence?.job.state === "pending"
+		&& input.evidence.job.failures > 0;
+	let activity = retrying
+		? "Retrying the web search"
+		: state === "running" && progress?.state === "started"
+		? progress.label
+		: undefined;
 	let base: Research.RequestViewBase = {
 		id: input.workspace.id,
 		channelId: input.workspace.channelId,
@@ -53,7 +60,7 @@ export function projectRequestView(input: {
 		return { ...base, state, stage: "cancelled" };
 	}
 	if (input.child) return { ...base, state: "completed", stage: "ready", child: input.child };
-	let stage: Research.ActiveRequestStage = "queued";
+	let stage: Research.ActiveRequestStage = retrying ? "searching" : "queued";
 	if (input.answer?.job.state === "completed") stage = "publishing";
 	else if (input.answer) {
 		stage = input.answer.job.progress.some(value =>
