@@ -3,6 +3,10 @@ id: 01M5A57Z2SZAZP1CRR56XQRT5E
 anchor: function RoomWorkspace
 created: 2026-10-19T13:22:32Z
 norm: '1'
+sig: bd75bf735bc4f7ba
+body_hash: 44851d4ff5fc032e
+raw_hash: cc37fd6ca0c34c5f
+lines: 457-2077
 supersedes: 01M51Z3Z048E7TFC6WHE3BVXFY
 ---
 
