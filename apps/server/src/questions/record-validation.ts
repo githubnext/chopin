@@ -192,7 +192,6 @@ const FINDING_KEYS = new Set([
 	"summary",
 	"sources",
 	"sourceCount",
-	"verdict",
 	"stance",
 	"branch",
 	"childId",
@@ -229,7 +228,6 @@ export function findings(value: unknown): Question.Finding[] {
 				invalid();
 			}
 		}
-		if (Object.hasOwn(finding, "verdict")) text(finding.verdict, MAX_FINDING_TITLE);
 		if (Object.hasOwn(finding, "branch")) text(finding.branch, 256);
 		if (Object.hasOwn(finding, "childId")) text(finding.childId, 128);
 		if (

@@ -62,7 +62,7 @@ decision's page.
 
 What comes back is a **finding** on the decision's record:
 `{ id, kind: "research" | "spike" | "ask", status, focus?, ref, title?, summary?, sources?,
-sourceCount?, verdict?, branch?, childId?, by, at }`, at most 20 per record. The browser starts
+sourceCount?, branch?, childId?, by, at }`, at most 20 per record. The browser starts
 research and investigations through their existing HTTP routes, so their authorization, Planner owner and
 paired-machine checks are unchanged, then sends `question:explore` with the request or
 investigation id. The server checks that the work belongs to the document, persists a running
@@ -70,6 +70,17 @@ finding, and only then replies and announces `question:meta`. When a research re
 ready or failed, or an investigation finishes, the server settles every running finding that
 follows it, idempotently, and posts a Chat notice. `question:explore-stop` stops the work and
 marks the finding stopped.
+
+A running finding never waits on a missed event. Attaching work that has already ended settles the
+finding at once. Cancelling a research request settles it as stopped, and a failed request that is
+retried to ready updates its failed finding. A sweep also runs whenever a top-level document opens
+(rooms open lazily, so that covers startup), settling any running research or investigation
+finding whose work is terminal; a failed settle commit is logged and retried by the next sweep.
+Only the person who started a running finding can stop it, and an ask is stopped by its asker.
+`question:take`, stop and page refuse while an implementation is active, and a take also needs
+the ask to be running on an open decision. Logins compare case-insensitively. At 20 findings the
+oldest settled research or investigation makes room; takes and running work are never dropped, and
+adding refuses when nothing can go.
 
 Asking someone records a running `ask` finding, shows an amber "Waiting for Sam" status in the card footer, and
 posts a Chat notice that names them. Only the asked member can answer, with `question:take`;

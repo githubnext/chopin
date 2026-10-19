@@ -923,7 +923,7 @@ export class ResearchWorkspaceService {
 	async cancelRequest(input: CancelResearchRequest): Promise<Research.RequestView> {
 		let channelId = safeId(input.channelId, "Channel id");
 		let workspaceId = safeId(input.workspaceId, "Workspace id");
-		return this.#exclusive(channelId, workspaceId, async () => {
+		let view = await this.#exclusive(channelId, workspaceId, async () => {
 			let detail = await this.#cancellationDetail(channelId, workspaceId);
 			if (!detail) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 			let initial = detail.turns.find(value => value.kind === "initial");
@@ -934,6 +934,15 @@ export class ResearchWorkspaceService {
 			let refreshed = await this.#cancellationDetail(channelId, workspaceId);
 			if (!refreshed) throw new ResearchWorkspaceError("not-found", "Research request not found.");
 			return this.#requestView(refreshed);
+		});
+		// Outside the workspace lock, as for a finished job: a listener opens the document.
+		if (view.stage === "cancelled") await this.#notifySettled(channelId, view);
+		return view;
+	}
+
+	async #notifySettled(channelId: string, request: Research.RequestView): Promise<void> {
+		await this.#settled?.(channelId, request).catch(error => {
+			console.error("[research] a settled request listener failed:", error);
 		});
 	}
 
@@ -1073,9 +1082,7 @@ export class ResearchWorkspaceService {
 			// Outside the workspace lock: a listener opens the document, which may be closing.
 			let request = await this.request(job.channelId, linked.workspaceId).catch(() => undefined);
 			if (request && (request.stage === "ready" || request.stage === "failed")) {
-				await this.#settled(job.channelId, request).catch(error => {
-					console.error("[research] a settled request listener failed:", error);
-				});
+				await this.#notifySettled(job.channelId, request);
 			}
 		}
 	}

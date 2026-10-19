@@ -114,7 +114,6 @@ export declare namespace Question {
 		stance?: "supports" | "objects";
 		sources?: Array<{ title: string; url: string }>;
 		sourceCount?: number;
-		verdict?: string;
 		branch?: string;
 		/** The published child document holding the full result. */
 		childId?: string;

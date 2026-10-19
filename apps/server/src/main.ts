@@ -94,9 +94,9 @@ import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Explore from "./questions/explore";
+import { runningFindingRefs } from "./questions/service-findings";
 import { deterministicChannelId } from "./channels/id";
 import type { Research as ResearchWire } from "@chopin/protocol";
-type ResearchRequestView = ResearchWire.RequestView;
 import { investigationFinding } from "./experiments/document";
 import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
@@ -136,6 +136,8 @@ import type {
 	Socket,
 	SocketData,
 } from "./wire";
+
+type ResearchRequestView = ResearchWire.RequestView;
 
 const config = load();
 /** The one decisions boundary, checked against Atomic's registry before anything starts. */
@@ -509,6 +511,11 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 			// Retrying only when unlocked keeps the retry's own room open from looping.
 			if (spikeScout && !Service.implementationActive(opened)) void spikeScout.refresh(room.id);
 			settlePendingSpikes(room.id);
+			// Work that ended while the document was closed, or whose commit failed, settles now.
+			if (!opened.parentChannelId) {
+				void Explore.sweep(opened, server, room.id, exploreDeps)
+					.catch(error => console.error("[questions] finding sweep failed:", error));
+			}
 		}
 		return opened;
 	});
@@ -2140,10 +2147,13 @@ function decisionNotice(
 }
 
 const exploreDeps: Explore.ExploreDeps = {
-	research: async (roomId, ref) =>
-		!!await researchService?.request(roomId, ref).catch(() => undefined),
-	spike: async (roomId, ref) =>
-		(await experiments?.service.store.get(ref).catch(() => undefined))?.documentId === roomId,
+	research: (roomId, ref) =>
+		researchService?.request(roomId, ref).catch(() => undefined)
+			?? Promise.resolve(undefined),
+	async spike(roomId, ref) {
+		let value = await experiments?.service.store.get(ref).catch(() => undefined);
+		return value?.documentId === roomId ? spikeSnapshot(value) : undefined;
+	},
 	async stop(roomId, finding) {
 		if (finding.kind === "research") {
 			await researchService?.cancelRequest({ channelId: roomId, workspaceId: finding.ref });
@@ -2196,28 +2206,49 @@ function researchSettled(channelId: string, request: ResearchRequestView): Promi
 	});
 }
 
-/** An investigation changed: settle the spike findings that follow a finished one. */
+/** An investigation as its finding follows it. */
+function spikeSnapshot(
+	value: NonNullable<
+		Awaited<ReturnType<NonNullable<typeof experiments>["service"]["store"]["get"]>>
+	>,
+): Explore.SpikeSnapshot {
+	let summary = value.result ? investigationFinding(value.brief, value.result.report) : {};
+	return {
+		id: value.id,
+		state: value.state,
+		...summary,
+		...(value.input?.source.branch ? { branch: value.input.source.branch } : {}),
+		...(value.childId ? { childId: value.childId } : {}),
+	};
+}
+
+/**
+ * An investigation changed: settle the spike findings that follow a finished one. A document that
+ * is not open is loaded only when its stored records show a running spike finding.
+ */
 async function spikesChanged(documentId: string): Promise<void> {
+	let live = Rooms.get(documentId)?.plan;
+	let running: Set<string>;
+	if (live) {
+		running = new Set();
+		for (let record of live.records.values()) {
+			for (let finding of record.findings ?? []) {
+				if (finding.kind === "spike" && finding.status === "running") running.add(finding.ref);
+			}
+		}
+	} else {
+		let stored = await storage.collaboration.load(documentId, new Date());
+		running = runningFindingRefs(stored?.sidecar as { questions?: unknown } | undefined, "spike");
+	}
+	if (running.size === 0) return;
 	let finished = (await experiments?.service.store.list(documentId) ?? []).filter(value =>
-		["completed", "failed", "cancelled", "interrupted"].includes(value.state)
+		running.has(value.id)
+		&& ["completed", "failed", "cancelled", "interrupted"].includes(value.state)
 	);
 	if (finished.length === 0) return;
 	await withDecisionPlan(documentId, async plan => {
 		for (let value of finished) {
-			let running = [...plan.records.values()].some(record =>
-				record.findings?.some(finding =>
-					finding.kind === "spike" && finding.ref === value.id && finding.status === "running"
-				)
-			);
-			if (!running) continue;
-			let summary = value.result ? investigationFinding(value.brief, value.result.report) : {};
-			await Explore.settleSpike(plan, server, documentId, {
-				id: value.id,
-				state: value.state,
-				...summary,
-				...(value.input?.source.branch ? { branch: value.input.source.branch } : {}),
-				...(value.childId ? { childId: value.childId } : {}),
-			}, decisionNotice);
+			await Explore.settleSpike(plan, server, documentId, spikeSnapshot(value), decisionNotice);
 		}
 	});
 }

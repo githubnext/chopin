@@ -25,7 +25,6 @@ function clip(value: string, length: number): string {
 	return points.length <= length ? value : `${points.slice(0, length - 1).join("").trimEnd()}…`;
 }
 
-/** The report's own top heading leads the child; otherwise the brief names it. */
 /** A finished investigation's one-line result and opening paragraph, for a decision's findings. */
 export function investigationFinding(
 	brief: string,
@@ -38,6 +37,7 @@ export function investigationFinding(
 	return { title, ...(paragraph ? { summary: plain(paragraph) } : {}) };
 }
 
+/** The report's own top heading leads the child; otherwise the brief names it. */
 function split(brief: string, report: string): { title: string; lead: string; body: string } {
 	let match = /^# (.+)\n+/.exec(report);
 	let heading = match ? plain(match[1]) : "";

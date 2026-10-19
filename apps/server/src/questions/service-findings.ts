@@ -12,8 +12,8 @@ import { findings as validate, MAX_FINDINGS } from "./record-validation";
  * Change one decision's findings and persist the record before announcing it.
  *
  * `change` sees the current findings inside the room queue and returns the next list, or
- * `undefined` to leave the record untouched. The oldest settled findings make room for a new one
- * once the list is full; running findings are never dropped.
+ * `undefined` to leave the record untouched. Once the list is full the oldest settled research or
+ * investigation makes room for a new finding; running findings and takes are never dropped.
  */
 export function changeFindings(
 	plan: Plan,
@@ -28,8 +28,13 @@ export function changeFindings(
 		let next = change(record.findings ?? []);
 		if (!next) return undefined;
 		while (next.length > MAX_FINDINGS) {
-			let oldest = next.findIndex(finding => finding.status !== "running");
-			if (oldest < 0) throw new Error("too many explorations are running");
+			// Running work and an ask's reply (a take) are never dropped; the oldest other one goes.
+			let oldest = next.findIndex(finding =>
+				finding.status !== "running" && !(finding.kind === "ask" && finding.summary)
+			);
+			if (oldest < 0) {
+				throw new Error("This decision has too many explorations and takes to add another");
+			}
 			next = next.toSpliced(oldest, 1);
 		}
 		validate(next);
@@ -61,4 +66,19 @@ export function updateFinding(
 		let next = patch(findings[index]!);
 		return next ? findings.with(index, next) : undefined;
 	});
+}
+
+/** Ids of running findings of `kind` in a stored sidecar's decision records, without opening them. */
+export function runningFindingRefs(sidecar: unknown, kind: Wire.Finding["kind"]): Set<string> {
+	let refs = new Set<string>();
+	let records = (sidecar as { questions?: unknown } | null | undefined)?.questions;
+	if (!Array.isArray(records)) return refs;
+	for (let record of records) {
+		let list = (record as { findings?: unknown } | null)?.findings;
+		if (!Array.isArray(list)) continue;
+		for (let finding of list as Wire.Finding[]) {
+			if (finding?.kind === kind && finding.status === "running") refs.add(finding.ref);
+		}
+	}
+	return refs;
 }

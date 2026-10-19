@@ -4,7 +4,8 @@ import { normalizeRecord } from "./records";
 import { findings } from "./record-validation";
 import { member, opened, restart, seed } from "./text-response.test-fixtures";
 
-import type { ExploreDeps } from "./explore";
+import * as Service from "../plan/service";
+import type { ExploreDeps, ResearchSnapshot } from "./explore";
 
 const KEY = "0b7a8f8e-4a1c-4e8e-9d2f-1c3b5a7d9e01";
 const REF = "7c2d4e6f-8a0b-4c1d-9e2f-3a4b5c6d7e8f";
@@ -13,8 +14,8 @@ function deps(overrides: Partial<ExploreDeps> = {}) {
 	let notices: string[] = [];
 	let stopped: string[] = [];
 	let value: ExploreDeps = {
-		research: async () => true,
-		spike: async () => true,
+		research: async (_room, ref) => ({ id: ref, stage: "evidence", sources: [] }),
+		spike: async (_room, ref) => ({ id: ref, state: "running" }),
 		stop: async (_room, finding) => {
 			stopped.push(finding.id);
 		},
@@ -122,7 +123,7 @@ test("explore refuses foreign work, invalid keys and settled decisions", async (
 		context.channel.id,
 		ws,
 		base,
-		deps({ research: async () => false }).deps,
+		deps({ research: async () => undefined }).deps,
 	);
 	expect(frames.at(-1)).toMatchObject({ ok: false, reason: "unavailable" });
 	await Explore.explore(context.plan, context.server, context.channel.id, ws, {
@@ -263,4 +264,328 @@ test("a decision opens as one page: created once, then remembered on its record"
 		id: "missing",
 	}, create);
 	expect(frames.at(-1)).toMatchObject({ ok: false });
+});
+
+const READY: ResearchSnapshot = {
+	id: REF,
+	stage: "ready",
+	sources: [{ title: "Where state could live", url: "https://example.com/a" }],
+	child: { id: "child-1", title: "Drop-off happens in session two", summary: "", sourceCount: 2 },
+};
+
+function research(context: Awaited<ReturnType<typeof opened>>, key = KEY) {
+	return {
+		kind: "question:explore",
+		ts: 0,
+		rid: "r",
+		id: context.id,
+		key,
+		action: "research",
+		ref: REF,
+	} as const;
+}
+
+function status(context: Awaited<ReturnType<typeof opened>>, index = 0) {
+	return context.plan.records.get(context.id)!.findings?.[index]?.status;
+}
+
+test("attaching work that already ended settles the finding at once", async () => {
+	let context = await opened();
+	let { ws } = member();
+	let { deps: explore, notices } = deps({ research: async () => READY });
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		explore,
+	);
+	expect(context.plan.records.get(context.id)!.findings?.[0]).toMatchObject({
+		status: "ready",
+		childId: "child-1",
+	});
+	expect(notices).toHaveLength(1);
+	let cancelled = deps({
+		research: async () => ({ ...READY, stage: "cancelled", child: undefined }),
+	});
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context, "1b7a8f8e-4a1c-4e8e-9d2f-1c3b5a7d9e02"),
+		cancelled.deps,
+	);
+	expect(status(context, 1)).toBe("stopped");
+	let spiked = deps({ spike: async (_room, ref) => ({ id: ref, state: "failed" }) });
+	await Explore.explore(context.plan, context.server, context.channel.id, ws, {
+		...research(context),
+		key: "2b7a8f8e-4a1c-4e8e-9d2f-1c3b5a7d9e03",
+		action: "spike",
+	}, spiked.deps);
+	expect(status(context, 2)).toBe("failed");
+});
+
+test("a failed request that is retried to ready updates its finding", async () => {
+	let context = await opened();
+	let { deps: explore } = deps();
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		member().ws,
+		research(context),
+		explore,
+	);
+	await Explore.settleResearch(context.plan, context.server, context.channel.id, {
+		id: REF,
+		stage: "failed",
+		sources: [],
+	}, explore.notice);
+	expect(status(context)).toBe("failed");
+	await Explore.settleResearch(
+		context.plan,
+		context.server,
+		context.channel.id,
+		READY,
+		explore.notice,
+	);
+	expect(status(context)).toBe("ready");
+});
+
+test("the sweep settles finished work and skips quietly when nothing runs", async () => {
+	let context = await opened();
+	let { deps: explore } = deps();
+	await Explore.sweep(context.plan, context.server, context.channel.id, explore);
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		member().ws,
+		research(context),
+		explore,
+	);
+	await Explore.sweep(context.plan, context.server, context.channel.id, explore);
+	expect(status(context)).toBe("running");
+	let finished = deps({ research: async () => READY }).deps;
+	await Explore.sweep(context.plan, context.server, context.channel.id, finished);
+	expect(status(context)).toBe("ready");
+	let broken = deps({
+		research: async () => {
+			throw new Error("down");
+		},
+	}).deps;
+	await Explore.sweep(context.plan, context.server, context.channel.id, broken);
+	expect(status(context)).toBe("ready");
+});
+
+async function ask(context: Awaited<ReturnType<typeof opened>>, login = "sam") {
+	await Explore.explore(context.plan, context.server, context.channel.id, member("ana").ws, {
+		kind: "question:explore",
+		ts: 0,
+		rid: "r",
+		id: context.id,
+		key: KEY,
+		action: "ask",
+		login,
+	}, deps().deps);
+}
+
+test("a take needs a running ask on an open decision, matches logins loosely, and settles once", async () => {
+	let context = await opened();
+	await ask(context, "Sam");
+	let sam = member("sam");
+	let reply = { kind: "question:take", ts: 0, id: context.id, finding: KEY, text: "Yes." } as const;
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		...reply,
+		rid: "a",
+	});
+	expect(sam.frames.at(-1)).toMatchObject({ ok: true });
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		...reply,
+		rid: "b",
+		text: "Changed.",
+	});
+	expect(sam.frames.at(-1)).toMatchObject({ ok: false });
+	expect(context.plan.records.get(context.id)!.findings?.[0]).toMatchObject({ summary: "Yes." });
+});
+
+test("a take after the ask was stopped is refused", async () => {
+	let context = await opened();
+	await ask(context);
+	let ana = member("ana");
+	await Explore.stop(context.plan, context.server, context.channel.id, ana.ws, {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	}, deps().deps);
+	let sam = member("sam");
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		kind: "question:take",
+		ts: 0,
+		rid: "t",
+		id: context.id,
+		finding: KEY,
+		text: "Late.",
+	});
+	expect(sam.frames.at(-1)).toMatchObject({ ok: false });
+	expect(status(context)).toBe("stopped");
+});
+
+test("a take on a discarded decision is refused", async () => {
+	let context = await opened();
+	await ask(context);
+	let record = context.plan.records.get(context.id)!;
+	context.plan.records = new Map(context.plan.records).set(context.id, {
+		...record,
+		status: "discarded",
+	});
+	let sam = member("sam");
+	await Explore.take(context.plan, context.server, context.channel.id, sam.ws, {
+		kind: "question:take",
+		ts: 0,
+		rid: "t",
+		id: context.id,
+		finding: KEY,
+		text: "Late.",
+	});
+	expect(sam.frames.at(-1)).toMatchObject({ ok: false });
+	expect(status(context)).toBe("running");
+});
+
+test("only the person who started a finding may stop it", async () => {
+	let context = await opened();
+	await ask(context);
+	let { deps: explore } = deps();
+	let stop = {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	} as const;
+	let sam = member("sam");
+	await Explore.stop(context.plan, context.server, context.channel.id, sam.ws, stop, explore);
+	expect(sam.frames.at(-1)).toMatchObject({ ok: false });
+	expect(status(context)).toBe("running");
+	let ana = member("ANA");
+	await Explore.stop(context.plan, context.server, context.channel.id, ana.ws, stop, explore);
+	expect(ana.frames.at(-1)).toMatchObject({ ok: true });
+	expect(status(context)).toBe("stopped");
+});
+
+test("a failed persist rolls back and announces nothing, and a retry commits once", async () => {
+	let context = await opened();
+	let { ws, frames } = member();
+	let { deps: explore } = deps();
+	let original = context.storage.collaboration.commit;
+	let before = context.broadcasts.length;
+	(context.storage.collaboration as { commit: typeof original }).commit = async () => {
+		throw new Error("storage unavailable");
+	};
+	try {
+		await Explore.explore(
+			context.plan,
+			context.server,
+			context.channel.id,
+			ws,
+			research(context),
+			explore,
+		);
+	} finally {
+		(context.storage.collaboration as { commit: typeof original }).commit = original;
+	}
+	expect(frames.at(-1)).toMatchObject({ kind: "session:error", message: "storage unavailable" });
+	expect(context.plan.records.get(context.id)!.findings).toBeUndefined();
+	expect(context.broadcasts).toHaveLength(before);
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		explore,
+	);
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		explore,
+	);
+	expect(frames.at(-1)).toMatchObject({ ok: true, repeated: true });
+	expect(context.plan.records.get(context.id)!.findings).toHaveLength(1);
+});
+
+test("a full list drops the oldest research first and never a take", async () => {
+	let context = await opened();
+	let key = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+	let record = context.plan.records.get(context.id)!;
+	let base = { status: "ready", by: "ana", at: 1 } as const;
+	let take = { ...base, id: "take", kind: "ask", ref: "sam", summary: "Yes." } as const;
+	let rest = Array.from({ length: 19 }, (_, index) => ({
+		...base,
+		id: `r${index}`,
+		kind: "research",
+		ref: key(index),
+	} as const));
+	context.plan.records = new Map(context.plan.records).set(context.id, {
+		...record,
+		findings: [take, ...rest],
+	});
+	let { ws } = member();
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context),
+		deps().deps,
+	);
+	let list = context.plan.records.get(context.id)!.findings!;
+	expect(list).toHaveLength(20);
+	expect(list[0]!.id).toBe("take");
+	expect(list.some(value => value.id === "r0")).toBe(false);
+	// A list of takes and running work has nothing to give up.
+	context.plan.records = new Map(context.plan.records).set(context.id, {
+		...record,
+		findings: Array.from({ length: 20 }, (_, index) => ({ ...take, id: `t${index}` })),
+	});
+	await Explore.explore(
+		context.plan,
+		context.server,
+		context.channel.id,
+		ws,
+		research(context, "3b7a8f8e-4a1c-4e8e-9d2f-1c3b5a7d9e04"),
+		deps().deps,
+	);
+	expect(context.plan.records.get(context.id)!.findings).toHaveLength(20);
+});
+
+test("stop and page refuse while an implementation is active", async () => {
+	let context = await opened();
+	await ask(context);
+	context.plan.claiming = true;
+	let ana = member("ana");
+	await Explore.stop(context.plan, context.server, context.channel.id, ana.ws, {
+		kind: "question:explore-stop",
+		ts: 0,
+		rid: "s",
+		id: context.id,
+		finding: KEY,
+	}, deps().deps);
+	expect(ana.frames.at(-1)).toMatchObject({ ok: false });
+	await Explore.page(context.plan, context.server, context.channel.id, ana.ws, {
+		kind: "question:page",
+		ts: 0,
+		rid: "p",
+		id: context.id,
+	}, async () => "child");
+	expect(ana.frames.at(-1)).toMatchObject({ ok: false });
+	expect(Service.implementationActive(context.plan)).toBe(true);
+	expect(status(context)).toBe("running");
 });
