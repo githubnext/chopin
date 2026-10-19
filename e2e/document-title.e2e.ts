@@ -158,6 +158,37 @@ test("an empty document opens with a body caret and keeps its generated title", 
 	await written(page, room, "First body prose.");
 });
 
+test(
+	"the empty body prompt follows the title when the sidebar changes width",
+	async ({ join, seed }, info) => {
+		await seed("# Solar sail\n");
+		let page = await join("ana", { viewport: { width: 2400, height: 1000 } });
+		let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+		await expect(prompt).toBeVisible();
+		let aligned = async () => {
+			await expect.poll(async () => {
+				let heading = await title(page).boundingBox();
+				let placeholder = await prompt.boundingBox();
+				return Math.abs(heading!.x - placeholder!.x);
+			}).toBeLessThan(1);
+		};
+		await aligned();
+		for (let action of ["Hide sidebar", "Show sidebar"] as const) {
+			await page.getByRole("button", { name: action, exact: true }).click();
+			await page.locator(".motion-sidebar").evaluate(async sidebar => {
+				await Promise.all(sidebar.getAnimations().map(animation => animation.finished));
+			});
+			await aligned();
+			await page.screenshot({
+				path: info.outputPath(`${action}.png`),
+				clip: { x: 0, y: 0, width: 2400, height: 360 },
+			});
+		}
+		await page.setViewportSize({ width: 1440, height: 1000 });
+		await aligned();
+	},
+);
+
 test("body-start deletion and select-all replacement retain the protected title", async ({ join, seed, room }) => {
 	await seed("# Original title\n\nBody prose.\n");
 	let page = await join("ana");

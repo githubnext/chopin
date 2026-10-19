@@ -86,6 +86,8 @@ export function BlankBehindDecisions(
 		};
 		let resize = new ResizeObserver(place);
 		resize.observe(root);
+		// A capped prose column can move within its host without changing its own size.
+		resize.observe(host);
 		let mutation = new MutationObserver(place);
 		mutation.observe(root, { attributes: true, childList: true, subtree: true });
 		place();
