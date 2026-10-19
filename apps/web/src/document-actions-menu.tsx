@@ -46,7 +46,13 @@ let LazyActionSheet = lazy(() =>
 	loadActionSheet().then(module => ({ default: module.ActionSheet }))
 );
 
-export type DocumentAction = "copy-link" | "rename" | "archive" | "restore" | "delete";
+export type DocumentAction =
+	| "copy-link"
+	| "rename"
+	| "archive"
+	| "restore"
+	| "delete"
+	| "discard-decision";
 
 export type CollaboratorAction = `collaborator:${string}`;
 
@@ -60,7 +66,20 @@ export type DocumentMenuItem = {
 export function documentMenuItems(
 	channel: Pick<Api.Channel, "archivedAt">,
 	collaborators: readonly DemoActor[] = [],
+	decision = false,
 ): DocumentMenuItem[] {
+	// A decision's page is its question: it is copied or discarded, never renamed or archived.
+	if (decision) {
+		return [
+			{ action: "copy-link", label: "Copy link", icon: LinkIcon },
+			{
+				action: "discard-decision",
+				label: "Discard decision…",
+				destructive: true,
+				icon: CloseIcon,
+			},
+		];
+	}
 	let personas: DocumentMenuItem[] = channel.archivedAt ? [] : collaborators.map(actor => ({
 		action: `collaborator:${actor.id}` as const,
 		label: `Open as collaborator: ${actor.name}`,
@@ -113,6 +132,7 @@ export function DocumentActionsMenu(
 		channel,
 		align = "end",
 		className = "",
+		decision = false,
 		iconButton = false,
 		onAction,
 		machine,
@@ -122,6 +142,8 @@ export function DocumentActionsMenu(
 		align?: "start" | "end";
 		channel: Pick<Api.Channel, "title" | "archivedAt">;
 		className?: string;
+		/** The menu of a decision's page: Copy link and Discard decision only. */
+		decision?: boolean;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
 		/**
@@ -156,7 +178,7 @@ export function DocumentActionsMenu(
 	let chosen = chosenMachine(choice);
 	let rows = choice ? machineRows(choice, Date.now()) : [];
 	let currentMachine = chosen?.label ?? "Default";
-	let base = documentMenuItems(channel, openDocument ? activeActorRoster() : []);
+	let base = documentMenuItems(channel, openDocument ? activeActorRoster() : [], decision);
 	let items: MenuEntry[] = hasMachine
 		? base.flatMap(item =>
 			item.action === "rename"

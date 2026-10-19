@@ -3,7 +3,6 @@
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: calc(var(--spacing) * 6);
 	color: var(--color-text-primary);
 }
 
@@ -14,71 +13,60 @@
 }
 
 .question-page h2 {
-	margin: 0;
 	font-size: var(--text-xl);
 	line-height: var(--text-xl--line-height);
 }
 
-.question-page-top {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--spacing) * 2);
-	align-self: stretch;
-}
-
-.question-page-status {
-	display: inline-flex;
-	align-items: center;
-	border-radius: var(--radius-full);
-	background: var(--color-neutral-surface);
-	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
-	font-size: var(--text-xs);
-	font-weight: var(--font-weight-medium);
-	color: var(--color-neutral-text);
-}
-
-.question-page-status[data-tone="waiting"] {
-	background: var(--color-warning-surface);
-	color: var(--color-warning-text);
-}
-
-.question-page-status[data-tone="settled"] {
-	background: var(--color-success-surface);
-	color: var(--color-success-text);
-}
-
-.question-page > h2 {
-	margin-block-end: calc(var(--spacing) * -4);
-}
-
-.question-page-section h2 {
-	margin-block-end: calc(var(--spacing) * 2);
-}
-
+/* Pill, then the question, sit at the same heights whether the decision is open or settled. */
 .question-page .question-page-title {
-	margin-block-start: calc(var(--spacing) * -3);
+	margin-block-start: 1.75rem;
 	font-size: var(--text-2xl);
 	line-height: var(--text-2xl--line-height);
+}
+
+.question-page-control,
+.question-page-answer {
+	align-self: stretch;
+	margin-block-start: 1.5rem;
+}
+
+.question-page-section {
+	align-self: stretch;
+	margin-block-start: 3.5rem;
+}
+
+.question-page-section > h2,
+.question-page h2.question-page-notes {
+	margin-block-end: 1rem;
+}
+
+.question-page h2.question-page-notes {
+	margin-block-start: 3.5rem;
+	margin-block-end: 0;
+}
+
+/* The title bar's actions, when a phone or compact layout has no bar room for them. */
+.question-page-inline-actions {
+	align-self: stretch;
+	margin-block-end: 1rem;
+}
+
+.question-page-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: calc(var(--spacing) * 2);
+}
+
+.question-page-action-error {
+	font-size: var(--text-xs);
+	color: var(--color-danger-text);
 }
 
 .question-page-answer {
 	display: grid;
 	gap: calc(var(--spacing) * 2);
 	justify-items: start;
-}
-
-.question-page-answer-foot {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: calc(var(--spacing) * 3);
-}
-
-/* What was considered reads as a plain list on the paper, with the chosen option tinted. */
-.question-page-considered {
-	align-self: stretch;
-	margin: 0 calc(var(--spacing) * -2);
 }
 
 .question-page-answer-text {
@@ -94,12 +82,9 @@
 	color: var(--color-text-tertiary);
 }
 
-.question-page-control {
-	align-self: stretch;
-}
-
-.question-page-section {
-	align-self: stretch;
+/* What was considered reads as a plain list on the paper, with the chosen option tinted. */
+.question-page-considered {
+	margin: 0 calc(var(--spacing) * -2);
 }
 
 .question-page-findings,
@@ -115,14 +100,13 @@
 }
 
 /*
- * One row geometry for every finding, folding or not: the toggle's own padding is the row's,
- * the icon column and the title start match, and the icon, meta and chevron are each centred
- * on the title's first line.
+ * One row geometry for every finding. The icon, the meta and the chevron are each centred on the
+ * title's first line, so they stay beside it when the title wraps.
  */
 .question-page-findings {
 	/* The title's line box as a length: the token itself is a bare ratio. */
 	--finding-line: calc(1rem * var(--text-base--line-height));
-	margin-inline: calc(var(--spacing) * -2);
+	--finding-indent: calc(1rem + var(--spacing) * 2);
 }
 
 .question-page-finding-head {
@@ -135,12 +119,16 @@
 
 .question-page-finding-static {
 	display: flex;
-	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+	padding-block: calc(var(--spacing) * 3);
 }
 
+/* Rows are flush: no inset and no hover surface. */
 .question-page-finding .cv-unfold-section-toggle {
 	align-items: flex-start;
 	gap: calc(var(--spacing) * 2);
+	border-radius: 0;
+	background: none;
+	padding: calc(var(--spacing) * 3) 0;
 	font-size: var(--text-base);
 	line-height: var(--text-base--line-height);
 }
@@ -182,64 +170,15 @@
 .question-page-finding-summary,
 .question-page-finding-branch {
 	margin: 0 0 calc(var(--spacing) * 3);
-	padding-inline-start: calc(var(--spacing) * 2 + 1rem + var(--spacing) * 2);
-	color: var(--color-text-secondary);
-}
-
-.question-page-sources {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.question-page-findings > li + li {
-	border-block-start: var(--edge-width) solid var(--color-edge);
-}
-
-.question-page-finding-head {
-	display: flex;
-	flex: 1;
-	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	min-width: 0;
-}
-
-.question-page-finding-static {
-	display: flex;
-	padding-block: calc(var(--spacing) * 2);
-}
-
-.question-page-finding-icon {
-	display: flex;
-	flex: none;
-	color: var(--color-text-tertiary);
-}
-
-.question-page-finding-title {
-	flex: 1;
-	min-width: 0;
-	font-size: var(--text-base);
-	font-weight: var(--font-weight-medium);
-	text-align: start;
-}
-
-.question-page-finding-meta {
-	flex: none;
-	font-size: var(--text-xs);
-	color: var(--color-text-tertiary);
-}
-
-.question-page-finding-summary,
-.question-page-finding-branch {
-	margin: 0 0 calc(var(--spacing) * 3);
+	padding-inline-start: var(--finding-indent);
 	color: var(--color-text-secondary);
 }
 
 .question-page-sources {
 	display: grid;
 	gap: var(--spacing);
-	padding-block-end: calc(var(--spacing) * 3);
-	padding-inline-start: calc(var(--spacing) * 2 + 1rem + var(--spacing) * 2);
+	padding-block-end: calc(var(--spacing) * 4);
+	padding-inline-start: var(--finding-indent);
 }
 
 .question-page-sources a {
@@ -262,10 +201,14 @@
 	min-width: 0;
 }
 
-.question-page-take-name {
+.question-page-take-head {
 	display: flex;
 	align-items: center;
+	gap: calc(var(--spacing) * 2);
 	min-block-size: 1.5rem;
+}
+
+.question-page-take-name {
 	font-size: var(--text-sm);
 	font-weight: var(--font-weight-medium);
 }
@@ -285,6 +228,15 @@
 	gap: calc(var(--spacing) * 2);
 }
 
+.question-page-stances {
+	display: flex;
+	gap: calc(var(--spacing) * 2);
+}
+
+.question-page-stances [aria-pressed="true"] {
+	background: var(--color-selected);
+}
+
 .question-page-take-field {
 	inline-size: 100%;
 	border: var(--edge-width) solid var(--color-control-edge);
@@ -301,10 +253,6 @@
 	color: var(--color-danger-text);
 }
 
-.question-page h2.question-page-notes {
-	margin-block-end: 0;
-}
-
 /*
  * The page's question is the record's, shown above; the child's own title stays in the document
  * for its name and crumb but is not shown twice.
@@ -313,12 +261,19 @@
 	display: none;
 }
 
-/* The page names the question above and lists its findings: its control is the options and actions. */
-.question-page-shell .question-head {
-	display: none;
+/* An empty Notes area says where to write; the caret stays at the start of the line. */
+.plan:has(.plan-preface [data-question-page])
+	.plan-content[contenteditable="true"]
+	> h1:first-child
+	+ p:last-child:has(> br:only-child)::before {
+	content: "Add a note";
+	float: left;
+	block-size: 0;
+	color: var(--color-text-tertiary);
+	pointer-events: none;
 }
 
-/* The rows' own inset lines their letters up with the title; the tint reaches past it. */
+/* The control is the options or written answer alone; the page owns the head and actions. */
 .question-page-shell {
 	margin-inline: calc(var(--spacing) * -2);
 }
@@ -329,8 +284,4 @@
 
 .question-page-shell .question-options {
 	margin-block-start: 0;
-}
-
-.question-page-shell .question-actions {
-	margin-block-start: calc(var(--spacing) * 3);
 }

@@ -11,6 +11,8 @@ import { createContext } from "react";
 import type { ChildMotionStyle } from "./child-motion";
 
 export type ChildTitle = {
+	/** Where a question page's actions go, at the end of the parent's bar; null until it mounts. */
+	actions?: HTMLElement | null;
 	motion: ChildMotionStyle;
 	/** The end of the parent's path under Zoom; null until it mounts, and under Lift. */
 	slot: HTMLElement | null;

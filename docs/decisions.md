@@ -73,7 +73,7 @@ marks the finding stopped.
 
 Asking someone records a running `ask` finding, shows an amber "Waiting for Sam" status in the card footer, and
 posts a Chat notice that names them. Only the asked member can answer, with `question:take`;
-their reply becomes the finding's summary and appears under **Takes** on the decision's page.
+their reply becomes the finding's summary and appears under **Takes** on the decision's page. The reply may carry a `stance`, `supports` or `objects`, which the page shows as a chip beside their name; the server stores only those two values, and only on an `ask` finding.
 
 Ready findings feed the settle write-up's prompt as context, beside the discussion's reasons.
 
@@ -82,11 +82,19 @@ Ready findings feed the settle write-up's prompt as context, beside the discussi
 **Expand decision** turns a decision in a top-level document into its own child document. The
 channel id is deterministic (`question:<recordId>` within the repository), so a retry or a second
 member finds the same page; the record learns `childId` only after the channel exists. The child's
-body is the decision's Notes. Above it, the page shows what the root's record says, on the paper
-with no card around it. A top row holds the status pill (Open, Exploring, Waiting for a member,
-or Settled) and the faces of the people in the decision, then the question. An open decision shows
-its options or written-answer field and one action row (Research, Discard, Save); who it is
-waiting for appears only in the pill. A settled decision shows its answer once with who settled
-it and a **Reopen** button, and for a choice question a plain list of what was considered with the
-chosen option tinted; a written answer has no such list. Findings and Takes follow. A child
-document's own decisions cannot open as pages.
+body is the decision's Notes. The page's actions sit in the child's title bar, after Back, the
+parent's crumb and the question: a **⋯** menu (Copy link, and **Discard decision…**, which asks
+for confirmation), then at the end who the decision is waiting for, **Research**, and **Save**.
+Save submits the same shared draft as the control in the body and stays disabled until the
+decision is answerable. When settled, an outline **Reopen** replaces them. Phones and compact
+layouts, which have no such bar, show the same actions above the status pill.
+
+Above the Notes, the page shows what the root's record says, on the paper with no card around it,
+in this order: a status pill (Open, Exploring, Waiting for a member, or Settled), the question,
+the answer block when settled (the answer, then "Settled by Ada, 19 Oct" with the display name),
+and the control, which is the options or written-answer field at page width with no box and no
+footer. A settled choice question lists what was considered under **What we considered**, with
+the chosen option tinted; a written answer has no such list. **Findings** (hidden when empty)
+follow, each expanded by default with its summary, plain source links and branch. **Takes**
+appear only if someone was asked. **Notes** is always present and shows an "Add a note"
+placeholder while empty. A child document's own decisions cannot open as pages.

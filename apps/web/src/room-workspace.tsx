@@ -18,6 +18,7 @@ import {
 	ClockIcon,
 	CloseIcon,
 	DocumentIcon,
+	EllipsisIcon,
 	MagnifierIcon,
 	PencilIcon,
 } from "@chopin/icons";
@@ -109,7 +110,14 @@ import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { peopleHere } from "./presence";
-import { QuestionPageContext, QuestionPagePanel, useQuestionPage } from "./question-page";
+import {
+	discardDecision,
+	DiscardDecisionDialog,
+	QuestionPageActions,
+	QuestionPageContext,
+	QuestionPagePanel,
+	useQuestionPage,
+} from "./question-page";
 import { ResearchRequestStore } from "./research-requests";
 import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
@@ -237,6 +245,7 @@ export function DocumentTitle(
 	{
 		archivedAt,
 		canManage,
+		decision,
 		editing,
 		icon,
 		label,
@@ -247,7 +256,7 @@ export function DocumentTitle(
 		path,
 		project,
 		room,
-	}: TitleProps & { icon?: boolean; path?: TitlePath },
+	}: TitleProps & { decision?: boolean; icon?: boolean; path?: TitlePath },
 ) {
 	let group = useRef<HTMLDivElement>(null);
 	let title = useRef<HTMLButtonElement>(null);
@@ -333,7 +342,7 @@ export function DocumentTitle(
 							}}
 						/>
 					)
-					: canManage && !archivedAt
+					: canManage && !archivedAt && !decision
 					? (
 						<button
 							aria-label={`Rename ${label}`}
@@ -351,21 +360,24 @@ export function DocumentTitle(
 						</button>
 					)
 					: <span className="title-control-label truncate">{label}</span>}
-				{canManage && (
+				{(canManage || decision) && (
 					<DocumentActionsMenu
 						openDocument
 						align="start"
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
+						decision={decision}
 						machine={machine}
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
-						trigger={
-							<ChevronIcon
-								aria-hidden="true"
-								className="rotate-90"
-								size={12}
-							/>
-						}
+						trigger={decision
+							? <EllipsisIcon aria-hidden="true" size={14} />
+							: (
+								<ChevronIcon
+									aria-hidden="true"
+									className="rotate-90"
+									size={12}
+								/>
+							)}
 					/>
 				)}
 			</div>
@@ -1244,6 +1256,9 @@ export function RoomWorkspace(
 	// Where this room's title goes when it is an open child, and where its own child's goes.
 	let childTitle = useContext(ChildTitleContext);
 	let [childTitleSlot, setChildTitleSlot] = useState<HTMLElement | null>(null);
+	// Where an open question page's actions go in its parent's title bar.
+	let [childActionsSlot, setChildActionsSlot] = useState<HTMLElement | null>(null);
+	let [discarding, setDiscarding] = useState(false);
 	let childRoom = presentation.type === "child";
 	let childOpen = presentation.type === "parent-with-child";
 	// A child opening over this document takes the pencil, so this one goes back to reading.
@@ -1527,6 +1542,15 @@ export function RoomWorkspace(
 							{questionPage
 								? (
 									<QuestionPagePanel
+										actions={!childTitle || childTitle.phone
+											? (
+												<QuestionPageActions
+													entry={questionPage.entry}
+													meta={questionPage.meta}
+													root={questionPage.root}
+												/>
+											)
+											: undefined}
 										entry={questionPage.entry}
 										meta={questionPage.meta}
 										root={questionPage.root}
@@ -1612,7 +1636,28 @@ export function RoomWorkspace(
 		[cardMetadata, entries, explore, handle, status, wire, workspaceCanEdit],
 	);
 	if (presentation.type === "child") {
-		let childTitleControl = <DocumentTitle {...titleProps} project={undefined} />;
+		let childTitleControl = (
+			<DocumentTitle
+				{...titleProps}
+				decision={!!questionPage && !!workspaceCanEdit}
+				onAction={action =>
+					action === "discard-decision" ? setDiscarding(true) : onDocumentAction(room, action)}
+				project={undefined}
+			/>
+		);
+		let pageActions = questionPage && (
+			<QuestionPageActions
+				entry={questionPage.entry}
+				meta={questionPage.meta}
+				root={questionPage.root}
+			/>
+		);
+		// Beside its parent the bar holds them; a lifted sheet has its own bar; a phone has neither.
+		let barActions = childTitle?.motion === "lift"
+			? "own"
+			: childTitle?.actions && !childTitle.phone
+			? "parent"
+			: undefined;
 		return (
 			<div
 				className="child-document flex h-full min-h-0 flex-col bg-page"
@@ -1646,6 +1691,19 @@ export function RoomWorkspace(
 						childTitle.slot,
 					)
 					: createPortal(childTitleControl, childTitle.slot))}
+				{questionPage && barActions === "parent" && childTitle?.actions
+					&& createPortal(pageActions, childTitle.actions)}
+				{questionPage && (
+					<DiscardDecisionDialog
+						onConfirm={async () => {
+							await discardDecision(questionPage.root, questionPage.entry.id);
+							setDiscarding(false);
+							presentation.onClose?.();
+						}}
+						onDismiss={() => setDiscarding(false)}
+						open={discarding}
+					/>
+				)}
 				{childTitle?.motion === "lift" && (
 					<div
 						className="document-title-bar panel-header flex shrink-0 items-center px-(--panel-toolbar-padding-inline) hairline-b"
@@ -1655,6 +1713,7 @@ export function RoomWorkspace(
 							<MagnifierIcon aria-hidden="true" size={16} />
 						</span>
 						<div className="document-title-slot">{childTitleControl}</div>
+						{barActions === "own" && pageActions}
 						<button
 							aria-label={`Back to ${presentation.parent?.label ?? "parent document"}`}
 							className="btn btn-icon btn-ghost shrink-0"
@@ -1702,7 +1761,11 @@ export function RoomWorkspace(
 	let childTitleValue = presentation.type === "parent-with-child" && phone
 		? { motion: "zoom" as const, parent: metadata.title, phone: true, slot: childTitleSlot }
 		: presentation.type === "parent-with-child" && mode === "split"
-		? { motion: presentation.motion, slot: zoomChild ? childTitleSlot : null }
+		? {
+			actions: zoomChild ? childActionsSlot : null,
+			motion: presentation.motion,
+			slot: zoomChild ? childTitleSlot : null,
+		}
 		: undefined;
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
 	// has no build of its own. A phone shows this room's bar only off Document, so it keeps it.
@@ -1915,7 +1978,13 @@ export function RoomWorkspace(
 							</>
 						}
 						// Build plan or its capsule closes the status, so the rule before the faces follows it.
-						status={<>{statusNotices}{mode === "split" && buildSlot}</>}
+						status={
+							<>
+								{statusNotices}
+								{mode === "split" && buildSlot}
+								{zoomChild && <span className="child-actions-slot" ref={setChildActionsSlot} />}
+							</>
+						}
 						ids={workspaceIds}
 						phoneAction={barEdit && (
 							<button

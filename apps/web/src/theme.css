@@ -847,11 +847,12 @@ body {
 	gap: calc(var(--spacing) * 2);
 }
 
-.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) {
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"], .child-actions-slot:empty)) {
 	padding-inline-end: calc(var(--spacing) * 2);
 }
 
-.document-title-status:has(> :not(.sr-only, [data-level="hidden"])) + .room-members {
+.document-title-status:has(> :not(.sr-only, [data-level="hidden"], .child-actions-slot:empty))
+	+ .room-members {
 	border-inline-start: var(--edge-width) solid var(--color-divider);
 }
 
@@ -2337,4 +2338,10 @@ textarea.question-written-field {
 
 .composer-surface .composer-draft-input {
 	outline: none;
+}
+
+/* A question page's actions sit at the end of its parent's bar, before the people. */
+.child-actions-slot {
+	display: flex;
+	align-items: center;
 }
