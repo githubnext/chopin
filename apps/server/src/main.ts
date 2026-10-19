@@ -93,6 +93,10 @@ import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
 import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
+import * as Explore from "./questions/explore";
+import type { Research as ResearchWire } from "@chopin/protocol";
+type ResearchRequestView = ResearchWire.RequestView;
+import { investigationFinding } from "./experiments/document";
 import { backfillPlannerAskThreads } from "./questions/backfill";
 import { registerResearchWorkspaceRoutes } from "./research/routes";
 import { ResearchWorkspaceError, ResearchWorkspaceService } from "./research/service";
@@ -1236,6 +1240,18 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) await Questions.addOption(room.plan, server, room.id, ws, frame);
 			return;
 
+		case "question:explore":
+			if (room.plan) await Explore.explore(room.plan, server, room.id, ws, frame, exploreDeps);
+			return;
+
+		case "question:explore-stop":
+			if (room.plan) await Explore.stop(room.plan, server, room.id, ws, frame, exploreDeps);
+			return;
+
+		case "question:take":
+			if (room.plan) await Explore.take(room.plan, server, room.id, ws, frame);
+			return;
+
 		// A note sent to the Planner starts a turn on the sender's entitlement, so
 		// their authority to do that is rechecked first, exactly as for Chat; the
 		// sender's session is the turn's claimant.
@@ -2091,6 +2107,82 @@ function announceResearchTerminal(channelId: string, id: string, text: string): 
 	});
 }
 
+/** Run `action` on a document's live plan, or open it detached for the duration. */
+function withDecisionPlan(channelId: string, action: (plan: Service.Plan) => Promise<void>) {
+	return withDocumentLock(channelId, async () => {
+		let active = Rooms.get(channelId)?.plan;
+		if (active) return action(active);
+		let detached = await Service.open(channelId, documentBackend(), server);
+		try {
+			await action(detached);
+		} finally {
+			await Service.close(detached);
+		}
+	});
+}
+
+function decisionNotice(
+	plan: Service.Plan,
+	roomId: string,
+	id: string,
+	text: string,
+	label: string,
+) {
+	return Chat.notice(
+		{ chat: plan.chat, plan, server, room: roomId },
+		{ text, decision: { questionnaireId: id, kind: "activity", label } },
+	).then(() => {});
+}
+
+const exploreDeps: Explore.ExploreDeps = {
+	research: async (roomId, ref) =>
+		!!await researchService?.request(roomId, ref).catch(() => undefined),
+	spike: async (roomId, ref) =>
+		(await experiments?.service.store.get(ref).catch(() => undefined))?.documentId === roomId,
+	async stop(roomId, finding) {
+		if (finding.kind === "research") {
+			await researchService?.cancelRequest({ channelId: roomId, workspaceId: finding.ref });
+		} else if (finding.kind === "spike") {
+			await experiments?.service.stop(finding.ref, "cancelled");
+		}
+	},
+	notice: decisionNotice,
+};
+
+/** A research request reached ready or failed: settle the findings that follow it. */
+function researchSettled(channelId: string, request: ResearchRequestView): Promise<void> {
+	return withDecisionPlan(channelId, async plan => {
+		if (![...plan.records.values()].some(record => record.findings?.length)) return;
+		await Explore.settleResearch(plan, server, channelId, request, decisionNotice);
+	});
+}
+
+/** An investigation changed: settle the spike findings that follow a finished one. */
+async function spikesChanged(documentId: string): Promise<void> {
+	let finished = (await experiments?.service.store.list(documentId) ?? []).filter(value =>
+		["completed", "failed", "cancelled", "interrupted"].includes(value.state)
+	);
+	if (finished.length === 0) return;
+	await withDecisionPlan(documentId, async plan => {
+		for (let value of finished) {
+			let running = [...plan.records.values()].some(record =>
+				record.findings?.some(finding =>
+					finding.kind === "spike" && finding.ref === value.id && finding.status === "running"
+				)
+			);
+			if (!running) continue;
+			let summary = value.result ? investigationFinding(value.brief, value.result.report) : {};
+			await Explore.settleSpike(plan, server, documentId, {
+				id: value.id,
+				state: value.state,
+				...summary,
+				...(value.input?.source.branch ? { branch: value.input.source.branch } : {}),
+				...(value.childId ? { childId: value.childId } : {}),
+			}, decisionNotice);
+		}
+	});
+}
+
 /** Open a document for implementation work, under its transition and document locks. */
 function withImplementationPlan<T>(id: string, action: (plan: Service.Plan) => Promise<T>) {
 	return withDocumentTransition(id, async () => {
@@ -2278,6 +2370,8 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 		}
 		void spikeScout?.refresh(documentId);
 		void reviewCompletedInvestigations(documentId);
+		void spikesChanged(documentId)
+			.catch(err => console.error("chopin: could not settle spike findings -", err));
 		void liveSync?.blockersChanged(documentId)
 			.catch(err => console.error("chopin: investigation build scheduling failed -", err));
 	},
@@ -2368,6 +2462,7 @@ researchService = new ResearchWorkspaceService({
 	current: currentDocumentTarget,
 	publish: announceResearchChanged,
 	terminalNotice: announceResearchTerminal,
+	settled: researchSettled,
 });
 referenceService = new ReferenceService({
 	storage,

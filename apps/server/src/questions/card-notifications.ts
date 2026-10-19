@@ -74,6 +74,8 @@ export function meta(plan: Plan, record: Record): Wire.CardMeta {
 		hasProse: prose.length > 0 && !Prose.orphaned(prose),
 		proseOrphaned: Prose.orphaned(prose),
 		...(written ? { writeup: written } : {}),
+		...(record.findings?.length ? { findings: record.findings } : {}),
+		...(record.childId ? { childId: record.childId } : {}),
 	};
 }
 

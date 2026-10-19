@@ -1,4 +1,4 @@
-import type { ConversationPlan, Plan as Wired } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wired, Question } from "@chopin/protocol";
 import { limits } from "@chopin/question";
 import { assertSourceShape } from "../conversation-plan/sources";
 import type { DecisionEntry, Record } from "./record-types";
@@ -175,4 +175,71 @@ export function prose(value: unknown): Wired.Anchor[] {
 		}
 	}
 	return value as Wired.Anchor[];
+}
+
+export const MAX_FINDINGS = 20;
+export const MAX_FINDING_SOURCES = 20;
+export const MAX_FINDING_FOCUS = 500;
+export const MAX_FINDING_TITLE = 300;
+export const MAX_FINDING_SUMMARY = 4_000;
+const FINDING_KEYS = new Set([
+	"id",
+	"kind",
+	"status",
+	"focus",
+	"ref",
+	"title",
+	"summary",
+	"sources",
+	"sourceCount",
+	"verdict",
+	"branch",
+	"childId",
+	"by",
+	"at",
+]);
+
+export function findings(value: unknown): Question.Finding[] {
+	if (!Array.isArray(value) || value.length > MAX_FINDINGS) invalid();
+	let ids = new Set<string>();
+	for (let candidate of value) {
+		let finding = object(candidate);
+		if (Object.keys(finding).some(key => !FINDING_KEYS.has(key))) invalid();
+		let id = text(finding.id, 128);
+		if (ids.has(id)) invalid();
+		ids.add(id);
+		if (finding.kind !== "research" && finding.kind !== "spike" && finding.kind !== "ask") {
+			invalid();
+		}
+		if (
+			finding.status !== "running" && finding.status !== "ready" && finding.status !== "failed"
+			&& finding.status !== "stopped"
+		) invalid();
+		text(finding.ref, 256);
+		text(finding.by);
+		unix(finding.at);
+		if (Object.hasOwn(finding, "focus")) text(finding.focus, MAX_FINDING_FOCUS);
+		if (Object.hasOwn(finding, "title")) text(finding.title, MAX_FINDING_TITLE);
+		if (Object.hasOwn(finding, "summary")) text(finding.summary, MAX_FINDING_SUMMARY);
+		if (Object.hasOwn(finding, "verdict")) text(finding.verdict, MAX_FINDING_TITLE);
+		if (Object.hasOwn(finding, "branch")) text(finding.branch, 256);
+		if (Object.hasOwn(finding, "childId")) text(finding.childId, 128);
+		if (
+			Object.hasOwn(finding, "sourceCount")
+			&& (!Number.isSafeInteger(finding.sourceCount) || (finding.sourceCount as number) < 0)
+		) invalid();
+		if (Object.hasOwn(finding, "sources")) {
+			if (!Array.isArray(finding.sources) || finding.sources.length > MAX_FINDING_SOURCES) {
+				invalid();
+			}
+			for (let source of finding.sources) {
+				let item = object(source);
+				if (Object.keys(item).some(key => key !== "title" && key !== "url")) invalid();
+				text(item.title, MAX_FINDING_TITLE);
+				let url = text(item.url, 2048);
+				if (!/^https?:\/\//.test(url)) invalid();
+			}
+		}
+	}
+	return value as Question.Finding[];
 }

@@ -6,6 +6,7 @@ import {
 	answers,
 	choices,
 	editors,
+	findings,
 	history,
 	optionOrigins,
 	options,
@@ -55,6 +56,8 @@ export function normalizeRecord(raw: unknown): Record {
 		);
 	}
 	if (Object.hasOwn(value, "editors")) editors(value.editors);
+	if (Object.hasOwn(value, "findings")) findings(value.findings);
+	if (Object.hasOwn(value, "childId")) text(value.childId, 128);
 	if (Object.hasOwn(value, "appended")) {
 		let appended = object(value.appended);
 		let seen = new Set<string>();

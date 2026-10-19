@@ -1,4 +1,4 @@
-import type { ConversationPlan, Plan as Wired } from "@chopin/protocol";
+import type { ConversationPlan, Plan as Wired, Question } from "@chopin/protocol";
 import type { Definition } from "@chopin/question";
 
 export type OptionOrigin = {
@@ -36,4 +36,7 @@ export type Record = {
 	editors: string[];
 	/** Durable request keys for shared option appends, bounded by the option limit. */
 	appended?: { [key: string]: string };
+	findings?: Question.Finding[];
+	/** The decision's own child document. */
+	childId?: string;
 };

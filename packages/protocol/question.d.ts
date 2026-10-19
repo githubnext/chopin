@@ -26,6 +26,10 @@ export declare namespace Question {
 		| Request<Discard.Ask>
 		| Request<Reopen.Ask>
 		| Request<AddOption.Ask>
+		| Request<Explore.Ask>
+		| Request<Explore.Stop>
+		| Request<Explore.Page>
+		| Request<Explore.Take>
 		| Presence.Input;
 
 	export type Outgoing =
@@ -42,6 +46,10 @@ export declare namespace Question {
 		| Discard.Reply
 		| Reopen.Reply
 		| AddOption.Reply
+		| Explore.Reply
+		| Explore.Stopped
+		| Explore.Paged
+		| Explore.Taken
 		| OptionAdded
 		| Presence.Output
 		| Resolved;
@@ -87,6 +95,31 @@ export declare namespace Question {
 		at: number;
 	};
 
+	/**
+	 * Something learned while exploring a decision: a web research report, a local spike, or a
+	 * person who was asked. A running finding is what the card shows as Exploring.
+	 */
+	export type Finding = {
+		id: string;
+		kind: "research" | "spike" | "ask";
+		status: "running" | "ready" | "failed" | "stopped";
+		/** What the exploration should find out. */
+		focus?: string;
+		/** The research request or investigation id, or the asked member's login. */
+		ref: string;
+		/** One-line result once ready. */
+		title?: string;
+		summary?: string;
+		sources?: Array<{ title: string; url: string }>;
+		sourceCount?: number;
+		verdict?: string;
+		branch?: string;
+		/** The published child document holding the full result. */
+		childId?: string;
+		by: string;
+		at: number;
+	};
+
 	export type CardMeta = {
 		status: CardStatus;
 		origin: "planner" | "conversation" | "human";
@@ -107,6 +140,10 @@ export declare namespace Question {
 		proseOrphaned: boolean;
 		/** The saved conversation decision's write-up job while it is queued, running, or failed. */
 		writeup?: { status: "writing" | "failed"; job: string };
+		/** Oldest first. */
+		findings?: Finding[];
+		/** The decision's own page, once someone has opened it. */
+		childId?: string;
 	};
 
 	export type Meta = KIND<"question:meta"> & { id: string; meta: CardMeta };
@@ -365,6 +402,65 @@ export declare namespace Question {
 				}
 				| { ok: false; reason: Refusal; message: string }
 			);
+	}
+
+	export namespace Explore {
+		/**
+		 * Explore an open decision: research the web, build a spike on a paired machine, or ask a
+		 * member. `key` is a client-chosen UUID that becomes the finding's id, so a retry returns the
+		 * finding already started.
+		 */
+		export type Ask = KIND<"question:explore"> & {
+			id: string;
+			key: string;
+			action: Finding["kind"];
+			/** What it should find out. */
+			focus?: string;
+			/** The member to ask, for `action: "ask"`. */
+			login?: string;
+			/** The research request the member started, for `action: "research"`. */
+			ref?: string;
+		};
+
+		export type Refusal =
+			| "invalid"
+			/** The decision is settled, discarded or gone. */
+			| "resolved"
+			/** The kind cannot run here: no research, no paired machine, or no Planner owner. */
+			| "unavailable"
+			| "implementation";
+
+		export type Reply =
+			& KIND<"question:explore">
+			& { id: string }
+			& (
+				| { ok: true; finding: Finding; repeated?: boolean }
+				| { ok: false; reason: Refusal; message: string }
+			);
+
+		/** Stop a running finding. */
+		export type Stop = KIND<"question:explore-stop"> & { id: string; finding: string };
+
+		export type Stopped =
+			& KIND<"question:explore-stop">
+			& { id: string }
+			& ({ ok: true } | { ok: false; message: string });
+
+		/** The asked member's reply, which settles their `ask` finding. */
+		export type Take = KIND<"question:take"> & { id: string; finding: string; text: string };
+
+		export type Taken =
+			& KIND<"question:take">
+			& { id: string }
+			& ({ ok: true } | { ok: false; message: string });
+
+		/** Open the decision as its own child document, creating it the first time. */
+		export type Page = KIND<"question:page"> & { id: string };
+
+		export type Paged =
+			& KIND<"question:page">
+			& { id: string }
+			& ({ ok: true; childId: string } | { ok: false; message: string });
 	}
 
 	/**

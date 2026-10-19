@@ -64,6 +64,8 @@ export type ResearchWorkspaceServiceOptions = {
 		revision: number,
 	) => void | Promise<void>;
 	terminalNotice?: (channelId: string, id: string, text: string) => Promise<void>;
+	/** Every request that reached ready or failed, whatever started it. Must be idempotent. */
+	settled?: (channelId: string, request: Research.RequestView) => Promise<void>;
 	clock?: () => Date;
 	id?: () => string;
 };
@@ -357,6 +359,7 @@ export class ResearchWorkspaceService {
 	#current: (channelId: string) => Promise<DocumentTarget | undefined>;
 	#publish: ResearchWorkspaceServiceOptions["publish"];
 	#terminalNotice: ResearchWorkspaceServiceOptions["terminalNotice"];
+	#settled: ResearchWorkspaceServiceOptions["settled"];
 	#clock: () => Date;
 	#id: () => string;
 	#tails = new Map<string, Promise<void>>();
@@ -368,6 +371,7 @@ export class ResearchWorkspaceService {
 		this.#current = options.current;
 		this.#publish = options.publish;
 		this.#terminalNotice = options.terminalNotice;
+		this.#settled = options.settled;
 		this.#clock = options.clock ?? (() => new Date());
 		this.#id = options.id ?? (() => crypto.randomUUID());
 	}
@@ -1033,11 +1037,15 @@ export class ResearchWorkspaceService {
 		if (!linked) return;
 		await this.#exclusive(job.channelId, linked.workspaceId, async () => {
 			let detail = await this.#reconciled(job.channelId, linked.workspaceId);
-			if (!detail || linked.kind !== "initial" || detail.workspace.inlineReference !== "placed") {
-				return;
-			}
+			if (!detail || linked.kind !== "initial") return;
 			let request = await this.#requestView(detail);
 			if (request.stage !== "ready" && request.stage !== "failed") return;
+			if (this.#settled) {
+				await this.#settled(job.channelId, request).catch(error => {
+					console.error("[research] a settled request listener failed:", error);
+				});
+			}
+			if (detail.workspace.inlineReference !== "placed") return;
 			let activeTurn = detail.turns.find(value => value.id === linked.id);
 			if (
 				request.stage === "ready"
