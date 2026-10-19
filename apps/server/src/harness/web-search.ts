@@ -1,4 +1,4 @@
-import { createMCPClient } from "@ai-sdk/mcp";
+import { createMCPClient, MCPClientError } from "@ai-sdk/mcp";
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -29,6 +29,12 @@ type CreateClient = (config: MCPClientConfig) => Promise<Client>;
 type Credential = Extract<JobExecutionCredential, { kind: "active-planner" }>;
 const WebContext = z.object({ credential: z.custom<Credential>() });
 
+export type WebSearchFailureDiagnostic = {
+	webFailure: string;
+	webFailureDurationMs: number;
+	webFailureToolCallId?: string;
+};
+
 export class WebSearchTimeoutError extends Error {
 	constructor(readonly phase: "authorization" | "request" = "request") {
 		super(
@@ -44,7 +50,11 @@ export async function webSearchTool(
 	credential: Credential,
 	deps: {
 		createClient?: CreateClient;
-		onCall?: (result?: unknown, error?: unknown) => void | Promise<void>;
+		onCall?: (
+			result?: unknown,
+			error?: unknown,
+			diagnostic?: WebSearchFailureDiagnostic,
+		) => void | Promise<void>;
 		timeoutMs?: number;
 	} = {},
 ): Promise<Result<{ tool: ToolSet["web_search"]; close: () => Promise<void> }, GitHubToolsError>> {
@@ -95,6 +105,8 @@ export async function webSearchTool(
 							current !== credential || credential.signal?.aborted
 							|| credential.expiresAt.getTime() <= Date.now()
 						) throw new Error("MCP web_search authorization ended");
+						let started = performance.now();
+						let resultError = false;
 						let timeout = AbortSignal.timeout(timeoutMs);
 						let signal = AbortSignal.any([
 							timeout,
@@ -130,10 +142,45 @@ export async function webSearchTool(
 									aborted,
 								]);
 								if (result && typeof result === "object" && "isError" in result && result.isError) {
+									resultError = true;
 									throw new Error("MCP web_search returned an error");
 								}
 							} catch (error) {
-								await deps.onCall?.(undefined, error);
+								// Only known classifications and numeric MCP codes cross into job logs.
+								let kind = timeout.aborted
+									? "timeout"
+									: signal.aborted
+									? "aborted"
+									: resultError
+									? "mcp-result-error"
+									: MCPClientError.isInstance(error)
+									? "mcp-client"
+									: error instanceof Error
+									? "error"
+									: "unknown";
+								let diagnostic: WebSearchFailureDiagnostic = {
+									webFailure: `local:${phase}:${kind}`,
+									webFailureDurationMs: Math.round(performance.now() - started),
+								};
+								if (MCPClientError.isInstance(error)) {
+									if (Number.isSafeInteger(error.code)) {
+										diagnostic.webFailure += `:rpc:${error.code}`;
+									}
+									if (
+										Number.isSafeInteger(error.statusCode) && error.statusCode! >= 100
+										&& error.statusCode! <= 599
+									) {
+										diagnostic.webFailure += `:http:${error.statusCode}`;
+									}
+								}
+								if (
+									/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+										options.toolCallId,
+									)
+								) {
+									diagnostic.webFailureToolCallId = options.toolCallId;
+								}
+								await deps.onCall?.(undefined, error, diagnostic);
 								throw error;
 							}
 							await deps.onCall?.(result);

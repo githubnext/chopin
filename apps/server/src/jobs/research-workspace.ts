@@ -4,6 +4,7 @@ import * as limits from "@chopin/dialect/limits";
 import { WebSearchTimeoutError, webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
 import { openWorkerSession, type WorkerSession } from "./worker-session";
+import type { WebSearchFailureDiagnostic } from "../harness/web-search";
 import type { researchAgent } from "../harness/agents";
 import type { Config } from "../config";
 import type { JsonValue } from "../storage/model";
@@ -164,6 +165,7 @@ export type ResearchAnswerOptions = {
 };
 
 type PublicResearchMetrics = {
+	webFailure?: WebSearchFailureDiagnostic;
 	phase:
 		| "authorizing"
 		| "connecting-web"
@@ -761,6 +763,7 @@ function executionFailure(err: unknown, reason: string): JobExecutionError {
 function publicDiagnostic(metrics: PublicResearchMetrics): JobExecutionDiagnostic {
 	return {
 		stage: "public-web",
+		...metrics.webFailure,
 		phase: metrics.phase,
 		webCalls: metrics.webCalls,
 		webSuccesses: metrics.webSuccesses,
@@ -861,7 +864,7 @@ async function stage(
 			diagnose("connecting-web");
 			await execution.progress("web-setup", "started");
 			let loading = webSearchTool(credential, {
-				onCall: async (result, error) => {
+				onCall: async (result, error, diagnostic) => {
 					if (abortSignal.aborted) return;
 					if (result === undefined && error === undefined) {
 						metrics.webCalls++;
@@ -869,6 +872,7 @@ async function stage(
 						await execution.progress("web-search", "started");
 					} else if (error !== undefined) {
 						metrics.webFailures++;
+						metrics.webFailure = diagnostic;
 						diagnose();
 						if (error instanceof WebSearchTimeoutError) {
 							toolFailure.abort(publicStageError(

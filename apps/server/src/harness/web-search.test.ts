@@ -1,8 +1,11 @@
 import { expect, it, spyOn } from "bun:test";
 import { tool } from "ai";
+import { MCPClientError } from "@ai-sdk/mcp";
 import { z } from "zod";
 
 import { WebSearchTimeoutError, webSearchTool } from "./web-search";
+
+import { executionDiagnostic } from "../jobs/registry";
 
 import type { MCPClientConfig } from "@ai-sdk/mcp";
 import type { JobExecutionCredential } from "../jobs/registry";
@@ -263,3 +266,105 @@ it("a timed-out authorization cannot start a search after it finally resolves", 
 		await loaded.value.close();
 	}
 });
+
+for (
+	let scenario of ["rpc", "response", "error", "unknown", "cancel", "timeout", "success"] as const
+) {
+	it(`records sanitized web-search failure metadata for ${scenario}`, async () => {
+		let sensitive = "private query https://private.example/result Bearer secret-token";
+		let controller = new AbortController();
+		let owner = credential();
+		let diagnostics: unknown[] = [];
+		let rpc = new MCPClientError({
+			name: sensitive,
+			message: sensitive,
+			code: -32603,
+			statusCode: 502,
+			url: "https://private.example/result",
+			responseBody: sensitive,
+			data: { token: sensitive },
+		});
+		let loaded = await webSearchTool(owner, {
+			timeoutMs: 10,
+			onCall: (_result, _error, diagnostic) => {
+				if (diagnostic) diagnostics.push(diagnostic);
+			},
+			createClient: async () => ({
+				tools: async () => ({
+					web_search: tool({
+						inputSchema: z.object({ query: z.string() }),
+						execute: async () => {
+							if (scenario === "rpc") throw rpc;
+							if (scenario === "error") {
+								throw Object.assign(new Error(sensitive), { name: sensitive });
+							}
+							if (scenario === "unknown") throw { code: sensitive, name: sensitive };
+							if (scenario === "cancel") controller.abort(new Error(sensitive));
+							if (scenario === "cancel" || scenario === "timeout") {
+								return new Promise(() => {});
+							}
+							return {
+								isError: scenario === "response",
+								content: [{ type: "text", text: sensitive }],
+							};
+						},
+					}),
+				}),
+				close: async () => {},
+			}),
+		});
+		if (!loaded.ok) throw new Error("fixture failed");
+		try {
+			let call = loaded.value.tool.execute!({ query: sensitive }, {
+				context: { credential: owner },
+				toolCallId: scenario === "unknown" ? sensitive : "d9dc5586-b81f-442c-b9e1-feb5d186f334",
+				abortSignal: controller.signal,
+			} as never);
+			if (scenario === "success") {
+				await call;
+				expect(diagnostics).toEqual([]);
+				return;
+			}
+			await expect(Promise.resolve(call)).rejects.toBeDefined();
+			let kinds = {
+				rpc: "mcp-client",
+				error: "error",
+				response: "mcp-result-error",
+				unknown: "unknown",
+				cancel: "aborted",
+				timeout: "timeout",
+			};
+			expect(diagnostics).toEqual([{
+				webFailure: `local:request:${kinds[scenario]}${
+					scenario === "rpc" ? ":rpc:-32603:http:502" : ""
+				}`,
+				webFailureDurationMs: expect.any(Number),
+				...(scenario === "unknown"
+					? {}
+					: { webFailureToolCallId: "d9dc5586-b81f-442c-b9e1-feb5d186f334" }),
+			}]);
+			expect(() =>
+				executionDiagnostic({
+					stage: "public-web",
+					phase: "waiting-web-search",
+					webCalls: 1,
+					webSuccesses: 0,
+					webFailures: 1,
+					hostedCalls: 0,
+					hostedCompleted: 0,
+					citableSources: 0,
+					outputSources: 0,
+					resultSubmitted: false,
+					resultInvalid: false,
+					webSearchDenied: false,
+					elapsedMs: 100,
+					...diagnostics[0] as Record<string, string | number>,
+				})
+			).not.toThrow();
+			expect(JSON.stringify(diagnostics)).not.toContain(sensitive);
+			expect(JSON.stringify(diagnostics)).not.toContain("private.example");
+		} finally {
+			await loaded.value.close();
+		}
+	});
+}

@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import { MCPClientError } from "@ai-sdk/mcp";
+import { tool } from "ai";
+import { z } from "zod";
+
+import * as webSearch from "../harness/web-search";
+import * as workerSession from "./worker-session";
+import { executionDiagnostic, JobExecutionError } from "./registry";
 
 import {
 	observedWebSourceUrls,
@@ -13,7 +20,7 @@ import {
 } from "./research-workspace";
 
 import type { BackgroundJob, JsonValue } from "../storage/model";
-import type { JobExecution } from "./registry";
+import type { JobExecution, JobExecutionDiagnostic } from "./registry";
 import type {
 	ResearchAnswerEngines,
 	ResearchAnswerInput,
@@ -399,6 +406,108 @@ describe("research evidence provenance", () => {
 });
 
 describe("research workspace execution", () => {
+	it("retains a failed search diagnostic after a successful search until the job deadline", async () => {
+		let { researchAgent } = await import("../harness/agents");
+		let originalWebSearch = webSearch.webSearchTool;
+		let input = { workspaceId: WORKSPACE_ID, turnId: TURN_ID, query: QUERY };
+		let progress: string[] = [];
+		let job = execution("research-evidence", input, async (stage, state) => {
+			progress.push(`${stage}:${state}`);
+		});
+		let snapshots: JobExecutionDiagnostic[] = [];
+		let deadline = new Date(Date.now() + 60_000);
+		let deadlineSignal = new AbortController();
+		let sensitive = "private query https://private.example/result Bearer secret-token";
+		let callId = "d9dc5586-b81f-442c-b9e1-feb5d186f334";
+		let searches = 0;
+		let web = spyOn(webSearch, "webSearchTool").mockImplementation((owner, deps) =>
+			originalWebSearch(owner, {
+				...deps,
+				createClient: async () => ({
+					tools: async () => ({
+						web_search: tool({
+							inputSchema: z.object({ query: z.string() }),
+							execute: async () => {
+								if (++searches === 1) {
+									throw new MCPClientError({
+										message: sensitive,
+										code: -32603,
+										statusCode: 502,
+										responseBody: sensitive,
+									});
+								}
+								return {
+									content: [{
+										type: "text",
+										text: JSON.stringify({
+											text: {
+												value: "Partial evidence",
+												annotations: [{ url_citation: { url: PUBLIC_SOURCE.url } }],
+											},
+										}),
+									}],
+								};
+							},
+						}),
+					}),
+					close: async () => {},
+				}),
+			})
+		);
+		let opening = spyOn(workerSession, "openWorkerSession").mockResolvedValue({
+			session: {} as never,
+			close: async () => {},
+		});
+		let generating = spyOn(researchAgent, "generate").mockImplementation(async call => {
+			let search = call.options!.webSearch!;
+			let options = {
+				context: call.options!.webContext,
+				toolCallId: callId,
+				abortSignal: call.abortSignal,
+			};
+			await expect(Promise.resolve(search.execute!({ query: sensitive }, options as never))).rejects
+				.toBeInstanceOf(MCPClientError);
+			await search.execute!({ query: sensitive }, options as never);
+			// The runner aborts the execution signal when its deadline expires.
+			deadline.setTime(Date.now() - 1);
+			deadlineSignal.abort(new Error("attempt-timeout"));
+			return await new Promise<never>(() => {});
+		});
+		try {
+			let definition = researchEvidenceDefinition({ config: { agent: true, model: "test-model" } });
+			let error = await definition.execute({
+				...job,
+				deadline,
+				signal: deadlineSignal.signal,
+				diagnostic: value => snapshots.push(executionDiagnostic(value)!),
+			}).then(() => undefined, error => error);
+			expect(error).toBeInstanceOf(JobExecutionError);
+			expect(error.progressReason).toBe("attempt-timeout");
+			let last = snapshots.at(-1)!;
+			expect(last).toMatchObject({
+				webFailure: "local:request:mcp-client:rpc:-32603:http:502",
+				webFailureDurationMs: expect.any(Number),
+				webFailureToolCallId: callId,
+				webCalls: 2,
+				webFailures: 1,
+				webSuccesses: 1,
+				outputSources: 1,
+				resultSubmitted: false,
+			});
+			let { elapsedMs, ...terminal } = last;
+			expect(elapsedMs).toBeGreaterThanOrEqual(0);
+			expect(error.diagnostic).toEqual(terminal);
+			expect(Object.keys(last).length).toBeLessThanOrEqual(16);
+			expect(JSON.stringify(snapshots)).not.toContain(sensitive);
+			expect(progress).not.toContain("research-result:completed");
+			expect(progress).not.toContain("public-web:completed");
+		} finally {
+			generating.mockRestore();
+			opening.mockRestore();
+			web.mockRestore();
+		}
+	});
+
 	it("keeps the public evidence worker input isolated and uses one attempt", async () => {
 		let observed: unknown;
 		let progress: string[] = [];
