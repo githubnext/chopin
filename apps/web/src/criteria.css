@@ -123,11 +123,6 @@
 	cursor: pointer;
 }
 
-.crit-pick:has(.question-input:focus-visible) {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
-}
-
 .crit-row:has(.question-input:not(:disabled)):hover .crit-pick {
 	--crit-row-bg: var(--color-hover);
 }
@@ -149,11 +144,6 @@
 .crit-row.question-option:has(.question-input:checked),
 .crit-row.question-option:has(.question-input:checked:not(:disabled)):hover {
 	background: var(--color-brand-wash);
-}
-
-/* The row itself has no focus ring: the label's radio draws it. */
-.crit-row.question-option:has(.question-input:focus-visible) {
-	outline: 0;
 }
 
 /* A mark's slot is one text line tall, so its glyph centres on the option's first line. */
@@ -188,12 +178,6 @@
 
 .crit-cell:hover {
 	background: var(--color-selected);
-}
-
-.crit-cell:focus-visible,
-.crit-seg-btn:focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
 }
 
 .crit-cell[data-chip] {
@@ -310,14 +294,13 @@
 	min-width: 0;
 	padding: 0.125rem 0.25rem 0.125rem 0.125rem;
 	border-radius: var(--radius-md);
-	outline: var(--edge-width) solid var(--color-control-edge);
-	outline-offset: calc(-1 * var(--edge-width));
+	border: var(--edge-width) solid var(--color-control-edge);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 }
 
 .crit-add-field:focus-within {
-	outline-color: var(--color-brand);
+	border-color: var(--color-brand);
 }
 
 .crit-input {

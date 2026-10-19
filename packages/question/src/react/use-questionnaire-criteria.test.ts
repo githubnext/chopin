@@ -78,7 +78,7 @@ describe("QuestionnaireController criteria", () => {
 			ok: true,
 			criterion: "c1",
 		});
-		let [call] = asked.filter(each => each.kind === "question:criterion");
+		let call = asked.find(each => each.kind === "question:criterion");
 		expect(call?.payload).toMatchObject({ id: "w", question: "q0", label: "Easy reset" });
 		expect(call?.payload.key).toEqual(expect.any(String));
 		expect(controller.getSnapshot().definition?.questions[0]?.criteria).toHaveLength(2);
