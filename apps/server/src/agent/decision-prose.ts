@@ -68,6 +68,12 @@ export async function write(
 			Questions.setProse(candidate, args.id, [
 				room.anchorAt(candidate.document, planned.index, hash),
 			]);
+			// Chopin's one-line why lands in the same commit, but only where no person wrote one.
+			let current = plan.records.get(args.id)!;
+			if (args.why && !current.whyBy) {
+				let { whyBy: _whyBy, ...drafted } = candidate.records.get(args.id)!;
+				candidate.records.set(args.id, { ...drafted, why: args.why });
+			}
 			if (!active() || args.revision !== plan.revision) {
 				throw new Error("background Planner job changed before its tool completed");
 			}

@@ -53,6 +53,7 @@ export {
 export type { Placement } from "./service-relationships";
 export { reopen } from "./service-reopen";
 export { submit } from "./service-submit";
+export { setWhy } from "./service-why";
 export type { Questions, StoredOpen } from "./store";
 
 export const create = Store.create;

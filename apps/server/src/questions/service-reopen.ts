@@ -138,6 +138,8 @@ export async function reopen(
 						...(Object.keys(text).length ? { answers: text } : {}),
 						owner,
 						at,
+						// The why belongs to the answer it explained; the next settle writes its own.
+						...(record.why ? { why: record.why } : {}),
 					}],
 				};
 				delete next.answers;
@@ -146,6 +148,8 @@ export async function reopen(
 				delete next.at;
 				delete next.owner;
 				delete next.decidedAt;
+				delete next.why;
+				delete next.whyBy;
 				candidate.records.set(msg.id, next);
 				let questions: Store.Questions = {
 					open: new Map(plan.questions.open),

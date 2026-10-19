@@ -9,13 +9,15 @@ export function createProseTools() {
 		write_decision_prose: tool({
 			description: "Background job only. Write one grounded paragraph for a saved conversation "
 				+ "decision. At most 600 characters; inline Markdown is allowed. Re-decisions replace the "
-				+ "existing paragraph.",
+				+ "existing paragraph. Optionally also pass why: one plain sentence, at most 300 characters, "
+				+ "saying why the decision went this way.",
 			inputSchema: jsonSchema<Record<string, unknown>>({
 				type: "object",
 				properties: {
 					revision: { type: "integer", minimum: 0 },
 					id: { type: "string" },
 					text: { type: "string", minLength: 1, maxLength: 600 },
+					why: { type: "string", minLength: 1, maxLength: 300 },
 				},
 				required: ["revision", "id", "text"],
 				additionalProperties: false,

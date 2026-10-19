@@ -76,6 +76,8 @@ export function meta(plan: Plan, record: Record): Wire.CardMeta {
 		...(written ? { writeup: written } : {}),
 		...(record.findings?.length ? { findings: record.findings } : {}),
 		...(record.childId ? { childId: record.childId } : {}),
+		...(decided && record.why ? { why: record.why } : {}),
+		...(decided && record.why && record.whyBy ? { whyBy: record.whyBy } : {}),
 	};
 }
 

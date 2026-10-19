@@ -120,8 +120,11 @@ export function prosePrompt(input: ProsePromptInput): string {
 		"current saved choice and applicable discussion reasons above support them.",
 		"State only the saved choice and supported reasons. Do not add commitments, implementation",
 		"details, or claims that the conversation did not establish. Do not name people.",
-		"One ordinary paragraph, at most 600 characters. Call `read_plan` for its revision, then",
-		"call `write_decision_prose` once with that revision, the card id, and the paragraph.",
+		"One ordinary paragraph, at most 600 characters. Also give `why`: one plain sentence, at most",
+		"300 characters, no Markdown and no names, saying why the group chose this. It must follow",
+		"from the supported reasons above; if none support one, leave `why` out. Call `read_plan`",
+		"for its revision, then call `write_decision_prose` once with that revision, the card id,",
+		"the paragraph and `why`.",
 		"Use no other writing tool. Do not reply in chat.",
 	);
 	return lines.join("\n");

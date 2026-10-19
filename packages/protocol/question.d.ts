@@ -30,6 +30,7 @@ export declare namespace Question {
 		| Request<Explore.Stop>
 		| Request<Explore.Page>
 		| Request<Explore.Take>
+		| Request<Why.Ask>
 		| Presence.Input;
 
 	export type Outgoing =
@@ -50,6 +51,7 @@ export declare namespace Question {
 		| Explore.Stopped
 		| Explore.Paged
 		| Explore.Taken
+		| Why.Reply
 		| OptionAdded
 		| Presence.Output
 		| Resolved;
@@ -93,6 +95,8 @@ export declare namespace Question {
 		answers?: { [questionId: string]: string };
 		owner: string;
 		at: number;
+		/** The why this answer carried when it was reopened. */
+		why?: string;
 	};
 
 	/**
@@ -145,6 +149,10 @@ export declare namespace Question {
 		findings?: Finding[];
 		/** The decision's own page, once someone has opened it. */
 		childId?: string;
+		/** A settled decision's one-sentence why, drafted by Chopin or written by a person. */
+		why?: string;
+		/** Who wrote `why`; absent while it is still Chopin's draft. */
+		whyBy?: string;
 	};
 
 	export type Meta = KIND<"question:meta"> & { id: string; meta: CardMeta };
@@ -467,6 +475,20 @@ export declare namespace Question {
 			& KIND<"question:page">
 			& { id: string }
 			& ({ ok: true; childId: string } | { ok: false; message: string });
+	}
+
+	/**
+	 * Write, replace or (with empty text) clear a settled decision's why. Any writer may; the
+	 * author is recorded, and Chopin's draft never replaces a person's words. It answers, and
+	 * announces `question:meta`, only after the record is durable.
+	 */
+	export namespace Why {
+		export type Ask = KIND<"question:why"> & { id: string; text: string };
+
+		export type Reply =
+			& KIND<"question:why">
+			& { id: string }
+			& ({ ok: true; why?: string } | { ok: false; message: string });
 	}
 
 	/**

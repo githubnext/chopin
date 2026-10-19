@@ -5,6 +5,7 @@ import { assertSourceShape } from "../conversation-plan/sources";
 import type { DecisionEntry, Record } from "./record-types";
 import { invalid, object, ORIGINS, text, unix } from "./record-fields";
 import type { Known } from "./record-fields";
+import { MAX_WHY } from "./why";
 
 export function options(definition: unknown, pending: boolean): Known {
 	let source = object(definition);
@@ -76,6 +77,12 @@ export function answers(value: unknown, known: Known): { [question: string]: str
 	return value as { [question: string]: string };
 }
 
+/** A decision's why: bounded, one line of plain text. */
+export function why(value: unknown): string {
+	if (typeof value !== "string" || value !== value.trim() || /[\r\n]/.test(value)) invalid();
+	return text(value, MAX_WHY);
+}
+
 export function editors(value: unknown): string[] {
 	if (!Array.isArray(value)) invalid();
 	let found = new Set<string>();
@@ -92,7 +99,7 @@ export function history(value: unknown, known: Known): DecisionEntry[] {
 	for (let candidate of value) {
 		let entry = object(candidate);
 		if (
-			Object.keys(entry).some(key => !["choices", "answers", "owner", "at"].includes(key))
+			Object.keys(entry).some(key => !["choices", "answers", "owner", "at", "why"].includes(key))
 			|| !Object.hasOwn(entry, "choices")
 			|| !Object.hasOwn(entry, "owner") || !Object.hasOwn(entry, "at")
 		) invalid();
@@ -106,6 +113,7 @@ export function history(value: unknown, known: Known): DecisionEntry[] {
 		if (chosenQuestions.size !== known.questions.size) invalid();
 		text(entry.owner);
 		unix(entry.at);
+		if (Object.hasOwn(entry, "why")) why(entry.why);
 	}
 	return value as DecisionEntry[];
 }

@@ -14,6 +14,8 @@ export type DecisionEntry = {
 	answers?: { [questionId: string]: string };
 	owner: string;
 	at: number;
+	/** The settled decision's why, kept when it is reopened. */
+	why?: string;
 };
 
 export type Record = {
@@ -41,4 +43,8 @@ export type Record = {
 	findings?: Question.Finding[];
 	/** The decision's own child document. */
 	childId?: string;
+	/** One plain sentence on why the decision went this way; only a settled decision has one. */
+	why?: string;
+	/** Who wrote `why`. Absent when Chopin drafted it, so a person's words are never replaced. */
+	whyBy?: string;
 };

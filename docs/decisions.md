@@ -123,3 +123,19 @@ or the written answer in the field; there is no separate answer block or heading
 follow, each expanded by default with its summary, plain source links and branch. **Takes**
 appear only if someone was asked. **Notes** is always present and shows an "Add a note"
 placeholder while empty. A child document's own decisions cannot open as pages.
+
+## A settled decision's why
+
+A settled decision may carry one **why**: a single plain sentence of at most 300 characters on its
+record (`why`, with `whyBy` naming the person who wrote it), projected on the card's metadata. Any
+writer sets, replaces or clears it with `question:why { id, text }` (empty text clears); the server
+commits the record, then announces `question:meta` and replies. Only a settled decision has one.
+
+Chopin drafts it. The settle write-up job (`write_decision_prose`) takes an optional `why`, checked
+as exactly one plain sentence with no Markdown, and saves it in the same commit as the paragraph.
+A draft has no `whyBy`; a person's words (`whyBy` set) are never replaced by a later draft, and a
+draft is replaced by a redraft. That job runs only for conversation decisions, so a Planner or
+human decision has a why only when a person writes one.
+
+Reopening moves the why into the answer's history entry and clears it from the record: it
+explained that answer, and the next settle drafts its own.
