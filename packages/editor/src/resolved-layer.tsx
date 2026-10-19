@@ -175,13 +175,14 @@ function markerStyle(
 	} as CSSProperties;
 }
 
-type PopoverValue = {
+export type PopoverValue = {
 	item: Item;
 	pinned: boolean;
 	style: CSSProperties;
 };
 
-function Popover(
+/** Exported for the design jig, which renders it beside its real wrapper classes. */
+export function Popover(
 	{ actions, close, onSource, value }: {
 		actions?: ReactNode;
 		close: () => void;

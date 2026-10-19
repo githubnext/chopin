@@ -5393,7 +5393,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 
 .plan-decision-pop .plan-decision-tools {
 	display: flex;
-	margin: -0.125rem -0.25rem 0 0;
+	margin: calc(var(--card-corner-inset) - 0.75rem) calc(var(--card-corner-inset) - 0.75rem) 0 0;
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);

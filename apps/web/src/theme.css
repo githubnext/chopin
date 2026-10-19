@@ -1618,6 +1618,16 @@ body {
 	color: var(--color-success);
 }
 
+/* Tucked into the card's corner: undo the card's top and the card and head inline padding. */
+.question-head-actions {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin-block-start: calc(var(--card-corner-inset) - 1rem);
+	margin-inline-end: calc(var(--card-corner-inset) - 1rem);
+}
+
 .question-head-text {
 	flex: 1;
 	min-width: 0;
