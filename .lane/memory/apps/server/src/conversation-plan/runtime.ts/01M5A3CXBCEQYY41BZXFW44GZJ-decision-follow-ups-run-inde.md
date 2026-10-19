@@ -4,8 +4,9 @@ anchor: function createConversationRuntime
 created: 2026-10-19T12:50:17Z
 norm: '1'
 sig: b071deea31809204
-body_hash: 1e428c39899c7739
-raw_hash: 2eea92be975247a4
+body_hash: b7aa75ea37767187
+raw_hash: 4ba65000fd9cabbd
+vouched: 2026-10-19T13:04:41Z
 lines: 35-325
 ---
 

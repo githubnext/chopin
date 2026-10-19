@@ -137,6 +137,9 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 				return { status: "failed", reason: `no prompt for ${job.kind} jobs` };
 			}
 			let result = outcome(await deps.runner(job, prompt, controller.signal));
+			if (result.status === "deferred" && job.kind !== "decision-followup") {
+				return { status: "failed", reason: "Only decision follow-ups may defer for availability." };
+			}
 			if (job.threadId && !initialThread(plan, job)) {
 				return { status: "skipped", reason: "The conversation decision is no longer open." };
 			}
@@ -194,6 +197,8 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 			);
 			if (!settled) continue;
 			announce(settled.find(job => job.id === running.id));
+			// A later owner or Chat capacity notification retries this pending generation.
+			if (finalResult.status === "deferred") return;
 			if (!stopped && (finalResult.status === "done" || finalResult.status === "skipped")) {
 				try {
 					deps.onCapacityAvailable?.();

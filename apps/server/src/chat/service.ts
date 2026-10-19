@@ -40,7 +40,7 @@ import { argsText, outputText, textOutput } from "./activity";
 import { toolErrorSchema } from "@chopin/agent-link";
 import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
-import type { JobOutcome } from "../conversation-plan/jobs";
+import type { Job, JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { isChannelId } from "../channels/id";
 import { broadcast, fail, reply, tell } from "../wire";
@@ -1843,10 +1843,15 @@ export function consumeBootstrapBackscroll(chat: Chat): void {
 export async function jobReady(
 	context: Room,
 	claimantSessionId: string | undefined,
+	job?: Pick<Job, "kind">,
 ): Promise<boolean> {
 	if (!context.config.agent || context.chat.closed || Service.implementationActive(context.plan)) {
 		return false;
 	}
+	if (
+		job?.kind === "decision-followup" && context.chat.busy
+		&& context.chat.waiting.length >= MAX_QUEUE
+	) return false;
 	if (await context.plannerNotAttached?.()) return false;
 	try {
 		await resolveOwner(
@@ -1882,7 +1887,9 @@ async function repositorySession(
 		context.room,
 		context.plannerNotAttached ? undefined : claimantSessionId,
 	);
-	if (context.ownerAvailable) void context.ownerAvailable().catch(() => {});
+	if (context.ownerAvailable && context.chat.job?.kind !== "decision-followup") {
+		void context.ownerAvailable().catch(() => {});
+	}
 	let { chat, auth } = context;
 	let lifecycle = chat.lifecycle;
 	let ownerSessionId = ownership.ownerSessionId!;
@@ -1902,7 +1909,7 @@ async function repositorySession(
 			|| binding.credentialRevision !== owner.access.revision
 			|| binding.repository.id !== repository.id
 			|| chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
-		) throw new Error("The Planner owner changed while opening. Try again.");
+		) throw new PlannerOwnerUnavailableError("The Planner owner changed while opening. Try again.");
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -1935,12 +1942,21 @@ async function repositorySession(
 			model: context.config.model || undefined,
 			harness: context.config.harness,
 		});
-		if (!result.ok) throw new Error(`Planner session unavailable (${result.error.kind})`);
+		if (!result.ok) {
+			if (binding.signal.aborted) {
+				throw new PlannerOwnerUnavailableError("Planner owner unavailable");
+			}
+			throw new Error(`Planner session unavailable (${result.error.kind})`);
+		}
 		opened = result.value;
 		if (
 			chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
 			|| binding.signal.aborted || !await binding.revalidate()
-		) throw new Error("The Planner session changed while opening. Try again.");
+		) {
+			throw new PlannerOwnerUnavailableError(
+				"The Planner session changed while opening. Try again.",
+			);
+		}
 		chat.agent = opened;
 		chat.owner = openingOwner;
 		if (!chat.job) consumeBootstrapBackscroll(chat);
@@ -1970,6 +1986,8 @@ function claimant(context: Room): string | undefined {
 	return context.plannerNotAttached ? undefined : context.claimantSessionId;
 }
 
+class PlannerOwnerUnavailableError extends Error {}
+
 /**
  * The channel's Planner owner, claimed for the claimant when it has none.
  * Without a claimant only an owner the channel already has will do.
@@ -1985,11 +2003,13 @@ export async function resolveOwner(
 		: (await auth.storage.channels.readAgent(channelId, new Date()))?.agent;
 	let ownerSessionId = ownership?.ownerSessionId;
 	if (!ownership || !ownerSessionId) {
-		throw new Error("This channel's Copilot owner is unavailable.");
+		throw new PlannerOwnerUnavailableError("This channel's Copilot owner is unavailable.");
 	}
 	let owner = await auth.sessions.resolve(ownerSessionId);
 	if (!owner) {
-		throw new Error("The Copilot owner must sign in again or reset this channel's agent.");
+		throw new PlannerOwnerUnavailableError(
+			"The Copilot owner must sign in again or reset this channel's agent.",
+		);
 	}
 	let checked = await auth.sessions.use(
 		owner,
@@ -2001,7 +2021,11 @@ export async function resolveOwner(
 		!current
 		|| current.id !== repository.id
 		|| (!current.permissions.push && !current.permissions.admin)
-	) throw new Error("The Copilot owner no longer has repository write access.");
+	) {
+		throw new PlannerOwnerUnavailableError(
+			"The Copilot owner no longer has repository write access.",
+		);
+	}
 	return { ownership, owner, repository };
 }
 
@@ -2187,7 +2211,12 @@ async function run(
 			outcome = chat.closed
 				? { status: "failed", reason: "The document closed." }
 				: {
-					status: sendStarted || chat.interruption ? "failed" : "skipped",
+					status: sendStarted || chat.interruption
+						? "failed"
+						: jobTurn.job.kind === "decision-followup"
+								&& err instanceof PlannerOwnerUnavailableError
+						? "deferred"
+						: "skipped",
 					reason: jobReason(err),
 				};
 		} else if (!chat.closed && failed) {
@@ -2372,7 +2401,10 @@ async function run(
 	chat.acting = undefined;
 	chat.actingChannel = undefined;
 	(jobTurn ? jobState : state)(chat, server, room);
-	if (context.ownerAvailable && !chat.closed) void context.ownerAvailable().catch(() => {});
+	// A pre-start availability deferral must wait for a real owner or queue change.
+	if (context.ownerAvailable && !chat.closed && outcome?.status !== "deferred") {
+		void context.ownerAvailable().catch(() => {});
+	}
 }
 
 function startRun(

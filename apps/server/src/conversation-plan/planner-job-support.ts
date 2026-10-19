@@ -21,7 +21,7 @@ export function outcome(value: JobOutcome): JobOutcome {
 		}
 		return { status: "failed", reason: "Invalid Planner job output." };
 	}
-	if (value?.status === "failed" || value?.status === "skipped") {
+	if (value?.status === "failed" || value?.status === "skipped" || value?.status === "deferred") {
 		return { status: value.status, reason: reason(value.reason, "Planner job failed.") };
 	}
 	return { status: "failed", reason: "Invalid Planner job outcome." };

@@ -171,7 +171,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 					) return true;
 					if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;
 					let claim = contexts.claim(opened, job);
-					return !!claim && await Chat.jobReady(claim.context, undefined);
+					return !!claim && await Chat.jobReady(claim.context, undefined, job);
 				}
 				if (job.kind !== "heading") return true;
 				if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;

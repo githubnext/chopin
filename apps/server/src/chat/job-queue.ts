@@ -138,7 +138,10 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		signal?.addEventListener("abort", cancel, { once: true });
 		if (chat.busy) {
 			if (chat.waiting.length >= MAX_QUEUE) {
-				finishJob(turn, { status: "skipped", reason: "The Planner queue is full." });
+				finishJob(turn, {
+					status: value.kind === "decision-followup" ? "deferred" : "skipped",
+					reason: "The Planner queue is full.",
+				});
 				return promise;
 			}
 			chat.waiting.push({
