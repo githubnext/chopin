@@ -71,7 +71,7 @@ Of the 192 candidates:
 ## Holdout check
 
 On 2026-10-19 every candidate, case source, related thread, decision-record
-source and implementation link was checked against the 8 holdout threads: 5 for
+source and implementation link, including the 41 document records, was checked against the 8 holdout threads: 5 for
 validation from eval-hub partition snapshot
 `dda78480888859ae3eec90846c1263cd28552d05`, and 3 sealed for final tests. None
 matched, and no kept thread or source document links to any of them. Every
