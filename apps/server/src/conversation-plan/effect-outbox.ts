@@ -150,7 +150,9 @@ export function restoreEffectOutbox(pendingValue: unknown, receiptValue: unknown
 				!String(item.key).startsWith("job:")
 				|| item.threadId !== undefined && !bounded(item.threadId, 200)
 				|| intent.kind === "prose" && !bounded(item.threadId, 200)
-				|| !["heading", "refine", "suggest", "prose"].includes(intent.kind as string)
+				|| !["heading", "refine", "suggest", "prose", "decision-followup"].includes(
+					intent.kind as string,
+				)
 				|| !bounded(intent.target, 200) || !bounded(intent.trigger, 200)
 			) return invalid();
 		} else return invalid();

@@ -1666,7 +1666,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		jobs: context.jobs,
 		children: context.children,
 		turnSignal: () => chat.turnController?.signal,
-		...(!chat.job && context.visualAdmission && {
+		...((!chat.job || chat.job.kind === "decision-followup") && context.visualAdmission && {
 			visualAdmission: input => {
 				let signals = [input.signal, chat.turnController?.signal].filter(
 					(signal): signal is AbortSignal => !!signal,
@@ -1840,7 +1840,10 @@ export function consumeBootstrapBackscroll(chat: Chat): void {
 }
 
 /** Readiness is a scheduling hint; the turn and live tools still revalidate ownership. */
-export async function jobReady(context: Room, claimantSessionId: string): Promise<boolean> {
+export async function jobReady(
+	context: Room,
+	claimantSessionId: string | undefined,
+): Promise<boolean> {
 	if (!context.config.agent || context.chat.closed || Service.implementationActive(context.plan)) {
 		return false;
 	}

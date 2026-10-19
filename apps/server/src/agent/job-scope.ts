@@ -10,11 +10,13 @@ export const JOB_TOOLS: Record<ConversationPlan.JobKind, string> = {
 	refine: "refine_decision",
 	suggest: "refine_decision",
 	prose: "write_decision_prose",
+	"decision-followup": "write_decision_scope",
 };
 
 export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"edit_plan",
 	"open_decision",
+	"open_decisions",
 	"ask",
 	"anchor_plan",
 	"reply_comment",
@@ -41,6 +43,11 @@ export const INVESTIGATION_READS: ReadonlySet<string> = new Set([
 ]);
 
 export function refusal(job: Job | undefined, tool: string): string | undefined {
+	if (tool === "read_decision_scope") {
+		return job?.kind === "decision-followup"
+			? undefined
+			: "read_decision_scope requires a decision-followup job.";
+	}
 	let own = job ? JOB_TOOLS[job.kind] : undefined;
 	if (!job) {
 		return Object.values(JOB_TOOLS).includes(tool)

@@ -17,6 +17,8 @@ import type { Decide } from "./decisions";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
 import type * as Rooms from "../rooms";
+import { followupIntent } from "../questions/decision-followup";
+import { decisionGeneration } from "../questions/card-actions";
 
 type RuntimeDeps = {
 	config: Pick<Config, "agent" | "conversationPlan">;
@@ -40,6 +42,8 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 	let contexts = createJobContexts();
 	let mirrors = new WeakMap<Plan.Plan, Promise<void>>();
 	let stopping = new WeakMap<Plan.Plan, Promise<void>>();
+	let followups = new WeakMap<Plan.Plan, Promise<void>>();
+	let followupWake = new WeakSet<Plan.Plan>();
 	let report = deps.onError ?? ((error: unknown) => console.error("[conversation-plan]", error));
 	let decide: Decide = (request, options) =>
 		deps.decide?.(request, options)
@@ -69,6 +73,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			brief?.idle(),
 			mirroring,
 			admitting.get(opened),
+			followups.get(opened),
 		])
 			.then(() => {})
 			.finally(() => {
@@ -84,11 +89,32 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 
 	function wake(opened: Plan.Plan): void {
 		admit(opened);
+		drainFollowups(opened);
 		if (!deps.unavailable(opened.id)) jobs.get(opened)?.wake();
 		let processor = processors.get(opened);
 		if (!processor) return;
 		refreshBriefs(opened);
 		mirrors.set(opened, wakeCardMirror(opened, processor).catch(report));
+	}
+
+	function drainFollowups(opened: Plan.Plan): void {
+		let coordinator = jobs.get(opened);
+		if (!coordinator || deps.unavailable(opened.id)) return;
+		if (followups.has(opened)) {
+			followupWake.add(opened);
+			return;
+		}
+		let task = (async () => {
+			for (let effect of opened.conversationPlanPendingEffects) {
+				if (effect.kind === "job" && effect.intent.kind === "decision-followup") {
+					await coordinator.enqueue(effect.intent, effect.key);
+				}
+			}
+		})().catch(report).finally(() => {
+			followups.delete(opened);
+			if (followupWake.delete(opened)) drainFollowups(opened);
+		});
+		followups.set(opened, task);
 	}
 
 	async function attach(
@@ -112,6 +138,12 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 			persist: () => Plan.persistExclusive(opened),
 			runner: async (job, prompt, signal) => {
 				if (!active()) return { status: "skipped", reason: "The document is unavailable." };
+				if (job.kind === "decision-followup") {
+					let record = opened.records.get(job.target);
+					if (record && record.followUp?.appliedGeneration === decisionGeneration(record)) {
+						return { status: "done", output: JSON.stringify({ id: job.target, replayed: true }) };
+					}
+				}
 				if (!deps.config.agent) {
 					return {
 						status: job.threadId ? "failed" : "skipped",
@@ -127,8 +159,20 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 					};
 			},
 			prompt: job => PROMPT_FOR[job.kind]?.(opened, job),
-			eligible: job => job.kind === "heading" || !!deps.config.conversationPlan,
+			eligible: job =>
+				job.kind === "heading" || job.kind === "decision-followup"
+				|| !!deps.config.conversationPlan,
 			ready: async job => {
+				if (job.kind === "decision-followup") {
+					let record = opened.records.get(job.target);
+					if (
+						!record || followupIntent(record)?.trigger !== job.trigger
+						|| record.followUp?.appliedGeneration === decisionGeneration(record)
+					) return true;
+					if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;
+					let claim = contexts.claim(opened, job);
+					return !!claim && await Chat.jobReady(claim.context, undefined);
+				}
 				if (job.kind !== "heading") return true;
 				if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;
 				let claim = contexts.claim(opened, job);
@@ -143,10 +187,22 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 					decision: { questionnaireId, kind: "activity", ...(label ? { label } : {}) },
 				});
 			},
-			onCapacityAvailable: () => processor?.wake(),
+			onCapacityAvailable: () => {
+				processor?.wake();
+				drainFollowups(opened);
+			},
 			onError: report,
 		});
 		if (coordinator) jobs.set(opened, coordinator);
+		let recover = () => {
+			drainFollowups(opened);
+			coordinator?.wake();
+			briefs.get(opened)?.wake();
+			processor?.wake();
+			if (processor) mirrors.set(opened, mirrorCard(opened, processor).catch(report));
+		};
+		listeners.set(opened, Questions.listen(opened, recover));
+		recover();
 		if (!deps.config.conversationPlan) return;
 		let researchJobs = researchAllowed ? deps.researchJobs?.() : undefined;
 		let briefCoordinator = researchJobs
@@ -195,12 +251,6 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 				announcer,
 			),
 		);
-		let recover = () => {
-			briefCoordinator?.wake();
-			processor!.wake();
-			mirrors.set(opened, mirrorCard(opened, processor!).catch(report));
-		};
-		listeners.set(opened, Questions.listen(opened, recover));
 		recover();
 	}
 

@@ -157,7 +157,9 @@ export function writingProse(
 	if (value.status === "expired" || cardPresentation(value, meta, "inline") !== "hidden") {
 		return false;
 	}
-	if ((meta?.status ?? cardStatus(value)) !== "decided" || meta?.hasProse) return false;
+	if ((meta?.status ?? cardStatus(value)) !== "decided") return false;
+	if (meta?.origin === "planner" && meta.writeup) return meta.writeup.status === "writing";
+	if (meta?.hasProse) return false;
 	if (meta?.proseOrphaned) return false;
 	if (meta?.origin === "conversation") return meta.writeup?.status === "writing";
 	return work.plannerBusy && work.unwritten;
@@ -657,12 +659,11 @@ function Decided(
 				: "Answered"}
 		/>
 	);
-	// The document hides a decision without prose, so its write-up's progress and Retry live
-	// here until the paragraph lands.
+	// Captured Planner cards can update already-linked prose, including after a later Save.
 	let linked = cardRelation(pointing.relations, value.questions.map(question => question.id))
 		?.relation === "linked";
-	let writeup = !discarded && !linked && meta?.origin === "conversation" && !meta.hasProse
-		&& !meta.proseOrphaned && !!meta.writeup;
+	let writeup = !discarded && !!meta?.writeup && (meta.origin === "planner"
+		|| !linked && meta.origin === "conversation" && !meta.hasProse && !meta.proseOrphaned);
 	return (
 		<SidecarCard
 			data-plan-sidecar-questionnaire={value.id}

@@ -35,10 +35,12 @@ decisions. A suggested remedy, such as onboarding, does not become an agreed
 requirement merely because someone mentioned it.
 
 Every request for human input, including missing intent and clarification, uses
-the `ask` decision tool. The Planner drafts provisional prose, then batches the
+the `open_decisions` tool. The Planner drafts provisional prose, then batches the
 known independent questions (up to ten) into separate cards beside the passages
-they inform before waiting. Alternatives are proposals, not assumed commitments;
-members can add options. Repository facts need answers, not votes. Optional
+they inform. Written answers capture intent, experience, constraints and unknown
+alternatives; choice cards offer grounded alternatives where useful. Both forms
+can appear in one batch. Cards stay open after the Planner finishes its turn,
+and people can answer in any order. Only Save settles an answer. Repository facts need answers, not votes. Optional
 exploration can remain provisional without becoming a Build blocker.
 
 On every harness, Chat buffers each complete Planner text message and checks it
@@ -60,11 +62,16 @@ while leaving broader questions open. This is advice about scope, not technical
 readiness or approval. Graph preparation retains its separate read/edit workflow
 and does not edit prose; only people approve and start implementation.
 
-This policy changes behavior **inside an invoked turn**. It does not schedule
-turns, start background research without an explicit current request, or change
-tool authority. The `ask` tool keeps its current turn waiting
-for a shared answer or cancellation. Ordinary unaddressed Chat still follows the
-existing addressing and title-maintenance behavior.
+Saving an anchored Planner decision durably queues a scoped prose update, independently of
+conversation-analysis flags. It uses the complete saved answers affecting that passage and
+updates only its explicit target. Applied answer generations commit with the source, so an
+interrupted retry cannot write them twice. Lost or ambiguous targets refuse safely. Work waits
+for an existing authorized Planner owner; it never claims ownership from a viewer or saver.
+See [Decisions](decisions.md) for the shared answer lifecycle.
+
+This does not start background research without an explicit request. Blocking `ask` remains
+available for an explicitly synchronous exchange and keeps that turn waiting for answers or
+cancellation. Ordinary unaddressed Chat retains its addressing and title-maintenance behavior.
 
 The [coaching evaluation suite](../evals/planner-coach/README.md) separates live
 model transcripts and independent rubric review from deterministic tool-boundary

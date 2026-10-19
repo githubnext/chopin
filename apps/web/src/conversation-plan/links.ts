@@ -75,7 +75,7 @@ export function jobsForMessage(
 ): ConversationPlan.Job[] {
 	return jobs.filter(job =>
 		job.trigger === messageId
-		|| job.kind === "prose"
+		|| (job.kind === "prose" || job.kind === "decision-followup")
 			&& threadForCard(state, job.target)?.questionSources[0]?.messageId === messageId
 	);
 }

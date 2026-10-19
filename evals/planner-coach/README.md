@@ -57,7 +57,9 @@ whole bounded scenario plus opening and cleanup allowances. Real publication
 persists each edit, and the runner reconstructs the stored document before teardown
 to compare it with the final live source.
 
-A real `ask` waits for a person. At the configured decision bound the runner aborts
+A real `open_decisions` captures anchored cards and returns without waiting. They stay open
+after the turn, and frozen later Chat inputs do not submit their shared drafts. A blocking
+`ask` still waits for a person. At the configured decision bound the runner aborts
 the turn, production cleanup withdraws the unanswered card, and the case stops as
 `awaiting-human`; its canned next Chat message is not submitted as an answer. A
 Chat question is a policy failure; frozen human turns remain historical inputs. Tool/time limits abort
@@ -66,9 +68,9 @@ case. These paths are visible in the traces and are not silently scored as succe
 
 The generated scorecard starts **unscored**. An independent human or agent reviewer
 reads the transcript, tool results and final document, assigns 0/1/2 on each axis,
-and supplies concrete evidence references and rationale. Count useful open Chat
-questions manually. Review scenario expectations alongside the common axes.
-Mechanical checks cover revision use, structured `ask` question count, tool authority,
+and supplies concrete evidence references and rationale. Review useful written/choice cards
+and any prohibited Chat input requests manually, alongside the scenario expectations.
+Mechanical checks cover revision use, structured decision-tool question count, tool authority,
 attempted mutations after a stop and successful evidence reads. They do not measure
 grounding, usefulness, respectful coaching or whether a claim follows its source.
 Report live rubric judgments separately from scripted runner tests.

@@ -127,6 +127,10 @@ export let visualPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()
 export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");
 export let refinePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "refine");
 export let prosePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "prose");
+export let decisionFollowupPlannerAgent = createPlannerAgent(
+	harnessFor(harnessSelection()),
+	"decision-followup",
+);
 
 type WorkerCallOptions = {
 	model: string;

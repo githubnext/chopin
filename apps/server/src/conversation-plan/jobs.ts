@@ -14,7 +14,7 @@ const MAX_TARGET = 200;
 const MAX_TRIGGER = 200;
 const MAX_REASON = 500;
 const MAX_OUTPUT = 4096;
-const KINDS = new Set(["heading", "refine", "suggest", "prose"]);
+const KINDS = new Set(["heading", "refine", "suggest", "prose", "decision-followup"]);
 const STATUSES = new Set(["pending", "running", "done", "failed", "skipped"]);
 
 function invalid(): never {
@@ -213,6 +213,10 @@ export function restore(value: unknown): Job[] {
 		}
 	}
 	return value.map((job: Job) =>
-		job.status === "running" ? { ...job, status: "failed", reason: "interrupted" } : job
+		job.status === "running"
+			? job.kind === "decision-followup"
+				? { ...job, status: "pending" }
+				: { ...job, status: "failed", reason: "interrupted" }
+			: job
 	);
 }

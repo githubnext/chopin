@@ -13,6 +13,7 @@ export const PLANNER_TOOL_NAMES = [
 	"create_research_workspace",
 	"edit_plan",
 	"open_decision",
+	"open_decisions",
 	"ask",
 	"read_implementation_graph",
 	"edit_implementation_graph",
@@ -51,6 +52,10 @@ export const BACKGROUND_TOOL_NAMES: Readonly<Record<ConversationPlan.JobKind, re
 		refine: jobNames("refine_decision"),
 		suggest: jobNames("refine_decision"),
 		prose: jobNames("write_decision_prose"),
+		"decision-followup": Object.freeze([
+			...jobNames("write_decision_scope"),
+			"read_decision_scope",
+		]),
 	});
 
 export const HEADING_TOOL_NAMES = BACKGROUND_TOOL_NAMES.heading;

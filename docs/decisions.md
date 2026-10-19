@@ -23,11 +23,26 @@ Existing decisions with selectable alternatives keep their current behavior.
 
 ## Planner tools
 
+`open_decisions` captures up to ten written or choice decisions in one durable batch. The
+Planner first writes provisional prose, then supplies the current document revision, a stable
+key and related block addresses for each card. Written responses use `response: "text"`,
+`options: []`, and `multiple: false`; choices retain their existing form. Cards appear beside
+their primary passage and the tool returns immediately. Retrying a key reuses the same card,
+including after it has been saved or discarded. Stop Planner does not withdraw committed cards.
+
+Each Save queues an update to the related prose. Decisions sharing a passage share its write
+scope, so later answers preserve earlier saved answers. Source, updated anchors and receipts
+commit together; reconnecting or retrying cannot apply the same answer twice. If the target is
+lost or ambiguous, the update fails without guessing a new passage. Pending work waits for an
+authorized Planner owner after restart. Draft edits and research findings do not start this
+write-up. Child-focused Planner turns cannot create decisions in the root document.
+
 `open_decision` captures a written decision and returns its identity immediately.
 It takes the current document revision, a stable request key, a concise question
 and optional context. Repeating a request returns the same card. The Planner
 can continue inspecting or developing the document while the choice remains
-open. This tool cannot confirm an answer.
+open. This tool cannot confirm an answer. It creates an unanchored card without the scoped
+follow-up above; the Planner uses `open_decisions` for questions beside plan prose.
 
 `ask` also accepts `response: "text"` when the Planner needs to wait for a
 person's answer. Set `options` to an empty array;

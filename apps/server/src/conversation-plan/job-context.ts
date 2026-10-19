@@ -143,9 +143,16 @@ export function createJobContexts() {
 			prune(plan);
 			return [...(byPlan.get(plan)?.values() ?? [])].at(-1);
 		},
-		claim(plan: Plan, job: Job): { context: Chat.Room; claimantSessionId: string } | undefined {
+		claim(
+			plan: Plan,
+			job: Job,
+		): { context: Chat.Room; claimantSessionId: string | undefined } | undefined {
 			prune(plan);
 			let byMessage = byPlan.get(plan);
+			if (job.kind === "decision-followup") {
+				let context = [...(byMessage?.values() ?? [])].at(-1);
+				return context ? { context, claimantSessionId: undefined } : undefined;
+			}
 			let triggered = byMessage?.get(job.trigger)
 				?? (job.kind === "heading" ? [...(byMessage?.values() ?? [])].at(-1) : undefined);
 			let owner = plan.chat.owner?.sessionId;

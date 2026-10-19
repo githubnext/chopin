@@ -4,6 +4,7 @@ import { z } from "zod";
 import { draftHeading } from "./heading-tool";
 import { jobToolContext } from "./job-tool-context";
 import { refusal, runJobTool } from "./job-scope";
+import { createFollowupTools } from "./scoped-followup-tools";
 
 import type { ToolSet } from "ai";
 import type { DocumentRoom } from "./tools";
@@ -16,6 +17,7 @@ let contextSchema = z.object({
 });
 
 export let jobTools = {
+	...createFollowupTools(),
 	draft_heading: tool({
 		description: "Background job only. Maintain a short document title from saved conversation. "
 			+ "Keep the current title when evidence is weak; a title a person chose is always kept. "

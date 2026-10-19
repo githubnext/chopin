@@ -2,7 +2,7 @@ import type { ConversationPlan } from "@chopin/protocol";
 // Extracted from archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2, effects.ts.
 
 export type JobIntent = {
-	kind: "heading" | "refine" | "suggest" | "prose";
+	kind: "heading" | "refine" | "suggest" | "prose" | "decision-followup";
 	target: string;
 	threadId?: string;
 	trigger: string;

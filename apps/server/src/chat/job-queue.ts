@@ -43,7 +43,7 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		handle: string,
 		text: string,
 		about: undefined,
-		claimantSessionId: string,
+		claimantSessionId: string | undefined,
 		reserved?: boolean,
 		member?: never,
 		references?: [],
@@ -103,7 +103,7 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		context: Room,
 		value: ConversationPlan.Job,
 		prompt: string,
-		claimantSessionId: string,
+		claimantSessionId: string | undefined,
 		signal?: AbortSignal,
 	): Promise<JobOutcome> {
 		let { chat, config, room, server } = context;

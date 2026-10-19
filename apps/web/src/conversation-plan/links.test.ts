@@ -160,6 +160,20 @@ test("a prose job belongs to the linked question's opening message", () => {
 	expect(jobsForMessage(state, [{ ...prose, target: "other" }], "m1")).toEqual([]);
 });
 
+test("a saved-answer follow-up links to the opening question when the card has a source", () => {
+	let job = {
+		id: "decision-followup:Q:decided:Q:1",
+		kind: "decision-followup",
+		target: "Q",
+		trigger: "decided:Q:1",
+		status: "failed",
+		attempts: 1,
+		at: "2026-10-19T00:00:00.000Z",
+	} as ConversationPlan.Job;
+	expect(jobsForMessage(state, [job], "m1")).toEqual([job]);
+	expect(jobsForMessage(state, [job], "m2")).toEqual([]);
+});
+
 test("badges name accepted roles only", () => {
 	let labels = (messageId: string) => messageLinks(state, messageId).map(link => link.label);
 

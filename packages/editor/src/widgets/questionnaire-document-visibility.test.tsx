@@ -85,6 +85,19 @@ test("a conversation decision is writing up only while its job runs", () => {
 	expect(writingProse(DECIDED, META, idle)).toBe(false);
 });
 
+test("an anchored Planner passage can be updating even when prior prose exists", () => {
+	let meta: Question.CardMeta = {
+		...PLANNER,
+		hasProse: true,
+		writeup: { status: "writing", job: "decision-followup:w:decided:w:2" },
+	};
+	expect(writingProse(DECIDED, meta, { unwritten: false, plannerBusy: false })).toBe(true);
+	expect(writingProse(DECIDED, { ...meta, writeup: { ...meta.writeup!, status: "failed" } }, {
+		unwritten: false,
+		plannerBusy: false,
+	})).toBe(false);
+});
+
 test("a failed write-up offers Retry from the Decisions card", () => {
 	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
 		canEdit: true,
@@ -140,5 +153,25 @@ test("the Decisions card says a conversation write-up is running only while its 
 	expect(card({ ...META, writeup: { status: "writing", job } })).toContain("Writing up…");
 	expect(card(META)).not.toContain("Writing up…");
 	expect(card({ ...META, origin: "planner", writeup: { status: "writing", job } }))
-		.not.toContain("Writing up…");
+		.toContain("Writing up…");
+});
+
+test("an anchored Planner follow-up keeps its failed write-up Retry visible with prior prose", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		canEdit: true,
+		connected: true,
+		meta: {
+			...PLANNER,
+			hasProse: true,
+			writeup: { status: "failed", job: "decision-followup:w:decided:w:2" },
+		},
+		presentation: "list",
+		relations: { [QUESTION]: "linked" },
+		value: DECIDED,
+		wire: { ask: async () => ({}), send() {}, on: () => () => {} } as never,
+	}));
+	expect(markup).toContain("Couldn&#x27;t write this up");
+	expect(markup).toMatch(
+		/<button aria-label="Retry write-up"(?![^>]*disabled)[^>]*>Retry<\/button>/,
+	);
 });

@@ -27,7 +27,7 @@ let choice = {
 	multiple: false,
 };
 
-test("a new draft publishes six separate inline decisions before waiting for any answers", async () => {
+test("a new draft leaves six mixed inline decisions open after its turn finishes", async () => {
 	let subjects = ["Audience", "Scope", "Deployment", "Data", "Access", "Rollout"];
 	let source = "# New plan\n\n"
 		+ subjects.map(subject => `${subject} remains provisional.\n`).join("\n");
@@ -43,28 +43,32 @@ test("a new draft publishes six separate inline decisions before waiting for any
 		output => {
 			let view = decoded<View>(output);
 			return {
-				tool: "ask",
+				tool: "open_decisions",
 				input: {
 					revision: view.revision,
-					questions: subjects.map(subject => ({
+					questions: subjects.map((subject, index) => ({
 						...choice,
+						key: `${subject.toLowerCase()}-decision`,
 						header: subject,
-						question: `Which ${subject.toLowerCase()} should the first version support?`,
+						question: `What should we know about ${subject.toLowerCase()}?`,
+						...(index % 2 === 0 ? { response: "text", options: [] } : {}),
 						blocks: [address(view, `${subject} remains provisional.`)],
 					})),
 				},
 			};
 		},
-		() => "The document contains the team's decisions.",
+		() => "The provisional document and six decisions are ready.",
 	]);
 	opened.push(fixture);
-	let running = fixture.run();
+	await fixture.run();
+	expect(fixture.host.plan.records.size).toBe(6);
 	let cards = await fixture.host.cards(6);
 	let saved = await fixture.saved();
-	expect(fixture.texts).toEqual([]);
-	expect(fixture.host.plan.records.size).toBe(6);
+	expect(fixture.texts).toEqual(["The provisional document and six decisions are ready."]);
 	for (let [index, card] of cards.entries()) {
 		expect(fixture.host.plan.records.get(card.id)?.status).toBe("open");
+		expect(card.definition.questions[0]?.response).toBe(index % 2 === 0 ? "text" : undefined);
+		expect(fixture.host.plan.records.get(card.id)?.followUp?.target).toHaveLength(1);
 		let before = saved.source.indexOf(`${subjects[index]} remains provisional.`);
 		let position = saved.source.indexOf(card.id);
 		expect(position).toBeGreaterThan(before);
@@ -74,9 +78,15 @@ test("a new draft publishes six separate inline decisions before waiting for any
 			);
 		}
 	}
-	for (let card of cards) await fixture.host.answer(card.id, [0]);
-	await running;
-	expect(fixture.calls.map(call => call.tool)).toEqual(["read_plan", "edit_plan", "ask"]);
+	fixture.controller.abort();
+	expect([...fixture.host.plan.records.values()].every(record => record.status === "open")).toBe(
+		true,
+	);
+	expect(fixture.calls.map(call => call.tool)).toEqual([
+		"read_plan",
+		"edit_plan",
+		"open_decisions",
+	]);
 });
 
 test("a shared answer drives a current revision edit and settled anchors before the turn ends", async () => {

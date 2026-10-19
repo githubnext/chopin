@@ -2,6 +2,7 @@ import type { JobIntent } from "./effects";
 import type { Job, JobOutcome } from "./jobs";
 import type { PlannerJobDeps } from "./planner-job-types";
 import { proseIntent } from "./prose-job";
+import { followupIntent } from "../questions/decision-followup";
 
 export function reason(value: unknown, fallback: string): string {
 	let text = value instanceof Error ? value.message : String(value ?? "");
@@ -32,7 +33,9 @@ function title(plan: PlannerJobDeps["plan"], id: string): string {
 
 export function currentProse(plan: PlannerJobDeps["plan"], job: Job): boolean {
 	let record = plan.records.get(job.target);
-	return !!record && proseIntent(record)?.trigger === job.trigger;
+	return !!record
+		&& (job.kind === "decision-followup" ? followupIntent(record) : proseIntent(record))?.trigger
+			=== job.trigger;
 }
 
 /** Initial creation may run before a card exists, but never for a closed or relinked thread. */
@@ -112,5 +115,8 @@ export function line(
 		return [`Chopin suggested ${added} options for ${named}`, job.target, named];
 	}
 	if (job.kind === "prose") return [`Chopin wrote up ${named}`, job.target, named];
+	if (job.kind === "decision-followup") {
+		return [`Chopin updated the passage for ${named}`, job.target, named];
+	}
 	return undefined;
 }

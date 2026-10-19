@@ -22,6 +22,7 @@ describe("background Planner job scope", () => {
 			refine: "refine_decision",
 			suggest: "refine_decision",
 			prose: "write_decision_prose",
+			"decision-followup": "write_decision_scope",
 		});
 		expect(WRITE_TOOLS.has("create_research_workspace")).toBe(true);
 		expect(WRITE_TOOLS.has("revise_open_decision")).toBe(true);
@@ -39,6 +40,7 @@ describe("background Planner job scope", () => {
 			let name of [
 				"edit_plan",
 				"open_decision",
+				"open_decisions",
 				"ask",
 				"anchor_plan",
 				"reply_comment",
@@ -47,12 +49,22 @@ describe("background Planner job scope", () => {
 				"revise_open_decision",
 				"draft_heading",
 				"write_decision_prose",
+				"write_decision_scope",
 			]
 		) {
 			expect(refusal(JOB, name)).toBe(
 				`This is a background refine job; use only refine_decision. ${name} is not available.`,
 			);
 		}
+	});
+
+	test("scope tools are restricted to their own follow-up job", () => {
+		expect(refusal(undefined, "read_decision_scope")).toContain("requires");
+		expect(refusal(JOB, "read_decision_scope")).toContain("requires");
+		let followup = { ...JOB, kind: "decision-followup" as const };
+		expect(refusal(followup, "read_decision_scope")).toBeUndefined();
+		expect(refusal(followup, "write_decision_scope")).toBeUndefined();
+		expect(refusal(followup, "open_decisions")).toContain("not available");
 	});
 });
 

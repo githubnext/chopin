@@ -315,6 +315,36 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 	return { revision, questions };
 }
 
+export function openDecisions(raw: unknown) {
+	let args = record(raw, "open_decisions arguments");
+	fields(args, ["revision", "questions"], ["revision", "questions"], "open_decisions arguments");
+	let keys = new Set<string>();
+	let keyed = array(args.questions, "questions", "question", 1, MAX_QUESTIONS).map(
+		(item, index) => {
+			let value = record(item, `questions[${index}]`);
+			let { key, ...question } = value;
+			if (typeof key !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(key) || keys.has(key)) {
+				fail(
+					"Every decision needs its own stable key of 8–64 letters, digits, dashes or underscores.",
+				);
+			}
+			keys.add(key);
+			return { key, question };
+		},
+	);
+	let normalized = askPlan({
+		revision: args.revision,
+		questions: keyed.map(item => item.question),
+	});
+	return {
+		revision: normalized.revision,
+		questions: normalized.questions.map((question, index) => {
+			if (!question.blocks.length) fail("Write provisional prose and anchor each decision to it.");
+			return { ...question, key: keyed[index]!.key };
+		}),
+	};
+}
+
 export function openDecision(raw: unknown) {
 	let args = record(raw, "open_decision arguments");
 	fields(

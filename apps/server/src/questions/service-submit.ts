@@ -20,6 +20,7 @@ import type { Socket, SocketData } from "../wire";
 
 import type { Record } from "./records";
 import { appendProseEffect, proseIntent } from "../conversation-plan/prose-job";
+import { appendFollowupEffect } from "./decision-followup";
 
 import type { CardEvent } from "./card-event";
 import { announce, emit, pending } from "./card-notifications";
@@ -123,8 +124,12 @@ export async function submit(
 				};
 				records.set(msg.id, answered);
 				let intent = proseIntent(answered);
-				let effects = appendProseEffect(
-					plan.conversationPlanPendingEffects,
+				let effects = appendFollowupEffect(
+					appendProseEffect(
+						plan.conversationPlanPendingEffects,
+						plan.conversationPlanEffects,
+						answered,
+					),
 					plan.conversationPlanEffects,
 					answered,
 				);

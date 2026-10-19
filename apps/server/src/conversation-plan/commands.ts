@@ -90,7 +90,6 @@ export async function handleConversationCommand(
 
 		case "conversation-plan:retry-job": {
 			try {
-				if (!deps.enabled) throw new Error("conversation analysis is disabled");
 				if (
 					!ws.data.canEdit || ws.data.channelArchivedAt || room.closing
 					|| deps.unavailable(room.id) || deps.unavailable(room.id)
@@ -99,6 +98,9 @@ export async function handleConversationCommand(
 				let jobs = opened && deps.runtime.jobs(opened);
 				if (!opened || !jobs) throw new Error("document is not open");
 				let found = jobs.jobs().find(job => job.id === frame.jobId);
+				if (!deps.enabled && found?.kind !== "decision-followup") {
+					throw new Error("conversation analysis is disabled");
+				}
 				let claimant = found ? deps.chat() : undefined;
 				let previous = found && claimant
 					? deps.runtime.contexts.remember(opened, found.trigger, claimant)

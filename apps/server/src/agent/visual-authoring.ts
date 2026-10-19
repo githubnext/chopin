@@ -96,7 +96,7 @@ qualify it:
   explanation, not to hide a short comparison.
 - Easily missed limit: place a brief \`<Callout type="note">\` after the relevant
   paragraph only for a source-backed caveat the reader could overlook. Keep
-  routine context in prose. A team selection belongs in \`ask\`, not hand-written
+  routine context in prose. A team selection belongs in \`open_decisions\`, not hand-written
   decision markup.
 
 Illustrative comparison (replace each cell with supported facts):

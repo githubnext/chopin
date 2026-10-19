@@ -44,6 +44,14 @@ export function rebase(plan: Plan, previousSource = plan.persistence?.committedS
 			...record,
 			anchors: { widget: value.widget, questions },
 			...(record.prose ? { prose: Prose.carry(plan.document, record.prose, previousSource) } : {}),
+			...(record.followUp
+				? {
+					followUp: {
+						...record.followUp,
+						target: Prose.carry(plan.document, record.followUp.target, previousSource),
+					},
+				}
+				: {}),
 		});
 	}
 }

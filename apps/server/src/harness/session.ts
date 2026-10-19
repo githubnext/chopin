@@ -1,6 +1,7 @@
 import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import {
+	decisionFollowupPlannerAgent,
 	headingPlannerAgent,
 	plannerAgent,
 	prosePlannerAgent,
@@ -107,6 +108,7 @@ export type PlannerSessionDependencies = {
 	headingAgent?: PlannerAgent;
 	refineAgent?: PlannerAgent;
 	proseAgent?: PlannerAgent;
+	followupAgent?: PlannerAgent;
 	visualAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
@@ -210,6 +212,8 @@ export async function openPlannerSession(
 			? deps.refineAgent ?? refinePlannerAgent
 			: job?.kind === "prose"
 			? deps.proseAgent ?? prosePlannerAgent
+			: job?.kind === "decision-followup"
+			? deps.followupAgent ?? decisionFollowupPlannerAgent
 			: channel.room.visual
 			? deps.visualAgent ?? visualPlannerAgent
 			: plannerAgent);

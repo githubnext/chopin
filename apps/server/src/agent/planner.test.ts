@@ -172,7 +172,7 @@ test("every harness receives proactive visual guidance and shared admission repa
 test("offers native composition recipes with valid table and Callout examples", () => {
 	expect(DIAGRAM_AUTHORING).toContain("Native document composition");
 	expect(DIAGRAM_AUTHORING).toContain("If evidence is uneven, use prose or bullets");
-	expect(DIAGRAM_AUTHORING).toContain("A team selection belongs in `ask`");
+	expect(DIAGRAM_AUTHORING).toContain("A team selection belongs in `open_decisions`");
 	let table = DIAGRAM_AUTHORING.match(
 		/Illustrative comparison \(replace each cell with supported facts\):\n([\s\S]*?)\n\nIllustrative caveat:/,
 	)?.[1];
@@ -196,25 +196,26 @@ test("offers native composition recipes with valid table and Callout examples", 
 });
 
 test("permits grounded provisional prose while human choices remain open", () => {
-	expect(PROMPT).toContain("Usually place the question beside the relevant provisional prose");
+	expect(PROMPT).toContain("write a short provisional account of the known problem");
 	expect(PROMPT).toContain("question never hides or replaces existing prose");
 	expect(PROMPT).not.toContain("settle genuinely blocking choices before writing the first draft");
 	expect(PROMPT).toContain("do not ask for permission to do ordinary document work");
 });
 
-test("keeps empty placement only for choices that prevent any grounded opening passage", () => {
+test("anchors sparse-intent written decisions beside provisional problem prose", () => {
 	expect(PROMPT).toContain(
-		"If a grounded human choice must be asked before any passage can be written,",
+		"capture the missing intent as a written decision beside that paragraph",
 	);
-	expect(PROMPT).toContain("only when its block list is empty");
-	expect(PROMPT).toContain("`blocks: []` for that `ask` question");
+	expect(PROMPT).toContain('`response: "text"`, `options: []`');
+	expect(PROMPT).not.toContain("`blocks: []` for that `ask` question");
 });
 
 test("asks existing and drafted non-blocking decisions beside their related prose", () => {
-	expect(PROMPT).toContain("include its related block addresses in `ask`");
+	expect(PROMPT).toContain("include its related block addresses in `open_decisions`");
 	expect(PROMPT).toContain(
-		"For existing or drafted non-blocking questions, write the relevant prose first, then ask.",
+		"Write the relevant prose first, then capture the questions.",
 	);
+	expect(PROMPT).toContain("turn with the cards still open");
 	expect(PROMPT).toContain("Do not collect decisions at the end of the plan");
 });
 

@@ -27,7 +27,7 @@ export declare namespace ConversationPlan {
 		| ResearchPresenceChanged
 		| ResearchLinkResult;
 
-	export type JobKind = "heading" | "refine" | "suggest" | "prose";
+	export type JobKind = "heading" | "refine" | "suggest" | "prose" | "decision-followup";
 	/** One durable piece of background Planner work. */
 	export type Job = {
 		id: string;

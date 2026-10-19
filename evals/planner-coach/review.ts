@@ -10,7 +10,7 @@ export const rubric = [
 	{
 		id: "intent",
 		question:
-			"Does it put all needed human input in inline decision cards, batch independent questions before waiting, and keep requests for input out of Chat?",
+			"Does it batch needed human input into anchored written or choice cards without inventing alternatives or holding the turn open, and keep requests for input out of Chat?",
 	},
 	{
 		id: "document",
@@ -43,7 +43,7 @@ export function mechanical(transcript: Transcript): Check[] {
 	let knownRevision: number | undefined;
 	for (let trace of tools) {
 		if (trace.name === "read_plan" && !trace.error) knownRevision = trace.revisionAfter;
-		if (["edit_plan", "ask", "anchor_plan"].includes(trace.name)) {
+		if (["edit_plan", "ask", "open_decisions", "anchor_plan"].includes(trace.name)) {
 			let revision = (trace.input as { revision?: unknown }).revision;
 			if (revision !== trace.revisionBefore || knownRevision !== trace.revisionBefore) {
 				revisionViolations.push(trace.index);
@@ -53,9 +53,9 @@ export function mechanical(transcript: Transcript): Check[] {
 			}
 		}
 	}
-	let asks = tools.filter(trace => trace.name === "ask");
+	let asks = tools.filter(trace => ["ask", "open_decisions"].includes(trace.name));
 	let tooMany = transcript.turns.filter(turn =>
-		tools.filter(trace => trace.turn === turn.number && trace.name === "ask").reduce(
+		asks.filter(trace => trace.turn === turn.number).reduce(
 			(sum, trace) => sum + ((trace.input as { questions?: unknown[] }).questions?.length ?? 0),
 			0,
 		)
@@ -99,7 +99,7 @@ export function mechanical(transcript: Transcript): Check[] {
 			id: "structured-question-count",
 			status: tooMany.length ? "fail" : "pass",
 			detail:
-				`Actual ask tool questions; allowed ${transcript.scenario.maxQuestions} per turn. Chat questions require rubric review.`,
+				`Actual decision tool questions; allowed ${transcript.scenario.maxQuestions} per turn. Chat questions require rubric review.`,
 			traceIndices: asks.map(trace => trace.index),
 		},
 		{

@@ -67,6 +67,7 @@ export async function authenticatedMemory(
 				headingAgent,
 				refineAgent: headingAgent,
 				proseAgent: headingAgent,
+				followupAgent: headingAgent,
 				githubTools: async () => ({ ok: true, value: {} }),
 				createSandbox: async () =>
 					({

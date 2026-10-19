@@ -1,3 +1,4 @@
+import { followupPrompt } from "../questions/decision-followup";
 /** Fixed, bounded instructions for one background Planner job. */
 
 import { documentTitleText, MAX_TITLE_LENGTH } from "@chopin/dialect";
@@ -225,4 +226,5 @@ export const PROMPT_FOR: Record<
 	refine: (plan, job) => card(plan, job, "refine"),
 	suggest: (plan, job) => card(plan, job, "suggest"),
 	prose: (plan, job) => prosePrompt(proseInput(plan, job.target)),
+	"decision-followup": (_plan, job) => followupPrompt(job.target),
 };

@@ -27,7 +27,11 @@ const REPAIR = "Your previous Chat response was withheld because it requested hu
 	+ "read_plan to recover the current durable state; for child-focused work also read_child. "
 	+ "The bounded tool transcript may omit details, so do not infer that omitted work is undone. "
 	+ "Draft useful provisional prose, then put every known independent question into inline "
-	+ "decision cards beside the relevant prose using one batched ask call. Never ask questions "
+	+ "decision cards beside the relevant prose using one open_decisions batch. Use written "
+	+ "responses (response: text, options: [], multiple: false) for intent, context and unknown "
+	+ "alternatives; use choices only when grounded alternatives help. Reuse stable keys and "
+	+ "existing cards instead of creating duplicates. Captured cards stay open after this turn; "
+	+ "continue independent work without waiting. Never ask questions "
 	+ "or request input in Chat. For child-focused work, do not create root decisions; if no "
 	+ "child decision tool is available, state that limitation without soliciting input. "
 	+ "Finish with a concise factual summary only.";

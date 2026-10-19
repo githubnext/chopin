@@ -7,6 +7,7 @@ import { jobId } from "./jobs";
 
 import type { Plan } from "../plan/service";
 import type { Record as CardRecord } from "../questions/records";
+import { followupIntent } from "../questions/decision-followup";
 
 export function proseIntent(record: CardRecord): JobIntent | undefined {
 	if (
@@ -25,8 +26,12 @@ export function writeup(
 	plan: Pick<Plan, "conversationPlanJobs" | "conversationPlanPendingEffects">,
 	record: CardRecord,
 ): { status: "writing" | "failed"; job: string } | undefined {
-	let intent = proseIntent(record);
+	let intent = proseIntent(record) ?? followupIntent(record);
 	if (!intent) return;
+	if (
+		intent.kind === "decision-followup"
+		&& record.followUp?.appliedGeneration === decisionGeneration(record)
+	) return;
 	let id = jobId(intent);
 	let job = plan.conversationPlanJobs.find(item => item.id === id);
 	if (job?.status === "failed") return { status: "failed", job: id };
@@ -34,7 +39,7 @@ export function writeup(
 	if (job) return;
 	// Save commits the job effect before the queue accepts it.
 	let queued = plan.conversationPlanPendingEffects.some(effect =>
-		effect.kind === "job" && effect.intent.kind === "prose"
+		effect.kind === "job" && effect.intent.kind === intent.kind
 		&& effect.intent.target === intent.target && effect.intent.trigger === intent.trigger
 	);
 	return queued ? { status: "writing", job: id } : undefined;

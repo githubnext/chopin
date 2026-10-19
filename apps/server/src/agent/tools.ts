@@ -9,6 +9,8 @@ import type { ActiveMemberRequest } from "../chat/service";
  */
 
 import * as Arguments from "./arguments";
+import { ASK_PLAN_SCHEMA, OPEN_DECISIONS_SCHEMA } from "./decision-schema";
+import * as OpenDecisions from "./open-decisions";
 import {
 	admitBlockEdit,
 	answer,
@@ -373,7 +375,7 @@ export const documentTools = {
 			+ "address top-level blocks and are resolved against that revision, so they do "
 			+ "not shift under each other within one batch. If the plan changed since you "
 			+ "read it the whole batch is refused and you are told which blocks moved — read "
-			+ "again and retry. Questionnaires are created by `ask`; you cannot clear the "
+			+ "again and retry. Questionnaires are created by decision tools; you cannot clear the "
 			+ "plan, and other people may be editing it while you work.",
 		inputSchema: jsonSchema({
 			type: "object",
@@ -455,7 +457,8 @@ export const documentTools = {
 			+ "Creates an open card with a shared working answer and returns immediately. "
 			+ "Use for choices such as how onboarding should work, not factual questions the "
 			+ "repository or research can settle. A recommendation is not agreement: only a "
-			+ "person pressing Save resolves this card. Reuse the same key when "
+			+ "person pressing Save resolves this card. For planning questions beside prose, prefer "
+			+ "open_decisions, which also follows saved answers into the related prose. Reuse the same key when "
 			+ "retrying the same capture. Do not use ask for the same decision as well.",
 		inputSchema: jsonSchema({
 			type: "object",
@@ -475,6 +478,9 @@ export const documentTools = {
 		metadata: { skipPermission: true },
 		execute: (raw, { context: { room: context } }) =>
 			answer("open_decision", async () => {
+				if (context.focusedChild?.() || context.plan.chat.actingChannel) {
+					return { ok: false, reason: "child-decision-unavailable" };
+				}
 				let { revision, ...input } = Arguments.openDecision(raw);
 				let id = await Questions.capture(context.plan, context.server, context.id, input, {
 					revision,
@@ -485,12 +491,28 @@ export const documentTools = {
 			}),
 	}),
 
+	open_decisions: tool({
+		contextSchema: ownerContext,
+		description: "Create all known independent human decisions beside provisional prose and "
+			+ "return immediately. Use response: text, options: [], multiple: false for intent, "
+			+ "context and unknown alternatives; offer choices only when grounded alternatives help. "
+			+ "Batch up to ten written or choice cards. Every card needs a stable key and related "
+			+ "blocks from read_plan; reuse the key on retry. Only a person's Save settles a card "
+			+ "and schedules its related prose update. Captured cards stay open after this turn ends. "
+			+ "Use this instead of asking in Chat, and finish independent work without waiting.",
+		inputSchema: OPEN_DECISIONS_SCHEMA,
+		metadata: { skipPermission: true },
+		execute: (raw, { context: { room, owner }, abortSignal }) =>
+			answer("open_decisions", () => OpenDecisions.capture(room, raw, abortSignal, owner)),
+	}),
+
 	ask: tool({
 		contextSchema: ownerContext,
 		description: "Ask the people in the room one or more decisions and wait for "
 			+ "their shared answer. Use response: text with options: [] for a written answer; "
-			+ "omit response for existing multiple-choice questions. Use open_decision "
-			+ "to capture a decision without waiting. All requests for human input, including "
+			+ "omit response for existing multiple-choice questions. Prefer open_decisions "
+			+ "to capture anchored decisions without waiting; use ask only for an explicitly "
+			+ "requested synchronous exchange. All requests for human input, including "
 			+ "intent and clarification, use these inline cards, never plain Chat. Batch all known "
 			+ "independent questions into one call before waiting. Each question becomes a separate "
 			+ "card beside its related prose. The questionnaire is recorded in the plan and the "
@@ -500,70 +522,7 @@ export const documentTools = {
 			+ "Ask only what the repository cannot tell you, and do not ask for permission "
 			+ "to proceed. Use the revision from "
 			+ "`read_plan` and relate every question to its returned blocks.",
-		inputSchema: jsonSchema({
-			type: "object",
-			properties: {
-				revision: {
-					type: "integer",
-					minimum: 0,
-					description: "The revision returned by the `read_plan` this ask relates to.",
-				},
-				questions: {
-					type: "array",
-					minItems: 1,
-					maxItems: 10,
-					items: {
-						type: "object",
-						properties: {
-							header: { type: "string", minLength: 1, maxLength: 80 },
-							question: {
-								type: "string",
-								minLength: 1,
-								maxLength: 100,
-								description: "A concise question that stands alone in compact summaries.",
-							},
-							description: {
-								type: "string",
-								maxLength: 140,
-								description: "Optional supporting context shown only in the full decision card.",
-							},
-							response: { type: "string", enum: ["text"] },
-							options: {
-								type: "array",
-								minItems: 0,
-								maxItems: 20,
-								items: {
-									type: "object",
-									properties: {
-										label: { type: "string", minLength: 1, maxLength: 60 },
-										description: { type: "string", maxLength: 160 },
-									},
-									required: ["label", "description"],
-									additionalProperties: false,
-								},
-							},
-							multiple: { type: "boolean" },
-							blocks: {
-								type: "array",
-								items: {
-									type: "object",
-									properties: {
-										index: { type: "integer", minimum: 0 },
-										digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
-									},
-									required: ["index", "digest"],
-									additionalProperties: false,
-								},
-							},
-						},
-						required: ["header", "question", "options", "multiple", "blocks"],
-						additionalProperties: false,
-					},
-				},
-			},
-			required: ["revision", "questions"],
-			additionalProperties: false,
-		}),
+		inputSchema: ASK_PLAN_SCHEMA,
 		metadata: { skipPermission: true },
 		execute: (raw, { context: { room: context, owner }, abortSignal }) =>
 			answer("ask", async () => {
