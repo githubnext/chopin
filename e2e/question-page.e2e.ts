@@ -45,14 +45,14 @@ test(
 		await expect(menu).toHaveCount(0);
 		await expect(card(ana).getByText("Waiting for ben")).toBeVisible();
 
-		await card(ana).getByRole("button", { name: "Open as a page" }).click();
+		await card(ana).getByRole("button", { name: "Expand decision" }).click();
 		await expect(questionPage(ana).getByRole("heading", { level: 1, name: QUESTION }))
 			.toBeVisible();
 		await expect(questionPage(ana)).toContainText("Waiting for @ben");
 		await expect(questionPage(ana).getByRole("heading", { name: "Takes" })).toBeVisible();
 		await expect(questionPage(ana).getByRole("heading", { name: "Notes" })).toBeVisible();
 
-		await card(ben).getByRole("button", { name: "Open as a page" }).click();
+		await card(ben).getByRole("button", { name: "Expand decision" }).click();
 		await questionPage(ben).getByRole("textbox", { name: "Your take" }).fill(
 			"Infer it from their documents.",
 		);

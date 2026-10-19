@@ -1347,7 +1347,7 @@ export function RoomWorkspace(
 						latestSelectDestination.current("plan");
 						return open?.(reply.childId);
 					})
-					.catch(error => console.error("[questions] could not open the page:", error));
+					.catch(error => console.error("[questions] could not open the decision:", error));
 			},
 			subscribe: () => () => {},
 		};

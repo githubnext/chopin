@@ -13,6 +13,7 @@ import {
 	LoaderIcon,
 	MagnifierIcon,
 } from "@chopin/icons";
+import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import type { ReactNode } from "react";
@@ -137,8 +138,7 @@ export function FindingsCount(
 	return (
 		<button className="explore-count" data-decision-findings="" onClick={onOpen} type="button">
 			<MagnifierIcon aria-hidden="true" size={14} />
-			{count === 1 ? "1 finding" : `${count} findings`}
-			<ChevronIcon aria-hidden="true" className="explore-count-chevron" size={14} />
+			<span className="explore-count-text">{count === 1 ? "1 finding" : `${count} findings`}</span>
 		</button>
 	);
 }
@@ -386,7 +386,11 @@ export function ExploreMenu(
 									))}
 							</div>
 						</Fold>
-						{error && <p className="explore-error" role="alert">{error}</p>}
+						{error && (
+							<div className="explore-notice">
+								<InlineNotice message={error} tone="danger" />
+							</div>
+						)}
 					</Popover.Popup>
 				</Popover.Positioner>
 			</Popover.Portal>

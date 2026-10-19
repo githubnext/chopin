@@ -869,7 +869,7 @@ export function ResolvedLayer(
 												type="button"
 											>
 												<ExpandIcon aria-hidden="true" />
-												Open page
+												Expand decision
 											</button>
 										)}
 										onDiscard={() => actions.request("discard", decision)}

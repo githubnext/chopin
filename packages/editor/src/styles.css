@@ -5863,17 +5863,13 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	display: flex;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	flex: 1 1 100%;
+	flex: 0 1 auto;
+	margin-inline-end: auto;
 	min-width: 0;
 }
 
 .question-footer-start:empty {
 	display: none;
-}
-
-/* The status and count take their own row above the actions: a card is too narrow to share. */
-.question-actions:has(> .question-footer-start) {
-	flex-wrap: wrap;
 }
 
 .explore-trigger[data-exploring] {
@@ -5998,16 +5994,15 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	overflow-wrap: anywhere;
 }
 
-.explore-empty,
-.explore-error {
+.explore-notice {
+	margin-block-start: var(--spacing);
+}
+
+.explore-empty {
 	margin: 0;
 	padding: var(--spacing) calc(var(--spacing) * 1.5);
 	font-size: var(--text-xs);
 	color: var(--color-text-tertiary);
-}
-
-.explore-error {
-	color: var(--color-danger-text);
 }
 
 /* Researching: a quiet capsule, after the Build status capsule, that still opens the menu. */
@@ -6033,35 +6028,32 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-text-primary);
 }
 
-/* What exploring found: a quiet count at the footer's start that opens the decision's page. */
+/* What exploring found: a small tinted preview pill at the footer's start; it is not a disclosure. */
 .explore-count {
 	display: inline-flex;
+	min-width: 0;
+	overflow: hidden;
 	align-items: center;
 	gap: var(--spacing);
-	min-width: 0;
-	border-radius: var(--radius-md);
-	padding: var(--spacing) calc(var(--spacing) * 1.5);
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
+	height: var(--control-height-compact);
+	padding-inline: calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background: var(--color-brand-wash);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	font-weight: 500;
 	white-space: nowrap;
-	color: var(--color-text-tertiary);
-	transition:
-		background-color var(--duration-fast) var(--ease-out),
-		color var(--duration-fast) var(--ease-out);
+	color: var(--color-brand-ink);
 }
 
-.explore-count:is(:hover, :focus-visible) {
-	background: var(--color-hover);
-	color: var(--color-text-primary);
-}
-
-.explore-count-chevron {
-	transform: rotate(90deg);
+button.explore-count:is(:hover, :focus-visible) {
+	filter: brightness(0.97);
 }
 
 /* Waiting on a person is amber: the same quiet capsule family as the count and the Research status. */
 .explore-waiting {
 	display: inline-flex;
+	overflow: hidden;
 	align-items: center;
 	gap: var(--spacing);
 	min-width: 0;
@@ -6075,7 +6067,8 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	color: var(--color-warning-text);
 }
 
-.explore-waiting-names {
+.explore-waiting-names,
+.explore-count-text {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;

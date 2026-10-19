@@ -392,10 +392,10 @@ function Undecided(
 						<EvidenceTrigger />
 						{openPage && (
 							<button
-								aria-label="Open as a page"
+								aria-label="Expand decision"
 								className="btn btn-icon btn-ghost"
 								onClick={openPage}
-								title="Open as a page"
+								title="Expand decision"
 								type="button"
 							>
 								<ExpandIcon aria-hidden="true" size={16} />

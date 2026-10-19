@@ -422,7 +422,7 @@
 	/* One recipe for every menu and listbox: `.menu-surface` holds `.menu-item` rows. */
 	--menu-padding: 0.25rem;
 	/* A close or expand icon button in a card's top-right corner sits this far from both edges. */
-	--card-corner-inset: 0.375rem;
+	--card-corner-inset: 0.5rem;
 	--menu-item-height: 2rem;
 	--sidebar-open-dur: 250ms;
 	--sidebar-close-dur: 180ms;

@@ -79,7 +79,7 @@ Ready findings feed the settle write-up's prompt as context, beside the discussi
 
 ## A decision's page
 
-**Open as a page** turns a decision in a top-level document into its own child document. The
+**Expand decision** turns a decision in a top-level document into its own child document. The
 channel id is deterministic (`question:<recordId>` within the repository), so a retry or a second
 member finds the same page; the record learns `childId` only after the channel exists. The child's
 body is the decision's Notes. Above it, the page shows what the root's record says, on the paper
