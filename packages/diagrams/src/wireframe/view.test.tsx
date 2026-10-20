@@ -102,3 +102,37 @@ test("a note marks a divider target as well as other parts", () => {
 	let html = markup(`panel\n  divider #split\nnote "Separates sections" -> #split`);
 	expect(html).toContain('<div data-wf="divider" data-marked=""><span class="wf-mark">');
 });
+
+test("repeat draws that many copies, and the outline lists the part once", () => {
+	let html = markup(`grid cols=3\n  card repeat=3\n    lines n=2`);
+	expect(html.match(/data-wf="card"/g)).toHaveLength(3);
+	expect(html.match(/data-wf="lines"/g)).toHaveLength(3);
+	expect(html.match(/<li>Card, repeated 3 times/g)).toHaveLength(1);
+});
+
+test("a note marks only the first copy of a repeated part", () => {
+	let html = markup(`row\n  card repeat=3 #item\nnote "Each one" -> #item`);
+	expect(html.match(/data-marked=""/g)).toHaveLength(1);
+});
+
+test("an unlabelled button is a placeholder bar", () => {
+	let html = markup(`row\n  button\n  button "Go"`);
+	expect(html).toContain('<span data-wf="button"><i class="wf-bar"></i></span>');
+	expect(html).toContain("Go");
+});
+
+test("a nav with n draws that many placeholder items", () => {
+	let html = markup(`nav vertical n=4 active=2`);
+	expect(html.match(/<i class="wf-bar">/g)).toHaveLength(4);
+	expect(html.match(/data-selected=""/g)).toHaveLength(1);
+});
+
+test("sizes and shares reach the DOM as data and a custom property", () => {
+	let html = markup(`row flush h=lg\n  stack w=5\n  box shaded width=sm`);
+	expect(html).toContain('data-h="lg"');
+	expect(html).toContain('data-flush=""');
+	expect(html).toContain('data-w="5"');
+	expect(html).toContain("--w:5");
+	expect(html).toContain('data-shaded=""');
+	expect(html).toContain('data-width="sm"');
+});

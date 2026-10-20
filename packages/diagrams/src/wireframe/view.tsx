@@ -12,7 +12,7 @@ import { Fragment, useMemo } from "react";
 
 import { describeWireframePart, wireframeCallouts, wireframeLabel } from "./outline";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { Wireframe as WireframeTree, WireframeNode } from "./schema";
 
 type Marks = Map<WireframeNode, number[]>;
@@ -34,9 +34,7 @@ export function Wireframe({ wireframe, focusable = false }: WireframeProps) {
 			tabIndex={focusable ? 0 : undefined}
 		>
 			<div className="wf-stage" inert>
-				<div className="wf-canvas">
-					{wireframe.nodes.map((node, index) => <Part key={index} node={node} marks={marks} />)}
-				</div>
+				<div className="wf-canvas">{drawParts(wireframe.nodes, marks)}</div>
 				{callouts.length > 0 && (
 					<ol className="wf-notes">
 						{callouts.map(callout => (
@@ -89,6 +87,21 @@ function has(node: WireframeNode, flag: string): "" | undefined {
 	return node.flags.includes(flag) ? "" : undefined;
 }
 
+/** A part's copies: `repeat` draws it again. A note has no drawing of its own. */
+function copies(nodes: WireframeNode[]): { node: WireframeNode; copy: number }[] {
+	return nodes
+		.filter(node => node.kind !== "note")
+		.flatMap(node =>
+			Array.from({ length: Number(node.props.repeat ?? 1) }, (_, copy) => ({ node, copy }))
+		);
+}
+
+function drawParts(nodes: WireframeNode[], marks: Marks): ReactNode {
+	return copies(nodes).map(({ node, copy }, index) => (
+		<Part key={index} node={node} copy={copy} marks={marks} />
+	));
+}
+
 /** Numbered chips on a part that a note points at. */
 function Mark({ numbers }: { numbers: number[] | undefined }) {
 	if (!numbers) return null;
@@ -104,22 +117,31 @@ function Glyph() {
 	return <span className="wf-glyph" />;
 }
 
-function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode {
+/** A grey bar standing in for a word. */
+function Bar() {
+	return <i className="wf-bar" />;
+}
+
+function Part(
+	{ node, copy, marks }: { node: WireframeNode; copy: number; marks: Marks },
+): ReactNode {
 	if (node.kind === "note") return null;
-	let numbers = marks.get(node);
+	// A note marks the first copy of a repeated part only.
+	let numbers = copy === 0 ? marks.get(node) : undefined;
+	let { w, cols, h, width, align } = node.props;
 	let common = {
 		"data-wf": node.kind,
 		"data-marked": numbers ? "" : undefined,
-		"data-align": node.props.align,
+		"data-align": align,
+		"data-w": w,
+		"data-h": h,
+		"data-width": width,
+		"data-shaded": has(node, "shaded"),
+		"data-flush": has(node, "flush"),
+		style: w || cols ? ({ "--w": w, "--cols": cols } as CSSProperties) : undefined,
 	};
 	let mark = <Mark numbers={numbers} />;
-	let children = node.children.map((child, index) => (
-		<Part
-			key={index}
-			node={child}
-			marks={marks}
-		/>
-	));
+	let children = drawParts(node.children, marks);
 
 	switch (node.kind) {
 		case "panel":
@@ -143,17 +165,26 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 			return (
 				<div {...common} data-flow={has(node, "flow")} data-wrap={has(node, "wrap")}>
 					{mark}
-					{node.children.filter(child => child.kind !== "note").map((child, index) => (
+					{copies(node.children).map(({ node: child, copy: at }, index) => (
 						<Fragment key={index}>
 							{flow && index > 0 && <span className="wf-arrow" />}
-							<Part node={child} marks={marks} />
+							<Part node={child} copy={at} marks={marks} />
 						</Fragment>
 					))}
 				</div>
 			);
 		}
 		case "stack":
+		case "grid":
 			return <div {...common}>{mark}{children}</div>;
+		case "box":
+			return (
+				<div {...common}>
+					{mark}
+					{node.label !== undefined && <span className="wf-card-label">{node.label}</span>}
+					{children}
+				</div>
+			);
 		case "card":
 			return (
 				<div {...common} data-selected={has(node, "selected")} data-muted={has(node, "muted")}>
@@ -181,7 +212,7 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 				>
 					{mark}
 					{node.flags.includes("danger") && <Glyph />}
-					{node.label}
+					{node.label === undefined ? <Bar /> : node.label}
 				</span>
 			);
 		case "badge":
@@ -201,19 +232,26 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 						<span className="wf-chevron" />
 						{node.label}
 					</div>
-					{open && children.length > 0 && <div className="wf-disclosure-body">{children}</div>}
+					{open && node.children.length > 0 && <div className="wf-disclosure-body">{children}</div>}
 				</div>
 			);
 		}
 		case "list": {
-			let items = node.items.map((item, index) => <li key={index}>{item.text}</li>);
+			let placeholders = node.items.length === 0 && node.props.n !== undefined;
+			let items = placeholders
+				? Array.from({ length: Number(node.props.n) }, (_, index) => (
+					<li key={index}>
+						<i className="wf-dot" />
+						<Bar />
+					</li>
+				))
+				: node.items.map((item, index) => <li key={index}>{item.text}</li>);
+			let List: "ol" | "ul" = node.flags.includes("ordered") ? "ol" : "ul";
 			return (
 				<div {...common}>
 					{mark}
 					{node.label !== undefined && <span className="wf-list-label">{node.label}</span>}
-					{node.flags.includes("ordered")
-						? <ol className="wf-items">{items}</ol>
-						: <ul className="wf-items">{items}</ul>}
+					<List className="wf-items" data-placeholder={placeholders ? "" : undefined}>{items}</List>
 				</div>
 			);
 		}
@@ -232,11 +270,17 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 		case "tabs":
 		case "nav": {
 			let active = Number(node.props.active ?? (node.kind === "tabs" ? 1 : 0)) - 1;
+			let slots = node.items.length > 0
+				? node.items.map(item => item.text)
+				: Array.from({ length: Number(node.props.n ?? 0) }, () => undefined);
 			return (
 				<div {...common} data-vertical={has(node, "vertical")}>
 					{mark}
-					{node.items.map((item, index) => (
-						<span key={index} data-selected={index === active ? "" : undefined}>{item.text}</span>
+					{slots.map((text, index) => (
+						<span key={index} data-selected={index === active ? "" : undefined}>
+							{node.kind === "nav" && <i className="wf-dot" />}
+							{text === undefined ? <Bar /> : text}
+						</span>
 					))}
 				</div>
 			);
@@ -248,15 +292,17 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 					{node.label !== undefined && <span className="wf-image-label">{node.label}</span>}
 				</div>
 			);
+		case "fill":
+			return <div {...common}>{mark}{node.label}</div>;
+		case "lines":
+			return (
+				<div {...common}>
+					{mark}
+					{Array.from({ length: Number(node.props.n ?? 2) }, (_, index) => <i key={index} />)}
+				</div>
+			);
+		case "icon":
 		case "divider":
 			return <div {...common}>{mark}</div>;
-		// Placeholders until the renderer styles them.
-		case "box":
-		case "grid":
-			return <div {...common}>{mark}{node.label}{children}</div>;
-		case "fill":
-		case "lines":
-		case "icon":
-			return <div {...common}>{mark}{node.label}</div>;
 	}
 }

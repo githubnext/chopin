@@ -65,6 +65,55 @@ const SETTINGS = `panel "Repository settings"
   note "Replaces the free-text member field" -> #search
   note "Optional; falls back to the README" -> #preview`;
 
+const APP_SHELL = `header flush
+  title "Project / Plan"
+  button "Share" primary
+row flush h=xl
+  nav vertical active=2
+    - Projects
+    - Documents
+    - Settings
+  stack w=5
+    title "Plan title"
+    lines n=4
+    image ratio=wide
+    lines n=3
+  stack w=2
+    text "Comments" strong
+    card repeat=3
+      row
+        icon
+        lines n=2`;
+
+const TEMPLATE_GALLERY = `header
+  title "Templates"
+  row
+    input placeholder="Search"
+    button "New" primary
+tabs active=1
+  - All
+  - Plans
+  - Specs
+grid cols=3
+  card repeat=6
+    image ratio=wide
+    lines n=1`;
+
+const DECISION_CARD = `card width=sm
+  badge "Open"
+  title "Which storage engine?"
+  lines n=1
+  stack
+    box shaded
+      text "PostgreSQL"
+    box
+      text "SQLite"
+    box
+      text "Redis"
+  row align=end
+    button "Skip"
+    button "Submit" primary`;
+
 const INVALID = `panel "Implementation"
   header
     buton "Approve and build this plan" primary
@@ -74,6 +123,9 @@ const SAMPLES = [
 	["implementation", "Implementation panel", IMPLEMENTATION_WIREFRAME],
 	["tasks", "Task graph", TASK_GRAPH],
 	["settings", "Settings layout", SETTINGS],
+	["app-shell", "App shell, flush chrome and proportional columns", APP_SHELL],
+	["template-gallery", "Grid of repeated cards", TEMPLATE_GALLERY],
+	["decision-card", "Single component at its own width", DECISION_CARD],
 ] as const;
 
 const DOCUMENT = `## Implementation
@@ -110,7 +162,7 @@ export function WireframeSpecimen() {
 					<h2 id="wireframe-heading">Interface sketches</h2>
 				</div>
 				<p>
-					Hairline blueprints drawn from a wireframe fence. The second fence in the document does
+					Low-fidelity sketches drawn from a wireframe fence. The second fence in the document does
 					not parse, so it stays code.
 				</p>
 			</div>

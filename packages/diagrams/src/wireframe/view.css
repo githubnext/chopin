@@ -1,10 +1,11 @@
 /*
- * Wireframes: a hairline blueprint.
+ * Wireframes: a low-fidelity sketch.
  *
- * Greyscale outlines on a dotted inset ground, so a drawing reads as a sketch
- * of a proposal rather than as interface embedded in the document. The one
- * filled shape is the primary button. Status is carried by shape — filled,
- * half, ring, dotted ring, struck ring — so it survives without colour.
+ * One hairline frame of greyscale outlines and placeholders, so a drawing
+ * reads as the shape of a proposal rather than as interface embedded in the
+ * document. The one dark shape is the primary button. Status is carried by
+ * shape — filled, half, ring, dotted ring, struck ring — so it survives
+ * without colour.
  *
  * The drawing lays itself out against its own width, not the viewport's: rows
  * stack and flows turn downward in a narrow column, and notes move from a side
@@ -13,7 +14,13 @@
 
 .wf {
 	--wf-line: var(--color-control-edge);
-	--wf-gap: calc(var(--spacing) * 2.5);
+	--wf-gap: calc(var(--spacing) * 3);
+	--wf-pad: calc(var(--spacing) * 4);
+	/* Chopin's grey scale: surface, selection, placeholder ink, ink on a selection. */
+	--wf-shade: var(--color-inset);
+	--wf-selected: var(--color-selected);
+	--wf-ink: var(--color-gray-300);
+	--wf-ink-strong: var(--color-gray-400);
 
 	position: relative;
 	container-type: inline-size;
@@ -28,16 +35,6 @@
 .wf-stage {
 	display: grid;
 	gap: calc(var(--spacing) * 4);
-	padding: calc(var(--spacing) * 4);
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-md);
-	background-color: var(--color-inset);
-	background-image: radial-gradient(
-		circle,
-		color-mix(in oklch, var(--color-text-quaternary) 40%, transparent) 1px,
-		transparent 1px
-	);
-	background-size: calc(var(--spacing) * 4) calc(var(--spacing) * 4);
 	cursor: default;
 	user-select: none;
 }
@@ -49,10 +46,23 @@
 	}
 }
 
+/* The one frame. Flush parts bleed to its edges, so it clips them to its corners. */
 .wf-canvas {
 	display: grid;
 	gap: var(--wf-gap);
+	align-content: start;
 	min-width: 0;
+	padding: var(--wf-pad);
+	overflow: hidden;
+	border: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md);
+	background-color: var(--color-page);
+}
+
+/* A component drawn at its own width sits on a shaded ground. */
+.wf-canvas:has(> [data-width]) {
+	padding: calc(var(--wf-pad) * 1.5);
+	background-color: var(--wf-shade);
 }
 
 .wf [data-wf] {
@@ -62,11 +72,55 @@
 	white-space: pre-line;
 }
 
+/* Size: minimum height, fixed width, and a share of the row ------------------ */
+
+.wf [data-h="xs"] {
+	min-block-size: calc(var(--spacing) * 5);
+}
+
+.wf [data-h="sm"] {
+	min-block-size: calc(var(--spacing) * 10);
+}
+
+.wf [data-h="md"] {
+	min-block-size: calc(var(--spacing) * 20);
+}
+
+.wf [data-h="lg"] {
+	min-block-size: calc(var(--spacing) * 36);
+}
+
+.wf [data-h="xl"] {
+	min-block-size: calc(var(--spacing) * 60);
+}
+
+.wf [data-width] {
+	inline-size: 100%;
+	justify-self: center;
+	background-color: var(--color-page);
+}
+
+.wf [data-width="sm"] {
+	max-inline-size: 18rem;
+}
+
+.wf [data-width="md"] {
+	max-inline-size: 26rem;
+}
+
+.wf [data-width="lg"] {
+	max-inline-size: 36rem;
+}
+
 /* Containers ------------------------------------------------------------- */
 
-.wf :is([data-wf="panel"], [data-wf="card"]) {
+.wf :is([data-wf="panel"], [data-wf="card"], [data-wf="box"]) {
 	border: var(--edge-width) solid var(--wf-line);
 	background-color: var(--color-page);
+}
+
+.wf [data-shaded] {
+	background-color: var(--wf-shade);
 }
 
 .wf [data-wf="panel"] {
@@ -88,6 +142,18 @@
 	align-content: start;
 }
 
+.wf :is([data-wf="stack"], [data-wf="box"], [data-wf="card"], [data-wf="panel"]) {
+	& > :is([data-wf="button"], [data-wf="badge"], [data-wf="input"]) {
+		justify-self: start;
+	}
+}
+
+.wf [data-wf="grid"] {
+	display: grid;
+	grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+	gap: var(--wf-gap);
+}
+
 .wf [data-wf="header"] {
 	display: flex;
 	flex-wrap: wrap;
@@ -96,7 +162,8 @@
 	gap: calc(var(--spacing) * 2);
 }
 
-.wf [data-wf="header"]:not(:has(> .wf-header-title, > [data-wf="title"], > [data-wf="text"])) {
+.wf
+	[data-wf="header"]:not(:has(> .wf-header-title, > [data-wf="title"], > [data-wf="text"], > [data-wf="row"])) {
 	justify-content: flex-end;
 }
 
@@ -108,24 +175,31 @@
 
 .wf [data-wf="row"] {
 	display: flex;
-	align-items: flex-start;
-	gap: calc(var(--spacing) * 3);
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
 
-	& > [data-wf] {
-		flex: 1 1 0;
-	}
-
-	& > :is([data-wf="button"], [data-wf="badge"]) {
-		flex: 0 0 auto;
+	/* Parts with width of their own share the row by `w`; words and controls stay as drawn. */
+	& > :is([data-wf="box"], [data-wf="card"], [data-wf="fill"], [data-wf="image"], [data-wf="lines"], [data-wf="stack"], [data-wf="grid"], [data-wf="panel"], [data-wf="row"], [data-wf="disclosure"], [data-wf="list"], [data-wf="tabs"]) {
+		flex: var(--w, 1) 1 0;
 	}
 
 	& > [data-wf="nav"][data-vertical] {
 		flex: 0 0 calc(var(--spacing) * 32);
+		align-self: stretch;
 	}
 
-	& > [data-wf="image"] {
-		flex: 0 0 calc(var(--spacing) * 36);
+	& > :is([data-wf="icon"], [data-wf="button"], [data-wf="badge"], [data-wf="input"]) {
+		flex: 0 0 auto;
 	}
+
+	& > :is([data-wf="title"], [data-wf="text"]) {
+		flex: 0 1 auto;
+	}
+}
+
+.wf
+	[data-wf="row"]:has(> :is([data-wf="box"], [data-wf="card"], [data-wf="stack"], [data-wf="nav"], [data-wf="panel"])) {
+	align-items: stretch;
 }
 
 .wf
@@ -163,7 +237,7 @@
 	justify-content: space-between;
 }
 
-.wf [data-wf="row"][data-align] > [data-wf] {
+.wf [data-wf="row"][data-align] > [data-wf="stack"] {
 	flex: 0 1 auto;
 }
 
@@ -171,6 +245,10 @@
 .wf [data-wf="row"][data-flow] {
 	align-items: center;
 	gap: 0;
+
+	& > [data-wf]:not(.wf-arrow) {
+		flex: var(--w, 1) 1 0;
+	}
 }
 
 .wf .wf-arrow {
@@ -193,26 +271,89 @@
 	}
 }
 
+/* Flush parts reach the frame's edges; their columns are divided by one line. */
+.wf-canvas > [data-flush] {
+	margin-inline: calc(var(--wf-pad) * -1);
+
+	&:first-child {
+		margin-block-start: calc(var(--wf-pad) * -1);
+	}
+
+	&:last-child {
+		margin-block-end: calc(var(--wf-pad) * -1);
+	}
+
+	& + [data-flush] {
+		margin-block-start: calc(var(--wf-gap) * -1);
+	}
+}
+
+.wf-canvas > [data-flush][data-width] {
+	max-inline-size: none;
+}
+
+.wf [data-wf="header"][data-flush] {
+	padding: calc(var(--spacing) * 2.5) var(--wf-pad);
+	border-block-end: var(--edge-width) solid var(--wf-line);
+}
+
+.wf [data-wf="row"][data-flush] {
+	gap: 0;
+	align-items: stretch;
+
+	& > * {
+		padding: var(--wf-pad);
+	}
+
+	& > * + * {
+		border-inline-start: var(--edge-width) solid var(--wf-line);
+	}
+
+	& > [data-wf="nav"] {
+		padding: calc(var(--spacing) * 2.5);
+		background-color: var(--wf-shade);
+	}
+
+	/* The line between columns is the container's, not a drawn card's. */
+	& > :is([data-wf="card"], [data-wf="box"], [data-wf="panel"]) {
+		border-block: 0;
+		border-inline-end: 0;
+		border-radius: 0;
+	}
+}
+
 .wf [data-wf="card"] {
 	display: grid;
-	gap: calc(var(--spacing) * 1.5);
+	gap: calc(var(--spacing) * 2);
 	justify-items: start;
 	align-content: start;
 	padding: calc(var(--spacing) * 2.5);
 	border-radius: var(--radius-sm);
 
-	& > :not([data-wf="badge"], [data-wf="button"], .wf-mark) {
+	& > :not([data-wf="badge"], [data-wf="button"], [data-wf="input"], [data-wf="icon"], .wf-mark) {
 		justify-self: stretch;
 	}
 }
 
-.wf [data-wf="panel"] [data-wf="card"] {
-	background-color: transparent;
+.wf [data-wf="box"] {
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+	align-content: start;
+	padding: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-sm);
+
+	& > :not([data-wf="badge"], [data-wf="button"], [data-wf="input"], [data-wf="icon"], .wf-mark) {
+		justify-self: stretch;
+	}
 }
 
 .wf [data-wf="card"][data-selected] {
-	border-color: var(--color-text-secondary);
-	outline: var(--edge-width) solid var(--color-text-secondary);
+	border-color: var(--wf-line);
+	background-color: var(--wf-selected);
+
+	& :is([data-wf="lines"] i, [data-wf="icon"], .wf-bar, .wf-dot) {
+		background-color: var(--wf-ink-strong);
+	}
 }
 
 .wf [data-wf="card"][data-muted] {
@@ -227,6 +368,59 @@
 .wf .wf-card-label {
 	font-weight: var(--font-weight-medium);
 	color: var(--color-text-primary);
+}
+
+/* Placeholders ----------------------------------------------------------- */
+
+.wf [data-wf="fill"] {
+	display: grid;
+	place-items: center;
+	min-block-size: calc(var(--spacing) * 10);
+	border-radius: var(--radius-sm);
+	background-color: var(--wf-shade);
+	color: var(--color-text-tertiary);
+}
+
+.wf [data-wf="lines"] {
+	display: grid;
+	gap: calc(var(--spacing) * 1.5);
+	align-content: center;
+
+	& i {
+		display: block;
+		block-size: calc(var(--spacing) * 2);
+		border-radius: var(--radius-full);
+		background-color: var(--wf-ink);
+	}
+
+	& i:last-child:not(:first-of-type) {
+		inline-size: 60%;
+	}
+}
+
+.wf .wf-bar {
+	display: block;
+	flex: 0 0 auto;
+	inline-size: calc(var(--spacing) * 10);
+	block-size: calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background-color: var(--wf-ink);
+}
+
+.wf [data-wf="icon"] {
+	inline-size: calc(var(--spacing) * 4);
+	block-size: calc(var(--spacing) * 4);
+	border-radius: var(--radius-full);
+	background-color: var(--wf-ink);
+}
+
+.wf .wf-dot {
+	display: block;
+	flex: 0 0 auto;
+	inline-size: calc(var(--spacing) * 2);
+	block-size: calc(var(--spacing) * 2);
+	border-radius: var(--radius-sm);
+	background-color: var(--wf-ink);
 }
 
 /* Words ------------------------------------------------------------------ */
@@ -268,9 +462,13 @@
 }
 
 .wf [data-wf="button"][data-primary] {
-	border-color: var(--color-text-primary);
-	background: var(--color-text-primary);
+	border-color: var(--color-text-secondary);
+	background: var(--color-text-secondary);
 	color: var(--color-page);
+
+	& .wf-bar {
+		background-color: var(--color-page);
+	}
 }
 
 .wf [data-wf="button"][data-disabled] {
@@ -284,7 +482,7 @@
 	align-items: center;
 	gap: calc(var(--spacing) * 1.25);
 	max-inline-size: 100%;
-	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 1.75);
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 2);
 	border: var(--edge-width) solid var(--wf-line);
 	border-radius: var(--radius-full);
 	background-color: var(--color-page);
@@ -361,6 +559,7 @@
 .wf [data-wf="list"] {
 	display: grid;
 	gap: calc(var(--spacing) * 1);
+	align-content: start;
 }
 
 .wf .wf-list-label {
@@ -389,6 +588,18 @@
 	list-style: decimal;
 }
 
+.wf .wf-items[data-placeholder] {
+	padding-inline-start: 0;
+	list-style: none;
+
+	& > li {
+		display: flex;
+		align-items: center;
+		gap: calc(var(--spacing) * 2);
+		padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5);
+	}
+}
+
 .wf [data-wf="input"] {
 	display: grid;
 	gap: calc(var(--spacing) * 1);
@@ -403,12 +614,13 @@
 .wf .wf-input-field {
 	display: flex;
 	align-items: center;
-	min-block-size: calc(var(--spacing) * 7);
-	padding-inline: calc(var(--spacing) * 2);
+	min-block-size: calc(var(--spacing) * 6);
+	min-inline-size: calc(var(--spacing) * 32);
+	padding-inline: calc(var(--spacing) * 2.5);
 	border: var(--edge-width) solid var(--wf-line);
 	border-radius: var(--radius-sm);
 	background-color: var(--color-page);
-	color: var(--color-text-quaternary);
+	color: var(--color-text-tertiary);
 
 	&[data-value] {
 		color: var(--color-text-primary);
@@ -417,7 +629,7 @@
 
 .wf [data-wf="input"][data-disabled] .wf-input-field {
 	border-color: var(--color-edge);
-	background-color: var(--color-inset);
+	background-color: var(--wf-shade);
 	color: var(--color-text-quaternary);
 }
 
@@ -448,8 +660,10 @@
 	gap: calc(var(--spacing) * 1);
 
 	& > span {
-		padding: calc(var(--spacing) * 1.25) calc(var(--spacing) * 2);
-		border: var(--edge-width) solid transparent;
+		display: flex;
+		align-items: center;
+		gap: calc(var(--spacing) * 2);
+		padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5);
 		border-radius: var(--radius-sm);
 		color: var(--color-text-tertiary);
 		white-space: nowrap;
@@ -458,10 +672,13 @@
 	}
 
 	& > [data-selected] {
-		border-color: var(--wf-line);
-		background: var(--color-page);
+		background-color: var(--wf-selected);
 		color: var(--color-text-primary);
 		font-weight: var(--font-weight-medium);
+
+		& :is(.wf-dot, .wf-bar) {
+			background-color: var(--wf-ink-strong);
+		}
 	}
 }
 
@@ -469,13 +686,12 @@
 	display: grid;
 	gap: calc(var(--spacing) * 0.5);
 	align-content: start;
-	padding-inline-end: calc(var(--spacing) * 3);
-	border-inline-end: var(--edge-width) solid var(--wf-line);
 }
 
 /*
  * A crossed box: the universal sign for "a picture goes here". Each ratio is
  * fixed, so each diagonal's length (as a share of the width) and angle are too.
+ * A stated height replaces the ratio.
  */
 .wf [data-wf="image"] {
 	--wf-diagonal: 117.925%;
@@ -500,6 +716,10 @@
 		--wf-angle: 53.13deg;
 
 		aspect-ratio: 3 / 4;
+	}
+
+	&[data-h] {
+		aspect-ratio: auto;
 	}
 
 	&::before,
@@ -603,7 +823,9 @@
 /* Narrow: reflow ------------------------------------------------------------ */
 
 @container (max-width: 26rem) {
-	.wf [data-wf="row"] {
+	/* A row of columns stacks; a row of icons, words and controls is a line and stays one. */
+	.wf
+		[data-wf="row"]:has(> :is([data-wf="box"], [data-wf="card"], [data-wf="stack"], [data-wf="grid"], [data-wf="panel"], [data-wf="row"], [data-wf="image"], [data-wf="disclosure"], [data-wf="nav"][data-vertical])) {
 		flex-direction: column;
 		align-items: stretch;
 
@@ -611,7 +833,7 @@
 			flex: 0 0 auto;
 		}
 
-		& > :is([data-wf="button"], [data-wf="badge"]) {
+		& > :is([data-wf="button"], [data-wf="badge"], [data-wf="icon"]) {
 			align-self: flex-start;
 		}
 
@@ -620,29 +842,28 @@
 			display: flex;
 			flex-wrap: wrap;
 			gap: calc(var(--spacing) * 1);
-			padding-inline-end: 0;
 			padding-block-end: calc(var(--spacing) * 2);
-			border-inline-end: 0;
-			border-block-end: var(--edge-width) solid var(--wf-line);
 		}
 
 		& > [data-wf="image"] {
-			flex: 0 0 auto;
 			inline-size: 100%;
 		}
 	}
 
-	/* A row of buttons is still a row of buttons; it wraps instead. */
-	.wf [data-wf="row"]:has(> [data-wf="button"]):not(:has(> :not([data-wf="button"]))) {
-		flex-direction: row;
-		align-items: flex-start;
+	.wf [data-wf="row"][data-flush]:has(> [data-wf="nav"][data-vertical]) {
+		& > * + * {
+			border-inline-start: 0;
+			border-block-start: var(--edge-width) solid var(--wf-line);
+		}
 	}
 
-	.wf [data-wf="row"][data-flow] {
-		align-items: stretch;
+	.wf [data-wf="grid"] {
+		grid-template-columns: repeat(min(var(--cols, 3), 2), minmax(0, 1fr));
 	}
 
-	.wf .wf-arrow {
+	.wf
+		[data-wf="row"]:has(> :is([data-wf="box"], [data-wf="card"], [data-wf="stack"], [data-wf="grid"], [data-wf="panel"], [data-wf="row"], [data-wf="image"], [data-wf="disclosure"]))
+		> .wf-arrow {
 		flex-basis: calc(var(--spacing) * 4);
 		align-self: flex-start;
 		inline-size: 0;
