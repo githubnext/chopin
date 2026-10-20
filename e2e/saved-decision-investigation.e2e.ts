@@ -1,4 +1,5 @@
 import { CONNECTOR_PROTOCOL_HEADER } from "../packages/protocol/connector";
+import { ulid } from "../packages/dialect/src";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { writtenSeed } from "./decision-deck-fixtures";
 import { testChannelPath } from "./database";
@@ -10,7 +11,7 @@ const QUESTION = "Where should onboarding progress live?";
 test(
 	"saving a decision keeps its running investigation reachable without reopening the answer",
 	async ({ baseURL, join, room, seed }, info) => {
-		let decision = writtenSeed(QUESTION);
+		let decision = writtenSeed(QUESTION, undefined, ulid());
 		await seed(decision.source, decision.state);
 		let page = await join(`ana-${crypto.randomUUID().slice(0, 8)}`);
 		let pairing = await (await fetch(`${baseURL}/api/connector/pairings`, {
