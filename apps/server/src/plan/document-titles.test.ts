@@ -158,7 +158,7 @@ describe("synchronized product document titles", () => {
 		}
 	});
 
-	it.each(["edited", "moved", "retagged"])(
+	it.each(["edited", "moved", "retagged", "replaced"])(
 		"rejects a corrupt %s title sent over Yjs and rebuilds",
 		async mode => {
 			let c = await context("# Original\n\nBody.\n");
@@ -188,6 +188,12 @@ describe("synchronized product document titles", () => {
 					if (mode === "retagged") {
 						if (!$isHeadingNode(title)) throw new Error("title missing");
 						title.setTag("h2");
+					}
+					if (mode === "replaced") {
+						title.insertBefore(
+							$createHeadingNode("h1").append($createTextNode("Notes\u0017runtime=default")),
+						);
+						title.remove();
 					}
 				}, { discrete: true });
 				await Room.settle();
@@ -262,41 +268,47 @@ describe("synchronized product document titles", () => {
 		await Service.close(plan);
 	});
 
-	it("repairs a custom wire deletion with a blank title and preserves the following body H1", async () => {
-		let body = "Body " + "x".repeat(60);
-		let c = await context("# Title\n\n# " + body + "\n");
-		let plan = await Service.open(c.channel.id, c.backend, c.server);
-		let peer = await Room.restore(
-			plan.document.epoch,
-			Y.encodeStateAsUpdate(plan.document.doc),
-			Service.source(plan),
-			[],
-		);
-		let vector = Y.encodeStateVector(peer.doc);
-		peer.editor.update(() => {
-			$getRoot().getFirstChild()!.remove();
-		}, { discrete: true });
-		await Room.settle();
-		let ws = {
-			data: { canEdit: true, room: plan.id, handle: "user", client: "peer" },
-			send() {},
-			publish() {},
-			close() {},
-		} as unknown as Socket;
-		Service.submit(plan, ws, {
-			kind: "plan:update",
-			ts: 0,
-			rid: "delete",
-			id: "delete",
-			epoch: plan.document.epoch,
-			update: Buffer.from(Y.encodeStateAsUpdate(peer.doc, vector)).toString("base64"),
-		});
-		await Service.drain(plan);
-		expect(Service.source(plan)).toBe("#\n\n# " + body + "\n");
-		expect((await c.storage.channels.get(plan.id))?.title).toBe("Untitled");
-		peer.doc.destroy();
-		await Service.close(plan);
-	});
+	it.each(["Body " + "x".repeat(60), "Body\u0017 heading"])(
+		"repairs a title deletion while preserving the unchanged body H1: %s",
+		async body => {
+			let c = await context("# Title\n\n# " + body + "\n");
+			let plan = await Service.open(c.channel.id, c.backend, c.server);
+			let epoch = plan.document.epoch;
+			let peer = await Room.restore(
+				plan.document.epoch,
+				Y.encodeStateAsUpdate(plan.document.doc),
+				Service.source(plan),
+				[],
+			);
+			let vector = Y.encodeStateVector(peer.doc);
+			peer.editor.update(() => {
+				$getRoot().getFirstChild()!.remove();
+			}, { discrete: true });
+			await Room.settle();
+			let ws = {
+				data: { canEdit: true, room: plan.id, handle: "user", client: "peer" },
+				send() {},
+				publish() {},
+				close() {},
+			} as unknown as Socket;
+			Service.submit(plan, ws, {
+				kind: "plan:update",
+				ts: 0,
+				rid: "delete",
+				id: "delete",
+				epoch: plan.document.epoch,
+				update: Buffer.from(Y.encodeStateAsUpdate(peer.doc, vector)).toString("base64"),
+			});
+			await Service.drain(plan);
+			expect(plan.document.epoch).toBe(epoch);
+			expect(Service.source(plan)).toBe("#\n\n# " + body + "\n");
+			expect((await c.storage.channels.get(plan.id))?.title).toBe("Untitled");
+			let stored = (await c.storage.collaboration.load(plan.id, new Date()))!;
+			expect((await Service.readStored(stored)).source).toBe("#\n\n# " + body + "\n");
+			peer.doc.destroy();
+			await Service.close(plan);
+		},
+	);
 
 	it("adopts a client's replacement blank H1 once when the known title was deleted", async () => {
 		let c = await context("# Title\n\n# Body heading\n");

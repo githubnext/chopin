@@ -4,8 +4,9 @@ anchor: function apply
 created: 2026-10-20T10:53:36Z
 norm: '1'
 sig: ff9533133fda3460
-body_hash: d7c971f353f03ecf
-raw_hash: 2017c1c76f6ba0db
+body_hash: 5f79de6b89df7e1a
+raw_hash: 9aa0de0f92a88d1b
+vouched: 2026-10-20T12:58:16Z
 lines: 369-461
 ---
 

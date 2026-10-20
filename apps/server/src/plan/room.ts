@@ -378,7 +378,8 @@ export async function apply(
 ): Promise<Applied> {
 	if (updates.length === 0) return { ok: true, seq: target.seq, researchProjections: [] };
 	let before = parse(project(target)).children;
-	let beforeTitle = target.titleKey === undefined ? undefined : target.editor.getEditorState().read(
+	let beforeState = target.editor.getEditorState();
+	let beforeTitle = target.titleKey === undefined ? undefined : beforeState.read(
 		() => $getNodeByKey(target.titleKey!)?.getTextContent(),
 	);
 	let researchProjections: ResearchProjectionChange[] = [];
@@ -404,8 +405,22 @@ export async function apply(
 		) {
 			return { ok: false, issues: ["invalid-title-text"] };
 		}
+		let first = target.editor.getEditorState().read(() => {
+			let node = $getRoot().getFirstChild();
+			return $isHeadingNode(node) && node.getTag() === "h1"
+				? { key: node.getKey(), text: node.getTextContent() }
+				: undefined;
+		});
+		// Deleting the known title inserts a blank H1; an unchanged body heading stays body prose.
+		let preservedBodyHeading = target.titleKey !== undefined && afterTitle === undefined && first
+			&& beforeState.read(() => {
+				let node = $getNodeByKey(first.key);
+				return $isHeadingNode(node) && node.getTag() === "h1"
+					&& node.getParent() === $getRoot() && node.getKey() !== target.titleKey
+					&& node.getTextContent() === first.text;
+			});
 		if (
-			!validDocumentTitleChange({ type: "root", children: before }, {
+			!preservedBodyHeading && !validDocumentTitleChange({ type: "root", children: before }, {
 				type: "root",
 				children: after,
 			})
