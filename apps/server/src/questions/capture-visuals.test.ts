@@ -54,6 +54,26 @@ test("capture keeps a paragraph and its existing native visual together before t
 		.toBe(true);
 });
 
+test("re-anchoring keeps native visuals before the decision card", async () => {
+	let context = await openPlan(`Compare the approaches.\n\n${table}`);
+	contexts.push(context);
+	let result = await captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [question(context.plan, "decision-one")],
+	});
+	let id = result.decisions[0]!.id;
+	let digests = Room.digests(context.plan.document);
+	let mutation = Questions.place(context.plan, [{
+		widget: id,
+		blocks: [{ index: 0, digest: digests[0]! }, { index: 1, digest: digests[1]! }],
+	}]);
+	if (mutation) await Plan.publish(context.plan, context.server, context.plan.id, mutation);
+	expect(Room.questionnaireIndex(context.plan.document, id)).toBe(2);
+	expect(Room.project(context.plan.document)).toStartWith(
+		"Compare the approaches.\n\n| Approach |",
+	);
+});
+
 test("a later peer card stays after the visual added by a saved-answer continuation", async () => {
 	let context = await openPlan("The approach remains provisional.");
 	contexts.push(context);

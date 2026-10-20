@@ -71,7 +71,6 @@ export async function writeScope(
 		return {
 			replay: false as const,
 			snapshot,
-			operations,
 			before: Edit.source(plan),
 			source: prepared.source,
 			count: blocks.length,
@@ -90,12 +89,22 @@ export async function writeScope(
 		if (record.followUp!.appliedGeneration === decisionGeneration(record)) {
 			return { output: { id: args.id, replayed: true }, revision: plan.revision };
 		}
+		let snapshot = scopeSnapshot(plan, args.id);
+		// An unrelated edit can advance the document while assessment runs. Only reuse the
+		// assessment when the complete passage and saved answers are still the ones assessed.
 		if (
-			args.revision !== plan.revision
-			|| scopeSnapshot(plan, args.id).answersHash !== args.answersHash
+			snapshot.scope !== preflight.snapshot.scope
+			|| snapshot.source !== preflight.snapshot.source
+			|| snapshot.context !== preflight.snapshot.context
+			|| snapshot.answersHash !== args.answersHash
 		) {
 			throw new Error("stale; read_decision_scope again");
 		}
+		let revision = plan.revision;
+		let operations: Edit.Operation[] = [
+			{ op: "replace", index: snapshot.indices[0]!, source: args.source },
+			...snapshot.indices.slice(1).map(index => ({ op: "delete" as const, index })),
+		];
 		let source = Room.project(plan.document);
 		let candidate: Service.Plan = {
 			...plan,
@@ -114,17 +123,17 @@ export async function writeScope(
 		staged.seq = plan.document.seq;
 		candidate.document = staged;
 		try {
-			let outcome = Edit.apply(candidate, args.revision, preflight.operations);
+			let outcome = Edit.apply(candidate, revision, operations);
 			if (!outcome.ok) throw new Error("stale decision scope");
 			Relationships.rebase(candidate, source);
 			Comments.rebase(candidate);
 			let indices = Array.from(
 				{ length: preflight.count },
-				(_, index) => preflight.snapshot.indices[0]! + index,
+				(_, index) => snapshot.indices[0]! + index,
 			);
 			let digests = Room.digests(staged);
 			let anchors = indices.map(index => Room.anchorAt(staged, index, digests[index]!));
-			for (let peer of preflight.snapshot.decisions) {
+			for (let peer of snapshot.decisions) {
 				let value = candidate.records.get(peer.id)!;
 				let question = value.definition.questions[0]!;
 				candidate.records.set(peer.id, {

@@ -6,6 +6,7 @@ import { decisionGeneration, proseJobTrigger } from "./card-actions";
 import * as Room from "../plan/room";
 import type { Plan } from "../plan/service";
 import type { Record } from "./records";
+import type { Heading } from "mdast";
 
 export function followupIntent(record: Record): JobIntent | undefined {
 	if (
@@ -76,7 +77,14 @@ export function scopeSnapshot(plan: Plan, id: string) {
 	}));
 	let answersHash = createHash("sha256").update(JSON.stringify(decisions)).digest("hex");
 	let source = serialize({ type: "root", children: indices.map(index => blocks[index]!) });
-	return { id, scope, revision: plan.revision, answersHash, source, decisions, indices };
+	let headings: Heading[] = [];
+	for (let node of blocks.slice(0, indices[0]!)) {
+		if (node.type !== "heading") continue;
+		headings = headings.filter(heading => heading.depth < node.depth);
+		headings.push(node);
+	}
+	let context = serialize({ type: "root", children: headings });
+	return { id, scope, revision: plan.revision, answersHash, source, context, decisions, indices };
 }
 
 export function followupPrompt(id: string): string {

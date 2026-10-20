@@ -1,4 +1,6 @@
 import * as Anchors from "./anchors";
+import { parse } from "@chopin/dialect";
+import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 
 import * as Prose from "./prose";
 import * as room from "../plan/room";
@@ -128,12 +130,26 @@ export function place(plan: Plan, updates: Placement[]): room.Mutation | undefin
 	let records = [...plan.records.values()];
 	let placements: room.QuestionnairePlacement[] = [];
 	let byWidget = new Map(updates.map(update => [update.widget, update]));
+	let blocks = parse(room.project(plan.document)).children;
+	let digests = room.digests(plan.document);
 
 	for (let record of records) {
 		let update = byWidget.get(record.id);
 		if (!update || record.definition.questions.length !== 1 || update.blocks.length === 0) continue;
 
 		let home = update.blocks[0]!;
+		let at = home;
+		if (digests[home.index] === home.digest && blocks[home.index]?.type === "paragraph") {
+			for (let index = home.index + 1; index < blocks.length; index++) {
+				let block = blocks[index]!;
+				// Old placements may already have separated the paragraph from its visual.
+				if (block.type === "mdxJsxFlowElement" && block.name === "Questionnaire") continue;
+				if (
+					block.type !== "table" && !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+				) break;
+				at = { index, digest: digests[index]! };
+			}
+		}
 		let before = records.slice(0, records.indexOf(record)).findLast(candidate => {
 			if (candidate.definition.questions.length !== 1) return false;
 			let question = candidate.definition.questions[0];
@@ -142,7 +158,7 @@ export function place(plan: Plan, updates: Placement[]): room.Mutation | undefin
 			return anchor !== undefined && room.matchesAnchor(plan.document, anchor, home.index);
 		});
 
-		placements.push({ id: update.widget, at: home, ...(before ? { after: before.id } : {}) });
+		placements.push({ id: update.widget, at, ...(before ? { after: before.id } : {}) });
 	}
 
 	return room.placeQuestionnaires(plan.document, placements);
