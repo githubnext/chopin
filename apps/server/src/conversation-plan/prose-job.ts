@@ -186,6 +186,12 @@ export function whyPrompt(input: ProsePromptInput): string {
 		`Question: ${quote(input.question, 500)}`,
 		`Chosen: ${input.chosen.slice(0, 10).map(value => quote(value, 200)).join("; ")}`,
 	];
+	if (input.criteria?.length) {
+		lines.push(
+			"Criteria the chosen option was marked against (yes, partly, no or not marked):",
+			...input.criteria.slice(0, 5).map(line => `- ${quote(line, 120)}`),
+		);
+	}
 	if (input.research?.length) {
 		lines.push(
 			"What exploring the decision found:",
