@@ -310,6 +310,8 @@ export function implementationConnector(
 					&& serves(connection, build.repositoryId)
 					&& ["renew_implementation_build", "report_implementation_build"].includes(name)
 					&& ["starting", "running"].includes(build.state) && build.expiresAt > Date.now()
+					// A connection already given another document's build is not this build's to take.
+					&& (connections.assigned(connection.id) ?? documentId) === documentId
 				) {
 					let from = build.connectionId;
 					if (await rebindBuild(plan, build.id, from, connection.id)) {
@@ -322,7 +324,12 @@ export function implementationConnector(
 						build = plan.builds.at(-1)!;
 					}
 				}
-				if (!grant.run && connections.assigned(connection.id) !== documentId) {
+				// Only a call naming its document must find it assigned; a protocol 2 to 5 connector names
+				// none, and keeps resolving through the run this process handed out.
+				if (
+					!grant.run && args.documentId !== undefined
+					&& connections.assigned(connection.id) !== documentId
+				) {
 					refuse("build-forbidden", build);
 				}
 				if (

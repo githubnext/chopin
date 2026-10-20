@@ -1194,6 +1194,22 @@ test("expired pairing and connections cannot be revived by replay", () => {
 	expect(() => connections.claim(pending.id, pending.secret)).toThrow("pairing-expired");
 });
 
+test("rebinding a build never replaces another document's assignment on the new connection", () => {
+	let connections = new Connections(() => 0);
+	let machine = { id: "machine", owner: "alice", login: "alice", autoRun: false };
+	let sources = [{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) }];
+	let from = connections.open(machine, "Laptop", sources).connection;
+	let busy = connections.open(machine, "Laptop", sources).connection;
+	let idle = connections.open(machine, "Laptop", sources).connection;
+	connections.assign(from.id, "doc-a");
+	connections.assign(busy.id, "doc-b");
+	connections.rebind(from.id, busy, "doc-a", "run-a");
+	expect(connections.assigned(busy.id)).toBe("doc-b");
+	// A new connection with none, after its predecessor's session already ended, takes it over.
+	connections.rebind(from.id, idle, "doc-a", "run-a");
+	expect(connections.assigned(idle.id)).toBe("doc-a");
+});
+
 test("a child document refuses new investigations", async () => {
 	let { storage, documentId, request, alice } = await setup();
 	let child = crypto.randomUUID();

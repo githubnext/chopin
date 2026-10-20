@@ -962,6 +962,30 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 });
 
+test("a protocol 2 to 5 connector's unhinted calls resolve the build's document, not the connection's assignment", async () => {
+	let context = await setup();
+	try {
+		let first = await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		await tool(context, first.token, "claim_implementation_build", { id: built.id });
+		// The connection's assignment now names another document, as when it queued behind one.
+		context.experiments.connections.assign(first.connection.id, "another-document");
+		expect(await tool(context, first.token, "renew_implementation_build", { id: built.id }))
+			.toEqual({ accepted: true });
+		let hinted = await tool(context, first.token, "renew_implementation_build", {
+			id: built.id,
+			documentId: context.plan.id,
+		});
+		expect(hinted.content[0].text).toMatch(/^build-forbidden:/);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
 test("Build queues behind a running prototype and starts once it finishes (LIVE_BUILD)", async () => {
 	let context = await setup({ liveBuild: true });
 	let connection = await paired(context);
