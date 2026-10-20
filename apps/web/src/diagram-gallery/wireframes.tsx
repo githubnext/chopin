@@ -65,11 +65,11 @@ const SETTINGS = `panel "Repository settings"
   note "Replaces the free-text member field" -> #search
   note "Optional; falls back to the README" -> #preview`;
 
-const APP_SHELL = `header flush
+const APP_SHELL = `header flush #top
   title "Project / Plan"
   button "Share" primary
 row flush h=xl
-  nav vertical active=2
+  nav vertical active=2 #sidebar
     - Projects
     - Documents
     - Settings
@@ -83,7 +83,9 @@ row flush h=xl
     card repeat=3
       row
         icon
-        lines n=2`;
+        lines n=2
+note "Breadcrumb and share" -> #top
+note "Stays visible while scrolling" -> #sidebar`;
 
 const TEMPLATE_GALLERY = `header
   title "Templates"

@@ -132,11 +132,16 @@ function generate(random: () => number): Wireframe {
 			if (key === "n" && made.items.length) continue;
 			if (key === "repeat") value = ["2", "3"];
 			if (value === "count") {
+				if (key === "n") continue;
 				let total = made.items.length || 1 + Math.floor(random() * 3);
-				if (!made.items.length) made.props.n = String(total);
-				made.props[key] = String(1 + Math.floor(random() * total));
+				let chosen = 1 + Math.floor(random() * total);
+				made.props[key] = String(chosen);
+				if (!made.items.length) made.props.n = String(Math.max(Number(made.props.n ?? 0), total));
 			} else if (value === "text") made.props[key] = pick(WORDS);
 			else made.props[key] = pick(value as string[]);
+		}
+		if ("n" in spec.props && !made.items.length && !made.props.n && random() < 0.5) {
+			made.props.n = String(1 + Math.floor(random() * 3));
 		}
 		made.span.end = line;
 		return made;

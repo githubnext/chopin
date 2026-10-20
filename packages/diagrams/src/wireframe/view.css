@@ -179,7 +179,7 @@
 	gap: calc(var(--spacing) * 2);
 
 	/* Parts with width of their own share the row by `w`; words and controls stay as drawn. */
-	& > :is([data-wf="box"], [data-wf="card"], [data-wf="fill"], [data-wf="image"], [data-wf="lines"], [data-wf="stack"], [data-wf="grid"], [data-wf="panel"], [data-wf="row"], [data-wf="disclosure"], [data-wf="list"], [data-wf="tabs"]) {
+	& > :is([data-wf="box"], [data-wf="card"], [data-wf="fill"], [data-wf="image"], [data-wf="lines"], [data-wf="stack"], [data-wf="grid"], [data-wf="panel"]) {
 		flex: var(--w, 1) 1 0;
 	}
 
@@ -292,20 +292,26 @@
 	max-inline-size: none;
 }
 
-.wf [data-wf="header"][data-flush] {
+.wf .wf-canvas > [data-wf="header"][data-flush] {
 	padding: calc(var(--spacing) * 2.5) var(--wf-pad);
 	border-block-end: var(--edge-width) solid var(--wf-line);
 }
 
-.wf [data-wf="row"][data-flush] {
+.wf .wf-canvas > [data-wf="header"][data-flush] > .wf-mark,
+.wf .wf-canvas > [data-wf="row"][data-flush] > .wf-mark {
+	inset-block-start: calc(var(--spacing) * 1);
+	inset-inline-end: calc(var(--spacing) * 1);
+}
+
+.wf .wf-canvas > [data-wf="row"][data-flush] {
 	gap: 0;
 	align-items: stretch;
 
-	& > * {
+	& > :not(.wf-mark) {
 		padding: var(--wf-pad);
 	}
 
-	& > * + * {
+	& > :not(.wf-mark) ~ :not(.wf-mark) {
 		border-inline-start: var(--edge-width) solid var(--wf-line);
 	}
 
@@ -358,6 +364,11 @@
 
 .wf [data-wf="card"][data-muted] {
 	background-color: transparent;
+
+	&[data-width]:not([data-shaded]) {
+		background-color: var(--color-page);
+	}
+
 	color: var(--color-text-tertiary);
 
 	& :is([data-wf="title"], .wf-card-label) {
@@ -850,8 +861,8 @@
 		}
 	}
 
-	.wf [data-wf="row"][data-flush]:has(> [data-wf="nav"][data-vertical]) {
-		& > * + * {
+	.wf .wf-canvas > [data-wf="row"][data-flush] {
+		& > :not(.wf-mark) ~ :not(.wf-mark) {
 			border-inline-start: 0;
 			border-block-start: var(--edge-width) solid var(--wf-line);
 		}

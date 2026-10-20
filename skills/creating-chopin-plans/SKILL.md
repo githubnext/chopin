@@ -34,7 +34,8 @@ or ASCII art. Draw low fidelity: the shape, not the copy. Label only key areas
 (titles, nav items, primary actions), never body copy; use `lines n=2` for
 text, and `image`, `fill` or `box` for content. Draw a collection once with
 `grid cols=3` and `card repeat=6`. One drawing per idea; a single component
-takes `width=sm|md` so it reads as a component, not a page.
+takes `width=sm|md|lg` (box, card or panel) so it reads as a component, not a page.
+`nav` and `list` take `n=1..8` placeholder items; `grid` takes `cols=2..6`.
 
 Each line is one part: a kind, a "quoted label", flags, `key=value`
 properties, and an optional `#id`. Indent children two spaces. Kinds: panel,

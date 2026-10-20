@@ -93,7 +93,8 @@ Draw low fidelity: the shape, not the copy. Label only key areas (titles, nav
 items, primary actions), never body copy; use \`lines n=2\` for text, \`image\`,
 \`fill\` or \`box\` for content, \`icon\` for a glyph. Draw a collection once:
 \`grid cols=3\` with \`card repeat=6\`. One drawing per idea; one component
-alone takes \`width=sm|md\`.
+alone takes \`width=sm|md|lg\` (box, card or panel). \`nav\` and \`list\` take
+\`n=1..8\` placeholder items; \`grid\` takes \`cols=2..6\`.
 
 Each line is one part: a kind, then a "quoted label", bare flags, \`key=value\`
 properties, and an optional \`#id\`. Indent each child exactly two spaces under

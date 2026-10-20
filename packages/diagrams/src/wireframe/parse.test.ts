@@ -332,6 +332,13 @@ describe("wireframe limits", () => {
 		expect(parseWireframe(full).ok).toBe(true);
 	});
 
+	it("counts placeholder items toward the expansion bound", () => {
+		let rows = (count: number) =>
+			Array.from({ length: count }, () => "list n=8 repeat=12").join("\n");
+		expect(parseWireframe(rows(3)).ok).toBe(true);
+		expect(parseWireframe(rows(5)).ok).toBe(false);
+	});
+
 	it("bounds depth", () => {
 		let lines = Array.from({ length: MAX_WIREFRAME_DEPTH }, (_, i) => "  ".repeat(i) + "stack");
 		expect(parseWireframe(lines.join("\n")).ok).toBe(true);

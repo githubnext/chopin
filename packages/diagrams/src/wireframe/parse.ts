@@ -240,7 +240,7 @@ function check(wireframe: Wireframe): WireframeProblem[] {
 
 	// Each count is capped as it is summed, so nested repeats cannot overflow.
 	let expanded = (node: WireframeNode): number => {
-		let inside = 1 + node.items.length;
+		let inside = 1 + (node.items.length || Number(node.props.n ?? 0));
 		for (let child of node.children) {
 			inside = Math.min(inside + expanded(child), MAX_WIREFRAME_NODES + 1);
 		}
