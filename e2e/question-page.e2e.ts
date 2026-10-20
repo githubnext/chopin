@@ -120,6 +120,7 @@ for (let [name, options] of LAYOUTS) {
 		await expect(questionPage(page).getByRole("heading", { level: 1, name: QUESTION }))
 			.toBeVisible();
 		let menu = page.getByRole("button", { name: `Actions for ${QUESTION}`, exact: true });
+		await expect(menu).toHaveCount(1);
 		await menu.click();
 		await expect(page.getByText("Copy link", { exact: true })).toBeVisible();
 		await expect(page.getByText("Rename", { exact: true })).toHaveCount(0);

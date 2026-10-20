@@ -1567,7 +1567,8 @@ export function RoomWorkspace(
 												<QuestionPageActions
 													entry={questionPage.entry}
 													meta={questionPage.meta}
-													// A phone's top bar carries the menu; a compact layout has no bar.
+													// Only a compact layout has no child context (a phone's top bar carries the menu), so the
+													// page's own menu shows there alone.
 													onAction={childTitle || !workspaceCanEdit
 														? undefined
 														: action =>
