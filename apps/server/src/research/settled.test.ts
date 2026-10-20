@@ -19,6 +19,8 @@ it("a failed evidence job, with no answer job, ends its request and settles list
 	// main.ts forwards a job to the service only when this holds.
 	expect(researchJobSettles(failed.job)).toBe(true);
 	expect(researchJobSettles({ type: "research-evidence", state: "running" })).toBe(false);
+	// The runner requeues a failed attempt that has retries left as pending (runner.ts #retry).
+	expect(researchJobSettles({ type: "research-evidence", state: "pending" })).toBe(false);
 	expect(researchJobSettles({ type: "version-summary", state: "failed" })).toBe(false);
 	let settled: Research.RequestView[] = [];
 	let service = new ResearchWorkspaceService({

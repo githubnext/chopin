@@ -351,13 +351,13 @@ export function boundedResearchEvidence(evidence: ResearchEvidence[]): ResearchE
 	return bounded;
 }
 
-/** Coordinates durable workspace state with independently durable background jobs. */
-/** Whether `job` is research work in a state that can end its request: completed or failed. */
+/** Whether `job` is research work in a state that can end its request. A failed attempt that will retry is `pending`, not `failed`. */
 export function researchJobSettles(job: Pick<JobView, "state" | "type">): boolean {
 	return (job.state === "completed" || job.state === "failed")
 		&& (job.type === "research-evidence" || job.type === "research-answer");
 }
 
+/** Coordinates durable workspace state with independently durable background jobs. */
 export class ResearchWorkspaceService {
 	#storage: StorageAdapter;
 	#jobs: JobService;
