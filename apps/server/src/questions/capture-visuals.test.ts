@@ -74,6 +74,29 @@ test("re-anchoring keeps native visuals before the decision card", async () => {
 	);
 });
 
+test("repairing one historical placement moves its interleaved peer group after the visual", async () => {
+	let context = await openPlan(`Compare the approaches.\n\n${table}`);
+	contexts.push(context);
+	let result = await captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [question(context.plan, "decision-one"), question(context.plan, "decision-two")],
+	});
+	let [first, second] = result.decisions.map(decision => decision.id);
+	let at = { index: 0, digest: Room.digests(context.plan.document)[0]! };
+	let historical = Room.placeQuestionnaires(context.plan.document, [
+		{ id: first!, at },
+		{ id: second!, at, after: first! },
+	]);
+	if (historical) await Plan.publish(context.plan, context.server, context.plan.id, historical);
+	let mutation = Questions.place(context.plan, [{ widget: second!, blocks: [at] }]);
+	if (mutation) await Plan.publish(context.plan, context.server, context.plan.id, mutation);
+	expect(Room.questionnaireIndex(context.plan.document, first!)).toBe(2);
+	expect(Room.questionnaireIndex(context.plan.document, second!)).toBe(3);
+	expect(Room.project(context.plan.document)).toStartWith(
+		"Compare the approaches.\n\n| Approach |",
+	);
+});
+
 test("a later peer card stays after the visual added by a saved-answer continuation", async () => {
 	let context = await openPlan("The approach remains provisional.");
 	contexts.push(context);

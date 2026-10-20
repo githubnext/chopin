@@ -37,6 +37,14 @@ lost or ambiguous, the update fails without guessing a new passage. Pending work
 authorized Planner owner after restart. Draft edits and research findings do not start this
 write-up. Child-focused Planner turns cannot create decisions in the root document.
 
+After a foreground rewrite, `anchor_plan` explicitly reviews the replacement passage and
+refreshes its saved write-up links and future write scope in the same durable commit.
+Decisions sharing a scope must be re-anchored together to the same passage. A scope contains
+at most eight ordinary paragraphs, native diagrams or tables; intervening decision cards are
+preserved, and unrelated gaps are refused. Re-anchoring does not claim an unwritten answer
+was applied or retry failed work automatically. **Retry** keeps the failed job's identity and
+uses the current reviewed passage and saved answers.
+
 `open_decision` captures a written decision and returns its identity immediately.
 It takes the current document revision, a stable request key, a concise question
 and optional context. Repeating a request returns the same card. The Planner

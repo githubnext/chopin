@@ -99,6 +99,9 @@ export function relate(
 ): string | undefined {
 	let record = plan.records.get(widget);
 	if (!record) return `no questionnaire ${widget}`;
+	if (!record.definition.questions.some(value => value.id === question)) {
+		return `no question ${question} in questionnaire ${widget}`;
+	}
 
 	let current = room.digests(plan.document);
 	let anchors: Wired.Anchor[] = [];
@@ -150,15 +153,29 @@ export function place(plan: Plan, updates: Placement[]): room.Mutation | undefin
 				at = { index, digest: digests[index]! };
 			}
 		}
-		let before = records.slice(0, records.indexOf(record)).findLast(candidate => {
-			if (candidate.definition.questions.length !== 1) return false;
-			let question = candidate.definition.questions[0];
-			if (!question) return false;
-			let anchor = Anchors.read(candidate).questions[question.id]?.anchors[0];
-			return anchor !== undefined && room.matchesAnchor(plan.document, anchor, home.index);
-		});
-
-		placements.push({ id: update.widget, at, ...(before ? { after: before.id } : {}) });
+		let group = new Set([record.id]);
+		if (at.index > home.index) {
+			for (let peer of records) {
+				let index = room.questionnaireIndex(plan.document, peer.id);
+				let requested = byWidget.get(peer.id)?.blocks[0];
+				if (
+					index !== undefined && index > home.index && index < at.index
+					&& (!requested || requested.index === home.index)
+				) group.add(peer.id);
+			}
+		}
+		for (let member of records.filter(candidate => group.has(candidate.id))) {
+			let before = records.slice(0, records.indexOf(member)).findLast(candidate => {
+				if (group.has(candidate.id)) return true;
+				let index = room.questionnaireIndex(plan.document, candidate.id);
+				if (index === undefined || index <= at.index) return false;
+				if (candidate.definition.questions.length !== 1) return false;
+				let question = candidate.definition.questions[0]!;
+				let anchor = Anchors.read(candidate).questions[question.id]?.anchors[0];
+				return anchor !== undefined && room.matchesAnchor(plan.document, anchor, home.index);
+			});
+			placements.push({ id: member.id, at, ...(before ? { after: before.id } : {}) });
+		}
 	}
 
 	return room.placeQuestionnaires(plan.document, placements);

@@ -54,11 +54,11 @@ export async function writeScope(
 		if (
 			!blocks.length || blocks.length > 8 || blocks[0]!.type !== "paragraph"
 			|| blocks.slice(1).some(block =>
-				block.type !== "table"
+				block.type !== "paragraph" && block.type !== "table"
 				&& !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
 			)
 		) {
-			throw new Error("write one paragraph followed only by native diagrams or tables");
+			throw new Error("write at most eight ordinary paragraphs, native diagrams or tables");
 		}
 		let operations: Edit.Operation[] = [
 			{ op: "replace", index: snapshot.indices[0]!, source: args.source },

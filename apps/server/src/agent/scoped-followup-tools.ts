@@ -33,7 +33,7 @@ export function createFollowupTools() {
 		}),
 		write_decision_scope: tool({
 			description:
-				"Background decision-followup only. Replace its explicit scoped passage with one paragraph and required native diagrams/tables, preserving every saved peer answer. Use revision and answersHash from read_decision_scope. Never change unrelated prose.",
+				"Background decision-followup only. Replace its explicit scoped passage with at most eight paragraphs and native diagrams/tables, preserving every saved peer answer. Use revision and answersHash from read_decision_scope. Never change unrelated prose.",
 			inputSchema: jsonSchema<ScopeWrite>({
 				type: "object",
 				properties: {

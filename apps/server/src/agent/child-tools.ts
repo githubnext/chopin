@@ -198,7 +198,7 @@ export const childTools = {
 				let { child, rest } = Arguments.childTarget(raw, "anchor_child");
 				let args = Arguments.anchorPlan(rest);
 				let children = await permitted(room, owner);
-				// Not inside `exclusive`, exactly like `anchor_plan`: `persist` queues on that chain.
+				// `applyAnchors` owns the child's queue and stages its durable commit.
 				return children.open(child, async opened => {
 					await stillChild(children, owner, opened.id);
 					if (implementationActive(opened.plan)) return { ok: false, reason: "locked" };

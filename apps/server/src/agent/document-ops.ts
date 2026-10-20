@@ -13,6 +13,7 @@ import * as edit from "../plan/edit";
 import * as room from "../plan/room";
 import * as Questions from "../questions/service";
 import * as QuestionStore from "../questions/store";
+import { reanchorScopes } from "../questions/decision-followup-reanchor";
 import { documentIdentity, implementationActive, publishStaged } from "../plan/service";
 
 import type { Plan } from "../plan/service";
@@ -272,51 +273,71 @@ async function editBlocks(
 /**
  * Relate decisions in `target`'s document to its blocks.
  *
- * Not inside `target.exclusive`: `persist` queues behind the same chain and would wait on itself.
+ * Stage reviewed links, follow-up targets and card placement in one fenced commit.
  */
 export async function applyAnchors(
 	target: DocumentRoom,
 	args: ReturnType<typeof Arguments.anchorPlan>,
 ) {
-	if (args.revision !== target.plan.revision) {
-		return {
-			ok: false,
-			reason: "stale",
-			revision: target.plan.revision,
-			message: "The plan changed. Read it again and re-anchor.",
-		};
-	}
-
-	let failures: string[] = [];
-	let placements: Questions.Placement[] = [];
-	for (let update of args.anchors) {
-		let failure = update.thread
-			? Comments.relate(target.plan, update.thread, update.blocks)
-			: update.widget && update.question
-			? Questions.relate(target.plan, update.widget, update.question, update.blocks)
-			: "give either `thread`, or both `widget` and `question`.";
-		if (failure) {
-			failures.push(failure);
-		} else if (update.widget !== undefined && update.question !== undefined) {
-			placements.push({
-				widget: update.widget,
-				blocks: update.blocks,
-			});
+	return target.exclusive(async () => {
+		if (implementationActive(target.plan)) return { ok: false, reason: "locked" };
+		if (args.revision !== target.plan.revision) {
+			return {
+				ok: false,
+				reason: "stale",
+				revision: target.plan.revision,
+				message: "The plan changed. Read it again and re-anchor.",
+			};
 		}
-	}
-	let mutation = Questions.place(target.plan, placements);
-	if (mutation) await target.publish(mutation);
-
-	await target.persist();
-	target.anchors();
-
-	return failures.length > 0
-		? { ok: false, reason: "invalid", errors: failures }
-		: {
-			ok: true,
-			anchors_pending: [
-				...Questions.outstanding(target.plan),
-				...Comments.outstanding(target.plan),
-			],
+		let source = room.project(target.plan.document);
+		let document = await room.restore(
+			target.plan.document.epoch,
+			Y.encodeStateAsUpdate(target.plan.document.doc),
+			source,
+			[],
+		);
+		if (target.plan.document.titleKey !== undefined) room.trackTitle(document);
+		document.seq = target.plan.document.seq;
+		let candidate: Plan = {
+			...target.plan,
+			document,
+			records: new Map(target.plan.records),
+			threads: new Map(target.plan.threads),
+			outlines: new Map(target.plan.outlines),
 		};
+		try {
+			let failures: string[] = [];
+			let placements: Questions.Placement[] = [];
+			for (let update of args.anchors) {
+				let failure = update.thread
+					? Comments.relate(candidate, update.thread, update.blocks)
+					: update.widget && update.question
+					? Questions.relate(candidate, update.widget, update.question, update.blocks)
+					: "give either `thread`, or both `widget` and `question`.";
+				if (failure) {
+					failures.push(failure);
+				} else if (update.widget !== undefined && update.question !== undefined) {
+					placements.push({ widget: update.widget, blocks: update.blocks });
+				}
+			}
+			failures.push(...reanchorScopes(candidate, placements));
+			if (failures.length) return { ok: false, reason: "invalid", errors: failures };
+			let mutation = Questions.place(candidate, placements);
+			Questions.rebase(candidate, source);
+			Comments.rebase(candidate);
+			await publishStaged(target.plan, target.server, target.id, candidate, mutation, {
+				agent: true,
+			});
+			target.anchors();
+			return {
+				ok: true,
+				anchors_pending: [
+					...Questions.outstanding(target.plan),
+					...Comments.outstanding(target.plan),
+				],
+			};
+		} finally {
+			document.doc.destroy();
+		}
+	});
 }

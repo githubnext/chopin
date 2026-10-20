@@ -382,7 +382,7 @@ test("read_reference accepts only ids made available by the active chat session"
 });
 
 test("anchor_plan waits for decision placement before persisting and broadcasting anchors", async () => {
-	let { plan, server } = await opened(SOURCE, {
+	let { plan, server, storage } = await opened(SOURCE, {
 		revision: 1,
 		questions: [{
 			id: WIDGET,
@@ -404,24 +404,24 @@ test("anchor_plan waits for decision placement before persisting and broadcastin
 	let anchors = 0;
 	let started = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
-	let finished = Promise.withResolvers<void>();
 	let persisted = false;
+	let sourceBefore = room.project(plan.document);
+	let commit = storage.collaboration.commit.bind(storage.collaboration);
+	storage.collaboration.commit = async input => {
+		started.resolve();
+		await release.promise;
+		let result = await commit(input);
+		published.push(input);
+		persisted = true;
+		return result;
+	};
 	let anchorPlan = fixtureTools({
 		plan,
 		server,
 		room: "test",
-		persist: async () => {
-			persisted = true;
-			await Service.persist(plan);
-		},
+		persist: () => Service.persist(plan),
 		exclusive: action => Service.exclusive(plan, action),
-		publish: async mutation => {
-			started.resolve();
-			await release.promise;
-			await Service.publish(plan, server, "test", mutation);
-			published.push(mutation);
-			finished.resolve();
-		},
+		publish: mutation => Service.publish(plan, server, "test", mutation),
 		anchors: () => anchors++,
 		changes() {},
 	}).find(tool => tool.name === "anchor_plan");
@@ -441,9 +441,9 @@ test("anchor_plan waits for decision placement before persisting and broadcastin
 	});
 	await started.promise;
 	let beforeCommit = { persisted, anchors };
+	expect(room.project(plan.document)).toBe(sourceBefore);
 	release.resolve();
 	let response = await pending;
-	await finished.promise;
 	expect(beforeCommit).toEqual({ persisted: false, anchors: 0 });
 	if (typeof response !== "string") throw new Error("anchor_plan returned no text");
 	let result = JSON.parse(response);
