@@ -29,23 +29,44 @@ expressions, raw HTML, arbitrary JSX, or component ids owned by Chopin.
 
 ### Wireframes
 
-Sketch an interface layout in a `wireframe` fence, never with box-drawing
-characters or ASCII art. Each line is one part: a kind, a "quoted label",
-flags, `key=value` properties, and an optional `#id`. Indent children two
-spaces. Kinds: panel, header, row, stack, card, title, text, button, badge,
-disclosure, list, tabs, nav, input, image, divider, and `note "…" -> #id`.
-Title, text, button, badge, disclosure, and note need a label; row, stack,
-tabs, nav, and divider take none. List, tabs, and nav hold `- item` lines.
+Sketch an interface in a `wireframe` fence, never with box-drawing characters
+or ASCII art. Draw low fidelity: the shape, not the copy. Label only key areas
+(titles, nav items, primary actions), never body copy; use `lines n=2` for
+text, and `image`, `fill` or `box` for content. Draw a collection once with
+`grid cols=3` and `card repeat=6`. One drawing per idea; a single component
+takes `width=sm|md` so it reads as a component, not a page.
+
+Each line is one part: a kind, a "quoted label", flags, `key=value`
+properties, and an optional `#id`. Indent children two spaces. Kinds: panel,
+header, row, stack, card, box, grid, title, text, button, badge, disclosure,
+list, tabs, nav, input, image, fill, lines, icon, divider, and `note "…" -> #id`.
+`w=1..12` gives a part its share of a row; `h=xs..xl` a rough height; `flush` on
+a row or header makes app chrome touch the frame edges; `shaded` tints a
+surface or selected option. Title, text, badge, disclosure, and note need a
+label; row, stack, grid, lines, icon, tabs, nav, and divider take none. List,
+tabs, and nav hold `- item` lines.
 
 ```wireframe
-panel "Review"
-  header
-    title "Pull request #42"
-    badge "open" tone=success
-  row
-    button "Approve" primary #approve
-    button "Request changes"
-  note "Disabled until checks pass" -> #approve
+header flush
+  title "Project"
+  button "Share" primary
+row flush h=xl
+  nav vertical active=2
+    - Documents
+    - Settings
+  stack w=5
+    title "Document title"
+    lines n=3
+    image ratio=wide
+    grid cols=3
+      card repeat=3
+        lines n=2
+  stack w=2
+    text "Comments" strong
+    card repeat=3
+      row
+        icon
+        lines n=2
 ```
 
 Chopin refuses an update that adds or changes an invalid wireframe and names the

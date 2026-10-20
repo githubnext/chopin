@@ -89,27 +89,47 @@ export const WIREFRAME_AUTHORING =
 	`Use a \`${WIREFRAME_LANGUAGE}\` fence to sketch an interface layout or mockup.
 Never draw one with box-drawing characters or ASCII art in a text fence.
 
+Draw low fidelity: the shape, not the copy. Label only key areas (titles, nav
+items, primary actions), never body copy; use \`lines n=2\` for text, \`image\`,
+\`fill\` or \`box\` for content, \`icon\` for a glyph. Draw a collection once:
+\`grid cols=3\` with \`card repeat=6\`. One drawing per idea; one component
+alone takes \`width=sm|md\`.
+
 Each line is one part: a kind, then a "quoted label", bare flags, \`key=value\`
 properties, and an optional \`#id\`. Indent each child exactly two spaces under
-its parent. Kinds, with some flags and properties: panel, header, row (wrap,
-flow), stack, card (selected, muted), title, text (muted, strong), button
-(primary, danger, disabled), badge (\`tone=success\`), disclosure (open), list
-(ordered), tabs and nav (\`active=2\`), input (\`placeholder="…"\`), image,
-divider. title, text, button, badge, disclosure and note need a label; row,
-stack, tabs, nav and divider take none. list, tabs and nav hold \`- item\` lines. \`note "…" -> #id\` annotates
-another part. A refused edit names the line to fix, counted inside the fence.
+its parent. Kinds: panel, header, row (wrap, flow, flush), stack, card
+(selected, muted, shaded), box (shaded), grid, title, text (muted, strong),
+button (primary, danger, disabled), badge (\`tone=success\`), disclosure (open),
+list (ordered), tabs, nav (vertical), input (\`placeholder="…"\`), image
+(\`ratio=wide\`), fill, lines, icon, divider. Any kind but note takes \`w=1..12\`
+(its share of a row, such as a sidebar beside main), \`repeat=2..12\`; most
+take \`h=xs..xl\`. \`flush\` on a row or header makes app chrome touch the
+frame edges. title, text, disclosure, badge and note need a label; row, stack,
+grid, lines, icon, tabs, nav and divider take none. list, tabs and nav hold
+\`- item\` lines (\`active=2\`). \`note "…" -> #id\` annotates another part. A
+refused edit names the line to fix, counted inside the fence.
 
 \`\`\`${WIREFRAME_LANGUAGE}
-panel "Implementation"
-  header
-    button "Approve and build this plan" primary
-  text "Build 4f2a9c01 on Laptop" muted
-  disclosure "0 of 2 tasks complete" open
-    card
-      badge "queued"
-      title "Parse wireframe fences"
-      list
-        - Unknown kinds report a line number
+header flush
+  title "Project"
+  button "Share" primary
+row flush h=xl
+  nav vertical active=2
+    - Documents
+    - Settings
+  stack w=5
+    title "Document title"
+    lines n=3
+    image ratio=wide
+    grid cols=3
+      card repeat=3
+        lines n=2
+  stack w=2
+    text "Comments" strong
+    card repeat=3
+      row
+        icon
+        lines n=2
 \`\`\``;
 
 export const PROMPT = `You are the planner. You produce and maintain the plan — the shared document

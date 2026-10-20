@@ -727,7 +727,9 @@ information. Mermaid is a fallback only for a representation the native catalogu
 cannot provide or an explicit user request; it supports numerical charts such as
 pie and bar/line charts. Jev-routed diagrams must keep the selected native type
 and SeeCode fence, with no Mermaid substitution. `wireframe` holds an indented
-outline of interface parts for layouts and mockups, and the prompt forbids
+outline of interface parts for layouts and mockups; the prompt asks for low
+fidelity (short labels on key areas, `lines`, `image` and `grid` with `repeat`
+for content, `w=` and `flush` for proportions and app chrome) and forbids
 box-drawing or ASCII art in text fences. `edit_plan` and MCP `update_document`
 refuse a batch that introduces or changes an invalid fence of either language;
 a wireframe refusal names the failing lines, counted inside the fence. An
