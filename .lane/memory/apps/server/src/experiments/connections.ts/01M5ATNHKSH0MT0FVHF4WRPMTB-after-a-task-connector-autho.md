@@ -4,8 +4,9 @@ anchor: method rebind
 created: 2026-10-19T19:36:57Z
 norm: '1'
 sig: bd59de56a281ac8d
-body_hash: 968ea5579dfa1d60
-raw_hash: 275c4adb97074b1d
+body_hash: abcaea20def331e2
+raw_hash: c2ad0f58d44567b6
+vouched: 2026-10-20T13:58:57Z
 lines: 444-457
 ---
 

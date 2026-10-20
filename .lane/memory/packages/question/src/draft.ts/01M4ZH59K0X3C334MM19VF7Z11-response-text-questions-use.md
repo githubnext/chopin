@@ -4,8 +4,9 @@ anchor: function read
 created: 2026-10-15T10:19:09Z
 norm: '1'
 sig: 53a70e80e512af0e
-body_hash: 993f39e09058001c
-raw_hash: e7d7b8ed8401e9c9
+body_hash: 35fd7dc33179ebb2
+raw_hash: 06091abd707279b8
+vouched: 2026-10-20T13:58:58Z
 lines: 105-168
 supersedes: 01M4Y23FC9YN2V7VYTGHWKEZFQ
 ---

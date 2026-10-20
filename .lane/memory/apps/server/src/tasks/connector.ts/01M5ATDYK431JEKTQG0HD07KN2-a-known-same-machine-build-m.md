@@ -4,8 +4,9 @@ anchor: method invoke
 created: 2026-10-19T19:32:48Z
 norm: '1'
 sig: 1d72e46bcddab91a
-body_hash: 5f0bf84dd42736c8
-raw_hash: c89f80073c57d291
+body_hash: 8bc44f1a8ee51dfc
+raw_hash: ba196865664b51ff
+vouched: 2026-10-20T13:58:57Z
 lines: 225-455
 ---
 
