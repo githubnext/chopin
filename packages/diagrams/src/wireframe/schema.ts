@@ -32,42 +32,99 @@ export type WireframeKindSpec = {
 
 const ALIGN = ["start", "center", "end", "between"] as const;
 const TONE = ["neutral", "info", "success", "warning", "danger"] as const;
+const HEIGHT = ["xs", "sm", "md", "lg", "xl"] as const;
+const WIDTH = ["sm", "md", "lg"] as const;
+const range = (from: number, to: number) =>
+	Array.from({ length: to - from + 1 }, (_, i) => String(from + i));
+/** Share of a row's width, and how many times to draw a part. */
+const SHARE = range(1, 12);
+const REPEAT = range(2, 12);
+/** Placeholder lines or items. */
+const LINES = range(1, 8);
+
+/** Every kind but a note can take a share of its row and be drawn several times. */
+function sized<const Spec extends WireframeKindSpec>(
+	spec: Spec,
+): Spec & { props: { w: typeof SHARE; repeat: typeof REPEAT } } {
+	return { ...spec, props: { ...spec.props, w: SHARE, repeat: REPEAT } };
+}
 
 export const WIREFRAME_KINDS = Object.freeze(
 	{
-		panel: { label: "optional", children: "blocks", flags: [], props: {} },
-		header: { label: "optional", children: "blocks", flags: [], props: { align: ALIGN } },
+		panel: sized({
+			label: "optional",
+			children: "blocks",
+			flags: ["shaded"],
+			props: { h: HEIGHT, width: WIDTH },
+		}),
+		header: sized({
+			label: "optional",
+			children: "blocks",
+			flags: ["flush"],
+			props: { align: ALIGN },
+		}),
 		/** `flow` joins sibling children with connectors; a `stack` child is a parallel column. */
-		row: { label: "none", children: "blocks", flags: ["wrap", "flow"], props: { align: ALIGN } },
-		stack: { label: "none", children: "blocks", flags: [], props: { align: ALIGN } },
-		card: { label: "optional", children: "blocks", flags: ["selected", "muted"], props: {} },
-		title: { label: "required", children: "none", flags: [], props: {} },
-		text: { label: "required", children: "none", flags: ["muted", "strong"], props: {} },
-		button: {
-			label: "required",
+		row: sized({
+			label: "none",
+			children: "blocks",
+			flags: ["wrap", "flow", "flush"],
+			props: { align: ALIGN, h: HEIGHT },
+		}),
+		stack: sized({
+			label: "none",
+			children: "blocks",
+			flags: [],
+			props: { align: ALIGN, h: HEIGHT },
+		}),
+		card: sized({
+			label: "optional",
+			children: "blocks",
+			flags: ["selected", "muted", "shaded"],
+			props: { h: HEIGHT, width: WIDTH },
+		}),
+		title: sized({ label: "required", children: "none", flags: [], props: {} }),
+		text: sized({ label: "required", children: "none", flags: ["muted", "strong"], props: {} }),
+		button: sized({
+			label: "optional",
 			children: "none",
 			flags: ["primary", "danger", "disabled"],
 			props: {},
-		},
-		badge: { label: "required", children: "none", flags: [], props: { tone: TONE } },
-		disclosure: { label: "required", children: "blocks", flags: ["open"], props: {} },
-		list: { label: "optional", children: "items", flags: ["ordered"], props: {} },
+		}),
+		badge: sized({ label: "required", children: "none", flags: [], props: { tone: TONE } }),
+		disclosure: sized({ label: "required", children: "blocks", flags: ["open"], props: {} }),
+		list: sized({ label: "optional", children: "items", flags: ["ordered"], props: { n: LINES } }),
 		note: { label: "required", children: "none", flags: [], props: {}, target: true },
-		input: {
+		input: sized({
 			label: "optional",
 			children: "none",
 			flags: ["disabled"],
 			props: { placeholder: "text", value: "text" },
-		},
-		tabs: { label: "none", children: "items", flags: [], props: { active: "count" } },
-		nav: { label: "none", children: "items", flags: ["vertical"], props: { active: "count" } },
-		image: {
+		}),
+		tabs: sized({ label: "none", children: "items", flags: [], props: { active: "count" } }),
+		nav: sized({
+			label: "none",
+			children: "items",
+			flags: ["vertical"],
+			props: { active: "count", n: LINES },
+		}),
+		image: sized({
 			label: "optional",
 			children: "none",
 			flags: [],
-			props: { ratio: ["square", "wide", "tall"] },
-		},
-		divider: { label: "none", children: "none", flags: [], props: {} },
+			props: { ratio: ["square", "wide", "tall"], h: HEIGHT },
+		}),
+		divider: sized({ label: "none", children: "none", flags: [], props: {} }),
+		/** Placeholders: a grey block, bars of text, a glyph and a grid of parts. */
+		box: sized({
+			label: "optional",
+			children: "blocks",
+			flags: ["shaded"],
+			props: { h: HEIGHT, width: WIDTH },
+		}),
+		fill: sized({ label: "optional", children: "none", flags: [], props: { h: HEIGHT } }),
+		lines: sized({ label: "none", children: "none", flags: [], props: { n: LINES } }),
+		icon: sized({ label: "none", children: "none", flags: [], props: {} }),
+		grid: sized({ label: "none", children: "blocks", flags: [], props: { cols: range(2, 6) } }),
 	} satisfies Record<string, WireframeKindSpec>,
 );
 

@@ -32,6 +32,12 @@ const EVERY_KIND = `panel "Settings" #panel
       divider
       button "Save" primary
       button "Delete" danger
+      box shaded
+        fill "Chart"
+        lines n=3
+        icon
+      grid cols=2
+        box repeat=2
   note "Two columns on wide screens" -> #panel`;
 
 function markup(source: string): string {

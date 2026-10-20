@@ -108,3 +108,41 @@ describe("wireframe problems", () => {
 		).toBe("Line 1: A. (2 more problems)");
 	});
 });
+
+describe("low-fidelity text alternative", () => {
+	it("names the new kinds and states their shape", () => {
+		let [root] = tree(`stack
+  box shaded h=lg w=2
+  fill "Chart"
+  lines n=3
+  icon repeat=4
+  grid cols=2 repeat=2
+  nav vertical n=5 active=1
+  list n=2
+  header flush`).nodes;
+		expect(root!.children.map(describeWireframePart)).toEqual([
+			"Box, shaded",
+			"Placeholder “Chart”",
+			"Text, 3 lines",
+			"Icon, repeated 4 times",
+			"Grid, repeated 2 times, 2 columns",
+			"Navigation, 5 items",
+			"List, 2 items",
+			"Header, flush",
+		]);
+	});
+
+	it("defaults lines and columns", () => {
+		let [lines, grid] = tree("lines\ngrid").nodes;
+		expect(describeWireframePart(lines!)).toBe("Text, 2 lines");
+		expect(describeWireframePart(grid!)).toBe("Grid, 3 columns");
+	});
+
+	it("does not announce layout-only properties", () => {
+		expect(describeWireframePart(tree("card w=3 h=md width=sm").nodes[0]!)).toBe("Card");
+	});
+
+	it("does not describe items that were written out as n", () => {
+		expect(describeWireframePart(tree("nav\n  - A\n  - B").nodes[0]!)).toBe("Navigation");
+	});
+});

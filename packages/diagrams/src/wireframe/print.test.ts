@@ -32,6 +32,14 @@ note "Any input" -> input`,
   - Tasks
 divider
 image "Hero" ratio=wide`,
+	`row flush h=lg
+  nav vertical n=4 active=2
+  grid cols=3 w=5
+    box "Area" shaded h=sm width=md repeat=3
+    fill
+    lines n=3 repeat=2
+    icon
+  button`,
 ];
 
 describe("wireframe printer", () => {
@@ -121,8 +129,13 @@ function generate(random: () => number): Wireframe {
 		}
 		for (let [key, value] of Object.entries(spec.props as Record<string, unknown>)) {
 			if (random() < 0.5) continue;
-			if (value === "count") made.props[key] = String(1 + Math.floor(random() * made.items.length));
-			else if (value === "text") made.props[key] = pick(WORDS);
+			if (key === "n" && made.items.length) continue;
+			if (key === "repeat") value = ["2", "3"];
+			if (value === "count") {
+				let total = made.items.length || 1 + Math.floor(random() * 3);
+				if (!made.items.length) made.props.n = String(total);
+				made.props[key] = String(1 + Math.floor(random() * total));
+			} else if (value === "text") made.props[key] = pick(WORDS);
 			else made.props[key] = pick(value as string[]);
 		}
 		made.span.end = line;

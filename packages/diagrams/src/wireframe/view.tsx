@@ -250,5 +250,13 @@ function Part({ node, marks }: { node: WireframeNode; marks: Marks }): ReactNode
 			);
 		case "divider":
 			return <div {...common}>{mark}</div>;
+		// Placeholders until the renderer styles them.
+		case "box":
+		case "grid":
+			return <div {...common}>{mark}{node.label}{children}</div>;
+		case "fill":
+		case "lines":
+		case "icon":
+			return <div {...common}>{mark}{node.label}</div>;
 	}
 }

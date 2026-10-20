@@ -7,6 +7,7 @@ import {
 	MAX_WIREFRAME_NODES,
 	MAX_WIREFRAME_PROBLEMS,
 	MAX_WIREFRAME_SOURCE_BYTES,
+	WIREFRAME_KINDS,
 	type WireframeProblem,
 } from "./schema";
 
@@ -377,5 +378,182 @@ describe("wireframe limits", () => {
 			expect(() => parseWireframe(source)).not.toThrow();
 		}
 		expect(performance.now() - started).toBeLessThan(500);
+	});
+});
+
+const PROPOSALS = [
+	`header
+  title "Today"
+  button "All notes"
+title "Worth revisiting"
+grid cols=3
+  card repeat=3
+    image ratio=wide
+    lines n=2
+    button "Open"
+title "Possible connections"
+grid cols=2
+  card repeat=2
+    row flow
+      box shaded h=sm
+      box shaded h=sm
+    lines n=1
+    button "Read both"`,
+	`header flush
+  title "Project / Plan"
+  button "Share" primary
+row flush h=xl
+  nav vertical active=2
+    - Projects
+    - Documents
+    - Settings
+  stack w=5
+    title "Plan title"
+    lines n=4
+    image ratio=wide
+    lines n=3
+  stack w=2
+    text "Comments" strong
+    card repeat=3
+      row
+        icon
+        lines n=2`,
+	`header
+  title "Templates"
+  row
+    input placeholder="Search"
+    button "New" primary
+tabs active=1
+  - All
+  - Plans
+  - Specs
+grid cols=3
+  card repeat=6
+    image ratio=wide
+    lines n=1`,
+	`card width=sm
+  badge "Open"
+  title "Which storage engine?"
+  lines n=1
+  stack
+    box shaded
+      text "PostgreSQL"
+    box
+      text "SQLite"
+    box
+      text "Redis"
+  row align=end
+    button "Skip"
+    button "Submit" primary`,
+	`row flush h=lg
+  nav vertical active=2
+    - Profile
+    - Machines
+    - Billing
+  stack
+    header
+      title "Machines"
+      button "Add machine" primary
+    card repeat=2
+      row
+        icon
+        lines n=1
+        badge "Online"
+        button "Remove"`,
+	`grid cols=3
+  card
+    text "Builds" muted
+    title "128"
+  card
+    text "Pass rate" muted
+    title "94%"
+  card
+    text "Median" muted
+    title "4m"
+card "Build time"
+  fill h=lg
+card "Recent builds"
+  row repeat=4
+    icon
+    lines n=1
+    badge "Passed"`,
+];
+
+describe("low-fidelity language", () => {
+	it("parses every new kind", () => {
+		let result = parseWireframe(`box "Area" shaded h=lg width=md w=3 repeat=2
+  fill "Chart" h=xl
+  lines n=4 w=2
+  icon repeat=3
+grid cols=4 repeat=2
+  box`);
+		expect(result.ok).toBe(true);
+	});
+
+	it("accepts w and repeat on every kind but a note", () => {
+		for (let kind of Object.keys(WIREFRAME_KINDS)) {
+			let props = WIREFRAME_KINDS[kind as keyof typeof WIREFRAME_KINDS].props as Record<
+				string,
+				unknown
+			>;
+			expect(Object.hasOwn(props, "w")).toBe(kind !== "note");
+			expect(Object.hasOwn(props, "repeat")).toBe(kind !== "note");
+		}
+	});
+
+	it("parses every proposal sample", () => {
+		for (let source of PROPOSALS) {
+			let result = parseWireframe(source);
+			if (!result.ok) throw new Error(JSON.stringify(result.problems));
+		}
+	});
+
+	it("accepts a button without a label, and flush on a row and header", () => {
+		expect(parseWireframe("button primary\nrow flush\n  button\nheader flush").ok).toBe(true);
+	});
+
+	it("refuses bad values with the allowed set", () => {
+		expect(only("box h=huge").message).toBe("h must be one of: xs, sm, md, lg, xl.");
+		expect(only("card width=xl").message).toBe("width must be one of: sm, md, lg.");
+		expect(only('text w=0 "x"').message).toContain("w must be one of: 1, 2");
+		expect(only("box repeat=1").message).toContain("repeat must be one of: 2, 3");
+		expect(only("grid cols=7").message).toContain("cols must be one of: 2, 3");
+		expect(only("lines n=9").message).toContain("n must be one of: 1, 2");
+	});
+
+	it("refuses w and repeat on a note, and flush elsewhere", () => {
+		expect(only('row\nnote "x" w=2 -> row').message).toBe('note does not accept "w".');
+		expect(only("stack flush").message).toContain('does not accept the flag "flush"');
+	});
+
+	it("draws n placeholder items on nav and list, and checks active against them", () => {
+		expect(parseWireframe("nav vertical n=4 active=2").ok).toBe(true);
+		expect(parseWireframe("list n=3").ok).toBe(true);
+		expect(only("nav n=3 active=4")).toEqual({ line: 1, message: "active=4 but nav has 3 items." });
+	});
+
+	it("refuses items together with n", () => {
+		expect(only("nav n=2\n  - One")).toEqual({
+			line: 1,
+			message: "nav has both items and n=; use one.",
+		});
+	});
+
+	it("refuses repeats that expand past the node bound, without hanging", () => {
+		let found = only('stack repeat=12\n  stack repeat=12\n    stack repeat=12\n      text "x"');
+		expect(found).toEqual({
+			line: 1,
+			message: `Repeats expand the wireframe past ${MAX_WIREFRAME_NODES} parts.`,
+		});
+		let nested = Array.from({ length: 9 }, (_, i) => `${"  ".repeat(i)}stack repeat=12`);
+		expect(only(nested.join("\n")).message).toContain("Repeats expand");
+		expect(parseWireframe("grid\n  card repeat=12\n    lines").ok).toBe(true);
+	});
+
+	it("reports the part whose repeat pushes the total over", () => {
+		let found = only(
+			"grid\n  icon repeat=12\nstack repeat=12\n  stack repeat=12\n    icon\n    icon",
+		);
+		expect(found.line).toBe(3);
 	});
 });

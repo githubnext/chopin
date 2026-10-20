@@ -70,6 +70,11 @@ const NAMES: Record<WireframeNode["kind"], string> = {
 	nav: "Navigation",
 	image: "Image",
 	divider: "Divider",
+	box: "Box",
+	fill: "Placeholder",
+	lines: "Text",
+	icon: "Icon",
+	grid: "Grid",
 };
 
 /**
@@ -90,6 +95,13 @@ export function describeWireframePart(node: WireframeNode): string {
 		states.push(node.props.tone);
 	}
 	if (node.kind === "row" && node.flags.includes("flow")) states.push("a sequence");
+	let repeat = Number(node.props.repeat ?? 1);
+	if (repeat > 1) states.push(`repeated ${repeat} times`);
+	if (node.kind === "lines") states.push(`${node.props.n ?? "2"} lines`);
+	if (node.kind === "grid") states.push(`${node.props.cols ?? "3"} columns`);
+	if ((node.kind === "nav" || node.kind === "list") && node.props.n && !node.items.length) {
+		states.push(`${node.props.n} items`);
+	}
 	for (let flag of node.flags) {
 		if (flag === "flow" || flag === "wrap" || flag === "vertical") continue;
 		states.push(flag);

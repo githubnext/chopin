@@ -210,7 +210,7 @@ function locate(index: Index, target: string): { node: WireframeNode } | { probl
 	return { node };
 }
 
-/** Checks that need the whole tree: note targets and counts against items. */
+/** Checks that need the whole tree: note targets, counts, and repeat expansion. */
 function check(wireframe: Wireframe): WireframeProblem[] {
 	let problems: WireframeProblem[] = [];
 	let found = index(wireframe);
@@ -221,17 +221,42 @@ function check(wireframe: Wireframe): WireframeProblem[] {
 			if ("problem" in target) problems.push({ line, message: target.problem });
 		}
 		let props = WIREFRAME_KINDS[node.kind].props as Record<string, unknown>;
+		if (props.n !== undefined && node.props.n !== undefined && node.items.length) {
+			problems.push({ line, message: `${node.kind} has both items and n=; use one.` });
+		}
 		for (let [key, value] of Object.entries(node.props)) {
-			if (props[key] === "count" && Number(value) > node.items.length) {
+			if (props[key] !== "count") continue;
+			let total = node.items.length || Number(node.props.n ?? 0);
+			if (Number(value) > total) {
 				problems.push({
 					line,
-					message: `${key}=${value} but ${node.kind} has ${node.items.length} items.`,
+					message: `${key}=${value} but ${node.kind} has ${total} items.`,
 				});
 			}
 		}
 		node.children.forEach(visit);
 	};
 	wireframe.nodes.forEach(visit);
+
+	// Each count is capped as it is summed, so nested repeats cannot overflow.
+	let expanded = (node: WireframeNode): number => {
+		let inside = 1 + node.items.length;
+		for (let child of node.children) {
+			inside = Math.min(inside + expanded(child), MAX_WIREFRAME_NODES + 1);
+		}
+		return Math.min(inside * Number(node.props.repeat ?? 1), MAX_WIREFRAME_NODES + 1);
+	};
+	let total = 0;
+	for (let node of wireframe.nodes) {
+		total += expanded(node);
+		if (total > MAX_WIREFRAME_NODES) {
+			problems.push({
+				line: node.span.start,
+				message: `Repeats expand the wireframe past ${MAX_WIREFRAME_NODES} parts.`,
+			});
+			break;
+		}
+	}
 	return problems;
 }
 
