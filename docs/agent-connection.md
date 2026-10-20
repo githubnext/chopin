@@ -645,10 +645,11 @@ stops all unfinished stage displays even without parent links. `active` and
 `paused` list at most 64 root run IDs. When the connection closes, the server
 shows the reported live runs as stopped.
 
-A full card's `stages` replace every stage Chopin stores for the run. Chopin
-stores all of a run's stages, not only those a card lists, and keeps them
-across reconnects and restarts until Chat stops showing the run's card, when a
-later run replaces ended cards.
+A full card's `stages` replace every stage Chopin stores for the run, unless
+it has none (see [Run stage deltas](#run-stage-deltas)). Chopin stores all of a
+run's stages, not only those a card lists, and keeps them across reconnects and
+restarts until Chat stops showing the run's card, when a later run replaces
+ended cards.
 
 ### Run stage deltas
 
@@ -669,7 +670,13 @@ card, with `stagesDelta` and without `earlierStages`:
   delta does not name are kept, and `"stages": []` changes none.
 - The run keeps the `earlierStages` of its last full card.
 - A delta never removes a stage. To start a run's stages over, send a full card
-  (its `stages` may be empty), then delta cards.
+  with the new first stages, then delta cards.
+- A full card with `"stages": []` for a run that already has stages keeps them,
+  with or without this feature. Its other fields, such as `status` and the
+  times, change the card as usual, and its `earlierStages` is ignored, so a
+  client that reattaches can report an ended run whose stages it no longer
+  holds without wiping the ones Chopin stores. A full card with any stages
+  still replaces them all.
 - `parentIds` may name any stage of the same run, sent in this message, an
   earlier one or a later one. Chopin refuses no parent ID; Chat shows a stage
   whose parent it does not know at the top level until the parent arrives, and

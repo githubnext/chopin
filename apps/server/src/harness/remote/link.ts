@@ -211,13 +211,25 @@ class RemoteSession {
 
 	/**
 	 * Takes a report: a full card's stages replace the run's, a delta card's are added by id to
-	 * them. The Planner always sees every stage of each run.
+	 * them. A full card with no stages for a run that has some keeps them, as a client that
+	 * reattaches may report an ended run without its stages. The Planner always sees every stage
+	 * of each run.
 	 */
 	reportRuns(message: Pick<ClientMessageOf<"runs">, "active" | "paused" | "cards">): void {
 		if (this.#closed || this.planner.isolated) return;
 		let previous = new Map(this.planner.runs?.cards.map(card => [card.id, card]));
 		let cards = message.cards.map((card): Wire.Run => {
 			if (!("stagesDelta" in card)) {
+				let kept = this.#stages.get(card.id);
+				if (!card.stages.length && kept?.size) {
+					let { earlierStages: _, ...fields } = card;
+					let earlierStages = previous.get(card.id)?.earlierStages;
+					return {
+						...fields,
+						stages: [...kept.values()],
+						...(earlierStages ? { earlierStages } : {}),
+					};
+				}
 				this.#stages.set(card.id, new Map(card.stages.map(stage => [stage.id, stage])));
 				return card;
 			}

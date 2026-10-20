@@ -1572,7 +1572,21 @@ async function publishReport(
 	let mine = prior.filter(run => !theirs(run)).map(run =>
 		known.get(run.id) === session || ENDED_RUN[run.status] ? run : stopped(run, at)
 	);
-	let own = mergeRuns(mine, runs?.cards, at);
+	// A card with no stages for a run Chat already shows stages of changes only the card's status
+	// and times: a reattached Planner reports an ended run without them, and they stay stored.
+	let kept = new Set<string>();
+	let incoming = runs?.cards?.map(card => {
+		let shown = card.stages.length ? undefined : prior.find(run => run.id === card.id);
+		if (!shown || (!shown.stages.length && !shown.earlierStages)) return card;
+		kept.add(card.id);
+		let { earlierStages: _, ...fields } = card;
+		return {
+			...fields,
+			stages: shown.stages,
+			...(shown.earlierStages ? { earlierStages: shown.earlierStages } : {}),
+		};
+	});
+	let own = mergeRuns(mine, incoming, at);
 	if (releasing) own = mergeRuns(own, undefined, at);
 	let fresh = (runs?.cards ?? []).some(run => !before.has(run.id));
 	let cards = [...others.filter(run => fresh ? !ENDED_RUN[run.status] : true), ...own];
@@ -1601,7 +1615,7 @@ async function publishReport(
 	}
 	let next = cards.length ? cards.map(cardWindow) : undefined;
 	try {
-		let storing = storeStages(context, runs?.cards ?? []);
+		let storing = storeStages(context, (runs?.cards ?? []).filter(card => !kept.has(card.id)));
 		if (storing) await storing;
 		await context.persist(() => ({ entries: [...chat.entries, ...finished], runs: next }));
 	} catch (err) {

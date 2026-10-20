@@ -1012,6 +1012,58 @@ describe("Agent connection protocol", () => {
 		expect(after?.earlierStages).toBe(7);
 	});
 
+	it("keeps a run's stages when a full card names none, and lets a full card with stages replace them", async () => {
+		let { server, channel, client } = await setup({});
+		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+		let session = await adapterFor(server, planner).doStart({
+			sessionId: "kept",
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		cleanups.push(() => session.doDestroy());
+		let card = {
+			id: "run",
+			name: "plan",
+			status: "running" as const,
+			started: 1,
+			updated: 1,
+			waiting: 0,
+		};
+		let stages = Array.from({ length: 16 }, (_, index) => ({
+			id: `s${index}`,
+			name: `stage ${index}`,
+			status: "completed" as const,
+		}));
+		let report = async (cards: Parameters<typeof client.reportRuns>[1]["cards"]) => {
+			client.reportRuns("kept", { active: [], paused: [], cards });
+			await Bun.sleep(30);
+			return planner.runs?.cards[0];
+		};
+		await report([{ ...card, stages, earlierStages: 3 }]);
+		let ended = await report([{
+			...card,
+			status: "finished",
+			updated: 9,
+			ended: 9,
+			stages: [],
+		}]);
+		expect(ended).toMatchObject({ status: "finished", updated: 9, ended: 9, earlierStages: 3 });
+		expect(ended?.stages).toEqual(stages);
+		let after = await report([{
+			...card,
+			stagesDelta: true,
+			stages: [{ id: "late", name: "late", status: "completed" }],
+		}]);
+		expect(after?.stages.map(stage => stage.id)).toEqual([
+			...stages.map(stage => stage.id),
+			"late",
+		]);
+
+		let replaced = await report([{ ...card, stages: [{ id: "x", name: "x", status: "running" }] }]);
+		expect(replaced?.stages.map(stage => stage.id)).toEqual(["x"]);
+		expect(replaced?.earlierStages).toBeUndefined();
+	});
+
 	it("runs Chopin's tools in the server and the client's own tools only once declared", async () => {
 		let reports: unknown[] = [];
 		let { server, channel } = await setup({

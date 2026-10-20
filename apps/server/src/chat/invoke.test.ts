@@ -1024,6 +1024,57 @@ test("a run that replaces an ended card takes that card's stored stages with it"
 	expect((await context.auth.storage.runStages.list(context.room, "run-2", page)).total).toBe(13);
 });
 
+test("a later session's stage-less card for a run keeps its stored stages, and a card with stages still replaces them", async () => {
+	for (let reported of [undefined, 16]) {
+		let { context, user, backend } = await setup(configured(ATOMIC));
+		let first = runningSession({ active: [], paused: [], cards: [longCard(16, "finished")] });
+		context.openPlannerSession = async () => ({ ok: true, value: first.session });
+		await Chat.invoke(context, user, "Run the workflow");
+		await context.chat.running;
+		await tick();
+		let stored = async () =>
+			await context.auth.storage.runStages.list(context.room, "run-1", { offset: 0, limit: 100 });
+		expect((await stored()).total).toBe(16);
+		let window = context.chat.runs![0]!;
+		expect(window.earlierStages).toBe(4);
+
+		// A reattached Planner reports the ended run again without its stages.
+		let bare: Wire.Run = {
+			...card("stopped"),
+			updated: 1_900,
+			ended: 1_900,
+			stages: [],
+			...(reported ? { earlierStages: reported } : {}),
+		};
+		let again = runningSession({ active: [], paused: [], cards: [bare] });
+		context.openPlannerSession = async () => ({ ok: true, value: again.session });
+		await Chat.invoke(context, user, "Check on it");
+		await context.chat.running;
+		await tick();
+		await tick();
+		expect(await stored()).toEqual({ stages: longCard(16, "finished").stages, total: 16 });
+		expect(context.chat.runs?.[0]).toEqual({
+			...window,
+			status: "stopped",
+			updated: 1_900,
+			ended: 1_900,
+		});
+		let reopened = await Plan.open(context.room, backend, context.server);
+		expect(reopened.chat.runs?.[0]).toMatchObject({ status: "stopped", earlierStages: 4 });
+		expect(reopened.chat.runs?.[0]?.stages).toEqual(window.stages);
+		await Plan.close(reopened);
+
+		let replaced = runningSession({ active: [], paused: [], cards: [longCard(13, "finished")] });
+		context.openPlannerSession = async () => ({ ok: true, value: replaced.session });
+		await Chat.invoke(context, user, "Run it again");
+		await context.chat.running;
+		await tick();
+		await tick();
+		expect((await stored()).total).toBe(13);
+		expect(context.chat.runs?.[0]?.earlierStages).toBe(1);
+	}
+});
+
 test("one run can be paused and resumed by name while others keep going", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();
