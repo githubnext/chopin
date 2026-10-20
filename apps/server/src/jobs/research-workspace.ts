@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
 import * as limits from "@chopin/dialect/limits";
 
-import {
-	WEB_SEARCH_MAX_CALLS,
-	WebSearchTimeoutError,
-	webSearchTool,
-} from "../harness/web-search";
+import { WEB_SEARCH_MAX_CALLS, WebSearchTimeoutError, webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
 import { openWorkerSession, type WorkerSession } from "./worker-session";
 import type { WebSearchFailureDiagnostic } from "../harness/web-search";

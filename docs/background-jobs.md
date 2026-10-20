@@ -427,9 +427,9 @@ fails with `web-search-failed` only when no call succeeded. A stalled
 authorization check still ends the attempt with
 `web-search-authorization-timeout`. Search calls are counted after authorization.
 A partial result is never published after the deadline; the model must submit
-before it. The upstream error text of a failed call is sanitized (tokens, auth
-headers and URL queries removed, at most 300 characters) and logged for the
-operator. The diagnostic carries only the sanitized `webFailure` classification. The evidence attempt
+before it. A failed call is logged for the operator and recorded in the
+diagnostic as its `webFailure` classification only; upstream error text is
+never copied. The evidence attempt
 deadline is `RESEARCH_EVIDENCE_TIMEOUT_MS` (ten minutes by default), and the
 job retries once (two attempts, each with its own worker session capped at 30 AI
 credits, so the job may spend 60). The deadline is wall-clock from the runner's

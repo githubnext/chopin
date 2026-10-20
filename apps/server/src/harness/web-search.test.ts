@@ -4,7 +4,6 @@ import { MCPClientError } from "@ai-sdk/mcp";
 import { z } from "zod";
 
 import {
-	sanitizeUpstream,
 	WEB_SEARCH_MARGIN_MS,
 	WEB_SEARCH_MAX_CALLS,
 	WebSearchTimeoutError,
@@ -460,7 +459,7 @@ it("caps the calls one attempt may start, counting calls still in flight", async
 	}
 });
 
-it("logs a sanitized upstream error and never the token", async () => {
+it("logs only the failure classification, never upstream text or the token", async () => {
 	let secret = "ghu_abcdefghijklmnopqrstuvwxyz0123456789";
 	let owner = { ...credential(), token: secret };
 	let logs: string[] = [];
@@ -490,36 +489,8 @@ it("logs a sanitized upstream error and never the token", async () => {
 			loaded.value.tool.execute!({ query: "q" }, { context: { credential: owner } } as never),
 		).rejects.toThrow("MCP web_search returned an error");
 		expect(logs).toHaveLength(1);
-		expect(logs[0]).toContain("HTTP 429 rate limited");
-		expect(logs[0]).not.toContain(secret);
-		expect(logs[0]!.toLowerCase()).not.toContain("bearer ghu");
-		expect(logs[0]!.length).toBeLessThan(400);
+		expect(logs[0]).toBe("chopin: web_search failed - local:request:mcp-result-error");
 	} finally {
 		await loaded.value.close();
 	}
-});
-
-it("redacts token-like strings and bounds upstream text", () => {
-	let text = sanitizeUpstream(
-		"failed ghp_1234567890abcdefghij github_pat_11AAAA_bbbbbbbbbb token=abc123 "
-			+ "eyJhbGciOiJI.eyJzdWIiOiIx.sigsig https://api.example.com/x?access=SECRET#frag "
-			+ "Cookie: a=b; c=d "
-			+ "0123456789abcdef0123456789abcdef0123456789",
-		["custom-secret"],
-	);
-	for (
-		let leaked of [
-			"ghp_1234",
-			"github_pat_",
-			"abc123",
-			"eyJhbGci",
-			"SECRET",
-			"a=b",
-			"0123456789abcdef0123456789abcdef",
-		]
-	) expect(text).not.toContain(leaked);
-	expect(sanitizeUpstream("boom custom-secret here", ["custom-secret"])).toBe(
-		"boom [redacted] here",
-	);
-	expect(sanitizeUpstream("y ".repeat(500)).length).toBeLessThanOrEqual(300);
 });

@@ -41,7 +41,6 @@ export const WEB_SEARCH_MAX_CALLS = 4;
 export const WEB_SEARCH_MIN_WINDOW_MS = 90_000;
 /** Time kept after the last call returns so the model can still submit its result. */
 export const WEB_SEARCH_MARGIN_MS = 30_000;
-const MAX_REASON = 300;
 
 export type WebSearchBudget = {
 	deadline: Date;
@@ -49,54 +48,6 @@ export type WebSearchBudget = {
 	minWindowMs?: number;
 	marginMs?: number;
 };
-
-/**
- * Upstream error text bounded for logs and diagnostics. Credentials, auth headers, URL queries and
- * long opaque strings are removed before the text is cut, so a secret is never split by the cut.
- */
-export function sanitizeUpstream(text: string, secrets: readonly string[] = []): string {
-	let out = text;
-	for (let secret of secrets) if (secret.length >= 4) out = out.split(secret).join("[redacted]");
-	out = Array.from(
-		out,
-		char => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char),
-	)
-		.join("")
-		.replace(
-			/\b(authorization|proxy-authorization|x-api-key|cookie|set-cookie)\s*[:=]\s*.*/gi,
-			"$1: [redacted]",
-		)
-		.replace(/\bbearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-		.replace(/\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{8,}/g, "[redacted]")
-		.replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g, "[redacted]")
-		.replace(
-			/\b(token|secret|password|passwd|api[_-]?key|access[_-]?token)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi,
-			"$1$2[redacted]",
-		)
-		.replace(/(https?:\/\/[^\s?#]+)[?#]\S*/gi, "$1?[redacted]")
-		.replace(/[A-Za-z0-9_\-+/=]{32,}/g, "[redacted]")
-		.replace(/\s+/g, " ")
-		.trim();
-	return out.length > MAX_REASON ? `${out.slice(0, MAX_REASON - 1)}…` : out;
-}
-
-/** An upstream web_search result that reported an error. `detail` is already sanitized. */
-export class WebSearchError extends Error {
-	constructor(readonly detail: string) {
-		super("MCP web_search returned an error");
-		this.name = "WebSearchError";
-	}
-}
-
-function resultText(result: object): string {
-	let content = (result as { content?: unknown }).content;
-	if (!Array.isArray(content)) return "";
-	return content.map(block =>
-		block && typeof block === "object" && typeof (block as { text?: unknown }).text === "string"
-			? (block as { text: string }).text
-			: ""
-	).join(" ");
-}
 
 function refusal(text: string) {
 	return { content: [{ type: "text" as const, text }] };
@@ -242,9 +193,7 @@ export async function webSearchTool(
 								]);
 								if (result && typeof result === "object" && "isError" in result && result.isError) {
 									resultError = true;
-									throw new WebSearchError(
-										sanitizeUpstream(resultText(result), [credential.token]),
-									);
+									throw new Error("MCP web_search returned an error");
 								}
 							} catch (error) {
 								// Only known classifications and numeric MCP codes cross into job logs.
@@ -281,14 +230,7 @@ export async function webSearchTool(
 								) {
 									diagnostic.webFailureToolCallId = options.toolCallId;
 								}
-								if (!(error instanceof WebSearchTimeoutError)) {
-									let detail = error instanceof WebSearchError
-										? error.detail
-										: error instanceof Error
-										? sanitizeUpstream(error.message, [credential.token])
-										: "";
-									log(`chopin: web_search failed - ${detail || "no error text"}`);
-								}
+								log(`chopin: web_search failed - ${diagnostic.webFailure}`);
 								await deps.onCall?.(undefined, error, diagnostic);
 								throw error;
 							}

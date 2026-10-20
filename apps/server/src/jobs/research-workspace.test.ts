@@ -417,7 +417,7 @@ describe("research workspace execution", () => {
 			progress.push(`${stage}:${state}`);
 		});
 		let snapshots: JobExecutionDiagnostic[] = [];
-		let deadline = new Date(Date.now() + 60_000);
+		let deadline = new Date(Date.now() + 600_000);
 		let deadlineSignal = new AbortController();
 		let sensitive = "private query https://private.example/result Bearer secret-token";
 		let callId = "d9dc5586-b81f-442c-b9e1-feb5d186f334";
