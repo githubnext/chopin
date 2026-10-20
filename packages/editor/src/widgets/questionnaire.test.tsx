@@ -156,3 +156,34 @@ test("a read-only decision remains linked but has no answer actions", () => {
 	expect(markup).not.toContain(">Save<");
 	expect(markup).not.toContain("Discard");
 });
+
+test("a saved decision keeps its full-page control while an investigation runs", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		presentation: "list",
+		connected: true,
+		canEdit: true,
+		explore: {
+			research: async () => "research",
+			spike: async () => {},
+			spikeUnavailable: () => undefined,
+			people: () => [],
+			openPage: async () => {},
+			subscribe: () => () => {},
+		},
+		value: {
+			id: "saved-decision",
+			questions: [{
+				id: "storage",
+				header: "Storage",
+				prompt: "Where should room state live?",
+				multiple: false,
+				options: [{ id: "mdx", label: "MDX on disk" }],
+				answer: "MDX on disk",
+				choices: ["mdx"],
+			}],
+		},
+	}));
+	expect(markup).toContain('aria-label="Expand decision"');
+	expect(markup).toContain("MDX on disk");
+	expect(markup).not.toContain(">Save<");
+});

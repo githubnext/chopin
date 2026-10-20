@@ -636,6 +636,7 @@ function Resolved(
 	{
 		answers,
 		aside,
+		headerActions,
 		definition,
 		resolver,
 		places,
@@ -645,6 +646,7 @@ function Resolved(
 	}: {
 		answers: Answer[];
 		aside?: ReactNode;
+		headerActions?: ReactNode;
 		definition: Definition;
 		resolver?: string;
 		places?: QuestionViewProps["places"];
@@ -697,6 +699,9 @@ function Resolved(
 										<MarkdownText place="hint" text={question.description} />
 									)}
 								</div>
+								{index === 0 && headerActions && (
+									<span className="question-head-actions">{headerActions}</span>
+								)}
 							</header>
 							{question?.response === "text"
 								? (
@@ -1068,6 +1073,7 @@ export function QuestionView(props: QuestionViewProps) {
 						<Resolved
 							answers={answers}
 							aside={aside}
+							headerActions={headerActions}
 							definition={definition}
 							resolver={resolver}
 							// One control per destination: a linked note takes over the jump.

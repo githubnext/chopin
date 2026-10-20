@@ -1068,6 +1068,14 @@ export function RoomWorkspace(
 	};
 
 	let showInvestigation = (id: string) => {
+		let decision = [...cardMetadata].find(([, meta]) =>
+			meta.status !== "discarded"
+			&& meta.findings?.some(finding => finding.kind === "spike" && finding.ref === id)
+		);
+		if (decision && explore?.openPage) {
+			void explore.openPage(decision[0]).catch(() => selectDestination("decisions"));
+			return;
+		}
 		selectDestination("plan");
 		requestAnimationFrame(() => {
 			let card = document.querySelector<HTMLElement>(
@@ -1493,11 +1501,12 @@ export function RoomWorkspace(
 			metadata: cardMetadata,
 			wire,
 			explore,
+			investigations,
 			self: handle,
 			canEdit: !!workspaceCanEdit,
 			connected: status === "connected",
 		}),
-		[cardMetadata, entries, explore, handle, status, wire, workspaceCanEdit],
+		[cardMetadata, entries, explore, handle, investigations, status, wire, workspaceCanEdit],
 	);
 	if (deleted) {
 		return (

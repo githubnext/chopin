@@ -504,7 +504,7 @@ export async function page(
 		return answer({ ok: false, message: "A child document’s decisions can’t open as pages" });
 	}
 	if (record.childId) return answer({ ok: true, childId: record.childId });
-	if (Service.implementationActive(plan)) {
+	if (record.status !== "answered" && Service.implementationActive(plan)) {
 		return answer({ ok: false, message: "An implementation is running; decisions cannot change" });
 	}
 	try {

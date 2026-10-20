@@ -49,7 +49,7 @@ export type InvestigationResources = {
 	cancel(id: string): Promise<unknown>;
 	/** False while the record still needs its card: unknown, queued, running or publishing. */
 	removable(id: string): boolean;
-	render(id: string, remove: () => void): ReactNode;
+	render(id: string, remove?: () => void): ReactNode;
 };
 
 /** A GitHub reference's summary as the host last saw it, or that one is on its way. */

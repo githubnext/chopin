@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
+import type { Model } from "@chopin/question";
 import * as Explore from "./explore";
+import * as Questions from "./service";
+import * as Store from "./store";
 import { normalizeRecord } from "./records";
 import { findings } from "./record-validation";
 import { member, opened, restart, seed } from "./text-response.test-fixtures";
@@ -264,6 +267,38 @@ test("a decision opens as one page: created once, then remembered on its record"
 		id: "missing",
 	}, create);
 	expect(frames.at(-1)).toMatchObject({ ok: false });
+});
+
+test("a saved decision first opens its page under an implementation lock without changing its answer", async () => {
+	let context = await opened();
+	let { ws, frames } = member();
+	let entry = Store.get(context.plan.questions, context.id)!;
+	let draft = entry.model.fork() as Model;
+	draft.api.str([context.questionId, "custom"]).ins(0, "Keep the existing view.");
+	Store.edit(context.plan.questions, context.id, [...draft.api.flush().toBinary()], "ana");
+	await Questions.submit(context.plan, context.server, context.channel.id, ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "save",
+		id: context.id,
+		revision: 1,
+	});
+	expect(frames.at(-1)).toMatchObject({ ok: true });
+	let before = context.plan.records.get(context.id)!;
+	let source = Service.source(context.plan);
+	let revision = context.plan.revision;
+	context.plan.claiming = true;
+	await Explore.page(context.plan, context.server, context.channel.id, ws, {
+		kind: "question:page",
+		ts: 0,
+		rid: "page",
+		id: context.id,
+	}, async () => "saved-page");
+	expect(frames.at(-1)).toMatchObject({ ok: true, childId: "saved-page" });
+	expect(context.plan.records.get(context.id)).toEqual({ ...before, childId: "saved-page" });
+	expect(Service.source(context.plan)).toBe(source);
+	expect(context.plan.revision).toBe(revision);
+	expect(Service.implementationActive(context.plan)).toBe(true);
 });
 
 const READY: ResearchSnapshot = {

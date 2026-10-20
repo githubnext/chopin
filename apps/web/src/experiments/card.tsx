@@ -46,7 +46,7 @@ export function InvestigationReference(
 		userId: string;
 		canEdit: boolean;
 		locked: boolean;
-		onRemove: () => void;
+		onRemove?: () => void;
 		onApply?: () => Promise<unknown>;
 		/** Open the child document a completed investigation was published as. */
 		onOpen?: (child: InvestigationChild, opener: HTMLElement) => void;
@@ -131,14 +131,14 @@ export function InvestigationReference(
 				</>
 			}
 			onOpen={child && onOpen ? opener => onOpen(child, opener) : undefined}
-			onRemove={canEdit && state === "requested"
+			onRemove={canEdit && onRemove && state === "requested"
 				? () =>
 					void act(async () => {
 						// Withdraw the record before its card leaves, so nothing is left unplaced.
 						await store.action(id, "cancel", {});
 						onRemove();
 					})
-				: canEdit && removableInvestigation(store, id)
+				: canEdit && onRemove && removableInvestigation(store, id)
 				? onRemove
 				: undefined}
 			onRetry={canEdit && SETTLED.has(state)

@@ -246,6 +246,7 @@ export function QuestionnaireCard(
 			<Decided
 				canEdit={canEdit}
 				connected={connected}
+				explore={explore}
 				wire={wire}
 				discarded={current === "discarded"}
 				meta={meta}
@@ -629,10 +630,11 @@ export function labels(value: Questionnaire): string[] {
 }
 
 function Decided(
-	{ canEdit, connected, discarded, meta, resolved, value, wire, ...pointing }: {
+	{ canEdit, connected, discarded, explore, meta, resolved, value, wire, ...pointing }: {
 		canEdit: boolean;
 		connected: boolean;
 		discarded: boolean;
+		explore?: ExploreResources;
 		meta?: Question.CardMeta;
 		resolved: Answer[] | undefined;
 		value: Questionnaire;
@@ -642,6 +644,7 @@ function Decided(
 	let [error, setError] = useState<string>();
 	let [submitting, setSubmitting] = useState(false);
 	let pending = useRef(false);
+	let { open: openPage, error: pageError } = useOpenPage(explore, value.id);
 	let editable = canEdit && connected && !!wire && !discarded;
 	let request = (kind: "question:reopen" | "question:discard") => {
 		if (!wire || pending.current) return;
@@ -697,6 +700,17 @@ function Decided(
 		>
 			<QuestionView
 				answers={resolved}
+				headerActions={!discarded && openPage && (
+					<button
+						aria-label="Expand decision"
+						className="btn btn-icon btn-ghost"
+						onClick={openPage}
+						title="Expand decision"
+						type="button"
+					>
+						<ExpandIcon aria-hidden="true" size={16} />
+					</button>
+				)}
 				aside={discarded ? undefined : provenance}
 				definition={definition(value)}
 				disabled={!editable}
@@ -713,6 +727,11 @@ function Decided(
 				submitting={submitting}
 				{...pointing}
 			/>
+			{pageError && (
+				<div className="explore-notice">
+					<InlineNotice message={pageError} tone="danger" />
+				</div>
+			)}
 		</SidecarCard>
 	);
 }

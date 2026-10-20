@@ -33,7 +33,12 @@ import { UnfoldSection } from "@chopin/visuals/unfold";
 import { createContext, useContext, useRef, useState } from "react";
 import { MarkdownBlocks, MarkdownLine, questionParts } from "@chopin/question/react";
 
-import type { ExploreResources, QuestionnaireEntry, Transport } from "@chopin/editor";
+import type {
+	ExploreResources,
+	InvestigationResources,
+	QuestionnaireEntry,
+	Transport,
+} from "@chopin/editor";
 import type { IconProps } from "@chopin/icons";
 import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
@@ -53,6 +58,7 @@ export type QuestionPageRoot = {
 	metadata: ReadonlyMap<string, Question.CardMeta>;
 	wire?: Transport;
 	explore?: ExploreResources;
+	investigations?: Pick<InvestigationResources, "render">;
 	self?: string;
 	canEdit: boolean;
 	connected: boolean;
@@ -338,7 +344,7 @@ export function QuestionPagePanel(
 					<ul className="question-page-findings">
 						{findings.map(finding => (
 							<li key={finding.id}>
-								<FindingDetail finding={finding} />
+								<FindingDetail finding={finding} root={root} />
 							</li>
 						))}
 					</ul>
@@ -361,7 +367,10 @@ export function QuestionPagePanel(
 	);
 }
 
-function FindingDetail({ finding }: { finding: Question.Finding }) {
+function FindingDetail({ finding, root }: { finding: Question.Finding; root: QuestionPageRoot }) {
+	if (finding.kind === "spike" && root.investigations) {
+		return root.investigations.render(finding.ref);
+	}
 	let label = (
 		<span className="question-page-finding-head">
 			<span aria-hidden="true" className="question-page-finding-icon">

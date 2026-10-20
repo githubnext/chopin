@@ -94,6 +94,19 @@ test("settled work offers Retry", () => {
 	}
 });
 
+test("an investigation on a decision page has recovery actions without a fake remove action", () => {
+	let { store } = setup("requested");
+	let markup = renderToStaticMarkup(createElement(InvestigationReference, {
+		store,
+		id: "investigation",
+		userId: "ana",
+		canEdit: true,
+		locked: false,
+	}));
+	expect(markup).toContain(">Run<");
+	expect(markup).not.toContain("Remove investigation");
+});
+
 test("a completed investigation is a compact card that opens its child document", () => {
 	let { store, item } = setup("completed");
 	item.result = performance;
