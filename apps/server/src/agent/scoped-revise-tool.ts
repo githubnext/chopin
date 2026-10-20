@@ -7,9 +7,12 @@ export function createDirectTools() {
 	return {
 		revise_open_decision: tool({
 			description: "In a direct member-requested Chat turn, perform exactly one action "
-				+ "on one existing open decision explicitly named in that action's clause: "
+				+ "on one existing open decision identified in that action's clause: "
 				+ "either reword its question or add evidence-backed options with rationales. "
 				+ "Use separate calls for separate actions, reading the revision again between calls. "
+				+ "For adding options, send revision, id and add_options; omit title even when unchanged. "
+				+ "An explicit instruction may follow discussion in the same message. 'The decision' "
+				+ "can identify the sole editable open choice card; ask which card if ambiguous. "
 				+ "Never create a card, rename an existing option, or choose an answer.",
 			inputSchema: jsonSchema<Record<string, unknown>>({
 				type: "object",

@@ -15,41 +15,64 @@ export function names(target: Target): string[] {
 }
 
 export function requestedActions(text: string): RequestedAction[] {
-	let message = text.toLocaleLowerCase().replace(/[\u2018\u2019]/g, "'")
+	let source = text.toLocaleLowerCase()
 		.replace(/^\s*@chopin\b[\s,:-]*/, "").trim();
+	let message = source.replace(/[\u2018\u2019]/g, "'");
+	// Preserve offsets so quoted target names can still be read in an unquoted command.
+	let unquoted = source
+		.replace(
+			/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`]*`|"[^"]*"|“[^”]*”|‘[^’]*’|(^|\s)'[^']*'/g,
+			quote => " ".repeat(quote.length),
+		)
+		.replace(/^[\t ]*>.*$/gm, quote => " ".repeat(quote.length))
+		.replace(/[\u2018\u2019]/g, "'");
 	let verbs = "change|edit|rename|retitle|reword|revise|update|add|include|propose|suggest";
 	let start = new RegExp(
 		`^(?:(?:please|kindly)\\s+)?(?:(?:(?:can|could|would) you\\s+(?:please\\s+)?`
 			+ `|i (?:want|would like) you to\\s+|i'd like you to\\s+))?(${verbs})\\b`,
 	);
-	let first = start.exec(message);
 	let actions: RequestedAction[] = [];
-	if (!first) return actions;
-	// A withdrawal anywhere in the same message cancels the whole proposed batch.
-	if (/\b(?:don't|do not|not|never|no|cancel|withdraw|retract|stop)\b/.test(message)) {
+	// A withdrawal or deferral anywhere in the same message cancels the proposed batch.
+	if (
+		/\b(?:don't|do not|not|never|no|cancel|withdraw|retract|stop)\b/.test(message)
+		|| /\b(?:wait (?:until|for)|hold off|defer (?:this|that|the) (?:request|edit|change))\b/
+			.test(message)
+	) {
 		return actions;
 	}
-	let commands: Array<{ verb: string; objectStart: number; boundary: number }> = [{
-		verb: first[1]!,
-		objectStart: first[0].length,
-		boundary: 0,
-	}];
-	let continuation = new RegExp(`\\b(?:and|then)\\s+(?:please\\s+)?(${verbs})\\b`, "g");
-	for (let match of message.slice(first[0].length).matchAll(continuation)) {
-		let boundary = first[0].length + match.index!;
-		commands.push({ verb: match[1]!, objectStart: boundary + match[0].length, boundary });
-	}
-	for (let [index, command] of commands.entries()) {
-		let clause = message.slice(command.objectStart, commands[index + 1]?.boundary);
-		if (/^(?:add|include|propose|suggest)$/.test(command.verb)) {
-			if (
-				/^\s*(?:(?:an?|some|new|the)\s+)?(?:option|options|choice|choices|alternative|alternatives)\b/
-					.test(clause)
-			) {
-				actions.push({ kind: "option", clause });
+	for (let segment of unquoted.matchAll(/[^.!?;\r\n]+/g)) {
+		let preceding = unquoted.slice(0, segment.index).trimEnd();
+		// A colon introduces quoted, illustrative or conditional material, not a fresh request.
+		if (preceding.endsWith(":")) continue;
+		let sentence = segment[0];
+		let first = start.exec(sentence.trimStart());
+		if (!first) continue;
+		let offset = sentence.length - sentence.trimStart().length;
+		let commands: Array<{ verb: string; objectStart: number; boundary: number }> = [{
+			verb: first[1]!,
+			objectStart: offset + first[0].length,
+			boundary: 0,
+		}];
+		let continuation = new RegExp(`\\b(?:and|then)\\s+(?:please\\s+)?(${verbs})\\b`, "g");
+		for (let match of sentence.slice(commands[0]!.objectStart).matchAll(continuation)) {
+			let boundary = commands[0]!.objectStart + match.index!;
+			commands.push({ verb: match[1]!, objectStart: boundary + match[0].length, boundary });
+		}
+		for (let [index, command] of commands.entries()) {
+			let clause = message.slice(
+				segment.index! + command.objectStart,
+				segment.index! + (commands[index + 1]?.boundary ?? sentence.length),
+			);
+			if (/^(?:add|include|propose|suggest)$/.test(command.verb)) {
+				if (
+					/^\s*(?:(?:an?|some|new|the|these|those|my)\s+)?(?:option|options|choice|choices|alternative|alternatives)\b/
+						.test(clause)
+				) {
+					actions.push({ kind: "option", clause });
+				}
+			} else if (/^\s*(?:the\s+)?(?:question|title|wording)\b/.test(clause)) {
+				actions.push({ kind: "title", clause });
 			}
-		} else if (/^\s*(?:the\s+)?(?:question|title|wording)\b/.test(clause)) {
-			actions.push({ kind: "title", clause });
 		}
 	}
 	return actions;
@@ -60,6 +83,7 @@ export function explicitRequest(
 	target: Target,
 	allTargets: Target[],
 	args: Input,
+	soleOptionTarget?: string,
 ): void {
 	let actions = requestedActions(text);
 	let supports = (kind: RequestedAction["kind"], refusal: string) => {
@@ -71,6 +95,9 @@ export function explicitRequest(
 			let mentioned = allTargets.filter(candidate =>
 				names(candidate).some(name => clause.includes(` ${name} `))
 			);
+			if (mentioned.length === 0 && kind === "option" && soleOptionTarget === target.id) {
+				return /\b(?:to|for) (?:the|this) decision $/.test(clause);
+			}
 			if (mentioned.length !== 1 || mentioned[0]?.id !== target.id) return false;
 			return [...clause.matchAll(/\b(?:to|for)\s+(?:the\s+)?/g)].some(match => {
 				let after = clause.slice(match.index! + match[0].length);

@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import * as room from "../plan/room";
 import * as Store from "../questions/store";
+import * as Questions from "../questions/service";
 import { createReviseOpenDecisionFixture } from "./revise-open-decision.test-fixtures";
 
 let contexts: ReturnType<typeof createReviseOpenDecisionFixture>["contexts"];
@@ -43,6 +44,12 @@ test("editing an option rationale does not authorize a question retitle", async 
 
 test("generic question words and ambiguous references do not identify a card", async () => {
 	let context = await opened();
+	await Questions.insertConversationCard(context.plan, context.server, "test", {
+		threadId: "thread-b",
+		header: "Billing",
+		question: "Which billing provider should we use?",
+		options: [],
+	});
 	let before = room.project(context.plan.document);
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	try {

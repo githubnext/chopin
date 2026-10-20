@@ -10,13 +10,15 @@ export function createReviseOpenDecisionFixture(
 ) {
 	let contexts: Awaited<ReturnType<typeof openPlan>>[] = [];
 
-	async function opened(options: Array<{ id: string; label: string }> = []) {
+	async function opened(
+		options: Array<{ id: string; label: string }> = [],
+		question = { header: "Authentication", question: "What auth system should we use?" },
+	) {
 		let context = await openPlan("Opening prose.\n");
 		contexts.push(context);
 		let id = await Questions.insertConversationCard(context.plan, context.server, "test", {
 			threadId: "thread-a",
-			header: "Authentication",
-			question: "What auth system should we use?",
+			...question,
 			options,
 		});
 		context.plan.chat.busy = true;

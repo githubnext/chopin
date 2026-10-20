@@ -36,6 +36,14 @@ export async function reviseOpenDecision(
 			|| !room.hasQuestionnaire(plan.document, args.id, record.definition.questions[0]!.id)
 		) throw new Error("that decision is no longer open in this document");
 		let question = record.definition.questions[0]!;
+		let optionTargets = [...plan.records.values()].filter(item => {
+			let candidate = item.definition.questions[0];
+			let entry = Store.get(plan.questions, item.id);
+			return Questions.isOpenStatus(item.status) && item.definition.questions.length === 1
+				&& candidate && candidate.response !== "text" && !candidate.verbatim
+				&& entry && !entry.claim && entry.definition.questions[0]?.id === candidate.id
+				&& room.hasQuestionnaire(plan.document, item.id, candidate.id);
+		});
 		explicitRequest(
 			request.text,
 			{ id: args.id, header: question.header, question: question.question },
@@ -45,6 +53,7 @@ export async function reviseOpenDecision(
 				question: item.definition.questions[0]?.question ?? "",
 			})),
 			args,
+			optionTargets.length === 1 ? optionTargets[0]!.id : undefined,
 		);
 		let seen = new Set(question.options.map(option => option.label.trim().toLocaleLowerCase()));
 		if (question.options.length + args.add_options.length > 10) {
