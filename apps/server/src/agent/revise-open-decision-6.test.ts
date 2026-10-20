@@ -97,11 +97,18 @@ test.each([
 	"The instruction I am considering is:\nAdd these options to the decision.",
 	"Example:\nAdd these options to the decision.",
 	"Add these options to the decision. But wait until Idan responds.",
+	"If Idan agrees:\nAdd options to Authentication.\nAdd options to Authentication.",
+	"The following is an example:\nAdd options to Authentication.\nAdd options to Authentication.",
+	"The following is an example: Add options to Authentication.\n\nAdd options to Authentication.",
+	"If Idan agrees: Add options to Authentication.\n\nAdd options to Authentication.",
+	"Add these options to the decision. Only if Idan agrees.",
 ])("an illustrative directive cannot mutate the sole choice card: %s", async text => {
 	let context = await opened();
 	context.request({ text });
 	let before = room.project(context.plan.document);
 	let revision = context.plan.revision;
+	let broadcasts = context.broadcasts.length;
+	let stored = await context.storage.collaboration.load(context.channel.id, context.now);
 	let errors = spyOn(console, "error").mockImplementation(() => {});
 	try {
 		expect(
@@ -117,6 +124,8 @@ test.each([
 	expect(context.plan.revision).toBe(revision);
 	expect(room.project(context.plan.document)).toBe(before);
 	expect(context.plan.records.get(context.id)!.definition.questions[0]!.options).toEqual([]);
+	expect(context.broadcasts).toHaveLength(broadcasts);
+	expect(await context.storage.collaboration.load(context.channel.id, context.now)).toEqual(stored);
 });
 
 test.each(["closed", "claimed", "unprojected"] as const)(

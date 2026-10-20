@@ -14,6 +14,18 @@ export function names(target: Target): string[] {
 		.filter(Boolean);
 }
 
+function requestedAction(verb: string, clause: string): RequestedAction | undefined {
+	if (/^(?:add|include|propose|suggest)$/.test(verb)) {
+		if (
+			/^\s*(?:(?:an?|some|new|the|these|those|my)\s+)?(?:option|options|choice|choices|alternative|alternatives)\b/
+				.test(clause)
+		) return { kind: "option", clause };
+	} else if (/^\s*(?:the\s+)?(?:question|title|wording)\b/.test(clause)) {
+		return { kind: "title", clause };
+	}
+	return undefined;
+}
+
 export function requestedActions(text: string): RequestedAction[] {
 	let source = text.toLocaleLowerCase()
 		.replace(/^\s*@chopin\b[\s,:-]*/, "").trim();
@@ -40,13 +52,30 @@ export function requestedActions(text: string): RequestedAction[] {
 	) {
 		return actions;
 	}
+	let scoped = false;
 	for (let segment of unquoted.matchAll(/[^.!?;\r\n]+/g)) {
-		let preceding = unquoted.slice(0, segment.index).trimEnd();
-		// A colon introduces quoted, illustrative or conditional material, not a fresh request.
-		if (preceding.endsWith(":")) continue;
+		let preceding = unquoted.slice(0, segment.index);
 		let sentence = segment[0];
 		let first = start.exec(sentence.trimStart());
-		if (!first) continue;
+		if (!first) {
+			// A directive with unexplained trailing prose may be conditional or withdrawn.
+			if (actions.length > 0 && sentence.trim()) return [];
+			if (
+				sentence.trimEnd().endsWith(":") || sentence.split(":").slice(1).some(part => {
+					let command = part.trimStart();
+					let directive = start.exec(command);
+					return directive && requestedAction(directive[1]!, command.slice(directive[0].length));
+				})
+			) scoped = true;
+			continue;
+		}
+		// A contextual colon scopes its paragraph. A block or embedded decision directive
+		// retains that scope across paragraph breaks, whose meaning is ambiguous.
+		let context = preceding.split(/\r?\n[\t ]*\r?\n/).at(-1)!;
+		if (scoped || context.includes(":")) {
+			if (actions.length > 0) return [];
+			continue;
+		}
 		let offset = sentence.length - sentence.trimStart().length;
 		let commands: Array<{ verb: string; objectStart: number; boundary: number }> = [{
 			verb: first[1]!,
@@ -63,16 +92,8 @@ export function requestedActions(text: string): RequestedAction[] {
 				segment.index! + command.objectStart,
 				segment.index! + (commands[index + 1]?.boundary ?? sentence.length),
 			);
-			if (/^(?:add|include|propose|suggest)$/.test(command.verb)) {
-				if (
-					/^\s*(?:(?:an?|some|new|the|these|those|my)\s+)?(?:option|options|choice|choices|alternative|alternatives)\b/
-						.test(clause)
-				) {
-					actions.push({ kind: "option", clause });
-				}
-			} else if (/^\s*(?:the\s+)?(?:question|title|wording)\b/.test(clause)) {
-				actions.push({ kind: "title", clause });
-			}
+			let action = requestedAction(command.verb, clause);
+			if (action) actions.push(action);
 		}
 	}
 	return actions;

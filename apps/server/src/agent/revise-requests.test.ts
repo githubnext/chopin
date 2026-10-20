@@ -26,6 +26,14 @@ test.each([
 	"Add options to Authentication. Actually, cancel that request.",
 	"Add these options to the decision. But wait until Idan responds.",
 	"Here are ideas.\n\nDon't add these options to the decision.",
+	"If Idan agrees:\nAdd options to Authentication.\nAdd options to Authentication.",
+	"The following is an example:\nAdd options to Authentication.\nAdd options to Authentication.",
+	"Someone said:\nAdd options to Authentication.\nAdd options to Authentication.",
+	"Example: Add options to Authentication. Add options to Authentication.",
+	"Example:\n\nAdd options to Authentication.\n\nAdd options to Authentication.",
+	"The following is an example: Add options to Authentication.\n\nAdd options to Authentication.",
+	"If Idan agrees: Add options to Authentication.\n\nAdd options to Authentication.",
+	"Add these options to the decision. Only if Idan agrees.",
 ])("discussion, quotation or withdrawal cannot authorize edits: %s", text => {
 	expect(requestedActions(text)).toEqual([]);
 });
