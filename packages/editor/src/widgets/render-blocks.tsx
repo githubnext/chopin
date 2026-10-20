@@ -568,12 +568,21 @@ function sidesOf(element: HTMLElement): ReturnType<typeof hiddenSides> {
  * measure makes its labels unreadable. A modest overshoot is scaled to fit;
  * anything wider keeps its size and scrolls from its start, fading the side
  * with more to see, and offers its whole shape scaled to the frame's width.
+ * `fitted` opens it at that width instead, as a card does, offering its
+ * actual size.
  */
-export function Diagram({ id, html, stale }: { id: string; html: string; stale: boolean }) {
+export function Diagram(
+	{ id, html, stale, fitted: opensFitted = false }: {
+		id: string;
+		html: string;
+		stale: boolean;
+		fitted?: boolean;
+	},
+) {
 	let region = useRef<HTMLDivElement>(null);
 	let [fit, setFit] = useState(false);
-	/** A reader asked for the whole shape at the frame's width. */
-	let [fitted, setFitted] = useState(false);
+	/** The whole shape at the frame's width, as the reader last chose. */
+	let [fitted, setFitted] = useState(opensFitted);
 	let [expanded, setExpanded] = useState(false);
 	let phone = usePhone();
 	let expand = useRef<HTMLButtonElement>(null);

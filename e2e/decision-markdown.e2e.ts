@@ -52,9 +52,17 @@ function prompt(image: string): string {
 	].join("\n");
 }
 
-/** One Markdown decision and one plain one-line decision, open, as a Planner records them. */
+type Item = {
+	widget: string;
+	question: string;
+	header: string;
+	prompt: string;
+	options: { id: string; label: string; description: string }[];
+};
+
+/** Markdown decisions and a plain one-line one, open, as a Planner records them. */
 function cards(image: string): { source: string; state: SeedState } {
-	let items = [
+	return seeded([
 		{
 			widget: "01K0N4TR8K7JGM4R1J7PW4R8M0",
 			question: "01K0N4V4E7Y6P4MJ5WD8XZF3M0",
@@ -89,7 +97,11 @@ function cards(image: string): { source: string; state: SeedState } {
 				{ id: "01K0N4W3B7P27CBAEC7A8C8WM3", label: "Rename", description: "" },
 			],
 		},
-	];
+	]);
+}
+
+/** The open decisions in a document, each a questionnaire block with its record. */
+function seeded(items: Item[]): { source: string; state: SeedState } {
 	let questions: unknown[] = [];
 	let openQuestions: unknown[] = [];
 	let blocks = items.map(item => {
@@ -291,4 +303,95 @@ test("phone: the Decisions sheet reads the Markdown decision the same way", asyn
 		body: await page.screenshot({ animations: "disabled" }),
 		contentType: "image/png",
 	});
+});
+
+const WIDE_HEADING = "Which delivery path do we keep?";
+/** A left-to-right flowchart of five steps, wider than a card and the document's measure. */
+const FLOW = [
+	"flowchart LR",
+	"A[Draft the document] --> B[Review the plan] --> C[Answer the decisions]",
+	"C --> D[Build the plan] --> E[Ship it to everyone]",
+];
+
+/** One decision drawing a wide flowchart, below the same flowchart drawn in the document. */
+function wide(): { source: string; state: SeedState } {
+	let fixture = seeded([{
+		widget: "01K0N4TR8K7JGM4R1J7PW4R8M3",
+		question: "01K0N4V4E7Y6P4MJ5WD8XZF3M3",
+		header: "Path",
+		prompt: [WIDE_HEADING, "", "```mermaid", ...FLOW, "```"].join("\n"),
+		options: [
+			{ id: "01K0N4W3B7P27CBAEC7A8C8WM6", label: "Keep it", description: "" },
+			{ id: "01K0N4W3B7P27CBAEC7A8C8WM7", label: "Shorten it", description: "" },
+		],
+	}]);
+	let [heading, ...rest] = fixture.source.split("\n\n");
+	let drawing = ["```mermaid", ...FLOW, "```"].join("\n");
+	return { ...fixture, source: [heading, drawing, ...rest].join("\n\n") };
+}
+
+/** Whether a drawing's frame scrolls, and whether the whole drawing sits inside it. */
+function framing(region: Locator) {
+	return region.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		let svg = element.querySelector("svg")!.getBoundingClientRect();
+		return {
+			scrolls: element.scrollWidth > element.clientWidth + 1,
+			inside: svg.left >= box.left - 1 && svg.right <= box.right + 1,
+		};
+	});
+}
+
+test("a wide diagram on a card opens fitted to the card, while the document's still scrolls", async ({ join, seed }) => {
+	test.setTimeout(90_000);
+	let fixture = wide();
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", { viewport: { width: 1280, height: 900 } });
+	let inline = card(page, "plan", WIDE_HEADING);
+	let drawing = inline.locator(".question-diagram .plan-diagram");
+	await expect(drawing.locator("svg")).toBeVisible({ timeout: 15_000 });
+	await inline.scrollIntoViewIfNeeded();
+	await test.info().attach("decision-diagram-1280", {
+		body: await inline.screenshot({ animations: "disabled" }),
+		contentType: "image/png",
+	});
+	expect(await framing(drawing)).toEqual({ scrolls: false, inside: true });
+	let actual = inline.getByRole("button", { name: "Actual size" });
+	await expect(actual).toBeVisible();
+	await expect(inline.getByRole("button", { name: "Fit diagram to width" })).toHaveCount(0);
+
+	// Actual size draws it at its own width, scrolling, and the card offers to fit it again.
+	await actual.click();
+	await expect(inline.getByRole("button", { name: "Fit diagram to width" })).toBeVisible();
+	await expect.poll(() => framing(drawing)).toEqual({ scrolls: true, inside: false });
+
+	// The same drawing in the document, above the card, still opens at its drawn size.
+	let document = page.locator('[data-document-view="plan"] .plan-diagram').first();
+	await expect(document.locator("svg")).toBeVisible({ timeout: 15_000 });
+	expect(await document.evaluate(element => element.closest(".question-diagram"))).toBeNull();
+	expect(await framing(document)).toEqual({ scrolls: true, inside: false });
+	await expect(
+		page.locator('[data-document-view="plan"]').getByRole("button", {
+			name: "Fit diagram to width",
+		}),
+	).toHaveCount(2);
+});
+
+test("phone: a wide diagram on a card opens fitted and still expands full screen", async ({ join, seed }) => {
+	test.setTimeout(90_000);
+	let fixture = wide();
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", PHONE);
+	await showDecisions(page);
+	let listed = card(page, "decisions", WIDE_HEADING).filter({ visible: true });
+	let drawing = listed.locator(".question-diagram .plan-diagram");
+	await expect(drawing.locator("svg")).toBeVisible({ timeout: 15_000 });
+	await test.info().attach("decision-diagram-phone", {
+		body: await page.screenshot({ animations: "disabled" }),
+		contentType: "image/png",
+	});
+	expect(await framing(drawing)).toEqual({ scrolls: false, inside: true });
+	await expect(listed.getByRole("button", { name: "Actual size" })).toHaveCount(0);
+	await listed.getByRole("button", { name: "Expand diagram" }).click();
+	await expect(page.getByRole("dialog")).toBeVisible();
 });

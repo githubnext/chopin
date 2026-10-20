@@ -2,11 +2,12 @@
  * A Mermaid diagram in a decision card.
  *
  * Drawn by the document's own Mermaid renderer, theme and strict security
- * level, inside the same frame: a wide chart scrolls and offers "Fit diagram to
- * width", and a phone can open it full screen. A card is short, so a tall
- * drawing is held to a bounded height until the reader expands it. Nothing is
- * loaded or drawn until the card is near the viewport, and a source Mermaid
- * cannot draw is shown as code rather than an error.
+ * level, inside the same frame. A card is narrow, so a wide chart opens fitted
+ * to its width, with "Actual size" to scroll it at its drawn size instead, and
+ * a phone can open it full screen. A card is short, so a tall drawing is held to
+ * a bounded height until the reader expands it. Nothing is loaded or drawn until
+ * the card is near the viewport, and a source Mermaid cannot draw is shown as
+ * code rather than an error.
  */
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
@@ -93,7 +94,7 @@ export function CardDiagram({ source }: { source: string }) {
 				data-overflows={overflows && !expanded ? "" : undefined}
 			>
 				{html
-					? <Diagram id={key} html={html} stale={false} />
+					? <Diagram id={key} html={html} stale={false} fitted />
 					: <div aria-label="Drawing diagram" className="question-diagram-pending" role="img" />}
 			</div>
 			{html && (overflows || expanded) && (
