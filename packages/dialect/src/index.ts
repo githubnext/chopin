@@ -134,5 +134,7 @@ export {
 	MAX_TITLE_LENGTH,
 	normalizeDocumentTitle,
 	normalizeDocumentTitleTree,
+	validDocumentTitleChange,
+	validDocumentTitleText,
 	withDocumentTitle,
 } from "./title";

@@ -1,4 +1,8 @@
-import { documentTitleText, normalizeDocumentTitleTree } from "@chopin/dialect";
+import {
+	documentTitleText,
+	normalizeDocumentTitleTree,
+	validDocumentTitleChange,
+} from "@chopin/dialect";
 /**
  * Agent edits to the plan, addressed by block.
  *
@@ -204,6 +208,9 @@ export function prepare(
 
 	let next: string;
 	try {
+		if (!validDocumentTitleChange(root, { ...root, children })) {
+			throw new Error("Document title contains control characters or damaged Unicode text");
+		}
 		next = serialize({ ...root, children });
 		// Parsing only proves the result is MDX. `<script>` is perfectly good
 		// MDX and utterly outside this dialect, so validate what we are about
@@ -269,6 +276,9 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 	try {
 		root = parse(source(plan));
 		proposed = parse(nextSource);
+		if (!validDocumentTitleChange(root, proposed)) {
+			throw new Error("Document title contains control characters or damaged Unicode text");
+		}
 		if (plan.document.titleKey !== undefined || plan.persistence?.documentTitles) {
 			proposed = normalizeDocumentTitleTree(
 				proposed,

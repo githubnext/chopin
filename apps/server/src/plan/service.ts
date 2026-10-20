@@ -3,6 +3,8 @@ import {
 	documentTitleText,
 	normalizeDocumentTitleTree,
 	serialize,
+	validDocumentTitleChange,
+	validDocumentTitleText,
 	withDocumentTitle,
 } from "@chopin/dialect";
 import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
@@ -932,6 +934,12 @@ export async function initial(
 ): Promise<InitialChannel> {
 	// A new document has no stored links to spare from the newer URL rules.
 	assertIntroducedUrls([], parse(source).children);
+	if (
+		!validDocumentTitleChange({ type: "root", children: [] }, parse(source))
+		|| title !== undefined && !validDocumentTitleText(title)
+	) {
+		throw new Error("Document title contains control characters or damaged Unicode text");
+	}
 	let document = await room.create(source);
 	if (title !== undefined) room.enableTitle(document, title);
 	try {

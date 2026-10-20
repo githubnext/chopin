@@ -1,8 +1,8 @@
 import * as Questions from "../questions/service";
 import { announceImplementation } from "../tasks/notifications";
-import { $createHeadingNode } from "@chopin/dialect";
+import { $createHeadingNode, $isHeadingNode } from "@chopin/dialect";
 import * as Y from "yjs";
-import { $createTextNode, $getRoot, $isElementNode } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode } from "lexical";
 import * as Room from "./room";
 import * as Edit from "./edit";
 import type { Socket } from "../wire";
@@ -13,11 +13,25 @@ import { normalizedTitle } from "../channels/title";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
 
-async function context(source?: string, active = false) {
+async function context(source?: string, active = false, legacyTitle = false) {
 	let storage = new MemoryStorage();
 	let now = new Date();
 	await storage.users.put({ id: "user", login: "user", avatarUrl: "", now });
-	let initial = source !== undefined ? await Service.initial(source) : undefined;
+	let initial = source !== undefined
+		? await Service.initial(legacyTitle ? "# Original\n\nBody.\n" : source)
+		: undefined;
+	if (legacyTitle && initial && source !== undefined) {
+		let document = await Room.create(source);
+		let canonical = Room.project(document);
+		initial = {
+			...initial,
+			epoch: document.epoch,
+			source: canonical,
+			sourceHash: Service.sourceHash(canonical),
+			document: Y.encodeStateAsUpdate(document.doc),
+		};
+		document.doc.destroy();
+	}
 	if (active && initial) {
 		initial.sidecar = {
 			...initial.sidecar as object,
@@ -58,6 +72,165 @@ async function context(source?: string, active = false) {
 }
 
 describe("synchronized product document titles", () => {
+	it("opens a legacy corrupt checkpoint, keeps its body editable, and permits an explicit repair", async () => {
+		let title = "Resurfacing old notes �00\u0017a9 \u0016e29 runtime=default";
+		let c = await context(`# ${title}\n\nBody.\n`, false, true);
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		try {
+			expect(Service.source(plan)).toBe(`# ${title}\n\nBody.\n`);
+			let outcome = Edit.replace(plan, plan.revision, `# ${title}\n\nUpdated body.\n`);
+			if (!outcome.ok || !outcome.mutation) throw new Error("legacy body edit failed");
+			await Service.publish(plan, c.server, plan.id, outcome.mutation);
+			expect(Edit.apply(plan, plan.revision, [{
+				op: "replace",
+				index: 0,
+				source: `# ${title} changed\n`,
+			}])).toMatchObject({ ok: false, reason: "invalid" });
+			await Service.exclusive(plan, () => Service.rename(plan, "Resurfacing old notes"));
+			expect(Service.source(plan)).toBe("# Resurfacing old notes\n\nUpdated body.\n");
+			await Service.close(plan);
+			plan = await Service.open(c.channel.id, c.backend, c.server);
+			expect(Service.source(plan)).toBe("# Resurfacing old notes\n\nUpdated body.\n");
+		} finally {
+			await Service.close(plan);
+		}
+	});
+
+	it("rejects a corrupt initial title and moving a damaged body H1 into the title", async () => {
+		let bad = "Notes\u0017runtime=default";
+		await expect(Service.initial(`# ${bad}\n\nBody.\n`)).rejects.toThrow("Document title contains");
+		await expect(Service.initial("", undefined, "Notes\u0000runtime=default"))
+			.rejects.toThrow("Document title contains");
+		let c = await context(`# Original\n\n# ${bad}\n\nBody.\n`);
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		try {
+			expect(Edit.apply(plan, plan.revision, [{ op: "move", index: 1, to: 0 }]))
+				.toMatchObject({ ok: false, reason: "invalid" });
+			expect(Service.source(plan)).toBe(`# Original\n\n# ${bad}\n\nBody.\n`);
+		} finally {
+			await Service.close(plan);
+		}
+	});
+
+	it("rejects corrupt titles through rename, rewrite, and structural edits without publication", async () => {
+		let c = await context("# Original\n\nBody.\n");
+		let frames: string[] = [];
+		c.server.publish = (_topic, frame) => {
+			frames.push(JSON.parse(String(frame)).kind);
+			return 0;
+		};
+		let plan = await Service.open(c.channel.id, c.backend, c.server);
+		frames.length = 0;
+		let before = await c.storage.channels.get(plan.id);
+		let source = Service.source(plan);
+		let revision = plan.revision;
+		let seq = plan.document.seq;
+		try {
+			for (
+				let title of [
+					"Resurfacing old notes �00\u0017a9 \u0016e29 runtime=default",
+					"Notes\u0085runtime=default",
+					"Notes\ud800",
+					"x".repeat(50) + "\u0017",
+				]
+			) {
+				expect(normalizedTitle(title)).toBeUndefined();
+				await expect(Service.exclusive(plan, () => Service.rename(plan, title))).rejects.toThrow(
+					"Document title contains",
+				);
+				expect(Edit.replace(plan, revision, `# ${title}\n\nChanged body.\n`)).toMatchObject({
+					ok: false,
+					reason: "invalid",
+				});
+				expect(Edit.apply(plan, revision, [{
+					op: "replace",
+					index: 0,
+					source: `# ${title}\n`,
+				}])).toMatchObject({ ok: false, reason: "invalid" });
+				expect(Service.source(plan)).toBe(source);
+				expect(plan.revision).toBe(revision);
+				expect(plan.document.seq).toBe(seq);
+				expect(await c.storage.channels.get(plan.id)).toEqual(before);
+				expect(frames).toEqual([]);
+			}
+		} finally {
+			await Service.close(plan);
+		}
+	});
+
+	it.each(["edited", "moved", "retagged"])(
+		"rejects a corrupt %s title sent over Yjs and rebuilds",
+		async mode => {
+			let c = await context("# Original\n\nBody.\n");
+			let plan = await Service.open(c.channel.id, c.backend, c.server);
+			let epoch = plan.document.epoch;
+			let publications: Array<{ kind: string; epoch?: string; ts?: number; reason?: string }> = [];
+			c.server.publish = (_topic, frame) => {
+				publications.push(JSON.parse(String(frame)));
+				return 0;
+			};
+			let before = await c.storage.channels.get(plan.id);
+			let peer = await Room.restore(
+				plan.document.epoch,
+				Y.encodeStateAsUpdate(plan.document.doc),
+				Service.source(plan),
+				[],
+			);
+			try {
+				let vector = Y.encodeStateVector(peer.doc);
+				peer.editor.update(() => {
+					let title = $getRoot().getFirstChild();
+					if (!$isElementNode(title)) throw new Error("title missing");
+					title.clear().append($createTextNode("Notes �00\u0017a9 \u0016e29 runtime=default"));
+					if (mode === "moved") {
+						title.insertBefore($createParagraphNode().append($createTextNode("Before.")));
+					}
+					if (mode === "retagged") {
+						if (!$isHeadingNode(title)) throw new Error("title missing");
+						title.setTag("h2");
+					}
+				}, { discrete: true });
+				await Room.settle();
+				let frames: Array<{ kind: string }> = [];
+				let ws = {
+					data: { canEdit: true, room: plan.id, handle: "user", client: "peer" },
+					send(frame: string) {
+						frames.push(JSON.parse(frame));
+					},
+					publish() {},
+					close() {},
+				} as unknown as Socket;
+				Service.submit(plan, ws, {
+					kind: "plan:update",
+					ts: 0,
+					rid: "corrupt",
+					id: "corrupt",
+					epoch: plan.document.epoch,
+					update: Buffer.from(Y.encodeStateAsUpdate(peer.doc, vector)).toString("base64"),
+				});
+				await Service.drain(plan);
+				expect(frames.some(frame => frame.kind === "plan:ack")).toBe(false);
+				expect(plan.document.epoch).not.toBe(epoch);
+				expect(publications).toContainEqual({
+					kind: "plan:reset",
+					ts: expect.any(Number),
+					epoch: plan.document.epoch,
+					reason: "rebuilt",
+				});
+				expect(Service.source(plan)).toBe("# Original\n\nBody.\n");
+				expect(await c.storage.channels.get(plan.id)).toMatchObject({
+					title: before!.title,
+					slug: before!.slug,
+				});
+				let stored = (await c.storage.collaboration.load(plan.id, new Date()))!;
+				expect((await Service.readStored(stored)).source).toBe("# Original\n\nBody.\n");
+			} finally {
+				peer.doc.destroy();
+				await Service.close(plan);
+			}
+		},
+	);
+
 	it("commits explicit rename before publishing and keeps the live document unchanged on failure", async () => {
 		let c = await context("# Original\n\nBody.\n");
 		let events: string[] = [];

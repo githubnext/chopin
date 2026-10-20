@@ -4,6 +4,7 @@ import {
 	documentTitleText,
 	MAX_TITLE_LENGTH,
 	normalizeDocumentTitle,
+	validDocumentTitleText,
 	withDocumentTitle,
 } from "@chopin/dialect";
 import { parse } from "@chopin/dialect/parse";
@@ -40,6 +41,9 @@ function input(raw: unknown): Input {
 		|| /[\r\n\u2028\u2029]/.test(value.title)
 	) {
 		throw new Error(`title must be at most ${MAX_TITLE_LENGTH} Unicode characters on one line.`);
+	}
+	if (!validDocumentTitleText(value.title)) {
+		throw new Error("title must not contain control characters or damaged Unicode text.");
 	}
 	let title = normalizeDocumentTitle(value.title);
 	let goal: string | undefined;

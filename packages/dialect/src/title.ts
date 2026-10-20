@@ -4,6 +4,11 @@ import type { Heading, Root } from "mdast";
 
 export const MAX_TITLE_LENGTH = 50;
 
+/** Reject damaged text rather than normalizing a corrupt title into a plausible one. */
+export function validDocumentTitleText(value: string): boolean {
+	return !/[\p{Cc}\p{Cs}\uFFFD]/u.test(value.replace(/[\t\r\n]/gu, ""));
+}
+
 /** Editable text retains edge spaces so typing a word separator survives collaboration. */
 export function boundDocumentTitle(value: string): string {
 	return [...value.replace(/[\r\n]/gu, " ")].slice(0, MAX_TITLE_LENGTH).join("");
@@ -32,6 +37,16 @@ export function documentTitleText(root: Root): string | undefined {
 		: undefined;
 }
 
+/** Previously accepted damaged titles remain recoverable, but new writes cannot introduce one. */
+export function validDocumentTitleChange(before: Root, after: Root): boolean {
+	let text = (root: Root) => {
+		let first = root.children[0];
+		return first?.type === "heading" && first.depth === 1 ? plainText(first) : undefined;
+	};
+	let proposed = text(after);
+	return proposed === undefined || validDocumentTitleText(proposed) || proposed === text(before);
+}
+
 /** Keep every body block's identity when initializing or replacing the title. */
 export function normalizeDocumentTitleTree(root: Root, fallback = "", replacement?: string): Root {
 	let existing = documentTitleText(root);
@@ -53,6 +68,9 @@ export function normalizeDocumentTitleTree(root: Root, fallback = "", replacemen
 }
 
 export function withDocumentTitle(source: string, title: string): string {
+	if (!validDocumentTitleText(title)) {
+		throw new Error("Document title contains control characters or damaged Unicode text");
+	}
 	return serialize(normalizeDocumentTitleTree(parse(source), "", title));
 }
 

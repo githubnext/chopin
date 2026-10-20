@@ -273,6 +273,38 @@ test("draft_heading rejects lengths, CR titles, blank lines, and non-paragraph g
 	expect(context.plan.chat.jobOutput).toBeUndefined();
 });
 
+test("draft_heading rejects corrupt title text without changing the previous title or goal", async () => {
+	let context = await opened("# Resurfacing old notes\n");
+	headingJob(context.plan);
+	context.plan.plannerTitle = "Resurfacing old notes";
+	let before = room.project(context.plan.document);
+	let stored = await context.storage.collaboration.load(context.channel.id, context.now);
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		for (
+			let title of [
+				"Resurfacing old notes �00\u0017a9 \u0016e29 runtime=default",
+				"Resurfacing old notes \u000000\u0017a9 \u0016e29 runtime=default",
+				"Notes\u0000runtime=default",
+				"Notes\u0085runtime=default",
+				"Notes\ud800",
+				"Notes\udc00",
+			]
+		) {
+			let result = await headingTool(context).handler({ ...INPUT, title }, {} as never);
+			expect(String(result)).toStartWith("Error:");
+			expect(room.project(context.plan.document)).toBe(before);
+			expect(context.plan.revision).toBe(0);
+			expect(context.plan.document.seq).toBe(0);
+			expect(context.plan.chat.jobOutput).toBeUndefined();
+		}
+	} finally {
+		errors.mockRestore();
+	}
+	expect(context.broadcasts.filter(frame => frame.kind === "plan:update")).toHaveLength(0);
+	expect(await context.storage.collaboration.load(context.channel.id, context.now)).toEqual(stored);
+});
+
 test("failed heading persistence leaves no live edit, publication, or job output", async () => {
 	let context = await opened(CARD);
 	headingJob(context.plan);

@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import * as limits from "./limits";
 import { parse } from "./parse";
 import { serialize } from "./serialize";
+import { validDocumentTitleChange } from "./title";
 import { assertIntroducedUrls, PlanValidationError, validate } from "./validate";
 
 import type { PhrasingContent, RootContent } from "mdast";
@@ -20,6 +21,29 @@ function codes(source: string): string[] {
 	let result = validate(parse(source));
 	return result.ok ? [] : result.issues.map(issue => issue.code);
 }
+
+it("rejects corrupt title text before it can become a document heading", () => {
+	for (
+		let text of [
+			"Resurfacing old notes �00\u0017a9 \u0016e29 runtime=default",
+			"Notes\u0000",
+			"Notes\u001b[0m",
+			"Notes\u0085",
+			"Notes\ud800",
+			"Notes\udc00",
+			"x".repeat(50) + "\u0017",
+		]
+	) {
+		expect(validDocumentTitleChange(parse("# Original\n"), parse(`# ${text}\n\nBody.\n`))).toBe(
+			false,
+		);
+	}
+	for (let text of ["研究ノート", "Résumé — café", "👩🏽‍💻 notes", "ملاحظات", "runtime=default"]) {
+		expect(validDocumentTitleChange(parse("# Original\n"), parse(`# ${text}\n\nBody.\n`))).toBe(
+			true,
+		);
+	}
+});
 
 function linkTo(url: string): PhrasingContent {
 	return { type: "link", url, children: [{ type: "text", value: "x" }] };

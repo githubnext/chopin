@@ -43,6 +43,8 @@ import {
 	ResearchNode,
 	serialize,
 	ulid,
+	validDocumentTitleChange,
+	validDocumentTitleText,
 } from "@chopin/dialect";
 import { $getAnchorAndFocusForUserState } from "@lexical/yjs";
 import {
@@ -376,6 +378,9 @@ export async function apply(
 ): Promise<Applied> {
 	if (updates.length === 0) return { ok: true, seq: target.seq, researchProjections: [] };
 	let before = parse(project(target)).children;
+	let beforeTitle = target.titleKey === undefined ? undefined : target.editor.getEditorState().read(
+		() => $getNodeByKey(target.titleKey!)?.getTextContent(),
+	);
 	let researchProjections: ResearchProjectionChange[] = [];
 	let held = open > 0 ? Buffer.byteLength(project(target)) : 0;
 	try {
@@ -388,6 +393,25 @@ export async function apply(
 
 	try {
 		let after = parse(project(target)).children;
+		// Title normalization restores this node's position and H1 tag after validation.
+		let afterTitle = target.titleKey === undefined
+			? undefined
+			: target.editor.getEditorState().read(
+				() => $getNodeByKey(target.titleKey!)?.getTextContent(),
+			);
+		if (
+			afterTitle !== undefined && afterTitle !== beforeTitle && !validDocumentTitleText(afterTitle)
+		) {
+			return { ok: false, issues: ["invalid-title-text"] };
+		}
+		if (
+			!validDocumentTitleChange({ type: "root", children: before }, {
+				type: "root",
+				children: after,
+			})
+		) {
+			return { ok: false, issues: ["invalid-title-text"] };
+		}
 		assertIntroducedUrls(before, after);
 		let added = new Set<string>();
 		let removed = new Set<string>();
