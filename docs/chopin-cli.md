@@ -277,6 +277,11 @@ permission prompt, so Copilot CLI runs with `--allow-all` to approve its tools
 without asking. Atomic doesn't ask, and `ATOMIC_ACP_HEADLESS=1` ends its
 questions at once instead of waiting for an answer.
 
+Atomic requires `atomic-acp` 0.0.3 or newer. Earlier adapters ignore the run's
+MCP servers, so an agent can chat but cannot read an investigation or build plan.
+Upgrade with `npm install -g @bastani/atomic-acp@latest`, then restart the connector
+with `chopin service restart`.
+
 Arguments after `--` go to the agent. For example,
 `chopin connect --agent atomic -- --model openai/gpt-5.5` runs
 `atomic-acp -- --model openai/gpt-5.5`, which passes them on to Atomic. An
