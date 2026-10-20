@@ -6,7 +6,7 @@ norm: '1'
 sig: 1d72e46bcddab91a
 body_hash: 8bc44f1a8ee51dfc
 raw_hash: ba196865664b51ff
-vouched: 2026-10-20T13:58:57Z
+vouched: 2026-10-20T14:01:50Z
 lines: 225-455
 ---
 
