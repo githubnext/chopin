@@ -660,7 +660,11 @@ the journal and working directory it started in. Each Planner session is
 given that file through Atomic's `createAgentSession({ journal })`, so the
 server's process environment is left unchanged. An operator's non-empty
 `ATOMIC_WORKFLOW_JOURNAL_PATH` names another file instead; Atomic's
-`workflows.journal` setting is not used for Planner sessions. A Build is not a workflow run and has no card in Chat: its tasks, their
+`workflows.journal` setting and its `ATOMIC_WORKFLOWS_JOURNAL` and
+`ATOMIC_STORAGE` selections do not move a Planner session's journal. Atomic
+still checks every set `ATOMIC_STORAGE`, `ATOMIC_SESSIONS_STORAGE`, and
+`ATOMIC_WORKFLOWS_JOURNAL` when it creates a session, so an invalid value fails
+every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their
 state and pull requests show under **Build**, whichever machine runs it. The
 Planner's instructions say so, so it does not point people to Chat for a Build.
 

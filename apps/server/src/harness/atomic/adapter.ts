@@ -661,6 +661,8 @@ export function createAtomicAdapter(
 						journal: full && settings.journal ? { path: settings.journal } : undefined,
 						customTools: turn.tools.map(hostTool),
 					});
+					// Never `startPendingRecovery()`: it replays undelivered work as turns Chopin did not
+					// start, and an interrupted turn is never replayed.
 					let session = created.session;
 					if (full) {
 						full.workflows = session.workflows;

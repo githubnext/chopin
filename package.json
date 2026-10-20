@@ -66,7 +66,7 @@
 				"@ai-sdk/harness": "1.0.146",
 				"@ai-sdk/mcp": "2.0.72",
 				"@ai-sdk/sandbox-just-bash": "1.0.146",
-				"@bastani/atomic": "0.9.39",
+				"@bastani/atomic": "0.9.40",
 				"ai": "7.0.135",
 				"typebox": "1.3.7",
 				"zod": "4.4.3"
