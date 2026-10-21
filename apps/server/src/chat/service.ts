@@ -48,6 +48,7 @@ import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
+import { runDuration } from "./run-duration";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
 import type { Server } from "bun";
@@ -1610,8 +1611,9 @@ async function publishReport(
 		let ended = ENDED_RUN[run.status];
 		let previous = before.get(run.id);
 		if (!ended || (previous && ENDED_RUN[previous])) continue;
-		let minutes = Math.max(1, Math.round(((run.ended ?? run.updated) - run.started) / 60));
-		let said = `${run.name} ${ended} after ${minutes} min.`;
+		let said = `${run.name} ${ended} after ${
+			runDuration((run.ended ?? run.updated) - run.started)
+		}.`;
 		if (followUp && !releasing && NEEDS_FOLLOW_UP[run.status] && known.get(run.id) === session) {
 			attention.push({ run, said });
 			continue;

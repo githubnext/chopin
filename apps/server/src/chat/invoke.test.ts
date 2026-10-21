@@ -1208,6 +1208,21 @@ test("a run first reported as ended gets one finish message and never a repeat",
 	expect(spoken(context, "lint failed after 10 min.")).toBe(1);
 });
 
+test("a run that fails within the second it started is reported in seconds, not as a minute", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	let quick = { ...card("failed"), id: "run-2", name: "lint", updated: 1_000, ended: 1_000 };
+	let short = { ...card("failed"), id: "run-3", name: "check", updated: 1_012, ended: 1_012 };
+	planner.set({ active: ["run-1"], paused: [], cards: [quick, short] });
+	await tick();
+	expect(spoken(context, "lint failed after less than a second.")).toBe(1);
+	expect(spoken(context, "check failed after 12 s.")).toBe(1);
+	expect(context.chat.entries.some(entry => entry.text.endsWith("after 1 min."))).toBe(false);
+});
+
 test("a run reported finished before its root ended gets no finish message until it does", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = runningSession();
