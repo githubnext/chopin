@@ -220,7 +220,7 @@ export const PROMPT_FOR: Record<
 			transcript: plan.chat.entries,
 			outline: outline(plan),
 			title,
-			personal: !draftableTitle(title ?? "", plan.plannerTitle),
+			personal: !draftableTitle(title ?? "", plan),
 		});
 	},
 	refine: (plan, job) => card(plan, job, "refine"),

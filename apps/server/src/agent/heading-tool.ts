@@ -10,7 +10,7 @@ import {
 import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 
-import { draftableTitle } from "../channels/document-title";
+import { draftableTitle, titleHeld } from "../channels/document-title";
 import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as room from "../plan/room";
@@ -84,8 +84,9 @@ export async function draftHeading(
 		if (revision !== plan.revision) throw new Error("stale; read_plan again");
 		let source = room.project(plan.document);
 		let current = documentTitleText(parse(source)) ?? "";
-		// A person's title is theirs: the draft may still seed the goal beneath it.
-		if (!draftableTitle(current, plan.plannerTitle)) title = current;
+		// A person's title is theirs, and so is one they are renaming right now: the draft may
+		// still seed the goal beneath it.
+		if (!draftableTitle(current, plan) || titleHeld(plan.titling, Date.now())) title = current;
 		let retitled = title !== current;
 		let next = withDocumentTitle(source, title);
 		let body = parse(documentBodySource(source));

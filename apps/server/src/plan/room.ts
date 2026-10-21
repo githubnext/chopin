@@ -356,7 +356,13 @@ export function mark(target: Document): void {
 }
 
 export type Applied =
-	| { ok: true; seq: number; researchProjections: ResearchProjectionChange[] }
+	| {
+		ok: true;
+		seq: number;
+		researchProjections: ResearchProjectionChange[];
+		/** The batch changed the title's text. */
+		retitled?: true;
+	}
 	| { ok: false; issues: string[] };
 
 /**
@@ -383,6 +389,7 @@ export async function apply(
 		() => $getNodeByKey(target.titleKey!)?.getTextContent(),
 	);
 	let researchProjections: ResearchProjectionChange[] = [];
+	let retitled = false;
 	let held = open > 0 ? Buffer.byteLength(project(target)) : 0;
 	try {
 		for (let update of updates) Y.applyUpdate(target.doc, update, REMOTE);
@@ -400,6 +407,7 @@ export async function apply(
 			: target.editor.getEditorState().read(
 				() => $getNodeByKey(target.titleKey!)?.getTextContent(),
 			);
+		retitled = afterTitle !== beforeTitle;
 		if (
 			afterTitle !== undefined && afterTitle !== beforeTitle && !validDocumentTitleText(afterTitle)
 		) {
@@ -472,7 +480,12 @@ export async function apply(
 	}
 
 	target.seq += updates.length;
-	return { ok: true, seq: target.seq, researchProjections };
+	return {
+		ok: true,
+		seq: target.seq,
+		researchProjections,
+		...(retitled ? { retitled: true as const } : {}),
+	};
 }
 
 /**

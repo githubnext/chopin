@@ -1099,6 +1099,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) Service.awareness(room.plan, ws, frame);
 			return;
 
+		case "plan:titling":
+			if (room.plan && typeof frame.active === "boolean") {
+				Service.titling(room.plan, ws, { active: frame.active, edited: frame.edited === true });
+			}
+			return;
+
 		case "plan:close":
 			if (room.plan) Service.departed(room.plan, ws);
 			return;

@@ -112,7 +112,14 @@ existing body prose. When the topic changes it may refine a blank title, the
 generated name of a document created without one, or the title a Planner last
 drafted (kept in the sidecar as `plannerTitle`). A title a person set, at
 creation, by renaming or by editing the heading, is never replaced; the job may
-still seed a goal beneath it.
+still seed a goal beneath it. Once a person renames the document or edits its
+heading, the sidecar records `titleChosen` and no later draft replaces their title,
+even a blank, a generated-looking name or the Planner's own earlier draft.
+A drafted title also waits for a person who is renaming: while anyone has the
+header's title field open or the caret in the heading (`plan:titling`), while
+anyone still connected has typed in either, and for a minute after the last of
+them lets go, the job keeps the current title. The drafted title is not offered
+elsewhere; the next saved message drafts again.
 Missing credentials, an absent remote attachment and an implementation lock keep
 new work pending. Closing or detaching interrupts live work; reconnecting never
 replays an interrupted job. Under `remote`, title work uses only the attached owner

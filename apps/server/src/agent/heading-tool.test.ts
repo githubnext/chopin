@@ -1,6 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { QuestionnaireNode } from "@chopin/dialect";
-import { $nodesOfType } from "lexical";
+import { $createTextNode, $getRoot, $isElementNode, $nodesOfType } from "lexical";
+import * as Y from "yjs";
 
 import { toolbox } from "./heading-tool.test-bridge";
 import * as room from "../plan/room";
@@ -8,6 +9,7 @@ import * as Service from "../plan/service";
 import { openPlan } from "../testing/plan";
 
 import type { ConversationPlan } from "@chopin/protocol";
+import type { Socket } from "../wire";
 
 const CARD = `<Questionnaire id="01K0N4X2M5R8T3VQ7YB6ZC4DEF" by="ana" at="2026-07-28T10:14:00.000Z">
 <Question id="01K0N4Y2M5R8T3VQ7YB6ZC4DEF" header="Scope" prompt="What ships first?" multiple="false">
@@ -189,6 +191,131 @@ test("a member's rename after a draft is kept by the next draft", async () => {
 	);
 	expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false });
 	expect(room.project(context.plan.document)).toBe("# Member title\n\nExisting body.\n");
+});
+
+test("a person's rename is never redrafted, even to a blank, generated or earlier draft", async () => {
+	for (let renamed of ["", "quiet-river", "First draft"]) {
+		let context = await opened("# \n\nExisting body.\n");
+		headingJob(context.plan);
+		await headingTool(context).handler({ revision: 0, title: "First draft" }, {} as never);
+		await Service.exclusive(context.plan, () => Service.rename(context.plan, "Member title"));
+		await Service.exclusive(context.plan, () => Service.rename(context.plan, renamed));
+		let kept = room.project(context.plan.document);
+		await Service.close(context.plan);
+		context.plan = await Service.open(context.channel.id, context.backend, context.server);
+		headingJob(context.plan);
+		let result = await headingTool(context).handler(
+			{ revision: context.plan.revision, title: "Second draft" },
+			{} as never,
+		);
+		expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false });
+		expect(room.project(context.plan.document)).toBe(kept);
+	}
+});
+
+test("a draft waits while a person has the title open, and for a while after", async () => {
+	let context = await opened("# amber-river\n\nExisting body.\n");
+	let person = {};
+	let clock = spyOn(Date, "now");
+	let at = Date.parse("2026-10-21T10:00:00.000Z");
+	clock.mockImplementation(() => at);
+	try {
+		Service.titling(context.plan, person, { active: true });
+		headingJob(context.plan);
+		let held = await headingTool(context).handler({ revision: 0, title: "Drafted" }, {} as never);
+		expect(JSON.parse(String(held))).toMatchObject({ ok: true, changed: false });
+		Service.titling(context.plan, person, { active: false });
+		at += 30_000;
+		headingJob(context.plan);
+		await headingTool(context).handler({ revision: 0, title: "Drafted" }, {} as never);
+		expect(room.project(context.plan.document)).toBe("# amber-river\n\nExisting body.\n");
+		at += 31_000;
+		headingJob(context.plan);
+		let applied = await headingTool(context).handler(
+			{ revision: 0, title: "Drafted" },
+			{} as never,
+		);
+		expect(JSON.parse(String(applied))).toMatchObject({ ok: true, title: "Drafted" });
+		expect(room.project(context.plan.document)).toBe("# Drafted\n\nExisting body.\n");
+	} finally {
+		clock.mockRestore();
+	}
+});
+
+test("a person who typed in the title field holds drafts until they leave", async () => {
+	let context = await opened("# amber-river\n\nExisting body.\n");
+	let person = {};
+	let clock = spyOn(Date, "now");
+	let at = Date.parse("2026-10-21T10:00:00.000Z");
+	clock.mockImplementation(() => at);
+	try {
+		Service.titling(context.plan, person, { active: true, edited: true });
+		Service.titling(context.plan, person, { active: false });
+		at += 10 * 60_000;
+		headingJob(context.plan);
+		await headingTool(context).handler({ revision: 0, title: "Drafted" }, {} as never);
+		expect(room.project(context.plan.document)).toBe("# amber-river\n\nExisting body.\n");
+		Service.departed(context.plan, person as never);
+		at += 61_000;
+		headingJob(context.plan);
+		await headingTool(context).handler({ revision: 0, title: "Drafted" }, {} as never);
+		expect(room.project(context.plan.document)).toBe("# Drafted\n\nExisting body.\n");
+	} finally {
+		clock.mockRestore();
+	}
+});
+test("a person's edit of the title in the document is never redrafted", async () => {
+	for (let typed of ["", "First draft"]) {
+		let context = await opened("# \n\nExisting body.\n");
+		context.backend.documentTitles = true;
+		await Service.close(context.plan);
+		context.plan = await Service.open(context.channel.id, context.backend, context.server);
+		let plan = context.plan;
+		headingJob(plan);
+		await headingTool(context).handler({ revision: plan.revision, title: "Drafted" }, {} as never);
+		expect(room.project(plan.document)).toBe("# Drafted\n\nExisting body.\n");
+		let peer = await room.restore(
+			plan.document.epoch,
+			Y.encodeStateAsUpdate(plan.document.doc),
+			room.project(plan.document),
+			[],
+		);
+		let vector = Y.encodeStateVector(peer.doc);
+		peer.editor.update(() => {
+			let title = $getRoot().getFirstChild();
+			if (!$isElementNode(title)) throw new Error("title missing");
+			title.clear();
+			if (typed) title.append($createTextNode(typed));
+		}, { discrete: true });
+		await room.settle();
+		let ws = {
+			data: { canEdit: true, room: plan.id, handle: "ana", client: "peer" },
+			send() {},
+			publish() {},
+			close() {},
+		} as unknown as Socket;
+		Service.submit(plan, ws, {
+			kind: "plan:update",
+			ts: 0,
+			rid: "title",
+			id: "title",
+			epoch: plan.document.epoch,
+			update: Buffer.from(Y.encodeStateAsUpdate(peer.doc, vector)).toString("base64"),
+		});
+		await Service.drain(plan);
+		peer.doc.destroy();
+		let kept = room.project(plan.document);
+		expect(kept).toBe(`${typed ? `# ${typed}` : "#"}\n\nExisting body.\n`);
+		await Service.close(plan);
+		context.plan = await Service.open(context.channel.id, context.backend, context.server);
+		headingJob(context.plan);
+		let result = await headingTool(context).handler(
+			{ revision: context.plan.revision, title: "Second draft" },
+			{} as never,
+		);
+		expect(JSON.parse(String(result))).toMatchObject({ ok: true, changed: false });
+		expect(room.project(context.plan.document)).toBe(kept);
+	}
 });
 
 test("unchanged friendly or blank titles are successful no-ops", async () => {

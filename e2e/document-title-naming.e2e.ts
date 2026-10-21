@@ -87,3 +87,57 @@ test("a heading job keeps the title a person chose", async ({ join, seed, page, 
 	await ready(ana);
 	await surfaces(ana, "E2E5 verify login resume");
 });
+
+function doneJobs(page: Page): () => number {
+	let jobs: ConversationPlan.Job[] = [];
+	page.on("websocket", socket =>
+		socket.on("framereceived", ({ payload }) => {
+			if (typeof payload !== "string") return;
+			let frame = JSON.parse(payload) as { kind: string; jobs?: ConversationPlan.Job[] };
+			if (frame.kind === "conversation-plan:jobs") jobs = frame.jobs ?? [];
+		}));
+	return () => jobs.filter(job => job.status === "done").length;
+}
+
+test("a person typing a title keeps it while the Planner drafts one", async ({ join, seed, page, room }) => {
+	await seed("# quiet-river\n\nExisting body.\n");
+	let done = doneJobs(page);
+	let ana = await join("ana");
+	let bo = await join("bo");
+	await ana.getByRole("group", { name: "Document: quiet-river", exact: true })
+		.getByRole("button", { name: "Rename quiet-river", exact: true }).click();
+	let field = ana.getByRole("textbox", { name: "Document title", exact: true });
+	await field.fill("Login resume");
+	await send(bo, "TITLE-TOPIC: Authentication choices");
+	await expect.poll(done).toBe(1);
+	await surfaces(bo, "quiet-river");
+	await expect(field).toHaveValue("Login resume");
+	await field.press("Enter");
+	for (let peer of [ana, bo]) await surfaces(peer, "Login resume");
+	// Later conversation does not redraft a title a person renamed.
+	await send(bo, "TITLE-TOPIC: Offline retries");
+	await expect.poll(done).toBe(2);
+	for (let peer of [ana, bo]) await surfaces(peer, "Login resume");
+	await written(bo, room, "# Login resume\n\nExisting body.\n");
+});
+
+test("a person with the caret in the document's title keeps it from a drafted title", async ({ join, seed, page, room }) => {
+	await seed("# quiet-river\n\nExisting body.\n");
+	let done = doneJobs(page);
+	let ana = await join("ana");
+	let bo = await join("bo");
+	let heading = content(ana).getByRole("heading", { name: "quiet-river", exact: true });
+	await heading.click();
+	await send(bo, "TITLE-TOPIC: Authentication choices");
+	await expect.poll(done).toBe(1);
+	await surfaces(bo, "quiet-river");
+	await ana.keyboard.press("End");
+	await ana.keyboard.press("Shift+Home");
+	await ana.keyboard.type("Login resume");
+	await written(bo, room, "# Login resume\n\nExisting body.\n");
+	await content(ana).getByText("Existing body.").click();
+	await send(bo, "TITLE-TOPIC: Offline retries");
+	await expect.poll(done).toBe(2);
+	for (let peer of [ana, bo]) await surfaces(peer, "Login resume");
+	await written(bo, room, "# Login resume\n\nExisting body.\n");
+});

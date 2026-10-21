@@ -14,7 +14,7 @@ type KIND<K extends string> = Frame & { kind: K };
  * text frame is legible in a network inspector when something goes wrong.
  */
 export declare namespace Plan {
-	export type Incoming = Request<Open.Ask> | Request<Submit> | Awareness | Close;
+	export type Incoming = Request<Open.Ask> | Request<Submit> | Awareness | Titling | Close;
 
 	export type Outgoing =
 		| Open.Reply
@@ -295,6 +295,13 @@ export declare namespace Plan {
 		/** base64 y-protocols awareness update */
 		update: string;
 	};
+
+	/**
+	 * This person has the document's title open for editing, in its header field or the
+	 * document's own heading, and whether they have typed in it on this connection. A drafted
+	 * title is not applied while anyone is renaming, nor for a short while after. Ephemeral.
+	 */
+	export type Titling = KIND<"plan:titling"> & { active: boolean; edited?: true };
 
 	/** Leave the document. Presence is dropped; the room stays open. */
 	export type Close = KIND<"plan:close">;

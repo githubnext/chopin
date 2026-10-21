@@ -174,7 +174,30 @@ export function generatedTitle(value: string): boolean {
 	return rest.length === 0 && adjectiveSet.has(adjective!) && nounSet.has(noun ?? "");
 }
 
-/** A draft may replace a blank or generated title, or the one a Planner last drafted. */
-export function draftableTitle(title: string, plannerTitle: string | undefined): boolean {
-	return !title || title === plannerTitle || generatedTitle(title);
+/**
+ * A draft may replace a blank or generated title, or the one a Planner last drafted, until a
+ * person renames the document: their title is then theirs, whatever it is.
+ */
+export function draftableTitle(
+	title: string,
+	plan: { plannerTitle?: string; titleChosen?: boolean },
+): boolean {
+	return !plan.titleChosen && (!title || title === plan.plannerTitle || generatedTitle(title));
+}
+
+/** How long after a person last had the title open a drafted title still waits. */
+export const TITLE_HOLD_MS = 60_000;
+
+/** Who has the title open, or has typed in it, on which connection. Never persisted. */
+export type Titling = {
+	people: Map<object, { active: boolean; edited: boolean }>;
+	/** When someone last let go of the title. */
+	releasedAt?: number;
+};
+
+/** A person is renaming, or about to: a drafted title must not race them. */
+export function titleHeld(titling: Titling | undefined, now: number): boolean {
+	if (!titling) return false;
+	for (let person of titling.people.values()) if (person.active || person.edited) return true;
+	return titling.releasedAt !== undefined && now - titling.releasedAt < TITLE_HOLD_MS;
 }

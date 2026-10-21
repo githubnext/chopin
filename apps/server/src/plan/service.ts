@@ -61,6 +61,7 @@ import type { Server } from "bun";
 import type { ConversationPlan, Plan as Wire, Request, Sidebar } from "@chopin/protocol";
 import type { Socket, SocketData } from "../wire";
 import type { Presence } from "./presence";
+import type { Titling } from "../channels/document-title";
 import type { Document } from "./room";
 import type { Block } from "./edit";
 import type { Brief, CreationOrigin } from "../mcp";
@@ -266,6 +267,10 @@ export type Plan = {
 	pendingCardActions: PendingCardAction[];
 	/** The title a Planner last drafted; any other non-generated title is a person's to keep. */
 	plannerTitle?: string;
+	/** A person renamed the document or edited its title; no drafted title replaces theirs. */
+	titleChosen?: true;
+	/** Who is renaming the document right now; a drafted title waits for them. */
+	titling?: Titling;
 
 	/**
 	 * Every questionnaire this plan has ever held, answered or not.
@@ -354,6 +359,7 @@ type Sidecar = {
 	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 	initiativePaused?: boolean;
 	plannerTitle?: string;
+	titleChosen?: true;
 };
 
 type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused">;
@@ -394,6 +400,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
 		...((chat.initiativePaused ?? plan.chat.initiativePaused) ? { initiativePaused: true } : {}),
 		...(plan.plannerTitle !== undefined ? { plannerTitle: plan.plannerTitle } : {}),
+		...(plan.titleChosen ? { titleChosen: true as const } : {}),
 	};
 }
 
@@ -587,6 +594,7 @@ function restoredState(
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	if (Object.hasOwn(item, "initiativePaused")) expected.push("initiativePaused");
 	if (Object.hasOwn(item, "plannerTitle")) expected.push("plannerTitle");
+	if (Object.hasOwn(item, "titleChosen")) expected.push("titleChosen");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -604,6 +612,7 @@ function restoredState(
 		|| !Array.isArray(item.transcript)
 		|| (Object.hasOwn(item, "initiativePaused") && typeof item.initiativePaused !== "boolean")
 		|| (Object.hasOwn(item, "plannerTitle") && typeof item.plannerTitle !== "string")
+		|| (Object.hasOwn(item, "titleChosen") && item.titleChosen !== true)
 	) throw new Error("hosted channel has an invalid sidecar");
 	let execution = Object.hasOwn(item, "execution")
 		? restoreRun(item.execution, graph, item.revision)
@@ -780,6 +789,7 @@ function restoredState(
 		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
 		...(item.initiativePaused === true ? { initiativePaused: true } : {}),
 		...(typeof item.plannerTitle === "string" ? { plannerTitle: item.plannerTitle } : {}),
+		...(item.titleChosen === true ? { titleChosen: true as const } : {}),
 	};
 }
 
@@ -1527,6 +1537,7 @@ export async function open(
 		conversationPlanPendingEffects: sidecar.conversationPlanPendingEffects ?? [],
 		pendingCardActions: sidecar.pendingCardActions ?? [],
 		...(sidecar.plannerTitle !== undefined ? { plannerTitle: sidecar.plannerTitle } : {}),
+		...(sidecar.titleChosen ? { titleChosen: true as const } : {}),
 		outlines: new Map(),
 		records: new Map(
 			sidecar.questions.map(record => [record.id, Questions.normalizeRecord(record)]),
@@ -1817,6 +1828,9 @@ async function commit(plan: Plan): Promise<void> {
 		? room.enableTitle(plan.document, plan.persistence.committedTitle)
 		: undefined;
 	let previousRevision = plan.revision;
+	let previousChosen = plan.titleChosen;
+	// Only people send browser updates: a title they touched is theirs from now on.
+	if (outcome.retitled) plan.titleChosen = true;
 	if (room.project(plan.document) !== plan.persistence.committedSource) plan.revision++;
 	let merged = Y.mergeUpdates([
 		...batch.map(item => item.update),
@@ -1838,6 +1852,7 @@ async function commit(plan: Plan): Promise<void> {
 	} catch (err) {
 		if (!(err instanceof ResearchProjectionConflict)) throw err;
 		plan.revision = previousRevision;
+		plan.titleChosen = previousChosen;
 		plan.records = previousRecords;
 		plan.threads = previousThreads;
 		await rejectBatch(plan, batch, ["research-reference-conflict"]);
@@ -1991,6 +2006,7 @@ export async function publishStaged(
 	plan.conversationPlanPendingEffects = candidate.conversationPlanPendingEffects;
 	plan.conversationPlanEffects = candidate.conversationPlanEffects;
 	plan.plannerTitle = candidate.plannerTitle;
+	if (candidate.titleChosen) plan.titleChosen = true;
 	if (mutation) {
 		try {
 			broadcast(server, roomId, {
@@ -2327,8 +2343,24 @@ export function awareness(plan: Plan, ws: Socket, msg: Wire.Awareness): void {
 	relay(ws, { kind: "plan:awareness", ts: 0, epoch: plan.document.epoch, update: msg.update });
 }
 
+/**
+ * Remember whether a person has the title open, or has typed in it on this connection. A drafted
+ * title waits for them, and for a while after they let go.
+ */
+export function titling(plan: Plan, ws: object, state: { active: boolean; edited?: boolean }) {
+	let titling: Titling = plan.titling ??= { people: new Map() };
+	let before = titling.people.get(ws);
+	let edited = !!before?.edited || state.edited === true;
+	if (before?.active && !state.active) titling.releasedAt = Date.now();
+	titling.people.set(ws, { active: state.active, edited });
+}
+
 /** Clear a departed member's cursors rather than leaving peers to time them out. */
 export function departed(plan: Plan, ws: Socket): void {
+	let left = plan.titling?.people.get(ws);
+	if (left && plan.titling!.people.delete(ws) && (left.active || left.edited)) {
+		plan.titling!.releasedAt = Date.now();
+	}
 	let update = presence.drop(plan.presence, ws);
 	if (!update) return;
 	relay(ws, {
@@ -2520,7 +2552,10 @@ export function placeExperimentReference(
 	});
 }
 
-/** Caller holds the document queue. The H1, metadata and slug commit before publication. */
+/**
+ * Caller holds the document queue. The H1, metadata and slug commit before publication. Only
+ * people rename, directly or through their coding agent, so the title is theirs from then on.
+ */
 export async function rename(
 	plan: Plan,
 	title: string,
@@ -2545,6 +2580,7 @@ export async function rename(
 		records: new Map(plan.records),
 		threads: new Map(plan.threads),
 		outlines: new Map(plan.outlines),
+		titleChosen: true,
 	};
 	try {
 		let outcome = edit.replace(candidate, plan.revision, next);
