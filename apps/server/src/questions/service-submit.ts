@@ -21,6 +21,8 @@ import type { Socket, SocketData } from "../wire";
 import type { Record } from "./records";
 import { appendProseEffect, settleIntent } from "../conversation-plan/prose-job";
 import { appendFollowupEffect } from "./decision-followup";
+import { plannerToActOn } from "./answer-turns";
+import { decisionGeneration } from "./card-actions";
 
 import type { CardEvent } from "./card-event";
 import { announce, emit, pending } from "./card-notifications";
@@ -34,6 +36,8 @@ export async function submit(
 	ws: Socket,
 	msg: Request<Wire.Submit.Ask>,
 	onCommitted?: (intent: NonNullable<ReturnType<typeof settleIntent>>) => void,
+	/** A saved answer the Planner asked for without waiting, which it should now act on. */
+	onPlannerAnswer?: (id: string, generation: number) => void,
 ): Promise<void> {
 	if (Service.implementationActive(plan)) return fail(ws, msg.rid, "implementation is active");
 	let paused = () => {
@@ -232,6 +236,11 @@ export async function submit(
 			// An answer can put a review on the Planner's list; readers learn its prose is owed.
 			() => Service.anchors(plan, server, roomId),
 			() => emit(plan, event),
+			() => {
+				if (plannerToActOn(record, claimed.claim.entry)) {
+					onPlannerAnswer?.(msg.id, decisionGeneration(record));
+				}
+			},
 		]
 	) {
 		try {

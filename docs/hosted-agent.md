@@ -71,6 +71,8 @@ conversation-analysis flags. It uses the complete saved answers affecting that p
 updates only its explicit target. Applied answer generations commit with the source, so an
 interrupted retry cannot write them twice. Lost or ambiguous targets refuse safely. Work waits
 for an existing authorized Planner owner; it never claims ownership from a viewer or saver.
+The same Save also starts one Planner turn carrying the answer, so the Planner acts on what was
+decided rather than only rewriting the passage.
 See [Decisions](decisions.md) for the shared answer lifecycle.
 
 This does not start background research without an explicit request. Blocking `ask` remains

@@ -27,6 +27,11 @@ export type Open = {
 	claim?: "submit" | "cancel" | "option" | "edit";
 	/** Resolves the promise the agent is waiting on. */
 	settle?: (ended: Ended) => void;
+	/**
+	 * A turn or a workflow is waiting on this answer, so it reaches its asker directly. Not
+	 * persisted: after a restart nobody waits any more.
+	 */
+	awaited?: true;
 };
 
 export type Closed = { result: Ended; revision: number; expires: number };

@@ -96,6 +96,7 @@ import * as Marks from "./comments/inject";
 import * as Questions from "./questions/service";
 import * as Explore from "./questions/explore";
 import { runningFindingRefs } from "./questions/service-findings";
+import { answerTurns } from "./questions/answer-turns";
 import { deterministicChannelId } from "./channels/id";
 import type { Research as ResearchWire } from "@chopin/protocol";
 import { investigationFinding } from "./experiments/document";
@@ -373,6 +374,27 @@ const spikeSettlement = spikeSettler({
 		),
 });
 
+/**
+ * Hand a saved answer to a decision the Planner left open to the Planner, as a turn it acts on.
+ * Like other server-authored turns it runs only under the existing owner, and under the remote
+ * harness only while a Planner is attached; one that found no Planner starts once one is.
+ */
+const decisionAnswers = answerTurns({
+	start: async (channelId, compose) => {
+		if (!config.agent) return "drop";
+		let channel = await storage.channels.get(channelId);
+		if (!channel || channel.parentChannelId) return "drop";
+		if (plannerAttachments && !await plannerAttachments.confirmed(channelId)) return false;
+		return serverInstruction(channelId, compose);
+	},
+});
+
+function answerDecision(channelId: string, id: string, generation: number): void {
+	void decisionAnswers.answered(channelId, id, generation).catch(err =>
+		console.error("chopin: could not hand a saved decision to the Planner -", err)
+	);
+}
+
 function settlePendingSpikes(channelId: string): void {
 	if (!config.agent || !config.liveSpikes || !experiments) return;
 	void spikeSettlement.pending(channelId).catch(err =>
@@ -385,6 +407,9 @@ function ownerAvailable(channelId: string): Promise<void> {
 	let opened = Rooms.get(channelId)?.plan;
 	if (opened) conversationRuntime.wake(opened);
 	settlePendingSpikes(channelId);
+	void decisionAnswers.pending(channelId).catch(err =>
+		console.error("chopin: could not hand saved decisions to the Planner -", err)
+	);
 	void reviewCompletedInvestigations(channelId);
 	void currentDocumentTarget(channelId).then(target => {
 		if (target) buildReadiness?.schedule(target);
@@ -1249,6 +1274,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					ws,
 					frame,
 					intent => conversationRuntime.contexts.remember(opened, intent.trigger, claimant),
+					(id, generation) => answerDecision(room.id, id, generation),
 				);
 			}
 			return;

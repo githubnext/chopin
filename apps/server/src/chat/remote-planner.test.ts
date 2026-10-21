@@ -17,6 +17,11 @@ import {
 	scriptedPlanner,
 } from "../testing/agent-link";
 import * as Chat from "./service";
+import * as Question from "@chopin/question";
+import { answerTurns } from "../questions/answer-turns";
+import * as Questions from "../questions/service";
+import * as Store from "../questions/store";
+import { member } from "../questions/text-response.test-fixtures";
 
 import type { Server } from "bun";
 import type { AgentClient } from "@chopin/agent-link/client";
@@ -372,4 +377,78 @@ test("@chopin and invoke_planner wait for a Planner that is starting, then run o
 	// A message to the room never waits for the Planner.
 	expect(await room.send("Just talking", "room")).toMatchObject({ kind: "chat:send" });
 	expect(started).toBe(2);
+});
+
+test("saving a decision the Planner left open starts one turn on the attached Planner carrying the answer", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let script = scriptedPlanner();
+	let client = await attach(room.server.url, room.channel.id, script.handlers);
+	cleanups.push(() => client.detach());
+	let id = await Questions.capture(context.plan, context.server, context.room, {
+		key: "blocked-run-next-step",
+		question: "How should the wrong sentence be fixed?",
+	}, { revision: context.plan.revision });
+	let turns = answerTurns({
+		start: async (_channelId, compose) => {
+			let instruction = compose(context.plan);
+			if (!instruction) return false;
+			await Chat.instruct(
+				context,
+				instruction.handle,
+				instruction.text,
+				instruction.said,
+				instruction.about,
+			);
+			return true;
+		},
+	});
+	let handing: Promise<void>[] = [];
+	let save = async () => {
+		let actor = member("ana");
+		let entry = Store.get(context.plan.questions, id)!;
+		let question = entry.definition.questions[0]!;
+		let fork = entry.model.fork() as Question.Model;
+		fork.api.str([question.id, "custom"]).ins(0, "Start a new run for it.");
+		await Questions.edit(context.plan, actor.ws, {
+			kind: "question:edit",
+			ts: 0,
+			rid: "edit",
+			id,
+			patch: [...fork.api.flush().toBinary()],
+		});
+		await Questions.submit(
+			context.plan,
+			context.server,
+			context.room,
+			actor.ws,
+			{
+				kind: "question:submit",
+				ts: 0,
+				rid: "save",
+				id,
+				revision: Store.get(context.plan.questions, id)!.revision,
+			},
+			undefined,
+			(answered, generation) => {
+				handing.push(turns.answered(context.room, answered, generation));
+				handing.push(turns.answered(context.room, answered, generation));
+			},
+		);
+		expect(actor.frames.at(-1)).toMatchObject({ kind: "question:submit", ok: true });
+	};
+
+	await save();
+	await Promise.all(handing);
+	await context.chat.running;
+
+	expect(script.turns.map(turn => turn.prompt)).toEqual([
+		expect.stringContaining(JSON.stringify("Start a new run for it.")),
+	]);
+	expect(script.turns[0]!.prompt).toContain(
+		JSON.stringify("How should the wrong sentence be fixed?"),
+	);
+	expect(context.chat.entries.map(entry => entry.text)).toContain(
+		'@ana answered "How should the wrong sentence be fixed?"',
+	);
 });

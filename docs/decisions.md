@@ -37,6 +37,16 @@ lost or ambiguous, the update fails without guessing a new passage. Pending work
 authorized Planner owner after restart. Draft edits and research findings do not start this
 write-up. Child-focused Planner turns cannot create decisions in the root document.
 
+Saving a decision the Planner left open, whether captured with `open_decisions` or
+`open_decision` or asked with `ask` by a turn that has since ended, also starts one Planner turn
+that carries the saved answer, so the Planner acts on it: an answer that chose "start a new run"
+starts one. Chat shows a system notice naming who answered, and the turn leaves an anchored
+card's passage to its write-up. Like other turns nobody typed, it runs only under the existing
+Planner owner, and under `HARNESS=remote` only while a Planner is attached; it never claims
+ownership. An answer that found no Planner starts once an owner appears or a Planner attaches,
+unless the server restarts first. Reopening or saving again makes a waiting answer stale. An
+answer a blocking `ask` or a workflow's question is waiting for returns to it instead.
+
 After a foreground rewrite, `anchor_plan` explicitly reviews the replacement passage and
 refreshes its saved write-up links and future write scope in the same durable commit.
 Decisions sharing a scope must be re-anchored together to the same passage. A scope contains

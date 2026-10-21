@@ -109,6 +109,8 @@ export async function publishQuestions(
 		identity?: string;
 		/** Anchored nonblocking Planner cards, with one retry identity per question. */
 		capture?: { identities: string[]; signal?: AbortSignal };
+		/** Somebody waits on the answer, which therefore reaches them rather than a new turn. */
+		awaited?: boolean;
 		revision?: number;
 		created?: () => void;
 	} = {},
@@ -228,6 +230,7 @@ export async function publishQuestions(
 				});
 			}
 			let waiting = Store.ask(questions, id, single, id);
+			if (options.awaited) questions.open.get(id)!.awaited = true;
 			let value = {
 				id,
 				...(threadId ? { thread: threadId } : {}),

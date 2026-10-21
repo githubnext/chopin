@@ -25,7 +25,11 @@ export async function ask(
 	signal?: AbortSignal,
 ): Promise<Ended[]> {
 	if (signal?.aborted) return [];
-	let asked = await publishQuestions(plan, server, roomId, definition, { placement, created });
+	let asked = await publishQuestions(plan, server, roomId, definition, {
+		placement,
+		created,
+		awaited: true,
+	});
 
 	let failed = Promise.withResolvers<never>();
 	let closing: Promise<unknown> | undefined;
