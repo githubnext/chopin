@@ -141,8 +141,11 @@ export async function runWork(
 			abort.abort();
 		},
 	});
-	// A heartbeat that fails while Chopin is out of reach retries on the reconnect backoff and
-	// leaves the agent running; only Chopin ending the run, or the grace period, stops it.
+	// A heartbeat that fails while Chopin is out of reach retries on the reconnect backoff, never
+	// waiting longer than a heartbeat apart, and leaves the agent running; only Chopin ending the
+	// run, or the grace period, stops it. A Chopin back from a restart hears the build again soon
+	// enough to let it carry on.
+	let heartbeatMs = options.heartbeatMs ?? 10_000;
 	let beating = new AbortController();
 	// Ctrl-C, the run ending and the grace period running out each abandon a heartbeat in flight.
 	let beat = AbortSignal.any([beating.signal, options.signal, reports.signal]);
@@ -151,8 +154,8 @@ export async function runWork(
 		while (!beat.aborted) {
 			await delay(
 				failures
-					? Math.min(backoff(failures - 1, options.random), reports.remaining())
-					: options.heartbeatMs ?? 10_000,
+					? Math.min(backoff(failures - 1, options.random), heartbeatMs, reports.remaining())
+					: heartbeatMs,
 				beat,
 			);
 			if (beat.aborted) return;

@@ -257,7 +257,7 @@ function described(live: Connection[]) {
 }
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
-	let connections = new Connections();
+	let connections = new Connections(undefined, auth.config.encryptionKey);
 	/**
 	 * The stored machine choices, read before any work is routed. A read that fails is retried a
 	 * few times, then refuses the work with `machine-choice-unavailable`; it is never taken to mean
@@ -1396,6 +1396,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * A connection that serves any repository is checked per document, as its work is claimed.
 	 */
 	async function connector(token: string) {
+		// A build's run credential from before a restart is accepted again for the connection that
+		// now holds its build, once its machine has come back.
+		let durable = !connections.holds(token) ? connections.durableRun(token) : undefined;
+		if (durable) await options.implementations?.()?.adopt(token, durable);
 		let found = connections.lookup(token);
 		let machine: StoredMachine;
 		try {

@@ -157,7 +157,10 @@ your Chopin account in a browser:
 5. Choose **Add machine**. The page says **Connected.**
 
 The pairing lasts until you [disconnect the machine](#disconnect). It survives
-server restarts, deploys and signing out of the browser.
+server restarts, deploys and signing out of the browser. So does a build
+running on the machine: the connector keeps its agent working while Chopin
+restarts, registers the machine again, and its heartbeat carries the build on
+(see [Trouble connecting](local-experiments.md#trouble-connecting)).
 
 When the connection is up, you see:
 

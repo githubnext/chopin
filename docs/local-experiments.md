@@ -177,7 +177,8 @@ when it is back. It stops instead of retrying when Chopin refuses the machine,
 requires a newer connector, or the owner has lost push access to the repository.
 
 A running agent keeps working through a drop. Its heartbeat retries on the same
-backoff, and its session and completion reports wait in memory, in order, until
+backoff, but never waits longer than its usual 10 seconds between tries, and its
+session and completion reports wait in memory, in order, until
 Chopin answers. The connector stops the agent only when Chopin says the run is
 over, after 10 minutes without reaching Chopin, or after two minutes in which
 Chopin only said it no longer knows the connection. Ctrl-C stops the agent at
@@ -206,11 +207,28 @@ on the way (a long poll cut by a proxy, a timeout, a 5xx answer); the terminal s
 Chopin again**. A build carries on through that: its next heartbeat comes on the
 new connection of the same paired machine and owner, and Chopin moves the build,
 and the agent's run credential, to it. A connection of any other machine, or of
-another person, is still refused (`build-forbidden`). A build that was going at a
-restart cannot go on, as Chopin forgot it with every connection: the connector
-stops its agent with **Chopin restarted, so it ended this run.** (an older
-connector says **Chopin ended this run (server-restarted).**) and waits for the
-next work, and Build says **Build stopped — Chopin restarted.** Build says **your
+another person, is still refused (`build-forbidden`).
+
+A build also goes on through a server restart or a deploy. Its heartbeat and
+reports name the document (connector protocol 6, chopin 0.0.16 and later), so
+the restarted Chopin finds the build in the document and hands it to the new
+connection of the same paired machine and owner, as above. The agent's run
+credential is signed with a key derived from the deployment's
+`SESSION_ENCRYPTION_KEY` rather than kept in memory, so Chopin checks it again
+after the restart, accepts it only for the connection that now holds its build,
+and refuses it once the build has ended. Until the machine is back, the agent's
+calls are answered `unavailable` (HTTP 503) with a request to retry. Chopin
+waits 90 seconds after it starts for the machine to come back: only then does
+it end a build nobody carried on, saying **your local agent stopped responding**
+when the machine reconnected without it and **your local agent disconnected**
+when it did not. A build that ended before the restart stays ended
+(`build-inactive`).
+
+A build claimed by an older connector, or by a server without this change,
+cannot go on, as Chopin cannot find it again: the connector stops its agent with
+**Chopin restarted, so it ended this run.** (an older connector says **Chopin
+ended this run (server-restarted).**) and waits for the next work, and Build
+says **Build stopped — Chopin restarted.** Build says **your
 local agent disconnected** only when the machine has no connection left, and
 **your local agent stopped responding** when its heartbeat stopped while the
 machine stayed connected. When Chopin has answered

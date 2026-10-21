@@ -1,7 +1,7 @@
 import { AgentApp, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import { spawn, spawnSync } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { Readable, Writable } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -198,10 +198,30 @@ let app = new AgentApp()
 					},
 				}),
 		);
-		let call = async (name: string, args: Record<string, unknown> = {}) => {
+		let once = async (name: string, args: Record<string, unknown>) => {
 			let result = await client.callTool({ name, arguments: args });
 			if (result.isError) throw new Error(JSON.stringify(result.content));
 			return result;
+		};
+		// With CHOPIN_TEST_RESUME, an agent that retries a failed call for a minute, as one does
+		// while Chopin restarts.
+		let call = async (name: string, args: Record<string, unknown> = {}) => {
+			for (let started = Date.now();;) {
+				try {
+					return await once(name, args);
+				} catch (error) {
+					if (!process.env.CHOPIN_TEST_RESUME || Date.now() - started > 60_000) throw error;
+					await new Promise(resolve => setTimeout(resolve, 500));
+				}
+			}
+		};
+		/** With CHOPIN_TEST_RESUME, say the build is under way and wait until told to go on. */
+		let pause = async () => {
+			if (!process.env.CHOPIN_TEST_RESUME) return;
+			await writeFile(process.env.CHOPIN_TEST_PAUSED!, "");
+			while (!await access(process.env.CHOPIN_TEST_RESUME).then(() => true, () => false)) {
+				await new Promise(resolve => setTimeout(resolve, 100));
+			}
 		};
 		// A completing fixture lands a rebuild with one commit on the first pull request.
 		if (rebuilding) {
@@ -227,6 +247,7 @@ let app = new AgentApp()
 			if (process.argv.includes("--complete")) {
 				for (let [index, task] of context.graph.definition.tasks.entries()) {
 					await call("start_task", { taskId: task.id, idempotencyKey: `start-${task.id}` });
+					if (index === 0) await pause();
 					await call("report_pr", {
 						taskId: task.id,
 						idempotencyKey: `pr-${task.id}`,

@@ -31,6 +31,11 @@ export type BuildRequest = {
 	stoppedAtRevision?: number;
 	/** The connector's key for the report that set `state`, so a retry of it is recognized. */
 	reportKey?: string;
+	/**
+	 * Claimed with a run credential Chopin can check again after it restarts, by a connector that
+	 * names the document as it reports, so its machine can carry on with it after a restart.
+	 */
+	resumable?: true;
 	/** A rebuild carries edits since `baseRevision` onto a live build's pull requests. */
 	kind?: "rebuild";
 	baseRevision?: number;

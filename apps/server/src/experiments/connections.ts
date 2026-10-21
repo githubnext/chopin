@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Source } from "@chopin/experiment";
 import { fail, fingerprint } from "./service";
 
@@ -79,6 +79,18 @@ const FRESH_MS = 45_000;
 
 /** The first connector protocol whose connection is the machine rather than one checkout. */
 export const ANY_REPOSITORY_PROTOCOL = 5;
+/**
+ * The first connector protocol whose build heartbeats and reports name the document, so a server
+ * that restarted can find the build again and its machine can carry on with it.
+ */
+export const RESUME_PROTOCOL = 6;
+
+/** A build's run, as its durable credential names it. */
+export type DurableRun = { id: string; documentId: string; kind: "implementation" | "rebuild" };
+const RUN_CONTEXT = "chopin:run-credential:v1";
+const RUN_PREFIX = "chopin_r_";
+/** An HMAC-SHA256 signature in unpadded base64url. */
+const SIGNATURE_LENGTH = 43;
 
 /** Whether a connection may take work in a repository. */
 export function serves(connection: Connection, repositoryId: string) {
@@ -135,7 +147,68 @@ export class Connections {
 	#about = new Map<string, About>();
 	/** Called once with each connection that ends: disconnected, expired, or its machine revoked. */
 	onEnded?: (connection: Connection) => void;
-	constructor(private now = () => Date.now()) {}
+	/** Signs build run credentials so they can be checked again after a restart; none without a key. */
+	#runKey: Buffer | undefined;
+	constructor(
+		private now = () => Date.now(),
+		/** The deployment's SESSION_ENCRYPTION_KEY, from which build run credentials are derived. */
+		key?: Uint8Array,
+	) {
+		this.#runKey = key
+			? Buffer.from(hkdfSync("sha256", key, "", RUN_CONTEXT, 32))
+			: undefined;
+	}
+	/** Whether build run credentials outlive this process, so a build can resume after a restart. */
+	get durable() {
+		return !!this.#runKey;
+	}
+	#sign(payload: string) {
+		return createHmac("sha256", this.#runKey!).update(payload).digest();
+	}
+	/**
+	 * A build's run credential: its run, signed with a key derived from the deployment's own, so a
+	 * restarted server can check it without having stored it. The build's state still decides
+	 * whether it is accepted: it ends with the build.
+	 */
+	#durableToken(run: DurableRun) {
+		let payload = Buffer.from([run.documentId, run.id, run.kind].join("\n")).toString("base64url");
+		// The signature first, at its fixed length, keeps the whole token one base64url word.
+		return `${RUN_PREFIX}${this.#sign(payload).toString("base64url")}${payload}`;
+	}
+	/** The run a durable build credential names, when this deployment signed it. */
+	durableRun(token: string): DurableRun | undefined {
+		if (!this.#runKey || !token.startsWith(RUN_PREFIX) || token.length > 512) return undefined;
+		let body = token.slice(RUN_PREFIX.length);
+		let signature = body.slice(0, SIGNATURE_LENGTH);
+		let payload = body.slice(SIGNATURE_LENGTH);
+		if (!payload || !/^[A-Za-z0-9_-]+$/.test(body)) return undefined;
+		let given = Buffer.from(signature, "base64url");
+		let expected = this.#sign(payload);
+		if (given.length !== expected.length || !timingSafeEqual(given, expected)) return undefined;
+		let [documentId, id, kind, rest] = Buffer.from(payload, "base64url").toString("utf8")
+			.split("\n");
+		if (!documentId || !id || rest !== undefined) return undefined;
+		if (kind !== "implementation" && kind !== "rebuild") return undefined;
+		return { documentId, id, kind };
+	}
+	/**
+	 * Accept a durable build credential this process has not seen, as after a restart, for the
+	 * connection that now holds its build.
+	 */
+	adopt(token: string, connectionId: string, run: DurableRun) {
+		if (!this.#connections.has(connectionId)) return;
+		this.#runTokens.set(`${connectionId}:${run.id}:1:${run.kind}`, token);
+		this.#tokens.set(fingerprint(token), {
+			connectionId,
+			run: { id: run.id, documentId: run.documentId, generation: 1, kind: run.kind },
+		});
+		this.#remember(run.id, run.documentId);
+	}
+	/** Whether this process already holds a credential, or refused it. */
+	holds(token: string) {
+		let key = fingerprint(token);
+		return this.#tokens.has(key) || this.#revoked.has(key);
+	}
 	create(input: PairingInput) {
 		this.sweep();
 		if (this.#pending.size >= 100) fail("pairing-capacity");
@@ -236,7 +309,7 @@ export class Connections {
 	}
 	/** Whether a token is a run's, which the coding agent itself presents. */
 	run(token: string) {
-		return !!this.#tokens.get(fingerprint(token))?.run;
+		return !!this.#tokens.get(fingerprint(token))?.run || !!this.durableRun(token);
 	}
 	lookup(token: string) {
 		let refused = this.#revoked.get(fingerprint(token));
@@ -411,19 +484,25 @@ export class Connections {
 		let key = `${connectionId}:${id}:${generation}:${kind ?? "experiment"}`;
 		let existing = this.#runTokens.get(key);
 		if (existing) return existing;
-		let token = randomBytes(32).toString("base64url");
+		// A build's credential can be checked again after a restart; an investigation's cannot.
+		let token = kind && this.#runKey
+			? this.#durableToken({ id, documentId, kind })
+			: randomBytes(32).toString("base64url");
 		this.#runTokens.set(key, token);
 		this.#tokens.set(fingerprint(token), {
 			connectionId,
 			run: { id, documentId, generation, ...(kind ? { kind } : {}) },
 		});
+		this.#remember(id, documentId);
+		return token;
+	}
+	#remember(id: string, documentId: string) {
 		this.#runs.delete(id);
 		this.#runs.set(id, documentId);
 		for (let old of this.#runs.keys()) {
 			if (this.#runs.size <= RUNS) break;
 			this.#runs.delete(old);
 		}
-		return token;
 	}
 	/** The document of a run this process handed out, whichever connection holds it now. */
 	runDocument(id: string) {

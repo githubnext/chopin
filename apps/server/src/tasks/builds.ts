@@ -57,6 +57,7 @@ let buildSchema = z.object({
 		at: z.string().datetime(),
 	}).strict().optional(),
 	reportKey: z.string().uuid().optional(),
+	resumable: z.literal(true).optional(),
 	kind: z.literal("rebuild").optional(),
 	baseRevision: z.number().int().nonnegative().optional(),
 	targetRevision: z.number().int().nonnegative().optional(),
@@ -470,6 +471,8 @@ export function pickBuild(
 	plan: Plan,
 	user: string,
 	connectionId: string,
+	/** Its run credential outlives a restart and its connector names the document as it reports. */
+	resumable = false,
 ): Promise<BuildRequest | undefined> {
 	return exclusive(plan, async () => {
 		let build = plan.builds.at(-1);
@@ -480,7 +483,12 @@ export function pickBuild(
 			return;
 		}
 		let previous = plan.builds;
-		let next: BuildRequest = { ...build, state: "starting", expiresAt: Date.now() + 60_000 };
+		let next: BuildRequest = {
+			...build,
+			state: "starting",
+			expiresAt: Date.now() + 60_000,
+			...(resumable ? { resumable: true as const } : {}),
+		};
 		plan.builds = [...previous.slice(0, -1), next];
 		try {
 			await persistExclusive(plan, true);
@@ -507,7 +515,12 @@ export function rebindBuild(
 		let build = plan.builds.at(-1);
 		if (!build || build.id !== id || build.connectionId !== from) return false;
 		let previous = plan.builds;
-		plan.builds = [...previous.slice(0, -1), { ...build, connectionId: to }];
+		// A build its machine carries on with after a restart may have gone longer than a heartbeat.
+		plan.builds = [...previous.slice(0, -1), {
+			...build,
+			connectionId: to,
+			expiresAt: Math.max(build.expiresAt, Date.now() + 60_000),
+		}];
 		try {
 			await persistExclusive(plan, true);
 		} catch (error) {

@@ -598,6 +598,37 @@ test("a network drop mid-run keeps the agent running and delivers its completion
 	expect(stopped).not.toBe(running);
 });
 
+test("a build keeps its agent through a server restart and its heartbeat is heard soon after", async () => {
+	let abort = new AbortController();
+	let renewals: Array<Record<string, unknown>> = [];
+	let started = performance.now();
+	let { documentId, calls } = await run(
+		{},
+		["--hang"],
+		(name, args) => {
+			if (name !== "renew_implementation_build") return {};
+			renewals.push(args);
+			// Chopin is down for eight heartbeats, then forgets the connection the connector had.
+			if (renewals.length <= 8) throw unreachable();
+			if (renewals.length === 9) {
+				throw new ConnectorError("connection-unavailable", "connection-unavailable");
+			}
+			// It carries on with the build; the person then stops the agent from the terminal.
+			abort.abort();
+			return { accepted: true };
+		},
+		abort.signal,
+		{ random: () => 0.999 },
+	);
+	// Retries wait no longer than a heartbeat apart, rather than backing off for minutes, so a
+	// restarted Chopin hears the build again within its window.
+	expect(performance.now() - started).toBeLessThan(4000);
+	expect(renewals).toHaveLength(10);
+	// Each heartbeat names the document, so a restarted Chopin can find the build again.
+	expect(renewals.every(args => args.documentId === documentId)).toBe(true);
+	expect(calls.at(-1)?.[1]).toMatchObject({ state: "failed", error: STOPPED });
+});
+
 test("a run out of reach for its whole grace period stops its agent", async () => {
 	let { id, calls } = await run(
 		{},

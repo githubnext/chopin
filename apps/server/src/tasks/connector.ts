@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { serves } from "../experiments/connections";
-import type { Connection, Connections, Grant } from "../experiments/connections";
+import { RESUME_PROTOCOL, serves } from "../experiments/connections";
+import type { Connection, Connections, DurableRun, Grant } from "../experiments/connections";
 import { ExperimentError } from "@chopin/experiment";
 import { fail } from "../experiments/service";
 import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
@@ -25,6 +25,14 @@ export const RESTARTED = "Chopin restarted, so this build ended.";
 export const DISCONNECTED = "Your local agent disconnected.";
 /** The build's heartbeat stopped while its machine may still be connected. */
 export const UNRESPONSIVE = "Your local agent stopped responding.";
+/** A run credential's build is resumable, but its machine has not come back since the restart. */
+export const RESUMING =
+	"Chopin restarted and is waiting for this machine's connector to come back. Retry in a few seconds.";
+/**
+ * How long after it starts a server waits for a machine to come back and carry on with a build it
+ * was running before the restart: a forgotten connection's window, 90 seconds.
+ */
+export const RESUME_MS = 90_000;
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
 
@@ -149,6 +157,15 @@ export function implementationConnector(
 	prototyping?: (connectionId: string) => Promise<boolean>,
 	options: { retryMs?: number; retries?: number } = {},
 ) {
+	/** When this process started; a build it never connected may still resume until the window ends. */
+	let started = Date.now();
+	/**
+	 * Whether a build was claimed before this process started, by a connection it never knew, and
+	 * may still be resumed by its machine.
+	 */
+	let resuming = (build: BuildRequest) =>
+		!!build.resumable && !connections.known(build.connectionId)
+		&& ["starting", "running"].includes(build.state) && Date.now() < started + RESUME_MS;
 	let tracked = new Set<string>();
 	// Lifecycle calls of one run apply in arrival order, one at a time.
 	let chains = new Map<string, Promise<unknown>>();
@@ -186,6 +203,27 @@ export function implementationConnector(
 	let api = {
 		track(id: string) {
 			tracked.add(id);
+		},
+		/**
+		 * Accept a build's durable run credential again after a restart, for the connection that holds
+		 * its build now. Until its machine comes back and takes the build over, the agent is asked to
+		 * retry; a credential whose build has ended is refused.
+		 */
+		async adopt(token: string, run: DurableRun) {
+			if (!await documentExists(run.documentId)) return;
+			await withPlan(run.documentId, async plan => {
+				let build = plan.builds.find(item => item.id === run.id);
+				if (!build?.resumable || (build.kind === "rebuild") !== (run.kind === "rebuild")) return;
+				tracked.add(plan.id);
+				if (connections.get(build.connectionId)) {
+					connections.adopt(token, build.connectionId, run);
+					return;
+				}
+				if (build !== plan.builds.at(-1) || !["starting", "running"].includes(build.state)) {
+					fail("build-inactive");
+				}
+				if (resuming(build)) fail("unavailable", RESUMING);
+			});
 		},
 		async waiting(connection: Connection) {
 			let build = await pending(connection);
@@ -310,18 +348,27 @@ export function implementationConnector(
 					}
 				}
 				let build = plan.builds.at(-1);
-				// A document hint survives restart; it must not revive a forgotten connection.
-				if (build && !grant.run && build.id === args.id && !connections.known(build.connectionId)) {
+				// Chopin restarted since the build's connection opened. Its machine may carry on with a
+				// resumable build for a while; any other is over.
+				let restarted = !!build && !grant.run && build.id === args.id
+					&& !connections.known(build.connectionId);
+				if (restarted && !resuming(build!)) {
+					// One that ended since, as when someone stopped it in Chopin, says so instead.
+					if (build!.resumable && !["starting", "running"].includes(build!.state)) {
+						refuse("build-inactive", build);
+					}
 					refuse("server-restarted", build, RESTARTED);
 				}
-				// The connector registered its machine again, as after a dropped request, so the build's
-				// heartbeat and reports now come on a newer connection of the same machine and owner.
+				// The connector registered its machine again, as after a dropped request or a restart, so
+				// the build's heartbeat and reports now come on a newer connection of the same machine and
+				// owner.
 				if (
 					build && !grant.run && build.connectionId !== connection.id && build.id === args.id
 					&& build.machineId === connection.machineId && build.user === connection.owner
 					&& serves(connection, build.repositoryId)
 					&& ["renew_implementation_build", "report_implementation_build"].includes(name)
-					&& ["starting", "running"].includes(build.state) && build.expiresAt > Date.now()
+					&& ["starting", "running"].includes(build.state)
+					&& (restarted || build.expiresAt > Date.now())
 					// A connection already given another document's build is not this build's to take.
 					&& (connections.assigned(connection.id) ?? documentId) === documentId
 				) {
@@ -331,7 +378,7 @@ export function implementationConnector(
 						console.info(
 							`chopin: build ${build.id} of document ${plan.id} moved from connection ${from} `
 								+ `to ${connection.id} of machine ${connection.machineId}, which registered `
-								+ `again; ${name} continues it`,
+								+ `again${restarted ? " after Chopin restarted" : ""}; ${name} continues it`,
 						);
 						build = plan.builds.at(-1)!;
 					}
@@ -393,7 +440,12 @@ export function implementationConnector(
 				}
 				if (name === "claim_implementation_build") {
 					if (build.expiresAt <= Date.now()) fail("build-expired");
-					let picked = await pickBuild(plan, connection.owner, connection.id);
+					let picked = await pickBuild(
+						plan,
+						connection.owner,
+						connection.id,
+						connections.durable && (connection.protocol ?? 1) >= RESUME_PROTOCOL,
+					);
 					if (!picked) fail("build-already-claimed");
 					return {
 						build: picked,
@@ -518,12 +570,14 @@ export function implementationConnector(
 						await renewQueued(plan, build.id);
 						return;
 					}
+					// Its machine may still come back after the restart and carry on with it.
+					if (resuming(build)) return;
 					if (!connected || build.expiresAt <= Date.now()) {
 						// Say what happened: Chopin restarted since the build's connection opened, the
 						// machine is gone, or its agent went quiet while the machine stayed connected.
 						let error = connected
 							? UNRESPONSIVE
-							: !connections.known(build.connectionId)
+							: !connections.known(build.connectionId) && !build.resumable
 							? RESTARTED
 							: build.machineId && connections.machine(build.machineId).length
 							? UNRESPONSIVE

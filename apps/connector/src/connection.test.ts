@@ -585,8 +585,8 @@ test("a connection failure's cause never shows credentials from the error", () =
 	expect(text).not.toContain("abcdef0123456789xyz");
 });
 
-test("machine, Planner and pairing key tokens are masked wherever chopin prints text", () => {
-	for (let prefix of ["chopin_m_", "chopin_p_", "chopin_k_"]) {
+test("machine, Planner, pairing key and build run tokens are masked wherever chopin prints text", () => {
+	for (let prefix of ["chopin_m_", "chopin_p_", "chopin_k_", "chopin_r_"]) {
 		let token = `${prefix}${"Zx9_-".repeat(9).slice(0, 43)}`;
 		expect(redacted(`ran chopin connect --key ${token} -- agent`)).toBe(
 			"ran chopin connect --key [redacted] -- agent",

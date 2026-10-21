@@ -290,7 +290,12 @@ press, so its trust model is narrow on purpose.
   connection that ran a rebuild, and whether their agent is online.
 
 A rebuild's run token reaches only `read_rebuild` and `report_rebuild`; a
-build's run token cannot report a rebuild. A report repeated after the rebuild
+build's run token cannot report a rebuild. A build's run token names its
+document, build and kind, signed with a key derived from `SESSION_ENCRYPTION_KEY`,
+so a restarted server can check it without storing it; the build's state still
+decides whether it is accepted, so it ends with the build. See
+[Trouble connecting](local-experiments.md#trouble-connecting) for how a build
+resumes after a restart. A report repeated after the rebuild
 landed returns the same success. The build history keeps 100 entries; ended
 rebuilds give way oldest first so a long-lived document keeps rebuilding.
 
