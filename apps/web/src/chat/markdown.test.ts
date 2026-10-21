@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { inlineText } from "./inline-text";
 import { InlineMarkdown, MessageMarkdown } from "./markdown";
 import { referenceRenderModel } from "./references";
 
@@ -264,4 +265,22 @@ test("inline Markdown formats code, emphasis and links without blocks", () => {
 	expect(inline("    indented `code`")).toBe("indented <code>code</code>");
 	expect(inline("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw ");
 	expect(inline("one\n\ntwo")).toBe("one two");
+});
+
+test("the plain text of inline Markdown is the text it shows, with single spaces", () => {
+	let sources = [
+		"Rewire `login` to **call** _three_ [helpers](https://example.com)",
+		"Deploy on `main`",
+		"Read [the docs](https://example.com)",
+		"<b>raw</b> ![image](https://example.invalid/i.png)",
+		"> quote &amp; `a  b`",
+		"one\n\ntwo",
+	];
+	for (let source of sources) {
+		let shown = inline(source, false).replace(/<[^>]+>/g, "").replaceAll("&gt;", ">")
+			.replaceAll("&amp;", "&");
+		expect(inlineText(source)).toBe(shown.replace(/\s+/g, " ").trim());
+	}
+	expect(inlineText("Deploy on `main`")).toBe("Deploy on main");
+	expect(inlineText("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw");
 });

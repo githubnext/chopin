@@ -344,6 +344,17 @@ export function taskStateLabel(state: TaskState, noChange: boolean): string {
 	return state === "completed" && noChange ? "done, no change needed" : TASK_STATE_LABEL[state];
 }
 
+/**
+ * A task row's accessible name: the title as shown (`inlineText`), then its state. Given as a
+ * label, since a name read from the row's content gains a space before the comma: browsers set
+ * a visually hidden, absolutely positioned state apart from the title with one.
+ */
+export function taskRowName(title: string, state: TaskState, noChange: boolean): string {
+	let text = title.replace(/\s+/g, " ").trim();
+	let label = taskStateLabel(state, noChange);
+	return text ? `${text}, ${label}` : label;
+}
+
 /** Active and blocked rows start open; so does a linked task. */
 export function taskStartsOpen(state: TaskState, linked: boolean): boolean {
 	return linked || state === "in_progress" || state === "blocked";

@@ -839,9 +839,12 @@ test("a build that ran for an hour reads as built when it finished, not when it 
 
 test("a task that needed no change reads as done without a pull request, with its evidence", async ({ seed, join: enter }) => {
 	let now = Date.now();
+	let graph = preparedGraph();
+	// A title ending in inline code reads with its state straight after it, as any title does.
+	graph.versions[0]!.definition.tasks[0]!.title = "Connect the local agent on `main`";
 	await seed(
 		"# Checked build\n\nOne task was already satisfied.\n",
-		builtBuild(preparedGraph(), new Date(now - 10 * 60_000), new Date(now - 60_000), {
+		builtBuild(graph, new Date(now - 10 * 60_000), new Date(now - 60_000), {
 			connect: {
 				reason: "The connection already reports blockers on the base commit.",
 				evidence: "- Ran `bun test connector` in run 4821: **36 passed**, 0 failed.",
@@ -856,10 +859,12 @@ test("a task that needed no change reads as done without a pull request, with it
 	await expect(view.getByText("1 pull request, 1 task needed no change", { exact: true }))
 		.toBeVisible();
 	let tasks = view.getByRole("list", { name: "Tasks" });
-	let checked = tasks.getByRole("button", {
-		name: /^Connect the local agent\s*, done, no change needed$/,
-	});
-	await expect(checked).toBeVisible();
+	let checked = tasks.getByRole("button", { name: /^Connect the local agent/ });
+	await expect(checked).toHaveAccessibleName(
+		"Connect the local agent on main, done, no change needed",
+	);
+	await expect(tasks.getByRole("button", { name: /^Review the connection/ }))
+		.toHaveAccessibleName("Review the connection, done");
 	// The task that needed no change has no pull request link; the other task keeps its own.
 	await expect(tasks.getByRole("link", { name: /^Pull request/ })).toHaveCount(1);
 	await expect(tasks.getByText("No change needed", { exact: true })).toBeVisible();

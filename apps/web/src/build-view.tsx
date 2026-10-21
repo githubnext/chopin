@@ -27,8 +27,8 @@ import {
 	pullRequestCommits,
 	pullRequestNumber,
 	retryAction,
+	taskRowName,
 	taskStartsOpen,
-	taskStateLabel,
 	unfinishedReason,
 } from "./build-model";
 import {
@@ -37,6 +37,7 @@ import {
 	implementationResponse as response,
 	stopBuild,
 } from "./build-start";
+import { inlineText } from "./chat/inline-text";
 import { InlineMarkdown, MessageMarkdown } from "./chat/markdown";
 import { LocalAgentNote } from "./local-agent-note";
 import { MachineGlyph } from "./machine-button";
@@ -641,6 +642,7 @@ function TaskRow(
 				<button
 					aria-controls={panel}
 					aria-expanded={expanded}
+					aria-label={taskRowName(inlineText(task.title), state, !!noChange)}
 					className="build-task-toggle"
 					onClick={onToggle}
 					type="button"
@@ -649,7 +651,6 @@ function TaskRow(
 					<span className="build-task-title">
 						<InlineMarkdown links={false} source={task.title} />
 					</span>
-					<span className="sr-only">, {taskStateLabel(state, !!noChange)}</span>
 				</button>
 				{pullRequest && (
 					<a

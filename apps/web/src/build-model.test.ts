@@ -28,9 +28,11 @@ import {
 	startingHint,
 	syncHint,
 	syncStatus,
+	taskRowName,
 	taskStartsOpen,
 	unfinishedReason,
 } from "./build-model";
+import { inlineText } from "./chat/inline-text";
 
 import type {
 	BuildRequest,
@@ -212,6 +214,21 @@ describe("presentation", () => {
 		expect(taskStartsOpen("blocked", false)).toBe(true);
 		expect(taskStartsOpen("queued", false)).toBe(false);
 		expect(taskStartsOpen("completed", true)).toBe(true);
+	});
+
+	it("names a task row by its title as shown, then its state, with no space before a comma", () => {
+		let title = inlineText("Deploy on `main`");
+		expect(taskRowName(title, "completed", true)).toBe("Deploy on main, done, no change needed");
+		expect(taskRowName(title, "completed", false)).toBe("Deploy on main, done");
+		expect(taskRowName(inlineText("Read [the docs](https://example.com)"), "blocked", false))
+			.toBe("Read the docs, blocked");
+		expect(taskRowName(" Wire  the\nagent ", "in_progress", false)).toBe(
+			"Wire the agent, in progress",
+		);
+		expect(taskRowName("Wire the agent", "queued", false)).toBe("Wire the agent, queued");
+		// A title that shows no text, such as only an image, leaves the state alone.
+		expect(taskRowName(inlineText("![image](https://example.invalid/i.png)"), "queued", false))
+			.toBe("queued");
 	});
 });
 
