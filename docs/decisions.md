@@ -38,14 +38,24 @@ authorized Planner owner after restart. Draft edits and research findings do not
 write-up. Child-focused Planner turns cannot create decisions in the root document.
 
 Saving a decision the Planner left open, whether captured with `open_decisions` or
-`open_decision` or asked with `ask` by a turn that has since ended, also starts one Planner turn
-that carries the saved answer, so the Planner acts on it: an answer that chose "start a new run"
-starts one. Chat shows a system notice naming who answered, and the turn leaves an anchored
-card's passage to its write-up. Like other turns nobody typed, it runs only under the existing
-Planner owner, and under `HARNESS=remote` only while a Planner is attached; it never claims
-ownership. An answer that found no Planner starts once an owner appears or a Planner attaches,
-unless the server restarts first. Reopening or saving again makes a waiting answer stale. An
-answer a blocking `ask` or a workflow's question is waiting for returns to it instead.
+`open_decision` or asked with `ask` by a turn that has since ended, also hands the saved answer to
+a Planner turn, so the Planner acts on it: an answer that chose "start a new run" starts one.
+Answers saved to one document close together share one turn that lists each question, answer,
+chosen option and who saved it. The turn starts once nobody has saved another answer for five
+seconds, or 30 seconds after the first, and never while a Planner turn runs or waits in that
+Chat, so answers saved meanwhile join the next turn. Chat shows one system notice naming who
+answered: the question for one answer, or a count such as "@ana answered 3 decisions". The turn
+leaves an anchored card's passage to its write-up. Like other turns nobody typed, it runs only
+under the existing Planner owner, and under `HARNESS=remote` only while a Planner is attached; it
+never claims ownership.
+
+Each answer waits in the `decision_answers` table, one row per document and decision, until a
+turn carries it, so an answer that found no Planner starts once an owner appears or a Planner
+attaches, after a restart too. Saving again replaces a waiting answer, and reopening makes it
+stale, so it is never handed over. A turn's answers are claimed under a fresh id before it starts
+and marked delivered once Chat accepts it. Its Chat notice takes that id, so answers claimed before
+a crash, but not yet marked, are recognized as already started and never run twice. An answer a
+blocking `ask` or a workflow's question is waiting for returns to it instead, and starts no turn.
 
 After a foreground rewrite, `anchor_plan` explicitly reviews the replacement passage and
 refreshes its saved write-up links and future write scope in the same durable commit.

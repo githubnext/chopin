@@ -390,6 +390,9 @@ test("saving a decision the Planner left open starts one turn on the attached Pl
 		question: "How should the wrong sentence be fixed?",
 	}, { revision: context.plan.revision });
 	let turns = answerTurns({
+		store: room.storage.decisionAnswers,
+		// Sent when the test asks, as when a Planner attaches.
+		window: { quietMs: 60_000, longestMs: 60_000 },
 		start: async (_channelId, compose) => {
 			let instruction = compose(context.plan);
 			if (!instruction) return false;
@@ -440,6 +443,8 @@ test("saving a decision the Planner left open starts one turn on the attached Pl
 
 	await save();
 	await Promise.all(handing);
+	await turns.pending(context.room);
+	turns.close();
 	await context.chat.running;
 
 	expect(script.turns.map(turn => turn.prompt)).toEqual([

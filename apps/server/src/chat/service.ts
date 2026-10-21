@@ -178,6 +178,11 @@ export type Instruction = {
 	threadChannel?: string;
 	/** Kept out of the visible queue: its notice says why, and its text is for the Planner alone. */
 	quiet?: boolean;
+	/**
+	 * The transcript notice's id, stable across restarts: a turn whose notice Chat already shows
+	 * was started before and is not started again.
+	 */
+	notice?: string;
 };
 
 /**
@@ -1028,10 +1033,11 @@ function instructionNotice(
 	context: Room,
 	text: string,
 	comment?: Instruction["comment"],
+	id = ulid(),
 ): void | Promise<void> {
 	let { chat, room, server } = context;
 	let entry: Wire.Entry = {
-		id: ulid(),
+		id,
 		author: { kind: "system" },
 		text,
 		ts: now(),
@@ -1097,7 +1103,7 @@ export function instruct(
 				});
 				return report(about, { status: "failed" });
 			}
-			let { comment: _comment, ...rest } = about;
+			let { comment: _comment, notice: _notice, ...rest } = about;
 			chat.waiting.push({
 				id: ulid(),
 				handle,
@@ -1113,7 +1119,7 @@ export function instruct(
 	if (about.spent?.() || about.signal?.aborted) return report(about, { status: "skipped" });
 	// Automatic participation replies like any member would, so it announces nothing.
 	if (!said) return proceed();
-	let announced = instructionNotice(context, said, about.comment);
+	let announced = instructionNotice(context, said, about.comment, about.notice);
 	return announced instanceof Promise ? announced.then(proceed) : proceed();
 }
 

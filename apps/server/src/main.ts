@@ -375,11 +375,13 @@ const spikeSettlement = spikeSettler({
 });
 
 /**
- * Hand a saved answer to a decision the Planner left open to the Planner, as a turn it acts on.
- * Like other server-authored turns it runs only under the existing owner, and under the remote
- * harness only while a Planner is attached; one that found no Planner starts once one is.
+ * Hand saved answers to decisions the Planner left open to the Planner, as one turn it acts on
+ * for the answers saved close together. Like other server-authored turns it runs only under the
+ * existing owner, and under the remote harness only while a Planner is attached; answers that
+ * found no Planner wait in storage and start once one is, after a restart too.
  */
 const decisionAnswers = answerTurns({
+	store: storage.decisionAnswers,
 	start: async (channelId, compose) => {
 		if (!config.agent) return "drop";
 		let channel = await storage.channels.get(channelId);
@@ -387,11 +389,17 @@ const decisionAnswers = answerTurns({
 		if (plannerAttachments && !await plannerAttachments.confirmed(channelId)) return false;
 		return serverInstruction(channelId, compose);
 	},
+	// Answers saved while a Planner turn runs or waits join the turn after it.
+	busy: channelId => {
+		let chat = Rooms.get(channelId)?.plan?.chat;
+		if (!chat || chat.closed || (!chat.busy && chat.waiting.length === 0)) return undefined;
+		return chat.running ?? Bun.sleep(1_000);
+	},
 });
 
 function answerDecision(channelId: string, id: string, generation: number): void {
 	void decisionAnswers.answered(channelId, id, generation).catch(err =>
-		console.error("chopin: could not hand a saved decision to the Planner -", err)
+		console.error("chopin: could not keep a saved decision for the Planner -", err)
 	);
 }
 
@@ -1879,6 +1887,8 @@ function drain(): Promise<void> {
 		liveSync?.close();
 		buildReadiness?.close();
 		spikeScout?.close();
+		// Answers still collecting stay stored; the next process delivers them.
+		decisionAnswers.close();
 		let stoppingJobs = jobRunner?.shutdown();
 		ownerBindings?.revokeAll();
 		plannerAttachments?.close();

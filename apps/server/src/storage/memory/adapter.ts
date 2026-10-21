@@ -7,6 +7,7 @@ import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
 import { MemoryImageStore } from "./images";
 import { MemoryRunStageStore } from "./run-stages";
+import { MemoryDecisionAnswerStore } from "./decision-answers";
 import { MemoryDocumentVersionStore } from "./versions";
 import { MemoryMachineStore } from "./machines";
 import { MemoryResearchWorkspaceStore } from "./research";
@@ -50,6 +51,7 @@ import type {
 	BackgroundJobStore,
 	ChannelStore,
 	CollaborationStore,
+	DecisionAnswerStore,
 	DocumentVersionStore,
 	ImageStore,
 	LeaseStore,
@@ -167,6 +169,8 @@ export class MemoryStorage implements StorageAdapter {
 	readonly images: ImageStore = this.#images;
 	readonly #runStages = new MemoryRunStageStore(id => this.#channels.has(id));
 	readonly runStages: RunStageStore = this.#runStages;
+	readonly #decisionAnswers = new MemoryDecisionAnswerStore(id => this.#channels.has(id));
+	readonly decisionAnswers: DecisionAnswerStore = this.#decisionAnswers;
 	readonly #versions = new MemoryDocumentVersionStore({
 		channelExists: id => this.#channels.has(id),
 		user: id => this.#users.get(id),
@@ -572,6 +576,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);
 		this.#runStages.deleteChannel(id);
+		this.#decisionAnswers.deleteChannel(id);
 		this.#versions.deleteChannel(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);

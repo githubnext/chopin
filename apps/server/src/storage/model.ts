@@ -63,6 +63,23 @@ export type PutRunStages = {
 	replace?: boolean;
 };
 
+/** A saved answer to a decision the Planner left open, waiting for a Planner turn to act on it. */
+export type DecisionAnswer = {
+	decisionId: string;
+	/** The decision's saved generation; a reopened and saved again decision has a newer one. */
+	generation: number;
+	savedAt: Date;
+	/** The turn claimed to carry it, whose notice id it is; absent while it waits for one. */
+	turnId?: string;
+};
+
+export type SaveDecisionAnswer = {
+	channelId: string;
+	decisionId: string;
+	generation: number;
+	savedAt: Date;
+};
+
 /**
  * One editing session in a document's history and the source it left behind.
  * Consecutive edits by the same author within the idle gap extend one session.

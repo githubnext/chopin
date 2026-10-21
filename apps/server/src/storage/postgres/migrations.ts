@@ -100,6 +100,9 @@ const MIGRATIONS = [{
 }, {
 	id: "026_workflow_run_stages",
 	path: join(import.meta.dir, "migrations/026_workflow_run_stages.sql"),
+}, {
+	id: "027_decision_answers",
+	path: join(import.meta.dir, "migrations/027_decision_answers.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

@@ -11,6 +11,7 @@ import { PostgresBackgroundJobStore } from "./jobs";
 import { PostgresExperimentStore } from "./experiments";
 import { PostgresImageStore } from "./images";
 import { PostgresRunStageStore } from "./run-stages";
+import { PostgresDecisionAnswerStore } from "./decision-answers";
 import { PostgresDocumentVersionStore } from "./versions";
 import { PostgresMachineStore } from "./machines";
 import { PostgresResearchWorkspaceStore } from "./research";
@@ -540,6 +541,10 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.decisionAnswers = new PostgresDecisionAnswerStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
 		this.versions = new PostgresDocumentVersionStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -693,6 +698,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly research: ResearchWorkspaceStore;
 	readonly images: PostgresImageStore;
 	readonly runStages: PostgresRunStageStore;
+	readonly decisionAnswers: PostgresDecisionAnswerStore;
 	readonly versions: PostgresDocumentVersionStore;
 	readonly machines: PostgresMachineStore;
 

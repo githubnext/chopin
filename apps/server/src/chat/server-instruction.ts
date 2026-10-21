@@ -25,7 +25,8 @@ export type ServerInstructionDeps = {
 };
 
 /**
- * Start a Planner turn nobody typed, and say whether Chat accepted it (started or queued).
+ * Start a Planner turn nobody typed, and say whether Chat accepted it (started or queued), or
+ * already showed the notice of the turn its stable `about.notice` id names.
  * It runs only under the document's existing Planner owner and never claims one: nobody asked
  * for this turn, so nobody's credentials are taken for it. A room evicted since is reopened.
  */
@@ -54,6 +55,9 @@ export async function serverInstruction(
 			let instruction = compose(current);
 			if (!instruction) return false;
 			let context = deps.conversation(held.room, undefined, repository);
+			// Its notice already shows: it started before a restart, and is not started again.
+			let notice = instruction.about?.notice;
+			if (notice && context.chat.entries.some(entry => entry.id === notice)) return true;
 			let before = context.chat.running;
 			let waiting = context.chat.waiting.length;
 			await deps.instruct(context, instruction);
