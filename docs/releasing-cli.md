@@ -139,10 +139,15 @@ The binaries are not code-signed or notarized. Installs through `curl` and
 
 - A build's heartbeat retries no longer back off past its 10-second interval
   while Chopin is out of reach, so a server back from a restart hears a running
-  build within its 90-second resume window. This needs no new protocol: a
-  protocol 6 connector (chopin 0.0.16) already names the document, and the
-  server lets its builds resume too, though one with a long backoff may miss
-  the window after a long outage.
+  build within its resume window (10 minutes by default). This needs no new
+  protocol: a protocol 6 connector (chopin 0.0.16) already names the document,
+  and the server lets its builds resume too, though one with a long backoff may
+  miss the minute a machine that registered again has to carry its build on.
+
+- While Chopin is out of reach during a run, the terminal says **Still trying to
+  reach Chopin (attempt 4, 40 s, HTTP 502), the run keeps going.** at most every
+  10 seconds, with the failure's HTTP status or error code only, and **Back in
+  contact with Chopin after 47 s.** once it answers.
 
 - Development builds that installed a service must run `chopin connect`, then
   `chopin service install` again: the service now runs its own copy of the

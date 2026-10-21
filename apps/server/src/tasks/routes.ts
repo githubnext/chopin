@@ -24,6 +24,8 @@ type Options = {
 	assess?: (id: string, planRevision: number) => void;
 	/** LIVE_BUILD: builds may queue behind a prototype or another document's build. */
 	liveBuild?: boolean;
+	/** CHOPIN_BUILD_RESUME_MS: how long after a restart a build's machine may come back to it. */
+	resumeMs?: number;
 	/** Throws `machine-offline` naming the machine the person chose, else `no-workspace`. */
 	refuseOffline?: (owner: string, documentId: string) => Promise<never>;
 	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
@@ -98,6 +100,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		},
 		async id => !!await auth.storage.channels.get(id),
 		options.liveBuild ? options.busy : undefined,
+		options.resumeMs === undefined ? {} : { resumeMs: options.resumeMs },
 	);
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {
 		try {

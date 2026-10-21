@@ -102,6 +102,25 @@ export function failureCause(error: unknown) {
 	return fallback ?? "connection closed";
 }
 
+/**
+ * A failure's kind alone, without any of its message, so nothing it quotes can reach the
+ * terminal: the HTTP status and the server's error code, else the network error's code.
+ */
+export function failureKind(error: unknown) {
+	let code = errorCode(error);
+	let current = error;
+	for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+		let status = (current as { code?: unknown }).code;
+		if (current instanceof StreamableHTTPError && typeof status === "number" && status >= 100) {
+			return code ? `HTTP ${status} ${code}` : `HTTP ${status}`;
+		}
+		if (!code && typeof status === "string" && /^[A-Za-z_]+$/.test(status)) return status;
+		if (!code && current.name === "TimeoutError") return "timed out";
+		current = current.cause;
+	}
+	return code ?? "no answer";
+}
+
 /** `promise`, or its signal's reason once `signal` aborts first; the promise itself carries on. */
 function abandoned<T>(promise: Promise<T>, signal?: AbortSignal) {
 	if (!signal) return promise;

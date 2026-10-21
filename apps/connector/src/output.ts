@@ -42,6 +42,14 @@ function headline(text: string) {
 	return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 
+/** A short duration for the terminal: `40 s`, or `2 min 5 s` from a minute up. */
+function span(ms: number) {
+	let seconds = Math.max(0, Math.round(ms / 1000));
+	if (seconds < 60) return `${seconds} s`;
+	let rest = seconds % 60;
+	return `${Math.floor(seconds / 60)} min${rest ? ` ${rest} s` : ""}`;
+}
+
 export function createOutput(
 	out: Stream = process.stdout,
 	err: Stream = process.stderr,
@@ -120,8 +128,21 @@ export function createOutput(
 				),
 			);
 		},
-		online() {
-			say(s.dim("  ✓ Back in contact with Chopin."));
+		/**
+		 * A run's retry to reach Chopin failed again: how many retries, how long since contact was
+		 * lost, and the failure's kind alone, an HTTP status or error code, never its message.
+		 */
+		stillTrying(attempt: number, ms: number, kind: string) {
+			say(
+				s.dim(
+					`  … Still trying to reach Chopin (attempt ${attempt}, ${span(ms)}, ${kind}), the run `
+						+ "keeps going.",
+				),
+			);
+		},
+		/** Back in contact after `ms` out of reach. */
+		online(ms: number) {
+			say(s.dim(`  ✓ Back in contact with Chopin after ${span(ms)}.`));
 		},
 		finished() {
 			say(`  ${s.green("✓")} Finished`, "");

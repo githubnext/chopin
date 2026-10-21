@@ -29,10 +29,18 @@ export const UNRESPONSIVE = "Your local agent stopped responding.";
 export const RESUMING =
 	"Chopin restarted and is waiting for this machine's connector to come back. Retry in a few seconds.";
 /**
- * How long after it starts a server waits for a machine to come back and carry on with a build it
- * was running before the restart: a forgotten connection's window, 90 seconds.
+ * How long after it starts a server waits, by default, for a machine to come back and carry on with
+ * a build it was running before the restart: ten minutes, as long as the connector keeps an agent
+ * running without reaching Chopin, so a slow deploy or a host reboot does not end it.
+ * `CHOPIN_BUILD_RESUME_MS` changes it.
  */
-export const RESUME_MS = 90_000;
+export const RESUME_MS = 600_000;
+/**
+ * How long a machine that came back may go without carrying on its build before the build ends as
+ * stopped responding: a heartbeat's allowance, as a connector still running the build renews it
+ * within seconds of registering again.
+ */
+export const RECONNECTED_MS = 60_000;
 
 export type WithPlan = <T>(id: string, action: (plan: Plan) => Promise<T>) => Promise<T>;
 
@@ -155,17 +163,25 @@ export function implementationConnector(
 	documentExists: (id: string) => Promise<boolean>,
 	/** Whether a prototype is executing on a connection; a build queued behind it waits. */
 	prototyping?: (connectionId: string) => Promise<boolean>,
-	options: { retryMs?: number; retries?: number } = {},
+	options: { retryMs?: number; retries?: number; resumeMs?: number } = {},
 ) {
 	/** When this process started; a build it never connected may still resume until the window ends. */
 	let started = Date.now();
+	let resumeMs = options.resumeMs ?? RESUME_MS;
 	/**
 	 * Whether a build was claimed before this process started, by a connection it never knew, and
-	 * may still be resumed by its machine.
+	 * may still be resumed by its machine: within the window, and, once its machine has come back,
+	 * only for a heartbeat's allowance. The sweep, the agent's answers and the takeover by the
+	 * machine's new connection all ask this, so they agree.
 	 */
-	let resuming = (build: BuildRequest) =>
-		!!build.resumable && !connections.known(build.connectionId)
-		&& ["starting", "running"].includes(build.state) && Date.now() < started + RESUME_MS;
+	let resuming = (build: BuildRequest) => {
+		if (
+			!build.resumable || connections.known(build.connectionId)
+			|| !["starting", "running"].includes(build.state) || Date.now() >= started + resumeMs
+		) return false;
+		let back = build.machineId ? connections.connectedSince(build.machineId) : undefined;
+		return back === undefined || Date.now() < back + RECONNECTED_MS;
+	};
 	let tracked = new Set<string>();
 	// Lifecycle calls of one run apply in arrival order, one at a time.
 	let chains = new Map<string, Promise<unknown>>();

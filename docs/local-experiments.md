@@ -179,7 +179,12 @@ requires a newer connector, or the owner has lost push access to the repository.
 A running agent keeps working through a drop. Its heartbeat retries on the same
 backoff, but never waits longer than its usual 10 seconds between tries, and its
 session and completion reports wait in memory, in order, until
-Chopin answers. The connector stops the agent only when Chopin says the run is
+Chopin answers. The terminal says **Lost contact with Chopin**, then, at most
+every 10 seconds while it lasts, **Still trying to reach Chopin (attempt 4,
+40 s, HTTP 502), the run keeps going.** with the retry's number, how long Chopin
+has been out of reach, and the failure's HTTP status or error code alone, never
+its message, and **Back in contact with Chopin after 47 s.** when it answers
+again. The connector stops the agent only when Chopin says the run is
 over, after 10 minutes without reaching Chopin, or after two minutes in which
 Chopin only said it no longer knows the connection. Ctrl-C stops the agent at
 once and waits at most five seconds for Chopin to hear why. Chopin itself still ends a
@@ -218,10 +223,17 @@ credential is signed with a key derived from the deployment's
 after the restart, accepts it only for the connection that now holds its build,
 and refuses it once the build has ended. Until the machine is back, the agent's
 calls are answered `unavailable` (HTTP 503) with a request to retry. Chopin
-waits 90 seconds after it starts for the machine to come back: only then does
-it end a build nobody carried on, saying **your local agent stopped responding**
-when the machine reconnected without it and **your local agent disconnected**
-when it did not. A build that ended before the restart stays ended
+waits 10 minutes after it starts for the machine to come back
+(`CHOPIN_BUILD_RESUME_MS`, see [Self-hosting](self-hosting.md#runtime-configuration)),
+as long as the connector keeps its agent running without reaching Chopin, so a
+slow deploy or a host reboot does not end the build. Once the machine has
+registered again, it has a minute to carry the build on, as a connector still
+running it renews it within seconds; a build it has not taken back by then ends
+as **your local agent stopped responding**. A build whose machine never comes
+back ends as **your local agent disconnected** when the window passes, once
+someone opens the document or the agent calls Chopin. The window, the agent's
+`unavailable` answers and the machine taking the build back follow the same
+rule, so they never disagree. A build that ended before the restart stays ended
 (`build-inactive`).
 
 A build claimed by an older connector, or by a server without this change,

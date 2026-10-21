@@ -76,6 +76,11 @@ export type Config = {
 	connectorVersion?: string;
 	/** Keep a finished build's document as the source for later rebuilds. */
 	liveBuild?: boolean;
+	/**
+	 * CHOPIN_BUILD_RESUME_MS: how long after it starts the server waits for a machine to come back
+	 * and carry on with a build it was running before the restart. Ten minutes by default.
+	 */
+	buildResumeMs: number;
 	/** CHOPIN_SETUP_AGENTS: setups the Machines page offers before the built-in agents. */
 	setupAgents: SetupAgent[];
 	/** Let the editor's local agent prototype uncertain passages before the first build. */
@@ -147,7 +152,7 @@ function port(): number {
 	return value;
 }
 
-/** An agent connection liveness setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
+/** A duration setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
 function milliseconds(name: string, fallback: number, max = 600_000): number {
 	let raw = process.env[name];
 	if (raw === undefined) return fallback;
@@ -311,6 +316,7 @@ export function load(): Config {
 		plannerVisuals,
 		connectorVersion: connectorVersion(),
 		liveBuild,
+		buildResumeMs: milliseconds("CHOPIN_BUILD_RESUME_MS", 600_000, 3_600_000),
 		setupAgents: setupAgents(process.env.CHOPIN_SETUP_AGENTS),
 		liveSpikes,
 		liveSpikesRegexJudge,

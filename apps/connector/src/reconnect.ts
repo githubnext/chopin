@@ -75,9 +75,12 @@ export function runReports(api: Caller, options: {
 	random?: () => number;
 	classify?: Classify;
 	now?: () => number;
-	/** Called once when Chopin stops answering, and once when it answers again. */
+	/**
+	 * Called once when Chopin stops answering, and once when it answers again, with how long it was
+	 * out of reach.
+	 */
 	lost?: () => void;
-	back?: () => void;
+	back?: (ms: number) => void;
 	/**
 	 * Called once when the run has been out of reach for its whole grace period, or when Chopin
 	 * has refused only as a server that forgot the connection does for `forgetMs`.
@@ -106,6 +109,8 @@ export function runReports(api: Caller, options: {
 		signal: gone.signal,
 		/** Out of contact for the whole grace period, or forgotten by Chopin. */
 		expired: () => gone.signal.aborted,
+		/** How long Chopin has been out of reach, while it is. */
+		outage: () => lostAt === undefined ? undefined : now() - lostAt,
 		/** Whether a failed call may succeed later, so the run should carry on. */
 		retryable: (error: unknown) => transient(classify(error)) && !gone.signal.aborted,
 		/** How long a retry may still wait: what is left of the grace period or forgotten window. */
@@ -124,9 +129,10 @@ export function runReports(api: Caller, options: {
 				forgottenAt = undefined;
 				clearTimeout(forgetting);
 				if (lostAt !== undefined) {
+					let outage = now() - lostAt;
 					lostAt = undefined;
 					clearTimeout(timer);
-					options.back?.();
+					options.back?.(outage);
 				}
 				return value;
 			} catch (error) {

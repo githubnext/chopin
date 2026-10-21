@@ -2732,6 +2732,7 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 		buildReadiness!.ready(id, revision);
 	}),
 	liveBuild: !!config.liveBuild,
+	resumeMs: config.buildResumeMs,
 	connections: experiments.connections,
 	refuseOffline: experiments.refuseOffline,
 	machineChoices: experiments.machineChoices,

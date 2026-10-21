@@ -24,6 +24,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		BACKGROUND_JOBS: undefined,
 		WEB_RESEARCH: undefined,
 		RESEARCH_EVIDENCE_TIMEOUT_MS: undefined,
+		CHOPIN_BUILD_RESUME_MS: undefined,
 		CONVERSATION_PLAN: undefined,
 		CONVERSATION_INITIATIVE_MODEL: undefined,
 		CONVERSATION_INITIATIVE_SILENCE_MS: undefined,

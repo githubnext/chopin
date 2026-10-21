@@ -97,6 +97,8 @@ async function setup(
 		assess?: (id: string, revision: number) => void;
 		/** While set, reading the stored machine choices fails, as a locked table does. */
 		unreadable?: { locked: boolean };
+		/** How long after a restart a build's machine may come back and carry it on. */
+		resumeMs?: number;
 	} = {},
 ) {
 	let context = await openPlan("# Launcher plan\n");
@@ -186,6 +188,7 @@ async function setup(
 		implementations = registerImplementationRoutes(router, auth, {
 			assess: options.assess,
 			liveBuild: options.liveBuild ?? false,
+			...(options.resumeMs === undefined ? {} : { resumeMs: options.resumeMs }),
 			connections: current.connections,
 			refuseOffline: current.refuseOffline,
 			machineChoices: current.machineChoices,
@@ -1134,38 +1137,107 @@ test("a build that ended before a restart stays ended", async () => {
 	}
 });
 
+test("a build carries on after a five-minute outage once its machine comes back", async () => {
+	let context = await setup();
+	let clock = clockFor(context);
+	try {
+		let { connection, built, claim } = await running(context);
+		context.restart();
+		// Someone opens the document, so Chopin looks at its build again while the machine is away.
+		await context.call(context.path);
+		let hint = { id: built.id, documentId: context.plan.id };
+		for (let minute = 1; minute <= 5; minute++) {
+			await clock.advance(60_000);
+			await context.implementations.sweep();
+			expect(context.plan.builds.at(-1)).toMatchObject({ state: "running" });
+			// The agent is still asked to retry, not told its build is over.
+			expect(
+				await tool(context, claim.runToken, "start_task", {
+					taskId: "first",
+					idempotencyKey: "start",
+				}, null),
+			).toMatchObject({ status: 503, error: "unavailable" });
+		}
+		let second = await reconnect(context, connection.machineToken);
+		expect(await tool(context, second.token, "renew_implementation_build", hint))
+			.toEqual({ accepted: true });
+		expect(context.plan.builds.at(-1)).toMatchObject({
+			state: "running",
+			connectionId: second.connection.id,
+		});
+		expect(
+			await tool(context, claim.runToken, "start_task", {
+				taskId: "first",
+				idempotencyKey: "start",
+			}, null),
+		).toEqual({ state: "accepted" });
+	} finally {
+		setSystemTime();
+		await Plan.close(context.plan);
+	}
+});
+
 test.each([
-	["comes back without it", "Your local agent stopped responding."],
-	["never comes back", "Your local agent disconnected."],
+	["the default window", undefined, 600_000],
+	["a configured window", 120_000, 120_000],
 ])(
-	"a build its machine does not resume after a restart waits out the window, then ends (machine %s)",
-	async (machine, error) => {
-		let context = await setup();
+	"a build whose machine never comes back after a restart ends as disconnected after %s",
+	async (_name, resumeMs, window) => {
+		let context = await setup({ resumeMs });
 		let clock = clockFor(context);
 		try {
-			let { connection } = await running(context);
+			let { claim } = await running(context);
 			context.restart();
-			// Someone opens the document, so Chopin looks at its build again.
 			await context.call(context.path);
 			let after = async (ms: number) => {
 				await clock.advance(ms);
 				await context.implementations.sweep();
 				return context.plan.builds.at(-1)!;
 			};
-			expect(await after(0)).toMatchObject({ state: "running" });
-			expect(await after(60_000)).toMatchObject({ state: "running" });
-			// A connector whose agent stopped meanwhile registers its machine but never renews the build.
-			if (machine === "comes back without it") {
-				await reconnect(context, connection.machineToken);
-			}
-			expect(await after(25_000)).toMatchObject({ state: "running" });
-			expect(await after(10_000)).toMatchObject({ state: "failed", error });
+			expect(await after(window - 10_000)).toMatchObject({ state: "running" });
+			expect(await after(10_000)).toMatchObject({
+				state: "failed",
+				error: "Your local agent disconnected.",
+			});
+			let late = await tool(context, claim.runToken, "start_task", {
+				taskId: "first",
+				idempotencyKey: "start",
+			}, null);
+			expect(late.content?.[0].text ?? late.error).toMatch(/^build-inactive/);
 		} finally {
 			setSystemTime();
 			await Plan.close(context.plan);
 		}
 	},
 );
+
+test("a build whose machine comes back without it after a restart ends as stopped responding", async () => {
+	let context = await setup();
+	let clock = clockFor(context);
+	try {
+		let { connection } = await running(context);
+		context.restart();
+		await context.call(context.path);
+		let after = async (ms: number) => {
+			await clock.advance(ms);
+			await context.implementations.sweep();
+			return context.plan.builds.at(-1)!;
+		};
+		expect(await after(120_000)).toMatchObject({ state: "running" });
+		// A connector whose agent stopped meanwhile registers its machine but never renews the build.
+		// One still running it renews within seconds, so this one gets a heartbeat's allowance, a
+		// minute, rather than the rest of the window.
+		await reconnect(context, connection.machineToken);
+		expect(await after(50_000)).toMatchObject({ state: "running" });
+		expect(await after(10_000)).toMatchObject({
+			state: "failed",
+			error: "Your local agent stopped responding.",
+		});
+	} finally {
+		setSystemTime();
+		await Plan.close(context.plan);
+	}
+});
 
 test("a build whose heartbeat stops while its machine stays connected says the agent stopped responding", async () => {
 	let context = await setup();

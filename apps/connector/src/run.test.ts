@@ -23,6 +23,7 @@ import { ConnectorError, remote } from "./mcp";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 /** Run one implementation claim against a fixture repository and record connector calls. */
 async function run(
@@ -627,6 +628,45 @@ test("a build keeps its agent through a server restart and its heartbeat is hear
 	// Each heartbeat names the document, so a restarted Chopin can find the build again.
 	expect(renewals.every(args => args.documentId === documentId)).toBe(true);
 	expect(calls.at(-1)?.[1]).toMatchObject({ state: "failed", error: STOPPED });
+});
+
+test("a run out of reach says it is still trying at most every 10 seconds, then how long it was", async () => {
+	let terminal = captured();
+	let abort = new AbortController();
+	// The fake clock moves four seconds with each heartbeat.
+	let clock = 0;
+	let renewals = 0;
+	let down = false;
+	let token = "chopin_r_secretsecretsecretsecret";
+	await run(
+		{},
+		["--hang"],
+		name => {
+			if (name === "renew_implementation_build") {
+				clock += 4000;
+				renewals++;
+				// Chopin answers the first heartbeat, then nothing for eleven, then answers again.
+				down = renewals > 1 && renewals <= 12;
+				if (renewals === 11) {
+					throw new StreamableHTTPError(502, `Bad gateway for Bearer ${token}`);
+				}
+				if (renewals === 13) abort.abort();
+			}
+			if (down) throw unreachable();
+			return { accepted: true };
+		},
+		abort.signal,
+		{ random: () => 0.01, now: () => clock, output: terminal.output },
+	);
+	let lines = terminal.out().split("\n").filter(line => /Chopin/.test(line));
+	expect(lines).toEqual([
+		"  … Lost contact with Chopin. The agent keeps working; reports wait until it is back.",
+		"  … Still trying to reach Chopin (attempt 3, 12 s, ConnectionRefused), the run keeps going.",
+		"  … Still trying to reach Chopin (attempt 6, 24 s, ConnectionRefused), the run keeps going.",
+		"  … Still trying to reach Chopin (attempt 9, 36 s, HTTP 502), the run keeps going.",
+		"  ✓ Back in contact with Chopin after 44 s.",
+	]);
+	expect(terminal.out() + terminal.err()).not.toContain(token);
 });
 
 test("a run out of reach for its whole grace period stops its agent", async () => {

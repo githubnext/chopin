@@ -251,6 +251,8 @@ test("a build running across a Chopin restart finishes Built", async ({ page }) 
 	expect(built.build.error).toBeUndefined();
 	expect(chopin.log.text).toContain("after Chopin restarted");
 	expect(local.output()).not.toContain("ended this run");
+	// The connector said how long Chopin was out of reach once it answered again.
+	expect(local.output()).toMatch(/Back in contact with Chopin after \d+ s\./);
 
 	await page.reload();
 	await expect(page.getByRole("button", { name: /^Built/ })).toBeVisible();

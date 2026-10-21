@@ -131,6 +131,8 @@ export class Connections {
 	#runs = new Map<string, string>();
 	/** When each connection that ended in the last hour ended, by id. */
 	#ended = new Map<string, number>();
+	/** When each live connection opened, by id. */
+	#opened = new Map<string, number>();
 	#waiters = new Map<string, Set<() => void>>();
 	#builds = new Map<string, string>();
 	/** Documents whose builds wait behind a connection's current one, first queued first. */
@@ -293,6 +295,7 @@ export class Connections {
 		};
 		let token = randomBytes(32).toString("base64url");
 		this.#connections.set(connection.id, connection);
+		this.#opened.set(connection.id, this.now());
 		this.#about.set(machine.id, about);
 		this.#tokens.set(fingerprint(token), { connectionId: connection.id });
 		return { connection, token };
@@ -302,6 +305,11 @@ export class Connections {
 		return [...this.#connections.values()].filter(value =>
 			value.machineId === machineId && value.expiresAt > this.now()
 		);
+	}
+	/** Since when a paired machine has been connected: its oldest live connection's opening. */
+	connectedSince(machineId: string) {
+		let opened = this.machine(machineId).map(value => this.#opened.get(value.id) ?? this.now());
+		return opened.length ? Math.min(...opened) : undefined;
 	}
 	/** What a machine last said about itself while this server ran, connected or not. */
 	about(machineId: string): About | undefined {
@@ -538,6 +546,7 @@ export class Connections {
 	revoke(id: string) {
 		let connection = this.#connections.get(id);
 		this.#connections.delete(id);
+		this.#opened.delete(id);
 		if (connection) this.#ended.set(id, this.now());
 		this.#builds.delete(id);
 		this.#queued.delete(id);

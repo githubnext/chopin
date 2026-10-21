@@ -2,7 +2,7 @@ import { requestSchema } from "@chopin/experiment";
 import { activityText } from "@chopin/protocol/activity";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { remote } from "./mcp";
-import { ConnectorStopped, redacted } from "./connection";
+import { ConnectorStopped, failureKind, redacted } from "./connection";
 import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
@@ -57,6 +57,8 @@ type Options = {
 	forgetMs?: number;
 	/** The jitter source for retries, for tests. */
 	random?: () => number;
+	/** The clock for how long Chopin has been out of reach, for tests. */
+	now?: () => number;
 	/** Where an agent that fails to start is recorded for `chopin status`. */
 	failures?: StartFailures;
 	/** The `--env` variables connect saved, for the agent. */
@@ -67,6 +69,8 @@ type Options = {
 	githubRefused?: (message: string, repository: string) => void;
 };
 export const STOPPED = "Stopped from the connector terminal.";
+/** A run out of reach says it is still trying at most this often. */
+const RETRY_SAID_MS = 10_000;
 
 function minutes(ms: number) {
 	let value = Math.round(ms / 60_000);
@@ -124,6 +128,9 @@ export async function runWork(
 	let ended: string | undefined;
 	/** Chopin forgot this connection, so the connector must stop once the run has reported. */
 	let forgotten = false;
+	let now = options.now ?? Date.now;
+	/** When the terminal last said Chopin is out of reach, so retries say so at most every 10 s. */
+	let saidAt = 0;
 	// Each build report carries its own idempotencyKey, kept across its retries, so Chopin accepts a
 	// report again whose answer was lost instead of refusing it as a second transition.
 	let reports = runReports(api, {
@@ -131,8 +138,12 @@ export async function runWork(
 		graceMs: options.graceMs,
 		forgetMs: options.forgetMs,
 		random: options.random,
-		lost: () => output.offline(),
-		back: () => output.online(),
+		now,
+		lost: () => {
+			saidAt = now();
+			output.offline();
+		},
+		back: ms => output.online(ms),
 		expired(reason) {
 			forgotten = reason === "forgotten";
 			ended ??= forgotten
@@ -178,6 +189,11 @@ export async function runWork(
 				if (beat.aborted) return;
 				if (reports.retryable(error)) {
 					failures++;
+					let outage = reports.outage();
+					if (failures > 1 && outage !== undefined && now() - saidAt >= RETRY_SAID_MS) {
+						saidAt = now();
+						output.stillTrying(failures - 1, outage, failureKind(error));
+					}
 					continue;
 				}
 				let code = errorCode(error);
