@@ -55,6 +55,30 @@ export async function resumeOwnedRuns(workflows: SessionWorkflows): Promise<void
 }
 
 /**
+ * Waits until Atomic has written the ending of each run that finished, failed or
+ * was stopped to the workflow journal, so a session disposed right after a run
+ * ends never leaves it `running` there. Live, paused and blocked runs are not
+ * waited on; disposing the session stops them. A run whose ending could not be
+ * journaled is logged, and the session still goes.
+ */
+export async function settleEndedRuns(
+	workflows: Pick<SessionWorkflows, "waitForSettled">,
+	runs: PlannerRuns | undefined,
+): Promise<void> {
+	let ended = (runs?.cards ?? []).filter(card =>
+		(card.status === "finished" || card.status === "failed" || card.status === "stopped")
+		&& !runs!.active.includes(card.id) && !runs!.paused.includes(card.id)
+	);
+	await Promise.all(
+		ended.map(card =>
+			workflows.waitForSettled(card.id).catch(error =>
+				console.error(`[agent] workflow run ${card.id} ended without its ending journaled:`, error)
+			)
+		),
+	);
+}
+
+/**
  * Resolves once the root run owning `runId` is not paused. Atomic leaves a
  * question open when its run pauses, so an answer given meanwhile is held here
  * until the run resumes, keeping the paused run fully stopped.

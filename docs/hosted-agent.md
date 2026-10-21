@@ -638,7 +638,9 @@ is between turns starts a Planner turn about it, on the kept session, so the
 Planner reports what happened and what the team needs to do; Chat records the
 run's end as that turn's reason, and the session is let go after the turn. The
 adapter stops any turn Atomic starts on its own, such as for its lifecycle
-notices, because Chopin would neither show nor record it.
+notices or, since Atomic 0.9.41, for a message queued while the session is
+idle, because Chopin would neither show nor record it. The Planner's next turn
+still starts normally.
 Chat shows the session's runs as one stack, one row
 per run: its name, status (running, waiting on Decisions, paused, or ended), and
 elapsed time. Several runs can be live at once. Runs waiting on Decisions come
@@ -664,7 +666,11 @@ document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
 binding ends, or when the document closes; run state is durable in Atomic's
 workflow journal, so runs interrupted that way can be resumed from a later
-session. Chopin keeps that journal at
+session. Before disposing the session, the adapter waits, for at most 10
+seconds, on Atomic's `session.workflows.waitForSettled()` for each run that
+finished, failed or was stopped, so a session let go right after a run ends
+never leaves that run `running` in the journal; a run whose ending could not be
+recorded is logged by its ID. Chopin keeps that journal at
 `$XDG_STATE_HOME/chopin/atomic/workflows.sqlite` under the same per-user state
 directory as the documents' own directories, because a run resumes only with
 the journal and working directory it started in. Each Planner session is

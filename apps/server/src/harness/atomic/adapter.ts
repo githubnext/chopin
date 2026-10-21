@@ -25,7 +25,7 @@ import {
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fullPlanner, workflowRuns } from "./full";
+import { fullPlanner, settleEndedRuns, workflowRuns } from "./full";
 
 import type {
 	HarnessV1,
@@ -709,6 +709,12 @@ export function createAtomicAdapter(
 				try {
 					if (live) {
 						live.release();
+						if (full) {
+							await bounded(
+								settleEndedRuns(live.session.workflows, full.runs),
+								"Atomic workflow runs did not settle.",
+							).catch(error => console.error("[agent]", error));
+						}
 						await bounded(live.session.dispose(), "Atomic session disposal timed out.");
 					}
 				} finally {
