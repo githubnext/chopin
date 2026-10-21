@@ -12,7 +12,7 @@ import {
 	CONNECTOR_UPDATE_REQUIRED,
 } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
-import { CONNECTOR_HEADERS, ConnectorError, refusal } from "./mcp";
+import { CONNECTOR_HEADERS, ConnectorError, jsonObject, refusal } from "./mcp";
 import type { Output } from "./output";
 
 /**
@@ -188,9 +188,7 @@ async function post(
 	});
 	let refused = await refusal(response);
 	if (refused) throw refused;
-	// Bun reads an empty body sent with Content-Length 0, as a gateway's 502 is, as JSON null.
-	let parsed: unknown = await response.json().catch(() => undefined);
-	let value = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+	let value = await jsonObject(response);
 	if (!response.ok) {
 		let code = typeof value.error === "string" ? value.error : `http-${response.status}`;
 		throw new ConnectorError(

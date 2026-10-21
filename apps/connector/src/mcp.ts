@@ -20,15 +20,22 @@ export const CONNECTOR_HEADERS = {
 };
 
 /**
+ * The JSON object a response carries, or an empty one when its body is anything else. Bun reads an
+ * empty body sent with Content-Length 0, as a gateway's 502 is, as JSON null rather than failing.
+ */
+export async function jsonObject(response: Response) {
+	let parsed: unknown = await response.json().catch(() => undefined);
+	return (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+}
+
+/**
  * The server's refusal of this connector's version, which no retry can fix. Its message names the
  * release to install.
  */
 export async function refusal(response: Response) {
 	if (response.status !== 409) return;
-	let body = await response.clone().json().catch(() => undefined) as
-		| { error?: unknown; message?: unknown }
-		| undefined;
-	if (body?.error === CONNECTOR_UPDATE_REQUIRED && typeof body.message === "string") {
+	let body = await jsonObject(response.clone());
+	if (body.error === CONNECTOR_UPDATE_REQUIRED && typeof body.message === "string") {
 		return new ConnectorError(CONNECTOR_UPDATE_REQUIRED, body.message, 409);
 	}
 }

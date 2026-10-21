@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { jsonObject } from "./mcp";
 import { VERSION } from "./version";
 
 /**
@@ -171,9 +172,7 @@ async function newest(api: string) {
 /** The release a Chopin server recommends to its connectors, if it can be asked. */
 async function recommended(server: string) {
 	try {
-		let body = await (await download(`${server}/api/connector/version`)).json() as {
-			version?: unknown;
-		};
+		let body = await jsonObject(await download(`${server}/api/connector/version`));
 		if (typeof body.version !== "string") return { reason: "it recommends none" };
 		return { version: releaseVersion(body.version) };
 	} catch (error) {

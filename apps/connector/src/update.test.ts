@@ -169,6 +169,23 @@ describe.skipIf(!binary)("chopin update", () => {
 		expect(await readFile(at.chopin, "utf8")).toBe(fakeChopin("99.0.0"));
 	});
 
+	test("installs the newest release when the Chopin server answers with an empty body", async () => {
+		using release = releases();
+		let empty = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null) });
+		let url = `http://127.0.0.1:${empty.port}`;
+		try {
+			let at = await installed();
+			let result = await at.update({ ...release.env, CHOPIN_URL: url });
+			expect(result.code).toBe(0);
+			expect(result.stdout).toContain(
+				`Could not ask ${url} which chopin to install (it recommends none), so installing the `
+					+ "newest release, 99.0.0, instead.",
+			);
+		} finally {
+			await empty.stop(true);
+		}
+	});
+
 	test("moves to an older release only with --allow-downgrade", async () => {
 		using release = releases();
 		using chopin = chopinServer("0.0.0");

@@ -428,6 +428,17 @@ test("status still reports when Chopin is down, and says when it refuses the mac
 	await hung.stop(true);
 });
 
+test("status reports the HTTP status of a gateway that answers with an empty body", async () => {
+	// A proxy such as Caddy answers for a Chopin that went away with 502 and Content-Length 0.
+	using gateway = chopin(() => new Response(null, { status: 502 }));
+	let paired = await machine(gateway.url);
+	let report = await collectStatus({ ...paired, server: gateway.url, source: "config" });
+	expect(report.machine).toMatchObject({ check: "error", accepted: null, detail: "http-502" });
+	expect(formatStatus(report).join("\n")).toContain(
+		"Machine:    paired as build-box; Chopin's answer was http-502",
+	);
+});
+
 // Run under a temporary HOME, so the service check sees no unit and runs nothing.
 test.skipIf(process.platform === "win32")(
 	"chopin status --json reads the base dir it is given and prints the report",

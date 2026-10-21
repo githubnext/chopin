@@ -1,6 +1,6 @@
 import { type ConnectSettings, readConfig } from "./config";
 import { machineLabel, machineToken, SELF } from "./machine";
-import { CONNECTOR_HEADERS, refusal } from "./mcp";
+import { CONNECTOR_HEADERS, jsonObject, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
 import { appCannotPush } from "./github-token";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
@@ -130,7 +130,7 @@ async function check(url: string, token: string, timeoutMs: number) {
 	if (refused) {
 		return { check: "update-required" as const, accepted: false, detail: refused.message };
 	}
-	let body = await response.json().catch(() => ({})) as Record<string, unknown>;
+	let body = await jsonObject(response);
 	if (response.ok) {
 		return {
 			check: "accepted" as const,
