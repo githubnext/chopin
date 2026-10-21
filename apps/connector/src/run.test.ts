@@ -784,45 +784,53 @@ async function connected(options: {
 	}
 }
 
-test("a run behind a gateway answering 502 with no body says HTTP 502 while it retries", async () => {
-	let abort = new AbortController();
-	// The fake clock moves four seconds with each request the gateway refuses.
-	let clock = 0;
-	let renewals = 0;
-	let refused = 0;
-	let down = false;
-	let { out } = await connected({
-		flags: ["--hang"],
-		abort,
-		runOptions: { now: () => clock },
-		tool(name) {
-			if (name !== "renew_implementation_build") return {};
-			// Chopin answers the first heartbeat and then goes away; once it is back the run ends.
-			if (++renewals === 1) down = true;
-			else abort.abort();
-			return { accepted: true };
-		},
-		// A proxy such as Caddy answers for a Chopin that went away with 502 and Content-Length 0,
-		// both the heartbeat on the open connection and each registration that follows.
-		gateway(request, name) {
-			let registering = new URL(request.url).pathname === "/api/connector/connections";
-			if (!down || !registering && name !== "renew_implementation_build") return;
-			clock += 4000;
-			if (++refused === 8) down = false;
-			return new Response(null, { status: 502 });
-		},
-	});
-	let lines = out().split("\n").filter(line => /Chopin/.test(line));
-	expect(lines).toEqual([
-		"  … Lost the connection to Chopin during a run (HTTP 502). Registering this machine again; "
-		+ "the agent keeps working.",
-		"  … Lost contact with Chopin. The agent keeps working; reports wait until it is back.",
-		"  … Still trying to reach Chopin (attempt 3, 12 s, HTTP 502), the run keeps going.",
-		"  … Still trying to reach Chopin (attempt 6, 24 s, HTTP 502), the run keeps going.",
-		"  ✓ Registered this machine with Chopin again; the run goes on.",
-		"  ✓ Back in contact with Chopin after 28 s.",
-	]);
-});
+// The outage waits for the agent's session, which a busy runner can be slow to start.
+test(
+	"a run behind a gateway answering 502 with no body says HTTP 502 while it retries",
+	async () => {
+		let abort = new AbortController();
+		// The fake clock moves four seconds with each request the gateway refuses.
+		let clock = 0;
+		let reported = false;
+		let refused = 0;
+		let down = false;
+		let { out } = await connected({
+			flags: ["--hang"],
+			abort,
+			runOptions: { now: () => clock },
+			tool(name) {
+				if (name === "report_implementation_build") reported = true;
+				if (name !== "renew_implementation_build") return {};
+				// Chopin goes away only once it has heard the agent's session, so every request it
+				// refuses is a heartbeat's: a session report retried during the outage would move the
+				// clock too. Once it is back the run ends.
+				if (refused) abort.abort();
+				else if (reported) down = true;
+				return { accepted: true };
+			},
+			// A proxy such as Caddy answers for a Chopin that went away with 502 and Content-Length
+			// 0, both the heartbeat on the open connection and each registration that follows.
+			gateway(request, name) {
+				let registering = new URL(request.url).pathname === "/api/connector/connections";
+				if (!down || !registering && name !== "renew_implementation_build") return;
+				clock += 4000;
+				if (++refused === 8) down = false;
+				return new Response(null, { status: 502 });
+			},
+		});
+		let lines = out().split("\n").filter(line => /Chopin/.test(line));
+		expect(lines).toEqual([
+			"  … Lost the connection to Chopin during a run (HTTP 502). Registering this machine again; "
+			+ "the agent keeps working.",
+			"  … Lost contact with Chopin. The agent keeps working; reports wait until it is back.",
+			"  … Still trying to reach Chopin (attempt 3, 12 s, HTTP 502), the run keeps going.",
+			"  … Still trying to reach Chopin (attempt 6, 24 s, HTTP 502), the run keeps going.",
+			"  ✓ Registered this machine with Chopin again; the run goes on.",
+			"  ✓ Back in contact with Chopin after 28 s.",
+		]);
+	},
+	10_000,
+);
 
 test("a heartbeat in flight when a run finishes is cancelled without losing the connection", async () => {
 	let abort = new AbortController();
