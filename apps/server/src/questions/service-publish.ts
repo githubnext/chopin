@@ -111,6 +111,11 @@ export async function publishQuestions(
 		capture?: { identities: string[]; signal?: AbortSignal };
 		/** Somebody waits on the answer, which therefore reaches them rather than a new turn. */
 		awaited?: boolean;
+		/**
+		 * The Planner's own card: without a block it can still place, it goes beside the
+		 * document's first section and is linked to it, rather than trailing unlinked.
+		 */
+		section?: boolean;
 		revision?: number;
 		created?: () => void;
 	} = {},
@@ -155,6 +160,10 @@ export async function publishQuestions(
 			placement = { ...placement, blocks: indices.map(index => blocks[index]!) };
 		}
 		let near = placement && "near" in placement ? nearBlock(plan, placement.near) : undefined;
+		if (!near && options.section && !(placement && "blocks" in placement)) {
+			let first = room.firstSection(plan.document);
+			near = first && nearBlock(plan, first);
+		}
 		let anchors = placement && "blocks" in placement
 			? validatePlacement(plan, fresh, placement)
 			: near && fresh.questions.map(() => [near.anchor]);

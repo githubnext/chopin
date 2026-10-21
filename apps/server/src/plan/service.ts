@@ -2038,6 +2038,7 @@ export async function rewrite(
 		Comments.rebase(candidate);
 		// A reviewed link whose blocks the rewrite left alone stays reviewed.
 		let reviewed = Questions.snapshot(candidate);
+		let sections = Questions.sections(candidate);
 		let outcome = edit.replace(candidate, plan.revision, nextSource);
 		if (outcome.ok && plan.persistence.documentTitles) room.trackTitle(document);
 		if (!outcome.ok) return outcome;
@@ -2046,6 +2047,7 @@ export async function rewrite(
 		if (changed) {
 			Questions.rebase(candidate);
 			Questions.invalidate(candidate, "plan_changed", reviewed);
+			Questions.keepOwnLinked(candidate, sections);
 			Comments.rebase(candidate);
 			Comments.invalidate(candidate, "plan_changed");
 		} else {
@@ -2090,6 +2092,7 @@ export async function rewrite(
 		if (changed) {
 			Questions.rebase(plan, before);
 			Questions.invalidate(plan, "plan_changed", reviewed);
+			Questions.keepOwnLinked(plan, sections);
 			Comments.rebase(plan);
 			Comments.invalidate(plan, "plan_changed");
 		}

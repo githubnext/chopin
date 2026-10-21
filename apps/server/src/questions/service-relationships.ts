@@ -8,6 +8,7 @@ import * as room from "../plan/room";
 import type { Plan as Wired } from "@chopin/protocol";
 
 import type { Plan } from "../plan/service";
+import type { Record } from "./record-types";
 
 // Exact archive 446a9779a937fa5be7cd3eb52fd7f3023d691ed2 declarations; import/export wrappers only.
 export function anchors(plan: Plan): Wired.WidgetAnchors[] {
@@ -78,6 +79,76 @@ export function invalidate(
 		plan.records.set(id, {
 			...record,
 			anchors: Anchors.invalidate(record, reason, before?.get(id)),
+		});
+	}
+}
+
+/** A card the Planner asked itself, as opposed to a workflow's, a person's or Chat's. */
+function plannerOwn(record: Record): boolean {
+	return record.origin === "planner"
+		&& !record.definition.questions.some(question => question.verbatim);
+}
+
+/** Per card, per question: the headings above its first linked block, nearest first. */
+export type Sections = Map<string, { [question: string]: Wired.Anchor[] }>;
+
+/** Before a whole-document rewrite, where each of the Planner's own cards could fall back to. */
+export function sections(plan: Plan): Sections {
+	let blocks = parse(room.project(plan.document)).children;
+	let digests = room.digests(plan.document);
+	let out: Sections = new Map();
+	for (let record of plan.records.values()) {
+		if (!plannerOwn(record)) continue;
+		let questions: { [question: string]: Wired.Anchor[] } = {};
+		for (let [question, set] of Object.entries(Anchors.read(record).questions)) {
+			let first = set.anchors[0];
+			if (!first || first.orphaned) continue;
+			let at = blocks.findIndex((_, index) => room.matchesAnchor(plan.document, first, index));
+			if (at < 0) continue;
+			questions[question] = blocks.slice(0, at).flatMap((block, index) =>
+				block.type === "heading" ? [room.anchorAt(plan.document, index, digests[index]!)] : []
+			).toReversed();
+		}
+		out.set(record.id, questions);
+	}
+	return out;
+}
+
+/**
+ * After a whole-document rewrite, keep the Planner's own cards linked, as a workflow's cards stay
+ * linked to the sections they name. Such a rewrite runs outside any Planner turn, so a link it
+ * left owing a review would never be reviewed. A block that survived keeps its card; a deleted
+ * one hands it to the nearest heading above it that survived, else the first section. A write-up
+ * whose passage was deleted has nothing left to rewrite, so it is dropped rather than failing.
+ */
+export function keepOwnLinked(plan: Plan, before: Sections): void {
+	for (let [id, record] of plan.records) {
+		if (!plannerOwn(record)) continue;
+		let value = Anchors.read(record);
+		let changed = false;
+		for (let [question, set] of Object.entries(value.questions)) {
+			if (!set.anchors.length) continue;
+			let live = set.anchors.filter(anchor => !anchor.orphaned);
+			let anchors = live;
+			if (!live.length) {
+				let heading = room.rebase(plan.document, before.get(id)?.[question] ?? [])
+					.find(anchor => !anchor.orphaned);
+				let first = heading ? undefined : room.firstSection(plan.document);
+				let fallback = heading
+					?? (first && room.anchorAt(plan.document, first.index, first.digest));
+				if (!fallback) continue;
+				anchors = [fallback];
+			}
+			value.questions[question] = { anchors, pending: false };
+			changed = true;
+		}
+		let lost = record.followUp?.target.some(anchor => anchor.orphaned);
+		if (!changed && !lost) continue;
+		let { followUp, ...rest } = record;
+		plan.records.set(id, {
+			...rest,
+			anchors: value,
+			...(followUp && !lost ? { followUp } : {}),
 		});
 	}
 }

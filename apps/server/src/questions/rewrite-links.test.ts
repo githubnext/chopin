@@ -32,12 +32,18 @@ afterEach(async () => {
 	reopen.clear();
 });
 
-/** An answered decision the Planner linked to the given blocks, reviewed. */
+/**
+ * An answered decision someone else asked, linked to the given blocks and reviewed. The
+ * Planner's own cards stay linked through a rewrite instead (planner-card-sections.test.ts).
+ */
 async function linked(indices: number[]) {
 	let context = await openPlan(SOURCE, {
 		revision: 1,
 		questions: [{
 			id: WIDGET,
+			origin: "human",
+			owner: "ana",
+			editors: ["ana"],
 			status: "answered",
 			resolver: "ana",
 			definition: {

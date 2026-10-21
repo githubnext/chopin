@@ -458,7 +458,9 @@ export const documentTools = {
 			+ "Use for choices such as how onboarding should work, not factual questions the "
 			+ "repository or research can settle. A recommendation is not agreement: only a "
 			+ "person pressing Save resolves this card. For planning questions beside prose, prefer "
-			+ "open_decisions, which also follows saved answers into the related prose. Reuse the same key when "
+			+ "open_decisions, which also follows saved answers into the related prose. Name the "
+			+ "block from read_plan the question concerns, such as its section heading; without one "
+			+ "the card goes beside the document's first section. Reuse the same key when "
 			+ "retrying the same capture. Do not use ask for the same decision as well.",
 		inputSchema: jsonSchema({
 			type: "object",
@@ -471,6 +473,20 @@ export const documentTools = {
 				},
 				question: { type: "string", minLength: 1, maxLength: 100 },
 				description: { type: "string", maxLength: 300 },
+				blocks: {
+					type: "array",
+					maxItems: 1,
+					description: "The block this decision concerns, from read_plan.",
+					items: {
+						type: "object",
+						properties: {
+							index: { type: "integer", minimum: 0 },
+							digest: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
+						},
+						required: ["index", "digest"],
+						additionalProperties: false,
+					},
+				},
 			},
 			required: ["revision", "key", "question"],
 			additionalProperties: false,

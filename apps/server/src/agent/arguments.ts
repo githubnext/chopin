@@ -356,10 +356,13 @@ export function openDecision(raw: unknown) {
 	let args = record(raw, "open_decision arguments");
 	fields(
 		args,
-		["revision", "key", "question", "description"],
+		["revision", "key", "question", "description", "blocks"],
 		["revision", "key", "question"],
 		"open_decision arguments",
 	);
+	let blocks = Object.hasOwn(args, "blocks")
+		? array(args.blocks, "blocks", "block").map((item, index) => block(item, `blocks[${index}]`))
+		: [];
 	return {
 		revision: integer(args.revision, "revision"),
 		key: text(args.key, "key"),
@@ -367,6 +370,7 @@ export function openDecision(raw: unknown) {
 		...(Object.hasOwn(args, "description")
 			? { description: args.description === "" ? "" : text(args.description, "description", 300) }
 			: {}),
+		...(blocks[0] ? { block: blocks[0] } : {}),
 	};
 }
 

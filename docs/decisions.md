@@ -59,12 +59,25 @@ uses the current reviewed passage and saved answers.
 It takes the current document revision, a stable request key, a concise question
 and optional context. Repeating a request returns the same card. The Planner
 can continue inspecting or developing the document while the choice remains
-open. This tool cannot confirm an answer. It creates an unanchored card without the scoped
-follow-up above; the Planner uses `open_decisions` for questions beside plan prose.
+open. This tool cannot confirm an answer. It may name the one block the question concerns,
+such as its section heading, and the card goes beside that block, linked to it. Without one, or
+when that block changed since the Planner read it, the card goes beside the document's first
+section: the first heading after an opening title, else the first block of prose. A document
+with only a title has no section, so the card trails it unlinked. It has no scoped follow-up;
+the Planner uses `open_decisions` for questions beside plan prose.
 
 `ask` also accepts `response: "text"` when the Planner needs to wait for a
 person's answer. Set `options` to an empty array;
 `multiple` must be false. Omitting `response` keeps the existing choice mode.
+
+A whole-document rewrite, such as an MCP `update_document` from a workflow run, runs outside any
+Planner turn, so nothing would review a link it left pending. The Planner's own cards (not a
+workflow's questions, a person's or Chat's decisions) therefore stay linked through one: a card
+whose block survived keeps it, and one whose block was deleted or rewritten into a new block is
+linked to the nearest heading above it that survived, else the first section. Its scoped
+write-up, when the rewrite deleted that passage, is dropped instead of failing, and the answer
+still reaches the Planner as a turn of its own. Other cards keep owing a review as before, and a
+Planner `edit_plan` still reports `anchors_pending` for the Planner to re-anchor.
 
 ## Collaboration and persistence
 

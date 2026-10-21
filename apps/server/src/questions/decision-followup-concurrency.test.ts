@@ -32,12 +32,15 @@ test.each(["append", "move"])(
 		await entered.promise;
 		await room.exclusive(async () => {
 			let before = Room.project(context.plan.document);
+			let unrelated = before.split("\n\n").findIndex(block =>
+				block.startsWith("Keep this unrelated")
+			);
 			let outcome = Edit.apply(
 				context.plan,
 				context.plan.revision,
 				change === "append"
 					? [{ op: "insert_root", source: "An unrelated edit made during assessment." }]
-					: [{ op: "move", index: 1, to: 0 }],
+					: [{ op: "move", index: unrelated, to: 0 }],
 			);
 			if (!outcome.ok || !outcome.mutation) throw new Error("expected the concurrent edit");
 			Questions.rebase(context.plan, before);

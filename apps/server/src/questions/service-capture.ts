@@ -10,7 +10,13 @@ import { fail, reply } from "../wire";
 import { identify } from "./service-definition";
 import { publishQuestions } from "./service-publish";
 
-type Input = { key: string; question: string; description?: string };
+type Input = {
+	key: string;
+	question: string;
+	description?: string;
+	/** The block the Planner's question concerns, from its latest read of the document. */
+	block?: { index: number; digest: string };
+};
 
 export type CaptureDecisionsInput = {
 	revision: number;
@@ -63,7 +69,11 @@ export async function capture(
 		identity: id,
 		...("human" in actor
 			? { origin: "human", by: actor.human }
-			: { revision: actor.revision }),
+			: {
+				revision: actor.revision,
+				section: true,
+				...(input.block ? { placement: { near: input.block } } : {}),
+			}),
 	});
 	return id;
 }

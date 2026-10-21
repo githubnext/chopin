@@ -43,15 +43,17 @@ export { away, edit, focus, greet, open, shutdown } from "./service-draft";
 export {
 	anchors,
 	invalidate,
+	keepOwnLinked,
 	outstanding,
 	place,
 	prose,
 	rebase,
 	relate,
+	sections,
 	setProse,
 	snapshot,
 } from "./service-relationships";
-export type { Placement } from "./service-relationships";
+export type { Placement, Sections } from "./service-relationships";
 export { reopen } from "./service-reopen";
 export { submit } from "./service-submit";
 export { setWhy } from "./service-why";

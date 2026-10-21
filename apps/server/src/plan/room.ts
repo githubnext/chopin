@@ -941,6 +941,24 @@ export function hasProse(target: Document): boolean {
 	);
 }
 
+/**
+ * The block a card about no particular passage goes beside: the first section heading after an
+ * opening title, else the first block of prose. A document with only a title, or nothing, has
+ * no section, and such a card stays where it was put.
+ */
+export function firstSection(target: Document): { index: number; digest: string } | undefined {
+	let blocks = parse(project(target)).children;
+	let body = blocks[0]?.type === "heading" && blocks[0].depth === 1 ? 1 : 0;
+	let index = blocks.findIndex((node, at) => at >= body && node.type === "heading");
+	if (index < 0) {
+		index = blocks.findIndex((node, at) =>
+			at >= body && (node.type !== "mdxJsxFlowElement"
+				|| (node.name !== "Questionnaire" && node.name !== "Decision"))
+		);
+	}
+	return index < 0 ? undefined : { index, digest: digests(target)[index]! };
+}
+
 export function headingAllowed(target: Document): boolean {
 	let blocks = bodyBlocks(target);
 	let placeholder = target.titleKey === undefined
