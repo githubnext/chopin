@@ -1208,6 +1208,25 @@ test("a run first reported as ended gets one finish message and never a repeat",
 	expect(spoken(context, "lint failed after 10 min.")).toBe(1);
 });
 
+test("a run reported finished before its root ended gets no finish message until it does", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = runningSession();
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	let { ended: _, ...early } = card("finished");
+	planner.set({ active: [], paused: [], cards: [early] });
+	planner.set({ active: ["run-1"], paused: [], cards: [card("running")] });
+	await tick();
+	await tick();
+	expect(spoken(context, finishLine())).toBe(0);
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(context.chat.retained).toBeDefined();
+	planner.set({ active: [], paused: [], cards: [card("finished")] });
+	await tick();
+	expect(spoken(context, finishLine())).toBe(1);
+});
+
 const followUps = (calls: string[]) =>
 	calls.filter(call => call.includes("plan-review (run-1) ended blocked"));
 

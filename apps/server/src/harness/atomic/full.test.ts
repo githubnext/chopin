@@ -15,16 +15,24 @@ import {
 	classifyRuns,
 	type FullPlanner,
 	pauseOwnedRuns,
+	type PlannerRuns,
 	registerFullPlanner,
 	resumeOwnedRuns,
 	runCards,
 	untilUnpaused,
+	workflowRuns,
 } from "./full";
 import { startStubModelServer } from "./model-stub";
 import * as Plan from "../../plan/service";
 import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
-import type { HostInput, QuestionParams, SessionWorkflows } from "@bastani/atomic";
+import type {
+	ExtensionAPI,
+	HostInput,
+	QuestionParams,
+	SessionWorkflows,
+	WorkflowActivityFrame,
+} from "@bastani/atomic";
 
 let params: QuestionParams = {
 	questions: [{
@@ -92,6 +100,7 @@ async function run(
 		askingWorkflow = false,
 		afterTurn,
 		events,
+		reports,
 	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
@@ -108,6 +117,8 @@ async function run(
 		afterTurn?: () => Promise<void>;
 		/** Collects, in order, the tool reports the adapter makes and the stream parts a tool yields. */
 		events?: string[];
+		/** Collects every runs report the Planner session makes. */
+		reports?: PlannerRuns[];
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -286,6 +297,7 @@ export default workflow({
 			cwd,
 			humanInput,
 			toolReport: events && ((_id, _output, state) => events.push(`report:${state}`)),
+			onRuns: reports && (runs => reports.push(structuredClone(runs))),
 		};
 		if (registered) release = registerFullPlanner(sessionId, planner);
 		let agent = new HarnessAgent({
@@ -898,4 +910,104 @@ test("ctx.tool steps appear among the stages, marked as tool steps", async () =>
 		{ id: "run-1:t2", name: "work", kind: "tool", status: "running", started: 6 },
 		{ id: "run-1:t3", name: "finish", kind: "tool", status: "skipped", ended: 7 },
 	]);
+});
+
+test(
+	"a launched run is live in every report from its first, even before Atomic's activity reaches it",
+	async () => {
+		// Atomic gives workflow stages a canned session under a test runtime.
+		let environment = process.env.NODE_ENV;
+		delete process.env.NODE_ENV;
+		try {
+			let reports: PlannerRuns[] = [];
+			let staged = () => reports.some(report => report.cards.some(card => card.stages.length > 0));
+			await run(true, "launch", {
+				askingWorkflow: true,
+				reports,
+				afterTurn: async () => {
+					for (let deadline = Date.now() + 30_000; !staged() && Date.now() < deadline;) {
+						await Bun.sleep(50);
+					}
+				},
+			});
+			expect(staged()).toBe(true);
+			let shown = reports.filter(report => report.cards.length > 0);
+			expect(shown.length).toBeGreaterThan(0);
+			for (let report of shown) {
+				let [card] = report.cards;
+				expect([card!.status, report.active]).toEqual([
+					expect.stringMatching(/^(running|waiting)$/),
+					[card!.id],
+				]);
+			}
+		} finally {
+			if (environment !== undefined) process.env.NODE_ENV = environment;
+		}
+	},
+	60_000,
+);
+
+test("a launched run stays live from admission until its root ends, and again once it resumes", () => {
+	let runId = "0f8fdc3a-2a59-4d43-9a43-0d6c51e8e1a1";
+	let handlers = new Map<string, (event: unknown, ctx?: unknown) => void>();
+	let observe: ((frame: WorkflowActivityFrame) => void) | undefined;
+	let planner: FullPlanner = { cwd: "/", humanInput: {} as HostInput };
+	workflowRuns(planner)({
+		on: (name: string, handler: (event: unknown, ctx?: unknown) => void) =>
+			handlers.set(name, handler),
+	} as unknown as ExtensionAPI);
+	handlers.get("session_start")!({}, {
+		observeWorkflowActivity: (observer: typeof observe) => {
+			observe = observer;
+			return { dispose() {} };
+		},
+	});
+	let cursor = { epoch: "e", revision: 0 };
+	let root = (state: "working" | "idle", reason: string) =>
+		({
+			kind: "changed",
+			cursor,
+			root: {
+				rootRunId: runId,
+				ownerSessionId: "session",
+				state,
+				reason,
+				activeExecutionCount: state === "working" ? 1 : 0,
+				actionableBlockCount: 0,
+				needsAttention: false,
+			},
+		}) as unknown as WorkflowActivityFrame;
+	let lifecycle = (status: string, at: number) =>
+		handlers.get("workflow_lifecycle")!({
+			type: "workflow_lifecycle",
+			eventId: `e${at}`,
+			cursor,
+			runId,
+			rootRunId: runId,
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target: { kind: "run", runId, status },
+		});
+	let state = () => [planner.runs!.active, planner.runs!.cards.map(card => card.status)];
+	observe!({ kind: "snapshot", cursor, availability: "ready", roots: [] } as WorkflowActivityFrame);
+
+	handlers.get("tool_result")!({
+		toolName: "workflow",
+		input: { action: "run", workflow: "demo" },
+		content: [{ type: "text", text: JSON.stringify({ runId }) }],
+	});
+	expect(state()).toEqual([[runId], []]);
+	lifecycle("running", 1);
+	expect(state()).toEqual([[runId], ["running"]]);
+	observe!(root("working", "executing"));
+	expect(state()).toEqual([[runId], ["running"]]);
+	lifecycle("completed", 2);
+	observe!(root("idle", "quiescent"));
+	expect(state()).toEqual([[], ["finished"]]);
+	lifecycle("running", 3);
+	expect(state()).toEqual([[runId], ["running"]]);
+	lifecycle("failed", 4);
+	expect(state()).toEqual([[], ["failed"]]);
 });

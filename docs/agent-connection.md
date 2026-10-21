@@ -642,7 +642,12 @@ them remain valid on version 1.
 Chat renders unfinished descendants of stopped, failed, blocked or skipped stages
 as stopped, while preserving finished outcomes. A stopped, failed or blocked run
 stops all unfinished stage displays even without parent links. `active` and
-`paused` list at most 64 root run IDs. When the connection closes, the server
+`paused` list at most 64 root run IDs. List a launched run in `active` from the
+moment the workflow tool admits it, or its root reports running, until its root
+run ends: Atomic delivers activity and lifecycle events in no shared order, so
+a run can start before its activity does. A `finished` card is finished only
+with `ended`, the time its root run ended; without it, Chat shows the run as
+still live and posts no finish notice. When the connection closes, the server
 shows the reported live runs as stopped.
 
 A full card's `stages` replace every stage Chopin stores for the run, unless

@@ -93,18 +93,26 @@ export function fullPlanner(sessionId: string): FullPlanner | undefined {
 
 /**
  * A root Atomic reports as paused is paused; one whose run has ended, as told
- * by its lifecycle events, is neither; any other root is live. Activity alone
- * cannot say a run ended: a root is idle and quiescent whenever nothing is
- * counted as executing, which also happens between steps of a live run.
+ * by its lifecycle events, is neither; any other root is live, as is a
+ * `launched` run Atomic's activity has yet to report. Activity alone cannot say
+ * a run ended: a root is idle and quiescent whenever nothing is counted as
+ * executing, which also happens between steps of a live run. Nor can it say a
+ * run started: Atomic delivers activity and lifecycle events in no shared order.
  */
 export function classifyRuns(
 	roots: Iterable<WorkflowRootActivity>,
 	ended: ReadonlySet<string> = new Set(),
+	launched: Iterable<string> = [],
 ): Omit<PlannerRuns, "cards"> {
 	let runs = { active: [] as string[], paused: [] as string[] };
 	for (let root of roots) {
 		if (root.reason === "paused") runs.paused.push(root.rootRunId);
 		else if (!ended.has(root.rootRunId)) runs.active.push(root.rootRunId);
+	}
+	for (let id of launched) {
+		if (!ended.has(id) && !runs.active.includes(id) && !runs.paused.includes(id)) {
+			runs.active.push(id);
+		}
 	}
 	return runs;
 }
@@ -246,7 +254,10 @@ function launchedRunId(content: readonly { type: string; text?: string }[]): str
  * Keeps `planner.runs` in step with the workflows this session owns, through
  * Atomic's public activity stream and lifecycle hooks. Recovering or
  * unavailable snapshots are unknown rather than empty, so they leave the last
- * known runs in place.
+ * known runs in place. A run is live from when the workflow tool admits it or
+ * its root says it is running until its root ends, whichever of Atomic's two
+ * unordered streams reports it first; an ended run stays ended until its root
+ * says it is running again.
  */
 export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 	return (atomic: ExtensionAPI): void => {
@@ -256,6 +267,8 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		let names = new Map<string, string>();
 		let parents = new Map<string, string>();
 		let seen = new Set<string>();
+		let launched = new Set<string>();
+		let over = new Set<string>();
 		let stage = true;
 		let ready = false;
 		let publish = () => {
@@ -265,11 +278,12 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 					card.status = "finished";
 					card.ended = card.updated;
 				}
+				if (card.ended !== undefined) {
+					over.add(id);
+					launched.delete(id);
+				}
 			}
-			let ended = new Set(
-				[...cards.values()].filter(card => card.ended !== undefined).map(card => card.id),
-			);
-			let split = classifyRuns(roots.values(), ended);
+			let split = classifyRuns(roots.values(), over, launched);
 			planner.runs = { ...split, cards: runCards(cards, split, roots.values()) };
 			planner.onRuns?.(planner.runs);
 			for (let wake of planner.waiters ?? []) wake();
@@ -293,18 +307,28 @@ export function workflowRuns(planner: FullPlanner): ExtensionFactory {
 		atomic.on("tool_result", event => {
 			if (stage || event.toolName !== "workflow" || event.input.action !== "run") return;
 			let runId = launchedRunId(event.content);
+			if (!runId) return;
+			if (!over.has(runId)) launched.add(runId);
 			let name = typeof event.input.workflow === "string" ? event.input.workflow : undefined;
-			if (!runId || !name) return;
-			names.set(runId, name);
+			if (name) names.set(runId, name);
 			let card = cards.get(runId);
-			if (card) {
-				card.name = name;
-				publish();
-			}
+			if (card && name) card.name = name;
+			publish();
 		});
 		atomic.on("workflow_lifecycle", event => {
 			if (stage) return;
-			if (event.target.kind !== "prompt") parents.set(event.target.runId, event.rootRunId);
+			let target = event.target;
+			if (target.kind !== "prompt") parents.set(target.runId, event.rootRunId);
+			if (target.kind === "run" && target.runId === event.rootRunId) {
+				if (ENDED[target.status]) {
+					over.add(target.runId);
+					launched.delete(target.runId);
+				} else {
+					over.delete(target.runId);
+					if (target.status === "paused") launched.delete(target.runId);
+					else launched.add(target.runId);
+				}
+			}
 			foldLifecycle(cards, event, names.get(event.rootRunId));
 			publish();
 		});

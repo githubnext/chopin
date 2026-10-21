@@ -1575,7 +1575,12 @@ async function publishReport(
 	// A card with no stages for a run Chat already shows stages of changes only the card's status
 	// and times: a reattached Planner reports an ended run without them, and they stay stored.
 	let kept = new Set<string>();
-	let incoming = runs?.cards?.map(card => {
+	let incoming = runs?.cards?.map(reported => {
+		// A run has finished only once its root ended, which a finished card carries as `ended`;
+		// one reported finished without it has just started and is still live.
+		let card: Wire.Run = reported.status === "finished" && reported.ended === undefined
+			? { ...reported, status: reported.waiting > 0 ? "waiting" : "running" }
+			: reported;
 		let shown = card.stages.length ? undefined : prior.find(run => run.id === card.id);
 		if (!shown || (!shown.stages.length && !shown.earlierStages)) return card;
 		kept.add(card.id);
