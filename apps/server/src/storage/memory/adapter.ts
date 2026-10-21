@@ -321,6 +321,15 @@ export class MemoryStorage implements StorageAdapter {
 			let found = id ? this.#channels.get(id) : undefined;
 			return Promise.resolve(found && channel(found));
 		},
+		earlierSlugs: id => {
+			let found = this.#channels.get(id);
+			let aliases = found ? this.#channelSlugs.get(found.repositoryId) : undefined;
+			return Promise.resolve(
+				[...aliases ?? []].flatMap(([slug, owner]) =>
+					owner === id && slug !== found!.slug ? [slug] : []
+				).toReversed(),
+			);
+		},
 		rename: input => this.#renameChannel(input),
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),

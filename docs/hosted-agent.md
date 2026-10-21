@@ -580,7 +580,9 @@ every turn.
   instead of receiving a stale embedded copy. That result, and every structured
   `edit_plan` result (success, or a locked, stale, or invalid refusal), carry
   `document: { id, url }`: the room's own document id and the canonical URL MCP
-  `read_document` returns for it, nested under the parent for a child document.
+  `read_document` returns for it, nested under the parent for a child document. A
+  renamed top-level document adds `earlier_urls`, the links it had before, which
+  still open it, so the Planner can tell its current link from an old one by data.
   Argument and storage errors return plain error text without it. Code running
   inside the session, such as an Atomic extension, can use either to address
   that document over MCP.

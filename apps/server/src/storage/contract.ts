@@ -1150,6 +1150,7 @@ export function storageContract(name: string, factory: Factory): void {
 				let { userId, channelId, repositoryId } = await userAndChannel(storage);
 				let original = await storage.channels.get(channelId);
 				expect(original?.slug).toBe("release-plan");
+				expect(await storage.channels.earlierSlugs(channelId)).toEqual([]);
 				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id)
 					.toBe(channelId);
 
@@ -1186,6 +1187,9 @@ export function storageContract(name: string, factory: Factory): void {
 					now: new Date("2026-01-06T03:04:05.000Z"),
 				});
 				expect(replacement.slug).toBe("release-plan-2");
+				expect(await storage.channels.earlierSlugs(channelId))
+					.toEqual(["résumé-計画", "release-plan"]);
+				expect(await storage.channels.earlierSlugs(replacement.id)).toEqual([]);
 				expect((await storage.channels.resolve(repositoryId, "release-plan"))?.id)
 					.toBe(channelId);
 				expect((await storage.channels.resolve(repositoryId, "release-plan-2"))?.id)

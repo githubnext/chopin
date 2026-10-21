@@ -220,7 +220,12 @@ test("read_plan and edit_plan name the room's document as read_document does", a
 	}
 
 	await storage.channels.rename({ id: channel.id, title: "Renamed plan", now });
-	let renamed = { id: channel.id, url: "/documents/owner/repository/renamed-plan" };
+	// The current link is `url`; the link it had before the rename is named as earlier.
+	let renamed = {
+		id: channel.id,
+		url: "/documents/owner/repository/renamed-plan",
+		earlier_urls: ["/documents/owner/repository/test-plan"],
+	};
 	let read = await call("read_plan", {});
 	expect(read.document).toEqual(renamed);
 	let edited = await call("edit_plan", {

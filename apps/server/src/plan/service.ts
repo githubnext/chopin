@@ -55,6 +55,7 @@ import { claim, restore as restoreGraph, restoreRun } from "../tasks/graphs";
 import { claimEligibility, restoreLifecycle, transition } from "../tasks/lifecycle";
 import { broadcast, broadcastRepository, fail, relay, reply, tell } from "../wire";
 import { documentUrl } from "../channels/document-url";
+import { documentPath } from "@chopin/protocol/document-url";
 
 import type { Server } from "bun";
 import type { ConversationPlan, Plan as Wire, Request, Sidebar } from "@chopin/protocol";
@@ -2388,10 +2389,30 @@ export function source(plan: Plan): string {
 	return room.project(plan.document);
 }
 
-export async function documentIdentity(plan: Plan): Promise<{ id: string; url: string }> {
-	let channel = await plan.persistence.storage.channels.get(plan.id);
+/**
+ * The document's id and current link. A renamed top-level document also lists the links it had
+ * before, which still open it, so the Planner can say which link is current from this data
+ * rather than guess it from the links it has seen.
+ */
+export async function documentIdentity(
+	plan: Plan,
+): Promise<{ id: string; url: string; earlier_urls?: string[] }> {
+	let channels = plan.persistence.storage.channels;
+	let channel = await channels.get(plan.id);
 	if (!channel) throw new Error("document is unavailable");
-	return { id: channel.id, url: await documentUrl(channel, plan.persistence.storage.channels) };
+	let url = await documentUrl(channel, channels);
+	let earlier = channel.parentChannelId ? [] : await channels.earlierSlugs(channel.id);
+	return {
+		id: channel.id,
+		url,
+		...(earlier.length
+			? {
+				earlier_urls: earlier.map(slug =>
+					documentPath(channel.repositoryOwner, channel.repositoryName, slug)
+				),
+			}
+			: {}),
+	};
 }
 
 /** Size of the Yjs history, for the idle compaction check. */

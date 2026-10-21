@@ -202,7 +202,9 @@ export const documentTools = {
 		contextSchema: roomContext,
 		description: "Read the plan: its revision, canonical source, the top-level blocks you can "
 			+ "address when editing, and the questions it holds. Read before editing — "
-			+ "`edit_plan` refuses a batch aimed at a revision that has moved on.",
+			+ "`edit_plan` refuses a batch aimed at a revision that has moved on. `document.url` is "
+			+ "this document's current link; `document.earlier_urls`, when present, are links it had "
+			+ "before a rename, which still open it.",
 		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
 		// Reading the document the agent is here to write is not a decision
 		// anybody needs to approve.

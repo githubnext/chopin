@@ -729,6 +729,15 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				return found ? channel(found) : undefined;
 			}),
+		earlierSlugs: id =>
+			this.#run("list earlier channel slugs", async () => {
+				let rows = await this.#sql<{ slug: string }[]>`
+					SELECT slug FROM channel_slugs
+					WHERE channel_id = ${id} AND NOT canonical
+					ORDER BY created_at DESC, slug
+				`;
+				return rows.map(row => row.slug);
+			}),
 		rename: input => this.#renameChannel(input),
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),
