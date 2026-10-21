@@ -93,7 +93,10 @@ let liveSchema = z.object({
 	checkout: checkoutSchema,
 	baseRevision: z.number().int().nonnegative(),
 	baseSource: z.string(),
-	/** Empty only when a first build stopped on a blocker before opening any pull request. */
+	/**
+	 * Empty only when a first build stopped on a blocker before opening any pull request, or every
+	 * task it completed needed no change.
+	 */
 	pullRequests: z.array(z.string().url()).max(100),
 	/** Commits rebuilds landed on the live pull requests, newest last. */
 	commits: z.array(
@@ -800,7 +803,10 @@ function liveTasks(plan: Plan) {
 				? [{
 					title: task.title,
 					goal: task.goal,
-					pullRequest: item.pullRequest.url,
+					// A task that needed no change has no pull request; say why instead.
+					...(item.pullRequest
+						? { pullRequest: item.pullRequest.url }
+						: { noChange: item.noChange.reason }),
 					summary: item.summary,
 				}]
 				: [];
@@ -823,7 +829,7 @@ export function readRebuild(plan: Plan, buildId: string) {
 			targetRevision: live.target.revision,
 			pullRequests: live.pullRequests.map(url => ({
 				url,
-				title: tasks.find(task => task.pullRequest === url)?.title ?? "",
+				title: tasks.find(task => "pullRequest" in task && task.pullRequest === url)?.title ?? "",
 			})),
 			tasks,
 			...(outstanding.length ? { outstanding } : {}),

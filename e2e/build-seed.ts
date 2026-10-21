@@ -23,12 +23,14 @@ export function failedBuild(graph: Graph): BuildRequest {
 
 /**
  * A first build of the graph's latest tasks that delivered a pull request for each and passed
- * review, asked for at `asked` and finished at `finished`: the document reads as built.
+ * review, asked for at `asked` and finished at `finished`: the document reads as built. A task
+ * named in `noChange` instead completes as needing no code change, with no pull request.
  */
 export function builtBuild(
 	draft: Graph,
 	asked: Date,
 	finished: Date,
+	noChange: Record<string, { reason: string; evidence: string }> = {},
 ): { graph: Graph; builds: BuildRequest[]; lifecycle: Lifecycle } {
 	let { error: _error, ...build } = failedBuild(draft);
 	let version = draft.versions.at(-1)!;
@@ -59,6 +61,18 @@ export function builtBuild(
 	};
 	for (let [index, task] of version.definition.tasks.entries()) {
 		apply({ kind: "start", runId: run.id, taskId: task.id, idempotencyKey: `start-${task.id}` });
+		let declared = noChange[task.id];
+		if (declared) {
+			apply({
+				kind: "complete",
+				runId: run.id,
+				taskId: task.id,
+				summary: `Checked ${task.id}.`,
+				noChange: declared,
+				idempotencyKey: `complete-${task.id}`,
+			});
+			continue;
+		}
 		apply({
 			kind: "report_pr",
 			runId: run.id,

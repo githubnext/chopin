@@ -109,6 +109,10 @@ const REFUSALS: Record<string, Record<string, { retry?: true; advice: string }>>
 			advice:
 				"report_pr needs the pull request's full GitHub URL and a state of open, merged or closed. Fix the arguments and retry.",
 		},
+		"no-change": {
+			advice:
+				"The task was completed as needing no code change, so it takes no pull request. Move on to the next task.",
+		},
 	},
 	complete_task: {
 		"already-complete": {
@@ -118,7 +122,15 @@ const REFUSALS: Record<string, Record<string, { retry?: true; advice: string }>>
 		"pull-request": {
 			retry: true,
 			advice:
-				"The task has no pull request yet. Call report_pr for it, wait for that call to finish, then retry complete_task with the same idempotencyKey.",
+				"The task has no pull request yet. Call report_pr for it, wait for that call to finish, then retry complete_task with the same idempotencyKey. If the task needed no code change, call complete_task with noChange instead.",
+		},
+		"no-change-pull-request": {
+			advice:
+				"The task has a pull request, so it changed code. Call complete_task without noChange.",
+		},
+		"no-change": {
+			advice:
+				"noChange needs a non-empty reason and Markdown evidence of what was checked. Fix the arguments and retry.",
 		},
 		"task-state": {
 			retry: true,

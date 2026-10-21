@@ -12,6 +12,7 @@ import {
 	buildPhase,
 	buildRefusalCopy,
 	buildTabReady,
+	builtCount,
 	draftRefusalCopy,
 	elapsed,
 	endedReason,
@@ -172,6 +173,20 @@ describe("buildPhase", () => {
 			build: build("stopped"),
 			lifecycle: { execution: { state: "idle" }, history: [run({ kind: "implemented" }, 2)] },
 		}))).toEqual({ kind: "done", pullRequests: 2 });
+	});
+
+	it("counts tasks that needed no change apart from pull requests when done", () => {
+		let history = run({ kind: "implemented" }, 2);
+		history.progress.tasks.push({
+			id: "checked",
+			state: "completed",
+			summary: "Already satisfied.",
+			noChange: { reason: "The code already does this.", evidence: "Run 42 passed." },
+		});
+		expect(buildPhase(snapshot({
+			build: build("stopped"),
+			lifecycle: { execution: { state: "idle" }, history: [history] },
+		}))).toEqual({ kind: "done", pullRequests: 2, noChange: 1 });
 	});
 });
 
@@ -752,6 +767,31 @@ describe("build status", () => {
 			lifecycle: { execution: { state: "idle" }, history: [run({ kind: "implemented" }, 2)] },
 		});
 		expect(look(done)).toMatchObject({ kind: "built", pullRequests: 2 });
+		expect(builtCount(look(done) as Extract<ReturnType<typeof look>, { kind: "built" }>))
+			.toBe("2 pull requests");
+		// A task that needed no change is counted on its own, never as a pull request.
+		let checked = run({ kind: "implemented" }, 3);
+		checked.progress.tasks.push({
+			id: "checked",
+			state: "completed",
+			summary: "Already satisfied.",
+			noChange: { reason: "The code already does this.", evidence: "Run 42 passed." },
+		});
+		let mixed = look(snapshot({
+			build: build("stopped"),
+			lifecycle: { execution: { state: "idle" }, history: [checked] },
+		}));
+		expect(mixed).toEqual({
+			kind: "built",
+			pullRequests: 3,
+			noChange: 1,
+			tip: "Every task has a pull request or needed no change",
+		});
+		expect(builtCount(mixed as Extract<typeof mixed, { kind: "built" }>))
+			.toBe("3 pull requests, 1 task needed no change");
+		expect(builtCount({ kind: "built", pullRequests: 0, noChange: 2, tip: "" }))
+			.toBe("2 tasks needed no change");
+		expect(builtCount({ kind: "built", pullRequests: 1, tip: "" })).toBe("1 pull request");
 		// A pull request reported before its task completes is still building, not built.
 		let reported = run({ kind: "implemented" }, 1);
 		reported.progress.tasks = [{
@@ -859,6 +899,23 @@ describe("build status", () => {
 		expect(buildLabel(failed)).toBe("Build failed");
 		expect(failed).toMatchObject({ retry: true });
 		expect(buildLabel(look(live()))).toBe("Built");
+		let checked = live({
+			tasks: [{
+				id: "checked",
+				title: "Check it",
+				context: "",
+				goal: "Check",
+				acceptance: [],
+				dependsOn: [],
+				progress: {
+					id: "checked",
+					state: "completed",
+					summary: "Already satisfied.",
+					noChange: { reason: "Nothing to change.", evidence: "Run 42 passed." },
+				},
+			}],
+		});
+		expect(look(checked)).toMatchObject({ kind: "built", pullRequests: 1, noChange: 1 });
 		expect(look({ ...live(), builtBy: "maggie" }, { userId: "other" }))
 			.toMatchObject({ tip: "Built by @maggie. Every pull request matches the document" });
 		// An unknown builder is left unnamed rather than called “the builder”.

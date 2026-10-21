@@ -362,6 +362,11 @@ export declare namespace Plan {
 			blocker?: string;
 			summary?: string;
 			pullRequest?: { url: string; state: "open" | "merged" | "closed" };
+			/**
+			 * A completed task that needed no code change, so it has no pull request: why, and
+			 * Markdown evidence of what was checked. Its dependents build on the base it started from.
+			 */
+			noChange?: { reason: string; evidence: string };
 		}>;
 		events: Array<{ idempotencyKey: string; kind: string }>;
 		verification?: Verification;

@@ -126,7 +126,7 @@ export function reportImplementationLifecycle(
 					pullRequests: [
 						...new Set(
 							finished.progress.tasks.flatMap(task =>
-								task.state === "completed" ? [task.pullRequest.url] : []
+								task.state === "completed" && task.pullRequest ? [task.pullRequest.url] : []
 							),
 						),
 					],
@@ -145,7 +145,7 @@ export function reportImplementationLifecycle(
 				pullRequests: [
 					...new Set(
 						delivered.progress.tasks.flatMap(task =>
-							task.state === "completed" ? [task.pullRequest.url] : []
+							task.state === "completed" && task.pullRequest ? [task.pullRequest.url] : []
 						),
 					),
 				],

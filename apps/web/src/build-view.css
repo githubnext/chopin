@@ -421,7 +421,7 @@
 	text-decoration: none;
 }
 
-.build-task-pr:hover {
+.build-task-pr:any-link:hover {
 	background: var(--build-pr-surface);
 }
 

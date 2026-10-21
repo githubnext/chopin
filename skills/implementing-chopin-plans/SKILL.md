@@ -23,7 +23,7 @@ Re-read the implementation before every lifecycle action, then follow the servic
 - Make only the required changes. Do not edit Chopin plan or graph content or start another top-level agent CLI session.
 - Stop code changes whenever the service requires a blocker or graph release. Explain what must change and wait for the next valid lifecycle state.
 - Perform a separate review pass after implementation. Prefer a fresh reviewer sub-agent; otherwise review independently after stepping away. Resolve in-scope findings and run focused checks.
-- Create exactly one pull request per task. Update that pull request if later verification returns the task to work.
+- Create exactly one pull request per task. Update that pull request if later verification returns the task to work. A task that needs no code change gets no pull request: complete it with `noChange`, giving the reason and the evidence you checked, rather than opening an empty one.
 
 ## When the document needs revision
 

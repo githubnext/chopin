@@ -131,7 +131,8 @@ graph counter.
    `start_implementation`, which atomically claims the approved graph and creates
    one run ID.
 7. The agent works only on dependency-ready tasks and reports their lifecycle.
-8. Every task receives one reported pull request and completion summary.
+8. Every task receives one reported pull request and completion summary, or
+   completes as needing no code change.
 9. An independent whole-graph review submits verification evidence for every
    task.
 10. Passing verification releases the successful run. Failed verification
@@ -147,16 +148,16 @@ the next reviewed build is a new attempt, not an automatic session replay.
 
 ## MCP lifecycle tools
 
-| Tool                   | Purpose                                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.           |
-| `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit. |
-| `start_task`           | Move one dependency-ready task to in progress.                                            |
-| `block_task`           | Record a task blocker without releasing the graph lock; a queued task starts implicitly.  |
-| `report_pr`            | Attach an open, merged, or closed pull request to a task.                                 |
-| `complete_task`        | Complete a task after its pull request and summary are recorded.                          |
-| `report_verification`  | Submit graph-wide review evidence and return failed tasks to work.                        |
-| `request_revision`     | End the run when the plan, criteria, tasks, or dependencies must change.                  |
+| Tool                   | Purpose                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `read_implementation`  | Read the approved graph, plan, and repository context by UUID or canonical URL.             |
+| `start_implementation` | Claim that exact graph while reporting the coding agent's repository, branch, and commit.   |
+| `start_task`           | Move one dependency-ready task to in progress.                                              |
+| `block_task`           | Record a task blocker without releasing the graph lock; a queued task starts implicitly.    |
+| `report_pr`            | Attach an open, merged, or closed pull request to a task.                                   |
+| `complete_task`        | Complete a task after its pull request is recorded, or with `noChange` when none is needed. |
+| `report_verification`  | Submit graph-wide review evidence and return failed tasks to work.                          |
+| `request_revision`     | End the run when the plan, criteria, tasks, or dependencies must change.                    |
 
 Every post-claim lifecycle report carries a caller-generated idempotency key.
 `start_implementation` does not; the service creates a fresh run ID when it
@@ -168,6 +169,46 @@ never lost even while the task's dependencies are unfinished. `complete_task`
 on a task that is already complete is refused with `already-complete`; the
 local connector answers it at once instead of retrying it as an out-of-order
 call.
+
+### Tasks that need no change
+
+Some tasks turn out to need no code change, such as a verification task whose
+code already satisfies it. `complete_task` completes one without a pull request
+when the agent declares it:
+
+```json
+{
+	"taskId": "verify-export",
+	"summary": "The export already meets the criteria.",
+	"noChange": {
+		"reason": "The base commit already exports every field.",
+		"evidence": "Ran `bun test export` in CI run 4821: **36 passed**, 0 failed."
+	},
+	"idempotencyKey": "complete-verify-export"
+}
+```
+
+`reason` is at most 1,000 characters and `evidence`, Markdown saying what was
+checked and its result, at most 5,000. Both are required and non-empty. A task
+that already has a reported pull request refuses `noChange` with
+`no-change-pull-request`, and a task completed this way refuses a later
+`report_pr` with `no-change`. Once a review returns it to work, it can complete
+again either way.
+
+The task counts as complete for its dependents, which may start at once. With
+no commit of its own, a dependent's base is the base this task started from: the
+run's checkout, or the prerequisite pull requests this task itself built on.
+Verification still needs evidence for the task but checks pull-request state
+only for tasks that have one, and a run is delivered once every pull request it
+has is merged; a run with none stays implemented. Build shows the task as done with **No change needed**, its
+reason and its evidence, never as a pull request, and counts such tasks apart
+from pull requests, as in "1 pull request, 1 task needed no change". Living
+documents and rebuilds treat it as a completed task: it is not outstanding, and
+a rebuild's `read_rebuild` lists it with its reason instead of a pull request.
+The field is additive: the connector protocol and `plan:lifecycle` keep their
+versions, and the task's `noChange` appears beside `summary` in progress. A
+server from before this field cannot restore a lifecycle that records one, so
+rolling back past it leaves such documents unopenable until it is rolled forward.
 
 The readable URL is a locator for `read_implementation`; it is not a lifecycle
 identity. `read_implementation` returns the stable UUID as `document.id`, and

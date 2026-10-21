@@ -19,6 +19,7 @@ import {
 	buildLabel,
 	buildPhase,
 	buildProgress,
+	builtCount,
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
@@ -26,8 +27,8 @@ import {
 	pullRequestCommits,
 	pullRequestNumber,
 	retryAction,
-	TASK_STATE_LABEL,
 	taskStartsOpen,
+	taskStateLabel,
 	unfinishedReason,
 } from "./build-model";
 import {
@@ -36,7 +37,7 @@ import {
 	implementationResponse as response,
 	stopBuild,
 } from "./build-start";
-import { InlineMarkdown } from "./chat/markdown";
+import { InlineMarkdown, MessageMarkdown } from "./chat/markdown";
 import { LocalAgentNote } from "./local-agent-note";
 import { MachineGlyph } from "./machine-button";
 
@@ -295,7 +296,7 @@ export function BuildView(
 			return {
 				...base,
 				title: "Built",
-				count: plural(look.pullRequests, "pull request", "pull requests"),
+				count: builtCount(look),
 				glyph: <CheckIcon aria-hidden="true" className="build-card-check" />,
 				detail: commits > 0
 					? `${plural(commits, "commit", "commits")} since first build`
@@ -441,6 +442,7 @@ export function BuildView(
 					commits={commits}
 					stopped={stopped}
 					summary={report?.state === "completed" ? report.summary : undefined}
+					noChange={report?.state === "completed" ? report.noChange : undefined}
 					now={now}
 					state={state}
 					task={task}
@@ -605,6 +607,7 @@ function TaskRow(
 		blocker,
 		commits,
 		expanded,
+		noChange,
 		now,
 		onToggle,
 		pullRequest,
@@ -617,6 +620,8 @@ function TaskRow(
 		blocker?: string;
 		commits: Array<{ sha: string; message: string; at: string }>;
 		expanded: boolean;
+		/** Why a finished task needed no code change, and what the agent checked to know. */
+		noChange?: { reason: string; evidence: string };
 		now: number;
 		onToggle: () => void;
 		pullRequest?: { url: string; state: "open" | "merged" | "closed"; number?: number };
@@ -644,7 +649,7 @@ function TaskRow(
 					<span className="build-task-title">
 						<InlineMarkdown links={false} source={task.title} />
 					</span>
-					<span className="sr-only">, {TASK_STATE_LABEL[state]}</span>
+					<span className="sr-only">, {taskStateLabel(state, !!noChange)}</span>
 				</button>
 				{pullRequest && (
 					<a
@@ -660,6 +665,11 @@ function TaskRow(
 						{pullRequest.number ? `#${pullRequest.number}` : "PR"}
 					</a>
 				)}
+				{!pullRequest && noChange && (
+					<span aria-hidden="true" className="build-task-pr" data-state="no-change">
+						No change needed
+					</span>
+				)}
 			</div>
 			<div className="build-task-fold" data-open={expanded || undefined} id={panel}>
 				<div inert={!expanded}>
@@ -671,6 +681,16 @@ function TaskRow(
 							<p className="build-task-summary">
 								<InlineMarkdown source={summary} />
 							</p>
+						)}
+						{noChange && (
+							<>
+								<p className="m-0">
+									No change needed: <InlineMarkdown source={noChange.reason} />
+								</p>
+								<section aria-label="Evidence">
+									<MessageMarkdown source={noChange.evidence} />
+								</section>
+							</>
 						)}
 						{!summary && task.acceptance.length > 0 && (
 							<ul className="build-task-acceptance">

@@ -837,6 +837,46 @@ test("a build that ran for an hour reads as built when it finished, not when it 
 	await expect(view.getByText(/^built /)).toHaveText("built 2m ago");
 });
 
+test("a task that needed no change reads as done without a pull request, with its evidence", async ({ seed, join: enter }) => {
+	let now = Date.now();
+	await seed(
+		"# Checked build\n\nOne task was already satisfied.\n",
+		builtBuild(preparedGraph(), new Date(now - 10 * 60_000), new Date(now - 60_000), {
+			connect: {
+				reason: "The connection already reports blockers on the base commit.",
+				evidence: "- Ran `bun test connector` in run 4821: **36 passed**, 0 failed.",
+			},
+		}),
+	);
+	let page = await enter("ana");
+	await page.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: "Build", exact: true }).click();
+	let view = buildView(page);
+	await expect(view.getByText("Built", { exact: true })).toBeVisible();
+	await expect(view.getByText("1 pull request, 1 task needed no change", { exact: true }))
+		.toBeVisible();
+	let tasks = view.getByRole("list", { name: "Tasks" });
+	let checked = tasks.getByRole("button", {
+		name: /^Connect the local agent\s*, done, no change needed$/,
+	});
+	await expect(checked).toBeVisible();
+	// The task that needed no change has no pull request link; the other task keeps its own.
+	await expect(tasks.getByRole("link", { name: /^Pull request/ })).toHaveCount(1);
+	await expect(tasks.getByText("No change needed", { exact: true })).toBeVisible();
+	await checked.click();
+	await expect(
+		view.getByText(
+			"No change needed: The connection already reports blockers on the base commit.",
+			{
+				exact: true,
+			},
+		),
+	).toBeVisible();
+	let evidence = view.getByRole("region", { name: "Evidence" });
+	await expect(evidence).toContainText("Ran bun test connector in run 4821: 36 passed, 0 failed.");
+	await expect(evidence.locator("strong")).toHaveText("36 passed");
+});
+
 test("on a phone, tapping Build or an inert Build plan says why, briefly", async ({ seed, join: enter }) => {
 	await seed("# Phone build\n\nNot built yet.\n");
 	let page = await enter("ana", {

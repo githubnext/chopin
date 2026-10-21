@@ -560,6 +560,102 @@ test("a run's parallel lifecycle batch lands in order and refusals say what to d
 	await Plan.close(context.plan);
 });
 
+test("complete_task records a task that needed no change, and its dependent starts", async () => {
+	let context = await setup();
+	await implementationGraphs().revise(context.plan, {
+		planRevision: 0,
+		graphRevision: 1,
+		operations: [{
+			op: "add",
+			task: {
+				id: "second",
+				title: "Second",
+				context: "Follows the tracer",
+				goal: "Build on it",
+				acceptance: ["Builds", "Reports"],
+				dependsOn: ["first"],
+			},
+		}],
+	});
+	let connection = await paired(context);
+	let built = await (await context.call(context.path, {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 2,
+	})).json();
+	let claim = await tool(context, connection.token, "claim_implementation_build", { id: built.id });
+	await tool(context, connection.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "acp-session",
+	});
+	let listed = await (await context.call("/connector/mcp", {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "tools/list",
+	}, claim.runToken)).json();
+	let schema = listed.result.tools.find((item: { name: string }) => item.name === "complete_task")
+		.inputSchema;
+	expect(schema.required).not.toContain("noChange");
+	expect(schema.properties.noChange.required).toEqual(["reason", "evidence"]);
+	expect(schema.properties.noChange.description).toContain("no pull request");
+	await tool(context, claim.runToken, "start_task", { taskId: "first", idempotencyKey: "start-1" });
+	let noChange = {
+		reason: "The behaviour already exists on the base commit.",
+		evidence: "Ran the focused suite in run 42: **12 passed**, 0 failed.",
+	};
+	let oversize = await tool(context, claim.runToken, "complete_task", {
+		taskId: "first",
+		summary: "Verified.",
+		noChange: { ...noChange, evidence: "x".repeat(5001) },
+		idempotencyKey: "complete-oversize",
+	});
+	expect(oversize.isError).toBe(true);
+	let long = await tool(context, claim.runToken, "complete_task", {
+		taskId: "first",
+		summary: "Verified.",
+		noChange: { ...noChange, reason: "x".repeat(1001) },
+		idempotencyKey: "complete-long-reason",
+	});
+	expect(long.isError).toBe(true);
+	let done = await tool(context, claim.runToken, "complete_task", {
+		taskId: "first",
+		summary: "Verified; nothing to change.",
+		noChange,
+		idempotencyKey: "complete-1",
+	});
+	expect(done.isError).toBeUndefined();
+	let snapshot = await (await context.call(context.path)).json();
+	expect(snapshot.lifecycle.activity.tasks[0]).toEqual({
+		id: "first",
+		state: "completed",
+		summary: "Verified; nothing to change.",
+		noChange,
+	});
+	// The dependent may start at once, and a task with a pull request cannot claim no change.
+	expect(
+		(await tool(context, claim.runToken, "start_task", {
+			taskId: "second",
+			idempotencyKey: "start-2",
+		})).isError,
+	).toBeUndefined();
+	await tool(context, claim.runToken, "report_pr", {
+		taskId: "second",
+		url: "https://github.com/owner/repository/pull/8",
+		state: "open",
+		idempotencyKey: "pr-2",
+	});
+	let refused = await tool(context, claim.runToken, "complete_task", {
+		taskId: "second",
+		summary: "Nothing to do.",
+		noChange,
+		idempotencyKey: "complete-2-no-change",
+	});
+	expect(refused.isError).toBe(true);
+	expect(refused.content[0].text).toContain("no-change-pull-request: The task has a pull request");
+	await Plan.close(context.plan);
+});
+
 test("a build runs only on the clicker's own connection and records who started it", async () => {
 	let context = await setup();
 	let foreign = await paired(context, context.otherCookie);

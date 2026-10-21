@@ -60,7 +60,7 @@ test("the MCP service publishes its complete implementation contract", async () 
 			"start_task: Mark one dependency-ready task as in progress for the active implementation run.",
 			"block_task: Record a task-level blocker while keeping the active implementation run and graph lock.",
 			"report_pr: Report the open, merged, or closed pull request for an implementation task.",
-			"complete_task: Complete an implementation task after reporting its pull request and summary.",
+			"complete_task: Complete an implementation task after reporting its pull request and summary. When the task needed no code change, give noChange instead of a pull request.",
 			"report_verification: After every task is complete, report graph-wide verification evidence; failures return named tasks to work.",
 			"request_revision: End the active implementation run and release its graph when scope, acceptance criteria, or dependencies must change.",
 		].join("\n"),

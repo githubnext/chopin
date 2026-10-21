@@ -8,6 +8,12 @@ export type PullRequest = {
 	state: "open" | "merged" | "closed";
 };
 
+/**
+ * Why a task needed no code change and what showed it. A task completed this way has no pull
+ * request; its dependents build on the same base it started from.
+ */
+export type NoChange = { reason: string; evidence: string };
+
 type Working = {
 	id: string;
 	pullRequest?: PullRequest;
@@ -17,7 +23,8 @@ export type TaskProgress =
 	| { id: string; state: "queued" }
 	| (Working & { state: "in_progress" })
 	| (Working & { state: "blocked"; blocker: string })
-	| { id: string; state: "completed"; summary: string; pullRequest: PullRequest };
+	| { id: string; state: "completed"; summary: string; pullRequest: PullRequest; noChange?: never }
+	| { id: string; state: "completed"; summary: string; noChange: NoChange; pullRequest?: never };
 
 export type VerificationEvidence = { taskId: string; evidence: string[] };
 export type VerificationReport = {
@@ -38,7 +45,13 @@ type Command =
 		state: PullRequest["state"];
 		idempotencyKey: string;
 	}
-	| { kind: "complete"; taskId: string; summary: string; idempotencyKey: string }
+	| {
+		kind: "complete";
+		taskId: string;
+		summary: string;
+		noChange?: NoChange;
+		idempotencyKey: string;
+	}
 	| ({ kind: "report_verification"; idempotencyKey: string } & VerificationReport)
 	| { kind: "request_revision"; reason: string; idempotencyKey: string };
 
@@ -126,6 +139,12 @@ function text(value: unknown): value is string {
 	return typeof value === "string" && Boolean(value.trim());
 }
 
+function validNoChange(value: unknown): value is NoChange {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+	let item = value as Record<string, unknown>;
+	return exact(item, ["evidence", "reason"]) && text(item.reason) && text(item.evidence);
+}
+
 function pullRequestState(value: unknown): value is PullRequest["state"] {
 	return value === "open" || value === "merged" || value === "closed";
 }
@@ -196,9 +215,10 @@ function deliveryPhase(tasks: TaskProgress[]): "implemented" | "delivered" {
 	let requests = new Map<string, PullRequest["state"]>();
 	for (let task of tasks) {
 		if (task.state !== "completed") return "implemented";
-		requests.set(task.pullRequest.url, task.pullRequest.state);
+		if (task.pullRequest) requests.set(task.pullRequest.url, task.pullRequest.state);
 	}
-	return [...requests.values()].every(state => state === "merged")
+	// Tasks that needed no change have nothing to merge; delivery waits on the pull requests there are.
+	return requests.size > 0 && [...requests.values()].every(state => state === "merged")
 		? "delivered"
 		: "implemented";
 }
@@ -220,19 +240,19 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 		let addressed = progress.tasks.find(task => task.id === stored.taskId);
 		if (
 			!addressed || addressed.state !== "completed"
-			|| addressed.pullRequest.url !== stored.url
+			|| addressed.pullRequest?.url !== stored.url
 		) return refused("pull-request");
 		if (!ownPullRequest(run.repository, stored.url)) return refused("repository");
 		if (
 			progress.tasks.some(task =>
 				task.state === "completed"
-				&& task.pullRequest.url === stored.url
+				&& task.pullRequest?.url === stored.url
 				&& task.pullRequest.state === "merged"
 			)
 			&& stored.state !== "merged"
 		) return refused("pull-request-state");
 		let nextTasks = progress.tasks.map(task =>
-			task.state === "completed" && task.pullRequest.url === stored.url
+			task.state === "completed" && task.pullRequest && task.pullRequest.url === stored.url
 				? { ...task, pullRequest: { url: stored.url, state: stored.state } }
 				: task
 		);
@@ -257,6 +277,7 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 		if (!validReport(stored, tasks)) return refused("verification");
 		for (let item of progress.tasks) {
 			if (item.state !== "completed") return refused("task-state");
+			if (item.noChange) continue;
 			if (item.pullRequest.state !== "open" && item.pullRequest.state !== "merged") {
 				return refused("pull-request");
 			}
@@ -278,7 +299,7 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 				? {
 					id: item.id,
 					state: "in_progress" as const,
-					pullRequest: copy(item.pullRequest),
+					...(item.pullRequest ? { pullRequest: copy(item.pullRequest) } : {}),
 				}
 				: item
 		);
@@ -330,6 +351,8 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 			break;
 		case "report_pr": {
 			if (item.state === "queued") return refused("task-state");
+			// A task completed as needing no change has no pull request to report.
+			if (item.state === "completed" && item.noChange) return refused("no-change");
 			if (!text(stored.url) || !pullRequestState(stored.state)) {
 				return refused("pull-request");
 			}
@@ -349,6 +372,19 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 			// A repeated complete_task under a new key is not order-dependent; say so plainly.
 			if (item.state === "completed") return refused("already-complete");
 			if (item.state !== "in_progress") return refused("task-state");
+			if (stored.noChange) {
+				// A task that reported a pull request changed code, so it cannot claim no change.
+				if (item.pullRequest) return refused("no-change-pull-request");
+				if (!validNoChange(stored.noChange)) return refused("no-change");
+				if (!text(stored.summary)) return refused("summary");
+				next = {
+					id: item.id,
+					state: "completed",
+					summary: stored.summary,
+					noChange: copy(stored.noChange),
+				};
+				break;
+			}
 			if (!item.pullRequest) return refused("pull-request");
 			if (!text(stored.summary)) return refused("summary");
 			next = {
@@ -362,7 +398,7 @@ function reduceEvent(state: ReducerState, stored: ProgressEvent, live = false): 
 	let nextTasks = progress.tasks.map((task, taskIndex) => {
 		if (taskIndex === index) return next;
 		return stored.kind === "report_pr" && stored.state === "merged"
-				&& "pullRequest" in task && task.pullRequest?.url === stored.url
+				&& "pullRequest" in task && task.pullRequest && task.pullRequest.url === stored.url
 			? { ...task, pullRequest: { url: stored.url, state: stored.state } }
 			: task;
 	});
@@ -486,9 +522,30 @@ function progressEvent(value: unknown): ProgressEvent | undefined {
 	}
 	if (
 		item.kind === "complete"
-		&& exact(item, ["idempotencyKey", "kind", "summary", "taskId"])
+		&& exact(
+			item,
+			item.noChange === undefined
+				? ["idempotencyKey", "kind", "summary", "taskId"]
+				: ["idempotencyKey", "kind", "noChange", "summary", "taskId"],
+		)
 		&& text(item.summary)
-	) return { kind: item.kind, taskId, summary: item.summary, idempotencyKey };
+		&& (item.noChange === undefined || validNoChange(item.noChange))
+	) {
+		return {
+			kind: item.kind,
+			taskId,
+			summary: item.summary,
+			...(item.noChange
+				? {
+					noChange: {
+						reason: (item.noChange as NoChange).reason,
+						evidence: (item.noChange as NoChange).evidence,
+					},
+				}
+				: {}),
+			idempotencyKey,
+		};
+	}
 	return undefined;
 }
 
@@ -652,6 +709,9 @@ function event(input: LifecycleInput): ProgressEvent {
 				kind: input.kind,
 				taskId: input.taskId,
 				summary: input.summary,
+				...(input.noChange
+					? { noChange: { reason: input.noChange.reason, evidence: input.noChange.evidence } }
+					: {}),
 				idempotencyKey: input.idempotencyKey,
 			};
 		case "report_verification":
@@ -691,7 +751,9 @@ function same(stored: ProgressEvent, input: LifecycleInput): boolean {
 				&& stored.url === input.url && stored.state === input.state;
 		case "complete":
 			return input.kind === "complete" && stored.taskId === input.taskId
-				&& stored.summary === input.summary;
+				&& stored.summary === input.summary
+				&& stored.noChange?.reason === input.noChange?.reason
+				&& stored.noChange?.evidence === input.noChange?.evidence;
 		case "report_verification":
 			return input.kind === "report_verification"
 				&& stored.passed === input.passed

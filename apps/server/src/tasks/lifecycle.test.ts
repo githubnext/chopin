@@ -719,6 +719,111 @@ describe("implementation task lifecycle", () => {
 		});
 	});
 
+	it("completes a task that needed no change without a pull request and unblocks its dependents", async () => {
+		let module = await lifecycle() as any;
+		let state: any = { graph, execution, lifecycle: { history: [] } };
+		state = apply(module, state, {
+			kind: "start",
+			runId: execution.id,
+			taskId: "foundation",
+			idempotencyKey: "start-foundation",
+		});
+		let noChange = {
+			reason: "The prerequisite already holds on the base commit.",
+			evidence: "Ran `bun test` in run 1234: 48 passed, 0 failed.",
+		};
+		let complete = {
+			kind: "complete",
+			runId: execution.id,
+			taskId: "foundation",
+			summary: "Verified; nothing to change.",
+			noChange,
+			idempotencyKey: "complete-foundation",
+		};
+		expect(module.transition(state, { ...complete, noChange: { ...noChange, reason: " " } }))
+			.toEqual({ kind: "refused", reason: "no-change" });
+		state = apply(module, state, complete);
+		expect(module.progressFor(graph, state.lifecycle, execution).tasks[0]).toEqual({
+			id: "foundation",
+			state: "completed",
+			summary: "Verified; nothing to change.",
+			noChange,
+		});
+		expect(module.transition(state, complete)).toMatchObject({ kind: "replayed" });
+		expect(module.transition(state, {
+			...complete,
+			noChange: { ...noChange, evidence: "Different evidence." },
+		})).toEqual({ kind: "refused", reason: "idempotency-conflict" });
+		// A task that needed no change never takes a pull request afterwards.
+		expect(module.transition(state, {
+			kind: "report_pr",
+			runId: execution.id,
+			taskId: "foundation",
+			url: "https://github.com/githubnext/chopin/pull/48",
+			state: "open",
+			idempotencyKey: "late-pr",
+		})).toEqual({ kind: "refused", reason: "no-change" });
+
+		// The dependent starts, and a task that already reported a pull request cannot claim no change.
+		state = apply(module, state, {
+			kind: "start",
+			runId: execution.id,
+			taskId: "delivery",
+			idempotencyKey: "start-delivery",
+		});
+		state = apply(module, state, {
+			kind: "report_pr",
+			runId: execution.id,
+			taskId: "delivery",
+			url: "https://github.com/githubnext/chopin/pull/49",
+			state: "open",
+			idempotencyKey: "pr-delivery",
+		});
+		expect(module.transition(state, {
+			kind: "complete",
+			runId: execution.id,
+			taskId: "delivery",
+			summary: "Nothing to do.",
+			noChange,
+			idempotencyKey: "no-change-delivery",
+		})).toEqual({ kind: "refused", reason: "no-change-pull-request" });
+		state = apply(module, state, {
+			kind: "complete",
+			runId: execution.id,
+			taskId: "delivery",
+			summary: "Delivered.",
+			idempotencyKey: "complete-delivery",
+		});
+
+		// Verification checks only the pull requests that exist, and the run reads as implemented.
+		let verified = module.transition(state, verification(true, []));
+		expect(verified.kind).toBe("accepted");
+		expect(module.historyFor(verified.state.graph, verified.state.lifecycle)[0]).toMatchObject({
+			outcome: { kind: "implemented" },
+			progress: { tasks: [{ id: "foundation", noChange }, { id: "delivery" }] },
+		});
+		expect(module.restoreLifecycle(verified.state.lifecycle, verified.state.graph, undefined))
+			.toEqual(verified.state.lifecycle);
+		let merged = apply(module, verified.state, {
+			kind: "report_pr",
+			runId: execution.id,
+			taskId: "delivery",
+			url: "https://github.com/githubnext/chopin/pull/49",
+			state: "merged",
+			idempotencyKey: "merge-delivery",
+		});
+		expect(module.historyFor(merged.graph, merged.lifecycle)[0].outcome).toEqual({
+			kind: "delivered",
+		});
+
+		// Failed verification returns a no-change task to work without inventing a pull request.
+		let returned = module.transition(state, verification(false, ["foundation"]));
+		expect(module.progressFor(graph, returned.state.lifecycle, execution).tasks[0]).toEqual({
+			id: "foundation",
+			state: "in_progress",
+		});
+	});
+
 	it("starts a queued task implicitly when it is blocked before start_task", async () => {
 		let module = await lifecycle() as {
 			transition: (state: any, input: any) => any;

@@ -1,4 +1,4 @@
-import type { LifecycleInput, VerificationEvidence } from "../tasks/lifecycle";
+import type { LifecycleInput, NoChange, VerificationEvidence } from "../tasks/lifecycle";
 
 export type LifecycleArguments = LifecycleInput & { id: string };
 
@@ -32,9 +32,9 @@ function boundedStrings(value: unknown, maximum: number, minimum = 0): string[] 
 	return restored;
 }
 
-function base(value: Record<string, unknown>, required: string[]) {
+function base(value: Record<string, unknown>, required: string[], optional: string[] = []) {
 	if (
-		Object.keys(value).length !== required.length
+		Object.keys(value).some(key => !required.includes(key) && !optional.includes(key))
 		|| required.some(key => !Object.hasOwn(value, key))
 	) return undefined;
 	let id = bounded(value.id, 128);
@@ -43,10 +43,23 @@ function base(value: Record<string, unknown>, required: string[]) {
 	return id && runId && idempotencyKey ? { id, runId, idempotencyKey } : undefined;
 }
 
-function task(value: Record<string, unknown>, required: string[]) {
-	let common = base(value, required);
+function task(value: Record<string, unknown>, required: string[], optional: string[] = []) {
+	let common = base(value, required, optional);
 	let taskId = bounded(value.taskId, 128);
 	return common && taskId ? { ...common, taskId } : undefined;
+}
+
+/** Bounds for a no-change completion: a short reason and Markdown evidence of what was checked. */
+const NO_CHANGE_REASON = 1000;
+const NO_CHANGE_EVIDENCE = 5000;
+
+function noChange(value: unknown): NoChange | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	let item = value as Record<string, unknown>;
+	if (Object.keys(item).some(key => key !== "reason" && key !== "evidence")) return undefined;
+	let reason = bounded(item.reason, NO_CHANGE_REASON);
+	let evidence = bounded(item.evidence, NO_CHANGE_EVIDENCE);
+	return reason && evidence ? { reason, evidence } : undefined;
 }
 
 function verificationEvidence(value: unknown): VerificationEvidence[] | undefined {
@@ -110,13 +123,45 @@ const definitions = {
 		},
 	},
 	complete_task: {
-		description: "Complete an implementation task after reporting its pull request and summary.",
-		properties: { id: ID, runId: ID, taskId: TASK, summary: TEXT, idempotencyKey: KEY },
+		description:
+			"Complete an implementation task after reporting its pull request and summary. When the task needed no code change, give noChange instead of a pull request.",
+		properties: {
+			id: ID,
+			runId: ID,
+			taskId: TASK,
+			summary: TEXT,
+			noChange: {
+				type: "object",
+				description:
+					"Only when the task needed no code change, so it has no pull request: why, and the evidence that showed it. Refused once a pull request was reported for the task. Dependent tasks then build on the same base this task started from.",
+				properties: {
+					reason: {
+						type: "string",
+						minLength: 1,
+						maxLength: NO_CHANGE_REASON,
+						description: "Why no code change was needed.",
+					},
+					evidence: {
+						type: "string",
+						minLength: 1,
+						maxLength: NO_CHANGE_EVIDENCE,
+						description:
+							"Markdown: what was checked and its result, such as the command or CI run and its outcome.",
+					},
+				},
+				required: ["reason", "evidence"],
+				additionalProperties: false,
+			},
+			idempotencyKey: KEY,
+		},
 		required: ["id", "runId", "taskId", "summary", "idempotencyKey"],
 		parse(value, required) {
-			let input = task(value, required);
+			let input = task(value, required, ["noChange"]);
 			let summary = bounded(value.summary, 5000);
-			return input && summary ? { ...input, kind: "complete", summary } : undefined;
+			if (!input || !summary) return undefined;
+			if (value.noChange === undefined) return { ...input, kind: "complete", summary };
+			let declared = noChange(value.noChange);
+			return declared ? { ...input, kind: "complete", summary, noChange: declared } : undefined;
 		},
 	},
 	report_verification: {

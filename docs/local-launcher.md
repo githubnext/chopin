@@ -81,7 +81,11 @@ MCP reporting; it does not prove delivery of a complete multi-PR implementation.
 New implementation decisions appear as task blockers. Configurable decision
 policy, human resolution/resume controls and a browser PR-creation action
 remain future work. Multiple reported PRs already
-appear beside their tasks; Chopin never merges them automatically.
+appear beside their tasks; Chopin never merges them automatically. The connector
+tells its agent to complete a task that needs no code change with `complete_task`
+and `noChange` rather than an empty pull request; Build shows that task as
+**No change needed** with its reason and evidence. See
+[Tasks that need no change](implementation-lifecycle.md#tasks-that-need-no-change).
 
 Inspect failures in the connector terminal and retained worktree. If startup
 failed before the graph was claimed, **Retry** in the header creates a

@@ -503,6 +503,12 @@ test.each([
 						: "Open small reviewable draft pull requests (`gh pr create --draft`)",
 				);
 				expect(prompt).toMatch(/Never merge/);
+				// A task that needs no code change is completed as such, never with an empty pull request.
+				if (!flags.includes("--rebuild")) {
+					expect(prompt).toContain(
+						"If a task needs no code change, open no pull request: call complete_task with noChange",
+					);
+				}
 			});
 		});
 	},
