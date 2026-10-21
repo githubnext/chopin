@@ -212,7 +212,9 @@ on the way (a long poll cut by a proxy, a timeout, a 5xx answer); the terminal s
 Chopin again**. A build carries on through that: its next heartbeat comes on the
 new connection of the same paired machine and owner, and Chopin moves the build,
 and the agent's run credential, to it. A connection of any other machine, or of
-another person, is still refused (`build-forbidden`).
+another person, is still refused (`build-forbidden`). A request the connector
+gives up itself, as the heartbeat still waiting when a run finishes, has not
+failed: the connection stays and the terminal says nothing about it.
 
 A build also goes on through a server restart or a deploy. Its heartbeat and
 reports name the document (connector protocol 6, chopin 0.0.16 and later), so

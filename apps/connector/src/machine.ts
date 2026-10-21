@@ -188,7 +188,9 @@ async function post(
 	});
 	let refused = await refusal(response);
 	if (refused) throw refused;
-	let value = await response.json().catch(() => ({})) as Record<string, unknown>;
+	// Bun reads an empty body sent with Content-Length 0, as a gateway's 502 is, as JSON null.
+	let parsed: unknown = await response.json().catch(() => undefined);
+	let value = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
 	if (!response.ok) {
 		let code = typeof value.error === "string" ? value.error : `http-${response.status}`;
 		throw new ConnectorError(

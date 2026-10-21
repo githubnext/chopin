@@ -20,6 +20,15 @@ export function transient(kind: ErrorClass) {
 	return kind === "retry" || kind === "forgotten";
 }
 
+/**
+ * Whether a call's own caller gave it up, as a run ending abandons its heartbeat: that says
+ * nothing about Chopin. A call that ran out of time did not hear from Chopin, so it is no such call.
+ */
+export function cancelled(signal?: AbortSignal) {
+	return !!signal?.aborted
+		&& (signal.reason as { name?: unknown } | undefined)?.name !== "TimeoutError";
+}
+
 /** The message for a connection Chopin forgot: connecting again registers it anew. */
 export function forgottenMessage() {
 	return "Chopin no longer recognizes this connection (it may have restarted). " + (
@@ -136,6 +145,7 @@ export function runReports(api: Caller, options: {
 				}
 				return value;
 			} catch (error) {
+				if (cancelled(signal)) throw error;
 				let kind = classify(error);
 				if (transient(kind) && lostAt === undefined && !gone.signal.aborted) {
 					lostAt = now();

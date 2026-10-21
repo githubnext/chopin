@@ -20,6 +20,7 @@ import { checkouts } from "./checkouts";
 import { runWork, STOPPED } from "./run";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
+import { register } from "./machine";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -667,6 +668,187 @@ test("a run out of reach says it is still trying at most every 10 seconds, then 
 		"  ✓ Back in contact with Chopin after 44 s.",
 	]);
 	expect(terminal.out() + terminal.err()).not.toContain(token);
+});
+
+/**
+ * A build served as `chopin connect` serves it, each connection registering this machine and
+ * then opening MCP, against a fake Chopin whose tools may take as long as they like. `gateway`
+ * answers a request instead of Chopin when it returns a response, as a proxy in front of a Chopin
+ * that went away does. Serving ends when `abort` aborts; work polls after the first offer go to
+ * `tool` and then wait.
+ */
+async function connected(options: {
+	tool: (name: string, args: Record<string, unknown>) => unknown;
+	gateway?: (request: Request, name?: string) => Response | undefined;
+	flags: string[];
+	/** More of the claim, such as `live` for a living document's first build. */
+	claim?: Record<string, unknown>;
+	abort: AbortController;
+	runOptions?: Partial<Parameters<typeof runWork>[3]>;
+}) {
+	let root = await mkdtemp(join(tmpdir(), "chopin-connected-"));
+	let state = await mkdtemp(join(tmpdir(), "chopin-connected-state-"));
+	let id = crypto.randomUUID();
+	let offered = false;
+	let registrations = 0;
+	let terminal = captured();
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let message = await request.clone().json().catch(() => undefined) as
+				| { params?: { name?: string } }
+				| undefined;
+			let answer = options.gateway?.(request, message?.params?.name);
+			if (answer) return answer;
+			if (new URL(request.url).pathname === "/api/connector/connections") {
+				return Response.json({ token: `connection-${++registrations}` });
+			}
+			let mcp = new Server({ name: "fake-chopin", version: "1" }, { capabilities: { tools: {} } });
+			mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+			mcp.setRequestHandler(CallToolRequestSchema, async request => {
+				let name = request.params.name;
+				let args = request.params.arguments ?? {};
+				// The work poll offers the build once, then hears of any later poll and waits.
+				let value: unknown = name === "wait_for_work"
+					? offered
+						? (await options.tool(name, args), await new Promise(() => {}))
+						: (offered = true, { id, kind: "implementation" })
+					: name === "claim_implementation_build"
+					? {
+						build: {
+							id,
+							repositoryId: "R_repo",
+							checkout: { repository: "org/repo", commit: git(root, "rev-parse", "HEAD") },
+						},
+						documentId: "document",
+						runToken: "run-token",
+						...options.claim,
+					}
+					: await options.tool(name, args);
+				return { content: [{ type: "text", text: JSON.stringify(value ?? {}) }] };
+			});
+			let transport = new WebStandardStreamableHTTPServerTransport({
+				sessionIdGenerator: undefined,
+				enableJsonResponse: true,
+			});
+			await mcp.connect(transport);
+			return transport.handleRequest(request);
+		},
+	});
+	let url = `http://127.0.0.1:${server.port}`;
+	try {
+		git(root, "init");
+		git(root, "config", "user.name", "Fixture");
+		git(root, "config", "user.email", "fixture@example.test");
+		git(root, "remote", "add", "origin", "git@github.com:org/repo.git");
+		await writeFile(join(root, "source.txt"), "committed");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "fixture");
+		let signal = options.abort.signal;
+		await serveWork({
+			connect: async signal => {
+				let registration = await register(
+					url,
+					"machine-token",
+					{ label: "box", checkouts: [] },
+					signal,
+				);
+				return remote(url, registration.token, signal);
+			},
+			signal,
+			output: terminal.output,
+			random: () => 0.01,
+			run: (api, kind, claim) =>
+				runWork(api, kind, claim, {
+					checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
+					directory: state,
+					command: [
+						process.execPath,
+						new URL("./testing/fake-implementer.ts", import.meta.url).pathname,
+						...options.flags,
+					],
+					url,
+					signal,
+					output: terminal.output,
+					heartbeatMs: 20,
+					random: () => 0.01,
+					...options.runOptions,
+				}),
+		});
+		return { registrations, out: terminal.out };
+	} finally {
+		await server.stop(true);
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+}
+
+test("a run behind a gateway answering 502 with no body says HTTP 502 while it retries", async () => {
+	let abort = new AbortController();
+	// The fake clock moves four seconds with each request the gateway refuses.
+	let clock = 0;
+	let renewals = 0;
+	let refused = 0;
+	let down = false;
+	let { out } = await connected({
+		flags: ["--hang"],
+		abort,
+		runOptions: { now: () => clock },
+		tool(name) {
+			if (name !== "renew_implementation_build") return {};
+			// Chopin answers the first heartbeat and then goes away; once it is back the run ends.
+			if (++renewals === 1) down = true;
+			else abort.abort();
+			return { accepted: true };
+		},
+		// A proxy such as Caddy answers for a Chopin that went away with 502 and Content-Length 0,
+		// both the heartbeat on the open connection and each registration that follows.
+		gateway(request, name) {
+			let registering = new URL(request.url).pathname === "/api/connector/connections";
+			if (!down || !registering && name !== "renew_implementation_build") return;
+			clock += 4000;
+			if (++refused === 8) down = false;
+			return new Response(null, { status: 502 });
+		},
+	});
+	let lines = out().split("\n").filter(line => /Chopin/.test(line));
+	expect(lines).toEqual([
+		"  … Lost the connection to Chopin during a run (HTTP 502). Registering this machine again; "
+		+ "the agent keeps working.",
+		"  … Lost contact with Chopin. The agent keeps working; reports wait until it is back.",
+		"  … Still trying to reach Chopin (attempt 3, 12 s, HTTP 502), the run keeps going.",
+		"  … Still trying to reach Chopin (attempt 6, 24 s, HTTP 502), the run keeps going.",
+		"  ✓ Registered this machine with Chopin again; the run goes on.",
+		"  ✓ Back in contact with Chopin after 28 s.",
+	]);
+});
+
+test("a heartbeat in flight when a run finishes is cancelled without losing the connection", async () => {
+	let abort = new AbortController();
+	let heartbeat = Promise.withResolvers<void>();
+	let { registrations, out } = await connected({
+		flags: ["--live"],
+		claim: { live: true },
+		abort,
+		tool(name, args) {
+			// Chopin is slow to answer a heartbeat, which is still in flight as the run finishes.
+			if (name === "renew_implementation_build") {
+				heartbeat.resolve();
+				return new Promise(() => {});
+			}
+			if (name === "report_implementation_build" && args.state === "stopped") {
+				return heartbeat.promise.then(() => ({ accepted: true }));
+			}
+			// The connector polls for its next work once the run is over.
+			if (name === "wait_for_work") abort.abort();
+			return {};
+		},
+	});
+	let lines = out().split("\n").filter(line => /Chopin|Finished/.test(line));
+	expect(lines).toEqual(["  ✓ Finished"]);
+	// The next poll went over the same connection rather than registering this machine again.
+	expect(registrations).toBe(1);
 });
 
 test("a run out of reach for its whole grace period stops its agent", async () => {

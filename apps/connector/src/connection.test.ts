@@ -5,9 +5,10 @@ import type { Server as NetServer } from "node:net";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { failureCause, redacted, serveWork } from "./connection";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { failureCause, failureKind, redacted, serveWork } from "./connection";
 import { SELF } from "./machine";
-import { remote } from "./mcp";
+import { ConnectorError, remote } from "./mcp";
 import { createOutput } from "./output";
 
 type Tool = (args: Record<string, unknown>) => unknown | Promise<unknown>;
@@ -583,6 +584,20 @@ test("a connection failure's cause never shows credentials from the error", () =
 	let text = failureCause(wrapped);
 	expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 	expect(text).not.toContain("abcdef0123456789xyz");
+});
+
+test("a failure's kind is its HTTP status, server code or network code, however it is wrapped", () => {
+	let kinds = [
+		new ConnectorError("http-502", "Chopin refused the request (http-502).", 502),
+		new ConnectorError("unavailable", "Chopin refused the request (unavailable).", 503),
+		new StreamableHTTPError(502, "Error POSTing to endpoint: <html>Bad Gateway</html>"),
+		Object.assign(new TypeError("Unable to connect."), { code: "ConnectionRefused" }),
+	].map(error => failureKind(new Error("Re-registering failed", { cause: error })));
+	expect(kinds).toEqual(["HTTP 502", "HTTP 503 unavailable", "HTTP 502", "ConnectionRefused"]);
+	// Never the message, whatever it holds.
+	expect(failureKind(new Error("Bad gateway for Bearer chopin_r_secretsecretsecret"))).toBe(
+		"no answer",
+	);
 });
 
 test("machine, Planner, pairing key and build run tokens are masked wherever chopin prints text", () => {

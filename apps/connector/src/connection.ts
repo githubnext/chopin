@@ -7,6 +7,7 @@ import type { remote } from "./mcp";
 import type { Output } from "./output";
 import {
 	backoff,
+	cancelled,
 	CONNECT_TIMEOUT_MS,
 	delay,
 	FORGET_MS,
@@ -104,17 +105,26 @@ export function failureCause(error: unknown) {
 
 /**
  * A failure's kind alone, without any of its message, so nothing it quotes can reach the
- * terminal: the HTTP status and the server's error code, else the network error's code.
+ * terminal: the HTTP status and the server's error code, else the network error's code, from the
+ * error or anything it wraps as its `cause`.
  */
 export function failureKind(error: unknown) {
 	let code = errorCode(error);
 	let current = error;
 	for (let depth = 0; current instanceof Error && depth < 5; depth++) {
-		let status = (current as { code?: unknown }).code;
-		if (current instanceof StreamableHTTPError && typeof status === "number" && status >= 100) {
-			return code ? `HTTP ${status} ${code}` : `HTTP ${status}`;
+		code ??= errorCode(current);
+		let own = (current as { code?: unknown }).code;
+		// The MCP client's HTTP error carries its status as `code`; a refused registration as `status`.
+		let status = current instanceof StreamableHTTPError
+			? own
+			: current instanceof ConnectorError
+			? current.status
+			: undefined;
+		if (typeof status === "number" && status >= 100) {
+			// A refusal without a code of its own is named `http-<status>`, which the status says.
+			return code && code !== `http-${status}` ? `HTTP ${status} ${code}` : `HTTP ${status}`;
 		}
-		if (!code && typeof status === "string" && /^[A-Za-z_]+$/.test(status)) return status;
+		if (!code && typeof own === "string" && /^[A-Za-z_]+$/.test(own)) return own;
 		if (!code && current.name === "TimeoutError") return "timed out";
 		current = current.cause;
 	}
@@ -215,7 +225,8 @@ export async function serveWork(options: {
 	};
 	// A call that fails transiently drops its connection, so a run's next report connects anew,
 	// as the token of a connection the server forgot is refused for good. A call Ctrl-C cut short
-	// keeps it, so the stop report and the disconnect that gives back claimed work still go out.
+	// keeps it, so the stop report and the disconnect that gives back claimed work still go out,
+	// and so does one its caller gave up, as a run ending gives up its heartbeat.
 	let link: Link = {
 		async call(name, args, callSignal) {
 			let api = current ?? await abandoned(
@@ -228,7 +239,7 @@ export async function serveWork(options: {
 			try {
 				return await api.call(name, args, callSignal);
 			} catch (error) {
-				if (!signal.aborted && transient(classify(error))) {
+				if (!signal.aborted && !cancelled(callSignal) && transient(classify(error))) {
 					if (running && current === api) output.runConnectionLost(failureCause(error));
 					drop(api);
 				}
