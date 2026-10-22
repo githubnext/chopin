@@ -1,7 +1,7 @@
 # Rendered design checks
 
 `bun run design:browser` builds and runs a disposable Linux amd64 container with
-Bun 1.4.2 and a digest-pinned Playwright 1.62.1 Noble image. It installs from the
+Bun 1.4.4 and a digest-pinned Playwright 1.62.1 Noble image. It installs from the
 frozen lockfile, starts the real `/design-audit` development route and runs Chromium.
 Docker is required. No database, GitHub login, API key, host port or paid agent is used.
 This is an optional visual review command. Screenshot differences and exact

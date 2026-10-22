@@ -256,7 +256,7 @@ headers.
 
 ## Prerequisites
 
-- Docker for the application image, or Bun 1.4.2 for a source deployment.
+- Docker for the application image, or Bun 1.4.4 for a source deployment.
 - A reachable PostgreSQL database and credentials with schema migration access.
 - A stable DNS name with TLS termination and WebSocket proxying.
 - Outbound HTTPS access to GitHub and the selected harness's model provider

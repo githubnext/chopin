@@ -1015,17 +1015,17 @@ if (url) {
 				"026_workflow_run_stages",
 				"027_decision_answers",
 			]);
-			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`)
-				.toEqual([
-					{ table: "channel_slugs" },
-				]);
-			expect(await sql<{ table: string | null }[]>`SELECT to_regclass('user_navigation') AS table`)
-				.toEqual([
-					{ table: "user_navigation" },
-				]);
-			expect(
-				await sql<{ table: string | null }[]>`SELECT to_regclass('research_workspaces') AS table`,
-			).toEqual([{ table: "research_workspaces" }]);
+			expect([
+				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,
+			]).toEqual([{ table: "channel_slugs" }]);
+			expect([
+				...await sql<{ table: string | null }[]>`SELECT to_regclass('user_navigation') AS table`,
+			]).toEqual([{ table: "user_navigation" }]);
+			expect([
+				...await sql<
+					{ table: string | null }[]
+				>`SELECT to_regclass('research_workspaces') AS table`,
+			]).toEqual([{ table: "research_workspaces" }]);
 		} finally {
 			await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).simple();
 			await sql.close();

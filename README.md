@@ -121,7 +121,7 @@ and tool vocabulary remain optimized for planning.
 
 The development path requires:
 
-- Bun 1.4.2;
+- Bun 1.4.4;
 - Docker Engine with Docker Compose, used for PostgreSQL;
 - a GitHub App owned by the deployment; and
 - a GitHub account with push or administration access to a test repository and,

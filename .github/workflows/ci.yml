@@ -25,7 +25,7 @@ permissions:
 env:
   # Matches the version this is developed against. Bun's lockfile format and
   # its workspace catalogs are both young enough that "latest" is a variable.
-  BUN_VERSION: 1.4.2
+  BUN_VERSION: 1.4.4
   # Shard counts; keep each matrix below in step with its count.
   UNIT_SHARDS: 3
   E2E_SHARDS: 12

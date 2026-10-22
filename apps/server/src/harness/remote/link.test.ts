@@ -1222,7 +1222,11 @@ describe("Agent connection protocol", () => {
 		});
 		cleanups.push(() => session.doDestroy());
 		await planner.control!("stop", "run-1");
-		await expect(planner.control!("resume")).rejects.toThrow("nothing to resume");
+		// Bun 1.4.4's pending `.rejects` matcher makes Bun.serve close a valid socket as
+		// fragmented (oven-sh/bun#45805), so the refusal is awaited before it is asserted.
+		let refusal = await planner.control!("resume").catch((error: unknown) => error);
+		expect(refusal).toBeInstanceOf(Error);
+		expect((refusal as Error).message).toContain("nothing to resume");
 		expect(controls).toEqual([{ type: "stop", run: "run-1" }, { type: "resume", run: undefined }]);
 		await session.doDestroy();
 		expect(planner.control).toBeUndefined();

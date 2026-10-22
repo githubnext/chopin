@@ -309,8 +309,8 @@ async function namespace(report: Record<string, unknown>): Promise<void> {
 		});
 		socket.once("error", (error: NodeJS.ErrnoException) => {
 			clearTimeout(timer);
-			// Bun 1.4.2 maps kernel ENETUNREACH to ECONNREFUSED in this verified route-free namespace.
-			let mapped = Bun.version === "1.4.2" && error.code === "ECONNREFUSED";
+			// Bun 1.4.4 maps kernel ENETUNREACH to ECONNREFUSED in this verified route-free namespace.
+			let mapped = Bun.version === "1.4.4" && error.code === "ECONNREFUSED";
 			if (mapped || ["ENETUNREACH", "EHOSTUNREACH", "EACCES", "EPERM"].includes(error.code ?? "")) {
 				report.socketDenial = mapped ? "bun-mapped-unreachable" : "routing-denial";
 				resolve();

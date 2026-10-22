@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.2 AS bun
+FROM oven/bun:1.4.4 AS bun
 FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /work
