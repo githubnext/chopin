@@ -119,7 +119,7 @@ function decisionColumns(base: string): Column<DecisionEntry>[] {
 					<span className={styles.titleCell}>
 						{open
 							? <CommentDiscussionIcon className={styles.openIcon} aria-label="Open" />
-							: <CheckCircleIcon className={styles.doneIcon} aria-label="Decided" />}
+							: <CheckCircleIcon className={styles.doneIcon} aria-label="Made" />}
 						<Link
 							to={`${base}?plan=${plan.slug}&tab=decisions`}
 							className={styles.titleLink}
@@ -195,8 +195,8 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 	let showOpen = useLinkClickHandler<HTMLButtonElement>(`${base}?view=decisions`, {
 		replace: true,
 	});
-	let showDecidedOnly = useLinkClickHandler<HTMLButtonElement>(
-		`${base}?view=decisions&state=decided`,
+	let showMadeOnly = useLinkClickHandler<HTMLButtonElement>(
+		`${base}?view=decisions&state=made`,
 		{ replace: true },
 	);
 	let all = useAllPlans();
@@ -230,9 +230,9 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 		state.decisions.map(decision => ({ plan, decision }))
 	);
 	let openCount = decisions.filter(({ decision }) => decision.answer === null).length;
-	let showDecided = params.get("state") === "decided";
+	let showMade = params.get("state") === "made";
 	let shown: DecisionEntry[] = decisions
-		.filter(({ decision }) => (decision.answer !== null) === showDecided)
+		.filter(({ decision }) => (decision.answer !== null) === showMade)
 		.map(({ plan, decision }) => ({ id: `${plan.slug}/${decision.id}`, plan, decision }));
 
 	let sidebar = (
@@ -273,22 +273,22 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 				<Header title="Decisions" />
 				<Table.Container className={styles.tableContainer}>
 					<Table.Title as="h2" id="decisions-table">
-						{showDecided ? "Decided" : "Open"} decisions
+						{showMade ? "Made" : "Open"} decisions
 					</Table.Title>
 					<Table.Actions>
 						<SegmentedControl
 							aria-label="Decision state"
 							size="small"
 						>
-							<SegmentedControl.Button selected={!showDecided} count={openCount} onClick={showOpen}>
+							<SegmentedControl.Button selected={!showMade} count={openCount} onClick={showOpen}>
 								Open
 							</SegmentedControl.Button>
 							<SegmentedControl.Button
-								selected={showDecided}
+								selected={showMade}
 								count={decisions.length - openCount}
-								onClick={showDecidedOnly}
+								onClick={showMadeOnly}
 							>
-								Decided
+								Made
 							</SegmentedControl.Button>
 						</SegmentedControl>
 					</Table.Actions>
@@ -308,7 +308,7 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 										<CommentDiscussionIcon size="medium" />
 									</Blankslate.Visual>
 									<Blankslate.Heading>
-										{showDecided ? "Nothing decided yet" : "No open decisions"}
+										{showMade ? "No decisions made yet" : "No open decisions"}
 									</Blankslate.Heading>
 									<Blankslate.Description>
 										Copilot raises a decision when a plan needs a choice only a person can make.
