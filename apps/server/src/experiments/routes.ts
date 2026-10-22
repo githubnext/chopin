@@ -4,6 +4,7 @@ import { publicInvestigation } from "@chopin/experiment/records";
 import type { Investigation, InvestigationProvenance } from "@chopin/experiment/records";
 import type { HostedAuth } from "../auth/routes";
 import { AdmissionDenied } from "../auth/admission";
+import { ownOrigin } from "../auth/config";
 import { MachineError } from "../auth/machines";
 import type { GitHubTokenGrant } from "../github/client";
 import type { ChannelRecord, StoredMachine } from "../storage/model";
@@ -692,12 +693,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	) {
 		router.on(method, path, async (request, _url, params) => {
 			try {
-				if (request.headers.has("origin") && request.headers.get("origin") !== auth.config.origin) {
+				if (
+					request.headers.has("origin") && !ownOrigin(auth.config, request.headers.get("origin"))
+				) {
 					fail("origin-forbidden");
 				}
 				if (
 					method !== "GET" && request.headers.has("cookie")
-					&& request.headers.get("origin") !== auth.config.origin
+					&& !ownOrigin(auth.config, request.headers.get("origin"))
 				) fail("origin-forbidden");
 				return await action(request, params);
 			} catch (error) {

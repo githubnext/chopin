@@ -83,6 +83,53 @@ describe("encrypted hosted sessions", () => {
 		}
 	});
 
+	it("restores a session saved before the deployment moved and re-encrypts it under the new origin", async () => {
+		let { storage, issued, request, clock } = await fixture();
+		let moved = {
+			...persistence,
+			origin: "https://chopin.example.com",
+			previousOrigins: ["https://chopin.test"],
+		};
+		let logged: unknown[][] = [];
+		let info = console.info;
+		console.info = (...values: unknown[]) => logged.push(values);
+		let restored;
+		try {
+			// Two processes restore the same browser at once; one move wins, both sign in.
+			restored = await Promise.all([
+				new Sessions(storage, true, clock, { persistence: moved }).authenticate(request),
+				new Sessions(storage, true, clock, { persistence: moved }).authenticate(request),
+			]);
+		} finally {
+			console.info = info;
+		}
+		for (let result of restored) expect(result?.access.token).toBe(grant.accessToken);
+		expect((await storage.sessions.get(issued.id, clock()))!.credentials!.revision).toBe(2);
+		expect(logged.length).toBeGreaterThan(0);
+		expect(JSON.stringify(logged)).not.toContain(grant.accessToken);
+
+		let { previousOrigins: _, ...settled } = moved;
+		let later = new Sessions(storage, true, clock, { persistence: settled });
+		expect((await later.authenticate(request))?.access.token).toBe(grant.accessToken);
+		let unlisted = new Sessions(storage, true, clock, {
+			persistence: { ...persistence, origin: "https://other.example.com" },
+		});
+		expect(await unlisted.authenticate(request)).toBeUndefined();
+	});
+
+	it("refuses a session saved under an origin that is not listed as previous", async () => {
+		let { storage, issued, request, clock } = await fixture();
+		let restarted = new Sessions(storage, true, clock, {
+			persistence: {
+				...persistence,
+				origin: "https://chopin.example.com",
+				previousOrigins: ["https://old.example.com"],
+			},
+		});
+		expect(await restarted.authenticate(request)).toBeUndefined();
+		expect((await storage.sessions.get(issued.id, clock()))!.credentials!.revision).toBe(1);
+	});
+
 	it("authenticates the ciphertext, identity, lifetime, verifier and revision together", async () => {
 		let { storage, issued, request, clock } = await fixture();
 		let saved = (await storage.sessions.get(issued.id, clock()))!;

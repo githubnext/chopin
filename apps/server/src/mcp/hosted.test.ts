@@ -1014,6 +1014,46 @@ describe("the hosted MCP adapter", () => {
 		}
 	});
 
+	it("reads documents by their links on an origin the deployment moved from", async () => {
+		let context = setup();
+		context.auth.config = {
+			...context.auth.config,
+			origin: "https://chopin.example.com",
+			previousOrigins: ["https://chopin.test"],
+		};
+		let opened = await plan(context);
+		let child = await context.storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Rollback research",
+			createdBy: "U_allowed",
+			parentChannelId: opened.channel.id,
+			now: context.now,
+		});
+		let adapter = hosted(context.auth);
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller) throw new Error("test caller was not authenticated");
+		let url = "/documents/octo-org/score/release-readiness";
+		let childUrl = `${url}/children/rollback-research`;
+
+		try {
+			for (let origin of ["https://chopin.example.com", "https://chopin.test"]) {
+				expect(await adapter.documents.read(caller, `${origin}${url}`))
+					.toMatchObject({ id: opened.channel.id, url });
+				expect(await adapter.documents.read(caller, `${origin}${childUrl}`))
+					.toMatchObject({ id: child.id, url: childUrl });
+				expect(await adapter.documents.read(caller, `${origin}/channels/${opened.channel.id}`))
+					.toMatchObject({ id: opened.channel.id, url });
+			}
+			expect(await adapter.documents.read(caller, `https://other.example.com${url}`))
+				.toBeUndefined();
+		} finally {
+			await Service.close(opened.plan);
+		}
+	});
+
 	it("reads an open plan from its authoritative live document", async () => {
 		let context = setup();
 		let opened = await plan(context);

@@ -2,6 +2,7 @@ import { GitHubClient, GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 import { demoRoster } from "../demo/roster";
 import { Admission, AdmissionDenied } from "./admission";
+import { ownOrigin } from "./config";
 import { OAuthAttempts, Sessions } from "./session";
 import { Machines } from "./machines";
 import { DeviceAuthorization } from "./device";
@@ -182,6 +183,7 @@ export function registerAuthRoutes(
 		persistence: config.local ? undefined : {
 			key: config.encryptionKey,
 			origin: config.origin,
+			previousOrigins: config.previousOrigins,
 			clientId: config.clientId,
 		},
 		refresh: refreshToken =>
@@ -235,6 +237,7 @@ export function registerAuthRoutes(
 	let machines = new Machines(storage, clock, {
 		key: config.local ? undefined : config.encryptionKey,
 		origin: config.origin,
+		previousOrigins: config.previousOrigins,
 		clientId: config.clientId,
 		refresh,
 		authorize: async (userId, token) => {
@@ -533,7 +536,7 @@ export function registerAuthRoutes(
 	);
 
 	router.on("POST", "/auth/logout", async request => {
-		if (request.headers.get("origin") !== config.origin) {
+		if (!ownOrigin(config, request.headers.get("origin"))) {
 			return json({ error: "origin is not allowed" }, 403);
 		}
 		try {

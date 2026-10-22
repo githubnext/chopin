@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 export type AuthConfig = {
 	origin: string;
+	/** Origins the deployment was served from before APP_ORIGIN (PREVIOUS_ORIGINS). */
+	previousOrigins?: readonly string[];
 	appSlug: string;
 	clientId: string;
 	clientSecret?: string;
@@ -14,13 +16,13 @@ export type AuthConfig = {
 const GITHUB_USER_LOGIN = /^[a-z0-9](?:[a-z0-9_-]{0,37}[a-z0-9_])?$/i;
 const GITHUB_ORGANIZATION_LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i;
 
-function origin(raw: string | undefined): string {
-	if (!raw) throw new Error("APP_ORIGIN is required");
+function origin(raw: string | undefined, name = "APP_ORIGIN"): string {
+	if (!raw) throw new Error(`${name} is required`);
 	let parsed: URL;
 	try {
 		parsed = new URL(raw);
 	} catch {
-		throw new Error("APP_ORIGIN must be an HTTP or HTTPS origin");
+		throw new Error(`${name} must be an HTTP or HTTPS origin`);
 	}
 	if (
 		parsed.origin !== raw
@@ -30,15 +32,35 @@ function origin(raw: string | undefined): string {
 		|| parsed.pathname !== "/"
 		|| parsed.search
 		|| parsed.hash
-	) throw new Error("APP_ORIGIN must contain only an HTTP or HTTPS origin");
+	) throw new Error(`${name} must contain only an HTTP or HTTPS origin`);
 
 	let loopback = parsed.hostname === "localhost"
 		|| parsed.hostname === "127.0.0.1"
 		|| parsed.hostname === "[::1]";
 	if (parsed.protocol !== "https:" && !loopback) {
-		throw new Error("APP_ORIGIN must use HTTPS unless it is loopback development");
+		throw new Error(`${name} must use HTTPS unless it is loopback development`);
 	}
 	return parsed.origin;
+}
+
+/** The origins a moved deployment was served from, other than its current one. */
+function previous(raw: string | undefined, current: string): string[] | undefined {
+	if (!raw?.trim()) return undefined;
+	let values = raw.split(",").map(value => value.trim());
+	if (values.some(value => !value)) {
+		throw new Error("PREVIOUS_ORIGINS must be a comma-separated list of origins");
+	}
+	let origins = [...new Set(values.map(value => origin(value, "PREVIOUS_ORIGINS")))]
+		.filter(value => value !== current);
+	return origins.length ? origins : undefined;
+}
+
+/** Whether `value` is the deployment's origin or one of the origins it moved from. */
+export function ownOrigin(
+	config: Pick<AuthConfig, "origin" | "previousOrigins">,
+	value: string | null | undefined,
+): boolean {
+	return !!value && (value === config.origin || !!config.previousOrigins?.includes(value));
 }
 
 function encryptionKey(raw: string | undefined): Uint8Array {
@@ -88,8 +110,10 @@ export function loadAuth(port = 8787, host = process.env.SERVER_HOST || "127.0.0
 	if (demo === "on" && mode !== "local") {
 		throw new Error("DEMO_PERSONAS=on requires AUTH_MODE=local on a loopback bind");
 	}
+	let previousOrigins = previous(process.env.PREVIOUS_ORIGINS, appOrigin);
 	return {
 		origin: appOrigin,
+		...(previousOrigins ? { previousOrigins } : {}),
 		appSlug,
 		clientId,
 		...(clientSecret ? { clientSecret } : {}),

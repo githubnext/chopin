@@ -1,3 +1,4 @@
+import { ownOrigin } from "../auth/config";
 import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
 
@@ -182,7 +183,7 @@ export function registerNavigationRoutes(
 	});
 
 	router.on("POST", "/api/navigation/projects", async request => {
-		if (request.headers.get("origin") !== auth.config.origin) {
+		if (!ownOrigin(auth.config, request.headers.get("origin"))) {
 			return json({ error: "origin is not allowed" }, 403);
 		}
 		try {
@@ -218,7 +219,7 @@ export function registerNavigationRoutes(
 	});
 
 	router.on("PATCH", "/api/navigation", async request => {
-		if (request.headers.get("origin") !== auth.config.origin) {
+		if (!ownOrigin(auth.config, request.headers.get("origin"))) {
 			return json({ error: "origin is not allowed" }, 403);
 		}
 		try {

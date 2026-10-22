@@ -235,6 +235,46 @@ describe("hosted authentication routes", () => {
 		}
 	});
 
+	it("keeps logins and machines from before APP_ORIGIN moved when the old origin is listed", async () => {
+		let storage = new MemoryStorage();
+		let github = new FakeGitHub();
+		let router = new Router();
+		let auth = registerAuthRoutes(router, { config: CONFIG, storage, github });
+		let cookie = pair(
+			cookies(await callback(router)).find(value => value.startsWith("__Host-chopin_session="))!,
+		);
+		let paired = await auth.machines.pair({
+			userId: "U_octocat",
+			label: "laptop",
+			repositories: [],
+			autoRun: false,
+			grant: {
+				accessToken: "ghu_machine",
+				accessExpiresIn: 28_800,
+				refreshToken: "ghr_machine",
+				refreshExpiresIn: 15_897_600,
+			},
+		});
+		let restart = async (config: AuthConfig) => {
+			let restarted = new Router();
+			let { machines } = registerAuthRoutes(restarted, { config, storage, github });
+			let response = (await restarted.handle(
+				new Request(`${config.origin}/api/session`, { headers: { cookie } }),
+			))!;
+			let machine = await machines.authenticate(paired.token);
+			return {
+				login: ((await response.json()) as { user: { login: string } | null }).user?.login,
+				token: await machines.use(machine, async token => token).catch(() => undefined),
+			};
+		};
+		let moved = { ...CONFIG, origin: "https://chopin.example.com" };
+		expect(await restart({ ...moved, previousOrigins: ["https://old.example.com"] }))
+			.toEqual({ login: undefined, token: undefined });
+		expect(await restart({ ...moved, previousOrigins: [CONFIG.origin] }))
+			.toEqual({ login: "octocat", token: "ghu_machine" });
+		expect(await restart(moved)).toEqual({ login: "octocat", token: "ghu_machine" });
+	});
+
 	it("signs in, reports the session, lists repositories and logs out", async () => {
 		let now = new Date("2026-08-13T12:00:00.000Z");
 		let storage = new MemoryStorage();

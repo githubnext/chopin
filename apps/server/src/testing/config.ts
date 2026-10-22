@@ -47,6 +47,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		CHOPIN_LOCAL_CREDENTIALS_DIR: undefined,
 		GITHUB_ALLOWED_USERS: undefined,
 		GITHUB_ALLOWED_ORGANIZATIONS: undefined,
+		PREVIOUS_ORIGINS: undefined,
 		CHOPIN_SETUP_AGENTS: undefined,
 		...overrides,
 	};

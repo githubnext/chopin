@@ -14,6 +14,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JEV_API_KEY: ${JEV_API_KEY}
       APP_ORIGIN: ${APP_ORIGIN}
+      PREVIOUS_ORIGINS: ${PREVIOUS_ORIGINS}
       DATABASE_URL: postgresql://chopin:chopin@${SERVICE_NAME_DB:-db}:5432/chopin?sslmode=disable
       GITHUB_APP_SLUG: ${GITHUB_APP_SLUG}
       GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID}

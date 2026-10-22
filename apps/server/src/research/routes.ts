@@ -1,3 +1,4 @@
+import { ownOrigin } from "../auth/config";
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { JobServiceError } from "../jobs/service";
@@ -121,7 +122,7 @@ function canWrite(value: Repository): boolean {
 }
 
 function origin(request: Request, auth: HostedAuth): Response | undefined {
-	return request.headers.get("origin") === auth.config.origin
+	return ownOrigin(auth.config, request.headers.get("origin"))
 		? undefined
 		: json({ error: "origin is not allowed" }, 403);
 }

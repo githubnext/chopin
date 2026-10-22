@@ -1,5 +1,6 @@
 import { handler } from "../mcp";
 import { AdmissionDenied } from "../auth/admission";
+import { ownOrigin } from "../auth/config";
 import { GitHubError } from "../github/client";
 import { hosted } from "./hosted";
 
@@ -38,7 +39,7 @@ export function registerMcpRoutes(
 ): void {
 	let endpoint = handler(hosted(auth, persistence, callbacks));
 	let route = async (request: Request): Promise<Response> => {
-		if (request.headers.has("origin") && request.headers.get("origin") !== auth.config.origin) {
+		if (request.headers.has("origin") && !ownOrigin(auth.config, request.headers.get("origin"))) {
 			return protectedResponse(new Response("origin is not allowed", { status: 403 }));
 		}
 		try {
