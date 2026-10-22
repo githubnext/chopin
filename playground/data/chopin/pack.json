@@ -3,7 +3,7 @@
 	"manifest": {
 		"id": "chopin",
 		"name": "Chopin plans demo cast",
-		"description": "Fictional teammates who collaborate on plans with monalisa and Copilot in the Chopin demo.",
+		"description": "Fictional teammates and the monalisa/notes app they plan with Copilot in the Chopin demo.",
 		"provenance": {
 			"source": "synthetic",
 			"createdAt": "2026-10-22T19:00:00Z",
@@ -13,9 +13,65 @@
 	},
 	"records": {
 		"users": {
-			"dana-okafor": { "name": "Dana Okafor" },
-			"theo-nguyen": { "name": "Theo Nguyen" },
-			"rosa-alvarez": { "name": "Rosa Alvarez" }
+			"dana-okafor": {
+				"name": "Dana Okafor"
+			},
+			"theo-nguyen": {
+				"name": "Theo Nguyen"
+			},
+			"rosa-alvarez": {
+				"name": "Rosa Alvarez"
+			}
+		},
+		"repositories": {
+			"monalisa/notes": {
+				"owner": "monalisa",
+				"name": "notes",
+				"visibility": "PUBLIC",
+				"description": "A small notes app for iOS and Android.",
+				"defaultBranch": "main",
+				"hasIssuesEnabled": true,
+				"hasDiscussionsEnabled": false,
+				"hasProjectsEnabled": true,
+				"issueTypesEnabled": true,
+				"isArchived": false,
+				"isLocked": false,
+				"isBlankIssuesEnabled": true,
+				"createdAt": "2026-08-03T17:12:00.000Z",
+				"updatedAt": "2026-10-09T20:47:00.000Z"
+			}
+		},
+		"collaborators": {
+			"monalisa/notes:monalisa": {
+				"repository": "monalisa/notes",
+				"user": "monalisa",
+				"permission": "admin"
+			},
+			"monalisa/notes:dana-okafor": {
+				"repository": "monalisa/notes",
+				"user": "dana-okafor",
+				"permission": "write"
+			},
+			"monalisa/notes:theo-nguyen": {
+				"repository": "monalisa/notes",
+				"user": "theo-nguyen",
+				"permission": "write"
+			},
+			"monalisa/notes:rosa-alvarez": {
+				"repository": "monalisa/notes",
+				"user": "rosa-alvarez",
+				"permission": "write"
+			}
+		}
+	},
+	"git": {
+		"repositories": {
+			"monalisa/notes": {
+				"defaultBranch": "main",
+				"fixture": {
+					"path": "git/notes.json"
+				}
+			}
 		}
 	}
 }

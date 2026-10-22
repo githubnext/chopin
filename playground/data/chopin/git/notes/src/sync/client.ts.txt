@@ -1,0 +1,37 @@
+import { api, ApiError } from "../api/client";
+import { log } from "../log";
+import { retryWithBackoff } from "./retry";
+import type { NoteEdit } from "./types";
+
+// Sends each note edit to the server as soon as it happens.
+export class SyncClient {
+  private pending: NoteEdit[] = [];
+
+  get pendingCount() {
+    return this.pending.length;
+  }
+
+  async push(edit: NoteEdit) {
+    this.pending.push(edit);
+    try {
+      await retryWithBackoff(() => this.send(edit));
+    } catch (error) {
+      log.warn("sync.dropped", { noteId: edit.noteId, error: String(error) });
+    } finally {
+      this.pending = this.pending.filter(item => item !== edit);
+    }
+  }
+
+  private async send(edit: NoteEdit) {
+    try {
+      await api.patch(`/notes/${edit.noteId}`, edit);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        // TODO(#142): last write wins until we handle conflicts.
+        await api.patch(`/notes/${edit.noteId}`, { ...edit, force: true });
+        return;
+      }
+      throw error;
+    }
+  }
+}

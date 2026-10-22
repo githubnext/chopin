@@ -1,0 +1,19 @@
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 500;
+
+export async function retryWithBackoff<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS) await delay(BASE_DELAY_MS * 2 ** (attempt - 1));
+    }
+  }
+  throw lastError;
+}
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

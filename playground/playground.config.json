@@ -4,7 +4,7 @@
 		"revision": "c8ba1cff7e357370ef608813c52dc830a7b56c1a"
 	},
 	"port": 4351,
-	"previewPath": "/monalisa/smile/plans",
+	"previewPath": "/monalisa/notes/plans",
 	"healthPath": "/_playground/dotcom/toolbar-state",
 	"maintainPackageJsonScripts": true
 }

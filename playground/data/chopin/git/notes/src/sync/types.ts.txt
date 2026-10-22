@@ -1,0 +1,6 @@
+export type NoteEdit = {
+  noteId: string;
+  revision: number;
+  title?: string;
+  body?: string;
+};

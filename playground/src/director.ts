@@ -2,7 +2,7 @@ import type { HybridMarkdownEditorRef } from "@github-ui/hybrid-markdown-editor/
 import { createToolPreference } from "@github-ui/playground/preferences";
 import { createToolbarBridge } from "@github-ui/playground/toolbar";
 import { simulateTyping } from "@github-ui/playground/typing";
-import { displayName } from "./plans";
+import { displayName, type Source } from "./plans";
 import { type BeatContext, script, type Where } from "./script";
 import type { PlanStore } from "./store";
 
@@ -90,11 +90,10 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 	let state = planStore.get;
 	let set = planStore.set;
 
-	let say = (author: string, body: string) => {
+	let say = (author: string, body: string, sources?: Source[]) => {
 		messageCount += 1;
-		set(current => ({
-			messages: [...current.messages, { id: `demo-${messageCount}`, author, body, at: "just now" }],
-		}));
+		let message = { id: `demo-${messageCount}`, author, body, at: "just now", sources };
+		set(current => ({ messages: [...current.messages, message] }));
 	};
 
 	let type = (login: string, text: string, onUpdate: (prefix: string) => void) =>
@@ -160,6 +159,27 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 				reveal(editor, pos + typed.length);
 			});
 			await sleep(300, signal);
+			done();
+		},
+		async place(login, where, text) {
+			let body = state().body;
+			let pos = locate(body, where);
+			let editor = instant ? null : await view();
+			if (!editor) {
+				set({
+					body: body.slice(0, pos) + text + body.slice(pos),
+					updated: "just now",
+					updatedBy: login,
+				});
+				return;
+			}
+			editing(login, pos);
+			reveal(editor, pos);
+			await sleep(700, signal);
+			editor.dispatch({ changes: { from: pos, insert: text } });
+			set({ cursor: { login, pos: pos + text.length } });
+			reveal(editor, pos + text.length);
+			await sleep(500, signal);
 			done();
 		},
 		async replace(login, find, text) {
@@ -257,7 +277,8 @@ async function play(all: boolean) {
 
 /** Starts the next beat when a presenter performs the matching action in the page. */
 export function cue(id: string) {
-	if (!store || playing || script[beat]?.id !== id) return false;
+	let current = script[beat];
+	if (!store || playing || !current || (current.cue ?? current.id) !== id) return false;
 	void play(false);
 	return true;
 }

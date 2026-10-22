@@ -1,0 +1,16 @@
+import { describe, expect, it, vi } from "vitest";
+import { retryWithBackoff } from "../../src/sync/retry";
+
+describe("retryWithBackoff", () => {
+  it("returns the first successful result", async () => {
+    const operation = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue("ok");
+    await expect(retryWithBackoff(operation)).resolves.toBe("ok");
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after three attempts", async () => {
+    const operation = vi.fn().mockRejectedValue(new Error("offline"));
+    await expect(retryWithBackoff(operation)).rejects.toThrow("offline");
+    expect(operation).toHaveBeenCalledTimes(3);
+  });
+});

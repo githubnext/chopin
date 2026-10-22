@@ -1,6 +1,9 @@
 export type PlanStatus = "Draft" | "In review" | "Building" | "Shipped";
 
-export type Message = { id: string; author: string; body: string; at: string };
+/** A file Copilot read while researching, optionally narrowed to the lines it cites. */
+export type Source = { path: string; lines?: [number, number] };
+
+export type Message = { id: string; author: string; body: string; at: string; sources?: Source[] };
 
 export type DecisionOption = { id: string; label: string; description: string };
 
@@ -40,6 +43,8 @@ export type Plan = {
 	decisions: Decision[];
 	tasks: Task[];
 };
+
+export let demoRepo = "monalisa/notes";
 
 export let demoSlug = "offline-sync";
 
@@ -135,7 +140,31 @@ export let plans: Plan[] = [
 		collaborators: ["dana-okafor", "monalisa", "theo-nguyen"],
 		body: "## Summary\n\nMove rate limiting from fixed windows to per-token buckets.\n",
 		messages: [],
-		decisions: [],
+		decisions: [
+			{
+				id: "bucket-state",
+				question: "Where should bucket state live?",
+				context: "Buckets are checked on every API request across 12 application hosts.",
+				options: [
+					{
+						id: "redis",
+						label: "Redis",
+						description: "Shared and exact, but adds a network hop to every request.",
+					},
+					{
+						id: "local",
+						label: "In process",
+						description: "Fast, but each host enforces its own share of the limit.",
+					},
+				],
+				raisedBy: "dana-okafor",
+				raisedAt: "yesterday",
+				selected: null,
+				answer: null,
+				answeredBy: null,
+				applied: false,
+			},
+		],
 		tasks: [],
 	},
 	{
@@ -148,7 +177,31 @@ export let plans: Plan[] = [
 		collaborators: ["rosa-alvarez", "theo-nguyen"],
 		body: "## Summary\n\nGuide new users through their first repository.\n",
 		messages: [],
-		decisions: [],
+		decisions: [
+			{
+				id: "placement",
+				question: "Where should the checklist appear?",
+				context: "New users land on the dashboard after signing up.",
+				options: [
+					{
+						id: "sidebar",
+						label: "Dashboard sidebar",
+						description: "Always visible, easy to dismiss.",
+					},
+					{
+						id: "dialog",
+						label: "Dialog on first sign-in",
+						description: "Hard to miss, easy to lose.",
+					},
+				],
+				raisedBy: "copilot",
+				raisedAt: "4 days ago",
+				selected: "sidebar",
+				answer: "sidebar",
+				answeredBy: "rosa-alvarez",
+				applied: true,
+			},
+		],
 		tasks: [],
 	},
 	{
@@ -161,7 +214,23 @@ export let plans: Plan[] = [
 		collaborators: ["monalisa", "dana-okafor"],
 		body: "## Summary\n\nCache tokenized queries and precompute facets.\n",
 		messages: [],
-		decisions: [],
+		decisions: [
+			{
+				id: "cache",
+				question: "Where should tokenized queries be cached?",
+				context: "Most searches repeat within a few minutes.",
+				options: [
+					{ id: "memory", label: "Application memory", description: "Fastest; lost on deploy." },
+					{ id: "redis", label: "Redis", description: "Survives deploys; one extra hop." },
+				],
+				raisedBy: "copilot",
+				raisedAt: "2 weeks ago",
+				selected: "memory",
+				answer: "memory",
+				answeredBy: "monalisa",
+				applied: true,
+			},
+		],
 		tasks: [],
 	},
 ];
@@ -172,6 +241,11 @@ export function findPlan(slug: string | null) {
 
 export function displayName(login: string) {
 	return login === "copilot" ? "Copilot" : login;
+}
+
+export function sourceUrl({ path, lines }: Source) {
+	let anchor = lines ? `#L${lines[0]}${lines[1] > lines[0] ? `-L${lines[1]}` : ""}` : "";
+	return `/${demoRepo}/blob/main/${path}${anchor}`;
 }
 
 export function avatarUrl(login: string) {

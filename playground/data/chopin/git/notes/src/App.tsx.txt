@@ -1,0 +1,20 @@
+import { useEffect, useState } from "react";
+import { SafeAreaView, Text } from "react-native";
+import { migrate } from "./db/sqlite";
+import { loadNotes } from "./store/notes";
+import { NoteList } from "./NoteList";
+
+export default function App() {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    migrate();
+    loadNotes().then(() => setReady(true));
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      {ready ? <NoteList /> : <Text>Loading notes…</Text>}
+    </SafeAreaView>
+  );
+}

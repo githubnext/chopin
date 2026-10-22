@@ -1,0 +1,19 @@
+import { db } from "../db/sqlite";
+import type { Note } from "../store/types";
+
+export function indexNote(note: Note) {
+  db.runSync(
+    "INSERT OR REPLACE INTO search_index (note_id, title, body) VALUES (?, ?, ?)",
+    note.id,
+    note.title,
+    note.body,
+  );
+}
+
+export function searchNotes(query: string): string[] {
+  const rows = db.getAllSync<{ note_id: string }>(
+    "SELECT note_id FROM search_index WHERE title LIKE ?1 OR body LIKE ?1",
+    `%${query}%`,
+  );
+  return rows.map(row => row.note_id);
+}

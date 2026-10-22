@@ -10,7 +10,7 @@ import { CircleIcon, GitMergeIcon, GitPullRequestIcon, RocketIcon } from "@prime
 import { Label, Link, ProgressBar, Spinner } from "@primer/react";
 import { Blankslate } from "@primer/react/experimental";
 import { cue } from "./director";
-import type { Task } from "./plans";
+import { demoRepo, type Task } from "./plans";
 import styles from "./plans.module.css";
 import { openDecisions, type PlanStore, usePlanState } from "./store";
 
@@ -111,7 +111,7 @@ export function Build({ store }: { store: PlanStore }) {
 							</ListItemMetadata>,
 							<ListItemMetadata key="pr">
 								{task.pr && (task.status === "open" || task.status === "merged")
-									? <Link href="/monalisa/smile/pulls">#{task.pr}</Link>
+									? <Link href={`/${demoRepo}/pulls`}>#{task.pr}</Link>
 									: null}
 							</ListItemMetadata>,
 						]}

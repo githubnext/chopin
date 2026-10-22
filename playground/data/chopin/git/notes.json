@@ -1,0 +1,147 @@
+{
+	"name": "chopin-notes",
+	"defaultBranch": "main",
+	"commits": [
+		{
+			"mark": "init",
+			"branch": "main",
+			"message": "Create the notes app",
+			"author": {
+				"name": "Mona Lisa",
+				"email": "mona@notes.example"
+			},
+			"date": "2026-08-03T17:12:00Z",
+			"changes": [
+				{
+					"path": "README.md",
+					"contentPath": "git/notes/README.md.txt"
+				},
+				{
+					"path": "package.json",
+					"contentPath": "git/notes/package.json.txt"
+				},
+				{
+					"path": ".github/workflows/ci.yml",
+					"contentPath": "git/notes/.github/workflows/ci.yml.txt"
+				},
+				{
+					"path": "src/App.tsx",
+					"content": "import { useEffect, useState } from \"react\";\nimport { SafeAreaView, Text } from \"react-native\";\nimport { loadNotes } from \"./store/notes\";\nimport { NoteList } from \"./NoteList\";\n\nexport default function App() {\n  const [ready, setReady] = useState(false);\n\n  useEffect(() => {\n    loadNotes().then(() => setReady(true));\n  }, []);\n\n  return (\n    <SafeAreaView style={{ flex: 1 }}>\n      {ready ? <NoteList /> : <Text>Loading notes…</Text>}\n    </SafeAreaView>\n  );\n}\n"
+				},
+				{
+					"path": "src/NoteList.tsx",
+					"contentPath": "git/notes/src/NoteList.tsx.txt"
+				},
+				{
+					"path": "src/log.ts",
+					"contentPath": "git/notes/src/log.ts.txt"
+				},
+				{
+					"path": "src/api/client.ts",
+					"contentPath": "git/notes/src/api/client.ts.txt"
+				},
+				{
+					"path": "src/store/types.ts",
+					"contentPath": "git/notes/src/store/types.ts.txt"
+				},
+				{
+					"path": "src/store/notes.ts",
+					"content": "import { api } from \"../api/client\";\nimport type { Note } from \"./types\";\n\n// Notes live in memory and are refetched from the server on every launch.\nconst notes = new Map<string, Note>();\n\nexport async function loadNotes() {\n  const fetched = await api.get<Note[]>(\"/notes\");\n  notes.clear();\n  for (const note of fetched) notes.set(note.id, note);\n}\n\nexport function listNotes() {\n  return [...notes.values()].sort((a, b) => b.updatedAt - a.updatedAt);\n}\n\nexport function updateNote(id: string, changes: Partial<Pick<Note, \"title\" | \"body\">>) {\n  const note = notes.get(id);\n  if (!note) throw new Error(`Unknown note ${id}`);\n  const next = { ...note, ...changes, updatedAt: Date.now() };\n  notes.set(id, next);\n}\n"
+				}
+			]
+		},
+		{
+			"mark": "search",
+			"branch": "main",
+			"message": "Index notes in SQLite for local search",
+			"author": {
+				"name": "Dana Okafor",
+				"email": "dana@notes.example"
+			},
+			"date": "2026-08-19T15:40:00Z",
+			"changes": [
+				{
+					"path": "src/db/sqlite.ts",
+					"contentPath": "git/notes/src/db/sqlite.ts.txt"
+				},
+				{
+					"path": "src/search/index.ts",
+					"contentPath": "git/notes/src/search/index.ts.txt"
+				},
+				{
+					"path": "src/App.tsx",
+					"contentPath": "git/notes/src/App.tsx.txt"
+				},
+				{
+					"path": "src/store/notes.ts",
+					"content": "import { api } from \"../api/client\";\nimport { indexNote } from \"../search\";\nimport type { Note } from \"./types\";\n\n// Notes live in memory and are refetched from the server on every launch.\nconst notes = new Map<string, Note>();\n\nexport async function loadNotes() {\n  const fetched = await api.get<Note[]>(\"/notes\");\n  notes.clear();\n  for (const note of fetched) notes.set(note.id, note);\n}\n\nexport function listNotes() {\n  return [...notes.values()].sort((a, b) => b.updatedAt - a.updatedAt);\n}\n\nexport function updateNote(id: string, changes: Partial<Pick<Note, \"title\" | \"body\">>) {\n  const note = notes.get(id);\n  if (!note) throw new Error(`Unknown note ${id}`);\n  const next = { ...note, ...changes, updatedAt: Date.now() };\n  notes.set(id, next);\n  indexNote(next);\n}\n"
+				}
+			]
+		},
+		{
+			"mark": "sync",
+			"branch": "main",
+			"message": "Send note edits to the server as they happen",
+			"author": {
+				"name": "Mona Lisa",
+				"email": "mona@notes.example"
+			},
+			"date": "2026-09-08T18:05:00Z",
+			"changes": [
+				{
+					"path": "src/sync/types.ts",
+					"contentPath": "git/notes/src/sync/types.ts.txt"
+				},
+				{
+					"path": "src/sync/client.ts",
+					"content": "import { api } from \"../api/client\";\nimport { log } from \"../log\";\nimport type { NoteEdit } from \"./types\";\n\n// Sends each note edit to the server as soon as it happens.\nexport class SyncClient {\n  async push(edit: NoteEdit) {\n    try {\n      await api.patch(`/notes/${edit.noteId}`, edit);\n    } catch (error) {\n      log.warn(\"sync.failed\", { noteId: edit.noteId, error: String(error) });\n    }\n  }\n}\n"
+				},
+				{
+					"path": "src/store/notes.ts",
+					"contentPath": "git/notes/src/store/notes.ts.txt"
+				}
+			]
+		},
+		{
+			"mark": "retry",
+			"branch": "main",
+			"message": "Retry failed sync requests with backoff",
+			"author": {
+				"name": "Theo Nguyen",
+				"email": "theo@notes.example"
+			},
+			"date": "2026-09-24T16:21:00Z",
+			"changes": [
+				{
+					"path": "src/sync/retry.ts",
+					"contentPath": "git/notes/src/sync/retry.ts.txt"
+				},
+				{
+					"path": "test/sync/retry.test.ts",
+					"contentPath": "git/notes/test/sync/retry.test.ts.txt"
+				},
+				{
+					"path": "src/sync/client.ts",
+					"content": "import { api } from \"../api/client\";\nimport { log } from \"../log\";\nimport { retryWithBackoff } from \"./retry\";\nimport type { NoteEdit } from \"./types\";\n\n// Sends each note edit to the server as soon as it happens.\nexport class SyncClient {\n  private pending: NoteEdit[] = [];\n\n  get pendingCount() {\n    return this.pending.length;\n  }\n\n  async push(edit: NoteEdit) {\n    this.pending.push(edit);\n    try {\n      await retryWithBackoff(() => this.send(edit));\n    } catch (error) {\n      log.warn(\"sync.dropped\", { noteId: edit.noteId, error: String(error) });\n    } finally {\n      this.pending = this.pending.filter(item => item !== edit);\n    }\n  }\n\n  private async send(edit: NoteEdit) {\n    await api.patch(`/notes/${edit.noteId}`, edit);\n  }\n}\n"
+				}
+			]
+		},
+		{
+			"mark": "conflicts",
+			"branch": "main",
+			"message": "Resend stale edits instead of failing them",
+			"author": {
+				"name": "Dana Okafor",
+				"email": "dana@notes.example"
+			},
+			"date": "2026-10-09T20:47:00Z",
+			"changes": [
+				{
+					"path": "src/sync/client.ts",
+					"contentPath": "git/notes/src/sync/client.ts.txt"
+				}
+			]
+		}
+	],
+	"tags": []
+}

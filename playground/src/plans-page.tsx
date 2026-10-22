@@ -1,84 +1,356 @@
 import type { RepositoryPageProps } from "@github-ui/playground/repository";
-import { ListView } from "@github-ui/list-view";
-import { ListItem } from "@github-ui/list-view/ListItem";
-import { ListItemDescription } from "@github-ui/list-view/ListItemDescription";
-import { ListItemLeadingContent } from "@github-ui/list-view/ListItemLeadingContent";
-import { ListItemLeadingVisual } from "@github-ui/list-view/ListItemLeadingVisual";
-import { ListItemMainContent } from "@github-ui/list-view/ListItemMainContent";
-import { ListItemMetadata } from "@github-ui/list-view/ListItemMetadata";
-import { ListItemTitle } from "@github-ui/list-view/ListItemTitle";
-import { useSearchParams } from "@github-ui/react-router";
-import { CommentDiscussionIcon } from "@primer/octicons-react";
+import {
+	Link,
+	SoftNavOnlyLink,
+	useLinkClickHandler,
+	useNavigationType,
+	useSearchParams,
+} from "@github-ui/react-router";
+import { ThreePanesLayout } from "@github-ui/three-panes-layout";
+import { CheckCircleIcon, CommentDiscussionIcon } from "@primer/octicons-react";
 import PlansIcon from "./plans-icon";
-import { Avatar, AvatarStack, Button, Label } from "@primer/react";
-import { Blankslate } from "@primer/react/experimental";
+import {
+	Avatar,
+	AvatarStack,
+	Button,
+	CounterLabel,
+	Label,
+	NavList,
+	SegmentedControl,
+} from "@primer/react";
+import { Blankslate, type Column, DataTable, Table } from "@primer/react/experimental";
+import { type ReactNode, useEffect } from "react";
+import { Face } from "./conversation";
 import { PlanView, statusVariant } from "./plan-view";
-import { avatarUrl, findPlan, type Plan, plans } from "./plans";
+import { avatarUrl, type Decision, displayName, findPlan, type Plan } from "./plans";
 import styles from "./plans.module.css";
-import { openDecisions, planStore, usePlanState } from "./store";
+import { openDecisions, type PlanState, type Tab, useAllPlans } from "./store";
 
-function PlanRow({ plan, base }: { plan: Plan; base: string }) {
-	let state = usePlanState(planStore(plan.slug));
-	let open = openDecisions(state);
-	return (
-		<ListItem
-			title={<ListItemTitle value={plan.title} href={`${base}?plan=${plan.slug}`} />}
-			metadata={[
-				<ListItemMetadata key="decisions">
-					{open > 0 && (
-						<span className={styles.metaCount} aria-label={`${open} open decisions`}>
+type View = "plans" | "decisions";
+
+type PlanEntry = { id: string; plan: Plan; state: PlanState };
+
+function planColumns(base: string): Column<PlanEntry>[] {
+	return [
+		{
+			header: "Plan",
+			field: "plan.title",
+			rowHeader: true,
+			width: "growCollapse",
+			minWidth: 190,
+			renderCell: ({ plan }) => (
+				<span className={styles.titleCell}>
+					<PlansIcon className={styles.planIcon} aria-hidden />
+					<span>
+						<Link to={`${base}?plan=${plan.slug}`} className={styles.titleLink}>
+							{plan.title}
+						</Link>{" "}
+						<span className={styles.planNumber}>#{plan.number}</span>
+					</span>
+				</span>
+			),
+		},
+		{
+			header: "Status",
+			field: "state.status",
+			width: "auto",
+			renderCell: ({ state }) => <Label variant={statusVariant[state.status]}>{state.status}
+			</Label>,
+		},
+		{
+			header: "Decisions",
+			id: "decisions",
+			width: "auto",
+			align: "end",
+			renderCell: ({ plan, state }) => {
+				let open = openDecisions(state);
+				return open > 0
+					? (
+						<Link to={`${base}?plan=${plan.slug}&tab=decisions`} className={styles.countLink}>
 							<CommentDiscussionIcon size={16} />
 							{open}
+						</Link>
+					)
+					: <span className={styles.mutedCell}>None</span>;
+			},
+		},
+		{
+			header: "People",
+			id: "collaborators",
+			width: "auto",
+			renderCell: ({ plan }) => (
+				<AvatarStack size={20}>
+					{plan.collaborators.map(login => (
+						<Avatar key={login} src={avatarUrl(login)} alt={displayName(login)} />
+					))}
+				</AvatarStack>
+			),
+		},
+		{
+			header: "Last edited",
+			field: "state.updated",
+			width: "auto",
+			renderCell: ({ state }) => (
+				<span className={styles.personCell}>
+					<Face login={state.updatedBy} size={20} />
+					<span className={styles.stacked}>
+						{displayName(state.updatedBy)}
+						<span className={styles.mutedCell}>{state.updated}</span>
+					</span>
+				</span>
+			),
+		},
+	];
+}
+
+type DecisionEntry = { id: string; plan: Plan; decision: Decision };
+
+function decisionColumns(base: string): Column<DecisionEntry>[] {
+	return [
+		{
+			header: "Decision",
+			field: "decision.question",
+			rowHeader: true,
+			width: "growCollapse",
+			minWidth: 190,
+			renderCell: ({ plan, decision }) => {
+				let open = decision.answer === null;
+				return (
+					<span className={styles.titleCell}>
+						{open
+							? <CommentDiscussionIcon className={styles.openIcon} aria-label="Open" />
+							: <CheckCircleIcon className={styles.doneIcon} aria-label="Decided" />}
+						<Link
+							to={`${base}?plan=${plan.slug}&tab=decisions`}
+							className={styles.titleLink}
+						>
+							{decision.question}
+						</Link>
+					</span>
+				);
+			},
+		},
+		{
+			header: "Plan",
+			field: "plan.title",
+			width: "growCollapse",
+			minWidth: 120,
+			renderCell: ({ plan }) => (
+				<Link to={`${base}?plan=${plan.slug}`} className={styles.planCell}>
+					{plan.title} <span className={styles.planNumber}>#{plan.number}</span>
+				</Link>
+			),
+		},
+		{
+			header: "Outcome",
+			field: "decision.answer",
+			width: "auto",
+			renderCell: ({ decision }) => {
+				let chosen = decision.options.find(option => option.id === decision.answer);
+				if (!chosen) return <Label variant="attention">Awaiting answer</Label>;
+				return (
+					<span className={styles.stacked}>
+						<span>
+							<Label variant="success">{chosen.label}</Label>
 						</span>
-					)}
-				</ListItemMetadata>,
-				<ListItemMetadata key="people">
-					<AvatarStack size={20} alignRight>
-						{plan.collaborators.map(login => (
-							<Avatar key={login} src={avatarUrl(login)} alt={login} />
-						))}
-					</AvatarStack>
-				</ListItemMetadata>,
-			]}
-		>
-			<ListItemLeadingContent>
-				<ListItemLeadingVisual icon={PlansIcon} color="var(--fgColor-muted)" description="Plan" />
-			</ListItemLeadingContent>
-			<ListItemMainContent>
-				<ListItemDescription>
-					<Label variant={statusVariant[state.status]}>{state.status}</Label> #{plan.number}{" "}
-					· Edited {state.updated} by {state.updatedBy}
-				</ListItemDescription>
-			</ListItemMainContent>
-		</ListItem>
+						{decision.answeredBy && (
+							<span className={styles.mutedCell}>by {displayName(decision.answeredBy)}</span>
+						)}
+					</span>
+				);
+			},
+		},
+		{
+			header: "Raised",
+			field: "decision.raisedAt",
+			width: "auto",
+			renderCell: ({ decision }) => (
+				<span className={styles.personCell}>
+					<Face login={decision.raisedBy} size={20} />
+					<span className={styles.stacked}>
+						{displayName(decision.raisedBy)}
+						<span className={styles.mutedCell}>{decision.raisedAt}</span>
+					</span>
+				</span>
+			),
+		},
+	];
+}
+
+function Header({ title, action }: { title: string; action?: ReactNode }) {
+	return (
+		<div className={styles.listHeader}>
+			<h1 className={styles.listTitle}>{title}</h1>
+			{action}
+		</div>
 	);
 }
 
 export default function PlansPage({ owner, name }: RepositoryPageProps) {
 	let [params] = useSearchParams();
 	let base = `/${owner}/${name}/plans`;
+	// github-ui's Link and useNavigate fall back to a Turbo frame visit for routes a partial does not
+	// own, which remounts the page and flashes the footer. Switching views stays client-side and
+	// replaces the entry, because Turbo reloads any pushed entry on back and forward.
+	let showOpen = useLinkClickHandler<HTMLButtonElement>(`${base}?view=decisions`, {
+		replace: true,
+	});
+	let showDecidedOnly = useLinkClickHandler<HTMLButtonElement>(
+		`${base}?view=decisions&state=decided`,
+		{ replace: true },
+	);
+	let all = useAllPlans();
+	// Turbo files the outgoing page's snapshot under the last URL it rendered, and the playground
+	// reloads any back or forward that finds none. Follow client-side view switches, but not pops,
+	// where Turbo is still caching the page being left.
+	let navigationType = useNavigationType();
+	let search = params.toString();
+	useEffect(() => {
+		if (navigationType === "POP") return;
+		let turbo = (window as { Turbo?: { session: { view: { lastRenderedLocation: URL } } } })
+			.Turbo;
+		if (turbo) turbo.session.view.lastRenderedLocation = new URL(window.location.href);
+	}, [navigationType, search]);
 	let slug = params.get("plan");
 	let selected = findPlan(slug);
+	let view: View = params.get("view") === "decisions" ? "decisions" : "plans";
+	let tab = params.get("tab");
 
-	if (selected) return <PlanView key={selected.slug} plan={selected} />;
+	if (selected) {
+		return (
+			<PlanView
+				key={selected.slug}
+				plan={selected}
+				initialTab={tab === "decisions" || tab === "build" ? (tab as Tab) : undefined}
+			/>
+		);
+	}
+
+	let decisions = all.flatMap(({ plan, state }) =>
+		state.decisions.map(decision => ({ plan, decision }))
+	);
+	let openCount = decisions.filter(({ decision }) => decision.answer === null).length;
+	let showDecided = params.get("state") === "decided";
+	let shown: DecisionEntry[] = decisions
+		.filter(({ decision }) => (decision.answer !== null) === showDecided)
+		.map(({ plan, decision }) => ({ id: `${plan.slug}/${decision.id}`, plan, decision }));
+
+	let sidebar = (
+		<NavList aria-label="Plans" className={styles.sidebar}>
+			<NavList.Item
+				as={SoftNavOnlyLink}
+				to={base}
+				replace
+				aria-current={view === "plans" ? "page" : undefined}
+			>
+				<NavList.LeadingVisual>
+					<PlansIcon />
+				</NavList.LeadingVisual>
+				Plans
+			</NavList.Item>
+			<NavList.Item
+				as={SoftNavOnlyLink}
+				to={`${base}?view=decisions`}
+				replace
+				aria-current={view === "decisions" ? "page" : undefined}
+			>
+				<NavList.LeadingVisual>
+					<CommentDiscussionIcon />
+				</NavList.LeadingVisual>
+				Decisions
+				{openCount > 0 && (
+					<NavList.TrailingVisual>
+						<CounterLabel>{openCount}</CounterLabel>
+					</NavList.TrailingVisual>
+				)}
+			</NavList.Item>
+		</NavList>
+	);
+
+	let content = view === "decisions"
+		? (
+			<div className={styles.listPane}>
+				<Header title="Decisions" />
+				<Table.Container className={styles.tableContainer}>
+					<Table.Title as="h2" id="decisions-table">
+						{showDecided ? "Decided" : "Open"} decisions
+					</Table.Title>
+					<Table.Actions>
+						<SegmentedControl
+							aria-label="Decision state"
+							size="small"
+						>
+							<SegmentedControl.Button selected={!showDecided} count={openCount} onClick={showOpen}>
+								Open
+							</SegmentedControl.Button>
+							<SegmentedControl.Button
+								selected={showDecided}
+								count={decisions.length - openCount}
+								onClick={showDecidedOnly}
+							>
+								Decided
+							</SegmentedControl.Button>
+						</SegmentedControl>
+					</Table.Actions>
+					{shown.length > 0
+						? (
+							<DataTable
+								aria-labelledby="decisions-table"
+								data={shown}
+								columns={decisionColumns(base)}
+								cellPadding="spacious"
+							/>
+						)
+						: (
+							<div className={styles.tableEmpty}>
+								<Blankslate border>
+									<Blankslate.Visual>
+										<CommentDiscussionIcon size="medium" />
+									</Blankslate.Visual>
+									<Blankslate.Heading>
+										{showDecided ? "Nothing decided yet" : "No open decisions"}
+									</Blankslate.Heading>
+									<Blankslate.Description>
+										Copilot raises a decision when a plan needs a choice only a person can make.
+									</Blankslate.Description>
+								</Blankslate>
+							</div>
+						)}
+				</Table.Container>
+			</div>
+		)
+		: (
+			<div className={styles.listPane}>
+				<Header title="Plans" action={<Button variant="primary">New plan</Button>} />
+				{slug && (
+					<Blankslate border narrow>
+						<Blankslate.Heading>Plan not found</Blankslate.Heading>
+						<Blankslate.Description>
+							No plan named “{slug}” exists in this repository.
+						</Blankslate.Description>
+					</Blankslate>
+				)}
+				<Table.Container className={styles.tableContainer}>
+					<Table.Title as="h2" id="plans-table">
+						All plans
+					</Table.Title>
+					<DataTable
+						aria-labelledby="plans-table"
+						data={all.map(({ plan, state }) => ({ id: plan.slug, plan, state }))}
+						columns={planColumns(base)}
+						cellPadding="spacious"
+					/>
+				</Table.Container>
+			</div>
+		);
 
 	return (
-		<div className={styles.page}>
-			<div className={styles.listHeader}>
-				<h1 className={styles.listTitle}>Plans</h1>
-				<Button variant="primary">New plan</Button>
-			</div>
-			{slug && (
-				<Blankslate border narrow>
-					<Blankslate.Heading>Plan not found</Blankslate.Heading>
-					<Blankslate.Description>
-						No plan named “{slug}” exists in this repository.
-					</Blankslate.Description>
-				</Blankslate>
-			)}
-			<ListView title="Plans">
-				{plans.map(plan => <PlanRow key={plan.slug} plan={plan} base={base} />)}
-			</ListView>
-		</div>
+		<ThreePanesLayout
+			leftPane={{ element: sidebar, ariaLabel: "Plans navigation" }}
+			leftPaneWidth="medium"
+			resizeable={false}
+			contentAs="div"
+			middlePane={content}
+		/>
 	);
 }

@@ -1,20 +1,50 @@
-import type { Decision, Task } from "./plans";
+import { type Decision, demoRepo, type Source, type Task } from "./plans";
 import type { PlanState, PlanStore } from "./store";
 
 export type Where = "end" | { after: string };
+
+let replayDiagram = `
+
+\`\`\`mermaid
+sequenceDiagram
+  participant App
+  participant Queue as SQLite queue
+  participant API
+  App->>Queue: Append operation while offline
+  Note over App,API: Device reconnects
+  loop Each queued operation, in order
+    Queue->>API: Send with base revision
+    alt Base revision is current
+      API-->>Queue: 200 OK
+      Queue->>Queue: Remove operation
+    else Base revision is stale
+      API-->>Queue: 409 Conflict
+      Queue->>App: Record skipped edit
+    end
+  end
+  App->>App: Show one summary of skipped edits
+\`\`\``;
 
 export type BeatContext = {
 	instant: boolean;
 	state: () => PlanState;
 	set: PlanStore["set"];
 	wait: (ms: number) => Promise<void>;
-	say: (author: string, body: string) => void;
+	say: (author: string, body: string, sources?: Source[]) => void;
 	compose: (author: string, text: string) => Promise<void>;
 	insert: (login: string, where: Where, text: string) => Promise<void>;
 	replace: (login: string, find: string, text: string) => Promise<void>;
+	/** Writes a whole block in one edit, as an agent does, rather than typing it. */
+	place: (login: string, where: Where, text: string) => Promise<void>;
 };
 
-export type Beat = { id: string; label: string; run: (ctx: BeatContext) => Promise<void> };
+/** `cue` names the in-page action that starts the beat; it defaults to the beat's `id`. */
+export type Beat = {
+	id: string;
+	label: string;
+	cue?: string;
+	run: (ctx: BeatContext) => Promise<void>;
+};
 
 let replayDecision: Decision = {
 	id: "replay",
@@ -78,6 +108,40 @@ let buildTasks: Task[] = [
 	},
 ];
 
+let research = [
+	{
+		doing: `Searching ${demoRepo} for sync code`,
+		done: `Searched ${demoRepo} for sync code`,
+		ms: 1800,
+	},
+	{ doing: "Reading src/sync/client.ts", done: "Read src/sync/client.ts", ms: 1600 },
+	{ doing: "Reading src/sync/retry.ts", done: "Read src/sync/retry.ts", ms: 1200 },
+	{ doing: "Reading src/store/notes.ts", done: "Read src/store/notes.ts", ms: 1100 },
+	{ doing: "Reading src/db/sqlite.ts", done: "Read src/db/sqlite.ts", ms: 900 },
+	{
+		doing: "Checking the history of src/sync/",
+		done: "Checked the history of src/sync/",
+		ms: 1200,
+	},
+];
+
+let researchSources: Source[] = [
+	{ path: "src/sync/client.ts", lines: [14, 22] },
+	{ path: "src/sync/client.ts", lines: [29, 32] },
+	{ path: "src/sync/retry.ts", lines: [1, 14] },
+	{ path: "src/store/notes.ts", lines: [8, 9] },
+	{ path: "src/db/sqlite.ts", lines: [3, 4] },
+];
+
+let currentBehavior = `
+## Current behavior
+
+- Failed edits wait in an in-memory \`pending\` array in \`src/sync/client.ts\`, so restarting the app loses them.
+- \`retryWithBackoff\` gives up after 3 attempts, about 1.5 seconds, and drops the edit with only a log line.
+- A \`409 Conflict\` is resent with \`force: true\`, which silently overwrites the newer server change.
+- SQLite is already bundled for search in \`src/db/sqlite.ts\`, so a durable queue needs no new dependency.
+`;
+
 let rollout = `
 ## Rollout
 
@@ -102,8 +166,52 @@ function updateDecision(ctx: BeatContext, id: string, patch: Partial<Decision>) 
 
 export let script: Beat[] = [
 	{
+		id: "research-ask",
+		label: "monalisa asks Copilot to research the sync code",
+		cue: "comment",
+		async run(ctx) {
+			ctx.set({ tab: "plan" });
+			await ctx.wait(400);
+			await ctx.compose(
+				"monalisa",
+				"@copilot how do offline edits work in `src/sync/` today? Add a summary of the current behavior to the plan.",
+			);
+		},
+	},
+	{
+		id: "research",
+		label: "Copilot researches the codebase and summarizes it",
+		async run(ctx) {
+			ctx.set(state => ({
+				viewers: [...state.viewers.filter(login => login !== "copilot"), "copilot"],
+			}));
+			let finished = (count: number) => research.slice(0, count).map(step => step.done);
+			for (let [index, step] of research.entries()) {
+				ctx.set({ activity: { login: "copilot", text: step.doing, steps: finished(index) } });
+				await ctx.wait(step.ms);
+			}
+			ctx.set({
+				activity: { login: "copilot", text: "Writing a summary", steps: finished(research.length) },
+			});
+			await ctx.wait(900);
+			ctx.set({ activity: null });
+			await ctx.insert(
+				"copilot",
+				{ after: "Edit freely; it keeps the prose consistent with every decision.\n" },
+				currentBehavior,
+			);
+			await ctx.wait(400);
+			ctx.say(
+				"copilot",
+				"Added **Current behavior** to the plan. In short: failed edits only live in memory, retries give up after about 1.5 seconds, and a `409` is resent with `force: true`. That explains both symptoms in #142.",
+				researchSources,
+			);
+		},
+	},
+	{
 		id: "ask",
 		label: "monalisa asks Copilot for a rollout plan",
+		cue: "comment",
 		async run(ctx) {
 			ctx.set({ tab: "plan" });
 			await ctx.wait(400);
@@ -178,10 +286,12 @@ export let script: Beat[] = [
 				"and the client asks the person to choose.",
 				"so replay skips that operation, applies the rest of the queue, and then shows one summary of the skipped edits.",
 			);
+			await ctx.wait(600);
+			await ctx.place("copilot", { after: "one summary of the skipped edits." }, replayDiagram);
 			updateDecision(ctx, "replay", { applied: true });
 			ctx.say(
 				"copilot",
-				"Updated **Design** to match @monalisa's decision: replay skips conflicts and summarizes them at the end. Nothing is left to decide, so this plan is ready to build.",
+				"Updated **Design** to match @monalisa's decision: replay skips conflicts and summarizes them at the end, with a diagram of the flow. Nothing is left to decide, so this plan is ready to build.",
 			);
 		},
 	},

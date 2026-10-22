@@ -1,11 +1,12 @@
 import { Link } from "@primer/react";
 import type { ReactNode } from "react";
+import { demoRepo } from "./plans";
 
 let pattern = /(\*\*[^*]+\*\*|`[^`]+`|@[a-z][\w-]*|#\d+)/g;
 
 function reference(token: string) {
 	let number = Number(token.slice(1));
-	return number >= 12 && number <= 15 ? "/monalisa/smile/pulls" : "/monalisa/smile/issues";
+	return `/${demoRepo}/${number >= 12 && number <= 15 ? "pulls" : "issues"}`;
 }
 
 /** Renders the small inline subset the demo conversation uses: bold, code, mentions and references. */

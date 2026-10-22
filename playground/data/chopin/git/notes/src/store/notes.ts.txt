@@ -1,0 +1,28 @@
+import { api } from "../api/client";
+import { indexNote } from "../search";
+import { SyncClient } from "../sync/client";
+import type { Note } from "./types";
+
+const sync = new SyncClient();
+
+// Notes live in memory and are refetched from the server on every launch.
+const notes = new Map<string, Note>();
+
+export async function loadNotes() {
+  const fetched = await api.get<Note[]>("/notes");
+  notes.clear();
+  for (const note of fetched) notes.set(note.id, note);
+}
+
+export function listNotes() {
+  return [...notes.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function updateNote(id: string, changes: Partial<Pick<Note, "title" | "body">>) {
+  const note = notes.get(id);
+  if (!note) throw new Error(`Unknown note ${id}`);
+  const next = { ...note, ...changes, updatedAt: Date.now() };
+  notes.set(id, next);
+  indexNote(next);
+  void sync.push({ noteId: id, revision: note.revision, ...changes });
+}

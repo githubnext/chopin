@@ -1,0 +1,14 @@
+import * as SQLite from "expo-sqlite";
+
+// The shared on-device database. Today it only backs local search.
+export const db = SQLite.openDatabaseSync("notes.db");
+
+export function migrate() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS search_index (
+      note_id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL
+    );
+  `);
+}

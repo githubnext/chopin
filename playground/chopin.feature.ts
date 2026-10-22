@@ -18,7 +18,7 @@ export default defineFeature({
 		order: ["code", "plans"],
 	},
 	bookmarks: [
-		{ name: "Plans", path: "/monalisa/smile/plans" },
-		{ name: "Offline sync", path: "/monalisa/smile/plans?plan=offline-sync" },
+		{ name: "Plans", path: "/monalisa/notes/plans" },
+		{ name: "Offline sync", path: "/monalisa/notes/plans?plan=offline-sync" },
 	],
 });

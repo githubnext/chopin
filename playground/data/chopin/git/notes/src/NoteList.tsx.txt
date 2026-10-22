@@ -1,0 +1,17 @@
+import { FlatList, Text, View } from "react-native";
+import { listNotes } from "./store/notes";
+
+export function NoteList() {
+  return (
+    <FlatList
+      data={listNotes()}
+      keyExtractor={note => note.id}
+      renderItem={({ item }) => (
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontWeight: "600" }}>{item.title}</Text>
+          <Text numberOfLines={2}>{item.body}</Text>
+        </View>
+      )}
+    />
+  );
+}

@@ -10,6 +10,21 @@
 	}
 }
 
+.sidebar {
+	min-height: calc(100vh - 200px);
+}
+
+.listPane {
+	max-width: 1012px;
+	padding: var(--base-size-24) var(--base-size-32);
+}
+
+@media (max-width: 767px) {
+	.listPane {
+		padding-inline: var(--base-size-16);
+	}
+}
+
 .listHeader {
 	display: flex;
 	align-items: center;
@@ -19,13 +34,6 @@
 
 .listTitle {
 	font: var(--text-title-shorthand-medium);
-}
-
-.metaCount {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--base-size-4);
-	color: var(--fgColor-muted);
 }
 
 .header {
@@ -70,7 +78,6 @@
 	grid-template-columns: minmax(0, 1fr) 360px;
 	gap: var(--base-size-24);
 	align-items: start;
-	margin-block-start: var(--base-size-16);
 }
 
 @media (max-width: 1011px) {
@@ -81,6 +88,10 @@
 
 .main {
 	min-width: 0;
+}
+
+.tabPanel {
+	margin-block-start: var(--base-size-16);
 }
 
 .aside {
@@ -157,7 +168,7 @@
 .conversation {
 	display: flex;
 	flex-direction: column;
-	height: max(360px, calc(100vh - 333px));
+	height: max(360px, calc(100vh - 269px));
 	border: var(--borderWidth-thin) solid var(--borderColor-default);
 	border-radius: var(--borderRadius-medium);
 	background: var(--bgColor-default);
@@ -315,4 +326,174 @@
 
 .buildSummary strong {
 	color: var(--fgColor-default);
+}
+
+.trace {
+	display: grid;
+	gap: var(--base-size-6);
+	padding: var(--base-size-8) var(--base-size-12);
+	margin: var(--base-size-6) 0 0;
+	border: var(--borderWidth-thin) solid var(--borderColor-muted);
+	border-radius: var(--borderRadius-medium);
+	background: var(--bgColor-muted);
+	color: var(--fgColor-muted);
+	font: var(--text-body-shorthand-small);
+	list-style: none;
+}
+
+.trace li {
+	display: flex;
+	gap: var(--base-size-8);
+	align-items: center;
+}
+
+.trace li:last-child {
+	color: var(--fgColor-default);
+}
+
+.traceDone {
+	flex: none;
+	color: var(--fgColor-success);
+}
+
+.traceSpinner {
+	flex: none;
+}
+
+.sources {
+	margin-block-start: var(--base-size-8);
+	border: var(--borderWidth-thin) solid var(--borderColor-muted);
+	border-radius: var(--borderRadius-medium);
+	font: var(--text-body-shorthand-small);
+}
+
+.sources summary {
+	display: flex;
+	gap: var(--base-size-4);
+	align-items: center;
+	padding: var(--base-size-6) var(--base-size-8);
+	color: var(--fgColor-muted);
+	cursor: pointer;
+	list-style: none;
+}
+
+.sources summary::-webkit-details-marker {
+	display: none;
+}
+
+.sourcesChevron {
+	transition: transform 120ms ease;
+}
+
+.sources[open] .sourcesChevron {
+	transform: rotate(90deg);
+}
+
+.sources ul {
+	display: grid;
+	gap: var(--base-size-4);
+	padding: var(--base-size-8);
+	margin: 0;
+	border-block-start: var(--borderWidth-thin) solid var(--borderColor-muted);
+	list-style: none;
+}
+
+.sources li {
+	display: flex;
+	gap: var(--base-size-6);
+	align-items: center;
+	min-width: 0;
+}
+
+.sources li a {
+	overflow: hidden;
+	font-family: var(--fontStack-monospace);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.sources li span {
+	flex: none;
+	color: var(--fgColor-muted);
+}
+
+.sourceIcon {
+	flex: none;
+	color: var(--fgColor-muted);
+}
+
+.titleCell {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--base-size-8);
+}
+
+.planIcon,
+.openIcon,
+.doneIcon {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+
+.planIcon {
+	color: var(--fgColor-muted);
+}
+
+.openIcon {
+	color: var(--fgColor-attention);
+}
+
+.doneIcon {
+	color: var(--fgColor-done);
+}
+
+.titleLink {
+	color: var(--fgColor-default);
+	font-size: var(--text-body-size-medium);
+	font-weight: var(--base-text-weight-semibold);
+}
+
+.titleLink:hover,
+.planCell:hover,
+.countLink:hover {
+	color: var(--fgColor-accent);
+}
+
+.planCell {
+	color: var(--fgColor-default);
+}
+
+.countLink {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--base-size-4);
+	color: var(--fgColor-muted);
+}
+
+.planNumber,
+.mutedCell {
+	color: var(--fgColor-muted);
+	white-space: nowrap;
+}
+
+.personCell {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--base-size-6);
+	white-space: nowrap;
+}
+
+.tableContainer :global(table) {
+	overflow-x: auto;
+}
+
+.stacked {
+	display: grid;
+	gap: var(--base-size-2);
+	font-size: var(--text-body-size-small);
+	line-height: var(--text-body-lineHeight-small);
+}
+
+.tableEmpty {
+	grid-area: table;
 }

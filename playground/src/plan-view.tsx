@@ -20,11 +20,15 @@ export let statusVariant: Record<PlanStatus, "secondary" | "accent" | "attention
 	Shipped: "done",
 };
 
-export function PlanView({ plan }: { plan: Plan }) {
+export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab }) {
 	let store = planStore(plan.slug);
 	let state = usePlanState(store);
 	let editor = useRef<HybridMarkdownEditorRef>(null);
 	let open = openDecisions(state);
+
+	useEffect(() => {
+		if (initialTab) store.set({ tab: initialTab });
+	}, [initialTab, store]);
 
 	useEffect(() => {
 		if (plan.slug !== demoSlug) return;
@@ -76,54 +80,56 @@ export function PlanView({ plan }: { plan: Plan }) {
 					)}
 				</div>
 			</header>
-			<UnderlineNav aria-label="Plan sections">
-				{tabs.map(tab => (
-					<UnderlineNav.Item
-						key={tab.id}
-						href={`?plan=${plan.slug}`}
-						icon={tab.icon}
-						counter={tab.counter}
-						aria-current={state.tab === tab.id ? "page" : undefined}
-						onSelect={event => {
-							event.preventDefault();
-							store.set({ tab: tab.id });
-						}}
-					>
-						{tab.label}
-					</UnderlineNav.Item>
-				))}
-			</UnderlineNav>
 			<div className={styles.columns}>
 				<div className={styles.main}>
-					{state.tab === "plan" && (
-						<div className={styles.editorFrame} data-banner={open > 0 || undefined}>
-							{open > 0 && (
-								<Banner
-									layout="compact"
-									variant="warning"
-									title="Decision needed"
-									description={`${open} ${
-										open === 1 ? "decision needs" : "decisions need"
-									} an answer before this plan can be built.`}
-									primaryAction={
-										<Banner.PrimaryAction onClick={() => store.set({ tab: "decisions" })}>
-											Review
-										</Banner.PrimaryAction>
-									}
+					<UnderlineNav aria-label="Plan sections">
+						{tabs.map(tab => (
+							<UnderlineNav.Item
+								key={tab.id}
+								href={`?plan=${plan.slug}`}
+								icon={tab.icon}
+								counter={tab.counter}
+								aria-current={state.tab === tab.id ? "page" : undefined}
+								onSelect={event => {
+									event.preventDefault();
+									store.set({ tab: tab.id });
+								}}
+							>
+								{tab.label}
+							</UnderlineNav.Item>
+						))}
+					</UnderlineNav>
+					<div className={styles.tabPanel}>
+						{state.tab === "plan" && (
+							<div className={styles.editorFrame} data-banner={open > 0 || undefined}>
+								{open > 0 && (
+									<Banner
+										layout="compact"
+										variant="warning"
+										title="Decision needed"
+										description={`${open} ${
+											open === 1 ? "decision needs" : "decisions need"
+										} an answer before this plan can be built.`}
+										primaryAction={
+											<Banner.PrimaryAction onClick={() => store.set({ tab: "decisions" })}>
+												Review
+											</Banner.PrimaryAction>
+										}
+									/>
+								)}
+								<HybridMarkdownEditor
+									ref={editor}
+									value={state.body}
+									onChange={body =>
+										store.set({ body })}
+									placeholder="Describe the plan"
 								/>
-							)}
-							<HybridMarkdownEditor
-								ref={editor}
-								value={state.body}
-								onChange={body =>
-									store.set({ body })}
-								placeholder="Describe the plan"
-							/>
-							<RemoteCursor editor={editor} cursor={state.cursor} />
-						</div>
-					)}
-					{state.tab === "decisions" && <Decisions store={store} />}
-					{state.tab === "build" && <Build store={store} />}
+								<RemoteCursor editor={editor} cursor={state.cursor} />
+							</div>
+						)}
+						{state.tab === "decisions" && <Decisions store={store} />}
+						{state.tab === "build" && <Build store={store} />}
+					</div>
 				</div>
 				<aside className={styles.aside} aria-label={`Conversation with ${displayName("copilot")}`}>
 					<Conversation store={store} />

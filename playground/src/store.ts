@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from "react";
-import { type Decision, findPlan, type Message, type PlanStatus, type Task } from "./plans";
+import { type Decision, findPlan, type Message, plans, type PlanStatus, type Task } from "./plans";
 
 export type Tab = "plan" | "decisions" | "build";
 
-export type Activity = { login: string; text: string } | null;
+/** `steps` lists what the agent has already finished, shown above its current `text`. */
+export type Activity = { login: string; text: string; steps?: string[] } | null;
 
 export type Cursor = { login: string; pos: number } | null;
 
@@ -49,6 +50,8 @@ function initial(slug: string): PlanState {
 }
 
 let stores = new Map<string, PlanStore>();
+let anyListeners = new Set<() => void>();
+let version = 0;
 
 export function planStore(slug: string): PlanStore {
 	let existing = stores.get(slug);
@@ -56,7 +59,9 @@ export function planStore(slug: string): PlanStore {
 	let state = initial(slug);
 	let listeners = new Set<() => void>();
 	let emit = () => {
+		version += 1;
 		for (let listener of listeners) listener();
+		for (let listener of anyListeners) listener();
 	};
 	let store: PlanStore = {
 		get: () => state,
@@ -80,6 +85,17 @@ export function planStore(slug: string): PlanStore {
 
 export function usePlanState(store: PlanStore) {
 	return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
+function subscribeAll(listener: () => void) {
+	anyListeners.add(listener);
+	return () => anyListeners.delete(listener);
+}
+
+/** Every plan with its live state, for indexes that span plans. */
+export function useAllPlans() {
+	useSyncExternalStore(subscribeAll, () => version, () => version);
+	return plans.map(plan => ({ plan, state: planStore(plan.slug).get() }));
 }
 
 export function openDecisions(state: PlanState) {

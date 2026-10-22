@@ -15,7 +15,7 @@ import {
 	typingSpeed,
 	typingSpeeds,
 } from "./director";
-import { demoSlug } from "./plans";
+import { demoRepo, demoSlug } from "./plans";
 
 function send(action: DirectorAction) {
 	directorBridge.sendAction(action);
@@ -30,7 +30,7 @@ function DirectorControl() {
 		return (
 			<PlaygroundToolbarGroup>
 				<PlaygroundToolbarButton
-					onClick={() => navigatePage(`/monalisa/smile/plans?plan=${demoSlug}`)}
+					onClick={() => navigatePage(`/${demoRepo}/plans?plan=${demoSlug}`)}
 				>
 					Open demo plan
 				</PlaygroundToolbarButton>
