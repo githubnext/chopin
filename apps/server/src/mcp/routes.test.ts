@@ -178,6 +178,22 @@ describe("the hosted MCP route", () => {
 		}
 	});
 
+	it("also accepts an origin the deployment moved from", async () => {
+		let { router } = setup({ previousOrigins: ["https://old.example.com"] });
+		for (
+			let [origin, status] of [["https://old.example.com", 200], [
+				"https://other.example.com",
+				403,
+			]] as const
+		) {
+			let response = await router.handle(request("POST", {
+				headers: { "content-type": "application/json", origin },
+				body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+			}));
+			expect(response?.status).toBe(status);
+		}
+	});
+
 	it("does not disclose hosted failures through MCP", async () => {
 		let { github, router } = setup();
 		github.failure = new Error("access-token foreign document: Private roadmap");

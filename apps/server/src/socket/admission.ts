@@ -1,3 +1,4 @@
+import { ownOrigin } from "../auth/config";
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { uid } from "../ids";
@@ -19,7 +20,7 @@ function probing(request: Request): boolean {
 
 export async function admitSidebar(request: Request, auth: HostedAuth): Promise<SidebarAdmission> {
 	try {
-		if (!probing(request) && request.headers.get("origin") !== auth.config.origin) {
+		if (!probing(request) && !ownOrigin(auth.config, request.headers.get("origin"))) {
 			return { status: 403, reason: "origin is not allowed" };
 		}
 		let session = await auth.sessions.authenticate(request);
@@ -54,7 +55,7 @@ export async function admit(
 	} = {},
 ): Promise<Admission> {
 	try {
-		if (!probing(request) && request.headers.get("origin") !== auth.config.origin) {
+		if (!probing(request) && !ownOrigin(auth.config, request.headers.get("origin"))) {
 			return { status: 403, reason: "origin is not allowed" };
 		}
 		let session = await auth.sessions.authenticate(request);

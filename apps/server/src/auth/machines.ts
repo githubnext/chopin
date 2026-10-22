@@ -36,6 +36,8 @@ type Options = {
 	/** The deployment's SESSION_ENCRYPTION_KEY; without it machines hold no GitHub credentials. */
 	key?: Uint8Array;
 	origin: string;
+	/** Origins the deployment moved from; a grant stored under one is moved to `origin` on use. */
+	previousOrigins?: readonly string[];
 	clientId: string;
 	refresh?: (refreshToken: string) => Promise<GitHubTokenGrant>;
 	/** Whether the owner is still admitted, as a browser session is rechecked. */
@@ -69,6 +71,7 @@ export class Machines {
 	readonly #refreshes = new Map<string, Promise<Grant>>();
 	readonly #seen = new Map<string, number>();
 	readonly #ended = new Set<(machineId: string) => void>();
+	#migrated = false;
 
 	constructor(storage: StorageAdapter, clock: Clock, options: Options) {
 		this.#storage = storage;
@@ -222,24 +225,60 @@ export class Machines {
 		if (cached) return cached;
 		let stored = await this.current(machine.id);
 		if (!stored.credentials || !this.#key) throw new MachineError("machine-reauthorize");
+		let { revision } = stored.credentials;
 		let value: unknown;
-		try {
-			value = await decrypted(
-				await this.#key,
-				this.#aad(stored, stored.credentials.revision),
-				stored.credentials.ciphertext,
-			);
-		} catch {
-			throw new MachineError("machine-reauthorize");
+		let moved = false;
+		for (let origin of [this.#options.origin, ...this.#options.previousOrigins ?? []]) {
+			try {
+				value = await decrypted(
+					await this.#key,
+					this.#aad(stored, revision, origin),
+					stored.credentials.ciphertext,
+				);
+				moved = origin !== this.#options.origin;
+				break;
+			} catch {
+				// Stored under another origin, or not at all.
+			}
 		}
 		let grant = value as Partial<Grant> | undefined;
 		if (
 			typeof grant?.accessToken !== "string" || typeof grant.refreshToken !== "string"
 			|| typeof grant.accessExpiresAt !== "number" || typeof grant.refreshExpiresAt !== "number"
 		) throw new MachineError("machine-reauthorize");
-		let restored = { ...grant, revision: stored.credentials.revision } as Grant;
+		let restored = { ...grant, revision } as Grant;
+		if (moved) return this.#move(stored, restored);
 		this.#grants.set(machine.id, restored);
 		return restored;
+	}
+
+	/**
+	 * Store a grant read under a previous origin again under the current one, as the next revision
+	 * so that only one concurrent move wins; a loser reads whatever the winner stored.
+	 */
+	async #move(machine: StoredMachine, grant: Grant): Promise<Grant> {
+		let next = { ...grant, revision: grant.revision + 1 };
+		if (
+			await this.#storage.machines.rotate(
+				machine.id,
+				grant.revision,
+				await this.#encrypt(machine, next),
+			)
+		) {
+			if (!this.#migrated) {
+				this.#migrated = true;
+				console.info("[machines] moved a machine's stored GitHub authorization to APP_ORIGIN");
+			}
+			this.#grants.set(machine.id, next);
+			return next;
+		}
+		let current = this.#grants.get(machine.id);
+		if (current) return current;
+		let stored = await this.current(machine.id);
+		if (stored.credentials?.revision === grant.revision) {
+			throw new MachineError("machine-reauthorize");
+		}
+		return this.#grant(stored);
 	}
 
 	#rotate(machine: StoredMachine, from: Grant): Promise<Grant> {
@@ -332,10 +371,10 @@ export class Machines {
 		};
 	}
 
-	#aad(machine: StoredMachine, revision: number): string {
+	#aad(machine: StoredMachine, revision: number, origin = this.#options.origin): string {
 		return JSON.stringify([
 			MACHINE_CONTEXT,
-			this.#options.origin,
+			origin,
 			this.#options.clientId,
 			machine.id,
 			machine.userId,

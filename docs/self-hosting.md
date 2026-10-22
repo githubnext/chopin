@@ -317,6 +317,7 @@ the image.
 | `STORAGE_DRIVER`                  | `postgres`              | Storage adapter. `postgres` is currently the only accepted value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `DATABASE_URL`                    | required                | `postgres:` or `postgresql:` connection URL. It is not printed by Chopin.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `APP_ORIGIN`                      | required                | Exact public origin, without credentials, path, query, fragment, or trailing slash. HTTPS is required unless the host is loopback.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `PREVIOUS_ORIGINS`                | empty                   | Comma-separated origins this deployment was served from before `APP_ORIGIN`, each validated like `APP_ORIGIN`. Paired machines, browser logins, Origin checks, and document links from those origins keep working; see [Moving to a new origin](#moving-to-a-new-origin).                                                                                                                                                                                                                                                                                                                                                                                         |
 | `GITHUB_APP_SLUG`                 | required                | Lowercase slug from the App's public URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `GITHUB_APP_CLIENT_ID`            | required                | OAuth client ID, not the numeric GitHub App ID.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `GITHUB_APP_CLIENT_SECRET`        | required (hosted)       | OAuth client secret used for user-token exchange and refresh. Unused when `AUTH_MODE=local`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -520,7 +521,8 @@ The proxy must:
 - proxy `/mcp` and the `/api/v1/agent` upgrade without removing their
   `Authorization` header, nor the upgrade's `Sec-WebSocket-Protocol` header;
 - serve Chopin at `/`, not below a path prefix; and
-- redirect alternate hosts to the canonical origin before application traffic.
+- redirect alternate hosts to the canonical origin before application traffic,
+  except the paths a [moved deployment](#moving-to-a-new-origin) keeps serving.
 
 Chopin derives OAuth callbacks from `APP_ORIGIN`, never from incoming `Host` or
 forwarded headers. A proxy cannot repair a mismatched configuration after the
@@ -659,6 +661,35 @@ Migration files are checksummed once applied. Never edit an applied migration.
 Because migrations are forward-only, returning to an older application image
 may require restoring the pre-upgrade database rather than merely changing the
 image tag.
+
+### Moving to a new origin
+
+Paired machines' GitHub authorizations and browser logins are encrypted for the
+origin they were stored under, so changing `APP_ORIGIN` alone signs everyone out
+and makes every machine run `chopin pair` again. To move a deployment from
+`https://old.example.com` to `https://new.example.com` instead:
+
+1. Add `https://new.example.com/auth/github/callback` to the GitHub App's
+   callback URLs, keeping the old one, and point its Homepage and Setup URLs at
+   the new origin.
+2. Serve the new name, and keep serving the old one. On the old name, keep
+   proxying `/mcp`, `/api`, `/connector*`, `/auth/github/callback`, and
+   `/auth/github/setup` to Chopin, because paired machines, MCP clients, and
+   GitHub still use it; redirect browsers on other paths to the new name.
+3. Restart with `APP_ORIGIN=https://new.example.com` and
+   `PREVIOUS_ORIGINS=https://old.example.com`.
+
+A machine or browser login stored under a previous origin is re-encrypted under
+`APP_ORIGIN` the first time it is used, and the server logs once per kind that
+it moved one. Browser cookies belong to a host, so people sign in once on the
+new name. Origin and WebSocket checks accept the previous origins, and document
+links on them resolve to the same documents; Chopin itself only writes links on
+`APP_ORIGIN`. A sign-in that was in progress when the deployment restarted has
+to start again.
+
+Remove `PREVIOUS_ORIGINS` once machines have reconnected and you stop serving
+the old name. Never list an origin you no longer control: its pages would pass
+Chopin's Origin checks.
 
 ### Writer lease
 

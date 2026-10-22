@@ -241,6 +241,26 @@ describe("configuration", () => {
 		expect(() => configured({ SESSION_ENCRYPTION_KEY: "short" })).toThrow("32 bytes");
 	});
 
+	it("accepts the exact origins a moved deployment was served from", () => {
+		expect(configured().auth.previousOrigins).toBeUndefined();
+		expect(configured({ PREVIOUS_ORIGINS: " " }).auth.previousOrigins).toBeUndefined();
+		expect(
+			configured({
+				PREVIOUS_ORIGINS:
+					"https://old.example.com, https://older.example.com,https://chopin.example",
+			}).auth.previousOrigins,
+		).toEqual(["https://old.example.com", "https://older.example.com"]);
+		expect(() => configured({ PREVIOUS_ORIGINS: "http://old.example.com" })).toThrow(
+			"PREVIOUS_ORIGINS must use HTTPS",
+		);
+		expect(() => configured({ PREVIOUS_ORIGINS: "https://old.example.com/path" })).toThrow(
+			"PREVIOUS_ORIGINS must contain only an HTTP or HTTPS origin",
+		);
+		expect(() => configured({ PREVIOUS_ORIGINS: "https://old.example.com,," })).toThrow(
+			"PREVIOUS_ORIGINS must be a comma-separated list of origins",
+		);
+	});
+
 	it("loads normalized user and organization admission lists", () => {
 		let config = configured({
 			GITHUB_ALLOWED_USERS: " OctoCat,hubot,octocat,managed_user ",

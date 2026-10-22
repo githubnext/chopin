@@ -33,10 +33,13 @@ async function setup() {
 		},
 	};
 	let admitted = true;
-	let create = (refresh = (token: string) => github.refresh(token)) =>
+	let create = (
+		refresh = (token: string) => github.refresh(token),
+		scope: { origin: string; previousOrigins?: string[] } = { origin: "https://chopin.test" },
+	) =>
 		new Machines(storage, () => now, {
 			key: KEY,
-			origin: "https://chopin.test",
+			...scope,
 			clientId: "client",
 			refresh,
 			authorize: async () => admitted,
@@ -59,6 +62,10 @@ async function setup() {
 		advance: (ms: number) => now = new Date(now.getTime() + ms),
 		deny: () => admitted = false,
 	};
+}
+
+function unexpectedRefresh(token: string): never {
+	throw new Error(`no refresh expected for ${token}`);
 }
 
 async function failure(promise: Promise<unknown>) {
@@ -190,4 +197,49 @@ test("a refresh refused because another instance rotated first uses that instanc
 	expect(stored.credentials?.revision).toBe(2);
 	expect(stored.reauthorizeAt).toBeUndefined();
 	expect(spent).toEqual(new Set(["ghr_machine_1"]));
+});
+
+test("a machine paired before the deployment moved keeps working and is re-encrypted under the new origin", async () => {
+	let { storage, create, paired, refreshed } = await setup();
+	let logged: unknown[][] = [];
+	let info = console.info;
+	console.info = (...values: unknown[]) => logged.push(values);
+	try {
+		// Restart after APP_ORIGIN moved to a new name, listing the old one as previous.
+		let moved = create(unexpectedRefresh, {
+			origin: "https://chopin.example.com",
+			previousOrigins: ["https://chopin.test"],
+		});
+		let machine = await moved.authenticate(paired.token);
+		let [first, second] = await Promise.all([
+			moved.use(machine, async token => token),
+			create(unexpectedRefresh, {
+				origin: "https://chopin.example.com",
+				previousOrigins: ["https://chopin.test"],
+			}).use(machine, async token => token),
+		]);
+		expect([first, second]).toEqual(["ghu_machine_1", "ghu_machine_1"]);
+	} finally {
+		console.info = info;
+	}
+	expect(refreshed).toEqual([]);
+	expect((await storage.machines.get(paired.machine.id))!.credentials?.revision).toBe(2);
+	expect(logged.length).toBeGreaterThan(0);
+	expect(JSON.stringify(logged)).not.toContain("ghu_machine_1");
+
+	// Nothing depends on the old origin any more.
+	let later = create(unexpectedRefresh, { origin: "https://chopin.example.com" });
+	expect(await later.use(await later.authenticate(paired.token), async token => token))
+		.toBe("ghu_machine_1");
+});
+
+test("a machine whose grant was stored under an origin not listed as previous is refused", async () => {
+	let { storage, create, paired } = await setup();
+	let moved = create(undefined, {
+		origin: "https://chopin.example.com",
+		previousOrigins: ["https://old.example.com"],
+	});
+	let machine = await moved.authenticate(paired.token);
+	expect(await failure(moved.use(machine, async token => token))).toBe("machine-reauthorize");
+	expect((await storage.machines.get(paired.machine.id))!.credentials?.revision).toBe(1);
 });

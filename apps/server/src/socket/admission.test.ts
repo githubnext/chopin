@@ -107,6 +107,7 @@ describe("socket admission", () => {
 			clientId: "client",
 			clientSecret: "secret",
 			encryptionKey: new Uint8Array(32).fill(2),
+			previousOrigins: ["https://old.example.com"],
 		};
 		let auth: HostedAuth = {
 			config,
@@ -128,6 +129,15 @@ describe("socket admission", () => {
 			auth,
 		);
 		expect(wrongOrigin).toEqual({ status: 403, reason: "origin is not allowed" });
+		// A page still open on the name the deployment moved from keeps its socket.
+		let previousOrigin = await admit(
+			new Request(url, {
+				headers: { cookie: pair(issued.cookie), origin: "https://old.example.com" },
+			}),
+			url,
+			auth,
+		);
+		expect("data" in previousOrigin).toBe(true);
 		let request = new Request(url, {
 			headers: { cookie: pair(issued.cookie), origin: "https://chopin.test" },
 		});
