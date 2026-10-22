@@ -96,7 +96,11 @@ export function failureCause(error: unknown) {
 			: typeof status === "string"
 			? status
 			: undefined;
-		if (name) return detail ? `${name}: ${detail}` : name;
+		if (name) {
+			// Bun 1.4.4's fetch also starts its message with the code; name it once.
+			if (detail.startsWith(`${name}: `)) detail = detail.slice(name.length + 2);
+			return detail ? `${name}: ${detail}` : name;
+		}
 		fallback ??= detail || undefined;
 		current = current.cause;
 	}

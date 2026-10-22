@@ -68,7 +68,7 @@ releases are made.
 ## Run without installing
 
 Every Chopin server also serves the connector as one script at
-`/connector.js`. It needs [Bun](https://bun.sh) 1.4.2. This is the command
+`/connector.js`. It needs [Bun](https://bun.sh) 1.4.4. This is the command
 Chopin shows when no local agent is connected:
 
 ```sh
