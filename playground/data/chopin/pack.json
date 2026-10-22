@@ -1,0 +1,21 @@
+{
+	"formatVersion": 1,
+	"manifest": {
+		"id": "chopin",
+		"name": "Chopin plans demo cast",
+		"description": "Fictional teammates who collaborate on plans with monalisa and Copilot in the Chopin demo.",
+		"provenance": {
+			"source": "synthetic",
+			"createdAt": "2026-10-22T19:00:00Z",
+			"sourceRepository": "githubnext/chopin",
+			"toolVersion": "1"
+		}
+	},
+	"records": {
+		"users": {
+			"dana-okafor": { "name": "Dana Okafor" },
+			"theo-nguyen": { "name": "Theo Nguyen" },
+			"rosa-alvarez": { "name": "Rosa Alvarez" }
+		}
+	}
+}

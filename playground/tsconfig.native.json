@@ -1,0 +1,7 @@
+{
+	"extends": "./.playground/runtime/packages/playground-runtime/native-consumer-types.json",
+	"compilerOptions": {
+		"skipLibCheck": true
+	},
+	"include": ["playground.ts", "chopin.feature.ts", "src/**/*.ts", "src/**/*.tsx"]
+}

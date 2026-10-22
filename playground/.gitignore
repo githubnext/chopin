@@ -1,0 +1,11 @@
+node_modules/
+.playground/
+.cache/
+.data/
+tmp/
+.env*
+!.env.example
+*.tsbuildinfo
+
+# The root ignores data/; the demo data pack is source.
+!data/
