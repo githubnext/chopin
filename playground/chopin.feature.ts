@@ -7,6 +7,7 @@ export default defineFeature({
 	toolbar: "./src/director.toolbar.tsx",
 	data: { packs: ["./data/chopin"] },
 	repositoryShell: {
+		repositories: ["monalisa/notes"],
 		pages: [
 			{
 				id: "plans",
