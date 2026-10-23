@@ -99,6 +99,7 @@ async function run(
 		projectPackage = false,
 		operatorPackage = false,
 		askingWorkflow = false,
+		operatorSettings,
 		afterTurn,
 		events,
 		reports,
@@ -114,6 +115,8 @@ async function run(
 		operatorPackage?: boolean;
 		/** Load a workflow whose stage calls ask_user_question, through the operator's extension paths. */
 		askingWorkflow?: boolean;
+		/** The operator's Atomic `settings.json`, as the host CLI would have written it. */
+		operatorSettings?: Record<string, unknown>;
 		/** Runs once the Planner's turn has ended, while its session and workflow runs are still live. */
 		afterTurn?: () => Promise<void>;
 		/** Collects, in order, the tool reports the adapter makes and the stream parts a tool yields. */
@@ -277,6 +280,9 @@ export default workflow({
 			);
 		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
+		if (operatorSettings) {
+			await writeFile(join(agentDir, "settings.json"), JSON.stringify(operatorSettings));
+		}
 		let humanInput: HostInput = host ?? {
 			confirm: async () => false,
 			select: async () => undefined,
@@ -558,6 +564,27 @@ test(
 		}
 	},
 	60_000,
+);
+
+test(
+	"an operator's shared storage selection, even an adapter package, does not move a Planner's workflow journal",
+	async () => {
+		let result = await run(true, "launch", {
+			askingWorkflow: true,
+			// What `atomic storage join` writes; the adapter package is not installed here.
+			operatorSettings: {
+				storage: {
+					adapter: "@bastani/atomic-storage-libsql",
+					options: { url: "libsql://chopin-test.invalid" },
+				},
+			},
+		});
+		let launched = result.requests.at(-1)!.toolResults.join("\n");
+		expect(launched).toContain("asking-workflow");
+		expect(launched).not.toContain('"failed"');
+		expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
+	},
+	WORKFLOW_TOOL_TIMEOUT_MS,
 );
 
 // Atomic starts a turn for its own notices, and since 0.9.41 for a message queued on an idle session.

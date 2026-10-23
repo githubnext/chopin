@@ -75,7 +75,7 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=atomic` runs Atomic 0.9.41-alpha.1 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.42 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
@@ -143,6 +143,14 @@ Atomic caveats:
 - Harness-level compaction, suspending a turn, and supplied harness skills are
   unsupported. A Planner session's own resource discovery does load Atomic
   skills. Atomic's automatic retries remain on.
+- Since Atomic 0.9.42 a provider's rate limit is shared by the whole server
+  process. After one request gets a 429, every Atomic session in the server,
+  Planner turns and workers alike, waits for that provider's cooldown (its
+  `Retry-After`, otherwise backoff of up to 60 seconds) before sending its next
+  request, instead of each hitting the limit in turn. A turn waiting there shows
+  no output yet; stopping it ends the wait without sending the request. Chopin
+  sets no request budget (`configureProviderRequestBudget()`) or
+  `resourceAdmission` of its own.
 - Under `auto`, refreshing an OAuth token in memory can rotate the refresh token
   stored by the host CLI, which may then ask the operator to sign in again.
   `auto` also runs `!command` API-key entries in `auth.json` to resolve them.
