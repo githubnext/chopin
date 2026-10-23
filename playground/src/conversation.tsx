@@ -3,7 +3,7 @@ import { CheckIcon, ChevronRightIcon, FileCodeIcon } from "@primer/octicons-reac
 import { Avatar, Button, Link, Spinner, Textarea } from "@primer/react";
 import { useEffect, useRef } from "react";
 import { cue } from "./director";
-import { avatarUrl, demoRepo, displayName, type Source, sourceUrl } from "./plans";
+import { avatarUrl, demoRepo, displayName, presenter, type Source, sourceUrl } from "./plans";
 import styles from "./plans.module.css";
 import { Rich } from "./rich";
 import { type PlanStore, usePlanState } from "./store";
@@ -59,7 +59,7 @@ export function Conversation({ store }: { store: PlanStore }) {
 			composer: "",
 			messages: [
 				...current.messages,
-				{ id: `local-${current.messages.length}`, author: "monalisa", body: text, at: "just now" },
+				{ id: `local-${current.messages.length}`, author: presenter, body: text, at: "just now" },
 			],
 		}));
 	};

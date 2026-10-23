@@ -1,7 +1,8 @@
 import { CommentDiscussionIcon, RocketIcon } from "@primer/octicons-react";
 import PlansIcon from "./plans-icon";
 import { Avatar, AvatarStack, Banner, Label, UnderlineNav } from "@primer/react";
-import { type CSSProperties, useEffect } from "react";
+import { useNavigate } from "@github-ui/react-router";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { Build } from "./build";
 import { Conversation, Face } from "./conversation";
 import { Decisions } from "./decisions";
@@ -23,6 +24,10 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 	let store = planStore(plan.slug);
 	let state = usePlanState(store);
 	let open = openDecisions(state);
+	let navigate = useNavigate();
+	// The director outlives renders; a fresh navigate must not detach it mid-beat.
+	let latestNavigate = useRef(navigate);
+	latestNavigate.current = navigate;
 
 	useEffect(() => {
 		if (initialTab) store.set({ tab: initialTab });
@@ -30,7 +35,7 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 
 	useEffect(() => {
 		if (plan.slug !== demoSlug) return;
-		return attachDirector(store);
+		return attachDirector(store, path => latestNavigate.current(path));
 	}, [plan.slug, store]);
 
 	let tabs: { id: Tab; label: string; icon: typeof RocketIcon; counter?: number }[] = [
@@ -113,7 +118,7 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 									}
 								/>
 							)}
-							<PlanDocument store={store} state={state} />
+							<PlanDocument state={state} />
 						</div>
 					)}
 					{state.tab === "decisions" && <Decisions store={store} />}

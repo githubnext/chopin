@@ -3,7 +3,7 @@ import { Button, FormControl, Label, Radio, RadioGroup } from "@primer/react";
 import { Blankslate } from "@primer/react/experimental";
 import { cue } from "./director";
 import type { Decision } from "./plans";
-import { displayName } from "./plans";
+import { displayName, presenter } from "./plans";
 import styles from "./plans.module.css";
 import { type PlanStore, usePlanState } from "./store";
 
@@ -18,7 +18,7 @@ function OpenDecision({ decision, store }: { decision: Decision; store: PlanStor
 		if (cue("decide")) return;
 		store.set(state => ({
 			decisions: state.decisions.map(item =>
-				item.id === decision.id ? { ...item, answer: item.selected, answeredBy: "monalisa" } : item
+				item.id === decision.id ? { ...item, answer: item.selected, answeredBy: presenter } : item
 			),
 		}));
 	};

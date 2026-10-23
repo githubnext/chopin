@@ -13,6 +13,9 @@
 	},
 	"records": {
 		"users": {
+			"mira-patel": {
+				"name": "Mira Patel"
+			},
 			"dana-okafor": {
 				"name": "Dana Okafor"
 			},
@@ -45,6 +48,11 @@
 			"monalisa/notes:monalisa": {
 				"repository": "monalisa/notes",
 				"user": "monalisa",
+				"permission": "admin"
+			},
+			"monalisa/notes:mira-patel": {
+				"repository": "monalisa/notes",
+				"user": "mira-patel",
 				"permission": "admin"
 			},
 			"monalisa/notes:dana-okafor": {

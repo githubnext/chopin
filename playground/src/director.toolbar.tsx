@@ -15,10 +15,18 @@ import {
 	typingSpeed,
 	typingSpeeds,
 } from "./director";
-import { demoSlug, findPlan, planPath } from "./plans";
+import { demoSlug, findPlan, planPath, presenter } from "./plans";
 
 function send(action: DirectorAction) {
 	directorBridge.sendAction(action);
+}
+
+/** Signs in as the presenter through the playground's local login, then opens the demo plan. */
+async function openDemo() {
+	let path = planPath(findPlan(demoSlug)!);
+	let body = new URLSearchParams({ login: presenter, return_to: path });
+	await fetch("/session", { method: "POST", body, redirect: "manual" });
+	navigatePage(path);
 }
 
 function DirectorControl() {
@@ -30,7 +38,7 @@ function DirectorControl() {
 		return (
 			<PlaygroundToolbarGroup>
 				<PlaygroundToolbarButton
-					onClick={() => navigatePage(planPath(findPlan(demoSlug)!))}
+					onClick={() => void openDemo()}
 				>
 					Open demo plan
 				</PlaygroundToolbarButton>

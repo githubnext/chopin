@@ -48,6 +48,9 @@ export let demoRepo = "monalisa/notes";
 
 export let demoSlug = "offline-sync";
 
+/** The teammate the presenter plays, signed in as the playground viewer. */
+export let presenter = "mira-patel";
+
 let offlineSyncBody = `## Summary
 
 The mobile app loses edits made while offline. This plan proposes a local operation queue that replays edits when the device reconnects, without changing the server API.
@@ -108,8 +111,8 @@ export let plans: Plan[] = [
 		title: "Offline sync for the mobile app",
 		status: "Draft",
 		updated: "12 minutes ago",
-		updatedBy: "monalisa",
-		collaborators: ["monalisa", "dana-okafor"],
+		updatedBy: presenter,
+		collaborators: [presenter, "dana-okafor"],
 		body: offlineSyncBody,
 		messages: [
 			{
@@ -137,7 +140,7 @@ export let plans: Plan[] = [
 		status: "In review",
 		updated: "yesterday",
 		updatedBy: "dana-okafor",
-		collaborators: ["dana-okafor", "monalisa", "theo-nguyen"],
+		collaborators: ["dana-okafor", presenter, "theo-nguyen"],
 		body: "## Summary\n\nMove rate limiting from fixed windows to per-token buckets.\n",
 		messages: [],
 		decisions: [
@@ -210,8 +213,8 @@ export let plans: Plan[] = [
 		title: "Cut search latency below 200 ms",
 		status: "Shipped",
 		updated: "last week",
-		updatedBy: "monalisa",
-		collaborators: ["monalisa", "dana-okafor"],
+		updatedBy: presenter,
+		collaborators: [presenter, "dana-okafor"],
 		body: "## Summary\n\nCache tokenized queries and precompute facets.\n",
 		messages: [],
 		decisions: [
@@ -227,7 +230,7 @@ export let plans: Plan[] = [
 				raisedAt: "2 weeks ago",
 				selected: "memory",
 				answer: "memory",
-				answeredBy: "monalisa",
+				answeredBy: presenter,
 				applied: true,
 			},
 		],

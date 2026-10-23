@@ -1,9 +1,9 @@
 import { createToolPreference } from "@github-ui/playground/preferences";
 import { createToolbarBridge } from "@github-ui/playground/toolbar";
 import { simulateTyping } from "@github-ui/playground/typing";
-import { displayName, type Source } from "./plans";
+import { demoSlug, displayName, type Source } from "./plans";
 import { type BeatContext, script, type Where } from "./script";
-import type { PlanStore } from "./store";
+import { type PlanStore, planStore } from "./store";
 
 export type DirectorState =
 	| { beat: number; labels: string[]; playing: boolean; auto: boolean }
@@ -33,13 +33,18 @@ export let typingSpeed = createToolPreference({
 let labels = script.map(beat => beat.label);
 
 let store: PlanStore | null = null;
+let navigator: ((path: string) => void) | null = null;
 let beat = 0;
 let playing = false;
 let auto = false;
 let run: AbortController | null = null;
 let messageCount = 0;
 
+// Leaving the plan reloads the page, so the tour keeps its place for this tab.
+let savedBeat = "chopin/demo-beat";
+
 function publish() {
+	if (store) sessionStorage.setItem(savedBeat, String(beat));
 	directorBridge.publishState(store ? { beat, labels, playing, auto } : null);
 }
 
@@ -98,6 +103,11 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 		set,
 		say,
 		wait: ms => (instant ? Promise.resolve() : sleep(ms, signal)),
+		navigate(path) {
+			let go = navigator;
+			// After the beat finishes, so the tour records it before the page unloads.
+			if (!instant && go) setTimeout(() => go(path));
+		},
 		async compose(author, text) {
 			if (!instant) {
 				await type(author, text, prefix => set({ composer: prefix }));
@@ -170,18 +180,30 @@ function stopRun() {
 	auto = false;
 }
 
-async function fastForward(target: number) {
-	if (!store) return;
-	stopRun();
-	store.reset();
+async function replay(planStore: PlanStore, target: number) {
+	planStore.reset();
 	messageCount = 0;
 	let controller = new AbortController();
 	for (let index = 0; index < target; index++) {
-		await script[index]?.run(context(store, controller.signal, true));
+		await script[index]?.run(context(planStore, controller.signal, true));
 	}
-	store.set({ cursor: null, activity: null });
+	planStore.set({ cursor: null, activity: null });
 	beat = target;
+}
+
+async function fastForward(target: number) {
+	if (!store) return;
+	stopRun();
+	await replay(store, target);
 	publish();
+}
+
+/** Restores the demo plan to where this tab's tour left off. */
+export function resumeTour() {
+	let target = Number(sessionStorage.getItem(savedBeat));
+	if (Number.isInteger(target) && target > 0 && target <= script.length) {
+		void replay(planStore(demoSlug), target);
+	}
 }
 
 async function play(all: boolean) {
@@ -224,8 +246,9 @@ export function cue(id: string) {
 	return true;
 }
 
-export function attachDirector(planStore: PlanStore) {
+export function attachDirector(planStore: PlanStore, navigate: (path: string) => void) {
 	store = planStore;
+	navigator = navigate;
 	publish();
 	let unsubscribe = directorBridge.onAction(action => {
 		switch (action.type) {
@@ -251,6 +274,7 @@ export function attachDirector(planStore: PlanStore) {
 		unsubscribe();
 		stopRun();
 		store = null;
+		navigator = null;
 		publish();
 	};
 }

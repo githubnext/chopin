@@ -173,11 +173,7 @@
 }
 
 .documentHeader {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: var(--base-size-8);
-	padding: var(--base-size-8) var(--base-size-8) var(--base-size-8) var(--base-size-16);
+	padding: var(--base-size-8) var(--base-size-16);
 	border-block-end: var(--borderWidth-thin) solid var(--borderColor-default);
 	background: var(--bgColor-muted);
 	border-start-start-radius: var(--borderRadius-medium);

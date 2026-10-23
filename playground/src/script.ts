@@ -1,4 +1,4 @@
-import { type Decision, demoRepo, type Source, type Task } from "./plans";
+import { type Decision, demoRepo, presenter, type Source, type Task } from "./plans";
 import type { PlanState, PlanStore } from "./store";
 
 export type Where = "end" | { after: string };
@@ -14,6 +14,8 @@ export type BeatContext = {
 	replace: (login: string, find: string, text: string) => Promise<void>;
 	/** Writes a whole block in one edit, as an agent does, rather than typing it. */
 	place: (login: string, where: Where, text: string) => Promise<void>;
+	/** Leaves the plan for another page. Skipped when fast-forwarding, so a jump stays put. */
+	navigate: (path: string) => void;
 };
 
 /** `cue` names the in-page action that starts the beat; it defaults to the beat's `id`. */
@@ -145,13 +147,13 @@ function updateDecision(ctx: BeatContext, id: string, patch: Partial<Decision>) 
 export let script: Beat[] = [
 	{
 		id: "research-ask",
-		label: "monalisa asks Copilot to research the sync code",
+		label: "mira-patel asks Copilot to research the sync code",
 		cue: "comment",
 		async run(ctx) {
 			ctx.set({ tab: "plan" });
 			await ctx.wait(400);
 			await ctx.compose(
-				"monalisa",
+				presenter,
 				"@copilot how do offline edits work in `src/sync/` today? Add a summary of the current behavior to the plan.",
 			);
 		},
@@ -188,13 +190,13 @@ export let script: Beat[] = [
 	},
 	{
 		id: "ask",
-		label: "monalisa asks Copilot for a rollout plan",
+		label: "mira-patel asks Copilot for a rollout plan",
 		cue: "comment",
 		async run(ctx) {
 			ctx.set({ tab: "plan" });
 			await ctx.wait(400);
 			await ctx.compose(
-				"monalisa",
+				presenter,
 				"@copilot add a rollout plan with a feature flag, and call out anything we still need to decide.",
 			);
 		},
@@ -241,13 +243,13 @@ export let script: Beat[] = [
 	},
 	{
 		id: "decide",
-		label: "monalisa makes the decision",
+		label: "mira-patel makes the decision",
 		async run(ctx) {
 			ctx.set({ tab: "decisions" });
 			await ctx.wait(1200);
 			updateDecision(ctx, "replay", { selected: "skip" });
 			await ctx.wait(1000);
-			updateDecision(ctx, "replay", { answer: "skip", answeredBy: "monalisa" });
+			updateDecision(ctx, "replay", { answer: "skip", answeredBy: presenter });
 			await ctx.wait(1000);
 		},
 	},
@@ -267,13 +269,13 @@ export let script: Beat[] = [
 			updateDecision(ctx, "replay", { applied: true });
 			ctx.say(
 				"copilot",
-				"Updated **Design** to match @monalisa's decision: replay skips conflicts and summarizes them at the end. Nothing is left to decide, so this plan is ready to build.",
+				"Updated **Design** to match @mira-patel's decision: replay skips conflicts and summarizes them at the end. Nothing is left to decide, so this plan is ready to build.",
 			);
 		},
 	},
 	{
 		id: "build",
-		label: "monalisa builds the plan",
+		label: "mira-patel builds the plan",
 		async run(ctx) {
 			ctx.set({ tab: "build" });
 			await ctx.wait(1200);
@@ -309,6 +311,14 @@ export let script: Beat[] = [
 			await ctx.wait(1500);
 			updateTask(ctx, "queue", { status: "merged" });
 			ctx.say("dana-okafor", "Reviewed and merged #12. Nice work, everyone.");
+		},
+	},
+	{
+		id: "made",
+		label: "The team reviews the decisions made",
+		async run(ctx) {
+			await ctx.wait(2500);
+			ctx.navigate(`/${demoRepo}/plans?view=decisions&state=made`);
 		},
 	},
 ];

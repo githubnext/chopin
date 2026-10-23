@@ -22,6 +22,7 @@ import {
 import { Blankslate, type Column, DataTable, Table } from "@primer/react/experimental";
 import { type ReactNode, useEffect } from "react";
 import { Face } from "./conversation";
+import { resumeTour } from "./director";
 import { PlanView, statusVariant } from "./plan-view";
 import { avatarUrl, type Decision, displayName, type Plan, planPath, plans } from "./plans";
 import styles from "./plans.module.css";
@@ -186,6 +187,8 @@ function Header({ title, action }: { title: string; action?: ReactNode }) {
 		</div>
 	);
 }
+
+resumeTour();
 
 export default function PlansPage({ owner, name }: RepositoryPageProps) {
 	let [params] = useSearchParams();

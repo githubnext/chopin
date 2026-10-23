@@ -1,5 +1,13 @@
 import { useSyncExternalStore } from "react";
-import { type Decision, findPlan, type Message, plans, type PlanStatus, type Task } from "./plans";
+import {
+	type Decision,
+	findPlan,
+	type Message,
+	plans,
+	type PlanStatus,
+	presenter,
+	type Task,
+} from "./plans";
 
 export type Tab = "plan" | "decisions" | "build";
 
@@ -41,7 +49,7 @@ function initial(slug: string): PlanState {
 		composer: "",
 		decisions: plan.decisions,
 		tasks: plan.tasks,
-		viewers: ["monalisa"],
+		viewers: [presenter],
 		activity: null,
 		cursor: null,
 		updated: plan.updated,
