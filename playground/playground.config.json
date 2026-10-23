@@ -1,7 +1,7 @@
 {
 	"runtime": {
 		"repository": "https://github.com/github/github-ui.git",
-		"revision": "f445a07425d6e552a118dd9c4baf71d91eb70532"
+		"revision": "a4cb26f61110aaae4503e8ef49dc9c1e066bdeed"
 	},
 	"port": 4351,
 	"previewPath": "/monalisa/notes/plans",
