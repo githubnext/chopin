@@ -678,7 +678,12 @@ given that file through Atomic's `createAgentSession({ journal })`, so the
 server's process environment is left unchanged. An operator's non-empty
 `ATOMIC_WORKFLOW_JOURNAL_PATH` names another file instead; Atomic's
 `workflows.journal` setting and its `ATOMIC_WORKFLOWS_JOURNAL` and
-`ATOMIC_STORAGE` selections do not move a Planner session's journal. Atomic
+`ATOMIC_STORAGE` selections do not move a Planner session's journal, and
+neither does the shared top-level `storage` setting, including an adapter named
+by package such as the libSQL selection `atomic storage join` writes. That
+setting does reach the Planner's Intercom: its sessions use the machine's
+Intercom broker, which keeps its routing in the selected database and so can
+reach sessions on every machine that selects the same one. Atomic
 still checks every set `ATOMIC_STORAGE`, `ATOMIC_SESSIONS_STORAGE`, and
 `ATOMIC_WORKFLOWS_JOURNAL` when it creates a session, so an invalid value fails
 every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their
