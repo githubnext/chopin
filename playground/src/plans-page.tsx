@@ -3,6 +3,7 @@ import {
 	Link,
 	SoftNavOnlyLink,
 	useLinkClickHandler,
+	useLocation,
 	useNavigationType,
 	useSearchParams,
 } from "@github-ui/react-router";
@@ -22,7 +23,7 @@ import { Blankslate, type Column, DataTable, Table } from "@primer/react/experim
 import { type ReactNode, useEffect } from "react";
 import { Face } from "./conversation";
 import { PlanView, statusVariant } from "./plan-view";
-import { avatarUrl, type Decision, displayName, findPlan, type Plan } from "./plans";
+import { avatarUrl, type Decision, displayName, type Plan, planPath, plans } from "./plans";
 import styles from "./plans.module.css";
 import { openDecisions, type PlanState, type Tab, useAllPlans } from "./store";
 
@@ -30,7 +31,7 @@ type View = "plans" | "decisions";
 
 type PlanEntry = { id: string; plan: Plan; state: PlanState };
 
-function planColumns(base: string): Column<PlanEntry>[] {
+function planColumns(): Column<PlanEntry>[] {
 	return [
 		{
 			header: "Plan",
@@ -42,7 +43,7 @@ function planColumns(base: string): Column<PlanEntry>[] {
 				<span className={styles.titleCell}>
 					<PlansIcon className={styles.planIcon} aria-hidden />
 					<span>
-						<Link to={`${base}?plan=${plan.slug}`} className={styles.titleLink}>
+						<Link to={planPath(plan)} className={styles.titleLink}>
 							{plan.title}
 						</Link>{" "}
 						<span className={styles.planNumber}>#{plan.number}</span>
@@ -66,7 +67,7 @@ function planColumns(base: string): Column<PlanEntry>[] {
 				let open = openDecisions(state);
 				return open > 0
 					? (
-						<Link to={`${base}?plan=${plan.slug}&tab=decisions`} className={styles.countLink}>
+						<Link to={planPath(plan, "decisions")} className={styles.countLink}>
 							<CommentDiscussionIcon size={16} />
 							{open}
 						</Link>
@@ -105,7 +106,7 @@ function planColumns(base: string): Column<PlanEntry>[] {
 
 type DecisionEntry = { id: string; plan: Plan; decision: Decision };
 
-function decisionColumns(base: string): Column<DecisionEntry>[] {
+function decisionColumns(): Column<DecisionEntry>[] {
 	return [
 		{
 			header: "Decision",
@@ -121,7 +122,7 @@ function decisionColumns(base: string): Column<DecisionEntry>[] {
 							? <CommentDiscussionIcon className={styles.openIcon} aria-label="Open" />
 							: <CheckCircleIcon className={styles.doneIcon} aria-label="Made" />}
 						<Link
-							to={`${base}?plan=${plan.slug}&tab=decisions`}
+							to={planPath(plan, "decisions")}
 							className={styles.titleLink}
 						>
 							{decision.question}
@@ -136,7 +137,7 @@ function decisionColumns(base: string): Column<DecisionEntry>[] {
 			width: "growCollapse",
 			minWidth: 120,
 			renderCell: ({ plan }) => (
-				<Link to={`${base}?plan=${plan.slug}`} className={styles.planCell}>
+				<Link to={planPath(plan)} className={styles.planCell}>
 					{plan.title} <span className={styles.planNumber}>#{plan.number}</span>
 				</Link>
 			),
@@ -188,6 +189,8 @@ function Header({ title, action }: { title: string; action?: ReactNode }) {
 
 export default function PlansPage({ owner, name }: RepositoryPageProps) {
 	let [params] = useSearchParams();
+	// Plans are addressed by number beneath the page, as `/owner/repo/plans/4`.
+	let number = useLocation().pathname.split("/").slice(4).filter(Boolean).join("/");
 	let base = `/${owner}/${name}/plans`;
 	// github-ui's Link and useNavigate fall back to a Turbo frame visit for routes a partial does not
 	// own, which remounts the page and flashes the footer. Switching views stays client-side and
@@ -211,8 +214,7 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 			.Turbo;
 		if (turbo) turbo.session.view.lastRenderedLocation = new URL(window.location.href);
 	}, [navigationType, search]);
-	let slug = params.get("plan");
-	let selected = findPlan(slug);
+	let selected = plans.find(plan => String(plan.number) === number);
 	let view: View = params.get("view") === "decisions" ? "decisions" : "plans";
 	let tab = params.get("tab");
 
@@ -297,7 +299,7 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 							<DataTable
 								aria-labelledby="decisions-table"
 								data={shown}
-								columns={decisionColumns(base)}
+								columns={decisionColumns()}
 								cellPadding="spacious"
 							/>
 						)
@@ -322,11 +324,11 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 		: (
 			<div className={styles.listPane}>
 				<Header title="Plans" action={<Button variant="primary">New plan</Button>} />
-				{slug && (
+				{number && (
 					<Blankslate border narrow>
 						<Blankslate.Heading>Plan not found</Blankslate.Heading>
 						<Blankslate.Description>
-							No plan named “{slug}” exists in this repository.
+							No plan #{number} exists in this repository.
 						</Blankslate.Description>
 					</Blankslate>
 				)}
@@ -337,7 +339,7 @@ export default function PlansPage({ owner, name }: RepositoryPageProps) {
 					<DataTable
 						aria-labelledby="plans-table"
 						data={all.map(({ plan, state }) => ({ id: plan.slug, plan, state }))}
-						columns={planColumns(base)}
+						columns={planColumns()}
 						cellPadding="spacious"
 					/>
 				</Table.Container>

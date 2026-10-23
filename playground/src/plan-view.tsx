@@ -7,7 +7,7 @@ import { Conversation, Face } from "./conversation";
 import { Decisions } from "./decisions";
 import { attachDirector } from "./director";
 import { PlanDocument } from "./plan-document";
-import { avatarUrl, demoSlug, displayName, type Plan, type PlanStatus } from "./plans";
+import { avatarUrl, demoSlug, displayName, type Plan, planPath, type PlanStatus } from "./plans";
 import styles from "./plans.module.css";
 import { cursorColor } from "./remote-cursor";
 import { openDecisions, planStore, type Tab, usePlanState } from "./store";
@@ -81,7 +81,7 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 						{tabs.map(tab => (
 							<UnderlineNav.Item
 								key={tab.id}
-								href={`?plan=${plan.slug}`}
+								href={planPath(plan, tab.id === "plan" ? undefined : tab.id)}
 								icon={tab.icon}
 								counter={tab.counter}
 								aria-current={state.tab === tab.id ? "page" : undefined}

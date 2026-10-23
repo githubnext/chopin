@@ -239,6 +239,11 @@ export function findPlan(slug: string | null) {
 	return plans.find(plan => plan.slug === slug);
 }
 
+/** A plan's address, numbered within the repository like an issue. */
+export function planPath(plan: Plan, tab?: "decisions" | "build") {
+	return `/${demoRepo}/plans/${plan.number}${tab ? `?tab=${tab}` : ""}`;
+}
+
 export function displayName(login: string) {
 	return login === "copilot" ? "Copilot" : login;
 }

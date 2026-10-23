@@ -20,6 +20,6 @@ export default defineFeature({
 	},
 	bookmarks: [
 		{ name: "Plans", path: "/monalisa/notes/plans" },
-		{ name: "Offline sync", path: "/monalisa/notes/plans?plan=offline-sync" },
+		{ name: "Offline sync", path: "/monalisa/notes/plans/4" },
 	],
 });

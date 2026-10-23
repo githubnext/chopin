@@ -7,12 +7,12 @@
 		"node": "26.5.1"
 	},
 	"scripts": {
-		"playground:build": "node .playground/cli.ts build",
-		"playground:path": "node .playground/cli.ts path",
-		"playground:restart": "node .playground/cli.ts restart",
-		"playground:setup": "bash -o pipefail -c 'gh api -H \"Accept: application/vnd.github.raw+json\" \"repos/github/github-ui/contents/packages/playground-runtime/bootstrap.mjs?ref=next/playground\" | node --input-type=module - setup \"$@\"' --",
-		"playground:start": "node .playground/cli.ts start",
-		"playground:start:prod": "node .playground/cli.ts start -- --prod",
+		"playground:build": "gh playground build",
+		"playground:path": "gh playground path",
+		"playground:restart": "gh playground restart",
+		"playground:setup": "gh playground setup",
+		"playground:start": "gh playground start",
+		"playground:start:prod": "gh playground start --prod",
 		"start": "npm run playground:start --"
 	}
 }
