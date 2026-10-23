@@ -73,31 +73,54 @@
 	color: var(--fgColor-default);
 }
 
+/* The document and Conversation share a height so their bottoms line up. */
 .columns {
+	--pane-height: max(
+		360px,
+		calc(100vh - 269px - var(--control-xlarge-size) + var(--borderWidth-thin))
+	);
+
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 360px;
-	gap: var(--base-size-24);
+	grid-template-areas:
+		"tabs ."
+		"panel aside";
+	column-gap: var(--base-size-24);
 	align-items: start;
+}
+
+.tabs {
+	grid-area: tabs;
+	min-width: 0;
+}
+
+.tabPanel {
+	grid-area: panel;
+	min-width: 0;
+	margin-block-start: var(--base-size-16);
+}
+
+/* Starts on the tab bar's bottom rule rather than below it. */
+.aside {
+	grid-area: aside;
+	position: sticky;
+	top: var(--base-size-16);
+	min-width: 0;
+	margin-block-start: calc(-1 * var(--borderWidth-thin));
 }
 
 @media (max-width: 1011px) {
 	.columns {
 		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			"tabs"
+			"panel"
+			"aside";
 	}
-}
 
-.main {
-	min-width: 0;
-}
-
-.tabPanel {
-	margin-block-start: var(--base-size-16);
-}
-
-.aside {
-	position: sticky;
-	top: var(--base-size-16);
-	min-width: 0;
+	.aside {
+		margin-block-start: var(--base-size-24);
+	}
 }
 
 .activity {
@@ -129,16 +152,63 @@
 }
 
 .editorFrame {
-	display: grid;
+	display: flex;
+	flex-direction: column;
 	gap: var(--base-size-12);
 }
 
-.editorFrame :global(.cm-editor.cm-editor) {
-	max-height: max(240px, calc(100vh - 391px));
+/* The tab panel starts below the tab bar's gap, and the Conversation starts on its rule. */
+.editorFrame:has(> .document) {
+	height: calc(var(--pane-height) - var(--base-size-16) - var(--borderWidth-thin));
 }
 
-.editorFrame[data-banner] :global(.cm-editor.cm-editor) {
-	max-height: max(200px, calc(100vh - 455px));
+.document {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	border: var(--borderWidth-thin) solid var(--borderColor-default);
+	border-radius: var(--borderRadius-medium);
+	background: var(--bgColor-default);
+}
+
+.documentHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--base-size-8);
+	padding: var(--base-size-8) var(--base-size-8) var(--base-size-8) var(--base-size-16);
+	border-block-end: var(--borderWidth-thin) solid var(--borderColor-default);
+	background: var(--bgColor-muted);
+	border-start-start-radius: var(--borderRadius-medium);
+	border-start-end-radius: var(--borderRadius-medium);
+	color: var(--fgColor-muted);
+	font: var(--text-body-shorthand-medium);
+}
+
+.documentHeader strong {
+	color: var(--fgColor-default);
+	font-weight: var(--base-text-weight-semibold);
+}
+
+.documentBody {
+	flex: 1;
+	min-height: 0;
+	padding: var(--base-size-24) var(--base-size-32);
+	overflow-y: auto;
+}
+
+/* Each block renders on its own; the wrapper leaves its elements in the Markdown flow. */
+.block {
+	display: contents;
+}
+
+.markdown > .block:first-child > :first-child {
+	margin-top: 0 !important;
+}
+
+.markdown > .block:last-child > :last-child {
+	margin-bottom: 0 !important;
 }
 
 .remoteCursor {
@@ -146,8 +216,9 @@
 	top: 0;
 	left: 0;
 	z-index: 10;
-	width: 2px;
-	margin-left: -1px;
+	width: var(--base-size-4);
+	margin-left: calc(-1 * var(--base-size-2));
+	border-radius: var(--borderRadius-small);
 	background: var(--cursor-color);
 	pointer-events: none;
 }
@@ -168,7 +239,7 @@
 .conversation {
 	display: flex;
 	flex-direction: column;
-	height: max(360px, calc(100vh - 269px));
+	height: var(--pane-height);
 	border: var(--borderWidth-thin) solid var(--borderColor-default);
 	border-radius: var(--borderRadius-medium);
 	background: var(--bgColor-default);

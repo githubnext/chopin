@@ -1,12 +1,9 @@
-import type { HybridMarkdownEditorRef } from "@github-ui/hybrid-markdown-editor/types";
 import { createToolPreference } from "@github-ui/playground/preferences";
 import { createToolbarBridge } from "@github-ui/playground/toolbar";
 import { simulateTyping } from "@github-ui/playground/typing";
 import { displayName, type Source } from "./plans";
 import { type BeatContext, script, type Where } from "./script";
 import type { PlanStore } from "./store";
-
-type View = NonNullable<HybridMarkdownEditorRef["view"]>;
 
 export type DirectorState =
 	| { beat: number; labels: string[]; playing: boolean; auto: boolean }
@@ -36,7 +33,6 @@ export let typingSpeed = createToolPreference({
 let labels = script.map(beat => beat.label);
 
 let store: PlanStore | null = null;
-let getView: () => View | null = () => null;
 let beat = 0;
 let playing = false;
 let auto = false;
@@ -62,23 +58,6 @@ function sleep(ms: number, signal: AbortSignal) {
 	});
 }
 
-function reveal(view: View, pos: number) {
-	requestAnimationFrame(() => {
-		let block = view.lineBlockAt(Math.min(pos, view.state.doc.length));
-		let scroller = view.scrollDOM;
-		let rect = scroller.getBoundingClientRect();
-		let top = view.documentTop + block.top;
-		let bottom = view.documentTop + block.bottom;
-		let margin = 48;
-		if (bottom > rect.bottom - margin) scroller.scrollTop += bottom - (rect.bottom - margin);
-		else if (top < rect.top + margin) scroller.scrollTop -= rect.top + margin - top;
-		let frame = scroller.getBoundingClientRect();
-		if (frame.bottom > window.innerHeight) {
-			window.scrollBy({ top: frame.bottom - window.innerHeight + 16 });
-		}
-	});
-}
-
 function locate(body: string, where: Where) {
 	if (where === "end") return body.length;
 	let index = body.indexOf(where.after);
@@ -101,15 +80,6 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 			signal,
 			wordsPerMinute: Math.min(1000, typingSpeed.get() * (login === "copilot" ? 2 : 1)),
 		});
-
-	let view = async () => {
-		for (let tries = 0; tries < 60; tries++) {
-			let current = getView();
-			if (current) return current;
-			await sleep(50, signal);
-		}
-		return null;
-	};
 
 	let editing = (login: string, pos: number) => {
 		set({
@@ -139,24 +109,14 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 		async insert(login, where, text) {
 			let body = state().body;
 			let pos = locate(body, where);
-			let editor = instant ? null : await view();
-			if (!editor) {
-				set({
-					body: body.slice(0, pos) + text + body.slice(pos),
-					updated: "just now",
-					updatedBy: login,
-				});
+			let write = (typed: string) => body.slice(0, pos) + typed + body.slice(pos);
+			if (instant) {
+				set({ body: write(text), updated: "just now", updatedBy: login });
 				return;
 			}
 			editing(login, pos);
-			let typed = "";
 			await type(login, text, prefix => {
-				editor.dispatch({
-					changes: { from: pos + typed.length, insert: prefix.slice(typed.length) },
-				});
-				typed = prefix;
-				set({ cursor: { login, pos: pos + typed.length } });
-				reveal(editor, pos + typed.length);
+				set({ body: write(prefix), cursor: { login, pos: pos + prefix.length } });
 			});
 			await sleep(300, signal);
 			done();
@@ -164,21 +124,14 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 		async place(login, where, text) {
 			let body = state().body;
 			let pos = locate(body, where);
-			let editor = instant ? null : await view();
-			if (!editor) {
-				set({
-					body: body.slice(0, pos) + text + body.slice(pos),
-					updated: "just now",
-					updatedBy: login,
-				});
+			let written = body.slice(0, pos) + text + body.slice(pos);
+			if (instant) {
+				set({ body: written, updated: "just now", updatedBy: login });
 				return;
 			}
 			editing(login, pos);
-			reveal(editor, pos);
 			await sleep(700, signal);
-			editor.dispatch({ changes: { from: pos, insert: text } });
-			set({ cursor: { login, pos: pos + text.length } });
-			reveal(editor, pos + text.length);
+			set({ body: written, cursor: { login, pos: pos + text.length } });
 			await sleep(500, signal);
 			done();
 		},
@@ -186,35 +139,23 @@ function context(planStore: PlanStore, signal: AbortSignal, instant: boolean): B
 			let body = state().body;
 			let start = body.indexOf(find);
 			if (start < 0) throw new Error(`Demo text not found: ${find}`);
-			let editor = instant ? null : await view();
-			if (!editor) {
-				set({
-					body: body.slice(0, start) + text + body.slice(start + find.length),
-					updated: "just now",
-					updatedBy: login,
-				});
+			let write = (middle: string) =>
+				body.slice(0, start) + middle + body.slice(start + find.length);
+			if (instant) {
+				set({ body: write(text), updated: "just now", updatedBy: login });
 				return;
 			}
-			let end = start + find.length;
-			editing(login, end);
-			reveal(editor, end);
+			let end = find.length;
+			editing(login, start + end);
 			await sleep(500, signal);
-			while (end > start) {
-				let next = Math.max(start, end - 3);
-				editor.dispatch({ changes: { from: next, to: end } });
-				end = next;
-				set({ cursor: { login, pos: end } });
+			while (end > 0) {
+				end = Math.max(0, end - 3);
+				set({ body: write(find.slice(0, end)), cursor: { login, pos: start + end } });
 				await sleep(18, signal);
 			}
 			await sleep(250, signal);
-			let typed = "";
 			await type(login, text, prefix => {
-				editor.dispatch({
-					changes: { from: start + typed.length, insert: prefix.slice(typed.length) },
-				});
-				typed = prefix;
-				set({ cursor: { login, pos: start + typed.length } });
-				reveal(editor, start + typed.length);
+				set({ body: write(prefix), cursor: { login, pos: start + prefix.length } });
 			});
 			await sleep(300, signal);
 			done();
@@ -283,9 +224,8 @@ export function cue(id: string) {
 	return true;
 }
 
-export function attachDirector(planStore: PlanStore, viewGetter: () => View | null) {
+export function attachDirector(planStore: PlanStore) {
 	store = planStore;
-	getView = viewGetter;
 	publish();
 	let unsubscribe = directorBridge.onAction(action => {
 		switch (action.type) {
@@ -311,7 +251,6 @@ export function attachDirector(planStore: PlanStore, viewGetter: () => View | nu
 		unsubscribe();
 		stopRun();
 		store = null;
-		getView = () => null;
 		publish();
 	};
 }

@@ -3,28 +3,6 @@ import type { PlanState, PlanStore } from "./store";
 
 export type Where = "end" | { after: string };
 
-let replayDiagram = `
-
-\`\`\`mermaid
-sequenceDiagram
-  participant App
-  participant Queue as SQLite queue
-  participant API
-  App->>Queue: Append operation while offline
-  Note over App,API: Device reconnects
-  loop Each queued operation, in order
-    Queue->>API: Send with base revision
-    alt Base revision is current
-      API-->>Queue: 200 OK
-      Queue->>Queue: Remove operation
-    else Base revision is stale
-      API-->>Queue: 409 Conflict
-      Queue->>App: Record skipped edit
-    end
-  end
-  App->>App: Show one summary of skipped edits
-\`\`\``;
-
 export type BeatContext = {
 	instant: boolean;
 	state: () => PlanState;
@@ -286,12 +264,10 @@ export let script: Beat[] = [
 				"and the client asks the person to choose.",
 				"so replay skips that operation, applies the rest of the queue, and then shows one summary of the skipped edits.",
 			);
-			await ctx.wait(600);
-			await ctx.place("copilot", { after: "one summary of the skipped edits." }, replayDiagram);
 			updateDecision(ctx, "replay", { applied: true });
 			ctx.say(
 				"copilot",
-				"Updated **Design** to match @monalisa's decision: replay skips conflicts and summarizes them at the end, with a diagram of the flow. Nothing is left to decide, so this plan is ready to build.",
+				"Updated **Design** to match @monalisa's decision: replay skips conflicts and summarizes them at the end. Nothing is left to decide, so this plan is ready to build.",
 			);
 		},
 	},

@@ -1,5 +1,5 @@
-import type { HybridMarkdownEditorRef } from "@github-ui/hybrid-markdown-editor/types";
 import { type CSSProperties, type RefObject, useEffect, useRef } from "react";
+import type { Blocks } from "./plan-document";
 import { displayName } from "./plans";
 import styles from "./plans.module.css";
 import type { Cursor } from "./store";
@@ -13,39 +13,78 @@ export function cursorColor(login: string) {
 	return colors[login] ?? "var(--fgColor-accent)";
 }
 
-/** A collaborator's caret drawn over the editor from a document position. */
+function blockAt(blocks: Blocks, pos: number) {
+	let index = blocks.findIndex(([start, end]) => pos >= start && pos <= end);
+	if (index >= 0) return index;
+	return blocks.findLastIndex(([start]) => start <= pos);
+}
+
+/**
+ * Marks the rendered block a collaborator is editing with a bar in the gutter, and keeps that
+ * block's end in view as it grows.
+ */
 export function RemoteCursor(
-	{ editor, cursor }: { editor: RefObject<HybridMarkdownEditorRef | null>; cursor: Cursor },
+	{ body, blocks, cursor }: {
+		body: RefObject<HTMLDivElement | null>;
+		blocks: Blocks;
+		cursor: Cursor;
+	},
 ) {
 	let element = useRef<HTMLDivElement>(null);
-	let position = useRef(cursor);
-	position.current = cursor;
+	let latest = useRef({ blocks, cursor });
+	latest.current = { blocks, cursor };
 
 	useEffect(() => {
 		let frame = 0;
+		let revealed = "";
 		let tick = () => {
 			frame = requestAnimationFrame(tick);
 			let node = element.current;
-			let view = editor.current?.view;
-			let current = position.current;
+			let scroller = body.current;
+			let { blocks, cursor } = latest.current;
 			if (!node) return;
-			if (!view || !current) {
+			let rendered = scroller?.querySelector(".markdown-body")?.children;
+			let block = cursor && rendered ? rendered[blockAt(blocks, cursor.pos)] : undefined;
+			if (!scroller || !block) {
 				node.hidden = true;
+				revealed = "";
 				return;
 			}
-			let coords = view.coordsAtPos(Math.min(current.pos, view.state.doc.length), -1);
-			let bounds = view.scrollDOM.getBoundingClientRect();
-			if (!coords || coords.bottom < bounds.top || coords.top > bounds.bottom) {
+			let bounds = scroller.getBoundingClientRect();
+			// Block wrappers use `display: contents`, so measure what they contain.
+			let range = document.createRange();
+			range.selectNodeContents(block);
+			let rect = range.getBoundingClientRect();
+			let key = `${cursor?.pos}:${rect.bottom - rect.top}`;
+			if (key !== revealed) {
+				revealed = key;
+				let margin = bounds.height / 6;
+				if (rect.bottom > bounds.bottom - margin) {
+					scroller.scrollTop += Math.min(
+						rect.bottom - (bounds.bottom - margin),
+						rect.top - bounds.top - margin,
+					);
+				} else if (rect.top < bounds.top + margin) {
+					scroller.scrollTop -= bounds.top + margin - rect.top;
+				}
+				if (bounds.bottom > window.innerHeight) {
+					window.scrollBy({ top: bounds.bottom - window.innerHeight });
+				}
+				return;
+			}
+			let top = Math.max(rect.top, bounds.top);
+			let bottom = Math.min(rect.bottom, bounds.bottom);
+			if (bottom <= top) {
 				node.hidden = true;
 				return;
 			}
 			node.hidden = false;
-			node.style.transform = `translate(${coords.left}px, ${coords.top}px)`;
-			node.style.height = `${coords.bottom - coords.top}px`;
+			node.style.transform = `translate(${(bounds.left + rect.left) / 2}px, ${top}px)`;
+			node.style.height = `${bottom - top}px`;
 		};
 		frame = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(frame);
-	}, [editor]);
+	}, [body]);
 
 	let login = cursor?.login ?? "";
 	return (

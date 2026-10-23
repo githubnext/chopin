@@ -1,16 +1,15 @@
-import { HybridMarkdownEditor } from "@github-ui/hybrid-markdown-editor";
-import type { HybridMarkdownEditorRef } from "@github-ui/hybrid-markdown-editor/types";
 import { CommentDiscussionIcon, RocketIcon } from "@primer/octicons-react";
 import PlansIcon from "./plans-icon";
 import { Avatar, AvatarStack, Banner, Label, UnderlineNav } from "@primer/react";
-import { type CSSProperties, useEffect, useRef } from "react";
+import { type CSSProperties, useEffect } from "react";
 import { Build } from "./build";
 import { Conversation, Face } from "./conversation";
 import { Decisions } from "./decisions";
 import { attachDirector } from "./director";
+import { PlanDocument } from "./plan-document";
 import { avatarUrl, demoSlug, displayName, type Plan, type PlanStatus } from "./plans";
 import styles from "./plans.module.css";
-import { cursorColor, RemoteCursor } from "./remote-cursor";
+import { cursorColor } from "./remote-cursor";
 import { openDecisions, planStore, type Tab, usePlanState } from "./store";
 
 export let statusVariant: Record<PlanStatus, "secondary" | "accent" | "attention" | "done"> = {
@@ -23,7 +22,6 @@ export let statusVariant: Record<PlanStatus, "secondary" | "accent" | "attention
 export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab }) {
 	let store = planStore(plan.slug);
 	let state = usePlanState(store);
-	let editor = useRef<HybridMarkdownEditorRef>(null);
 	let open = openDecisions(state);
 
 	useEffect(() => {
@@ -32,7 +30,7 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 
 	useEffect(() => {
 		if (plan.slug !== demoSlug) return;
-		return attachDirector(store, () => editor.current?.view ?? null);
+		return attachDirector(store);
 	}, [plan.slug, store]);
 
 	let tabs: { id: Tab; label: string; icon: typeof RocketIcon; counter?: number }[] = [
@@ -58,9 +56,6 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 					<Label variant={statusVariant[state.status]} size="large">
 						{state.status}
 					</Label>
-					<span>
-						<strong>{displayName(state.updatedBy)}</strong> edited {state.updated}
-					</span>
 					<span className={styles.presence} aria-label={`${state.viewers.length} viewing`}>
 						<AvatarStack size={20}>
 							{humans.map(login => <Avatar key={login} src={avatarUrl(login)} alt={login} />)}
@@ -81,7 +76,7 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 				</div>
 			</header>
 			<div className={styles.columns}>
-				<div className={styles.main}>
+				<div className={styles.tabs}>
 					<UnderlineNav aria-label="Plan sections">
 						{tabs.map(tab => (
 							<UnderlineNav.Item
@@ -99,37 +94,30 @@ export function PlanView({ plan, initialTab }: { plan: Plan; initialTab?: Tab })
 							</UnderlineNav.Item>
 						))}
 					</UnderlineNav>
-					<div className={styles.tabPanel}>
-						{state.tab === "plan" && (
-							<div className={styles.editorFrame} data-banner={open > 0 || undefined}>
-								{open > 0 && (
-									<Banner
-										layout="compact"
-										variant="warning"
-										title="Decision needed"
-										description={`${open} ${
-											open === 1 ? "decision needs" : "decisions need"
-										} an answer before this plan can be built.`}
-										primaryAction={
-											<Banner.PrimaryAction onClick={() => store.set({ tab: "decisions" })}>
-												Review
-											</Banner.PrimaryAction>
-										}
-									/>
-								)}
-								<HybridMarkdownEditor
-									ref={editor}
-									value={state.body}
-									onChange={body =>
-										store.set({ body })}
-									placeholder="Describe the plan"
+				</div>
+				<div className={styles.tabPanel}>
+					{state.tab === "plan" && (
+						<div className={styles.editorFrame}>
+							{open > 0 && (
+								<Banner
+									layout="compact"
+									variant="warning"
+									title="Decision needed"
+									description={`${open} ${
+										open === 1 ? "decision needs" : "decisions need"
+									} an answer before this plan can be built.`}
+									primaryAction={
+										<Banner.PrimaryAction onClick={() => store.set({ tab: "decisions" })}>
+											Review
+										</Banner.PrimaryAction>
+									}
 								/>
-								<RemoteCursor editor={editor} cursor={state.cursor} />
-							</div>
-						)}
-						{state.tab === "decisions" && <Decisions store={store} />}
-						{state.tab === "build" && <Build store={store} />}
-					</div>
+							)}
+							<PlanDocument store={store} state={state} />
+						</div>
+					)}
+					{state.tab === "decisions" && <Decisions store={store} />}
+					{state.tab === "build" && <Build store={store} />}
 				</div>
 				<aside className={styles.aside} aria-label={`Conversation with ${displayName("copilot")}`}>
 					<Conversation store={store} />
