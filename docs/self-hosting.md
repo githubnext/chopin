@@ -75,7 +75,7 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=atomic` runs Atomic 0.9.42 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.43 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
@@ -165,6 +165,17 @@ Atomic caveats:
   [Full Atomic Planner](hosted-agent.md#full-atomic-planner)). The Docker image
   sets `XDG_STATE_HOME=/var/lib/chopin`; mount a volume there to keep runs
   and those directories when the container is replaced.
+- Local workflow worker pools stay off unless the operator's Atomic settings
+  set `workflows.localWorkers`. With a pool, Atomic 0.9.43 keeps each worker's
+  standard error in `worker-logs/` beside the journal, so under
+  `$XDG_STATE_HOME/chopin/atomic/worker-logs/<run id>/`, inside the directory
+  Chopin creates for the journal with access for the server's user only. It
+  deletes a log when its worker shuts down normally but keeps the logs of
+  workers that failed; remove them yourself. A child whose worker dies is
+  replayed on a new worker, up to three attempts; after that the run fails and
+  its card in Chat says so. The settings `workflows.localWorkers.startupTimeoutMs`
+  and `leaseMs` set how long a worker may take to start and how long an
+  unresponsive one keeps its child.
 - Atomic depends on `typebox` 1.3.27 while Chopin pins 1.3.7. Host tool schemas
   pass to Atomic as plain JSON Schema, so the two versions never meet.
 
