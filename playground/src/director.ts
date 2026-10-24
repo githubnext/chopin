@@ -1,22 +1,15 @@
+import { registerPlaygroundDemoController } from "@github-ui/playground/demos";
 import { createToolPreference } from "@github-ui/playground/preferences";
-import { createToolbarBridge } from "@github-ui/playground/toolbar";
 import { simulateTyping } from "@github-ui/playground/typing";
-import { demoSlug, displayName, type Source } from "./plans";
+import { demoSlug, displayName, findPlan, planPath, presenter, type Source } from "./plans";
 import { type BeatContext, script, type Where } from "./script";
 import { type PlanStore, planStore } from "./store";
 
-export type DirectorState =
-	| { beat: number; labels: string[]; playing: boolean; auto: boolean }
-	| null;
+type DemoController = Parameters<typeof registerPlaygroundDemoController>[1];
+type DemoState = ReturnType<DemoController["getState"]>;
 
-export type DirectorAction =
-	| { type: "play" }
-	| { type: "play-all" }
-	| { type: "stop" }
-	| { type: "reset" }
-	| { type: "jump"; beat: number };
-
-export let directorBridge = createToolbarBridge<DirectorState, DirectorAction>("chopin/director");
+export let demoId = "chopin/demo";
+export let demoPath = planPath(findPlan(demoSlug)!);
 
 export let typingSpeeds = [80, 160, 240, 320, 480, 640] as const;
 
@@ -37,15 +30,32 @@ let navigator: ((path: string) => void) | null = null;
 let beat = 0;
 let playing = false;
 let auto = false;
+// A tour that has started stays paused, never idle, until Stop; idle ends the player's ownership.
+let started = false;
+let failure: string | null = null;
 let run: AbortController | null = null;
 let messageCount = 0;
+let listeners = new Set<() => void>();
+let snapshot: DemoState = { status: "idle", progress: { current: 0, total: script.length } };
 
 // Leaving the plan reloads the page, so the tour keeps its place for this tab.
 let savedBeat = "chopin/demo-beat";
 
+function status(): DemoState["status"] {
+	if (failure) return "error";
+	if (playing) return "playing";
+	if (beat >= script.length) return "completed";
+	return started || beat > 0 ? "paused" : "idle";
+}
+
 function publish() {
 	if (store) sessionStorage.setItem(savedBeat, String(beat));
-	directorBridge.publishState(store ? { beat, labels, playing, auto } : null);
+	snapshot = {
+		status: status(),
+		error: failure ?? undefined,
+		progress: { current: beat, total: script.length, label: labels[beat] },
+	};
+	for (let listener of listeners) listener();
 }
 
 function sleep(ms: number, signal: AbortSignal) {
@@ -205,11 +215,18 @@ async function replay(planStore: PlanStore, target: number) {
 	beat = target;
 }
 
-async function fastForward(target: number) {
-	if (!store) return;
+let seeking = Promise.resolve();
+
+/** Seeks run one at a time so overlapping controls never interleave two replays. */
+function fastForward(target: number) {
 	stopRun();
-	await replay(store, target);
-	publish();
+	let seek = seeking.then(async () => {
+		if (!store) return;
+		await replay(store, target);
+		publish();
+	});
+	seeking = seek.catch(() => {});
+	return seek;
 }
 
 /** Restores the demo plan to where this tab's tour left off. */
@@ -220,12 +237,23 @@ export function resumeTour() {
 	}
 }
 
-async function play(all: boolean) {
-	if (!store || playing) return;
+async function play(all: boolean, signal?: AbortSignal) {
+	if (!store) return;
+	if (playing) {
+		follow(signal);
+		if (all && !auto) {
+			auto = true;
+			publish();
+		}
+		return;
+	}
+	failure = null;
 	if (beat >= script.length) await fastForward(0);
 	let planStore = store;
 	let controller = new AbortController();
 	run = controller;
+	started = true;
+	follow(signal);
 	playing = true;
 	auto = all;
 	publish();
@@ -235,12 +263,14 @@ async function play(all: boolean) {
 			await performBeat(planStore, beat, controller.signal);
 			beat += 1;
 			publish();
-			if (!all || beat >= script.length) break;
+			if (!auto || beat >= script.length) break;
 			await sleep(1500, controller.signal);
 		}
 	} catch (error) {
-		if (!controller.signal.aborted) throw error;
-		return;
+		if (controller.signal.aborted) return;
+		console.error(error);
+		failure = error instanceof Error ? error.message : String(error);
+		if (run === controller) await fastForward(beat);
 	} finally {
 		if (run === controller) {
 			run = null;
@@ -251,6 +281,19 @@ async function play(all: boolean) {
 	}
 }
 
+/** The player aborts its signal on Stop, Restart, replacement, and teardown, but not Pause. */
+function follow(signal?: AbortSignal) {
+	let current = run;
+	signal?.addEventListener("abort", () => {
+		if (current && run === current) void interrupt();
+	}, { once: true });
+}
+
+/** Stops live playback; a beat interrupted partway rewinds to its start. */
+function interrupt() {
+	return playing ? fastForward(beat) : Promise.resolve();
+}
+
 /** Starts the next beat when a presenter performs the matching action in the page. */
 export function cue(id: string) {
 	let current = script[beat];
@@ -259,35 +302,60 @@ export function cue(id: string) {
 	return true;
 }
 
+function signedInAsPresenter() {
+	let login = document.querySelector<HTMLMetaElement>('meta[name="user-login"]')?.content;
+	return login === presenter;
+}
+
+/** Signs in as the presenter through the playground's local login; the player continues after reload. */
+async function enterAsPresenter(navigate: (path: string) => void) {
+	let body = new URLSearchParams({ login: presenter, return_to: demoPath });
+	await fetch("/session", { method: "POST", body, redirect: "manual" });
+	navigate(demoPath);
+}
+
+let demoController: DemoController = {
+	async play({ signal, navigate }) {
+		if (!signedInAsPresenter()) return enterAsPresenter(navigate);
+		await play(true, signal);
+	},
+	pause: interrupt,
+	async restart({ signal, navigate }) {
+		failure = null;
+		await fastForward(0);
+		if (!signedInAsPresenter()) return enterAsPresenter(navigate);
+		await play(true, signal);
+	},
+	async stop() {
+		failure = null;
+		started = false;
+		await fastForward(0);
+	},
+	async next() {
+		failure = null;
+		await fastForward(Math.min(script.length, beat + 1));
+	},
+	async previous() {
+		failure = null;
+		await fastForward(playing ? beat : Math.max(0, beat - 1));
+	},
+	getState: () => snapshot,
+	subscribe(listener) {
+		listeners.add(listener);
+		return () => listeners.delete(listener);
+	},
+};
+
 export function attachDirector(planStore: PlanStore, navigate: (path: string) => void) {
 	store = planStore;
 	navigator = navigate;
 	publish();
-	let unsubscribe = directorBridge.onAction(action => {
-		switch (action.type) {
-			case "play":
-				void play(false);
-				break;
-			case "play-all":
-				void play(true);
-				break;
-			case "stop":
-				// Rewinds to the start of the interrupted beat so a retake starts clean.
-				if (playing) void fastForward(beat);
-				break;
-			case "reset":
-				void fastForward(0);
-				break;
-			case "jump":
-				void fastForward(Math.max(0, Math.min(script.length, action.beat)));
-				break;
-		}
-	});
+	let unregister = registerPlaygroundDemoController(demoId, demoController);
 	return () => {
-		unsubscribe();
 		stopRun();
 		store = null;
 		navigator = null;
 		publish();
+		unregister();
 	};
 }
