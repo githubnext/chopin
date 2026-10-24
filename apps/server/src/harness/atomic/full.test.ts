@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { jsonSchema, tool } from "ai";
@@ -341,6 +341,10 @@ export default workflow({
 				let files = {
 					operator: await Bun.file(join(agentDir, "settings.json")).exists(),
 					journal: await Bun.file(journal).exists(),
+					journalDirectoryMode: await stat(dirname(journal)).then(
+						info => info.mode & 0o777,
+						() => undefined,
+					),
 					defaultJournal: await Bun.file(join(root, "workflows", "journal.sqlite")).exists(),
 					environment: process.env.ATOMIC_WORKFLOW_JOURNAL_PATH,
 					project: projectPackage
@@ -558,6 +562,8 @@ test(
 			// and through the session rather than the process-wide environment variable.
 			expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
 			expect(result.files?.environment).toBeUndefined();
+			// Only the server's user can enter its directory, which also holds the worker-logs/ Atomic keeps.
+			expect(result.files?.journalDirectoryMode).toBe(0o700);
 		} finally {
 			if (environment !== undefined) process.env.NODE_ENV = environment;
 			await room.close();
