@@ -293,24 +293,13 @@ export let script: Beat[] = [
 		},
 	},
 	{
-		id: "prs",
-		label: "Copilot opens pull requests",
+		id: "coding",
+		label: "Copilot starts coding each task",
 		async run(ctx) {
 			for (let task of buildTasks) {
 				updateTask(ctx, task.id, { status: "working" });
 				await ctx.wait(250);
 			}
-			for (let task of buildTasks) {
-				await ctx.wait(1300);
-				updateTask(ctx, task.id, { status: "open" });
-			}
-			ctx.say(
-				"copilot",
-				"Opened 4 pull requests: #12, #13, #14, and #15. Each one links back to this plan.",
-			);
-			await ctx.wait(1500);
-			updateTask(ctx, "queue", { status: "merged" });
-			ctx.say("dana-okafor", "Reviewed and merged #12. Nice work, everyone.");
 		},
 	},
 	{
