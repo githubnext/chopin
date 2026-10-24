@@ -180,7 +180,8 @@ function stopRun() {
 	auto = false;
 }
 
-async function replay(planStore: PlanStore, target: number) {
+/** Rebuilds the demo plan as it stands before `target`, without animation. */
+export async function restoreBeat(planStore: PlanStore, target: number) {
 	planStore.reset();
 	messageCount = 0;
 	let controller = new AbortController();
@@ -188,6 +189,19 @@ async function replay(planStore: PlanStore, target: number) {
 		await script[index]?.run(context(planStore, controller.signal, true));
 	}
 	planStore.set({ cursor: null, activity: null });
+}
+
+/** Performs one beat live; aborting leaves it partway, so callers restore its start. */
+export function performBeat(planStore: PlanStore, index: number, signal: AbortSignal) {
+	let current = script[index];
+	if (!current) throw new RangeError(`No demo beat ${index}`);
+	return current.run(context(planStore, signal, false));
+}
+
+export let beatCount = script.length;
+
+async function replay(planStore: PlanStore, target: number) {
+	await restoreBeat(planStore, target);
 	beat = target;
 }
 
@@ -217,9 +231,8 @@ async function play(all: boolean) {
 	publish();
 	try {
 		for (;;) {
-			let current = script[beat];
-			if (!current) break;
-			await current.run(context(planStore, controller.signal, false));
+			if (beat >= script.length) break;
+			await performBeat(planStore, beat, controller.signal);
 			beat += 1;
 			publish();
 			if (!all || beat >= script.length) break;
