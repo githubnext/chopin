@@ -628,7 +628,9 @@ launched it, and its runs belong to that session, so Chopin keeps the session
 and its owner binding, and keeps the document loaded, until every run has
 finished. The next turn reuses that session, so the Planner can still see and
 steer its runs over Intercom; people steer through Chat and Decisions, never a
-stage directly. **Stop Planner** also pauses the session's live runs, resumably,
+stage directly. Since Atomic 0.9.44 such a message reaches a busy stage after
+its current tool calls finish rather than cancelling them, unless the Planner
+sends it as an `interrupt`. **Stop Planner** also pauses the session's live runs, resumably,
 through Atomic's session run control, and **Resume Planner** resumes the runs it
 paused. A run waiting on a question pauses too: Atomic withdraws the question
 from Decisions while the run is paused and presents it again on Resume, and an
