@@ -3,11 +3,18 @@ import {
 	PlaygroundToolbarGroup,
 	PlaygroundToolbarSelect,
 } from "@github-ui/playground/toolbar-controls";
+import { playgroundDemoPlayer } from "@github-ui/playground/demos";
 import { useToolPreference } from "@github-ui/playground/preferences";
+import { useSyncExternalStore } from "react";
 import { demoId, demoPath, typingSpeed, typingSpeeds } from "./director";
 
+let subscribe = (listener: () => void) => playgroundDemoPlayer().subscribe(listener);
+let activeDemo = () => playgroundDemoPlayer().getState().activeDemoId;
+
+// Exit clears the active demo, so its options leave the toolbar with the shared controls.
 function TypingSpeedControl() {
 	let { value: speed, set: setSpeed } = useToolPreference(typingSpeed);
+	if (useSyncExternalStore(subscribe, activeDemo) !== demoId) return null;
 	return (
 		<PlaygroundToolbarGroup>
 			<PlaygroundToolbarSelect

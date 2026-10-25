@@ -1,4 +1,7 @@
-import { registerPlaygroundDemoController } from "@github-ui/playground/demos";
+import {
+	playgroundDemoPlayer,
+	registerPlaygroundDemoController,
+} from "@github-ui/playground/demos";
 import { createToolPreference } from "@github-ui/playground/preferences";
 import { simulateTyping } from "@github-ui/playground/typing";
 import { demoSlug, displayName, findPlan, planPath, presenter, type Source } from "./plans";
@@ -32,6 +35,11 @@ let playing = false;
 let auto = false;
 // A tour that has started stays paused, never idle, until Stop; idle ends the player's ownership.
 let started = false;
+let stopped = false;
+// A beat cut off by Stop or Exit stays as it was; the next Play rewinds it before running it again.
+let partial = false;
+// Rewinding before playback reports playing: the player keeps any reported pause as the user's.
+let starting: object | null = null;
 let failure: string | null = null;
 let run: AbortController | null = null;
 let messageCount = 0;
@@ -43,7 +51,8 @@ let savedBeat = "chopin/demo-beat";
 
 function status(): DemoState["status"] {
 	if (failure) return "error";
-	if (playing) return "playing";
+	if (playing || starting) return "playing";
+	if (stopped) return "idle";
 	if (beat >= script.length) return "completed";
 	return started || beat > 0 ? "paused" : "idle";
 }
@@ -213,6 +222,7 @@ export let beatCount = script.length;
 async function replay(planStore: PlanStore, target: number) {
 	await restoreBeat(planStore, target);
 	beat = target;
+	partial = false;
 }
 
 let seeking = Promise.resolve();
@@ -220,6 +230,7 @@ let seeking = Promise.resolve();
 /** Seeks run one at a time so overlapping controls never interleave two replays. */
 function fastForward(target: number) {
 	stopRun();
+	stopped = false;
 	let seek = seeking.then(async () => {
 		if (!store) return;
 		await replay(store, target);
@@ -237,6 +248,21 @@ export function resumeTour() {
 	}
 }
 
+/** Rewinds to `target` before playback; false when Pause, Stop, or the signal cancelled it. */
+async function prepare(target: number, signal?: AbortSignal) {
+	let token = {};
+	starting = token;
+	stopped = false;
+	publish();
+	await fastForward(target);
+	if (starting === token && !signal?.aborted) return true;
+	if (starting === token) {
+		starting = null;
+		publish();
+	}
+	return false;
+}
+
 async function play(all: boolean, signal?: AbortSignal) {
 	if (!store) return;
 	if (playing) {
@@ -248,12 +274,20 @@ async function play(all: boolean, signal?: AbortSignal) {
 		return;
 	}
 	failure = null;
-	if (beat >= script.length) await fastForward(0);
+	stopped = false;
+	if (beat >= script.length || partial) {
+		if (!(await prepare(beat >= script.length ? 0 : beat, signal))) return;
+	}
+	if (!store) {
+		starting = null;
+		return;
+	}
 	let planStore = store;
 	let controller = new AbortController();
 	run = controller;
 	started = true;
 	follow(signal);
+	starting = null;
 	playing = true;
 	auto = all;
 	publish();
@@ -281,16 +315,31 @@ async function play(all: boolean, signal?: AbortSignal) {
 	}
 }
 
-/** The player aborts its signal on Stop, Restart, replacement, and teardown, but not Pause. */
+/** The player aborts its signal on Stop, Exit, Restart, replacement, and teardown, but not Pause. */
 function follow(signal?: AbortSignal) {
 	let current = run;
 	signal?.addEventListener("abort", () => {
-		if (current && run === current) void interrupt();
+		if (current && run === current) halt();
 	}, { once: true });
+}
+
+/** Ends live playback where it is, keeping the page's data. */
+function halt() {
+	starting = null;
+	if (!playing) return;
+	stopRun();
+	partial = true;
+	store?.set({ cursor: null, activity: null });
+	publish();
 }
 
 /** Stops live playback; a beat interrupted partway rewinds to its start. */
 function interrupt() {
+	if (starting) {
+		starting = null;
+		publish();
+		return seeking;
+	}
 	return playing ? fastForward(beat) : Promise.resolve();
 }
 
@@ -298,6 +347,7 @@ function interrupt() {
 export function cue(id: string) {
 	let current = script[beat];
 	if (!store || playing || !current || (current.cue ?? current.id) !== id) return false;
+	if (playgroundDemoPlayer().getState().activeDemoId !== demoId) return false;
 	void play(false);
 	return true;
 }
@@ -322,14 +372,24 @@ let demoController: DemoController = {
 	pause: interrupt,
 	async restart({ signal, navigate }) {
 		failure = null;
-		await fastForward(0);
-		if (!signedInAsPresenter()) return enterAsPresenter(navigate);
-		await play(true, signal);
+		if (!signedInAsPresenter()) {
+			await fastForward(0);
+			return enterAsPresenter(navigate);
+		}
+		if (await prepare(0, signal)) await play(true, signal);
 	},
-	async stop() {
+	async reset() {
+		failure = null;
+		started = true;
+		await fastForward(0);
+	},
+	// Exit stops through here, so Stop keeps the current page and data.
+	stop() {
 		failure = null;
 		started = false;
-		await fastForward(0);
+		halt();
+		stopped = true;
+		publish();
 	},
 	async next() {
 		failure = null;
@@ -353,6 +413,7 @@ export function attachDirector(planStore: PlanStore, navigate: (path: string) =>
 	let unregister = registerPlaygroundDemoController(demoId, demoController);
 	return () => {
 		stopRun();
+		starting = null;
 		store = null;
 		navigator = null;
 		publish();
