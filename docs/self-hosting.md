@@ -75,7 +75,7 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=atomic` runs Atomic 0.9.43 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.44 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
@@ -166,8 +166,11 @@ Atomic caveats:
   sets `XDG_STATE_HOME=/var/lib/chopin`; mount a volume there to keep runs
   and those directories when the container is replaced.
 - Local workflow worker pools stay off unless the operator's Atomic settings
-  set `workflows.localWorkers`. With a pool, Atomic 0.9.43 keeps each worker's
-  standard error in `worker-logs/` beside the journal, so under
+  set `workflows.localWorkers`. Since Atomic 0.9.44 a pool runs as one
+  coordinator process per root run, started by the Chopin server process, with
+  the worker processes under it; it uses the same journal, and if the server
+  exits, the coordinator and its workers exit with it. Atomic keeps each
+  worker's standard error in `worker-logs/` beside the journal, so under
   `$XDG_STATE_HOME/chopin/atomic/worker-logs/<run id>/`, inside the directory
   Chopin creates for the journal with access for the server's user only. It
   deletes a log when its worker shuts down normally but keeps the logs of
@@ -176,6 +179,16 @@ Atomic caveats:
   its card in Chat says so. The settings `workflows.localWorkers.startupTimeoutMs`
   and `leaseMs` set how long a worker may take to start and how long an
   unresponsive one keeps its child.
+- Since Atomic 0.9.44 a workflow runs up to 1000 of its stages at once unless
+  it says otherwise (`defaultConcurrency`, 3 before), nests child workflows at
+  most three levels deep (`maxDepth`, 4 before), and a stage's `subagent` tool
+  runs up to 1000 children at once (`parallel.concurrency` and
+  `parallel.runningCapacity`, 3 and 4 before). Without a pool, all of them run
+  in the Chopin server process and share its memory and the provider rate
+  limit above. To throttle a server, lower `defaultConcurrency` in
+  `extensions/workflow/config.json` and the `parallel` limits in
+  `extensions/subagent/config.json` under the Atomic agent directory, which
+  Planner sessions read; Chopin sets none of these itself.
 - Atomic depends on `typebox` 1.3.27 while Chopin pins 1.3.7. Host tool schemas
   pass to Atomic as plain JSON Schema, so the two versions never meet.
 
