@@ -75,7 +75,7 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
-`HARNESS=atomic` runs Atomic 0.9.44 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.9.45 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
@@ -178,7 +178,14 @@ Atomic caveats:
   replayed on a new worker, up to three attempts; after that the run fails and
   its card in Chat says so. The settings `workflows.localWorkers.startupTimeoutMs`
   and `leaseMs` set how long a worker may take to start and how long an
-  unresponsive one keeps its child.
+  unresponsive one keeps its child; Chopin sets neither. A pool runs children
+  once one worker is ready and fails to start only when none is. Since Atomic
+  0.9.45 an unset `startupTimeoutMs` is no longer a flat 30 seconds: it is 30
+  seconds times the worker count plus the one-minute load average, divided by
+  the CPU cores, at least 30 seconds and at most 10 minutes, so a large pool on
+  a busy Chopin host waits longer. A run whose workers still miss it fails with
+  `Local worker startup timed out`, and its card in Chat says so; raise the
+  setting or use fewer workers.
 - Since Atomic 0.9.44 a workflow runs up to 1000 of its stages at once unless
   it says otherwise (`defaultConcurrency`, 3 before), nests child workflows at
   most three levels deep (`maxDepth`, 4 before), and a stage's `subagent` tool
