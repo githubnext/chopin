@@ -3,5 +3,5 @@ import chopin from "./chopin.feature";
 
 export default definePlayground({
 	data: { base: "stock" },
-	features: [chopin],
+	features: [chopin()],
 });
