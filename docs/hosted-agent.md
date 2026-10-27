@@ -141,9 +141,9 @@ Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
 owner. Other Planner requests, such as sending a comment to the Planner or a
 Build draft, claim nothing either: with a client attached they run on it, and
 without one they fail as any request without a usable owner does, not with
-`planner-not-attached`. Model-backed research is unavailable, because the remote
-Planner requires `BACKGROUND_JOBS=off`; a research request claims no ownership
-and is refused as not ready.
+`planner-not-attached`. A research request claims no ownership either: its
+workers run on the attached client as [isolated sessions](#remote-planner), and
+without one the request waits until a client attaches.
 
 An attachment lasts only as long as its owner. Signing that browser login out,
 its expiry, or a repository writer's reset of the document's Planner closes the
@@ -503,7 +503,12 @@ them with `tools` before calling any, may not reuse a host tool's name, and
 reports them as provider-executed `tool-call` and `tool-result` parts. An
 undeclared tool fails the turn as a tool boundary failure. Background job
 sessions start in `isolated` mode, where the client may offer no tools of its own
-and ask nothing. A turn ends with `turn-end`. An abort waits briefly for the
+and ask nothing. That includes every background worker: the research, research
+brief, document description, and History summary workers each open an isolated
+session on the client attached to their document, may call only the host tools
+their stage offers (the research evidence worker's `web_search`), and return
+their structured result as the turn's JSON. The job runner starts no worker for
+a document with no attached client; its job stays pending until one attaches. A turn ends with `turn-end`. An abort waits briefly for the
 client's `turn-end`, then ends the turn anyway. A turn that ends while one of
 its host tools still runs, such as an `ask` waiting on Decisions, stops that tool
 and withdraws the cards it opened. A connection that closes mid-turn ends the turn
@@ -540,7 +545,9 @@ GitHub App token, limited to the document's repository, which its own account
 can already read. The attached client decides what the Planner writes to the
 document during turns writers start, which is why attaching requires the push
 or administration access every Planner owner needs. Summary and research workers
-have no model in the server, so `HARNESS=remote` requires `BACKGROUND_JOBS=off`.
+have no model in the server either; they run as isolated sessions on the same
+client, so attaching also lends that client's model to the document's
+background work.
 
 ## Permission checks
 

@@ -230,6 +230,7 @@ class HarnessSummaryEngine {
 			else abortSignal.addEventListener("abort", stop, { once: true });
 		});
 		let worker = await openWorkerSession(summaryAgent, {
+			channelId: execution.job.channelId,
 			token: () => credential.token,
 			maxAiCredits: MAX_AI_CREDITS,
 			aborted,

@@ -109,6 +109,7 @@ test("the default brief engine opens a worker within Copilot's session credit co
 	try {
 		let definition = researchBriefDefinition({ config: { agent: true, model: "fixture" } });
 		let result = await definition.execute({
+			job: { channelId: "channel" },
 			input: material,
 			signal: new AbortController().signal,
 			deadline: new Date(Date.now() + 60_000),

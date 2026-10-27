@@ -118,7 +118,7 @@ describe("configuration", () => {
 		});
 	});
 
-	it("accepts a remote Planner on a public bind with no MODEL, and only without background jobs", () => {
+	it("accepts a remote Planner on a public bind with no MODEL, with or without background jobs", () => {
 		let remote = { HARNESS: "remote", SERVER_HOST: "0.0.0.0", BACKGROUND_JOBS: "off" };
 		let config = configured(remote);
 		expect(config).toMatchObject({ harness: "remote", host: "0.0.0.0", model: "" });
@@ -127,8 +127,11 @@ describe("configuration", () => {
 			"Planner: attached client over /api/v1/agent (model and client tools run on its machine)",
 		);
 		expect(configured({ ...remote, MODEL: "openai/gpt-6" }).model).toBe("openai/gpt-6");
-		expect(() => configured({ HARNESS: "remote" }))
-			.toThrow("HARNESS=remote requires BACKGROUND_JOBS=off");
+		expect(configured({ HARNESS: "remote" })).toMatchObject({
+			harness: "remote",
+			backgroundJobs: true,
+			webResearch: true,
+		});
 	});
 
 	it("keeps a detached remote Planner's ownership two minutes unless PLANNER_ATTACH_GRACE_MS says otherwise", () => {

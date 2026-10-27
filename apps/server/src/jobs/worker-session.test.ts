@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { registerCredential } from "../harness/harnesses";
+import { remotePlanner } from "../harness/remote/registry";
 import { openWorkerSession, type WorkerSandbox } from "./worker-session";
 
 function fixture() {
@@ -41,6 +42,7 @@ describe("openWorkerSession", () => {
 				return session;
 			},
 		}, {
+			channelId: "channel",
 			token: () => "token",
 			maxAiCredits: 4,
 			aborted: never(),
@@ -49,9 +51,11 @@ describe("openWorkerSession", () => {
 
 		expect(worker.session).toBe(session);
 		expect(released(sessionIds[0]!)).toBe(false);
+		expect(remotePlanner(sessionIds[0]!)).toEqual({ channelId: "channel", isolated: true });
 		await worker.close();
 		expect(events).toEqual(["session destroyed", "sandbox destroyed"]);
 		expect(released(sessionIds[0]!)).toBe(true);
+		expect(remotePlanner(sessionIds[0]!)).toBeUndefined();
 	});
 
 	it("keeps closing after the session fails to destroy", async () => {
@@ -62,6 +66,7 @@ describe("openWorkerSession", () => {
 				return { destroy: async () => Promise.reject(new Error("session stuck")) };
 			},
 		}, {
+			channelId: "channel",
 			token: () => "token",
 			maxAiCredits: 4,
 			aborted: never(),
@@ -81,6 +86,7 @@ describe("openWorkerSession", () => {
 				throw new Error("harness unavailable");
 			},
 		}, {
+			channelId: "channel",
 			token: () => "token",
 			maxAiCredits: 4,
 			aborted: never(),
@@ -100,7 +106,13 @@ describe("openWorkerSession", () => {
 				sessionIds.push(options.sessionId);
 				return late.promise;
 			},
-		}, { token: () => "token", maxAiCredits: 4, aborted, openSandbox: async () => sandbox });
+		}, {
+			channelId: "channel",
+			token: () => "token",
+			maxAiCredits: 4,
+			aborted,
+			openSandbox: async () => sandbox,
+		});
 		await Bun.sleep(0);
 		abort(new Error("deadline"));
 
@@ -122,7 +134,13 @@ describe("openWorkerSession", () => {
 				created = true;
 				throw new Error("not reached");
 			},
-		}, { token: () => "token", maxAiCredits: 4, aborted, openSandbox: () => late.promise });
+		}, {
+			channelId: "channel",
+			token: () => "token",
+			maxAiCredits: 4,
+			aborted,
+			openSandbox: () => late.promise,
+		});
 		abort(new Error("cancelled"));
 
 		await expect(opening).rejects.toThrow("cancelled");
@@ -139,7 +157,7 @@ describe("openWorkerSession", () => {
 				received = options.sandboxSession;
 				return { destroy: async () => {} };
 			},
-		}, { token: () => "token", maxAiCredits: 4, aborted: never() });
+		}, { channelId: "channel", token: () => "token", maxAiCredits: 4, aborted: never() });
 
 		expect(received?.defaultWorkingDirectory).toBeString();
 		await worker.close();
