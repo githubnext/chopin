@@ -3,7 +3,7 @@ import { parse } from "@chopin/dialect/parse";
 import { serialize } from "@chopin/dialect/serialize";
 
 import { historySummaryAgent } from "../harness/agents";
-import { openWorkerSession } from "./worker-session";
+import { openWorkerSession, workerModel } from "./worker-session";
 import type { Config } from "../config";
 import type { JsonValue, StoredDocumentVersion, SummarizeDocumentVersion } from "../storage/model";
 import type { JobDefinition, JobExecution } from "./registry";
@@ -228,7 +228,7 @@ class HarnessVersionSummaryEngine {
 				aborted,
 			]);
 			let output = result.output as { summaries: { id: string; summary: string }[] };
-			return { summaries: output.summaries, model: this.#config.historyModel };
+			return { summaries: output.summaries, model: workerModel(this.#config.historyModel) };
 		} finally {
 			await worker.close();
 		}
@@ -274,7 +274,11 @@ export function versionSummaryDefinition(options: VersionSummaryOptions): JobDef
 				wanted.set(version.id, version.sourceHash);
 			}
 			if (changes.length === 0) {
-				return { generatorVersion: 1, model: options.config.historyModel, summaries: [] };
+				return {
+					generatorVersion: 1,
+					model: workerModel(options.config.historyModel),
+					summaries: [],
+				};
 			}
 			let result = await engine(execution, changes);
 			let summaries: VersionSummaryArtifact["summaries"] = [];
