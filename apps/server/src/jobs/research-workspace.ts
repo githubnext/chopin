@@ -971,6 +971,7 @@ async function stage(
 		diagnose("opening-session");
 		if (publicWeb) await execution.progress("worker-session", "started");
 		worker = await openWorkerSession(agent, {
+			channelId: execution.job.channelId,
 			token: () => credential.token,
 			maxAiCredits: STAGE_AI_CREDITS,
 			aborted,

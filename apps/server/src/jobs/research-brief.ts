@@ -92,6 +92,7 @@ async function generate(
 	try {
 		if (!await credential.authorize()) throw new JobExecutionError("owner-unavailable");
 		let opened = await openWorkerSession(researchBriefAgent, {
+			channelId: execution.job.channelId,
 			token: () => credential.token,
 			maxAiCredits: MAX_AI_CREDITS,
 			aborted,

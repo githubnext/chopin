@@ -2661,6 +2661,8 @@ jobRunner = new JobRunner({
 		return writerLease.held;
 	},
 	resolveActivePlanner: async job => {
+		// A remote document's workers run in its attached Planner client; without one, work waits.
+		if (plannerAttachments && !plannerAttachments.attached(job.channelId)) return undefined;
 		let binding = await ownerBindings!.resolve(job.channelId);
 		if (!binding) return undefined;
 		return {

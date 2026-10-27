@@ -16,7 +16,8 @@ import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Edit from "../../plan/edit";
 import * as Room from "../../plan/room";
-import { createPlannerAgent } from "../agents";
+import { createPlannerAgent, createResearchAgent } from "../agents";
+import { openWorkerSession } from "../../jobs/worker-session";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
 import { untilUnpaused } from "../atomic/full";
@@ -43,7 +44,7 @@ import { createRemoteAdapter } from "./adapter";
 import { admitAgent } from "./endpoint";
 import { remotePlanner } from "./registry";
 
-import type { AgentClient, AgentHandlers } from "@chopin/agent-link/client";
+import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { ActiveOwnerBinding } from "../../agent/active-owner";
 import type { RemotePlanner } from "./registry";
 
@@ -1772,5 +1773,75 @@ describe("Agent connection questions", () => {
 	it("stops a host ask and withdraws its Decision when its turn ends before the tool does", async () => {
 		expect(await askingTurn("turn-end")).toEqual(["Error: The client gave up."]);
 		await askingTurn("destroy");
+	});
+});
+
+describe("Agent connection background workers", () => {
+	it("runs a document's research worker in its attached client as an isolated session", async () => {
+		let starts: string[] = [];
+		let turns: TurnContext["message"][] = [];
+		let searched: unknown[] = [];
+		let { channel } = await setup({
+			start: message => void starts.push(message.mode),
+			async turn(context) {
+				turns.push(context.message);
+				context.emit({ type: "stream-start", modelId: "scripted" });
+				let search = await context.callHostTool("web_search", { query: "axum rate limiting" });
+				let evidence = {
+					findings: [`Searched: ${String(search.output)}`],
+					sources: [{ title: "tower-governor", url: "https://docs.rs/tower_governor" }],
+				};
+				context.emit({ type: "text-start", id: "result" });
+				context.emit({ type: "text-delta", id: "result", delta: JSON.stringify(evidence) });
+				context.emit({ type: "text-end", id: "result" });
+				finishTurn(context);
+			},
+		});
+		let agent = createResearchAgent(createRemoteAdapter());
+		let worker = await openWorkerSession(agent, {
+			channelId: channel.id,
+			token: () => MEMBER_TOKEN,
+			maxAiCredits: 1,
+			aborted: new Promise<never>(() => {}),
+			openSandbox: async () => sandboxSession,
+		});
+		cleanups.push(() => worker.close());
+
+		let result = await agent.generate({
+			session: worker.session,
+			prompt: JSON.stringify({ material: { query: "axum rate limiting" } }),
+			options: {
+				model: "",
+				instructions: "Research only public web evidence.",
+				webSearch: tool({
+					inputSchema: z.object({ query: z.string() }),
+					execute: async input => {
+						searched.push(input);
+						return "results";
+					},
+				}),
+			},
+		});
+
+		expect(starts).toEqual(["isolated"]);
+		expect(turns.map(turn => turn.tools.map(spec => spec.name))).toEqual([["web_search"]]);
+		expect(turns[0]!.responseFormat?.type).toBe("json");
+		expect(searched).toEqual([{ query: "axum rate limiting" }]);
+		expect(result.output).toEqual({
+			findings: ["Searched: results"],
+			sources: [{ title: "tower-governor", url: "https://docs.rs/tower_governor" }],
+		});
+	});
+
+	it("refuses a worker for a document with no attached Planner", async () => {
+		let { channel } = await setup();
+		let agent = createResearchAgent(createRemoteAdapter());
+		await expect(openWorkerSession(agent, {
+			channelId: channel.id,
+			token: () => MEMBER_TOKEN,
+			maxAiCredits: 1,
+			aborted: new Promise<never>(() => {}),
+			openSandbox: async () => sandboxSession,
+		})).rejects.toThrow("No Planner is attached to this document.");
 	});
 });

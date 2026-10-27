@@ -289,11 +289,6 @@ export function load(): Config {
 		throw new Error("AGENT_CONNECTION_MAX_SILENCE_MS must be at least AGENT_CONNECTION_TIMEOUT_MS");
 	}
 	let selection = harnessSelection();
-	if (selection.harness === "remote" && backgroundJobs) {
-		throw new Error(
-			"HARNESS=remote requires BACKGROUND_JOBS=off: summary and research workers have no model on the server",
-		);
-	}
 	let serverPort = port();
 	return {
 		...selection,
