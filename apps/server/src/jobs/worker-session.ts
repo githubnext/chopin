@@ -12,6 +12,14 @@ export type WorkerAgent<Session extends Destroyable> = {
 
 export type WorkerSession<Session> = { session: Session; close(): Promise<void> };
 
+/**
+ * The model a worker's artifact records. Under `HARNESS=remote` the operator may configure none, and the
+ * attached client then chooses its own.
+ */
+export function workerModel(configured: string): string {
+	return configured || "attached-client";
+}
+
 async function openAbortable<T extends Destroyable>(
 	opening: Promise<T>,
 	aborted: Promise<never>,

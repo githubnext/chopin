@@ -5,7 +5,7 @@ import { assertResearchContext, researchSources } from "../conversation-plan/res
 import { id, knownKeys, record, text, version } from "../conversation-plan/validation-fields";
 import type { JsonValue } from "../storage/model";
 import { type JobDefinition, type JobExecution, JobExecutionError } from "./registry";
-import { openWorkerSession } from "./worker-session";
+import { openWorkerSession, workerModel } from "./worker-session";
 
 // Copilot requires a session ceiling of at least 30, even for a single short turn.
 const MAX_AI_CREDITS = 30;
@@ -123,7 +123,10 @@ async function generate(
 		if (!await credential.authorize() || signal.aborted) {
 			throw new JobExecutionError("owner-unavailable");
 		}
-		return { ...(result.output as { brief: string; sourceIds: string[] }), model: config.model };
+		return {
+			...(result.output as { brief: string; sourceIds: string[] }),
+			model: workerModel(config.model),
+		};
 	} finally {
 		signal.removeEventListener("abort", rejectAbort);
 		await close?.();

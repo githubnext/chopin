@@ -784,3 +784,19 @@ describe("research workspace execution", () => {
 			.rejects.toMatchObject({ progressReason: "source-validation-failed" });
 	});
 });
+
+it("research artifacts record the attached client when the operator configured no model", async () => {
+	let definition = researchEvidenceDefinition({
+		config: { agent: true, model: "" },
+		engine: async () => ({ findings: [], sources: [] }),
+	});
+	let input = { workspaceId: "workspace", turnId: "turn", query: "Rate limiting a login endpoint" };
+	let artifact = await definition.execute({
+		job: { channelId: "channel" },
+		input,
+		progress: async () => {},
+	} as unknown as JobExecution<ResearchEvidenceInput>);
+
+	expect(artifact.model).toBe("attached-client");
+	expect(parseResearchEvidenceArtifact(artifact as unknown as JsonValue)).toEqual(artifact);
+});
