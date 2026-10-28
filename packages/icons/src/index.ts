@@ -61,6 +61,7 @@ export {
 	StarIcon,
 	TableIcon,
 	TabsIcon,
+	UsersIcon,
 	WrenchIcon,
 } from "./line";
 export { ListIcon } from "./list";

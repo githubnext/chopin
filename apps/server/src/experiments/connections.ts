@@ -27,6 +27,11 @@ export type Connection = {
 	 * Stored with the machine, so a reconnect keeps it.
 	 */
 	autoRun?: boolean;
+	/**
+	 * Its owner shares the machine with teammates: Default machine may run the Planner of a
+	 * document whose creator has no machine that can. Stored with the machine.
+	 */
+	shared?: boolean;
 	/** The chopin release that opened it, when it said; known only while it is connected. */
 	version?: string;
 	/**
@@ -53,6 +58,7 @@ export type Approval = {
 	owner: string;
 	login: string;
 	autoRun: boolean;
+	shared?: boolean;
 	repositoryId?: string;
 };
 type Pending = {
@@ -260,6 +266,7 @@ export class Connections {
 			owner: string;
 			login: string;
 			autoRun: boolean;
+			shared?: boolean;
 			version?: string;
 			protocol?: number;
 		},
@@ -289,6 +296,7 @@ export class Connections {
 			anyRepository,
 			expiresAt: this.now() + CONNECTION_MS,
 			autoRun: machine.autoRun,
+			...(machine.shared ? { shared: true } : {}),
 			...(machine.version ? { version: machine.version } : {}),
 			...(machine.protocol !== undefined ? { protocol: machine.protocol } : {}),
 			about,
@@ -299,6 +307,24 @@ export class Connections {
 		this.#about.set(machine.id, about);
 		this.#tokens.set(fingerprint(token), { connectionId: connection.id });
 		return { connection, token };
+	}
+	/** Its owner shared a machine with teammates or stopped: its live connections follow at once. */
+	share(machineId: string, shared: boolean) {
+		for (let connection of this.machine(machineId)) {
+			if (shared) connection.shared = true;
+			else delete connection.shared;
+		}
+	}
+	/**
+	 * Live connections of machines their owners share with teammates, other than `owner`'s, that
+	 * serve a repository: each owner's favorite first, then the most recently heard from.
+	 */
+	shared(repositoryId: string, owner: string) {
+		return this.list(repositoryId).filter(value => value.shared && value.owner !== owner)
+			.sort((a, b) =>
+				Number(this.#favorites.get(b.owner) === b.machineId)
+				- Number(this.#favorites.get(a.owner) === a.machineId)
+			);
 	}
 	/** Live connections of one paired machine. */
 	machine(machineId: string) {

@@ -238,7 +238,9 @@ choice is yours alone and holds for that document until you change it:
 - Where Chopin runs Planners on machines, the document's Planner runs there
   too, and on **Default machine** it runs on the creator's; see
   [Run a Planner on this machine](#run-a-planner-on-this-machine).
-- You can choose only your own machines.
+- You can choose only your own machines. A teammate's machine can run the
+  document's Planner only on **Default machine**; see
+  [Share a machine with teammates](#share-a-machine-with-teammates).
 - If the machine you chose is offline, **Build plan** is greyed out, as offline
   machines are in the list, and starts nothing. It changes within a few seconds
   of the machine going offline or coming back, as does the Machines count in
@@ -472,6 +474,29 @@ another comes online; it moves when the machine disconnects or the creator
 changes the document's machine or their default. Chat says
 **Planner: starting on studio…** (the machine's name) until it attaches, and
 an `@chopin` message sent meanwhile waits for it.
+
+#### Share a machine with teammates
+
+A teammate who has no machine of their own can still get a Planner on a
+document they create, on a machine someone shared with teammates. Sharing is
+off unless its owner turns it on: with **Plan teammates' documents** as they
+add the machine (**Let teammates' documents plan on this machine** on the
+pairing card), or later with the machine's **Teammates** switch on the
+**Machines** page (**Share with teammates** in its view on a phone).
+
+- Only a document left on **Default machine** whose creator has no connected
+  machine that can run Planners uses a shared one. A document whose creator
+  chose a machine never does, and nobody's builds, runs or investigations go
+  to a teammate's machine.
+- The machine runs the Planner as its owner, with the owner's GitHub
+  authorization, so only in repositories its owner can push to. Chopin checks
+  that with the machine's own token before it asks, and again every 10 minutes.
+- With several shared machines, each owner's default goes first.
+- Once the creator connects a machine of their own, the Planner moves there,
+  unless it is already attached on the shared machine; then it stays until it
+  stops.
+- Turning sharing off stops the Planners the machine runs for teammates, and
+  prints why: `<owner> stopped sharing <machine> with teammates`.
 
 Choosing another machine stops it and prints
 `Stopped the Planner for <document>: the document chose another machine.` So do

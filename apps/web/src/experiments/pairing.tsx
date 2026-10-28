@@ -256,7 +256,10 @@ export default function PairingPage() {
 	// Off by default: without it, work reaches this machine only when its owner presses Build or
 	// Run (apps/server/src/experiments/routes.ts runs pressed work on the presser's own connection).
 	let [autoRun, setAutoRun] = useState(false);
+	// Off by default too: shared, a teammate's document with no machine may plan here as its owner.
+	let [shared, setShared] = useState(false);
 	let helpId = useId();
+	let shareHelpId = useId();
 	useEffect(() => {
 		let abort = new AbortController();
 		// Without a pairing, /machines lists the person's machines.
@@ -281,7 +284,7 @@ export default function PairingPage() {
 		try {
 			let result = await experimentRequest<{ url?: string; authorize?: string }>(
 				`/api/connector/pairings/${encodeURIComponent(id!)}/approve`,
-				{ autoRun },
+				{ autoRun, shared },
 			);
 			// GitHub authorizes the machine on its own, then returns to this page.
 			if (result.authorize) {
@@ -387,7 +390,25 @@ export default function PairingPage() {
 									<p className="machines-detail machines-auto-help" id={helpId}>
 										Off: work runs here only when you press Build or Run. On: Chopin can also
 										rebuild what you built when its document changes, and prototype passages you
-										write. Nobody else's work runs here.
+										write.
+									</p>
+								</div>
+								<div className="machines-auto">
+									<label className="machines-auto-label">
+										<input
+											aria-describedby={shareHelpId}
+											checked={shared}
+											className="choice-control size-4 shrink-0"
+											disabled={busy}
+											onChange={event => setShared(event.target.checked)}
+											type="checkbox"
+										/>
+										<span>Let teammates' documents plan on this machine</span>
+									</label>
+									<p className="machines-detail machines-auto-help" id={shareHelpId}>
+										Off: nobody else's work runs here. On: when a teammate's document has no machine
+										of its own, its Planner runs here as you, in repositories you can push to.
+										Builds stay yours. Change it any time on Machines.
 									</p>
 								</div>
 								<div className="machines-pairing-actions">

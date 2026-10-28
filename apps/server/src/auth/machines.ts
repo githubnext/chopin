@@ -50,6 +50,8 @@ export type PairMachine = {
 	label: string;
 	repositories: MachineRepository[];
 	autoRun: boolean;
+	/** Whether teammates' documents may run their Planner here on Default machine. */
+	shared?: boolean;
 	/** The machine's own GitHub authorization; GitHub refresh tokens are single-use, never shared. */
 	grant?: GitHubTokenGrant;
 };
@@ -96,6 +98,7 @@ export class Machines {
 			label: input.label,
 			repositories: input.repositories,
 			autoRun: input.autoRun,
+			...(input.shared ? { shared: true } : {}),
 			tokenHash: digest(token),
 			createdAt: now,
 			lastSeenAt: now,
@@ -144,6 +147,10 @@ export class Machines {
 	/** Rename the owner's live machine; false for another person's or a revoked one. */
 	rename(id: string, userId: string, label: string): Promise<boolean> {
 		return this.#storage.machines.rename(id, userId, label);
+	}
+
+	share(id: string, userId: string, shared: boolean): Promise<boolean> {
+		return this.#storage.machines.share(id, userId, shared);
 	}
 
 	async revoke(id: string, userId: string): Promise<boolean> {

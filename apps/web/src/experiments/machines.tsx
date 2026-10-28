@@ -13,7 +13,7 @@ import {
 import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
-import { setFavorite } from "../machine-choice";
+import { setFavorite, setShared } from "../machine-choice";
 import { machines as liveMachines, useLiveMachines } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem, MenuSeparator } from "../menu-item";
@@ -57,7 +57,20 @@ export function useMachines() {
 			void liveMachines.load();
 		}
 	};
-	return { machines, error, recommended, forget, retry, favor };
+	/** Share a machine with teammates or stop: switched at once, then as the server says. */
+	let share = async (id: string, shared: boolean) => {
+		let mark = (value: boolean) =>
+			liveMachines.update(list =>
+				list.map(item => item.id === id ? { ...item, shared: value } : item)
+			);
+		mark(shared);
+		try {
+			mark(await setShared(id, shared));
+		} catch {
+			void liveMachines.load();
+		}
+	};
+	return { machines, error, recommended, forget, retry, favor, share };
 }
 
 /**

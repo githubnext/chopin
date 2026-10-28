@@ -177,6 +177,18 @@ export async function setFavorite(machine: string, favorite: boolean): Promise<s
 	return value.favorite ?? null;
 }
 
+/** Share one of the signed-in person's machines with teammates, or stop; resolves with the result. */
+export async function setShared(machine: string, shared: boolean): Promise<boolean> {
+	let response = await fetch(`/api/connector/machines/${encodeURIComponent(machine)}/shared`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ shared }),
+	});
+	let value = await response.json();
+	if (!response.ok) throw new Error(value.message ?? value.error ?? "Chopin couldn’t save that");
+	return value.shared;
+}
+
 /**
  * The person's machine for a document, read on open, on focus and every 15 seconds while
  * visible, and again as soon as the page's live machine list, asked every few seconds while the

@@ -25,6 +25,7 @@ const base: Machine = {
 	service: false,
 	planner: false,
 	favorite: false,
+	shared: false,
 };
 
 test("a machine's state and its words: connected, last seen, or needing to reconnect", () => {

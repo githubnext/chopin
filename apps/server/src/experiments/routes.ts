@@ -165,6 +165,12 @@ export const MAX_INVESTIGATION_IMAGES = 3;
  */
 export const PLANNER_IDLE_MS = 30 * 60_000;
 /**
+ * How long a check that a shared machine's owner can push to a document's repository holds: a
+ * pass for this long, a refusal for a minute, before Default machine asks GitHub again.
+ */
+export const SHARED_REACH_MS = 10 * 60_000;
+const SHARED_RETRY_MS = 60_000;
+/**
  * The connector protocols this server speaks; a connector outside them must update first.
  * Protocol 2 pairs a machine once and connects checkouts with its stored token. Protocol 4 polls
  * `wait_for_work` with the Planners it runs, and is answered with the ones its owner chose it for
@@ -427,10 +433,39 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	let defaults = new Map<string, string>();
 	/**
+	 * Whether each shared machine's owner can push to a repository, by machine and repository id,
+	 * as GitHub last said with the machine's own token; a machine shared with teammates runs only
+	 * the Planners of documents its owner could work on themselves.
+	 */
+	let reach = new Map<string, { ok: boolean; until: number }>();
+	let reachKey = (machineId: string, repositoryId: string) => `${machineId}\n${repositoryId}`;
+	/** The creator's own machine that can run the document's Planner now: the one builds would use. */
+	function ownPlannerMachine(channel: ChannelRecord) {
+		return connections.candidates(channel.repositoryId, channel.createdBy, channel.id, null)
+			.find(runsPlanners)?.machineId;
+	}
+	/** A teammate's shared machine that can run the document's Planner now, and whose owner can push. */
+	function sharedPlannerMachine(channel: ChannelRecord) {
+		return connections.shared(channel.repositoryId, channel.createdBy).find(value =>
+			runsPlanners(value) && reach.get(reachKey(value.machineId, channel.repositoryId))?.ok
+		)?.machineId;
+	}
+	/** Whether a machine can run a document's Planner: its creator's own, or one shared with them. */
+	function readyFor(machineId: string, channel: ChannelRecord) {
+		return connections.machine(machineId).some(value =>
+			serves(value, channel.repositoryId) && runsPlanners(value)
+			&& (value.owner === channel.createdBy
+				|| !!value.shared && !!reach.get(reachKey(machineId, channel.repositoryId))?.ok)
+		);
+	}
+	/**
 	 * The machine Default machine runs a document's Planner on, while someone uses it and its
-	 * creator chose no machine for it: the creator's machine it already runs on while that one can,
-	 * else the machine their builds would go to (their favorite, then the one last used for the
-	 * document, then any of theirs), counting only machines that can run Planners.
+	 * creator chose no machine for it: the machine it already runs on while that one can, else the
+	 * machine the creator's builds would go to (their favorite, then the one last used for the
+	 * document, then any of theirs), counting only machines that can run Planners. A creator with
+	 * none gets a teammate's machine shared with teammates, its owner's favorite first. Once the
+	 * creator has a machine of their own, a Planner on a teammate's machine moves to it unless it
+	 * is attached there.
 	 */
 	function defaultMachine(channel: ChannelRecord): string | undefined {
 		if (
@@ -440,13 +475,48 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			defaults.delete(channel.id);
 			return undefined;
 		}
+		let own = ownPlannerMachine(channel);
 		let kept = defaults.get(channel.id);
-		if (kept && plannerReady(kept, channel.repositoryId)) return kept;
-		let next = connections.candidates(channel.repositoryId, channel.createdBy, channel.id, null)
-			.find(runsPlanners)?.machineId;
+		if (kept && readyFor(kept, channel)) {
+			let teammates = connections.machine(kept)[0]?.owner !== channel.createdBy;
+			if (!teammates || !own || options.attachments?.()?.holding(channel.id)) return kept;
+		}
+		let next = own ?? sharedPlannerMachine(channel);
 		if (next) defaults.set(channel.id, next);
 		else defaults.delete(channel.id);
 		return next;
+	}
+	/**
+	 * Ask GitHub, with each shared machine's own token, whether its owner can push to a document's
+	 * repository, for a document whose creator has no machine of their own that can run its Planner.
+	 * Whether any answer changed.
+	 */
+	async function reachShared(channel: ChannelRecord): Promise<boolean> {
+		if (!options.planners || !auth.machines.durable || channel.parentChannelId) return false;
+		if (ownPlannerMachine(channel)) return false;
+		let changed = false;
+		let asked = new Set<string>();
+		for (let connection of connections.shared(channel.repositoryId, channel.createdBy)) {
+			if (!runsPlanners(connection) || asked.has(connection.machineId)) continue;
+			asked.add(connection.machineId);
+			let key = reachKey(connection.machineId, channel.repositoryId);
+			let known = reach.get(key);
+			let now = auth.clock().getTime();
+			if (known && known.until > now) continue;
+			let ok = false;
+			try {
+				let machine = await auth.machines.current(connection.machineId);
+				await documentAccess(await machineCaller(machine), channel.id, true);
+				ok = true;
+			} catch (error) {
+				if (!(error instanceof ExperimentError || error instanceof MachineError)) {
+					console.error("chopin: could not check a shared machine's repository access -", error);
+				}
+			}
+			reach.set(key, { ok, until: now + (ok ? SHARED_REACH_MS : SHARED_RETRY_MS) });
+			if (ok !== known?.ok) changed = true;
+		}
+		return changed;
 	}
 	/** The machine that runs a document's Planner for `userId`: the one they chose, else Default's. */
 	function plannerMachine(channel: ChannelRecord, userId: string) {
@@ -455,8 +525,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * The documents whose Planner a connection should run, in the repositories it serves: those its
-	 * owner chose its machine for, and those of theirs Default machine gives it, except one whose
-	 * Planner another account holds, which is never taken over.
+	 * owner chose its machine for, and those Default machine gives it (its owner's, or a teammate's
+	 * when its owner shares it), except one whose Planner another account holds, which is never
+	 * taken over.
 	 */
 	async function plannerDocuments(connection: Connection): Promise<PlannerAssignment[]> {
 		if (!runsPlanners(connection)) return [];
@@ -479,8 +550,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		for (let documentId of inUse.keys()) {
 			let channel = await auth.storage.channels.get(documentId);
 			if (
-				!channel || channel.createdBy !== connection.owner
-				|| !serves(connection, channel.repositoryId)
+				!channel || !serves(connection, channel.repositoryId)
 				|| defaultMachine(channel) !== connection.machineId
 			) continue;
 			// Nor one its owner's Planner is attached to elsewhere, until that one lets go.
@@ -519,8 +589,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!channel || channel.archivedAt) return;
 		let fresh = !inUse.has(channel.id);
 		inUse.set(channel.id, auth.clock().getTime());
-		if (!fresh) return;
 		await readChoices().catch(() => {});
+		// A creator with no machine of their own may get a teammate's shared one, checked anew here.
+		let reached = await reachShared(channel);
+		if (!fresh && !reached) return;
 		connections.wake(channel.repositoryId);
 		options.plannerStatus?.(channel.id);
 	}
@@ -623,14 +695,23 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!told.size) dispatched.delete(machineId);
 	}
 	/**
-	 * One of `owner`'s machines connected or disconnected: the documents it may run the Planner of,
-	 * chosen for it or on Default machine, are asked again and say who starts their Planner now.
+	 * One of `owner`'s machines connected, disconnected, or was shared or no longer: the documents
+	 * it may run the Planner of, chosen for it or on Default machine (any in use when it is
+	 * `shared`), are asked again and say who starts their Planner now.
 	 */
-	async function plannersMoved(machineId: string, owner: string) {
+	async function plannersMoved(machineId: string, owner: string, shared = false) {
 		let documents = new Set(
 			connections.choosing(machineId).map(value => value.documentId),
 		);
 		for (let channel of await created(owner)) documents.add(channel.id);
+		if (shared) {
+			for (let documentId of inUse.keys()) {
+				let channel = await auth.storage.channels.get(documentId);
+				if (!channel || channel.createdBy === owner) continue;
+				await reachShared(channel);
+				documents.add(channel.id);
+			}
+		}
 		for (let documentId of documents) {
 			let channel = await auth.storage.channels.get(documentId);
 			if (channel) connections.wake(channel.repositoryId);
@@ -649,8 +730,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			label => `${label} disconnected from Chopin, so it stopped running this document's Planner.`,
 			(_documentId, repositoryId) =>
 				!serves(connection, repositoryId) || others.some(value => serves(value, repositoryId)),
-		).then(() => plannersMoved(connection.machineId, connection.owner)).catch(error =>
-			console.error("chopin: could not stop a disconnected machine's Planner -", error)
+		).then(() => plannersMoved(connection.machineId, connection.owner, !!connection.shared)).catch(
+			error => console.error("chopin: could not stop a disconnected machine's Planner -", error),
 		);
 	};
 	async function mutationAllowed(id: string) {
@@ -751,15 +832,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * key also carries the person's choice of automatic work, as the pairing card's checkbox does.
 	 */
 	route("POST", "/api/connector/pairing-keys", async request => {
-		let { autoRun } = z.object({ autoRun: z.boolean().optional() }).strict().parse(
-			await body(request),
-		);
+		let { autoRun, shared } = z.object({
+			autoRun: z.boolean().optional(),
+			shared: z.boolean().optional(),
+		}).strict().parse(await body(request));
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		if (auth.machines.durable && !keys.authorized(session.user.id, session.session.id)) {
 			return json({ authorize: "/auth/github/connector?key" });
 		}
-		return json(keys.mint(session.user.id, session.session.id, autoRun));
+		return json(keys.mint(session.user.id, session.session.id, autoRun, shared));
 	});
 	/**
 	 * Pair a machine with a key: approved at once as the key's owner, with automatic work as they
@@ -799,6 +881,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				}]
 				: [],
 			autoRun: spent.autoRun,
+			...(spent.shared ? { shared: true } : {}),
 			...(spent.grant && auth.machines.durable ? { grant: spent.grant } : {}),
 		});
 		return { token };
@@ -850,6 +933,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					}]
 					: [],
 				autoRun: approval.autoRun,
+				...(approval.shared ? { shared: true } : {}),
 				...(grant ? { grant } : {}),
 			});
 			connections.paired(id, machine.id, token);
@@ -858,10 +942,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	auth.pairings.complete = complete;
 	route("POST", "/api/connector/pairings/:id/approve", async (request, params) => {
-		// Automatic work is opt-in, once, as the machine is paired; it is off unless asked for.
-		let { autoRun } = z.object({ autoRun: z.boolean().optional() }).strict().parse(
-			await body(request),
-		);
+		// Automatic work and sharing are opt-in, as the machine is paired; both off unless asked for.
+		let { autoRun, shared } = z.object({
+			autoRun: z.boolean().optional(),
+			shared: z.boolean().optional(),
+		}).strict().parse(await body(request));
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let pending = connections.pending(params.id);
@@ -872,6 +957,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			owner: session.user.id,
 			login: session.user.login,
 			autoRun: autoRun ?? false,
+			...(shared ? { shared: true } : {}),
 			...(repository ? { repositoryId: repository.id } : {}),
 		});
 		// GitHub refresh tokens are single-use, so the machine needs its own authorization.
@@ -926,6 +1012,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				owner: machine.userId,
 				login: user?.login ?? machine.userId,
 				autoRun: machine.autoRun,
+				...(machine.shared ? { shared: true } : {}),
 				version: releaseVersion(request),
 				protocol,
 			},
@@ -953,7 +1040,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		options.connected?.(anyRepository ? undefined : checkouts[0]!.repositoryId, machine.userId);
 		// A machine that can run Planners may be the one to start a document's now.
 		if (runsPlanners(connection)) {
-			void plannersMoved(machine.id, machine.userId).catch(error =>
+			void plannersMoved(machine.id, machine.userId, !!machine.shared).catch(error =>
 				console.error("chopin: could not ask a connected machine for Planners -", error)
 			);
 		}
@@ -1065,6 +1152,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					]),
 				],
 				autoRun: machine.autoRun,
+				shared: !!machine.shared,
 				createdAt: machine.createdAt.getTime(),
 				lastSeenAt: machine.lastSeenAt.getTime(),
 				connected: connections.machine(machine.id).length > 0,
@@ -1115,6 +1203,36 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		}
 		return json({ favorite: connections.favorite(userId) ?? null });
+	});
+	/**
+	 * The owner shares a machine with teammates, or stops. Shared, it may run the Planner of a
+	 * document on Default machine whose creator has no machine of their own that can, in a
+	 * repository its owner can push to. Stopping ends the Planners it runs for teammates.
+	 */
+	route("POST", "/api/connector/machines/:id/shared", async (request, params) => {
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		let { shared } = z.object({ shared: z.boolean() }).strict().parse(await body(request));
+		let userId = session.user.id;
+		await readChoices();
+		if (!await auth.machines.share(params.id, userId, shared)) fail("not-found");
+		connections.share(params.id, shared);
+		if (!shared) {
+			for (let key of reach.keys()) if (key.startsWith(`${params.id}\n`)) reach.delete(key);
+			for (let [documentId, machineId] of defaults) {
+				if (machineId !== params.id) continue;
+				let channel = await auth.storage.channels.get(documentId);
+				if (!channel || channel.createdBy === userId) continue;
+				await redefault(
+					channel,
+					label =>
+						`${session.user.login} stopped sharing ${label} with teammates, so it stopped running `
+						+ "this document's Planner.",
+				);
+			}
+		}
+		await plannersMoved(params.id, userId, shared);
+		return json({ shared });
 	});
 	route("POST", "/api/connector/machines/:id/revoke", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);
@@ -1204,7 +1322,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		let machine = plannerMachine(channel, userId);
 		if (machine && plannerReady(machine, channel.repositoryId)) {
-			return { state: "starting" as const, login: null, machine };
+			// A teammate's shared machine says whose it is; the caller's own is named by its id.
+			let teammate = connections.machine(machine).find(value => value.owner !== userId);
+			return { state: "starting" as const, login: teammate?.login ?? null, machine };
 		}
 		return { state: "none" as const, login: null, machine: null };
 	}

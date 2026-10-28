@@ -107,13 +107,14 @@ async function dispatchServer() {
 		login: string,
 		userId: string,
 		label: string,
-		connector: { protocol?: number; plannerCommand?: boolean } = {},
+		connector: { protocol?: number; plannerCommand?: boolean; shared?: boolean } = {},
 	) {
 		let { machine, token } = await machines.pair({
 			userId,
 			label,
 			repositories: [],
 			autoRun: false,
+			...(connector.shared ? { shared: true } : {}),
 			grant: {
 				accessToken: machineToken(login),
 				accessExpiresIn: 28_800,
@@ -226,6 +227,14 @@ async function dispatchServer() {
 		});
 		expect(response.status).toBe(200);
 	};
+	/** Share a machine with teammates as its owner, or stop. */
+	let share = async (login: string, machine: string, shared = true) => {
+		let response = await send(`/api/connector/machines/${machine}/shared`, {
+			login,
+			body: { shared },
+		});
+		return response.status;
+	};
 	/** Someone opens the document in Chopin; closing it starts its idle time. */
 	let visit = async (id = channel.id) => {
 		open.add(id);
@@ -245,6 +254,7 @@ async function dispatchServer() {
 		choose,
 		choice,
 		favor,
+		share,
 		visit,
 		url,
 	};
@@ -732,6 +742,123 @@ describe("a document on Default machine", () => {
 		await runs([], []);
 		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
 		expect(await idle(2_000)).toBe(false);
+	});
+});
+
+describe("a teammate's machine shared with teammates", () => {
+	it("runs the Planner of a document whose creator has no machine, as its owner", async () => {
+		let { machine, share, visit, choice, channel, runtime, url } = await dispatchServer();
+		// The creator's own machine can't run Planners, so it doesn't count as theirs here.
+		let plain = await machine("member", "U_member", "plain", { plannerCommand: false });
+		let box = await machine("rival", "U_rival", "build-box");
+		// Not shared: a teammate's machine is never anyone else's Default machine.
+		await visit();
+		expect(await box.poll([])).toEqual({ waiting: true });
+		expect((await choice("member")).planner).toEqual({ state: "none", login: null, machine: null });
+
+		expect(await share("rival", box.id)).toBe(200);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: "rival", machine: box.id });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({ login: "rival" });
+
+		expect(await plain.poll([])).toEqual({ waiting: true });
+
+		let link = await box.backend();
+		await link.next("attached");
+		expect((await choice("member")).planner)
+			.toEqual({ state: "held", login: "rival", machine: null });
+	});
+
+	it("takes a machine shared as it pairs, and finds it for a document opened before it connected", async () => {
+		let { machine, machines, visit, channel, url } = await dispatchServer();
+		await visit();
+		// Shared from the start, as the pairing page's switch pairs it, and connected only now.
+		let box = await machine("rival", "U_rival", "build-box", { shared: true });
+		expect((await machines.current(box.id)).shared).toBe(true);
+		expect(await box.poll([], 1_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+	});
+
+	it("stops the Planner when its owner stops sharing, and tells the machine why", async () => {
+		let { machine, share, visit, choice, channel, url } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box");
+		await share("rival", box.id);
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let link = await box.backend();
+		await link.next("attached");
+
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await box.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped sharing build-box") },
+		});
+		expect((await choice("member")).planner).toEqual({ state: "none", login: null, machine: null });
+	});
+
+	it("prefers the creator's own machine, and moves there from a teammate's while not attached", async () => {
+		let { machine, share, visit, channel, url } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box");
+		await share("rival", box.id);
+		let laptop = await machine("member", "U_member", "laptop");
+		await visit();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect(await box.poll([])).toEqual({ waiting: true });
+
+		// Another document starts on the teammate's machine while the creator has none online.
+		let other = await dispatchServer();
+		let otherBox = await other.machine("rival", "U_rival", "build-box");
+		await other.share("rival", otherBox.id);
+		await other.visit();
+		expect(await otherBox.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: other.channel.id, url }],
+		});
+		// The creator's own machine comes online before it attached: the Planner moves there.
+		let desk = await other.machine("member", "U_member", "desk");
+		expect(await desk.poll([], 1_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: other.channel.id, url }],
+		});
+		expect(await otherBox.poll([other.channel.id])).toEqual({ kind: "planners", planners: [] });
+	});
+
+	it("keeps an attached Planner on the teammate's machine when the creator's own comes online", async () => {
+		let { machine, share, visit, channel, server, url } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box");
+		await share("rival", box.id);
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let link = await box.backend();
+		await link.next("attached");
+		let laptop = await machine("member", "U_member", "laptop");
+		expect(await laptop.poll([])).toEqual({ waiting: true });
+		expect(await box.poll([channel.id])).toEqual({ waiting: true });
+		expect(server.attachments.holding(channel.id)?.machineId).toBe(box.id);
+	});
+
+	it("passes over a shared machine whose owner can't push to the repository", async () => {
+		let { machine, share, visit, choice } = await dispatchServer();
+		// A protocol 5 machine connects for any repository, whatever its owner can push to.
+		let box = await machine("viewer", "U_viewer", "viewer-box", { protocol: 5 });
+		expect(await share("viewer", box.id)).toBe(200);
+		await visit();
+		expect(await box.poll([])).toEqual({ waiting: true });
+		expect((await choice("member")).planner).toEqual({ state: "none", login: null, machine: null });
+	});
+
+	it("lets only the owner share a machine", async () => {
+		let { machine, share } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box");
+		expect(await share("member", box.id)).toBe(404);
 	});
 });
 

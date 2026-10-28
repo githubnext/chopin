@@ -24,6 +24,7 @@ import {
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,
+	UsersIcon,
 	WarningIcon,
 	WrenchIcon,
 } from "@chopin/icons";
@@ -84,6 +85,7 @@ const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ icon: LoaderIcon, name: "Loader" },
 	{ icon: MachineIcon, name: "Machine" },
 	{ icon: ServerIcon, name: "Server" },
+	{ icon: UsersIcon, name: "Users" },
 ];
 
 export function IconCatalogue() {

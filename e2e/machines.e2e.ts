@@ -262,6 +262,12 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await expect(automatic).toHaveAttribute("aria-checked", "false");
 	await automatic.click();
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
+	// Planning teammates' documents is off until asked for, and the key carries it to the machine.
+	let teammates = page.getByRole("switch", { name: "Plan teammates' documents", exact: true });
+	await expect(teammates).toHaveAttribute("aria-checked", "false");
+	await teammates.click();
+	await expect(teammates).toHaveAttribute("aria-checked", "true");
+	await shot(page, "add-server-settings");
 	// The machine's name is optional; the field says the hostname stands in without one.
 	let name = page.getByRole("textbox", { name: "Machine name", exact: true });
 	await expect(name).toHaveValue("");
@@ -315,7 +321,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 		await expect.poll(
 			() =>
 				page.evaluate(async () => (await (await fetch("/api/connector/machines")).json()).machines),
-		).toMatchObject([{ label: "ci-runner", hostname: hostname(), autoRun: true }]);
+		).toMatchObject([{ label: "ci-runner", hostname: hostname(), autoRun: true, shared: true }]);
 
 		// Back on Machines, the machine is in the table.
 		await page.getByRole("main").getByRole("link", { name: "Machines", exact: true }).click();
@@ -427,6 +433,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 		"Host",
 		"Version",
 		"Agent",
+		"Teammates",
 		"Last seen",
 		"Actions",
 	]);
@@ -453,6 +460,24 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(row("build-box").getByRole("button", { name: /^Copy / })).toHaveCount(0);
 	await expect(row("studio")).toContainText("macOS arm64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
+
+	// Sharing is off until its owner turns it on, from the row's switch, and stays on once saved.
+	let sharing = row("studio").getByRole("switch", { name: "Share studio with teammates" });
+	await expect(sharing).toHaveAttribute("aria-checked", "false");
+	await sharing.click();
+	await expect(sharing).toHaveAttribute("aria-checked", "true");
+	await expect.poll(async () =>
+		(await page.evaluate(async () =>
+			(await (await fetch("/api/connector/machines")).json()).machines
+		))
+			.find((machine: { label: string }) => machine.label === "studio")?.shared
+	).toBe(true);
+	await page.reload();
+	await expect(row("studio").getByRole("switch", { name: "Share studio with teammates" }))
+		.toHaveAttribute("aria-checked", "true");
+	await shot(page, "machines-table-shared");
+	await expect(row("build-box").getByRole("switch", { name: "Share build-box with teammates" }))
+		.toHaveAttribute("aria-checked", "false");
 
 	// Search narrows the table, by name, owner, host, version or agent alike; never by repository.
 	let search = page.getByRole("searchbox", { name: "Search machines" });

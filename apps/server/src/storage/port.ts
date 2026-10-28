@@ -125,6 +125,8 @@ export interface MachineStore {
 	rename(id: string, userId: string, label: string): Promise<boolean>;
 	/** Add a repository the machine connected a checkout of, unless it already serves it. */
 	serve(id: string, repository: MachineRepository): Promise<void>;
+	/** The owner shares one of their machines with teammates, or stops; false when it isn't theirs. */
+	share(id: string, userId: string, shared: boolean): Promise<boolean>;
 	/** Every choice of an unrevoked machine. Revoking a machine forgets its choices. */
 	choices(): Promise<MachineChoice[]>;
 	/** Set one person's machine for one document, or without `machineId` go back to automatic. */
