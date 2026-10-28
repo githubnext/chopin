@@ -161,6 +161,36 @@ if (database) {
 			await storage.close();
 		}, 20_000);
 
+		it("releases the writer lease when stopped while it is still starting", async () => {
+			let storage = new PostgresStorage(database);
+			await storage.migrate();
+			let sql = new SQL(database);
+			let held = async () => {
+				let [row] = await sql<{ owner: string }[]>`
+					SELECT owner FROM storage_leases
+					WHERE name = 'chopin:writer' AND expires_at > clock_timestamp()
+				`;
+				return row?.owner;
+			};
+			let before = await held();
+			let child = spawn(9077, "pipe");
+			let owner: string | undefined;
+			for (let attempt = 0; attempt < 2_000 && (!owner || owner === before); attempt++) {
+				owner = await held();
+				if (!owner || owner === before) await Bun.sleep(5);
+			}
+			expect(owner).toBeDefined();
+			expect(owner).not.toBe(before);
+			child.kill("SIGTERM");
+			await child.exited;
+			expect(await held()).toBeUndefined();
+			let next = await storage.leases.acquire("chopin:writer", crypto.randomUUID(), 30_000);
+			expect(next).toBeDefined();
+			await storage.leases.release(next!);
+			await sql.close();
+			await storage.close();
+		}, 20_000);
+
 		it("recovers an inline Research card without an open room, once across restarts", async () => {
 			let storage = new PostgresStorage(database);
 			await storage.migrate();
