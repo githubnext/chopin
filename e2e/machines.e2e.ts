@@ -433,7 +433,7 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 		"Host",
 		"Version",
 		"Agent",
-		"Teammates",
+		"Shared",
 		"Last seen",
 		"Actions",
 	]);

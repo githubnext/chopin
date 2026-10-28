@@ -481,7 +481,7 @@ A teammate who has no machine of their own can still get a Planner on a
 document they create, on a machine someone shared with teammates. Sharing is
 off unless its owner turns it on: with **Plan teammates' documents** as they
 add the machine (**Let teammates' documents plan on this machine** on the
-pairing card), or later with the machine's **Teammates** switch on the
+pairing card), or later with the machine's **Shared** switch on the
 **Machines** page (**Share with teammates** in its view on a phone).
 
 - Only a document left on **Default machine** whose creator has no connected

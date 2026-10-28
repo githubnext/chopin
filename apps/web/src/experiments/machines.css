@@ -665,7 +665,7 @@
 	min-width: 9rem;
 }
 
-/* The Teammates switch sits on the row's centre line, never wider than its header. */
+/* The Shared switch sits on the row's centre line, never wider than its header. */
 .machines-share-column {
 	width: 1%;
 	white-space: nowrap;

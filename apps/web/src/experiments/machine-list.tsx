@@ -354,7 +354,7 @@ function MachineTable(
 					<TableHead>Version</TableHead>
 					<TableHead>Agent</TableHead>
 					<TableHead className="machines-share-column">
-						<span data-tooltip={SHARE_DETAIL} tabIndex={0}>Teammates</span>
+						<span data-tooltip={SHARE_DETAIL} tabIndex={0}>Shared</span>
 					</TableHead>
 					<TableHead className="machines-status-column">Last seen</TableHead>
 					<TableHead className="machines-actions-column">
