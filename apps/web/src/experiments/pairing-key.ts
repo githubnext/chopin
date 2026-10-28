@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { experimentRequest } from "./api";
 
 /**
- * Set as the page goes to GitHub to authorize the next machine, with the automatic-work choice
- * the key is for, so the server page makes that key as it comes back. Never the key itself.
+ * Set as the page goes to GitHub to authorize the next machine, with the choices the key is for,
+ * so the server page makes that key as it comes back. Never the key itself.
  */
 const RETURNING_KEY = "chopin:machines:generate";
 
@@ -13,21 +13,26 @@ export function expiryLabel(expiresAt: number, now: number): string {
 	return left > 0 ? `Works once and expires in ${Math.ceil(left / 60_000)} min` : "Expired";
 }
 
+/** What the machine a key pairs may do: build on its own, and plan teammates' documents. */
+export type KeyChoices = { autoRun: boolean; shared: boolean };
+
 export type PairingKey =
 	| { state: "idle" }
 	| { state: "minting" }
-	| { state: "ready"; key: string; expiresAt: number; autoRun: boolean }
+	| ({ state: "ready"; key: string; expiresAt: number } & KeyChoices)
 	/** GitHub authorizes the next machine first; `going` while the page is on its way there. */
 	| { state: "authorize"; url: string; going: boolean }
 	| { state: "expired" }
 	| { state: "failed"; code: string };
 
-/** The automatic-work choice a key was asked for just before the page went to GitHub, once. */
-function returning(): boolean | undefined {
+/** The choices a key was asked for just before the page went to GitHub, once. */
+function returning(): KeyChoices | undefined {
 	try {
 		let value = sessionStorage.getItem(RETURNING_KEY);
 		sessionStorage.removeItem(RETURNING_KEY);
-		return value === null ? undefined : value === "auto";
+		if (value === null) return undefined;
+		let parsed = JSON.parse(value);
+		return { autoRun: parsed?.autoRun === true, shared: parsed?.shared === true };
 	} catch {
 		return undefined;
 	}
@@ -43,13 +48,13 @@ function returning(): boolean | undefined {
 export function usePairingKey() {
 	let [key, setKey] = useState<PairingKey>({ state: "idle" });
 	let attempt = useRef(0);
-	let mint = useCallback(async (autoRun: boolean, go: boolean) => {
+	let mint = useCallback(async (choices: KeyChoices, go: boolean) => {
 		let id = ++attempt.current;
 		setKey({ state: "minting" });
 		try {
 			let result = await experimentRequest<
 				{ key: string; expiresIn: number } | { authorize: string }
-			>("/api/connector/pairing-keys", { autoRun });
+			>("/api/connector/pairing-keys", { ...choices });
 			if (id !== attempt.current) return;
 			if ("key" in result) {
 				// Counted on this clock from the key's lifetime, so a clock that differs from the
@@ -58,14 +63,14 @@ export function usePairingKey() {
 					state: "ready",
 					key: result.key,
 					expiresAt: Date.now() + result.expiresIn,
-					autoRun,
+					...choices,
 				});
 				return;
 			}
 			setKey({ state: "authorize", url: result.authorize, going: go });
 			if (!go) return;
 			try {
-				sessionStorage.setItem(RETURNING_KEY, autoRun ? "auto" : "manual");
+				sessionStorage.setItem(RETURNING_KEY, JSON.stringify(choices));
 			} catch {
 				// Without storage the page asks for another press as it comes back.
 			}
@@ -77,8 +82,8 @@ export function usePairingKey() {
 		}
 	}, []);
 	useEffect(() => {
-		let autoRun = returning();
-		if (autoRun !== undefined) void mint(autoRun, false);
+		let choices = returning();
+		if (choices) void mint(choices, false);
 		return () => {
 			attempt.current++;
 		};
@@ -92,7 +97,7 @@ export function usePairingKey() {
 		);
 		return () => window.clearTimeout(timer);
 	}, [expiresAt]);
-	let generate = useCallback((autoRun: boolean) => void mint(autoRun, true), [mint]);
+	let generate = useCallback((choices: KeyChoices) => void mint(choices, true), [mint]);
 	let reset = useCallback(() => {
 		attempt.current++;
 		setKey({ state: "idle" });

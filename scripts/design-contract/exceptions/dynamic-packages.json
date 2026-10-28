@@ -429,9 +429,16 @@
 				"props",
 				"unresolved JSX props > ProgressHalfIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > UsersIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "7682cc5a91547e815aa28d1be3b669526d8e161030d1827e17859377b636005c"
+		"sourceHash": "2c57992b273f5f0ce07a72ccc8b29c3c1e343cd20aefdafe2ed1773e5a749eaa"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

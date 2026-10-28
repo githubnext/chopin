@@ -22,6 +22,8 @@ export type Machine = {
 	planner: boolean;
 	/** The person's favorite machine, which Automatic prefers. */
 	favorite: boolean;
+	/** Teammates' documents may run their Planner here when they have no machine of their own. */
+	shared: boolean;
 };
 
 export type MachineSummary = { paired: number; connected: number };

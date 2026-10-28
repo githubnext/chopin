@@ -22,13 +22,19 @@ import {
 
 import type { ReactNode } from "react";
 import type { CodingAgent } from "@chopin/protocol/agents";
-import type { PairingKey } from "./pairing-key";
+import type { KeyChoices, PairingKey } from "./pairing-key";
 import type { SetupSystem } from "./setup-commands";
 
 /** The server page's choices, kept for this tab across the trip to GitHub and back. */
 const SETTINGS_KEY = "chopin:machines:server";
 
-type Settings = { system?: SetupSystem; background?: boolean; autoRun?: boolean; name?: string };
+type Settings = {
+	system?: SetupSystem;
+	background?: boolean;
+	autoRun?: boolean;
+	shared?: boolean;
+	name?: string;
+};
 
 function storedSettings(): Settings {
 	try {
@@ -78,9 +84,9 @@ function Setting(
 
 /** What stands in the command's place before there is a key to put in it. */
 function Generate(
-	{ autoRun, generate, pairing }: {
-		autoRun: boolean;
-		generate: (autoRun: boolean) => void;
+	{ choices, generate, pairing }: {
+		choices: KeyChoices;
+		generate: (choices: KeyChoices) => void;
 		pairing: Exclude<PairingKey, { state: "ready" }>;
 	},
 ) {
@@ -91,7 +97,7 @@ function Generate(
 				actions={problem.retry && (
 					<button
 						className="btn btn-xs btn-outline"
-						onClick={() => generate(autoRun)}
+						onClick={() => generate(choices)}
 						type="button"
 					>
 						<RestartIcon aria-hidden="true" />
@@ -112,7 +118,7 @@ function Generate(
 						<>
 							<button
 								className="btn btn-md btn-primary"
-								onClick={() => generate(autoRun)}
+								onClick={() => generate(choices)}
 								type="button"
 							>
 								<GitHubIcon aria-hidden="true" />
@@ -131,7 +137,7 @@ function Generate(
 				aria-busy={busy || undefined}
 				className="btn btn-md btn-primary"
 				disabled={busy}
-				onClick={() => generate(autoRun)}
+				onClick={() => generate(choices)}
 				type="button"
 			>
 				{busy
@@ -200,18 +206,20 @@ export function AddServerPage() {
 	let { agent, options, choose } = useAgent("server");
 	let [background, setBackground] = useState(saved.background ?? true);
 	let [autoRun, setAutoRun] = useState(saved.autoRun ?? false);
+	let [shared, setShared] = useState(saved.shared ?? false);
 	let [name, setName] = useState(saved.name ?? "");
+	let choices = { autoRun, shared };
 	let { key: pairing, generate, reset } = usePairingKey();
 	useEffect(() => {
 		try {
 			sessionStorage.setItem(
 				SETTINGS_KEY,
-				JSON.stringify({ system, background, autoRun, name }),
+				JSON.stringify({ system, background, autoRun, shared, name }),
 			);
 		} catch {
 			// Without storage the page starts from its defaults after GitHub.
 		}
-	}, [system, background, autoRun, name]);
+	}, [system, background, autoRun, shared, name]);
 	let shell = shellFor(system);
 	// A setup agent's own command decides how the machine connects, service included.
 	let setup = isSetupAgent(agent) ? agent : undefined;
@@ -247,8 +255,18 @@ export function AddServerPage() {
 						title="Build and prototype automatically"
 					>
 						Off: work runs here only when you press Build or Run. On: Chopin can also rebuild what
-						you built when its document changes, and prototype passages you write. Nobody else's
-						work runs here.
+						you built when its document changes, and prototype passages you write.
+					</Setting>
+					<Setting
+						checked={shared}
+						onChange={value => {
+							setShared(value);
+							if (pairing.state !== "idle") reset();
+						}}
+						title="Plan teammates' documents"
+					>
+						Off: nobody else's work runs here. On: when a teammate's document has no machine of its
+						own, its Planner runs here as you, in repositories you can push to. Builds stay yours.
 					</Setting>
 				</div>
 			</li>
@@ -261,7 +279,7 @@ export function AddServerPage() {
 							<div className="machines-key">
 								<button
 									className="btn btn-md btn-secondary"
-									onClick={() => generate(autoRun)}
+									onClick={() => generate(choices)}
 									type="button"
 								>
 									Re-generate install script
@@ -289,7 +307,7 @@ export function AddServerPage() {
 							)}
 						</div>
 					)
-					: <Generate autoRun={autoRun} generate={generate} pairing={pairing} />}
+					: <Generate choices={choices} generate={generate} pairing={pairing} />}
 			</li>
 		</ol>
 	);

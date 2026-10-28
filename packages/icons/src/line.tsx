@@ -434,3 +434,14 @@ export function CollapseIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+export function UsersIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="6.75" cy="5.75" r="2.75" />
+			<path d="M1.75 15.25c0-2.9 2.25-5 5-5s5 2.1 5 5" />
+			<path d="M11.75 3.15a2.75 2.75 0 0 1 0 5.2" />
+			<path d="M13.5 10.6c1.65.7 2.75 2.4 2.75 4.65" />
+		</LineIcon>
+	);
+}

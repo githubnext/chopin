@@ -1080,6 +1080,26 @@ test("a key minted with automatic work on pairs a machine with it on, as the pai
 	expect(await wrong.json()).toEqual({ error: "invalid-request" });
 });
 
+test("a key minted shared pairs a machine shared with teammates, and its owner can stop sharing it", async () => {
+	let { alice, request, authorizeKeys } = await setup();
+	authorizeKeys("alice");
+	let minted = await (await request("/api/connector/pairing-keys", { shared: true }, alice.cookie))
+		.json();
+	expect((await request("/api/connector/pairings", { ...CHECKOUT, key: minted.key })).status)
+		.toBe(200);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toMatchObject([{ label: "Laptop", shared: true, autoRun: false }]);
+	let id = listed.machines[0].id;
+	let stopped = await request(
+		`/api/connector/machines/${id}/shared`,
+		{ shared: false },
+		alice.cookie,
+	);
+	expect(await stopped.json()).toEqual({ shared: false });
+	listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines).toMatchObject([{ shared: false }]);
+});
+
 test("two machines racing with one pairing key: exactly one pairs", async () => {
 	let { alice, request, mint, authorizeKeys } = await setup();
 	authorizeKeys("alice");

@@ -33,7 +33,9 @@ export class MemoryMachineStore implements MachineStore {
 		if (this.#machines.has(input.id) || this.#tokens.has(hex(input.tokenHash))) {
 			throw conflict(`machine ${input.id} already exists`);
 		}
-		this.#machines.set(input.id, copy(input));
+		let stored = copy(input);
+		if (!stored.shared) delete stored.shared;
+		this.#machines.set(input.id, stored);
 		this.#tokens.set(hex(input.tokenHash), input.id);
 	}
 	async get(id: string) {
@@ -78,6 +80,13 @@ export class MemoryMachineStore implements MachineStore {
 		let found = this.#machines.get(id);
 		if (!found || found.userId !== userId || found.revokedAt) return false;
 		found.label = label;
+		return true;
+	}
+	async share(id: string, userId: string, shared: boolean) {
+		let found = this.#machines.get(id);
+		if (!found || found.userId !== userId || found.revokedAt) return false;
+		if (shared) found.shared = true;
+		else delete found.shared;
 		return true;
 	}
 	async revoke(id: string, userId: string, now: Date) {

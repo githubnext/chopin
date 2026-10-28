@@ -169,6 +169,12 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 				exact: true,
 			}),
 		).not.toBeChecked();
+		await expect(
+			page.getByRole("checkbox", {
+				name: "Let teammates' documents plan on this machine",
+				exact: true,
+			}),
+		).not.toBeChecked();
 		await page.getByRole("button", { name: "Add machine", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "Connected" }))
 			.toHaveText("Connected");

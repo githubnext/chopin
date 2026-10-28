@@ -273,6 +273,32 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		it("shares a machine with teammates only at its owner's word, and never once revoked", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let input = machine(userId);
+				let paired = machine(userId, { shared: true });
+				await storage.machines.create(input);
+				await storage.machines.create(paired);
+				expect((await storage.machines.get(input.id))?.shared).toBeUndefined();
+				expect((await storage.machines.get(paired.id))?.shared).toBe(true);
+				expect(await storage.machines.share(input.id, userId, true)).toBe(true);
+				expect((await storage.machines.get(input.id))?.shared).toBe(true);
+				expect(await storage.machines.share(input.id, userId, false)).toBe(true);
+				expect((await storage.machines.get(input.id))?.shared).toBeUndefined();
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				let other = id("machine-teammate");
+				await storage.users.put({ id: other, login: "teammate", avatarUrl: "", now });
+				expect(await storage.machines.share(input.id, other, true)).toBe(false);
+				expect((await storage.machines.get(input.id))?.shared).toBeUndefined();
+				await storage.machines.revoke(paired.id, userId, now);
+				expect(await storage.machines.share(paired.id, userId, true)).toBe(false);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("remembers each repository a machine connects, once", async () => {
 			let storage = await openedStorage(factory);
 			try {

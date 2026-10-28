@@ -1014,6 +1014,7 @@ if (url) {
 				"025_document_version_summaries",
 				"026_workflow_run_stages",
 				"027_decision_answers",
+				"028_machine_sharing",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,
