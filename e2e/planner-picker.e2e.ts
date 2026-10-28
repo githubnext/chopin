@@ -412,3 +412,45 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
 	await link.detach();
 });
+
+test("a teammate's document with no machine of its own gets its Planner on a machine shared with teammates", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	// mona's machine can run Planners; hubot created the document and has no machine.
+	let owner = await open(browser, "mona", room, DESKTOP);
+	let studio = await machine(owner, "studio", true);
+	let page = await open(browser, "hubot", room, DESKTOP);
+	await createdBy(room, "hubot");
+	await page.reload();
+	await ready(page);
+	let status = plannerStatus(page);
+	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.");
+
+	// mona shares studio from the Machines table; hubot's document asks it at once.
+	await owner.goto(`${ORIGIN}/machines`);
+	let sharing = owner.getByRole("switch", { name: "Share studio with teammates" });
+	await expect(sharing).toHaveAttribute("aria-checked", "false");
+	await sharing.click();
+	await expect(sharing).toHaveAttribute("aria-checked", "true");
+	await expect(status).toHaveText("Planner: starting on @mona’s machine…");
+	expect(await studio.poll([])).toEqual({
+		kind: "planners",
+		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
+	});
+	let link = await studio.backend(room);
+	await expect(status).toHaveText("Planner: mona attached");
+	await shoot(page, "teammate-planner-attached", page.locator(".chat-composer"));
+
+	// hubot's @chopin reaches the Planner on mona's machine.
+	let input = chatInput(page);
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	await expect(page.getByText("outline the plan").first()).toBeVisible();
+	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
+
+	// Sharing off: the Planner stops, and hubot's document has none again.
+	await sharing.click();
+	await expect(sharing).toHaveAttribute("aria-checked", "false");
+	await expect(status).toHaveText(/^Planner: (none attached|mona detached)/);
+	await link.detach().catch(() => {});
+});
