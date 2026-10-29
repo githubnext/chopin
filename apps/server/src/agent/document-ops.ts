@@ -13,7 +13,7 @@ import * as edit from "../plan/edit";
 import * as room from "../plan/room";
 import * as Questions from "../questions/service";
 import * as QuestionStore from "../questions/store";
-import { reanchorScopes } from "../questions/decision-followup-reanchor";
+import { reanchorDecisionRelationships } from "../questions/decision-reanchor";
 import { documentIdentity, implementationActive, publishStaged } from "../plan/service";
 
 import type { Plan } from "../plan/service";
@@ -320,7 +320,7 @@ export async function applyAnchors(
 					placements.push({ widget: update.widget, blocks: update.blocks });
 				}
 			}
-			failures.push(...reanchorScopes(candidate, placements));
+			failures.push(...reanchorDecisionRelationships(candidate, placements));
 			if (failures.length) return { ok: false, reason: "invalid", errors: failures };
 			let mutation = Questions.place(candidate, placements);
 			Questions.rebase(candidate, source);
