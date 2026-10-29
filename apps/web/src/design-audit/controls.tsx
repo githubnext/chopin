@@ -81,16 +81,18 @@ const AUDIT_REPOSITORIES: Api.Repository[] = ["chopin", "design-notes", "editor-
 	url: `https://github.com/githubnext/${name}`,
 }));
 
-/** The live palette listbox as Add project shows it: one repository already added and not offered. */
+/** The live palette listbox as Add project shows it: projects checked, one being added. */
 function SelectionList() {
 	let input = useRef<HTMLInputElement>(null);
+	let projects = new Set(["R_design-notes"]);
 	return (
 		<div className="navigation-modal-content navigation-palette">
 			<div className="navigation-palette-list">
 				<RepositoryOptions
-					addedIds={new Set(["R_design-notes"])}
 					input={input}
+					isProject={id => projects.has(id)}
 					onChoose={() => {}}
+					pending={new Map([[AUDIT_REPOSITORIES.at(-1)!.id, "adding" as const]])}
 					query="githubnext"
 					repositories={AUDIT_REPOSITORIES}
 				/>

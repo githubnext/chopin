@@ -9,6 +9,7 @@ import type { KeyboardEvent, ReactNode, RefObject } from "react";
  */
 export function PaletteListbox<T>(
 	{
+		checked,
 		enabled = () => true,
 		input,
 		itemKey,
@@ -19,6 +20,8 @@ export function PaletteListbox<T>(
 		renderItem,
 		itemLabel,
 	}: {
+		/** Rows that toggle membership say whether each is in; the highlight stays `aria-selected`. */
+		checked?: (item: T) => boolean;
 		enabled?: (item: T) => boolean;
 		input: RefObject<HTMLInputElement | null>;
 		itemKey: (item: T) => string;
@@ -108,6 +111,7 @@ export function PaletteListbox<T>(
 				let on = enabled(item);
 				return (
 					<div
+						aria-checked={checked?.(item)}
 						aria-disabled={on ? undefined : true}
 						aria-label={itemLabel?.(item)}
 						aria-selected={index === active}
