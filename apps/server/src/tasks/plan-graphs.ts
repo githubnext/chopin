@@ -3,6 +3,7 @@
 import { claim, Graphs } from "./graphs";
 import { claimEligibility, historyFor, implementationLifecycle, transition } from "./lifecycle";
 import * as Comments from "../comments/service";
+import { isOpenStatus } from "../questions/records";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import { announceImplementation } from "./notifications";
@@ -176,7 +177,7 @@ export function implementationReadiness(
 	revision: unknown,
 ): { ok: true; revision: number } | { ok: false; blockers: string[] } {
 	let blockers: string[] = [];
-	if ([...plan.records.values()].some(record => record.status === "open")) {
+	if ([...plan.records.values()].some(record => isOpenStatus(record.status))) {
 		blockers.push("unanswered questionnaires");
 	}
 	if (Comments.outstanding(plan).length > 0) {

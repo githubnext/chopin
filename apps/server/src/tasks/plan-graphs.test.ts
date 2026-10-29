@@ -10,9 +10,11 @@ import { liveSnapshot, readRebuild, reportBuild, reportRebuild, restoreLive } fr
 import { historyFor } from "./lifecycle";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { claimStored, close, implementationActive, open, source } from "../plan/service";
+import { unansweredDecisions } from "../questions/unanswered";
 
 import type { Server } from "bun";
 import type { Backend, Plan } from "../plan/service";
+import type { Record as DecisionRecord } from "../questions/record-types";
 import type { JsonValue } from "../storage/model";
 import type { SocketData } from "../wire";
 
@@ -113,6 +115,53 @@ async function verifyRun(plan: Plan, runId: string) {
 }
 
 describe("the plan graph adapter", () => {
+	let blocksBuild = {
+		open: true,
+		reopened: true,
+		answered: false,
+		discarded: false,
+		cancelled: false,
+		expired: false,
+	} satisfies Record<DecisionRecord["status"], boolean>;
+
+	it.each(Object.entries(blocksBuild) as Array<[DecisionRecord["status"], boolean]>)(
+		"Build readiness blocks while a decision is open or reopened (%s: %p)",
+		async (status, blocks) => {
+			let context = await hosted();
+			let plan = await open(context.channel.id, context.backend, context.server);
+			try {
+				let record: DecisionRecord = {
+					id: "decision",
+					status,
+					origin: "planner",
+					definition: {
+						questions: [{
+							id: "choice",
+							header: "Choice",
+							question: "Which approach?",
+							multiple: false,
+							options: [],
+						}],
+					},
+					...(status === "open" ? {} : { answers: { choice: "Previous choice" } }),
+					history: [],
+					optionOrigins: {},
+					editors: [],
+				};
+				plan.records.set(record.id, record);
+				expect(graphPlans.implementationReadiness(plan, plan.revision)).toEqual(
+					blocks
+						? { ok: false, blockers: ["unanswered questionnaires"] }
+						: { ok: true, revision: plan.revision },
+				);
+				// The stored-record unanswered count classifies the same statuses as waiting.
+				expect(unansweredDecisions([record]) > 0).toBe(blocks);
+			} finally {
+				await close(plan);
+			}
+		},
+	);
+
 	it("keeps implementation preparation policy with graph persistence", async () => {
 		let context = await hosted();
 		let plan = await open(context.channel.id, context.backend, context.server);
