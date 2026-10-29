@@ -182,6 +182,11 @@ class RemoteSession {
 		void this.#started.promise.catch(() => {});
 	}
 
+	/** Whether a turn is under way: the Planner is replying. */
+	get replying(): boolean {
+		return this.#current !== undefined;
+	}
+
 	async start(): Promise<HarnessV1Session> {
 		let mode = this.planner.isolated ? "isolated" as const : "planner" as const;
 		if (!this.#port.send({ type: "start", session: this.id, mode })) {
@@ -635,6 +640,19 @@ export class AgentLink {
 		for (let session of this.#sessions.values()) {
 			let runs = session.planner.runs;
 			if (runs && (runs.active.length > 0 || runs.paused.length > 0)) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the client is in the middle of work for the document's members: a reply under way,
+	 * a question still open, or a live workflow run. A paused run alone is not; it waits on people.
+	 */
+	get busy(): boolean {
+		if (this.#state === "closed") return false;
+		if (this.#inputs.size > 0) return true;
+		for (let session of this.#sessions.values()) {
+			if (session.replying || (session.planner.runs?.active.length ?? 0) > 0) return true;
 		}
 		return false;
 	}

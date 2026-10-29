@@ -855,6 +855,107 @@ describe("a teammate's machine shared with teammates", () => {
 		expect((await choice("member")).planner).toEqual({ state: "none", login: null, machine: null });
 	});
 
+	/** rival's shared build-box runs the member's document's Planner, attached with a live session. */
+	async function sharedAndAttached() {
+		let dispatch = await dispatchServer();
+		let { machine, share, visit, channel, server } = dispatch;
+		let box = await machine("rival", "U_rival", "build-box");
+		await share("rival", box.id);
+		await visit();
+		await box.poll([]);
+		let link = await box.backend();
+		await link.next("attached");
+		let room = await hostInputRoom();
+		cleanups.push(room.close);
+		let planner: RemotePlanner = {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(room.room, undefined, report),
+		};
+		let started = link.next("start").then(start => {
+			link.send({ type: "started", session: start.session });
+		});
+		let session = await server.links.at(-1)!.startSession("planner-session", planner);
+		cleanups.push(() => session.doDestroy?.());
+		await started;
+		/** What build-box is told about the document's Planner after a sweep. */
+		let afterSweep = async () => {
+			await dispatch.runtime.sweep();
+			return box.poll([channel.id]);
+		};
+		let stillRuns = async () => "waiting" in await afterSweep();
+		let finishing = async () =>
+			(await (await dispatch.send("/api/connector/machines", { login: "rival" })).json())
+				.machines[0].finishing as number;
+		return { ...dispatch, box, link, room, session, afterSweep, stillRuns, finishing };
+	}
+
+	it("keeps a teammate's Planner through an open question when sharing stops, then stops it", async () => {
+		let { share, box, link, room, afterSweep, stillRuns, finishing, choice, channel } =
+			await sharedAndAttached();
+		link.send({
+			type: "input-request",
+			request: "ship",
+			session: "planner-session",
+			input: { method: "confirm", title: "Ship?", message: "Now." },
+		});
+		let [card] = await room.cards(1);
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await stillRuns()).toBe(true);
+		expect(await finishing()).toBe(1);
+		expect((await choice("member")).planner)
+			.toEqual({ state: "held", login: "rival", machine: null });
+
+		await room.answer(card!.id, [0]);
+		expect(await link.next("input-result")).toMatchObject({ status: "answered", value: true });
+		expect(await afterSweep()).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped sharing build-box") },
+		});
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await finishing()).toBe(0);
+	});
+
+	it("keeps a teammate's Planner through its reply when sharing stops, then stops it", async () => {
+		let { share, box, link, session, stillRuns } = await sharedAndAttached();
+		let turn = session.doPromptTurn({
+			prompt: "outline the plan",
+			skills: [],
+			tools: [],
+			emit: () => {},
+		});
+		let { turn: id } = await link.next("turn");
+		await turn;
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await stillRuns()).toBe(true);
+		link.send({ type: "turn-end", session: "planner-session", turn: id, status: "finished" });
+		await Bun.sleep(50);
+		expect(await stillRuns()).toBe(false);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+	});
+
+	it("keeps it through a live run, not a paused one, and keeps it when shared again meanwhile", async () => {
+		let { share, box, link, stillRuns, finishing } = await sharedAndAttached();
+		let runs = async (active: string[], paused: string[]) => {
+			link.send({ type: "runs", session: "planner-session", active, paused, cards: [] });
+			await Bun.sleep(50);
+		};
+		await runs(["root"], []);
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await stillRuns()).toBe(true);
+		// Shared again before it finished: nothing is stopped later.
+		expect(await share("rival", box.id)).toBe(200);
+		expect(await finishing()).toBe(0);
+		await runs([], ["root"]);
+		expect(await stillRuns()).toBe(true);
+
+		// A paused run waits on people, not on the machine: sharing off stops the Planner at once.
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await stillRuns()).toBe(false);
+	});
+
 	it("lets only the owner share a machine", async () => {
 		let { machine, share } = await dispatchServer();
 		let box = await machine("rival", "U_rival", "build-box");

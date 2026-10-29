@@ -132,6 +132,11 @@ export class PlannerAttachments {
 		return this.#holds.get(channelId)?.link?.waiting ?? false;
 	}
 
+	/** Whether the client attached to the document is mid-work: replying, asking, or running. */
+	busy(channelId: string): boolean {
+		return this.#holds.get(channelId)?.link?.busy ?? false;
+	}
+
 	/** Waits at most `ms` for a client to attach to the document; whether one is attached then. */
 	attachedWithin(channelId: string, ms: number): Promise<boolean> {
 		if (this.attached(channelId)) return Promise.resolve(true);

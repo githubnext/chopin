@@ -9,6 +9,7 @@ import { mkdir } from "node:fs/promises";
 import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
+import type { AgentHandlers } from "../packages/agent-link/src/client";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
@@ -177,7 +178,7 @@ async function machine(page: Page, label: string, planner: boolean) {
 	await page.goto(back);
 	return {
 		/** The Planner backend Chopin asked the connector to start: a credential, then the link. */
-		backend: async (document: string) => {
+		backend: async (document: string, handlers: AgentHandlers = { turn() {} }) => {
 			let issued = await post("/api/connector/planner", { document }, {
 				authorization: `Bearer ${paired.token}`,
 			});
@@ -187,7 +188,7 @@ async function machine(page: Page, label: string, planner: boolean) {
 				url: ORIGIN,
 				token: credential,
 				document,
-				handlers: { turn() {} },
+				handlers,
 			});
 		},
 		/**
@@ -452,5 +453,53 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
 	await expect(status).toHaveText(/^Planner: (none attached|mona detached)/);
+	await link.detach().catch(() => {});
+});
+
+test("a teammate's Planner finishes its reply after its machine stops being shared, then stops", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let owner = await open(browser, "mona", room, DESKTOP);
+	let studio = await machine(owner, "studio", true);
+	let page = await open(browser, "hubot", room, DESKTOP);
+	await createdBy(room, "hubot");
+	await owner.goto(`${ORIGIN}/machines`);
+	let sharing = owner.getByRole("switch", { name: "Share studio with teammates" });
+	await sharing.click();
+	await expect(sharing).toHaveAttribute("aria-checked", "true");
+	await page.reload();
+	await ready(page);
+	let status = plannerStatus(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	let replying = Promise.withResolvers<void>();
+	let started = Promise.withResolvers<void>();
+	let link = await studio.backend(room, {
+		async turn() {
+			started.resolve();
+			await replying.promise;
+		},
+	});
+	await expect(status).toHaveText("Planner: mona attached");
+
+	// hubot's reply is under way when mona stops sharing studio: it keeps its Planner meanwhile.
+	let input = chatInput(page);
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	await started.promise;
+	await sharing.click();
+	await expect(sharing).toHaveAttribute("aria-checked", "false");
+	await expect(owner.getByText("Finishing 1 teammate document", { exact: true })).toBeVisible({
+		timeout: 15_000,
+	});
+	await expect(sharing).toHaveAccessibleDescription("Finishing 1 teammate document");
+	await expect(status).toHaveText("Planner: mona attached");
+	await shoot(owner, "machines-finishing");
+
+	// The reply ends: the next sweep stops the Planner, and studio no longer says it is finishing.
+	replying.resolve();
+	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.", {
+		timeout: 30_000,
+	});
+	await expect(owner.getByText(/^Finishing/)).toHaveCount(0, { timeout: 15_000 });
 	await link.detach().catch(() => {});
 });

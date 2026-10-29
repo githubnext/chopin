@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+	finishingWords,
 	groupMachines,
 	machineMatches,
 	machineState,
@@ -78,4 +79,11 @@ test("machines group by kind, Local then Cloud, leaving out an empty group", () 
 		.toEqual([["local", ["a", "c"]], ["cloud", ["b"]]]);
 	expect(groupMachines([box]).map(group => group.kind)).toEqual(["cloud"]);
 	expect(groupMachines([])).toEqual([]);
+});
+
+test("a machine that stopped being shared says how many teammate documents it is finishing", () => {
+	expect(finishingWords({})).toBeUndefined();
+	expect(finishingWords({ finishing: 0 })).toBeUndefined();
+	expect(finishingWords({ finishing: 1 })).toBe("Finishing 1 teammate document");
+	expect(finishingWords({ finishing: 2 })).toBe("Finishing 2 teammate documents");
 });

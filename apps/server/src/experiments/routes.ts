@@ -170,6 +170,11 @@ export const PLANNER_IDLE_MS = 30 * 60_000;
  */
 export const SHARED_REACH_MS = 10 * 60_000;
 const SHARED_RETRY_MS = 60_000;
+/** Why a machine that is no longer shared stopped a teammate's Planner, told to its connector. */
+function stoppedSharing(login: string) {
+	return (label: string) =>
+		`${login} stopped sharing ${label} with teammates, so it stopped running this document's Planner.`;
+}
 /**
  * The connector protocols this server speaks; a connector outside them must update first.
  * Protocol 2 pairs a machine once and connects checkouts with its stored token. Protocol 4 polls
@@ -439,6 +444,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	let reach = new Map<string, { ok: boolean; until: number }>();
 	let reachKey = (machineId: string, repositoryId: string) => `${machineId}\n${repositoryId}`;
+	/**
+	 * Machines whose owner stopped sharing them while teammates' Planners on them were mid-work, by
+	 * machine id: who stopped, and those documents. Each keeps its Planner there until its work
+	 * finishes (a reply, an open question, a live run), then stops; no new teammate document
+	 * comes to the machine meanwhile. Forgotten with a restart, which ends every Planner anyway.
+	 */
+	let finishing = new Map<string, { login: string; documents: Set<string> }>();
 	/** The creator's own machine that can run the document's Planner now: the one builds would use. */
 	function ownPlannerMachine(channel: ChannelRecord) {
 		return connections.candidates(channel.repositoryId, channel.createdBy, channel.id, null)
@@ -450,13 +462,33 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			runsPlanners(value) && reach.get(reachKey(value.machineId, channel.repositoryId))?.ok
 		)?.machineId;
 	}
-	/** Whether a machine can run a document's Planner: its creator's own, or one shared with them. */
+	/**
+	 * Whether a machine can run a document's Planner: its creator's own, one shared with them, or
+	 * one that stopped being shared while finishing this document's work.
+	 */
 	function readyFor(machineId: string, channel: ChannelRecord) {
+		let finishes = !!finishing.get(machineId)?.documents.has(channel.id);
 		return connections.machine(machineId).some(value =>
 			serves(value, channel.repositoryId) && runsPlanners(value)
-			&& (value.owner === channel.createdBy
+			&& (value.owner === channel.createdBy || finishes
 				|| !!value.shared && !!reach.get(reachKey(machineId, channel.repositoryId))?.ok)
 		);
+	}
+	/**
+	 * Stop the teammates' Planners a machine that is no longer shared kept while they were mid-work,
+	 * once each has finished or no longer runs there.
+	 */
+	async function finishShared() {
+		for (let [machineId, { login, documents }] of finishing) {
+			for (let documentId of documents) {
+				let runsThere = defaults.get(documentId) === machineId;
+				if (runsThere && options.attachments?.()?.busy(documentId)) continue;
+				documents.delete(documentId);
+				let channel = runsThere ? await auth.storage.channels.get(documentId) : undefined;
+				if (channel) await redefault(channel, stoppedSharing(login));
+			}
+			if (!documents.size) finishing.delete(machineId);
+		}
 	}
 	/**
 	 * The machine Default machine runs a document's Planner on, while someone uses it and its
@@ -1153,6 +1185,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				],
 				autoRun: machine.autoRun,
 				shared: !!machine.shared,
+				// Teammates' documents it still runs the Planner of until their work finishes.
+				finishing: finishing.get(machine.id)?.documents.size ?? 0,
 				createdAt: machine.createdAt.getTime(),
 				lastSeenAt: machine.lastSeenAt.getTime(),
 				connected: connections.machine(machine.id).length > 0,
@@ -1207,7 +1241,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * The owner shares a machine with teammates, or stops. Shared, it may run the Planner of a
 	 * document on Default machine whose creator has no machine of their own that can, in a
-	 * repository its owner can push to. Stopping ends the Planners it runs for teammates.
+	 * repository its owner can push to. Stopping takes no new teammate documents and ends the
+	 * Planners it runs for teammates: at once where idle, else once their current work finishes.
 	 */
 	route("POST", "/api/connector/machines/:id/shared", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);
@@ -1216,19 +1251,28 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let userId = session.user.id;
 		await readChoices();
 		if (!await auth.machines.share(params.id, userId, shared)) fail("not-found");
-		connections.share(params.id, shared);
+		finishing.delete(params.id);
+		let teammates: ChannelRecord[] = [];
 		if (!shared) {
-			for (let key of reach.keys()) if (key.startsWith(`${params.id}\n`)) reach.delete(key);
 			for (let [documentId, machineId] of defaults) {
 				if (machineId !== params.id) continue;
 				let channel = await auth.storage.channels.get(documentId);
-				if (!channel || channel.createdBy === userId) continue;
-				await redefault(
-					channel,
-					label =>
-						`${session.user.login} stopped sharing ${label} with teammates, so it stopped running `
-						+ "this document's Planner.",
-				);
+				if (channel && channel.createdBy !== userId) teammates.push(channel);
+			}
+			// A teammate mid-reply, mid-question or mid-run keeps the Planner until it finishes;
+			// recorded before sharing ends, so no poll in between moves it.
+			let busy = new Set(
+				teammates.filter(channel => options.attachments?.()?.busy(channel.id)).map(value =>
+					value.id
+				),
+			);
+			if (busy.size) finishing.set(params.id, { login: session.user.login, documents: busy });
+			for (let key of reach.keys()) if (key.startsWith(`${params.id}\n`)) reach.delete(key);
+		}
+		connections.share(params.id, shared);
+		for (let channel of teammates) {
+			if (!finishing.get(params.id)?.documents.has(channel.id)) {
+				await redefault(channel, stoppedSharing(session.user.login));
 			}
 		}
 		await plannersMoved(params.id, userId, shared);
@@ -2034,6 +2078,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	async function sweep() {
 		connections.sweep();
+		await finishShared().catch(error =>
+			console.error("chopin: could not stop a machine's finished teammate Planners -", error)
+		);
 		await plannersIdle().catch(error =>
 			console.error("chopin: could not stop an unused document's Planner -", error)
 		);
