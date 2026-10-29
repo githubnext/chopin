@@ -237,6 +237,22 @@ describe("the hosted MCP adapter", () => {
 		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
 	});
 
+	it("tells sidebars about a document create_document made, once, not on a replay", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let lease = (await context.storage.leases.acquire("writer", "announce-create", 60_000))!;
+		let created: string[] = [];
+		let adapter = hosted(context.auth, { lease: () => lease }, {
+			onChannelCreated: channel => created.push(`${channel.repositoryId} ${channel.id}`),
+		});
+		let caller = (await adapter.caller(request("Bearer allowed")))!;
+		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "created" });
+		let id = deterministicChannelId("R_score", creation.idempotencyKey);
+		expect(created).toEqual([`R_score ${id}`]);
+		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
+		expect(created).toEqual([`R_score ${id}`]);
+	});
+
 	it("never recreates an import deleted after its durable replay was read", async () => {
 		let context = setup();
 		context.github.repositoryValue.permissions.push = true;

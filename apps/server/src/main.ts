@@ -125,7 +125,16 @@ import { SessionSockets } from "./socket/session-sockets";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
 import { WriterLease } from "./storage/writer-lease";
-import { broadcast, fail, relay, reply, repositoryTopic, tell, topic } from "./wire";
+import {
+	broadcast,
+	broadcastRepository,
+	fail,
+	relay,
+	reply,
+	repositoryTopic,
+	tell,
+	topic,
+} from "./wire";
 
 import { AGENT_PATH, LINK_CLOSE } from "@chopin/agent-link";
 
@@ -1939,9 +1948,21 @@ async function resetOpenAgents(
 	);
 }
 
+/** Tell every sidebar watching the document's repository that its documents changed. */
+function announceCatalogue(channel: Pick<ChannelRecord, "id" | "repositoryId">): void {
+	if (!server || draining) return;
+	broadcastRepository(server, channel.repositoryId, {
+		kind: "sidebar:catalogue",
+		ts: 0,
+		repositoryId: channel.repositoryId,
+		channelId: channel.id,
+	});
+}
+
 function announceChannel(channel: ChannelRecord): void {
 	// A machine running its Planner hears a new address on its next Planner poll; wake that poll.
 	experiments?.connections.wake(channel.repositoryId);
+	announceCatalogue(channel);
 	let room = Rooms.get(channel.id);
 	if (!room) return;
 	for (let ws of room.members.values()) {
@@ -2095,6 +2116,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 		if (room) Rooms.forget(room);
 		buildReadiness?.forget(channelId);
 		void Service.announceDeletedUnanswered(server, storage, channel);
+		announceCatalogue(channel);
 		summaryCoordinator?.resume(channelId);
 		return true;
 	} catch (err) {
@@ -2738,6 +2760,7 @@ registerMcpRoutes(router, hostedAuth, {
 	archiveChannel,
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,
+	onChannelCreated: announceCatalogue,
 	onDocumentPersisted: target => {
 		void documentHistory.record(target);
 		if (summaryCoordinator) void summaryCoordinator.enqueueNow(target).catch(() => {});
@@ -2803,6 +2826,7 @@ registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
 	onChannelDeleted: deleteChannel,
+	onChannelCreated: announceCatalogue,
 	renameChannel: (id, title) =>
 		withImplementationPlan(
 			id,

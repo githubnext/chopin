@@ -18,11 +18,13 @@ import type { ResyncQueue, WatchLedger } from "./sidebar-decision-watch";
 type Handlers = {
 	onCounts: (counts: Sidebar.Decisions) => void;
 	onSnapshot: (snapshot: Sidebar.Snapshot) => void;
+	/** A watched repository's documents changed: one was created, renamed, archived, restored or deleted. */
+	onCatalogue: (change: Sidebar.Catalogue) => void;
 };
 
 /**
- * Keep the Projects sidebar's decision counts live through its own socket, whether or
- * not a document is open, watching every repository the sidebar shows. Returns a
+ * Keep the Projects sidebar's decision counts and documents live through its own socket,
+ * whether or not a document is open, watching every repository the sidebar shows. Returns a
  * function that asks for a fresh snapshot of a repository whose total conflicts.
  */
 export function useSidebarDecisions(
@@ -65,6 +67,9 @@ export function useSidebarDecisions(
 			}),
 			socket.on<Sidebar.Snapshot>("sidebar:snapshot", frame => {
 				latestHandlers.current.onSnapshot(frame);
+			}),
+			socket.on<Sidebar.Catalogue>("sidebar:catalogue", frame => {
+				latestHandlers.current.onCatalogue(frame);
 			}),
 		];
 		setWire(socket);
