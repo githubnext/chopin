@@ -121,6 +121,15 @@ session and each watched repository. A denied repository is unsubscribed, an
 unavailable answer keeps an existing subscription, an expired session closes the
 socket, and closing the socket drops every subscription.
 
+When a document is created, renamed, archived, restored or permanently deleted,
+by a person, the Planner or a coding agent over MCP, the server also publishes
+`sidebar:catalogue` to that repository's topic. It names the repository and the
+document but no title, so a sidebar learns nothing it couldn't read: it reads that
+repository's documents again through the usual access check, once a burst of
+changes has been quiet for 250 ms. A document someone else creates therefore
+shows in every sidebar watching its repository without a reload. Repositories
+past the watch cap still refresh every minute.
+
 When a commit changes a document's count, or a document is archived, restored or
 permanently deleted, the server publishes `sidebar:decisions` to that
 repository's topic, so every sidebar socket watching it receives the update. A

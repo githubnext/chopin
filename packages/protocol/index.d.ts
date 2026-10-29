@@ -149,14 +149,31 @@ export declare namespace Session {
 /**
  * The Projects sidebar's own socket at `/ws/sidebar`, which carries unanswered
  * decision counts for every repository the sidebar shows whether or not a
- * document is open. Admission authenticates the browser session only; each
+ * document is open, and says when a repository's documents change. Admission authenticates the browser session only; each
  * repository is authorized when it is watched. Room sockets carry none of these
  * frames. Requests fail with `Session.Failure`, and `Session.Ping` works here too.
  */
 export declare namespace Sidebar {
 	export type Incoming = Request<Session.Ping> | Request<Watch> | Request<Unwatch>;
 
-	export type Outgoing = Decisions | Watched | Snapshot | Session.Failure | Session.Ping;
+	export type Outgoing =
+		| Decisions
+		| Catalogue
+		| Watched
+		| Snapshot
+		| Session.Failure
+		| Session.Ping;
+
+	/**
+	 * A document in a watched repository joined, changed in or left its catalogue: someone
+	 * created, renamed, archived, restored or deleted it. Sent to every socket watching the
+	 * repository, the change's author's included. It names no title: read the repository's
+	 * documents again, through the same access check as any read.
+	 */
+	export type Catalogue = KIND<"sidebar:catalogue"> & {
+		repositoryId: string;
+		channelId: string;
+	};
 
 	/**
 	 * Unanswered decision counts read from authoritative question records after they

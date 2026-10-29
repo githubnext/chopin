@@ -802,3 +802,63 @@ test("deleting an archived child updates the project total for a viewer in its p
 		await editor.context.close();
 	}
 });
+
+test("documents someone else creates, renames, archives or deletes show in the sidebar without a reload", async ({ baseURL, browser, join, room }) => {
+	let port = Number(new URL(baseURL!).port);
+	let existing = crypto.randomUUID();
+	await createChannel(port, existing, ARCHIVED_CHILD);
+	let creator = await openAs(
+		browser,
+		baseURL!,
+		`document-creator-${crypto.randomUUID()}`,
+		documentPath(ARCHIVED_CHILD, existing),
+	);
+	try {
+		let viewer = await join(`catalogue-live-${room.slice(0, 8)}`);
+		await addProject(viewer, baseURL!, ARCHIVED_CHILD);
+		await viewer.goto(`/documents/${ARCHIVED_CHILD.owner}/${ARCHIVED_CHILD.name}`);
+		await expect(viewer.getByRole("heading", { name: "No document open" })).toBeVisible();
+		let projects = sidebar(viewer);
+		await expect(projects.getByRole("link", { name: new RegExp(`^Test ${existing.slice(0, 8)}`) }))
+			.toBeVisible();
+		let reloads = 0;
+		viewer.on("framenavigated", frame => {
+			if (frame === viewer.mainFrame()) reloads++;
+		});
+		let headers = { origin: baseURL! };
+
+		// Created in another browser: it appears in the viewer's sidebar on its own.
+		let title = `Live ${room.slice(0, 8)}`;
+		let created = await creator.page.request.post(
+			`/api/repositories/${ARCHIVED_CHILD.owner}/${ARCHIVED_CHILD.name}/channels`,
+			{ headers, data: { title } },
+		);
+		expect(created.status()).toBe(201);
+		let id = (await created.json()).channel.id as string;
+		await expect(projects.getByRole("link", { name: new RegExp(`^${title}`) })).toBeVisible({
+			timeout: 10_000,
+		});
+
+		// Renamed: the row follows.
+		let renamedTitle = `Renamed ${room.slice(0, 8)}`;
+		let renamed = await creator.page.request.patch(`/api/channels/${id}`, {
+			headers,
+			data: { title: renamedTitle },
+		});
+		expect(renamed.ok()).toBe(true);
+		await expect(projects.getByRole("link", { name: new RegExp(`^${renamedTitle}`) }))
+			.toBeVisible({ timeout: 10_000 });
+		await expect(projects.getByRole("link", { name: new RegExp(`^${title}`) })).toHaveCount(0);
+
+		// Archived, then deleted: it leaves.
+		let archived = await creator.page.request.post(`/api/channels/${id}/archive`, { headers });
+		expect(archived.ok()).toBe(true);
+		await expect(projects.getByRole("link", { name: new RegExp(`^${renamedTitle}`) }))
+			.toHaveCount(0, { timeout: 10_000 });
+		let deleted = await creator.page.request.delete(`/api/channels/${id}`, { headers });
+		expect(deleted.status()).toBe(204);
+		expect(reloads).toBe(0);
+	} finally {
+		await creator.context.close();
+	}
+});

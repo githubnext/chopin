@@ -67,6 +67,8 @@ export type HostedCallbacks = {
 	isChannelDeleting?: (channelId: string) => boolean;
 	serializeDocument?: <T>(channelId: string, action: () => Promise<T>) => Promise<T>;
 	onChannelRenamed?: (channel: ChannelRecord) => void;
+	/** `create_document` created a document. */
+	onChannelCreated?: (channel: ChannelRecord) => void;
 	onDocumentPersisted?: (target: Plan.DocumentTarget) => void;
 	invokePlanner?: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
 	/** What `planner-not-attached` says for a document, at its URL; how to attach one by default. */
@@ -616,6 +618,7 @@ export function hosted(
 					if (!stored) return { kind: "title-taken" };
 					return replay(stored);
 				}
+				callbacks.onChannelCreated?.(created);
 				callbacks.onDocumentPersisted?.({
 					channelId: id,
 					revision: 0,

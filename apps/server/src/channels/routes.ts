@@ -253,6 +253,8 @@ export function registerChannelRoutes(
 		onChannelArchived?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		onChannelDeleted?: (channelId: string) => Promise<boolean>;
 		onChannelRenamed?: (channel: ChannelRecord) => void;
+		/** A person created a document. */
+		onChannelCreated?: (channel: ChannelRecord) => void;
 		renameChannel?: (id: string, title: string) => Promise<RenameResult>;
 		onChannelRestored?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		/** Restores an earlier version's prose as a new edit by `author` (a user id). */
@@ -387,6 +389,7 @@ export function registerChannelRoutes(
 					}
 				}
 				if (!channel) throw new StorageError("conflict", "could not reserve a generated title");
+				options.onChannelCreated?.(channel);
 				return json(
 					{
 						repository: repository(repo),
