@@ -495,8 +495,13 @@ pairing card), or later with the machine's **Shared** switch on the
 - Once the creator connects a machine of their own, the Planner moves there,
   unless it is already attached on the shared machine; then it stays until it
   stops.
-- Turning sharing off stops the Planners the machine runs for teammates, and
-  prints why: `<owner> stopped sharing <machine> with teammates`.
+- Turning sharing off takes no new teammate documents. A teammate's Planner
+  that is idle, or waits only on a paused run, stops at once; one that is
+  replying, has a question open, or has a live run keeps going until that work
+  finishes, then stops within 15 seconds. Meanwhile the machine's row on
+  **Machines** says **Finishing 1 teammate document**. Each stop prints why:
+  `<owner> stopped sharing <machine> with teammates`. A paused run stays on the
+  machine and resumes if its owner shares it again.
 
 Choosing another machine stops it and prints
 `Stopped the Planner for <document>: the document chose another machine.` So do

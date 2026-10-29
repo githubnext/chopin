@@ -155,7 +155,8 @@ function Dash({ label }: { label: string }) {
 /** What sharing a machine with teammates does, as the switch's tooltip and the phone row say. */
 export const SHARE_DETAIL =
 	"A teammate's document with no machine of its own can run its Planner here, as you, "
-	+ "in repositories you can push to. Builds stay yours.";
+	+ "in repositories you can push to. Builds stay yours. Turned off, a teammate's Planner "
+	+ "finishes the reply, question or run it is on first.";
 
 /**
  * Whether teammates' documents may plan on a machine: a switch, named for the machine, that
@@ -164,19 +165,34 @@ export const SHARE_DETAIL =
 function ShareSwitch(
 	{ machine, onChange }: { machine: Machine; onChange: (shared: boolean) => void },
 ) {
+	let finishingId = useId();
+	let finishing = !machine.shared && finishingWords(machine);
 	return (
-		<button
-			aria-checked={machine.shared}
-			aria-label={`Share ${machine.label} with teammates`}
-			className="machines-switch"
-			data-tooltip={machine.shared ? "Shared with teammates" : "Share with teammates"}
-			onClick={() => onChange(!machine.shared)}
-			role="switch"
-			type="button"
-		>
-			<span aria-hidden="true" className="machines-switch-thumb" />
-		</button>
+		<span className="machines-stack">
+			<button
+				aria-checked={machine.shared}
+				aria-describedby={finishing ? finishingId : undefined}
+				aria-label={`Share ${machine.label} with teammates`}
+				className="machines-switch"
+				data-tooltip={machine.shared ? "Shared with teammates" : "Share with teammates"}
+				onClick={() => onChange(!machine.shared)}
+				role="switch"
+				type="button"
+			>
+				<span aria-hidden="true" className="machines-switch-thumb" />
+			</button>
+			{finishing && <span className="machines-secondary" id={finishingId}>{finishing}</span>}
+		</span>
 	);
+}
+
+/**
+ * What a machine that stopped being shared still does for teammates: their Planners keep going
+ * until their current work finishes. Undefined once none does.
+ */
+export function finishingWords(machine: Pick<Machine, "finishing">): string | undefined {
+	let count = machine.finishing ?? 0;
+	return count ? `Finishing ${count} teammate document${count === 1 ? "" : "s"}` : undefined;
 }
 
 function copiesFor(machine: Machine, recommended: string | null): CopyItem[] {
@@ -722,7 +738,11 @@ export function MachineDetail(
 						<UsersIcon aria-hidden="true" size={16} />
 						<span className="machines-row-text">
 							{machine.shared ? "Stop sharing with teammates" : "Share with teammates"}
-							<span className="machines-secondary">{SHARE_DETAIL}</span>
+							<span className="machines-secondary">
+								{!machine.shared && finishingWords(machine)
+									? `${finishingWords(machine)}. Each stops when its current work finishes.`
+									: SHARE_DETAIL}
+							</span>
 						</span>
 					</button>
 				</li>

@@ -24,6 +24,8 @@ export type Machine = {
 	favorite: boolean;
 	/** Teammates' documents may run their Planner here when they have no machine of their own. */
 	shared: boolean;
+	/** Teammates' documents it still runs the Planner of after sharing stopped, until their work finishes. */
+	finishing?: number;
 };
 
 export type MachineSummary = { paired: number; connected: number };
