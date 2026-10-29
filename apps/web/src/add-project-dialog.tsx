@@ -21,18 +21,41 @@ function message(error: unknown): string {
 	return error instanceof Error ? error.message : "Could not load repositories.";
 }
 
+/** Take a repository out of the signed-in person's projects; its documents stay as they are. */
+async function removeProject(repositoryId: string): Promise<void> {
+	let result = await fetch(`/api/navigation/projects/${encodeURIComponent(repositoryId)}`, {
+		method: "DELETE",
+	});
+	if (result.status === 204) return;
+	let failure = await result.json().catch(() => undefined) as { error?: string } | undefined;
+	throw new Api.ApiError(failure?.error ?? `request failed (${result.status})`, result.status);
+}
+
+/** A change to one repository that is under way. */
+type Pending = "adding" | "removing";
+
+/**
+ * Choose which repositories are projects, as GitHub's multi-select repository picker does: each
+ * row is a checkbox and the repository's name, projects listed first as it opens, and choosing a
+ * row adds or removes it at once. It stays open for several changes and closes with Escape or a
+ * click outside. With no projects yet, the first one added closes it, so a first run goes
+ * straight to its documents.
+ */
 export function AddProjectDialog(
 	{
 		added,
 		motion,
 		onAdded,
 		onDismiss,
+		onRemoved,
 		userId,
 	}: {
 		added: Api.NavigationProject[];
 		motion: NavigationDialogMotion;
-		onAdded: (project: Api.NavigationProject) => void;
+		/** A project was added; `closing` when the dialog closes with it, so focus can follow it. */
+		onAdded: (project: Api.NavigationProject, closing: boolean) => void;
 		onDismiss: () => void;
+		onRemoved: (repositoryId: string) => void;
 		userId: string;
 	},
 ) {
@@ -43,7 +66,12 @@ export function AddProjectDialog(
 	let [error, setError] = useState<unknown>();
 	let [query, setQuery] = useState("");
 	let [retry, setRetry] = useState(0);
-	let [adding, setAdding] = useState<string>();
+	let [pending, setPending] = useState<ReadonlyMap<string, Pending>>(new Map());
+	/** Choices made here, shown at once and kept until the projects list agrees. */
+	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
+	let firstRun = useRef(added.length === 0);
+	/** Projects as the dialog opened, listed first; a choice made here never reorders the list. */
+	let openedWith = useRef(new Set(added.map(project => project.repositoryId)));
 
 	useEffect(() => {
 		let active = true;
@@ -71,22 +99,58 @@ export function AddProjectDialog(
 		? installedRepositoryGroups(snapshot).flatMap(group => group.repositories)
 		: [];
 	let addedIds = new Set(added.map(project => project.repositoryId));
+	let isProject = (id: string) => chosen.get(id) ?? addedIds.has(id);
 	let visible = repositories.filter(repository =>
 		!normalized || `${repository.owner}/${repository.name}`.toLocaleLowerCase().includes(normalized)
-	);
+	).sort((a, b) => Number(openedWith.current.has(b.id)) - Number(openedWith.current.has(a.id)));
 
-	async function select(repository: Api.Repository) {
-		if (adding || addedIds.has(repository.id)) return;
-		setAdding(repository.id);
+	function settle(id: string, value?: boolean) {
+		setPending(current => {
+			let next = new Map(current);
+			next.delete(id);
+			return next;
+		});
+		setChosen(current => {
+			let next = new Map(current);
+			if (value === undefined) next.delete(id);
+			else next.set(id, value);
+			return next;
+		});
+	}
+
+	async function toggle(repository: Api.Repository) {
+		if (pending.has(repository.id)) return;
+		let adding = !isProject(repository.id);
+		setPending(current => new Map(current).set(repository.id, adding ? "adding" : "removing"));
+		setChosen(current => new Map(current).set(repository.id, adding));
 		setError(undefined);
 		try {
-			onAdded(await Api.addProject(repository.owner, repository.name));
-			onDismiss();
+			if (adding) {
+				onAdded(await Api.addProject(repository.owner, repository.name), firstRun.current);
+			} else {
+				await removeProject(repository.id);
+				onRemoved(repository.id);
+			}
+			settle(repository.id, adding);
+			if (adding && firstRun.current) onDismiss();
 		} catch (reason) {
 			setError(reason);
-			setAdding(undefined);
+			settle(repository.id);
 		}
 	}
+
+	// Once the projects list agrees with a choice made here, the list is the truth again.
+	useEffect(() => {
+		setChosen(current => {
+			let stale = [...current].filter(([id, value]) =>
+				addedIds.has(id) === value && !pending.has(id)
+			);
+			if (stale.length === 0) return current;
+			let next = new Map(current);
+			for (let [id] of stale) next.delete(id);
+			return next;
+		});
+	}, [added]);
 
 	return (
 		<NavigationDialog
@@ -148,10 +212,10 @@ export function AddProjectDialog(
 				)}
 				{visible.length > 0 && (
 					<RepositoryOptions
-						addedIds={addedIds}
-						adding={adding}
 						input={input}
-						onChoose={repository => void select(repository)}
+						isProject={isProject}
+						onChoose={repository => void toggle(repository)}
+						pending={pending}
 						query={query}
 						repositories={visible}
 					/>
@@ -164,53 +228,44 @@ export function AddProjectDialog(
 	);
 }
 
-/** The repositories a person can add, with ones already added shown but not offered. */
+/** Each repository a person can add, checked when it is one of their projects. */
 export function RepositoryOptions(
-	{ addedIds, adding, input, onChoose, query, repositories }: {
-		addedIds: ReadonlySet<string>;
-		adding?: string;
+	{ input, isProject, onChoose, pending, query, repositories }: {
 		input: RefObject<HTMLInputElement | null>;
+		isProject: (repositoryId: string) => boolean;
 		onChoose: (repository: Api.Repository) => void;
+		pending: ReadonlyMap<string, Pending>;
 		query: string;
 		repositories: Api.Repository[];
 	},
 ) {
 	return (
 		<PaletteListbox
-			enabled={repository => !addedIds.has(repository.id)}
+			checked={repository => isProject(repository.id)}
 			input={input}
 			itemKey={repository => repository.id}
-			itemLabel={repository =>
-				`${repository.owner}/${repository.name}${addedIds.has(repository.id) ? ", added" : ""}`}
+			itemLabel={repository => `${repository.owner}/${repository.name}`}
 			items={repositories}
 			label="Repositories"
 			onChoose={onChoose}
 			query={query}
 			renderItem={repository => {
-				let alreadyAdded = addedIds.has(repository.id);
-				let busy = adding === repository.id;
+				let member = isProject(repository.id);
+				let busy = pending.get(repository.id);
 				return (
 					<>
 						<span
-							className={`min-w-0 flex-1 truncate ${
-								alreadyAdded ? "text-text-tertiary" : "text-text-primary"
-							}`}
+							aria-hidden="true"
+							className="navigation-palette-check"
+							data-checked={member || undefined}
 						>
-							<span className="text-text-tertiary">{repository.owner}/</span>
-							{repository.name}
+							{busy
+								? <LoaderIcon data-palette-loader="" size={12} />
+								: member && <CheckIcon size={12} />}
 						</span>
-						{alreadyAdded
-							? (
-								<span className="flex shrink-0 items-center gap-1 text-xs text-text-tertiary">
-									<CheckIcon aria-hidden="true" />
-									Added
-								</span>
-							)
-							: (
-								<span className="navigation-palette-hint" data-busy={busy || undefined}>
-									{busy ? "Adding…" : "Add"}
-								</span>
-							)}
+						<span className="min-w-0 flex-1 truncate text-text-primary">
+							{repository.owner}/{repository.name}
+						</span>
 					</>
 				);
 			}}

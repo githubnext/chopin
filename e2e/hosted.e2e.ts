@@ -644,3 +644,54 @@ test("expired GitHub authorization returns to sign in without losing the documen
 	await expect(page.getByRole("link", { name: "Continue with GitHub" })).toBeVisible();
 	await expect(page).toHaveURL(path);
 });
+
+test("the Add project dialog adds and removes projects as checkboxes, projects first, until it is closed", async ({ baseURL, page }) => {
+	await authenticate(page, `project-toggler-${crypto.randomUUID()}`, baseURL!);
+	let added = await page.request.post("/api/navigation/projects", {
+		data: { owner: "octo-org", repository: "score" },
+		headers: { origin: baseURL! },
+	});
+	expect(added.status()).toBe(201);
+	await page.goto("/");
+	let projects = page.getByRole("complementary", { name: "Projects", exact: true });
+	let project = (name: string) =>
+		projects.getByRole("button", {
+			name: new RegExp(`^${name}(?:, \\d+ unanswered decisions?)?$`),
+		});
+	await expect(project("score")).toBeVisible();
+	await projects.getByRole("button", { exact: true, name: "Add project" }).click();
+
+	let dialog = addProjectDialog(page);
+	let score = dialog.getByRole("option", { name: "octo-org/score", exact: true });
+	let notes = dialog.getByRole("option", { name: "octocat/notes", exact: true });
+	await expect(score).toHaveAttribute("aria-checked", "true");
+	await expect(notes).toHaveAttribute("aria-checked", "false");
+	// As GitHub's picker does: projects first, each row only its checkbox and name.
+	await expect(dialog.getByRole("option").first()).toHaveAccessibleName("octo-org/score");
+	await expect(score).toHaveText("octo-org/score");
+
+	// Adding keeps the dialog open; the sidebar follows.
+	await notes.click();
+	await expect(notes).toHaveAttribute("aria-checked", "true");
+	await expect(project("notes")).toBeVisible();
+	await expect(dialog).toBeVisible();
+	// The sidebar shows the new project without taking focus from the open dialog.
+	expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+	// A choice made here never reorders the list.
+	await expect(dialog.getByRole("option").first()).toHaveAccessibleName("octo-org/score");
+
+	// Removing from the keyboard, with Space on the focused row.
+	let search = dialog.getByRole("textbox", { name: "Search repositories" });
+	await search.fill("score");
+	await search.press("ArrowDown");
+	await expect(score).toBeFocused();
+	await page.keyboard.press(" ");
+	await expect(score).toHaveAttribute("aria-checked", "false");
+	await expect(project("score")).toHaveCount(0);
+
+	await page.keyboard.press("Escape");
+	await expect(dialog).toBeHidden();
+	await page.reload();
+	await expect(project("notes")).toBeVisible();
+	await expect(project("score")).toHaveCount(0);
+});

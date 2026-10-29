@@ -1281,6 +1281,38 @@
 	visibility: visible;
 }
 
+/* A project row's checkbox: the choice-control checkbox, drawn inside its option. */
+.navigation-palette-check {
+	display: grid;
+	width: calc(var(--spacing) * 4);
+	height: calc(var(--spacing) * 4);
+	flex-shrink: 0;
+	place-items: center;
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-sm);
+	background: var(--color-page);
+	color: var(--color-text-tertiary);
+	transition:
+		background-color var(--duration-base) var(--ease-out),
+		border-color var(--duration-base) var(--ease-out);
+}
+
+.navigation-palette-check[data-checked] {
+	border-color: var(--color-brand);
+	background: var(--color-brand);
+	color: var(--color-page);
+}
+
+/* The check and the loader take the box's ink, as icons in a primary button do. */
+.navigation-palette-check [data-nucleo-icon] {
+	color: inherit;
+}
+
+/* At 12px the line icons' stroke is a single pixel; the check carries the weight choice-control's does. */
+.navigation-palette-check[data-checked] path {
+	stroke-width: 2.5;
+}
+
 /* Touch has no hover to disclose the action, so every addable row shows it. */
 @media (pointer: coarse) {
 	.navigation-palette-option {
@@ -1304,7 +1336,8 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.navigation-palette-status [data-palette-loader] {
+	.navigation-palette-status [data-palette-loader],
+	.navigation-palette-check [data-palette-loader] {
 		animation: button-loader-spin var(--duration-linger) linear infinite;
 	}
 }

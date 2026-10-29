@@ -205,7 +205,10 @@ describe("design audit specimens", () => {
 		expect(markup).toContain('aria-label="Add document"');
 		expect(markup).toContain("disabled");
 		expect(plate(markup, "selections")).toContain(
-			'aria-disabled="true" aria-label="githubnext/design-notes, added"',
+			'aria-checked="true" aria-label="githubnext/design-notes"',
+		);
+		expect(plate(markup, "selections")).toContain(
+			'aria-checked="false" aria-label="githubnext/chopin"',
 		);
 		expect(plate(markup, "selections")).toContain('class="navigation-palette-option"');
 		expect(markup).not.toContain("design-audit-selection-list");

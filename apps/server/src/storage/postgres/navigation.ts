@@ -210,6 +210,29 @@ export class PostgresNavigationStore implements NavigationStore {
 			() => this.#sql.begin(transaction => this.#addProject(transaction, input)),
 		);
 
+	readonly removeProject = (userId: string, repositoryId: string, now: Date): Promise<boolean> =>
+		this.#run("remove project", () =>
+			this.#sql.begin(async transaction => {
+				await this.#lockUser(transaction, userId);
+				let removed = await transaction<{ repositoryId: string }[]>`
+					DELETE FROM user_projects
+					WHERE user_id = ${userId} AND repository_id = ${repositoryId}
+					RETURNING repository_id AS "repositoryId"
+				`;
+				if (!removed.length) return false;
+				await transaction`
+					UPDATE user_navigation SET
+						last_document_id = NULL,
+						revision = revision + 1,
+						updated_at = ${now}
+					WHERE user_id = ${userId}
+						AND last_document_id IN (
+							SELECT id FROM channels WHERE repository_id = ${repositoryId}
+						)
+				`;
+				return true;
+			}));
+
 	readonly get = (userId: string): Promise<UserNavigation | undefined> =>
 		this.#run("read navigation", async () => {
 			await this.#requireUser(userId);

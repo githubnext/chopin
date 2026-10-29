@@ -495,7 +495,13 @@ for (let height of [1080, 969]) {
 					await sidebar.getByRole("button", { name: "Add project", exact: true }).click();
 				}
 				await add.getByRole("textbox", { name: "Search repositories" }).fill(repository);
-				await add.getByRole("option", { name: `octo-org/${repository}`, exact: true }).click();
+				let option = add.getByRole("option", { name: `octo-org/${repository}`, exact: true });
+				await option.click();
+				// The first project closes the dialog; later ones keep it open for more changes.
+				if (repository !== "score") {
+					await expect(option).toHaveAttribute("aria-checked", "true");
+					await page.keyboard.press("Escape");
+				}
 				await expect(add).toBeHidden();
 				let create = sidebar.getByRole("button", {
 					name: `New document in ${repository}`,

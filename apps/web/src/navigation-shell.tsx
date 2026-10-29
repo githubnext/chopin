@@ -1107,9 +1107,12 @@ export function NavigationShell(
 							<AddProjectDialog
 								added={navigation?.projects ?? []}
 								motion={dialogMotion}
-								onAdded={project => {
+								onAdded={(project, closing) => {
 									catalogueRefreshes.current.set(project.repositoryId, Date.now());
-									setFocusProjectId(project.repositoryId);
+									// Focus moves to the new project only as the dialog closes; open, it keeps focus.
+									if (closing) {
+										setFocusProjectId(project.repositoryId);
+									}
 									setCollapsed(false);
 									if (mode === "drawer") {
 										setDrawerOpen(true);
@@ -1117,6 +1120,10 @@ export function NavigationShell(
 									void refresh();
 								}}
 								onDismiss={dismissDialog}
+								onRemoved={repositoryId => {
+									catalogueRefreshes.current.delete(repositoryId);
+									void refresh();
+								}}
 								userId={user.id}
 							/>
 						</LazyDialogBoundary>

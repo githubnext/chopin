@@ -272,6 +272,37 @@ describe("navigation routes", () => {
 		expect(await repeated!.json()).toEqual(await added!.json());
 	});
 
+	it("removes a project once, only from the same origin, leaving it to be added again", async () => {
+		let { router, github, cookie } = await setup();
+		github.repositories.set("octo-org/score", repository("R_score", "octo-org", "score"));
+		let headers = { "content-type": "application/json", origin: "https://chopin.test" };
+		let add = () =>
+			router.handle(request("/api/navigation/projects", cookie, {
+				method: "POST",
+				headers,
+				body: JSON.stringify({ owner: "octo-org", repository: "score" }),
+			}));
+		let remove = (origin = "https://chopin.test", id = "R_score") =>
+			router.handle(request(`/api/navigation/projects/${id}`, cookie, {
+				method: "DELETE",
+				headers: { origin },
+			}));
+		expect((await add())!.status).toBe(201);
+		expect((await remove("https://elsewhere.test"))!.status).toBe(403);
+		expect(
+			(await router.handle(request(`/api/navigation/projects/R_score`, undefined, {
+				method: "DELETE",
+				headers: { origin: "https://chopin.test" },
+			})))!.status,
+		).toBe(401);
+		expect((await remove())!.status).toBe(204);
+		expect((await remove())!.status).toBe(404);
+		expect((await remove(undefined, "not%20an%20id"))!.status).toBe(404);
+		let listed = await (await router.handle(request("/api/navigation", cookie)))!.json();
+		expect(listed.projects).toEqual([]);
+		expect((await add())!.status).toBe(201);
+	});
+
 	it("rejects cross-origin navigation mutations", async () => {
 		let { router, cookie } = await setup();
 		let headers = { "content-type": "application/json", origin: "https://elsewhere.test" };

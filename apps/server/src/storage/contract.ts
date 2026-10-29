@@ -236,6 +236,53 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("removes a project, forgetting the last document only when it is in that repository", async () => {
+			let storage = await opened(factory);
+			try {
+				let now = new Date("2026-01-02T03:04:05.000Z");
+				let { userId, channelId, repositoryId } = await userAndChannel(storage);
+				let channel = (await storage.channels.get(channelId))!;
+				for (let [id, name] of [[repositoryId, channel.repositoryName], ["R_other", "other"]]) {
+					await storage.navigation.addProject({
+						userId,
+						repositoryId: id!,
+						repositoryOwner: channel.repositoryOwner,
+						repositoryName: name!,
+						now,
+					});
+				}
+				let visited = await storage.navigation.setLastDocument(userId, channelId, now);
+
+				// Another repository: the last document stays.
+				expect(await storage.navigation.removeProject(userId, "R_other", now)).toBe(true);
+				expect(await storage.navigation.get(userId)).toEqual(visited);
+				expect(await storage.navigation.removeProject(userId, "R_other", now)).toBe(false);
+
+				// The last document's own repository: it is forgotten, with a new revision.
+				let later = new Date(now.getTime() + 1);
+				expect(await storage.navigation.removeProject(userId, repositoryId, later)).toBe(true);
+				expect(await storage.navigation.projects(userId)).toEqual([]);
+				expect(await storage.navigation.get(userId)).toMatchObject({
+					lastDocumentId: undefined,
+					revision: visited.revision + 1,
+				});
+
+				// Visiting one of its documents adds it back.
+				await storage.navigation.recordVisit({
+					userId,
+					repositoryId,
+					repositoryOwner: channel.repositoryOwner,
+					repositoryName: channel.repositoryName,
+					documentId: channelId,
+					now: later,
+				});
+				expect((await storage.navigation.projects(userId)).map(value => value.repositoryId))
+					.toEqual([repositoryId]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("stores the last document with a monotonic navigation revision", async () => {
 			let storage = await opened(factory);
 			try {

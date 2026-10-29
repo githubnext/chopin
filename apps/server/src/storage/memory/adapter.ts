@@ -285,6 +285,8 @@ export class MemoryStorage implements StorageAdapter {
 			return Promise.resolve(undefined);
 		},
 		addProject: input => this.#addProject(input),
+		removeProject: (userId, repositoryId, now) =>
+			Promise.resolve(this.#removeProject(userId, repositoryId, now)),
 		get: userId => {
 			this.#requireUser(userId);
 			let found = this.#navigation.get(userId);
@@ -443,6 +445,25 @@ export class MemoryStorage implements StorageAdapter {
 		};
 		this.#projects.set(input.userId, [...projects, saved]);
 		return Promise.resolve({ project: project(saved), added: true });
+	}
+
+	#removeProject(userId: string, repositoryId: string, now: Date): boolean {
+		this.#requireUser(userId);
+		let projects = this.#projects.get(userId) ?? [];
+		let kept = projects.filter(value => value.repositoryId !== repositoryId);
+		if (kept.length === projects.length) return false;
+		this.#projects.set(userId, kept);
+		let saved = this.#navigation.get(userId);
+		let last = saved?.lastDocumentId ? this.#channels.get(saved.lastDocumentId) : undefined;
+		if (saved && last?.repositoryId === repositoryId) {
+			this.#navigation.set(userId, {
+				...saved,
+				lastDocumentId: undefined,
+				revision: saved.revision + 1,
+				updatedAt: now,
+			});
+		}
+		return true;
 	}
 
 	async #setLastDocument(
