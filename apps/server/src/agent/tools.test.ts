@@ -85,6 +85,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"list_background_jobs",
 		"read_background_job",
 		"create_research_workspace",
+		"upload_plan_image",
 		"assess_visual",
 		"edit_plan",
 		"open_decision",

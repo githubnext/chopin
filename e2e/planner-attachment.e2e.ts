@@ -5,6 +5,7 @@
  * one against a database of its own, created beside local-auth's.
  */
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 import { SQL } from "bun";
 
@@ -382,6 +383,119 @@ test("an attached Planner's Markdown question reads as a heading over a list, an
 			value: {
 				cancelled: false,
 				answers: [{ questionIndex: 0, question, kind: "option", answer: "Confirm all" }],
+			},
+		});
+	} finally {
+		await client.detach();
+	}
+});
+
+test("an attached Planner stores the images it made and shows one under each option and in the card", async ({ page }) => {
+	test.setTimeout(90_000);
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	registerTestDatabase(PORT, database);
+	let room = crypto.randomUUID();
+	let other = crypto.randomUUID();
+	await createChannel(PORT, room);
+	await createChannel(PORT, other);
+	await seedChannel(PORT, room, "# Cache\nHow writes reach it.\n");
+	await authenticate(page, HANDLE, ORIGIN);
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+
+	let pictures = [
+		{
+			file: "option-write-through.png",
+			alt: "Write-through: the database is written before the reply",
+		},
+		{
+			file: "option-write-back.png",
+			alt: "Write-back: the reply comes first and the database later",
+		},
+	];
+	let stored: { path: string; markdown: string }[] = [];
+	let offered: string[] = [];
+	let result = Promise.withResolvers<unknown>();
+	let link: AgentClient | undefined;
+	let client = await connectAgent({
+		url: ORIGIN,
+		token: `ghu_e2e_${HANDLE}_1`,
+		document: room,
+		handlers: {
+			async turn(context) {
+				offered = context.message.tools.map(tool => tool.name);
+				for (let { file, alt } of pictures) {
+					let bytes = await readFile(new URL(`./fixtures/${file}`, import.meta.url));
+					let uploaded = await context.callHostTool("upload_plan_image", {
+						data: bytes.toString("base64"),
+						mimeType: "image/png",
+						alt,
+					});
+					expect(uploaded.isError).toBe(false);
+					stored.push(JSON.parse(String(uploaded.output)));
+				}
+				let answered = await link!.ask(context.message.session, {
+					method: "questionnaire",
+					params: {
+						questions: [{
+							question: `How should writes reach the cache?\n\n${stored[0]!.markdown}`,
+							header: "Cache",
+							options: [
+								{ label: "Write-through", description: "Safe.", preview: stored[0]!.markdown },
+								{ label: "Write-back", description: "Fast.", preview: stored[1]!.markdown },
+							],
+						}],
+					},
+				});
+				result.resolve(answered);
+			},
+		},
+	});
+	link = client;
+	try {
+		expect(client.features).toContain("decision-option-previews");
+		await expect(plannerStatus(page)).toHaveText(`Planner: ${HANDLE} attached`);
+		let input = chatInput(page);
+		await fillChat(input, "@chopin compare the cache options");
+		await input.press("Enter");
+
+		let card = content(page).locator("article[data-plan-sidecar-questionnaire]");
+		let write = card.getByRole("group", { name: "Preview of Write-through", exact: true });
+		let back = card.getByRole("group", { name: "Preview of Write-back", exact: true });
+		for (let [frame, { alt }] of [[write, pictures[0]!], [back, pictures[1]!]] as const) {
+			let picture = frame.getByRole("img", { name: alt });
+			await expect(picture).toBeVisible();
+			await expect.poll(() =>
+				picture.evaluate(element => (element as HTMLImageElement).naturalWidth)
+			)
+				.toBeGreaterThan(0);
+		}
+		// The turn was offered the tool, and the same picture it stored is also in the card's body.
+		expect(offered).toContain("upload_plan_image");
+		// The same picture the Planner stored is also in the card's body.
+		await expect(card.locator(".question-body").getByRole("img", { name: pictures[0]!.alt }))
+			.toBeVisible();
+		await test.info().attach("remote-planner-option-previews", {
+			body: await card.screenshot({ animations: "disabled" }),
+			contentType: "image/png",
+		});
+
+		// Only this document serves what was stored in it.
+		let path = stored[0]!.path;
+		let own = await page.request.get(`${ORIGIN}${path}?document=${room}`);
+		expect(own.status()).toBe(200);
+		expect(own.headers()["content-type"]).toBe("image/png");
+		expect((await page.request.get(`${ORIGIN}${path}?document=${other}`)).status()).toBe(404);
+
+		await card.getByText("Write-back", { exact: true }).click();
+		await card.getByRole("button", { name: "Save", exact: true }).click();
+		expect(await result.promise).toMatchObject({
+			status: "answered",
+			value: {
+				answers: [{ kind: "option", answer: "Write-back", preview: stored[1]!.markdown }],
 			},
 		});
 	} finally {

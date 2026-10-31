@@ -176,6 +176,7 @@ describe("Agent connection messages", () => {
 			features: [AGENT_FEATURES.runStageDeltas],
 		};
 		expect(AGENT_FEATURES.runStageDeltas).toBe("run-stage-deltas");
+		expect(AGENT_FEATURES.decisionOptionPreviews).toBe("decision-option-previews");
 		expect(AGENT_FEATURES_HEADER).toBe("chopin-agent-features");
 		expect(parseServerMessage(encodeMessage(attached))).toEqual({ ok: true, message: attached });
 		expect(parseServerMessage(encodeMessage({ ...attached, features: ["has space"] })))
@@ -316,6 +317,7 @@ describe("Agent connection messages", () => {
 			malformedClose: 4400,
 			featuresHeader: AGENT_FEATURES_HEADER,
 			runStageDeltas: AGENT_FEATURES.runStageDeltas,
+			decisionOptionPreviews: AGENT_FEATURES.decisionOptionPreviews,
 		});
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];

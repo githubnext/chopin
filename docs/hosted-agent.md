@@ -340,7 +340,11 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
 
 - Questionnaires retain question and option order, multi-selection, and the
   exact text Atomic supplied; answers return their Atomic question indices and
-  answer kinds, including a selected option's preview.
+  answer kinds, including a selected option's preview. An option's `preview` is
+  kept as its own field and shown framed under the option, as Markdown that may
+  hold an image of the document's, a Mermaid diagram or a table; see
+  [Option previews](agent-connection.md#option-previews). The Planner's own
+  `ask`, `open_decision` and `open_decisions` tools take it too.
 - Every card offers a written answer. It returns as Atomic's `custom` kind where
   Atomic's own dialog accepts typed text (single-select without previews), and
   otherwise as typed `chat`, which Atomic delivers to the model as the member's

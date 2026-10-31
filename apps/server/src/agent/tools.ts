@@ -28,6 +28,7 @@ import { implementationGraphs, implementationReadiness } from "../tasks/plan-gra
 import { documentIdentity, implementationActive } from "../plan/service";
 import { childTools, Refusal, shielded } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
+import { planImage } from "./plan-images";
 import type { InvestigationTools } from "./experiment-tools";
 
 import type { ActiveOwnerBinding } from "./active-owner";
@@ -179,6 +180,13 @@ export type DocumentRoom = {
 	checkReply?: (text: string, signal?: AbortSignal) => Promise<boolean>;
 	/** This root's children; absent in a child room and in tests that do not need them. */
 	children?: import("../chat/children").ChildDocuments;
+	/**
+	 * Stores an image in this document's own images, during a live Planner turn. Absent where the
+	 * session may not write the document.
+	 */
+	uploadImage?: (
+		image: { bytes: Uint8Array; mimeType: import("../images/format").ImageType },
+	) => Promise<{ path: string }>;
 };
 const roomContext = z.object({
 	room: z.custom<DocumentRoom>(value =>
@@ -283,6 +291,37 @@ export const documentTools = {
 					throw new Error("a current member request is required to create a research workspace");
 				}
 				return context.createResearch(question);
+			}),
+	}),
+
+	upload_plan_image: tool({
+		contextSchema: roomContext,
+		description: "Store an image you made, a PNG, JPEG, WebP or GIF of at most 1 MiB, in this "
+			+ "document's images and get back the Markdown that shows it. Put that Markdown in a "
+			+ "decision option's `preview` (or a question body, or the plan) so people can compare "
+			+ "choices by looking. Only people who can read this document can load the image; the "
+			+ "same bytes twice give the same path. `alt` says what the image shows, in a sentence.",
+		inputSchema: jsonSchema({
+			type: "object",
+			properties: {
+				data: {
+					type: "string",
+					contentEncoding: "base64",
+					description: "Standard base64 image bytes, at most 1 MiB decoded.",
+				},
+				mimeType: { type: "string", enum: ["image/png", "image/jpeg", "image/webp", "image/gif"] },
+				alt: { type: "string", minLength: 1, maxLength: 200 },
+			},
+			required: ["data", "mimeType", "alt"],
+			additionalProperties: false,
+		}),
+		metadata: { skipPermission: true },
+		execute: (raw, { context: { room: context } }) =>
+			answer("upload_plan_image", async () => {
+				if (!context.uploadImage) throw new Error("images cannot be stored in this session");
+				let image = planImage(raw, context.id);
+				let { path } = await context.uploadImage({ bytes: image.bytes, mimeType: image.mimeType });
+				return { path, markdown: `![${image.alt}](${path})` };
 			}),
 	}),
 

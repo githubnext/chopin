@@ -6,7 +6,13 @@
  */
 
 import { HarnessCapabilityUnsupportedError } from "@ai-sdk/harness";
-import { AGENT_VERSION, encodeMessage, LINK_CLOSE, parseClientMessage } from "@chopin/agent-link";
+import {
+	AGENT_FEATURES,
+	AGENT_VERSION,
+	encodeMessage,
+	LINK_CLOSE,
+	parseClientMessage,
+} from "@chopin/agent-link";
 
 import type {
 	HarnessV1PromptControl,
@@ -141,6 +147,8 @@ type Port = {
 	/** Throws, closing the link, when the caller can no longer read the document. */
 	revalidate(): Promise<void>;
 	timeoutMs: number;
+	/** The features the client asked for that this server supports; absent when it asked for none. */
+	features?: readonly string[];
 };
 
 type Turn = {
@@ -498,7 +506,10 @@ class RemoteSession {
 		let prompt = promptText(options.prompt);
 		await this.#port.revalidate();
 		this.#ready();
-		let hostNames = options.tools.map(tool => tool.name);
+		// A client that did not ask for option previews is not offered the tool that makes their images.
+		let previews = this.#port.features?.includes(AGENT_FEATURES.decisionOptionPreviews);
+		let offered = options.tools.filter(tool => tool.name !== "upload_plan_image" || previews);
+		let hostNames = offered.map(tool => tool.name);
 		let hostTools = this.planner.hostTools;
 		this.planner.hostTools = undefined;
 		let turn: Turn = {
@@ -522,7 +533,7 @@ class RemoteSession {
 			prompt,
 			...(options.instructions === undefined ? {} : { instructions: options.instructions }),
 			...(options.model ? { model: options.model } : {}),
-			tools: options.tools.map(tool => ({
+			tools: offered.map(tool => ({
 				name: tool.name,
 				...(tool.description === undefined ? {} : { description: tool.description }),
 				...(tool.inputSchema === undefined
@@ -619,6 +630,7 @@ export class AgentLink {
 			},
 			revalidate: () => this.#recheck(),
 			timeoutMs: options.timeoutMs ?? OPERATION_TIMEOUT_MS,
+			...(options.features ? { features: options.features } : {}),
 		};
 	}
 

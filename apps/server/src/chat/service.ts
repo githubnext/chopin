@@ -17,6 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { imagePath } from "../images/format";
 
 import { ulid } from "@chopin/dialect";
 
@@ -1791,6 +1792,41 @@ export function documentRoom(context: Room): DocumentRoom {
 				),
 		}),
 		currentMemberRequest: () => currentMemberRequest(chat),
+		...(!chat.job && {
+			uploadImage: async ({ bytes, mimeType }) => {
+				if (
+					chat.closed || !chat.busy || !chat.turnController || chat.turnController.signal.aborted
+				) {
+					throw new Error("images can be stored only during a Planner turn");
+				}
+				let channel = await context.auth.storage.channels.get(room);
+				if (!channel) throw new Error("this document is unavailable");
+				if (channel.archivedAt) throw new Error("this document is archived");
+				// Whoever the turn is for owns the upload; a turn nobody asked for, such as a
+				// follow-up, is the Planner owner's.
+				let uploadedBy = currentMemberRequest(chat)?.userId;
+				if (!uploadedBy) {
+					let binding = await context.activeOwner?.();
+					if (!binding) throw new Error("this Planner has no owner to store the image for");
+					try {
+						uploadedBy = (await context.auth.sessions.resolve(binding.ownerSessionId))?.user.id;
+					} finally {
+						binding.release();
+					}
+				}
+				if (!uploadedBy) throw new Error("this Planner has no owner to store the image for");
+				let sha256 = createHash("sha256").update(bytes).digest("hex");
+				await context.auth.storage.images.put({
+					channelId: room,
+					sha256,
+					mimeType,
+					bytes,
+					uploadedBy,
+					now: context.auth.clock(),
+				});
+				return { path: imagePath(sha256, mimeType) };
+			},
+		}),
 		focusedChild: () =>
 			!chat.closed && chat.busy && chat.turnController && !chat.turnController.signal.aborted
 				? chat.focus?.channelId

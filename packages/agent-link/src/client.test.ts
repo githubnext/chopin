@@ -111,7 +111,7 @@ describe("Agent connection client", () => {
 	it("asks for stage deltas and splits a report too large for one frame across several", async () => {
 		let server = fakeServer({ features: ["run-stage-deltas"] });
 		let client = await connect(server, { turn() {} });
-		expect(server.asked).toEqual(["run-stage-deltas"]);
+		expect(server.asked).toEqual(["run-stage-deltas, decision-option-previews"]);
 		expect(client.features).toEqual(["run-stage-deltas"]);
 		let stages = Array.from({ length: 2_000 }, (_, index) => ({
 			id: `s${index}`,
