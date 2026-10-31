@@ -85,6 +85,11 @@ function startAgent(
 			(code, signal) => resolve(ended ??= signal ? `signal ${signal}` : `exit ${code}`),
 		);
 	});
+	// "exit" can come before the last of its stderr is read; "close" follows once that stream ends.
+	let closed = new Promise(resolve => {
+		child.once("error", resolve);
+		child.once("close", resolve);
+	});
 	let connection = app.connect(ndJsonStream(
 		Writable.toWeb(child.stdin),
 		Readable.toWeb(child.stdout) as unknown as ReadableStream<Uint8Array>,
@@ -95,8 +100,12 @@ function startAgent(
 		connection,
 		kill,
 		async failure(error: unknown): Promise<AgentFailure> {
-			// Its exit, and the rest of its stderr, may come just after the failure they caused.
-			await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 1000))]);
+			// Its exit, and the rest of its stderr, may come just after the failure they caused. A
+			// process it left holding stderr open is not waited on past a second.
+			await Promise.race([
+				exited.then(() => closed),
+				new Promise(resolve => setTimeout(resolve, 1000)),
+			]);
 			let line = head.split("\n").map(text => text.trim()).find(Boolean);
 			return {
 				how: ended ?? (error instanceof Error ? error.message : String(error)),

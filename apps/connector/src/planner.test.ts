@@ -581,15 +581,23 @@ test.skipIf(process.platform === "win32")(
 		let directory = await mkdtemp(join(scratch, "long-line-"));
 		let script = join(directory, "backend.ts");
 		// The first 8 characters of the credential end a 65,545-character piece without a newline;
-		// the rest comes after a pause, then a normal line.
+		// the rest comes after a pause, then a normal line. Only the first start prints it: the
+		// Planner starts again on a backoff that may be a few milliseconds, and a second start
+		// printing the line before the test stops it would be a second, legitimate drop.
 		await writeFile(
 			script,
 			[
+				"import { existsSync, writeFileSync } from 'node:fs';",
+				`let ran = ${JSON.stringify(join(directory, "ran"))};`,
+				"if (existsSync(ran)) setInterval(() => {}, 1000);",
+				"else {",
+				"writeFileSync(ran, '');",
 				"let token = process.env.CHOPIN_PLANNER_TOKEN;",
 				"process.stderr.write(`${'x'.repeat(65536)} ${token.slice(0, 8)}`, () => setTimeout(() => {",
 				"\tprocess.stderr.write(`${token.slice(8)}\\nnext CHOPIN_PLANNER_TOKEN=${token}\\n`,",
 				"\t\t() => process.exit(127));",
 				"}, 300));",
+				"}",
 				"",
 			].join("\n"),
 		);
