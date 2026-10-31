@@ -64,6 +64,36 @@ describe("questionnaire", () => {
 		});
 	});
 
+	it("round-trips an option's own visual: a diagram and an image of the document's, indentation kept", () => {
+		let preview = [
+			"```mermaid",
+			"flowchart LR",
+			"  W[write] --> C[cache] --> D[(db)]",
+			"```",
+			"",
+			`![Write-through: the cache is written with the database](/images/${"b".repeat(64)}.png)`,
+		].join("\n");
+		let written = preview.replace("\n  W[", "\n&#32;&#32;W[");
+		let source = OPEN.replace(
+			'<Option id="01K0N4X2M5R8T3VQ7YB6ZC4DEF" label="Blue-green" />',
+			`<Option id="01K0N4X2M5R8T3VQ7YB6ZC4DEF" label="Blue-green" preview="${written}" />`,
+		);
+		expect(source).toContain("preview=");
+		let out = through(source);
+		expect(through(out)).toBe(out);
+		expect(out).toContain(`preview="${written}"`);
+		let instance = editor();
+		importPlan(instance, out, { registry: REGISTRY });
+		instance.getEditorState().read(() => {
+			let node = $getRoot().getFirstChild();
+			if (!$isQuestionnaireNode(node)) throw new Error("expected questionnaire");
+			let [canary, blue] = node.getQuestionnaire().questions[0]!.options;
+			expect(blue?.preview).toBe(preview);
+			// An option without one has none, so cards written before keep their exact source.
+			expect("preview" in canary!).toBe(false);
+		});
+	});
+
 	it("round-trips a resolved answer projection", () => {
 		let source = OPEN.replace(
 			"</Question>",

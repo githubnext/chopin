@@ -73,6 +73,17 @@ function storedText(
 	if (!verbatim && (value as string).length > max) fail(`${name} exceeds ${max} characters`);
 }
 
+/** An option's own visual: kept when it has any text, left out when it is empty. */
+function visual(
+	option: Record<string, unknown>,
+	name: string,
+	verbatim: boolean,
+): { preview?: string } {
+	if (!Object.hasOwn(option, "preview")) return {};
+	let preview = text(option.preview, name, limits.MAX_PREVIEW, true, verbatim);
+	return preview.trim() ? { preview } : {};
+}
+
 /**
  * Validate an agent's tool input into a frozen definition.
  *
@@ -131,7 +142,11 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 
 		let options: Option[] = raw.options.map((source, position) => {
 			let option = record(source, `Question ${index + 1} option ${position + 1}`);
-			exact(option, ["label", "description"], `Question ${index + 1} option ${position + 1}`);
+			exact(
+				option,
+				["label", "description", ...(Object.hasOwn(option, "preview") ? ["preview"] : [])],
+				`Question ${index + 1} option ${position + 1}`,
+			);
 			return {
 				id: `o${position}`,
 				label: text(
@@ -146,6 +161,11 @@ export function normalize(raw: unknown, { verbatim = false } = {}): Definition {
 					`Question ${index + 1} option ${position + 1} description`,
 					limits.MAX_NEW_DESCRIPTION,
 					true,
+					verbatim,
+				),
+				...visual(
+					option,
+					`Question ${index + 1} option ${position + 1} preview`,
 					verbatim,
 				),
 			};
@@ -311,7 +331,11 @@ export function identified(raw: unknown): Definition {
 		}
 		for (let [position, candidate] of question.options.entries()) {
 			let option = record(candidate, `Question ${index + 1} option ${position + 1}`);
-			exact(option, ["id", "label", "description"], `Question ${index + 1} option ${position + 1}`);
+			exact(
+				option,
+				["id", "label", "description", ...(Object.hasOwn(option, "preview") ? ["preview"] : [])],
+				`Question ${index + 1} option ${position + 1}`,
+			);
 			storedText(option.id, `Question ${index + 1} option id`, limits.MAX_CALL_ID);
 			let optionId = option.id as string;
 			if (optionIds.has(optionId)) fail("Questionnaire has duplicate option IDs");
@@ -330,6 +354,15 @@ export function identified(raw: unknown): Definition {
 				true,
 				verbatim,
 			);
+			if (Object.hasOwn(option, "preview")) {
+				storedText(
+					option.preview,
+					`Question ${index + 1} option preview`,
+					limits.MAX_PREVIEW,
+					true,
+					verbatim,
+				);
+			}
 		}
 	}
 	return raw as Definition;

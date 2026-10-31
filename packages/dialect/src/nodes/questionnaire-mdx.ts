@@ -50,6 +50,8 @@ export function fromElement(node: Jsx): Questionnaire {
 			};
 			let description = attribute(source, "description");
 			if (description) option.description = description;
+			let preview = attribute(source, "preview");
+			if (preview) option.preview = preview;
 			options.push(option);
 		}
 
@@ -147,6 +149,13 @@ export function toElement(value: Questionnaire): MdxJsxFlowElement {
 								type: "mdxJsxAttribute" as const,
 								name: "description",
 								value: option.description,
+							}]
+							: []),
+						...(option.preview
+							? [{
+								type: "mdxJsxAttribute" as const,
+								name: "preview",
+								value: option.preview,
 							}]
 							: []),
 					],

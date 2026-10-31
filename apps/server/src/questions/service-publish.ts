@@ -254,6 +254,7 @@ export async function publishQuestions(
 						id: option.id,
 						label: option.label,
 						...(option.description ? { description: option.description } : {}),
+						...(option.preview ? { preview: option.preview } : {}),
 					})),
 					...(question.criteria
 						? { criteria: question.criteria.map(({ id, label }) => ({ id, label })) }

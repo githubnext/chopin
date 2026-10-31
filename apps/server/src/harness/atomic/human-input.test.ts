@@ -89,9 +89,11 @@ test("HostInput appends one ordered questionnaire batch and returns typed answer
 		"Multiple",
 		"Custom",
 	]);
-	expect(cards[0]!.definition.questions[0].options[0]).toMatchObject({
+	expect(cards[0]!.definition.questions[0].options[0]).toEqual({
+		id: expect.any(String),
 		label: " A ",
-		description: "  first  \n\npreview A",
+		description: "  first  ",
+		preview: "preview A",
 	});
 	expect(cards[0]!.definition.questions[0].options[1]).toMatchObject({
 		label: "B",

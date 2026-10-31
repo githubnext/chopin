@@ -16,6 +16,7 @@ import { MAX_NEW_LABEL, MAX_SHARED_OPTIONS } from "../limits";
 import { answered } from "../draft";
 import { InlineCode } from "./inline-code";
 import { MarkdownBlocks, MarkdownLine, MarkdownText } from "./question-markdown";
+import { OptionPreview } from "./option-preview";
 import { questionHeading, questionParts } from "../text";
 import { CriteriaGrid } from "./criteria";
 import { Key, letter } from "./option-key";
@@ -223,6 +224,9 @@ function Choices(
 		let selected = question.multiple
 			? !!draft?.options[option.id]
 			: draft?.choice === option.id;
+		// With its own visual in the row, the option's name stays its label and description, not
+		// every word an image or diagram carries; the visual is its own group beside them.
+		let named = option.preview ? `${name}:${option.id}` : undefined;
 
 		return (
 			<label
@@ -248,16 +252,29 @@ function Choices(
 						);
 					}}
 					className="question-input"
+					aria-labelledby={named
+						&& (option.description ? `${named}:label ${named}:desc` : `${named}:label`)}
 				/>
 				<Key>{letter(index)}</Key>
 				<span className="question-text">
-					<span className="question-label">
+					<span className="question-label" id={named && `${named}:label`}>
 						<MarkdownLine links={false} text={option.label} />
 					</span>
 					{!custom && selected && option.id === suggestedOptionId && (
 						<span className="text-sm text-text-tertiary">{" from chat"}</span>
 					)}
-					{option.description && <MarkdownText place="desc" text={option.description} />}
+					{option.description && (
+						named
+							? (
+								<span className="question-desc-wrap" id={`${named}:desc`}>
+									<MarkdownText place="desc" text={option.description} />
+								</span>
+							)
+							: <MarkdownText place="desc" text={option.description} />
+					)}
+					{option.preview && (
+						<OptionPreview compact={matrix} label={option.label} text={option.preview} />
+					)}
 				</span>
 				{!matrix && (
 					<span aria-hidden="true" className="question-check">
@@ -728,6 +745,9 @@ function Resolved(
 														</span>
 														{option.description && (
 															<MarkdownText place="desc" text={option.description} />
+														)}
+														{option.preview && (
+															<OptionPreview label={option.label} text={option.preview} />
 														)}
 													</span>
 													<span aria-hidden="true" className="question-check">

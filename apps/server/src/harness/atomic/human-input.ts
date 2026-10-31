@@ -54,11 +54,10 @@ export function createHumanInput(
 				question: question.question,
 				options: question.options.map(option => ({
 					label: option.label,
-					// Decisions shows no preview pane, so the mockup or code a member
-					// needs to see before choosing travels in the description.
-					description: [option.description, option.preview]
-						.filter(value => value !== undefined)
-						.join("\n\n"),
+					description: option.description,
+					// The option's own visual (a diagram, a table, an image of this document's)
+					// is its own field: every card surface frames it under the option.
+					...(option.preview ? { preview: option.preview } : {}),
 				})),
 				multiple: question.multiSelect ?? false,
 			})),

@@ -31,6 +31,10 @@
 			"types": "./src/face.tsx",
 			"default": "./src/face.tsx"
 		},
+		"./image-lightbox": {
+			"types": "./src/widgets/image-lightbox.tsx",
+			"default": "./src/widgets/image-lightbox.tsx"
+		},
 		"./people": {
 			"types": "./src/people.ts",
 			"default": "./src/people.ts"

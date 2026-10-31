@@ -35,7 +35,8 @@ function matches(record: Record, projections: Questionnaire[]): boolean {
 		&& projected.options.every((option, index) => {
 			let expected = question.options[index]!;
 			return option.id === expected.id && option.label === expected.label
-				&& (option.description ?? "") === (expected.description ?? "");
+				&& (option.description ?? "") === (expected.description ?? "")
+				&& (option.preview ?? "") === (expected.preview ?? "");
 		});
 }
 
