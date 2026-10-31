@@ -130,6 +130,108 @@ describe("AI SDK stream projection", () => {
 		expect(current()).toBeUndefined();
 	});
 
+	describe("storing an image the Planner made", () => {
+		const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9]);
+		function storing(chat: Chat, archived = false) {
+			let stored: Array<{ channelId: string; sha256: string; uploadedBy: string }> = [];
+			let released = 0;
+			let context = room(chat).context;
+			context.auth = {
+				clock: () => new Date(0),
+				storage: {
+					channels: {
+						get: async (id: string) =>
+							id === "test" ? { id, archivedAt: archived ? new Date(0) : null } : undefined,
+					},
+					images: {
+						put: async (image: { channelId: string; sha256: string; uploadedBy: string }) => {
+							stored.push(image);
+						},
+					},
+				},
+				sessions: { resolve: async () => ({ user: { id: "owner-user" } }) },
+			} as never;
+			context.activeOwner = async () =>
+				({ ownerSessionId: "s", release: () => released++ }) as never;
+			return { context, stored, released: () => released };
+		}
+		function live(chat: Chat, member = true) {
+			chat.busy = true;
+			chat.turnController = new AbortController();
+			if (!member) return;
+			let entryId = ulid();
+			chat.entries.push({
+				id: entryId,
+				author: { kind: "member", handle: "ana" },
+				text: "Show me.",
+				ts: 1,
+			});
+			chat.turn = {
+				id: "turn-1",
+				handle: "ana",
+				started: 1,
+				startedAt: 1,
+				entryOffset: 0,
+				responded: false,
+			};
+			chat.activeRequest = {
+				entryId,
+				userId: "member-user",
+				handle: "ana",
+				text: "Show me.",
+				claimantSessionId: undefined,
+				turnId: "turn-1",
+				lifecycle: chat.lifecycle,
+			};
+		}
+
+		it("stores the bytes under their hash for the document, owned by the member the turn is for", async () => {
+			let chat = create();
+			live(chat);
+			let { context, stored } = storing(chat);
+			let { path } = await documentRoom(context).uploadImage!({
+				bytes: PNG,
+				mimeType: "image/png",
+			});
+			expect(path).toMatch(/^\/images\/[0-9a-f]{64}\.png$/);
+			expect(stored).toEqual([expect.objectContaining({
+				channelId: "test",
+				sha256: path.slice(8, 72),
+				uploadedBy: "member-user",
+			})]);
+		});
+
+		it("is the Planner owner's when no member asked for the turn, and releases the binding", async () => {
+			let chat = create();
+			live(chat, false);
+			let { context, stored, released } = storing(chat);
+			await documentRoom(context).uploadImage!({ bytes: PNG, mimeType: "image/png" });
+			expect(stored[0]!.uploadedBy).toBe("owner-user");
+			expect(released()).toBe(1);
+		});
+
+		it("refuses outside a live turn, in an archived document, and for a background job", async () => {
+			let chat = create();
+			let idle = storing(chat);
+			await expect(documentRoom(idle.context).uploadImage!({ bytes: PNG, mimeType: "image/png" }))
+				.rejects.toThrow("only during a Planner turn");
+			live(chat);
+			let archived = storing(chat, true);
+			await expect(
+				documentRoom(archived.context).uploadImage!({ bytes: PNG, mimeType: "image/png" }),
+			)
+				.rejects.toThrow("archived");
+			expect(archived.stored).toEqual([]);
+			chat.turnController!.abort();
+			await expect(
+				documentRoom(storing(chat).context).uploadImage!({ bytes: PNG, mimeType: "image/png" }),
+			)
+				.rejects.toThrow("only during a Planner turn");
+			chat.job = { kind: "heading" } as never;
+			expect(documentRoom(storing(chat).context).uploadImage).toBeUndefined();
+		});
+	});
+
 	it("counts only non-empty Planner prose as a response and streams one entry", () => {
 		let chat = create();
 		chat.turn = {

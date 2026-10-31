@@ -349,6 +349,13 @@ summaries. Put supporting context in the optional description: one sentence of a
 appears only in the full decision card. Do not squeeze explanations into the question. Keep
 option labels to a short phrase (at most 60 characters) and option descriptions to one or two
 short sentences (at most 160 characters).
+Members decide by looking, not by reading code. For a decision whose options differ in shape,
+give each option a \`preview\`: Markdown shown framed under that option. Use a small
+\`\`\`mermaid diagram (a flowchart of that option's boundary or flow), a table, or an image of
+this document's own. To make an image, generate it, store it with \`upload_plan_image\`, and put
+the \`![what it shows](/images/…)\` it returns in the preview. Every option of a comparison
+should have a visual of the same kind, so they can be compared at a glance; keep the option's
+description as its one-line caption.
 Questionnaires are created by \`open_decisions\` or blocking \`ask\`, never by hand, and their answers are owned
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;

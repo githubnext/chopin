@@ -37,6 +37,15 @@ let ask = {
 							properties: {
 								label: { type: "string", minLength: 1, maxLength: 60 },
 								description: { type: "string", maxLength: 160 },
+								preview: {
+									type: "string",
+									maxLength: 16_000,
+									description:
+										"Optional visual for this option, as Markdown, shown framed under it: "
+										+ "an image of this document's own, `![what it shows](/images/…)` from "
+										+ "`upload_plan_image`, a ```mermaid diagram, or a small table. Members "
+										+ "compare options by looking, so give every option of a comparison its own.",
+								},
 							},
 							required: ["label", "description"],
 							additionalProperties: false,

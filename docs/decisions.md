@@ -89,6 +89,27 @@ write-up, when the rewrite deleted that passage, is dropped instead of failing, 
 still reaches the Planner as a turn of its own. Other cards keep owing a review as before, and a
 Planner `edit_plan` still reports `anchors_pending` for the Planner to re-anchor.
 
+## Options with their own visual
+
+People decide by looking, so each option of a choice question can carry a `preview`: Markdown that
+Chopin shows framed under the option's label and description. It can hold an image of the
+document's own, a Mermaid diagram, a small pipe table or a code sketch, at most 16,000
+characters. The Planner's `ask`, `open_decision` and `open_decisions` tools take it, and so does
+an input request from an attached Planner or from Atomic's `ask_user_question`.
+
+- The Planner makes an image, stores it with `upload_plan_image` (base64 bytes, a type and
+  required alternative text, at most 1 MiB) and puts the Markdown the tool returns in the
+  option's `preview` or in the card's body. Only people who can read the document load it.
+- Every card surface shows the previews: the Decisions tab, the inline card, the phone sheet,
+  an answered card, which keeps every option's visual, and the decision page. A picture is held
+  to the option's column and opens large from a click on it, which never chooses the option. A
+  decision with criteria shows a small thumbnail.
+- An option is still one radio button named by its label and description; its visual is a group
+  of its own, `Preview of <label>`, and an image keeps its alternative text.
+- A card saved before previews joined a sketch onto its description and looks the same.
+- A connected Planner learns whether the server does this from the `decision-option-previews`
+  [agent feature](agent-connection.md#option-previews).
+
 ## Collaboration and persistence
 
 Written and choice decisions use the same authoritative records, shared drafts,

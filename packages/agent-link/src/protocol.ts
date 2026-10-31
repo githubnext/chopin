@@ -23,6 +23,11 @@ export const AGENT_SUBPROTOCOL = "chopin.agent.v1";
 export const AGENT_FEATURES = {
 	/** `runs` cards may carry `stagesDelta: true` with only new and changed stages, uncounted. */
 	runStageDeltas: "run-stage-deltas",
+	/**
+	 * A question option's `preview` is its own framed Markdown visual on every card surface, and
+	 * the turn's host tools include `upload_plan_image`, which stores an image the Planner made.
+	 */
+	decisionOptionPreviews: "decision-option-previews",
 } as const;
 
 /** The upgrade request header naming the features a client asks for, comma-separated. */

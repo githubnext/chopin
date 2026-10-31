@@ -949,9 +949,50 @@ describe("Agent connection protocol", () => {
 		}
 	});
 
+	it("offers upload_plan_image only to a client that asked for decision-option-previews", async () => {
+		let { server, channel } = await setup();
+		let both = new HarnessAgent({
+			harness: adapterFor(server, { channelId: channel.id, isolated: false }),
+			tools: {
+				read_plan: tool({ inputSchema: z.object({}), execute: async () => "the plan" }),
+				upload_plan_image: tool({ inputSchema: z.object({}), execute: async () => "stored" }),
+			},
+			activeTools: ["read_plan", "upload_plan_image"],
+			permissionMode: "allow-reads",
+		});
+		for (
+			let [header, offered] of [
+				[undefined, ["read_plan"]],
+				["run-stage-deltas", ["read_plan"]],
+				["decision-option-previews", ["read_plan", "upload_plan_image"]],
+				["run-stage-deltas, decision-option-previews", ["read_plan", "upload_plan_image"]],
+			] as const
+		) {
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			let started = raw.next("start").then(start => {
+				raw.send({ type: "started", session: start.session });
+				return raw.next("turn");
+			});
+			let session = await both.createSession({ sandboxSession });
+			cleanups.push(() => session.destroy());
+			let outcome = (async () => {
+				let result = await both.stream({ session, prompt: "look" });
+				for await (let _part of result.fullStream);
+			})();
+			let turn = await started;
+			expect(turn.tools.map((item: { name: string }) => item.name)).toEqual(offered);
+			raw.send({ type: "turn-end", session: turn.session, turn: turn.turn, status: "finished" });
+			await outcome;
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
+	});
+
 	it("merges stage deltas into a run's stages, and a full card replaces them", async () => {
 		let { server, channel, client } = await setup({});
-		expect(client.features).toEqual(["run-stage-deltas"]);
+		expect(client.features).toEqual(["run-stage-deltas", "decision-option-previews"]);
 		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
 		let session = await adapterFor(server, planner).doStart({
 			sessionId: "deltas",

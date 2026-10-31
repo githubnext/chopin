@@ -26,6 +26,7 @@ export const WIRE = {
 	/** The upgrade request header asking for optional features, and the ones this client knows. */
 	featuresHeader: "chopin-agent-features",
 	runStageDeltas: "run-stage-deltas",
+	decisionOptionPreviews: "decision-option-previews",
 } as const;
 
 export class AgentRefused extends Error {
@@ -153,7 +154,10 @@ type HeaderWebSocket = new(
  */
 export function linkSocket(url: URL, token: string): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
-		headers: { authorization: `Bearer ${token}`, [WIRE.featuresHeader]: WIRE.runStageDeltas },
+		headers: {
+			authorization: `Bearer ${token}`,
+			[WIRE.featuresHeader]: `${WIRE.runStageDeltas}, ${WIRE.decisionOptionPreviews}`,
+		},
 		protocols: [WIRE.subprotocol],
 	});
 }

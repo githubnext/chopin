@@ -15,6 +15,7 @@ export const JOB_TOOLS: Record<ConversationPlan.JobKind, string> = {
 
 export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"edit_plan",
+	"upload_plan_image",
 	"open_decision",
 	"open_decisions",
 	"ask",

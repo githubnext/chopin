@@ -99,7 +99,7 @@ feature instead of a new version. The client names the features it wants,
 comma-separated, in the upgrade request's `Chopin-Agent-Features` header:
 
 ```http
-Chopin-Agent-Features: run-stage-deltas
+Chopin-Agent-Features: run-stage-deltas, decision-option-previews
 ```
 
 The server ignores names it does not know. When the request has the header,
@@ -109,9 +109,10 @@ that validates `attached` strictly and never asks never sees the field. A server
 from before features ignores the header and answers without `features`; a
 client must then use none of them.
 
-| Feature            | What it allows                                                  |
-| ------------------ | --------------------------------------------------------------- |
-| `run-stage-deltas` | [Delta run cards](#run-stage-deltas), with no stage count limit |
+| Feature                    | What it allows                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `run-stage-deltas`         | [Delta run cards](#run-stage-deltas), with no stage count limit                                    |
+| `decision-option-previews` | An option's [`preview`](#option-previews) as its own visual, and the `upload_plan_image` host tool |
 
 ### Pings
 
@@ -553,7 +554,7 @@ connection closes), and only then gets its `input-result`:
 ```
 
 A questionnaire has 1 to 16 questions of up to 32 options; `preview` may be
-16,000 characters; `select` offers up to 32 choices. The document's own limits
+16,000 characters and is an [option's own visual](#option-previews); `select` offers up to 32 choices. The document's own limits
 still apply. Text is stored verbatim and shown as Markdown; see
 [Card text](#card-text).
 
@@ -698,6 +699,55 @@ A server that did not list `run-stage-deltas` in `attached.features`, including
 every server from before features, refuses a delta card as `malformed-message`
 and closes the connection with 1008. Send such a server full cards: the 64 most
 recent stages, with `earlierStages` counting the rest.
+
+### Option previews
+
+With the `decision-option-previews` [feature](#features), an option's `preview`
+is the option's own visual: Chopin keeps it as a field of its own and shows it,
+framed, under the option's label and description on every card surface
+(Decisions, the inline card, the phone sheet, answered cards and the decision
+page). Members compare the choices by looking at them, so give every option of
+a comparison a visual of the same kind.
+
+- `preview` is one string of Markdown, at most 16,000 characters, stored
+  verbatim. It may hold a Mermaid fence, a small pipe table, a code sketch, or an
+  image: `![alt](/images/<sha256>.<ext>)`, the document's own upload with the
+  required alternative text. Anything else, such as a remote or `data:` image,
+  shows its alternative text. There is no separate image field and no cap on the
+  number of images, but one picture or diagram per option reads best; the option's
+  one-line `description` is its caption.
+- Pictures are held to the option's column and about a third of a screen, and
+  open large from a click on the picture, which never chooses the option. A
+  diagram is bounded until the reader expands it. Where space is tight, as in a
+  decision with criteria, an image is a small thumbnail and other content is left
+  out of the row.
+- The option's accessible name stays its label and description; the preview is a
+  group of its own named `Preview of <label>`.
+- A selected option's answer carries the option's `preview` as before.
+
+The `upload_plan_image` host tool is offered in a turn's `tools` only to a client
+that asked for the feature. It stores an image the Planner made in this
+document's own images and returns the Markdown to use, in an option's `preview`,
+a question's body, or the plan:
+
+```text
+input:  { "data": "<standard base64, at most 1 MiB decoded>", "mimeType": "image/png" | "image/jpeg" | "image/webp" | "image/gif", "alt": "" }
+output: { "path": "/images/<sha256>.<ext>", "markdown": "![alt](/images/<sha256>.<ext>)" }
+```
+
+`alt` is required, one line of at most 200 characters. The same bytes uploaded
+twice give the same path. The server never reads a path on the Planner's side:
+a remote Planner encodes its own file. A call fails with the usual host tool
+error for an image over 1 MiB, an unsupported type, bytes that are not the
+declared type, an archived document, or a call outside a live Planner turn. The
+image loads only for people who can read this document. A workflow stage has no
+turn of its own, so from a stage use the MCP `upload_image` tool with the same
+bytes, or pass the Markdown down from a Planner turn.
+
+A server that did not list `decision-option-previews` in `attached.features`
+joins `preview` onto the end of the option's `description` and offers no image
+tool; a Chopin that renders card text as Markdown still draws a Mermaid fence or
+the document's own image there, just not in a frame of its own.
 
 ### Card text
 
