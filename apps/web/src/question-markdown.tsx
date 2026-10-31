@@ -8,10 +8,12 @@
  * so a question that mentions `<div>` still says so.
  */
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 import { QuestionMarkdownContext } from "@chopin/question/react";
+import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
+import { gfmTable } from "micromark-extension-gfm-table";
 
 import { CHAT_COMPONENTS, CHAT_ELEMENTS, CHAT_INLINE, inlineSource } from "./chat/markdown";
 import { orderedRunsRemarkPlugin } from "./chat/ordered-runs";
@@ -23,8 +25,13 @@ import type { QuestionMarkdownRenderer } from "@chopin/question/react";
 const CardDiagram = lazy(() =>
 	import("@chopin/editor/card-diagram").then(({ CardDiagram }) => ({ default: CardDiagram }))
 );
+const ImageLightbox = lazy(() =>
+	import("@chopin/editor/image-lightbox").then(({ ImageLightbox }) => ({ default: ImageLightbox }))
+);
 
 const BLOCK_ELEMENTS = [...CHAT_ELEMENTS, "img"];
+/** An option's own visual may also be a small table. */
+const PREVIEW_ELEMENTS = [...BLOCK_ELEMENTS, "table", "thead", "tbody", "tr", "th", "td"];
 
 /**
  * The URL a card loads an image from, or undefined when the image is not this
@@ -36,24 +43,52 @@ export function documentImageUrl(src: string | undefined, document: string): str
 	return `${src}?document=${encodeURIComponent(document)}`;
 }
 
-/** An image, or its alt text in its place when it is refused or fails to load. */
+/**
+ * An image, or its alt text in its place when it is refused or fails to load. A loaded image
+ * opens large on a click, from its own button, so it never picks the option it sits in.
+ */
 function CardImage({ alt, document, src }: { alt: string; document: string; src?: string }) {
 	let [failed, setFailed] = useState(false);
+	let [viewing, setViewing] = useState(false);
+	let view = useRef<HTMLButtonElement>(null);
 	let url = documentImageUrl(src, document);
 	if (!alt.trim()) return null;
 	if (!url || failed) {
 		return <span className="question-image-alt" data-question-image="refused">{alt}</span>;
 	}
 	return (
-		<img
-			alt={alt}
-			className="question-image"
-			data-question-image="document"
-			decoding="async"
-			loading="lazy"
-			onError={() => setFailed(true)}
-			src={url}
-		/>
+		<>
+			<button
+				aria-haspopup="dialog"
+				aria-label={`View larger: ${alt}`}
+				className="question-image-view"
+				onClick={() => setViewing(true)}
+				ref={view}
+				type="button"
+			>
+				<img
+					alt={alt}
+					className="question-image"
+					data-question-image="document"
+					decoding="async"
+					loading="lazy"
+					onError={() => setFailed(true)}
+					src={url}
+				/>
+			</button>
+			{viewing && (
+				<Suspense fallback={null}>
+					<ImageLightbox
+						alt={alt}
+						onClose={() => {
+							setViewing(false);
+							requestAnimationFrame(() => view.current?.focus());
+						}}
+						src={url}
+					/>
+				</Suspense>
+			)}
+		</>
 	);
 }
 
@@ -102,6 +137,16 @@ const INLINE_COMPONENTS: Components = {
 	code: ({ children }) => <code className="inline-code">{children}</code>,
 };
 
+/** Reads GitHub's pipe tables, and nothing else of GFM, as remark-gfm's table part does. */
+function tablesRemarkPlugin(this: { data(): unknown }) {
+	let data = this.data() as {
+		micromarkExtensions?: unknown[];
+		fromMarkdownExtensions?: unknown[];
+	};
+	(data.micromarkExtensions ??= []).push(gfmTable());
+	(data.fromMarkdownExtensions ??= []).push(gfmTableFromMarkdown());
+}
+
 type MarkdownNode = { type: string; value?: string; children?: MarkdownNode[] };
 
 /**
@@ -138,11 +183,13 @@ export function questionMarkdown(document: string): QuestionMarkdownRenderer {
 				{inlineSource(source)}
 			</ReactMarkdown>
 		),
-		block: source => (
+		block: (source, place) => (
 			<ReactMarkdown
-				allowedElements={BLOCK_ELEMENTS}
+				allowedElements={place === "preview" ? PREVIEW_ELEMENTS : BLOCK_ELEMENTS}
 				components={components}
-				remarkPlugins={[orderedRunsRemarkPlugin, lineBreaksRemarkPlugin]}
+				remarkPlugins={place === "preview"
+					? [tablesRemarkPlugin, orderedRunsRemarkPlugin, lineBreaksRemarkPlugin]
+					: [orderedRunsRemarkPlugin, lineBreaksRemarkPlugin]}
 				unwrapDisallowed
 			>
 				{source}

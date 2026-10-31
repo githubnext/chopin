@@ -64,6 +64,12 @@ export declare namespace Question {
 		id: string;
 		label: string;
 		description: string;
+		/**
+		 * The option's own visual, as Markdown: an image of this document's own (`![alt](/images/…)`),
+		 * a Mermaid fence, a table or a code sketch. Shown framed under the option on every card
+		 * surface. Absent when the option has none.
+		 */
+		preview?: string;
 	};
 
 	/** One thing to judge each option against. Frozen once asked, apart from appends. */

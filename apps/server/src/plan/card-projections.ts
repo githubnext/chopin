@@ -122,6 +122,7 @@ export function createCardProjections(
 							id: option.id,
 							label: option.label,
 							...(option.description ? { description: option.description } : {}),
+							...(option.preview ? { preview: option.preview } : {}),
 						})),
 					}
 				),

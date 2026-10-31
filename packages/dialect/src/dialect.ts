@@ -161,6 +161,7 @@ export const COMPONENTS: Readonly<Record<string, Component>> = Object.freeze({
 		attributes: {
 			label: { type: "text", required: true, max: limits.MAX_QUESTIONNAIRE_TEXT },
 			description: { type: "text", required: false, max: limits.MAX_QUESTIONNAIRE_TEXT },
+			preview: { type: "text", required: false, max: limits.MAX_QUESTIONNAIRE_TEXT },
 		},
 	}),
 

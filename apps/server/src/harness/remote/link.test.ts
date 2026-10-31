@@ -1464,7 +1464,7 @@ describe("Agent connection questions", () => {
 			header: "Choice",
 			question: "  Which store?  ",
 			options: [
-				{ label: " Postgres ", description: "  durable  \n\ncreate table" },
+				{ label: " Postgres ", description: "  durable  ", preview: "create table" },
 				{ label: "Memory", description: "fast" },
 			],
 		});

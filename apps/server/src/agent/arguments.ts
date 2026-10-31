@@ -254,7 +254,7 @@ export type PositionedQuestion = {
 	question: string;
 	description?: string;
 	response?: "text";
-	options: Array<{ label: string; description: string }>;
+	options: Array<{ label: string; description: string; preview?: string }>;
 	/** Columns to judge each option against; choice questions only. */
 	criteria?: Array<{ label: string }>;
 	multiple: boolean;
@@ -310,6 +310,7 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 				options: normalized.options.map(option => ({
 					label: option.label,
 					description: option.description,
+					...(option.preview ? { preview: option.preview } : {}),
 				})),
 				...(normalized.criteria
 					? { criteria: normalized.criteria.map(({ label }) => ({ label })) }

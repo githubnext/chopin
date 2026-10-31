@@ -25,6 +25,11 @@ export const MAX_NEW_QUESTION_DESCRIPTION = 140;
 export const MAX_LABEL = 200;
 export const MAX_NEW_LABEL = 60;
 export const MAX_DESCRIPTION = 1_000;
+/**
+ * An option's own visual as Markdown: an image, a Mermaid diagram, a table or a code sketch.
+ * Host dialogs keep theirs verbatim, bounded by the draft and document byte limits.
+ */
+export const MAX_PREVIEW = 16_000;
 export const MAX_NEW_DESCRIPTION = 160;
 export const MAX_CUSTOM = 4_000;
 

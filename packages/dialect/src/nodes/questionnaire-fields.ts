@@ -6,6 +6,8 @@ export type Option = {
 	id: string;
 	label: string;
 	description?: string;
+	/** The option's own visual as Markdown: an image of this document's, a diagram, a table. */
+	preview?: string;
 };
 
 /** `expired` is host input an earlier Chopin closed unanswered: settled, but with no answer. */

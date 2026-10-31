@@ -45,6 +45,7 @@ function definition(value: Questionnaire | undefined): Definition | undefined {
 				id: option.id,
 				label: option.label,
 				description: option.description ?? "",
+				...(option.preview ? { preview: option.preview } : {}),
 			})),
 		})),
 	};
