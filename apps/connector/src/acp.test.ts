@@ -155,3 +155,23 @@ test.skipIf(process.platform === "win32")(
 		expect(starts).toEqual([{ how: "exit 127", stderr: "agent: no credentials" }, undefined]);
 	},
 );
+
+test.skipIf(process.platform === "win32")(
+	"an agent that exits before its stderr reaches us still reports what it printed",
+	async () => {
+		let starts: unknown[] = [];
+		// The agent exits at once; a process it left behind prints after the exit.
+		let failed = await runAgent({
+			command: ["/bin/sh", "-c", "(sleep 0.3; echo 'agent: no credentials' >&2) & exit 127"],
+			cwd: process.cwd(),
+			prompt: "Investigate",
+			mcpServers: [],
+			signal: new AbortController().signal,
+			onUpdate: () => {},
+			permission: async () => undefined,
+			onStart: (failure?: unknown) => void starts.push(failure),
+		}).catch(error => error);
+		expect(failed).toBeInstanceOf(Error);
+		expect(starts).toEqual([{ how: "exit 127", stderr: "agent: no credentials" }]);
+	},
+);
