@@ -317,7 +317,7 @@
       "@ai-sdk/harness": "1.0.146",
       "@ai-sdk/mcp": "2.0.72",
       "@ai-sdk/sandbox-just-bash": "1.0.146",
-      "@bastani/atomic": "0.9.63",
+      "@bastani/atomic": "0.9.64",
       "ai": "7.0.135",
       "typebox": "1.3.7",
       "zod": "4.4.3",
@@ -458,27 +458,27 @@
 
     "@base-ui/utils": ["@base-ui/utils@0.3.2", "", { "dependencies": { "@babel/runtime": "^7.29.2", "@floating-ui/utils": "^0.2.12", "reselect": "^5.2.0", "use-sync-external-store": "^1.6.0" }, "peerDependencies": { "@types/react": "^17 || ^18 || ^19", "react": "^17 || ^18 || ^19", "react-dom": "^17 || ^18 || ^19" }, "optionalPeers": ["@types/react"] }, "sha512-oWy1aq/I2GmYjpl4PhEAhzflF8VPGKgZeq0xAWTbfD5KBWyxcN0ZP2+WHSUm/5Z6lVMBDLReLcoXwSYoRc/zNQ=="],
 
-    "@bastani/atomic": ["@bastani/atomic@0.9.63", "", { "dependencies": { "@bastani/atomic-natives": "0.9.63", "@bastani/pi-ai": "0.9.63", "@earendil-works/pi-agent-core": "1.4.0", "@earendil-works/pi-codemode": "1.4.0", "@earendil-works/pi-tui": "1.4.0", "@modelcontextprotocol/ext-apps": "^1.7.5", "@modelcontextprotocol/sdk": "1.32.1", "@mozilla/readability": "^0.6.0", "@silvia-odwyer/photon-node": "0.3.4", "@typesafe-ai/sdk": "0.7.0", "brace-expansion": "5.0.12", "chalk": "6.0.0", "cross-spawn": "7.0.6", "diff": "8.0.4", "glob": "13.0.6", "grok-mermaid": "0.2.3", "highlight.js": "10.7.3", "hosted-git-info": "9.0.3", "ignore": "7.0.8", "jiti": "2.7.0", "linkedom": "^0.18.13", "lru-cache": "11.5.3", "markit-ai": "0.5.3", "minimatch": "10.2.6", "open": "^11.0.1", "p-limit": "^7.3.2", "proper-lockfile": "4.1.2", "quickjs-wasi": "3.6.3", "semver": "7.8.5", "turndown": "^7.2.0", "typebox": "1.3.27", "undici": "8.12.3", "unpdf": "1.8.1", "yaml": "2.9.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalDependencies": { "@mariozechner/clipboard": "0.3.9" }, "bin": { "atomic": "dist/cli.js" } }, "sha512-iKSKSA15YRT2/U/A0OrCf73FD9v5cH7xVJDYwSliVGDkUgV/MzPTpQ6jUYHysfcVR5heNXae8aWY7snpccYvtQ=="],
+    "@bastani/atomic": ["@bastani/atomic@0.9.64", "", { "dependencies": { "@bastani/atomic-natives": "0.9.64", "@bastani/pi-ai": "0.9.64", "@earendil-works/pi-agent-core": "1.4.0", "@earendil-works/pi-codemode": "1.4.0", "@earendil-works/pi-tui": "1.4.0", "@modelcontextprotocol/ext-apps": "^1.7.5", "@modelcontextprotocol/sdk": "1.32.1", "@mozilla/readability": "^0.6.0", "@silvia-odwyer/photon-node": "0.3.4", "@typesafe-ai/sdk": "0.7.0", "brace-expansion": "5.0.12", "chalk": "6.0.0", "cross-spawn": "7.0.6", "diff": "8.0.4", "glob": "13.0.6", "grok-mermaid": "0.2.3", "highlight.js": "10.7.3", "hosted-git-info": "9.0.3", "ignore": "7.0.8", "jiti": "2.7.0", "linkedom": "^0.18.13", "lru-cache": "11.5.3", "markit-ai": "0.5.3", "minimatch": "10.2.6", "open": "^11.0.1", "p-limit": "^7.3.2", "proper-lockfile": "4.1.2", "quickjs-wasi": "3.6.3", "semver": "7.8.5", "turndown": "^7.2.0", "typebox": "1.3.27", "undici": "8.12.3", "unpdf": "1.8.1", "yaml": "2.9.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalDependencies": { "@mariozechner/clipboard": "0.3.9" }, "bin": { "atomic": "dist/cli.js" } }, "sha512-B4EaHeb5/vaTgOa/ye3QenD1Zyt9a0Iy8dLPmaQCgJXn5FdCfaGeN66jEQ38/67ok9q9EVNmpvya2Na68QUibA=="],
 
-    "@bastani/atomic-natives": ["@bastani/atomic-natives@0.9.63", "", { "optionalDependencies": { "@bastani/atomic-natives-darwin-arm64": "0.9.63", "@bastani/atomic-natives-darwin-x64": "0.9.63", "@bastani/atomic-natives-linux-arm64-gnu": "0.9.63", "@bastani/atomic-natives-linux-arm64-musl": "0.9.63", "@bastani/atomic-natives-linux-x64-gnu": "0.9.63", "@bastani/atomic-natives-linux-x64-musl": "0.9.63", "@bastani/atomic-natives-win32-arm64-msvc": "0.9.63", "@bastani/atomic-natives-win32-x64-msvc": "0.9.63" } }, "sha512-Ju5wyKIFqFDzVdw1WV4i8XkNXQKX5fDowjafg5vPsIvjJ022COcaLQ3Fs7elRsuwMYr1C54LJQB3X/mhYI9E5A=="],
+    "@bastani/atomic-natives": ["@bastani/atomic-natives@0.9.64", "", { "optionalDependencies": { "@bastani/atomic-natives-darwin-arm64": "0.9.64", "@bastani/atomic-natives-darwin-x64": "0.9.64", "@bastani/atomic-natives-linux-arm64-gnu": "0.9.64", "@bastani/atomic-natives-linux-arm64-musl": "0.9.64", "@bastani/atomic-natives-linux-x64-gnu": "0.9.64", "@bastani/atomic-natives-linux-x64-musl": "0.9.64", "@bastani/atomic-natives-win32-arm64-msvc": "0.9.64", "@bastani/atomic-natives-win32-x64-msvc": "0.9.64" } }, "sha512-5UIfpjY8CGGfv25twa/x97Mo1HnELT/Gm0Phn6AvWEU2AX/SUpdOBaW1oudq/+UAi+PCk3sQ2G9S/EkYose3kA=="],
 
-    "@bastani/atomic-natives-darwin-arm64": ["@bastani/atomic-natives-darwin-arm64@0.9.63", "", { "os": "darwin", "cpu": "arm64" }, "sha512-JYQo9vzpDfHlQfmFgYBnm0Mg97CAbD4oYF3Ix3WeAPyhLGWcoW41WCc1Geibe7ZhkICGHu8vv5IRaDGzbeQQ5w=="],
+    "@bastani/atomic-natives-darwin-arm64": ["@bastani/atomic-natives-darwin-arm64@0.9.64", "", { "os": "darwin", "cpu": "arm64" }, "sha512-PzShFTLVelpGjnUZiXs0QpVsDsa97heYSRLwa5oc3Ol0PPqjkquffH4cOMyFeGN8OjFkqup/cxpASdyWLLrH0A=="],
 
-    "@bastani/atomic-natives-darwin-x64": ["@bastani/atomic-natives-darwin-x64@0.9.63", "", { "os": "darwin", "cpu": "x64" }, "sha512-KcVQsGSx4S4QChfl5fQS/khdBn4mR4eoC1kHMoieTLsjDFEffL0eRNpeKiWZf17w8++spzfp9xysOWd/gcge7Q=="],
+    "@bastani/atomic-natives-darwin-x64": ["@bastani/atomic-natives-darwin-x64@0.9.64", "", { "os": "darwin", "cpu": "x64" }, "sha512-JmUBn6/SxSRUtpvjHbqtrFx2rp7cgHPOdQRNiNPkS7EfJfjb2qVedrc/tQM82H4ZlnHJkWTeaKja7R2Ha5rbQg=="],
 
-    "@bastani/atomic-natives-linux-arm64-gnu": ["@bastani/atomic-natives-linux-arm64-gnu@0.9.63", "", { "os": "linux", "cpu": "arm64", "libc": "glibc" }, "sha512-e41b9Qxg3fXAbKwQjJ0Ig495KXxH04BWTTexCMafy1PVxXKrVI/bcTEjBiKB1YRQ+/upuoAN81yGeaZ3LpBWpA=="],
+    "@bastani/atomic-natives-linux-arm64-gnu": ["@bastani/atomic-natives-linux-arm64-gnu@0.9.64", "", { "os": "linux", "cpu": "arm64", "libc": "glibc" }, "sha512-4zT9+Qof/sou6E3WwzBgornPnBMoO0G1QJeuRAG/zQQ5z8/5HYxM0uszSkDea1wY/HHeq7SfInmhCTJpuE3QDA=="],
 
-    "@bastani/atomic-natives-linux-arm64-musl": ["@bastani/atomic-natives-linux-arm64-musl@0.9.63", "", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-qvkdQnXVLaWTdnlQntcrROfI2tB7/FOj3yYGm+MluhItc5oYWusIKos44K8+MIsm8KAi8oE8khfGzrs9R7jM3A=="],
+    "@bastani/atomic-natives-linux-arm64-musl": ["@bastani/atomic-natives-linux-arm64-musl@0.9.64", "", { "os": "linux", "cpu": "arm64", "libc": "musl" }, "sha512-R7dAMB/mDDz6BFv6oufNX/Q83ZdWKw/p/4/vdxO7LNfl2JkzcQ8IBHhqXR0ejyAvZ3zSxhg30SyUfoYpKqtM7g=="],
 
-    "@bastani/atomic-natives-linux-x64-gnu": ["@bastani/atomic-natives-linux-x64-gnu@0.9.63", "", { "os": "linux", "cpu": "x64", "libc": "glibc" }, "sha512-nyHRFavQehMuQtG6YydxH8p8dQKnCjqS5S3o9TYNfoHCUL7cTDVUutavZ2ZYNg0XiHWzwW2sZb4o/pDOmOsZWQ=="],
+    "@bastani/atomic-natives-linux-x64-gnu": ["@bastani/atomic-natives-linux-x64-gnu@0.9.64", "", { "os": "linux", "cpu": "x64", "libc": "glibc" }, "sha512-jIypESIfRPlXOfj8AS1mMTHWXaqQr9fwhHQA3T0P419ilVmbkbhcWTLwJy4mzIvLE1lDsj3vkKapI/mrjRFW4g=="],
 
-    "@bastani/atomic-natives-linux-x64-musl": ["@bastani/atomic-natives-linux-x64-musl@0.9.63", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-ac3gKDM6lc5iepKHykfvCjUacLJ60pc3/x3u9xYrzWa8BNan692fFxbMWWMRUSpkRhhSs+imCibOyFv4HCdasg=="],
+    "@bastani/atomic-natives-linux-x64-musl": ["@bastani/atomic-natives-linux-x64-musl@0.9.64", "", { "os": "linux", "cpu": "x64", "libc": "musl" }, "sha512-Qp870vCh/RAipa1tEQ/SsGrJhKGRiBxW/zMKKUOAbSov2WHzicVlItf+96S8OXN9GDKUw2dTy2QO/0bCLNN2Ew=="],
 
-    "@bastani/atomic-natives-win32-arm64-msvc": ["@bastani/atomic-natives-win32-arm64-msvc@0.9.63", "", { "os": "win32", "cpu": "arm64" }, "sha512-+zn9kh4NY3lqgELN4Zcuig8bk2eHmO4QY4xXoqGP92WxatSnldu4/Yzh8T/71tJe0w6sXq/VbN4n04JJLsjx6w=="],
+    "@bastani/atomic-natives-win32-arm64-msvc": ["@bastani/atomic-natives-win32-arm64-msvc@0.9.64", "", { "os": "win32", "cpu": "arm64" }, "sha512-DPCTv0Jj4auvBkIMAd3jOylS9b1XiosEyihNehDyO+taPmdGsPpOPrSajqCqOwcuWEyy3FPLCDilc5lcl13XjA=="],
 
-    "@bastani/atomic-natives-win32-x64-msvc": ["@bastani/atomic-natives-win32-x64-msvc@0.9.63", "", { "os": "win32", "cpu": "x64" }, "sha512-23DYANZ6nRuicPcPkJCaLDi2JL5y8HFuVi6vJcDzuPV9599/1u2hxITY1IZ+eduDw72RZ52M+Yz5gv+/TxsqsQ=="],
+    "@bastani/atomic-natives-win32-x64-msvc": ["@bastani/atomic-natives-win32-x64-msvc@0.9.64", "", { "os": "win32", "cpu": "x64" }, "sha512-RmmrjbxVc+NXJSte6FJ603UdEXSkVEIi3Anwxeq6vUzUov5ObHJsobbdfITmn4uX0XEJc6SRssg1yd/SsMvU8g=="],
 
-    "@bastani/pi-ai": ["@bastani/pi-ai@0.9.63", "", { "dependencies": { "@anthropic-ai/sdk": "0.129.0", "@aws-sdk/client-bedrock-runtime": "3.1127.0", "@earendil-works/pi-telemetry": "1.4.0", "@google/genai": "2.21.0", "@smithy/node-http-handler": "4.13.0", "http-proxy-agent": "9.1.0", "https-proxy-agent": "9.1.0", "openai": "7.19.0", "partial-json": "0.1.7", "typebox": "1.3.27" }, "bin": { "pi-ai": "dist/cli.js" } }, "sha512-i5Z6snfr52AFYakGNJFH9GdXK4c9oJD+uD0uuYJ0pxn7FlCybpIZ6d3Eu3nZoMThj+4peNhyZOxaQfDscYGuHw=="],
+    "@bastani/pi-ai": ["@bastani/pi-ai@0.9.64", "", { "dependencies": { "@anthropic-ai/sdk": "0.129.0", "@aws-sdk/client-bedrock-runtime": "3.1127.0", "@earendil-works/pi-telemetry": "1.4.0", "@google/genai": "2.21.0", "@smithy/node-http-handler": "4.13.0", "http-proxy-agent": "9.1.0", "https-proxy-agent": "9.1.0", "openai": "7.19.0", "partial-json": "0.1.7", "typebox": "1.3.27" }, "bin": { "pi-ai": "dist/cli.js" } }, "sha512-/nBBigani57u3LmkjIrsPL1AO+yGdsVTaUY2uhjz9JX4CsorGHOBDFpuqVvX/0P+r6hLL649E2p5uYEgXUtu1g=="],
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
