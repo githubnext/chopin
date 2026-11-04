@@ -214,15 +214,20 @@ describe("atomic HarnessV1 lifecycle", () => {
 	}
 
 	it("leaves no working directory behind when closed while its first turn is still setting up", async () => {
-		let planners = async () =>
-			new Set((await readdir(tmpdir())).filter(name => name.startsWith("chopin-atomic-planner-")));
-		let before = await planners();
-		let session = await start();
-		let turn = session.doPromptTurn({ prompt: "plain", skills: [], tools: [], emit: () => {} });
-		await session.doDestroy();
-		await expect(turn).rejects.toThrow("Atomic session is closed.");
-		let left = [...await planners()].filter(name => !before.has(name));
-		expect(left).toEqual([]);
+		let root = await mkdtemp(join(tmpdir(), "chopin-atomic-root-"));
+		try {
+			let session = await createStubAtomic({ tempRoot: root }).doStart({
+				sessionId: crypto.randomUUID(),
+				sandboxSession: {} as HarnessV1StartOptions["sandboxSession"],
+				sessionWorkDir: "/workspace",
+			});
+			let turn = session.doPromptTurn({ prompt: "plain", skills: [], tools: [], emit: () => {} });
+			await session.doDestroy();
+			await expect(turn).rejects.toThrow("Atomic session is closed.");
+			expect(await readdir(root)).toEqual([]);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it("settles a pending host tool on abort and ignores a late result", async () => {
