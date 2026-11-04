@@ -114,7 +114,7 @@ export function BuildBlockerPopover({ hot, items, onHover, onSelect, phone }: {
 				ref={trigger}
 				type="button"
 			>
-				<BuildBlockerGlyph tone={summary.tone} />
+				<BuildBlockerGlyph />
 				<span className="build-capsule-label">{summary.label}</span>
 			</button>
 			{typeof document !== "undefined" && createPortal(
@@ -142,16 +142,16 @@ export function BuildBlockerPopover({ hot, items, onHover, onSelect, phone }: {
 				>
 					{items.map(item => (
 						<button
-							aria-label={`${item.kind === "decision" ? "Review" : "Open"}: ${item.title}`}
+							aria-label={`Open: ${item.title}`}
 							className="build-blocker-row"
-							key={`${item.kind}:${item.id}:${"question" in item ? item.question : ""}`}
+							key={item.id}
 							onClick={() => {
 								panel.current?.hidePopover();
 								onSelect(item);
 							}}
 							type="button"
 						>
-							<BuildBlockerGlyph tone={item.kind} />
+							<BuildBlockerGlyph />
 							<span className="build-blocker-title">{item.title}</span>
 							<ArrowRightIcon aria-hidden="true" className="build-blocker-arrow" />
 						</button>

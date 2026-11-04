@@ -88,7 +88,6 @@ export function useBuildPlan(
 		planner,
 		plannerDetached,
 		room,
-		unanswered,
 		userId,
 		wire,
 	}: {
@@ -102,7 +101,6 @@ export function useBuildPlan(
 		/** `session:planner` reports no Planner client attached (remote harness only). */
 		plannerDetached?: boolean;
 		room: string;
-		unanswered: number;
 		userId?: string;
 		wire?: Wire;
 	},
@@ -228,7 +226,6 @@ export function useBuildPlan(
 			planner,
 			plannerDetached,
 			hasContent,
-			unanswered,
 		})
 		: { kind: "plan" as const, blocked: "A child document is never built" };
 	// A refusal stands until the next press, or until a build of the changes is under way or done.
@@ -283,7 +280,7 @@ export function BuildGlyph(
 	if ("blocked" in look && look.blocked && blockers?.length) {
 		return (
 			<span className="build-glyph" aria-hidden="true">
-				<BuildBlockerGlyph tone={buildBlockerSummary(blockers).tone} />
+				<BuildBlockerGlyph />
 			</span>
 		);
 	}
@@ -448,7 +445,7 @@ export function BuildPlanButton(
 								: "build-capsule build-blocker-capsule"}
 							data-tone={summary.tone}
 						>
-							<BuildBlockerGlyph tone={summary.tone} />
+							<BuildBlockerGlyph />
 							<span className="build-capsule-label">{summary.label}</span>
 						</span>
 					}

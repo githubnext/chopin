@@ -18,6 +18,7 @@ import * as Rooms from "../rooms";
 import { claimImplementation, reportImplementationLifecycle } from "../tasks/plan-graphs";
 import { StorageError } from "../storage/errors";
 import { implementationLifecycle } from "../tasks/lifecycle";
+import { unapprovedContext } from "../tasks/open-decisions";
 import { imagePath } from "../images/format";
 
 import type { Server } from "bun";
@@ -158,6 +159,7 @@ function exposed(
 			: { state: "idle" },
 		activity: lifecycle?.activity,
 		history: lifecycle?.history ?? [],
+		...unapprovedContext(state.records ?? []),
 	};
 }
 
@@ -824,6 +826,7 @@ export function hosted(
 								exposed(channel, {
 									source: Plan.source(live),
 									revision: live.revision,
+									records: [...live.records.values()],
 									...(live.creation ? { creation: live.creation } : {}),
 									...(live.graph ? { graph: live.graph } : {}),
 									...(live.execution ? { execution: live.execution } : {}),

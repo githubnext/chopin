@@ -18,6 +18,30 @@ import type { HostedAuth } from "../auth/routes";
 
 let checkout = { repository: "owner/repository", branch: "main", commit: "a".repeat(40) };
 
+/** A stored decision nobody has answered yet, or one somebody reopened. */
+function decision(id: string, status: "open" | "reopened" = "open") {
+	return {
+		id,
+		status,
+		origin: "planner",
+		definition: {
+			questions: [{
+				id: `${id}-question`,
+				header: "Rollout",
+				question: "How should we deploy?",
+				multiple: false,
+				options: [
+					{ id: `${id}-canary`, label: "Canary", description: "" },
+					{ id: `${id}-rolling`, label: "Rolling", description: "" },
+				],
+			}],
+		},
+		history: [],
+		optionOrigins: {},
+		editors: [],
+	} as never;
+}
+
 test("opening an archived document cannot start a new readiness review", async () => {
 	let assessments = 0;
 	let context = await setup({ assess: () => assessments++ });
@@ -516,6 +540,84 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	expect(snapshot.lifecycle.activity.tasks[0].blocker).toBe("Choose the next tracer");
 	expect((await tool(context, claim.runToken, "read_implementation")).isError).toBe(true);
 	await Plan.close(context.plan);
+});
+
+test("Build proceeds while decisions are open and hands them to the builder as assumptions", async () => {
+	let context = await setup();
+	try {
+		let connection = await paired(context);
+		context.plan.records.set("deploy", decision("deploy"));
+		context.plan.records.set("again", decision("again", "reopened"));
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot).toMatchObject({ buildReady: true, blockers: [] });
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		expect(built.state).toBe("queued");
+		let claim = await tool(context, connection.token, "claim_implementation_build", {
+			id: built.id,
+		});
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "acp-session",
+		});
+		let read = await tool(context, claim.runToken, "read_implementation");
+		expect(read.unapprovedDecisions.instructions).toContain("best judgment");
+		expect(read.unapprovedDecisions.decisions).toEqual([
+			{
+				id: "deploy",
+				questionId: "deploy-question",
+				status: "open",
+				prompt: "How should we deploy?",
+				options: ["Canary", "Rolling"],
+			},
+			{
+				id: "again",
+				questionId: "again-question",
+				status: "reopened",
+				prompt: "How should we deploy?",
+				options: ["Canary", "Rolling"],
+			},
+		]);
+		// What the agent pastes into each pull request's body.
+		expect(read.unapprovedDecisions.pullRequestSection).toContain("## Assumed, not yet approved");
+		expect(read.unapprovedDecisions.pullRequestSection).toContain(
+			"- How should we deploy? (Canary, Rolling)",
+		);
+		// The decisions stay open and answerable; building closed none of them.
+		expect(context.plan.records.get("deploy")?.status).toBe("open");
+		expect(context.plan.records.get("again")?.status).toBe("reopened");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a document with no open decision tells the builder nothing to assume", async () => {
+	let context = await setup();
+	try {
+		let connection = await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		let claim = await tool(context, connection.token, "claim_implementation_build", {
+			id: built.id,
+		});
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "acp-session",
+		});
+		expect(await tool(context, claim.runToken, "read_implementation")).not.toHaveProperty(
+			"unapprovedDecisions",
+		);
+	} finally {
+		await Plan.close(context.plan);
+	}
 });
 
 test("a run's parallel lifecycle batch lands in order and refusals say what to do next", async () => {
@@ -2342,13 +2444,41 @@ test("without LIVE_BUILD a delivered build counts later edits and a person build
 		expect(snapshot.live).toMatchObject({ outOfSync: false, changes: 0 });
 		expect(snapshot.live.commits).toHaveLength(1);
 
-		// Like Build plan, a pressed Build waits for open decisions and accepted comments.
+		// A pressed Build still waits for accepted comments, but never for a decision.
 		expect((await edit(context.plan, "Another paragraph.")).ok).toBe(true);
-		context.plan.records.set("open-decision", { status: "open" } as never);
+		context.plan.threads.set(
+			"accepted",
+			{ id: "accepted", status: "accepted", notes: [] } as never,
+		);
 		let blocked = await context.call(rebuild, {});
 		expect(blocked.status).toBe(409);
-		expect((await blocked.json()).error).toBe("unanswered questionnaires");
-		context.plan.records.delete("open-decision");
+		expect((await blocked.json()).error).toBe("accepted comments awaiting plan changes");
+		context.plan.threads.delete("accepted");
+		context.plan.records.set("open-decision", decision("open-decision"));
+		context.plan.records.set("reopened-decision", decision("reopened-decision", "reopened"));
+		expect((await (await context.call(context.path)).json()).blockers).toEqual([]);
+		let again = await context.call(rebuild, {});
+		expect(again.status).toBe(200);
+		let next = context.plan.builds.at(-1)!.id;
+		expect(await tool(context, connection.token, "wait_for_work")).toEqual({
+			id: next,
+			kind: "implementation",
+		});
+		let rerun = await tool(context, connection.token, "claim_implementation_build", { id: next });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: next,
+			state: "running",
+			session: "second-session",
+		});
+		// The builder reads every decision still open, and building answered none of them.
+		let changes = await tool(context, rerun.runToken, "read_rebuild");
+		expect(changes.unapprovedDecisions.decisions).toMatchObject([
+			{ id: "open-decision", status: "open", prompt: "How should we deploy?" },
+			{ id: "reopened-decision", status: "reopened", prompt: "How should we deploy?" },
+		]);
+		expect(changes.unapprovedDecisions.pullRequestSection).toContain("Assumed, not yet approved");
+		expect(context.plan.records.get("open-decision")?.status).toBe("open");
+		expect(context.plan.records.get("reopened-decision")?.status).toBe("reopened");
 	} finally {
 		await Plan.close(context.plan);
 	}

@@ -18,11 +18,14 @@ requests appear in its terminal with the command or paths involved, and are
 declined when no interactive terminal is available. The agent retains its
 normal tools, project instructions and configured services.
 
-## Build a settled plan
+## Build a plan
 
-1. Resolve planning questions and accepted comments awaiting document updates.
-   Until then **Build plan** in the document header is inert and its tooltip
-   says what is left.
+1. Update the document for accepted comments, and finish any required
+   investigation. Until then **Build plan** in the document header is inert and
+   its tooltip says what is left. Open decisions do not wait: the agent builds
+   on its best judgment, is told which decisions are unanswered, and lists them
+   as assumed in each pull request. See
+   [open decisions never block a build](implementation-lifecycle.md#open-decisions-never-block-a-build).
 2. Select **Build plan**. When the tasks are missing or older than the
    document, it asks the hosted Planner to draft them without posting a Chat
    message, then starts them without a separate review. See

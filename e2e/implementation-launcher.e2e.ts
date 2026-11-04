@@ -694,7 +694,7 @@ test("the agent-offline notice folds to its glyph before the document's title gi
 });
 
 test(
-	"Build plan waits for unanswered decisions and says so",
+	"Build plan proceeds while decisions are open and leaves them to answer",
 	async ({ seed, join: enter }) => {
 		let widget = "01K0N4TR8K7JGM4R1J7PW4R8YJ";
 		let question = "01K0N4V4E7Y6P4MJ5WD8XZF3B2";
@@ -709,13 +709,12 @@ test(
 			}],
 		};
 		await seed(
-			`# Blocked build\n\nA decision is open.\n\n<Questionnaire id="${widget}" by="ana">
+			`# Open decision\n\nA decision is open.\n\n<Questionnaire id="${widget}" by="ana">
 <Question id="${question}" header="Rollout" prompt="How should we deploy?" multiple="false">
 <Option id="${option}" label="Canary" />
 </Question>
 </Questionnaire>\n`,
 			{
-				revision: 1,
 				graph: preparedGraph(),
 				questions: [{
 					id: widget,
@@ -736,27 +735,23 @@ test(
 			},
 		);
 		let page = await enter("ana");
-		let plan = page.getByRole("button", { name: "1 decision left. Show blockers", exact: true });
+		let plan = page.getByRole("button", { name: "Build plan", exact: true });
 		await expect(plan).toBeVisible();
-		await expect(page.getByRole("button", { name: "Build plan", exact: true })).toHaveCount(0);
+		// Nothing about the open decision holds Build back: no waiting capsule, no inert button.
+		await expect(page.getByRole("button", { name: /decisions? left/ })).toHaveCount(0);
+		await expect(plan).not.toHaveAttribute("aria-disabled", "true");
+		let shots = process.env.CHOPIN_SHOTS;
+		if (shots) await page.screenshot({ path: `${shots}/build-plan-with-open-decision.png` });
 		await plan.click();
-		let popup = page.getByRole("dialog", { name: "Build blockers", exact: true });
-		let item = popup.getByRole("button", { name: "Review: How should we deploy?", exact: true });
-		await expect(item).toBeVisible();
-		let screenshot = test.info().outputPath("decision-blocker-header.png");
-		await page.screenshot({ path: screenshot });
-		await test.info().attach("decision-blocker-header", {
-			path: screenshot,
-			contentType: "image/png",
-		});
-		await item.click();
-		await expect(page.locator(`article[data-plan-sidecar-questionnaire="${widget}"]`).first())
-			.toBeFocused();
-		await expect(page.getByRole("button", { name: "Preparing tasks", exact: true })).toHaveCount(0);
+		// The press went ahead; with no local agent connected it stops there, not at the decision.
+		await expect(page.getByRole("button", { name: "Agent offline", exact: true })).toBeVisible();
 		await expect(
 			page.getByRole("group", { name: "Document view" })
 				.getByRole("button", { name: "Build", exact: true }),
-		).toBeDisabled();
+		).toBeEnabled();
+		// The decision stays open on the page, still answerable once the build is done with it.
+		await expect(page.locator(`article[data-plan-sidecar-questionnaire="${widget}"]`).first())
+			.toBeVisible();
 	},
 );
 

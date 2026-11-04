@@ -18,6 +18,7 @@ import {
 	reportRebuild,
 } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
+import { unapprovedContext } from "./open-decisions";
 
 /** Why a build claimed before the server restarted ended: the server forgot it. */
 export const RESTARTED = "Chopin restarted, so this build ended.";
@@ -446,6 +447,7 @@ export function implementationConnector(
 								execution: plan.execution,
 								lifecycle: plan.lifecycle,
 							}),
+							...unapprovedContext(plan.records.values()),
 						}));
 					}
 					let parsed = lifecycleCall(name, { ...args, id: plan.id, runId: build.id });

@@ -113,32 +113,47 @@ async function verifyRun(plan: Plan, runId: string) {
 }
 
 describe("the plan graph adapter", () => {
-	it("keeps implementation preparation policy with graph persistence", async () => {
-		let context = await hosted();
-		let plan = await open(context.channel.id, context.backend, context.server);
-		let readiness = (graphPlans as typeof graphPlans & {
-			implementationReadiness?: (plan: Plan, revision: unknown) => unknown;
-		}).implementationReadiness;
-
-		expect(readiness).toBeTypeOf("function");
-		if (typeof readiness !== "function") return;
-
-		plan.records.set("open", { id: "open", status: "open" } as never);
-		plan.threads.set("accepted", { id: "accepted", status: "accepted", notes: [] } as never);
-		expect(readiness(plan, -1)).toEqual({
-			ok: false,
-			blockers: [
-				"unanswered questionnaires",
-				"accepted comments awaiting plan changes",
-				"invalid plan revision",
-			],
-		});
-
-		plan.records.clear();
-		plan.threads.clear();
-		expect(readiness(plan, plan.revision)).toEqual({ ok: true, revision: plan.revision });
-		await close(plan);
-	});
+	it.each(["open", "reopened"] as const)(
+		"Build readiness ignores %s decisions and keeps every other blocker",
+		async status => {
+			let context = await hosted();
+			let plan = await open(context.channel.id, context.backend, context.server);
+			try {
+				plan.records.set("decision", {
+					id: "decision",
+					status,
+					definition: {
+						questions: [{
+							id: "choice",
+							header: "Choice",
+							question: "Which approach?",
+							multiple: false,
+							options: [],
+						}],
+					},
+				} as never);
+				// Only the decision is outstanding: Build may proceed.
+				expect(graphPlans.implementationReadiness(plan, plan.revision)).toEqual({
+					ok: true,
+					revision: plan.revision,
+				});
+				expect(await graphPlans.planningReadiness(plan, plan.revision)).toEqual({
+					ok: true,
+					blockers: [],
+					investigations: [],
+				});
+				// Everything else that held Build back still does, beside the decision.
+				plan.threads.set("accepted", { id: "accepted", status: "accepted", notes: [] } as never);
+				expect(graphPlans.implementationReadiness(plan, -1)).toEqual({
+					ok: false,
+					blockers: ["accepted comments awaiting plan changes", "invalid plan revision"],
+				});
+				plan.threads.clear();
+			} finally {
+				await close(plan);
+			}
+		},
+	);
 
 	it("keeps a document graph in the hosted sidecar through a restart", async () => {
 		let context = await hosted();

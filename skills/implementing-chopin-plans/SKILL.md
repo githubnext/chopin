@@ -20,6 +20,7 @@ Chopin's MCP initialize instructions and current tool descriptions are authorita
 Re-read the implementation before every lifecycle action, then follow the service instructions for the current state. Reads may use the canonical URL or UUID, but `start_implementation` and every later lifecycle call must use the UUID returned as `document.id`.
 
 - Work only on tasks whose dependencies are complete. Independent ready roots may be delegated when the runtime supports it; the owning agent remains responsible for MCP reporting, review, verification evidence, and one pull request per task.
+- If `read_implementation` returns `unapprovedDecisions`, those decisions are still open. Do not wait for one, block a task on one, or answer or close one: use your best judgment, and put the returned `pullRequestSection`, unchanged, at the end of every pull request's body, adding a few words after each item on what you assumed.
 - Make only the required changes. Do not edit Chopin plan or graph content or start another top-level agent CLI session.
 - Stop code changes whenever the service requires a blocker or graph release. Explain what must change and wait for the next valid lifecycle state.
 - Perform a separate review pass after implementation. Prefer a fresh reviewer sub-agent; otherwise review independently after stepping away. Resolve in-scope findings and run focused checks.

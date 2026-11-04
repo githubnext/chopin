@@ -26,6 +26,7 @@ import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { UpdateDocument } from "./mcp/update";
 import type { UploadImageInput } from "./mcp/image";
 import type { Run, Version } from "./tasks/graphs";
+import type { unapprovedContext } from "./tasks/open-decisions";
 import type { LifecycleArguments } from "./mcp/lifecycle";
 import type { ImplementationLifecycle } from "./tasks/lifecycle";
 import type { Issue } from "@chopin/dialect";
@@ -65,6 +66,8 @@ export type Implementation = {
 	execution: { state: "idle" } | { state: "active"; run: Run };
 	activity?: ImplementationLifecycle["activity"];
 	history: ImplementationLifecycle["history"];
+	/** Decisions still open, for the agent to build on its best judgment; absent when none is. */
+	unapprovedDecisions?: NonNullable<ReturnType<typeof unapprovedContext>>["unapprovedDecisions"];
 };
 
 export type ImplementationInput = {

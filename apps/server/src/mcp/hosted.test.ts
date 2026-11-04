@@ -11,6 +11,7 @@ import * as Room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Rooms from "../rooms";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { storedQuestion } from "../testing/plan";
 import { implementationGraphs } from "../tasks/plan-graphs";
 import { hosted } from "./hosted";
 import { deterministicChannelId } from "../channels/id";
@@ -26,6 +27,7 @@ import type {
 	RepositoryPage,
 } from "../github/client";
 import type { CreateDocumentInput } from "../mcp";
+import type { JsonValue } from "../storage/model";
 import type { Socket, SocketData } from "../wire";
 import type { PlannerInvocation } from "./hosted";
 
@@ -1276,6 +1278,106 @@ describe("the hosted MCP adapter", () => {
 			Rooms.forget(live);
 			await Service.close(opened.plan);
 		}
+	});
+
+	it("lists the decisions still open to a coding agent that reads an approved graph", async () => {
+		let context = setup();
+		let opened = await plan(context);
+		opened.plan.creation = {
+			brief: creation.brief,
+			origin: {
+				idempotencyKey: creation.idempotencyKey,
+				fingerprint: creation.fingerprint,
+				repository: creation.repository,
+				baseBranch: creation.baseBranch,
+				baseCommit: creation.baseCommit,
+				title: "Created",
+			},
+		};
+		expect(
+			(await implementationGraphs().revise(opened.plan, {
+				planRevision: 0,
+				graphRevision: 0,
+				operations: [{ op: "add", task: claimTask }],
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(opened.plan)).ok).toBe(true);
+		let definition = {
+			questions: [{
+				id: "rollout",
+				header: "Rollout",
+				question: "How should we deploy?",
+				multiple: false,
+				options: [{ id: "canary", label: "Canary", description: "" }],
+			}],
+		};
+		let decision = {
+			id: "deploy",
+			status: "open" as const,
+			origin: "planner" as const,
+			definition,
+			history: [],
+			optionOrigins: {},
+			editors: [],
+		};
+		let adapter = hosted(context.auth, { lease: () => opened.lease });
+		let caller = await adapter.caller(request("Bearer allowed"));
+		if (!caller || !adapter.implementations) throw new Error("implementation adapter unavailable");
+		let listed = {
+			unapprovedDecisions: {
+				decisions: [{
+					id: "deploy",
+					questionId: "rollout",
+					status: "open",
+					prompt: "How should we deploy?",
+					options: ["Canary"],
+				}],
+			},
+		};
+
+		// With no open decision the agent has nothing to assume.
+		let live = Rooms.join(
+			{ data: { room: opened.channel.id, client: "mcp-test" } } as unknown as Socket,
+		);
+		live.plan = opened.plan;
+		try {
+			expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
+				.not.toHaveProperty("unapprovedDecisions");
+			opened.plan.records.set("deploy", decision);
+			expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
+				.toMatchObject(listed);
+			opened.plan.records.clear();
+		} finally {
+			Rooms.forget(live);
+		}
+
+		// A closed document answers from its stored sidecar.
+		await Service.close(opened.plan);
+		let stored = await context.storage.collaboration.load(opened.channel.id, context.now);
+		if (!stored?.snapshot) throw new Error("test channel has no checkpoint");
+		let sidecar = stored.sidecar as { [key: string]: JsonValue };
+		await context.storage.collaboration.commit({
+			channelId: opened.channel.id,
+			lease: opened.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: crypto.randomUUID(),
+			epoch: stored.snapshot.epoch,
+			sidecar: {
+				...sidecar,
+				revision: Number(sidecar.revision) + 1,
+				questions: [decision],
+				openQuestions: [{
+					id: "deploy",
+					definition,
+					model: storedQuestion(definition),
+					revision: 0,
+				}],
+			},
+			events: [],
+			now: context.now,
+		});
+		expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
+			.toMatchObject(listed);
 	});
 
 	it("atomically stores one implementation claim for a closed hosted plan", async () => {

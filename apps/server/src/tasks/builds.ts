@@ -2,6 +2,7 @@ import { z } from "zod";
 import { activityText } from "@chopin/protocol/activity";
 import { changedBlocks } from "./changes";
 import { approveGraph, validate } from "./graphs";
+import { unapprovedContext } from "./open-decisions";
 import { planningReadiness } from "./plan-graphs";
 import {
 	claimEligibility,
@@ -846,6 +847,7 @@ export function readRebuild(plan: Plan, buildId: string) {
 			})),
 			tasks,
 			...(outstanding.length ? { outstanding } : {}),
+			...unapprovedContext(plan.records.values()),
 		};
 	});
 }
