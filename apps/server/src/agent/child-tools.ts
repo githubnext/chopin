@@ -18,9 +18,11 @@ import {
 	answer,
 	applyAnchors,
 	applyBlockEdit,
-	documentView,
 	EDIT_OPERATIONS_SCHEMA,
+	readableView,
 } from "./document-ops";
+import { READING_IN_PARTS } from "../document-reading";
+import { readingModelOutput } from "./reading-output";
 import { implementationActive } from "../plan/service";
 import { type ChildDocuments, UnknownChild } from "../chat/children";
 
@@ -102,12 +104,21 @@ export const childTools = {
 
 	read_child: tool({
 		contextSchema: childContext,
-		description: "Read one child document exactly as `read_plan` reads the root: its revision, "
-			+ "source, addressable blocks, questions and accepted comments. Use that revision with "
-			+ "`edit_child` and `anchor_child`.",
+		description: "Read one child document exactly as `read_plan` reads the root: as text with a "
+			+ "short header, its revision, the addressable blocks, questions and accepted comments, "
+			+ `then its source. Use that revision with \`edit_child\` and \`anchor_child\`. ${READING_IN_PARTS}`,
 		inputSchema: jsonSchema({
 			type: "object",
-			properties: { child: CHILD },
+			properties: {
+				child: CHILD,
+				offset: { type: "integer", minimum: 1, description: "First line to read, from 1." },
+				limit: { type: "integer", minimum: 1, description: "Most lines to read." },
+				column: {
+					type: "integer",
+					minimum: 1,
+					description: "Character in line `offset` to start at.",
+				},
+			},
 			required: ["child"],
 			additionalProperties: false,
 		}),
@@ -115,17 +126,18 @@ export const childTools = {
 		execute: (raw, { context: { room, owner } }) =>
 			respond("read_child", async () => {
 				let { child, rest } = Arguments.childTarget(raw, "read_child");
-				if (Object.keys(rest).length) throw new Refusal("read_child accepts only `child`");
+				let range = Arguments.readRange(rest, "read_child");
 				let children = await permitted(room, owner);
 				return children.open(child, async opened => {
 					let summary = await children.resolve(opened.id);
 					if (!summary) throw new Refusal(MISSING);
 					return {
 						child: { id: opened.id, title: summary.title },
-						...await documentView(opened.plan),
+						...await readableView(opened.plan, range),
 					};
 				});
 			}),
+		toModelOutput: readingModelOutput("read_child"),
 	}),
 
 	edit_child: tool({

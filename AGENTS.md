@@ -419,6 +419,13 @@ so merge ranges from all mounted editors before replacing a registry entry.
   reads raw Copilot SDK events and keeps its own live tool check against session
   metadata. Treat that as adapter-internal behavior, not a property every harness
   in `HARNESS` shares.
+- A host tool's return value is what its model reads: the Copilot SDK, Atomic and an
+  attached client show it as is, or as one line of JSON for an object, and `HarnessAgent`
+  applies a tool's `toModelOutput` only when a turn ends. `read_plan` and `read_child`
+  return their structured view, and each real harness in `harnesses.ts` is wrapped by
+  `withModelOutput` so its model reads them as text of at most `READ_BYTES` bytes, paged
+  with `next:`; Atomic's MCP adapter silently drops the middle of text over 20 KiB. A new
+  `HARNESS` must be wrapped too.
 - The GitHub MCP tools reached through `apps/server/src/harness/github-tools.ts`
   come from a remote server that can change its offered tool count. Diagnose by
   required names and denied capabilities, not literal counts.

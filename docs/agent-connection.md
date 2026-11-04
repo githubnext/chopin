@@ -621,8 +621,32 @@ percent-encoding of an escape's own characters, such as `%25%34%30` for `%40`.
 
 This masking applies only to what Chat stores and shows. It does not change
 what crosses the connection: `host-tool-result.output` reaches the client exactly as
-the host tool returned it, and a failed host call keeps its
-`{ "error": "<message>" }` output.
+the host tool returned it (except the two reading tools; see
+[Reading a large document](#reading-a-large-document)), and a failed host call
+keeps its `{ "error": "<message>" }` output.
+
+### Reading a large document
+
+`read_plan` and `read_child` host results, and MCP `read_document`'s text, are
+text a model can page through, not JSON: a short header (document, `url`,
+`revision`, size), the top-level blocks with their lines and digests, then the
+document's own lines, verbatim. One result carries at most 16,000 UTF-8 bytes in
+all, header and lists included, because a harness may keep only the head and
+tail of a result over 20 KiB. They take optional `offset` (a 1-based line),
+`limit` (most lines; a result stops sooner when the budget requires, and says
+so) and `column` (a 1-based character in line `offset`, to continue a line too
+long for one result), and name the exact call that continues in a `next:` header
+line. A document over the budget returns an outline and its first part until the
+client pages through it; calling each `next:` returns every character exactly
+once. See [Reading a large document](hosted-agent.md#reading-a-large-document).
+
+These are the only host results whose `host-tool-result.output` is not the tool's
+own return value: the two tools return their structured view, and the server
+sends the client the text its model should read, made from the same view. A client
+that read the revision from that JSON must read `revision: <n>` from the header.
+The `open_decisions` and `ask` results' `current_plan` stays JSON, and leaves out
+`source` and `blocks` when the view is over 8,000 bytes, and says so in
+`source_omitted`.
 
 ## Questions
 

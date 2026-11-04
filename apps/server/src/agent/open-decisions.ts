@@ -1,7 +1,7 @@
 import * as Questions from "../questions/service";
 import { implementationActive } from "../plan/service";
 import { openDecisions } from "./arguments";
-import { documentView } from "./document-ops";
+import { currentPlan, documentView } from "./document-ops";
 
 import type { ActiveOwnerBinding } from "./active-owner";
 import type { DocumentRoom } from "./tools";
@@ -27,5 +27,5 @@ export async function capture(
 	let result = await Questions.captureDecisions(room.plan, room.server, room.id, input, signal);
 	for (let { id } of result.decisions) room.plan.chat.captured?.add(id);
 	room.anchors();
-	return { ...result, current_plan: await documentView(room.plan) };
+	return { ...result, current_plan: currentPlan(await documentView(room.plan), "read_plan") };
 }
