@@ -272,7 +272,7 @@ export type RebuildResult =
 	| { kind: "busy" }
 	| { kind: "unchanged" }
 	| { kind: "unavailable" }
-	/** A person's Build waits, like Build plan, for open decisions and accepted comments. */
+	/** A person's Build waits, like Build plan, for accepted comments and required investigations. */
 	| { kind: "blocked"; blockers: string[] };
 
 /** Whether any build or claim is in flight, including rebuilds that leave editing open. */

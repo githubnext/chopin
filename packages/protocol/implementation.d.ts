@@ -141,7 +141,10 @@ export type ImplementationSnapshot = {
 	blockers: string[];
 	/** Required investigations, with concrete reasons; completion still needs evidence review. */
 	buildInvestigations?: Array<{ id: string; brief: string; reason: string }>;
-	/** No unresolved decisions, accepted changes, or required investigations. */
+	/**
+	 * No accepted changes awaiting plan changes and no required investigations. Open decisions never
+	 * make it false.
+	 */
 	buildReady: boolean;
 	/** `build` is queued on a connection that starts it once its running prototype finishes. */
 	waitingForPrototype?: true;
@@ -152,7 +155,7 @@ export type ImplementationSnapshot = {
 	waitingForDocument?: { title?: string };
 	/**
 	 * A one-click Build plan is waiting for its tasks: `by` (a user id) pressed it at `revision`.
-	 * It holds through open decisions and reloads until the build starts or is cancelled.
+	 * It survives a reload, and any blocker that remains, until the build starts or is cancelled.
 	 */
 	buildRequested?: { by: string; revision: number };
 	lifecycle: Pick<Plan.Lifecycle, "execution" | "activity" | "history">;
