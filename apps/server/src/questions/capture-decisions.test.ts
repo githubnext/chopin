@@ -643,3 +643,28 @@ test("a stale address whose index disagrees with its digest is refused as the fr
 	await edited(context, [{ op: "insert_root", source: "A late note." }]);
 	await expectNothingCreated(context, input, 0, "does not match the block you read");
 });
+
+test("a repeated key whose read was evicted is refused when a later passage was rewritten beside an identical copy", async () => {
+	let context = await setup(
+		"# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.\n\nProvisional pricing.",
+	);
+	let single = question(context.plan, "decision-one", 1);
+	let digests = Room.digests(context.plan.document);
+	let input = {
+		revision: 0,
+		questions: [{ ...single, blocks: [1, 2].map(index => ({ index, digest: digests[index]! })) }],
+	};
+	await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	await edited(context, [{
+		op: "replace",
+		index: 3,
+		source: "Provisional collaboration, rewritten.",
+	}]);
+	await edited(context, [{ op: "insert_root", source: "Provisional collaboration." }]);
+	for (let note = 0; note < 9; note++) {
+		await edited(context, [{ op: "insert_root", source: `Note ${note}.` }]);
+		Edit.outline(context.plan);
+	}
+	expect(Edit.read(context.plan, 0)).toBeUndefined();
+	await expectNothingCreated(context, input, 1, "the server no longer has that read");
+});
