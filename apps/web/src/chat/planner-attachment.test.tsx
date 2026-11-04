@@ -48,6 +48,37 @@ test("names the machine starting the Planner when it is the viewer's, else whose
 	);
 });
 
+test("says why a Planner a machine keeps failing to start cannot, still as starting and still trying", () => {
+	let at = "2026-11-04T02:05:16.000Z";
+	let time = new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	let failure = {
+		attempts: 3,
+		reason: "unsafe-checkout: ~/src/score sets a credential helper",
+		at,
+	};
+	let markup = render({ state: "starting", login: "mona", failure }, "studio");
+	expect(words(markup)).toBe(
+		"Planner: can’t start on studio unsafe-checkout: ~/src/score sets a credential helper "
+			+ `Tried 3 times in a row, last at ${time}. Still trying.`,
+	);
+	// It is still the starting state, so everything that follows it still does, and it is said aloud.
+	expect(markup).toContain('data-planner-state="starting"');
+	expect(markup).toContain("data-planner-failing");
+	expect(markup).toContain('role="status"');
+	expect(markup).toContain(`<time dateTime="${at}">${time}</time>`);
+	// The reason is text, never markup.
+	expect(render({ state: "starting", login: "mona", failure: { ...failure, reason: "<b>no</b>" } }))
+		.toContain("&lt;b&gt;no&lt;/b&gt;");
+	// Somebody else's machine is named as whose it is.
+	expect(words(render({ state: "starting", login: "mona", failure }))).toStartWith(
+		"Planner: can’t start on @mona’s machine ",
+	);
+	// Without a failure, nothing about one is said.
+	expect(render({ state: "starting", login: "mona" }, "studio")).not.toContain(
+		"data-planner-failing",
+	);
+});
+
 test("keeps its status dot out of the accessible text", () => {
 	let markup = render({ state: "attached", login: "lavaman131" });
 	expect(markup).toMatch(/<span aria-hidden="true" class="composer-planner-dot"><\/span>/);
