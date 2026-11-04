@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { ActiveOwnerBindings } from "../agent/active-owner";
 import { createPlannerAgent } from "../harness/agents";
 import { createRemoteAdapter } from "../harness/remote/adapter";
-import { notAttachedMessage } from "../harness/remote/attachments";
+import { disconnectedMessage, notAttachedMessage } from "../harness/remote/attachments";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { configured } from "../testing/config";
@@ -11,11 +11,16 @@ import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import {
 	attach,
 	finishTurn,
+	holdingProxy,
 	linkAuth,
 	linkServer,
+	MEMBER_TOKEN,
 	RIVAL_TOKEN,
 	scriptedPlanner,
 } from "../testing/agent-link";
+import { AgentRefused, connectAgent } from "@chopin/agent-link/client";
+import { GitHubError } from "../github/client";
+import { laterTimers } from "../testing/decisions";
 import * as Chat from "./service";
 import * as Question from "@chopin/question";
 import { answerTurns } from "../questions/answer-turns";
@@ -24,7 +29,7 @@ import * as Store from "../questions/store";
 import { member } from "../questions/text-response.test-fixtures";
 
 import type { Server } from "bun";
-import type { AgentClient } from "@chopin/agent-link/client";
+import type { AgentClient, AgentHandlers } from "@chopin/agent-link/client";
 import type { HostedAuth } from "../auth/routes";
 import type { Socket, SocketData } from "../wire";
 
@@ -34,6 +39,8 @@ afterEach(async () => {
 });
 
 const REMOTE = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
+/** How long a deployment keeps a dropped link by default (`PLANNER_ATTACH_GRACE_MS`). */
+const GRACE_MS = configured(REMOTE).plannerAttachGraceMs;
 const RIVAL = { id: "U_rival", login: "rival" };
 
 function card(status: "running" | "paused") {
@@ -53,9 +60,9 @@ function card(status: "running" | "paused") {
  * with a real agent connection server. The rival sends from a browser with a
  * login of their own; only the attached member may own the Planner.
  */
-async function remoteRoom() {
+async function remoteRoom(graceMs?: number, operationMs?: number) {
 	let { auth, storage, channel, logins, revocations, signOut, clock } = await linkAuth();
-	let server = linkServer(auth);
+	let server = linkServer(auth, operationMs, undefined, graceMs);
 	cleanups.push(server.stop);
 	revocations.add(id => server.attachments.sessionRevoked(id));
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
@@ -88,6 +95,8 @@ async function remoteRoom() {
 		plannerNotAttached: async () =>
 			await server.attachments.confirmed(channel.id)
 				? undefined
+				: server.attachments.status(channel.id).state === "disconnected"
+				? disconnectedMessage(server.attachments.holder(channel.id))
 				: notAttachedMessage(url, "octo-org/score"),
 		activeOwner: () => owners.resolve(channel.id),
 		persist: () => Plan.persist(plan),
@@ -456,4 +465,716 @@ test("saving a decision the Planner left open starts one turn on the attached Pl
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
 		'@ana answered "How should the wrong sentence be fixed?"',
 	);
+});
+
+/** A member's Save of an open choice card, as the Decisions surface sends it. */
+async function answerChoice(context: Chat.Room, id: string, index: number) {
+	let opened = Store.snapshot(context.plan.questions, id);
+	if (!opened.open) throw new Error("question closed");
+	let definition = Store.get(context.plan.questions, id)!.definition;
+	let model = Question.restore(opened.model, definition);
+	let question = definition.questions[0]!;
+	model.api.val([question.id, "mode"]).set("choices");
+	model.api.val([question.id, "choice"]).set(question.options[index]!.id);
+	let patch = model.api.flush();
+	let actor = member("ana");
+	if (patch) {
+		await Questions.edit(context.plan, actor.ws, {
+			kind: "question:edit",
+			ts: 0,
+			rid: "edit",
+			id,
+			patch: [...patch.toBinary()],
+		});
+	}
+	await Questions.submit(context.plan, context.server, context.room, actor.ws, {
+		kind: "question:submit",
+		ts: 0,
+		rid: "save",
+		id,
+		revision: Store.get(context.plan.questions, id)!.revision,
+	});
+	expect(actor.frames.at(-1)).toMatchObject({ kind: "question:submit", ok: true });
+}
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+async function until(check: () => boolean, ms = 3_000) {
+	for (let deadline = Date.now() + ms; Date.now() < deadline && !check(); await Bun.sleep(5));
+	expect(check()).toBe(true);
+}
+
+/**
+ * A resumable client that took one turn, reported `run-1` live and, if told to, asked one
+ * question. `drop()` is the network failing, with no detach and no revocation; `reconnect()` is
+ * the same account's next link, which resumes what the dropped one held; `controls` is what the
+ * client was told to do with its runs. `graceMs` is how long the server keeps a dropped link and
+ * `operationMs` how long it waits for the client to answer a control. A `silent` client takes
+ * every control and never answers it, as one whose network is failing does, until `answering()`.
+ */
+async function resumablePlanner(
+	options: {
+		run?: boolean;
+		ask?: boolean;
+		graceMs?: number;
+		operationMs?: number;
+		silent?: boolean;
+		/** The question's caller can withdraw it with `withdraw()`, as an aborted workflow stage does. */
+		withdrawable?: boolean;
+		/** The client reaches the server through a proxy that can go silent without closing. */
+		proxied?: boolean;
+	} = {},
+) {
+	let room = await remoteRoom(options.graceMs, options.operationMs);
+	let { context, server } = room;
+	let proxy = options.proxied ? await holdingProxy(server.url, 10) : undefined;
+	if (proxy) cleanups.push(proxy.stop);
+	let script = scriptedPlanner();
+	let controls: string[] = [];
+	let silent = options.silent === true;
+	let withdrawal = new AbortController();
+	let asked: Promise<{ status: string; value?: unknown }> | undefined;
+	let first: AgentClient | undefined;
+	let held: Awaited<AgentClient["resumption"]>;
+	let sessionId: string | undefined;
+	let handlers: Partial<AgentHandlers> = {
+		...script.handlers,
+		async turn(turn) {
+			sessionId = turn.message.session;
+			if (options.run !== false) {
+				first!.reportRuns(turn.message.session, {
+					active: ["run-1"],
+					paused: [],
+					cards: [card("running")],
+				});
+			}
+			if (options.ask && !asked) {
+				asked = first!.ask(turn.message.session, {
+					method: "confirm",
+					title: "Ship?",
+					message: "Now.",
+				}, options.withdrawable ? { signal: withdrawal.signal } : {});
+			}
+			finishTurn(turn);
+		},
+		control(message) {
+			controls.push(message.run ? `${message.type} ${message.run}` : message.type);
+			if (silent) return new Promise<void>(() => {});
+		},
+	};
+	let connect = (resume?: typeof held) =>
+		connectAgent({
+			url: resume === undefined && proxy ? proxy.url : server.url,
+			token: MEMBER_TOKEN,
+			document: room.channel.id,
+			handlers: handlers as AgentHandlers,
+			resumable: true,
+			...(resume ? { resume } : {}),
+		});
+	first = await connect();
+	expect(first.features).toContain("resumable-sessions");
+	expect(await Chat.invoke(context, RIVAL, "Run the review")).toBeUndefined();
+	await context.chat.running;
+	if (options.ask) await until(() => [...context.plan.records.values()][0]?.status === "open");
+	await until(() => context.chat.retained !== undefined);
+	// Chat shows the run card, so a person's Stop or pause has a run to act on.
+	if (options.run !== false) await until(() => context.chat.runs?.[0]?.status === "running");
+	return {
+		...room,
+		handlers,
+		controls,
+		/** The client answers the controls it is given from now on. */
+		answering() {
+			silent = false;
+		},
+		asked: () => asked!,
+		sessionId: () => sessionId!,
+		proxy,
+		first: () => first!,
+		/** The client's own resumption, once its link has closed some other way than `drop()`. */
+		setHeld(value: typeof held) {
+			held = value;
+		},
+		/** The caller of the question stops waiting for it. */
+		withdraw: () => withdrawal.abort(),
+		said: () => context.chat.entries.map(entry => entry.text),
+		async drop() {
+			for (let socket of server.sockets) socket.close(1001, "network failed");
+			held = await first!.resumption;
+			expect(held).toBeDefined();
+			await until(() => server.links.length === 0);
+		},
+		/** The session the dropped link held, to report its runs on once the client is back. */
+		session: () => [...held!.sessions][0]!,
+		async reconnect() {
+			let client = await connect(held);
+			cleanups.push(() => client.detach());
+			return client;
+		},
+	};
+}
+
+test("with its link connected, an attached Planner's open question and live run stay open for hours, ending only with its owner's sign-in credential", async () => {
+	let clock = laterTimers();
+	cleanups.push(() => clock.restore());
+	let live = await resumablePlanner({ ask: true });
+	let { context, server } = live;
+	let id = [...context.plan.records.keys()][0]!;
+	// Half an hour, then two hours, then four: no wall-clock limit ends a connected Planner's work.
+	for (let passed of [31 * MINUTE, 2 * HOUR, 4 * HOUR]) {
+		await clock.pass(passed);
+		expect(context.plan.records.get(id)?.status).toBe("open");
+		expect(context.chat.retained).toBeDefined();
+		expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+		expect(server.attachments.status(live.channel.id)).toEqual({
+			state: "attached",
+			login: "member",
+		});
+		expect(live.said().some(text => text.includes("was stopped"))).toBe(false);
+	}
+	// The one bound is authorization: the owner's GitHub credential, which the fixture's browser
+	// login issued for eight hours, is what the Planner acts under, and it cannot outlive it.
+	await clock.pass(2 * HOUR);
+	await until(() => context.plan.records.get(id)?.status === "cancelled");
+	await until(() => context.chat.retained === undefined);
+});
+
+test("a dropped link's run card says disconnected, not stopped, and its open question stays open and answerable for as long as its client is away", async () => {
+	// Installed before anything is created, so every timer the server and Chat arm is on it.
+	let clock = laterTimers();
+	cleanups.push(() => clock.restore());
+	let down = await resumablePlanner({ ask: true, graceMs: GRACE_MS });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	expect(server.attachments.status(down.channel.id)).toEqual({
+		state: "disconnected",
+		login: "member",
+	});
+	// The card keeps its last reported status and says only that its Planner is away.
+	expect(context.chat.runs?.map(run => [run.status, run.disconnected])).toEqual([[
+		"running",
+		true,
+	]]);
+	expect(down.said().filter(text => text.startsWith("The Planner disconnected."))).toHaveLength(1);
+
+	// The owner's GitHub credential of eight hours is renewed meanwhile, and a day goes by: past
+	// the configured grace, the one-hour maximum and every other timer, nothing ends.
+	for (let passed of [GRACE_MS, 31 * MINUTE, 3 * HOUR, 5 * HOUR, 16 * HOUR]) {
+		await clock.pass(passed);
+		expect(context.plan.records.get(id)?.status).toBe("open");
+		expect(context.chat.retained).toBeDefined();
+		expect(context.chat.runs?.map(run => [run.status, run.disconnected])).toEqual([[
+			"running",
+			true,
+		]]);
+		expect(down.said().some(text => text.includes("was stopped"))).toBe(false);
+		expect(server.attachments.status(down.channel.id)).toEqual({
+			state: "disconnected",
+			login: "member",
+		});
+	}
+	// Nobody else can take the Planner while its account's client may return.
+	expect(await Chat.invoke(context, RIVAL, "Anything?")).toBe("planner-not-attached");
+	expect(await context.plannerNotAttached!()).toContain("is disconnected");
+
+	let client = await down.reconnect();
+	expect(context.plan.records.size).toBe(1);
+	client.reportRuns(down.session(), { active: ["run-1"], paused: [], cards: [card("running")] });
+	await until(() => context.chat.runs?.[0]?.disconnected === undefined);
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(down.said().filter(text => text === "The Planner reconnected and carries on."))
+		.toHaveLength(1);
+	// The renewed credential serves the session when it is next used, and nothing was reopened.
+	expect(context.chat.retained).toBeDefined();
+	expect(await Chat.invoke(context, RIVAL, "Carry on")).toBeUndefined();
+	await context.chat.running;
+	expect(context.plan.records.size).toBe(1);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	await clock.pass(4 * HOUR);
+	await answerChoice(context, id, 0);
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	expect(context.plan.records.size).toBe(1);
+	expect(down.said().some(text => text.includes("was stopped"))).toBe(false);
+});
+
+test("an answer given hours into a drop reaches the client that returns, which takes the open question's answer, not a cancellation", async () => {
+	let clock = laterTimers();
+	cleanups.push(() => clock.restore());
+	let down = await resumablePlanner({ ask: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	await clock.pass(6 * HOUR);
+	await answerChoice(context, id, 0);
+	await clock.pass(20 * HOUR);
+	await down.reconnect();
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+	expect(context.plan.records.size).toBe(1);
+});
+
+test("a dropped link's grace period only leases ownership: a Stop that ends a question-only Planner starts it, and a successor attaches once it runs out", async () => {
+	let clock = laterTimers();
+	cleanups.push(() => clock.restore());
+	let down = await resumablePlanner({ run: false, ask: true, graceMs: GRACE_MS });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	await clock.pass(2 * GRACE_MS);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	await expect(attach(server.url, down.channel.id, scriptedPlanner().handlers, RIVAL_TOKEN))
+		.rejects.toMatchObject({ code: "planner-attached" });
+
+	// Someone presses Stop: the question is withdrawn explicitly, Chat says so, and with nothing
+	// left to keep, the account's ownership is leased for the grace period as a detach's is.
+	await Chat.abort(context, down.ws);
+	await until(() => context.plan.records.get(id)?.status === "cancelled");
+	expect(down.said().at(-1)).toBe("@rival stopped the Planner and withdrew its open question.");
+	await until(() => server.attachments.status(down.channel.id).state === "held");
+	await clock.pass(GRACE_MS - 1);
+	expect(server.attachments.status(down.channel.id)).toMatchObject({ state: "held" });
+	await clock.pass(1);
+	await until(() => server.attachments.status(down.channel.id).state === "none");
+	let successor = await attach(
+		server.url,
+		down.channel.id,
+		scriptedPlanner().handlers,
+		RIVAL_TOKEN,
+	);
+	cleanups.push(() => successor.detach());
+	expect(await down.owner()).toBe(down.logins.get("rival"));
+});
+
+test("the same drop of an attached Planner that did not ask for resumable sessions ends its run and question as before", async () => {
+	let room = await remoteRoom();
+	let { context, server } = room;
+	let script = scriptedPlanner();
+	let asked: Promise<{ status: string }> | undefined;
+	let client: AgentClient | undefined;
+	client = await connectAgent({
+		url: server.url,
+		token: MEMBER_TOKEN,
+		document: room.channel.id,
+		resumable: false,
+		handlers: {
+			...script.handlers,
+			async turn(turn) {
+				client!.reportRuns(turn.message.session, {
+					active: ["run-1"],
+					paused: [],
+					cards: [card("running")],
+				});
+				asked = client!.ask(turn.message.session, {
+					method: "confirm",
+					title: "Ship?",
+					message: "Now.",
+				});
+				finishTurn(turn);
+			},
+		},
+	});
+	await Chat.invoke(context, RIVAL, "Run the review");
+	await context.chat.running;
+	for (let socket of server.sockets) socket.close(1001, "network failed");
+	expect(await asked).toMatchObject({ status: "cancelled" });
+	expect(await client.resumption).toBeUndefined();
+	for (let attempt = 0; attempt < 100 && context.chat.retained; attempt++) await Bun.sleep(5);
+	expect(context.chat.retained).toBeUndefined();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["stopped"]);
+	expect([...context.plan.records.values()].map(record => record.status)).toEqual(["cancelled"]);
+});
+
+test("a Stop pressed while the attached Planner's link is down says it is pending, and reaches the client first, once, when it returns", async () => {
+	let down = await resumablePlanner();
+	await down.drop();
+	let { context, said } = down;
+	await Chat.abort(context, down.ws);
+	await Chat.abort(context, down.ws);
+	// Nothing has stopped: the run card stays as last reported, and the notice does not say otherwise.
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(said().at(-1)).toBe(
+		"@rival asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+	);
+
+	let client = await down.reconnect();
+	await until(() => down.controls.length > 0).catch(() => {});
+	await Bun.sleep(50);
+	expect(down.controls).toEqual(["stop"]);
+	client.reportRuns(down.session(), { active: [], paused: ["run-1"], cards: [card("paused")] });
+	await until(() => context.chat.runs?.[0]?.status === "paused");
+	expect(down.controls).toEqual(["stop"]);
+	expect(said().some(text => text.includes("was stopped"))).toBe(false);
+});
+
+test("pausing one run while the attached Planner's link is down is held for its client too, and the notice says it is pending", async () => {
+	let down = await resumablePlanner();
+	await down.drop();
+	let { context, said } = down;
+	await Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(said().at(-1)).toBe(
+		"@rival asked to pause plan-review. It will pause when the Planner reconnects.",
+	);
+
+	await down.reconnect();
+	await until(() => down.controls.length > 0).catch(() => {});
+	await Bun.sleep(50);
+	expect(down.controls).toEqual(["stop run-1"]);
+});
+
+test("a Stop pressed while the attached Planner's link is down withdraws a question it only waits on, as when connected", async () => {
+	let down = await resumablePlanner({ run: false, ask: true });
+	await down.drop();
+	let { context, said } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	await Chat.abort(context, down.ws);
+	expect(said().at(-1)).toBe("@rival stopped the Planner and withdrew its open question.");
+	expect(context.plan.records.get(id)?.status).toBe("cancelled");
+	expect(context.chat.retained).toBeUndefined();
+
+	await down.reconnect();
+	expect(await down.asked()).toMatchObject({ status: "cancelled" });
+	await Bun.sleep(50);
+	expect(down.controls).toEqual([]);
+	expect(context.plan.records.size).toBe(1);
+});
+
+test("a Stop the client had not answered when its link dropped is held, says it is pending, and reaches the client first, once, when it returns", async () => {
+	let down = await resumablePlanner({ silent: true });
+	let { context, said } = down;
+	// The client takes the Stop and the network fails before it answers.
+	let stopping = Chat.abort(context, down.ws);
+	await until(() => down.controls.length === 1);
+	await down.drop();
+	await stopping;
+	// Nothing has stopped, and the notice does not say so.
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(said().at(-1)).toBe(
+		"@rival asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+	);
+
+	down.answering();
+	let client = await down.reconnect();
+	await until(() => down.controls.length === 2);
+	await Bun.sleep(50);
+	// The client has the original, which it never answered, and now the Stop the server owed it, once.
+	expect(down.controls).toEqual(["stop", "stop"]);
+	client.reportRuns(down.session(), { active: [], paused: ["run-1"], cards: [card("paused")] });
+	await until(() => context.chat.runs?.[0]?.status === "paused");
+	expect(down.controls).toEqual(["stop", "stop"]);
+	expect(said().some(text => text.includes("was stopped"))).toBe(false);
+});
+
+test("pausing one run the client had not answered when its link dropped is held too, says it is pending, and reaches the client once when it returns", async () => {
+	let down = await resumablePlanner({ silent: true });
+	let { context, said } = down;
+	let pausing = Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
+	await until(() => down.controls.length === 1);
+	await down.drop();
+	await pausing;
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(said().at(-1)).toBe(
+		"@rival asked to pause plan-review. It will pause when the Planner reconnects.",
+	);
+
+	down.answering();
+	await down.reconnect();
+	await until(() => down.controls.length === 2);
+	await Bun.sleep(50);
+	expect(down.controls).toEqual(["stop run-1", "stop run-1"]);
+});
+
+test("a Stop the attached Planner did not answer in time is not lost when its link then drops: the client hears it when it returns", async () => {
+	let down = await resumablePlanner({ silent: true, operationMs: 150 });
+	let { context, said } = down;
+	// The link is still attached, and the client never answers.
+	await Chat.abort(context, down.ws);
+	expect(down.controls).toEqual(["stop"]);
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	expect(said().at(-1)).not.toContain("paused its workflows");
+
+	// The link is only noticed to be dead later.
+	await down.drop();
+	down.answering();
+	await down.reconnect();
+	await until(() => down.controls.length === 2);
+	await Bun.sleep(50);
+	expect(down.controls).toEqual(["stop", "stop"]);
+});
+
+test("answering the only question of an attached Planner that has no run delivers the answer to its client before the session is let go", async () => {
+	let lone = await resumablePlanner({ run: false, ask: true });
+	let { context } = lone;
+	let id = [...context.plan.records.keys()][0]!;
+	expect(context.chat.retained).toBeDefined();
+	await answerChoice(context, id, 0);
+	expect(await lone.asked()).toMatchObject({ status: "answered", value: true });
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+	// With nothing left to wait on, the session is let go once its client has the answer.
+	await until(() => context.chat.retained === undefined);
+});
+
+test("an answer given while the attached Planner's link is down is held for its client and delivered once when it returns, and only then is a session with nothing else let go", async () => {
+	let down = await resumablePlanner({ run: false, ask: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	await answerChoice(context, id, 0);
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+	// The client has not got its answer, so the session that owes it stays.
+	await Bun.sleep(100);
+	expect(context.chat.retained).toBeDefined();
+
+	await down.reconnect();
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	await until(() => context.chat.retained === undefined);
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+});
+
+test("a question its client withdraws while the Planner's link is down ends its wait at once and is withdrawn in Chopin when the client resumes", async () => {
+	let down = await resumablePlanner({ ask: true, withdrawable: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	// The link is down, so the server cannot hear the withdrawal yet; the caller's wait is over.
+	down.withdraw();
+	expect(await down.asked()).toMatchObject({ status: "cancelled" });
+	expect(context.plan.records.get(id)?.status).toBe("open");
+
+	await down.reconnect();
+	await until(() => context.plan.records.get(id)?.status === "cancelled");
+	expect(context.plan.records.size).toBe(1);
+});
+
+test("an answer given while the link was down stays the person's answer when the client had withdrawn the question meanwhile, and is not asked or answered twice", async () => {
+	let down = await resumablePlanner({ ask: true, withdrawable: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	await answerChoice(context, id, 0);
+	down.withdraw();
+	expect(await down.asked()).toMatchObject({ status: "cancelled" });
+
+	await down.reconnect();
+	await Bun.sleep(100);
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+	expect(context.plan.records.size).toBe(1);
+});
+
+test("an answer given before the server notices the link died reaches the client once it resumes, for a Planner with only that question, and the document stays disconnected", async () => {
+	let down = await resumablePlanner({ run: false, ask: true, proxied: true });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	// The client's network goes away, and the server has not noticed yet.
+	down.proxy!.hold();
+	await answerChoice(context, id, 0);
+	await Bun.sleep(150);
+	expect(context.chat.retained).toBeDefined();
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+	// The server now notices, and the client, which noticed first, returns.
+	await down.proxy!.stop();
+	down.setHeld(await down.first().resumption);
+	await until(() => server.links.length === 0);
+	expect(server.attachments.status(down.channel.id)).toEqual({
+		state: "disconnected",
+		login: "member",
+	});
+	await down.reconnect();
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	await until(() => context.chat.retained === undefined);
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+});
+
+test("an answer the client never acknowledged is kept through a frame that crossed it, and reaches the client that resumes, for a Planner with only that question", async () => {
+	let down = await resumablePlanner({ run: false, ask: true, proxied: true, operationMs: 150 });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	down.proxy!.hold();
+	await answerChoice(context, id, 0);
+	// The client's own frame reaches the server after the answer was written, but never the answer.
+	down.proxy!.hearClient();
+	down.first().reportRuns(down.sessionId(), { active: [], paused: [], cards: [] });
+	await Bun.sleep(600);
+	expect(context.chat.retained).toBeDefined();
+	await down.proxy!.stop();
+	down.setHeld(await down.first().resumption);
+	await until(() => server.links.length === 0);
+	expect(server.attachments.status(down.channel.id)).toEqual({
+		state: "disconnected",
+		login: "member",
+	});
+	expect(context.chat.retained).toBeDefined();
+	await down.reconnect();
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	await until(() => context.chat.retained === undefined);
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+});
+
+test("a Stop pressed before the server notices the link died says it was not confirmed, and says it is kept once the drop is noticed", async () => {
+	let down = await resumablePlanner({ proxied: true, operationMs: 150 });
+	let { context, server } = down;
+	down.proxy!.hold();
+	await Chat.abort(context, down.ws);
+	expect(down.said().at(-1)).toBe(
+		"@rival asked the Planner to stop its workflows. It has not confirmed yet, and if its "
+			+ "connection is down they will pause when it reconnects.",
+	);
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
+	await down.proxy!.stop();
+	down.setHeld(await down.first().resumption);
+	await until(() => server.links.length === 0);
+	await until(() => down.said().some(text => text.startsWith("The Planner disconnected.")));
+	expect(down.said().at(-1)).toContain(
+		"A Stop it had not confirmed is kept and will be delivered when it reconnects.",
+	);
+	expect(down.said().some(text => text === "@rival stopped the turn.")).toBe(false);
+	await down.reconnect();
+	await until(() => down.controls.length >= 1);
+	expect(down.controls).toEqual(["stop"]);
+});
+
+test("a pause of one run the client did not confirm in time is reported as not confirmed, not as paused", async () => {
+	let down = await resumablePlanner({ proxied: true, operationMs: 150 });
+	let { context } = down;
+	down.proxy!.hold();
+	await Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
+	expect(down.said().at(-1)).toBe(
+		"@rival asked to pause plan-review. The Planner has not confirmed yet, and if its "
+			+ "connection is down it will pause when it reconnects.",
+	);
+});
+
+test("a Stop of every run that a Resume of another run partly undid is still reported as held when the link drops", async () => {
+	let down = await resumablePlanner({ silent: true });
+	let { context } = down;
+	(down.handlers as any).turn = async (turn: any) => {
+		down.first().reportRuns(turn.message.session, {
+			active: ["run-1"],
+			paused: ["run-2"],
+			cards: [card("running"), { ...card("paused"), id: "run-2", name: "second" }],
+		});
+		finishTurn(turn);
+	};
+	await Chat.invoke(context, RIVAL, "Two runs");
+	await context.chat.running;
+	await until(() => context.chat.runs?.length === 2);
+	let stopping = Chat.abort(context, down.ws);
+	await until(() => down.controls.length === 1);
+	down.answering();
+	await Chat.controlRun(context, down.ws, { kind: "chat:resume-run", runId: "run-2" });
+	await down.drop();
+	await stopping;
+	expect(down.said().some(text => text === "@rival stopped the turn.")).toBe(false);
+	expect(down.said().some(text => text.startsWith("@rival asked to stop the Planner."))).toBe(true);
+	await down.reconnect();
+	await until(() => down.controls.includes("stop run-1"));
+});
+
+test("a graceful shutdown leaves a remote Planner's open Decisions open and says nothing about its link or its runs, whether its link was attached when the shutdown began or had dropped before it", async () => {
+	for (let order of ["attached", "dropped before"] as const) {
+		let down = await resumablePlanner({ ask: true });
+		let { context, server } = down;
+		let id = [...context.plan.records.keys()][0]!;
+		// main.ts drain: the attachments are told, the sockets close, then each room closes.
+		if (order === "dropped before") await down.drop();
+		let before = down.said().length;
+		server.attachments.shutdown();
+		if (order === "attached") {
+			for (let socket of server.sockets) socket.close(1001, "server shutting down");
+			await until(() => server.links.length === 0);
+		}
+		await Chat.close(context.chat);
+		server.attachments.close();
+		await Bun.sleep(100);
+		expect(context.plan.records.get(id)?.status, order).toBe("open");
+		expect(
+			down.said().slice(before).filter(text => /disconnected|was stopped|nothing ends/.test(text)),
+			order,
+		).toEqual([]);
+		expect(context.chat.runs?.map(run => run.status), order).not.toContain("stopped");
+	}
+});
+
+test("a drop in the middle of a reply keeps the run and question, and Chat does not invite a retry that would be refused", async () => {
+	let down = await resumablePlanner({ ask: true });
+	let { context } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	let turning = Promise.withResolvers<void>();
+	(down.handlers as any).turn = async () => {
+		turning.resolve();
+		await new Promise(() => {});
+	};
+	let invoked = Chat.invoke(context, RIVAL, "Keep going");
+	await turning.promise;
+	await down.drop();
+	await invoked;
+	await context.chat.running;
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(context.chat.runs?.map(run => [run.status, run.disconnected])).toEqual([[
+		"running",
+		true,
+	]]);
+	expect(down.said().some(text => /try again/i.test(text))).toBe(false);
+	expect(down.said()).toContain(
+		"The Planner's connection dropped during this reply. Its workflows and open Decisions are kept; ask again once it has reconnected.",
+	);
+});
+
+test("a transient failure while Chopin checks the account during a resume ends nothing, and the retry resumes and delivers the answer", async () => {
+	let down = await resumablePlanner({ ask: true });
+	let { context, server } = down;
+	let id = [...context.plan.records.keys()][0]!;
+	await down.drop();
+	let github =
+		(context.auth as unknown as { github: { repositoryAccess: (...args: unknown[]) => unknown } })
+			.github;
+	let original = github.repositoryAccess;
+	let failures = 1;
+	github.repositoryAccess = async (...args: unknown[]) => {
+		if (failures-- > 0) throw new GitHubError("Service Unavailable", 503);
+		return original(...args);
+	};
+	let refusal = await down.reconnect().then(() => undefined, (error: unknown) => error);
+	expect(refusal).toBeInstanceOf(AgentRefused);
+	expect(refusal).toMatchObject({ code: "unavailable", retry: true });
+	// The client's question is still pending, and Chopin still holds everything it kept.
+	expect(await Promise.race([down.asked(), Bun.sleep(200).then(() => "pending")])).toBe("pending");
+	expect(server.attachments.status(down.channel.id)).toEqual({
+		state: "disconnected",
+		login: "member",
+	});
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(context.chat.runs?.map(run => [run.status, run.disconnected])).toEqual([[
+		"running",
+		true,
+	]]);
+
+	await down.reconnect();
+	await answerChoice(context, id, 0);
+	expect(await down.asked()).toMatchObject({ status: "answered", value: true });
+	expect(context.plan.records.get(id)?.status).toBe("answered");
+});
+
+test("a Stop the client confirms after the wait for it ended is not announced as kept when the link later drops, and is not sent again", async () => {
+	let down = await resumablePlanner({ operationMs: 150 });
+	let { context } = down;
+	(down.handlers as AgentHandlers).control = async message => {
+		down.controls.push(message.run ? `${message.type} ${message.run}` : message.type);
+		await Bun.sleep(400);
+	};
+	await Chat.abort(context, down.ws);
+	expect(down.said().at(-1)).toContain("It has not confirmed yet");
+	// The client paused and said so, after the server stopped waiting.
+	await Bun.sleep(600);
+	await down.drop();
+	await until(() => down.said().some(text => text.startsWith("The Planner disconnected.")));
+	expect(down.said().some(text => text.includes("A Stop it had not confirmed is kept"))).toBe(
+		false,
+	);
+	await down.reconnect();
+	await Bun.sleep(300);
+	expect(down.controls).toEqual(["stop"]);
 });

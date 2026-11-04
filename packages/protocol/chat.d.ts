@@ -188,6 +188,11 @@ export declare namespace Chat {
 		earlierStages?: number;
 		/** Decisions questions the run is waiting on. */
 		waiting: number;
+		/**
+		 * The Planner's connection dropped while this run was live: Chopin keeps the card as
+		 * last reported, and the run goes on when the Planner reconnects. Absent otherwise.
+		 */
+		disconnected?: true;
 	};
 
 	export type Runs = Run[];

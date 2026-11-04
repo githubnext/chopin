@@ -250,11 +250,33 @@ export function agentLink(
 				: {}),
 		}, link);
 		if (!granted.ok) return granted;
+		let document = { id: channel.id, title: channel.title, repository: fullName, url };
+		if (granted.takeover) {
+			let { takeover } = granted;
+			return {
+				ok: true,
+				document,
+				takeover: async names => {
+					let taken = await takeover(names);
+					if (!taken.ok) return taken;
+					channelId = channel.id;
+					return {
+						ok: true,
+						document,
+						detach: taken.detach,
+						claim: taken.claim,
+						lapse: taken.lapse,
+					};
+				},
+			};
+		}
 		channelId = channel.id;
 		return {
 			ok: true,
-			document: { id: channel.id, title: channel.title, repository: fullName, url },
+			document,
 			detach: granted.detach,
+			claim: granted.claim,
+			lapse: granted.lapse,
 		};
 	}
 	async function revalidate(): Promise<boolean> {

@@ -17,8 +17,14 @@ import {
 	scriptedPlanner,
 	upgradeRequest,
 } from "../../testing/agent-link";
+import { hostInputRoom } from "../../testing/decisions";
+import { createHumanInput } from "../atomic/human-input";
+import { untilUnpaused } from "../atomic/full";
+import { createRemoteAdapter } from "./adapter";
 import { agentLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
+
+import type { RemotePlanner } from "./registry";
 
 let cleanups: Array<() => unknown> = [];
 afterEach(async () => {
@@ -361,5 +367,145 @@ describe("a paired machine's Planner", () => {
 		expect([server.attachments.attached(channel.id), server.attachments.attached(other.id)])
 			.toEqual([false, false]);
 		expect(logins.map(id => sessions.isLive(id!))).toEqual([false, false]);
+	});
+});
+
+/** The status an agent connection's upgrade gets with `credential`: 101 when it opens. */
+async function upgrade(url: string, credential: string) {
+	return (await upgradeRequest(url, { authorization: `Bearer ${credential}` })).status;
+}
+
+const run = {
+	id: "run",
+	name: "plan",
+	status: "running" as const,
+	started: 1,
+	updated: 1,
+	stages: [],
+	waiting: 0,
+};
+
+async function until(check: () => boolean, ms = 4_000) {
+	for (let deadline = Date.now() + ms; Date.now() < deadline; await Bun.sleep(5)) {
+		if (check()) return;
+	}
+	throw new Error("the condition did not hold in time");
+}
+
+/**
+ * A paired machine's Planner backend, attached with its credential and offering
+ * `resumable-sessions`, with a run and a question open, whose link then drops.
+ */
+async function parkedMachine() {
+	let m = await machineServer();
+	let member = await m.pair("member", "U_member");
+	let issued = await m.credential(member.token, m.channel.id);
+	let f = await hostInputRoom();
+	cleanups.push(f.close);
+	let raw = await rawLink(m.server.url, issued.body.token, "resumable-sessions");
+	raw.send({ type: "attach", version: AGENT_VERSION, document: m.channel.id });
+	await raw.next("attached");
+	let planner: RemotePlanner = { channelId: m.channel.id, isolated: false };
+	planner.humanInput = report =>
+		createHumanInput(f.room, (runId, signal) => untilUnpaused(planner, runId, signal), report);
+	let sessionId = crypto.randomUUID();
+	let opening = createRemoteAdapter(() => ({ link: m.server.links.at(-1)!, planner })).doStart({
+		sessionId,
+		sandboxSession: {
+			defaultWorkingDirectory: "/tmp",
+			async run() {
+				return { exitCode: 0, stdout: "", stderr: "" };
+			},
+			async destroy() {},
+		} as never,
+		sessionWorkDir: "/tmp",
+	});
+	let start = await raw.next("start");
+	raw.send({ type: "started", session: start.session });
+	let session = await opening;
+	cleanups.push(() => session.doDestroy());
+	raw.send({
+		type: "input-request",
+		request: "ask-1",
+		session: sessionId,
+		input: { method: "confirm", title: "Ship?", message: "Now." },
+	});
+	let [card] = await f.cards(1);
+	raw.send({ type: "runs", session: sessionId, active: ["run"], paused: [], cards: [run] });
+	await until(() => planner.runs?.active.length === 1);
+	raw.socket.close();
+	await raw.closed;
+	await until(() => m.server.links.length === 0);
+	expect(m.server.attachments.status(m.channel.id)).toEqual({
+		state: "disconnected",
+		login: "member",
+	});
+	return {
+		...m,
+		member,
+		f,
+		sessionId,
+		card: card!,
+		status: () => f.plan.records.get(card!.id)?.status,
+		runStatus: () => planner.runs?.cards[0]?.status,
+		token: issued.body.token,
+	};
+}
+
+describe("a paired machine's Planner whose link dropped with its work kept", () => {
+	it("resumes with a fresh credential long after the first one expired, and receives the answer given meanwhile", async () => {
+		let p = await parkedMachine();
+		await p.f.answer(p.card.id, [0]);
+		// 16 minutes on: the credential the backend was launched with no longer opens a link.
+		p.time.offsetMs = 16 * 60_000;
+		expect(await upgrade(p.server.url, p.token)).toBe(401);
+		// The connector replaced it in the token file; the backend reads that and attaches again.
+		let fresh = await p.credential(p.member.token, p.channel.id);
+		expect(fresh.status).toBe(200);
+		expect(fresh.body.token).not.toBe(p.token);
+		let next = await rawLink(p.server.url, fresh.body.token, "resumable-sessions");
+		cleanups.push(() => next.socket.close());
+		next.send({ type: "attach", version: AGENT_VERSION, document: p.channel.id });
+		expect((await next.next("attached")).features).toEqual(["resumable-sessions"]);
+		next.send({ type: "resume", sessions: [{ session: p.sessionId, requests: ["ask-1"] }] });
+		expect(await next.next("resumed")).toEqual({
+			type: "resumed",
+			sessions: [{ session: p.sessionId, requests: ["ask-1"] }],
+		});
+		expect(await next.next("input-result")).toMatchObject({ request: "ask-1", status: "answered" });
+		expect(p.runStatus()).toBe("running");
+	});
+
+	it("ends when its owner chooses another machine for the document", async () => {
+		let p = await parkedMachine();
+		await p.server.attachments.stopMachine(
+			p.channel.id,
+			p.member.machine.id,
+			"chose another machine",
+		);
+		await until(() => p.status() === "cancelled");
+		expect(p.runStatus()).toBe("stopped");
+		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
+	});
+
+	it("ends when the machine is unpaired, and neither its old credential nor a new one is accepted", async () => {
+		let p = await parkedMachine();
+		await p.machines.revoke(p.member.machine.id, "U_member");
+		await until(() => p.status() === "cancelled");
+		expect(p.runStatus()).toBe("stopped");
+		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
+		expect(await upgrade(p.server.url, p.token)).toBe(401);
+		expect(await p.credential(p.member.token, p.channel.id))
+			.toMatchObject({ status: 401, body: { error: "machine-revoked" } });
+	});
+
+	it("ends when the same account attaches with its browser sign-in, which cannot resume a machine's work", async () => {
+		let p = await parkedMachine();
+		let browser = await rawLink(p.server.url, MEMBER_TOKEN, "resumable-sessions");
+		cleanups.push(() => browser.socket.close());
+		browser.send({ type: "attach", version: AGENT_VERSION, document: p.channel.id });
+		await browser.next("attached");
+		await until(() => p.status() === "cancelled");
+		expect(p.runStatus()).toBe("stopped");
 	});
 });

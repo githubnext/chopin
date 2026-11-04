@@ -109,10 +109,11 @@ that validates `attached` strictly and never asks never sees the field. A server
 from before features ignores the header and answers without `features`; a
 client must then use none of them.
 
-| Feature                    | What it allows                                                                                     |
-| -------------------------- | -------------------------------------------------------------------------------------------------- |
-| `run-stage-deltas`         | [Delta run cards](#run-stage-deltas), with no stage count limit                                    |
-| `decision-option-previews` | An option's [`preview`](#option-previews) as its own visual, and the `upload_plan_image` host tool |
+| Feature                    | What it allows                                                                                                  |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `run-stage-deltas`         | [Delta run cards](#run-stage-deltas), with no stage count limit                                                 |
+| `decision-option-previews` | An option's [`preview`](#option-previews) as its own visual, and the `upload_plan_image` host tool              |
+| `resumable-sessions`       | [Resuming](#resuming-after-a-dropped-link) the sessions, runs and questions of a link that dropped unexpectedly |
 
 ### Pings
 
@@ -136,8 +137,9 @@ such as one whose network silently went away. However much of its queue drains
 meanwhile, a connection that sends nothing at all, not even a pong, for **15
 minutes** is dropped too. The server closes it with 1001 and reason
 `unresponsive`, without an `error` or `refused` message, and releases it exactly
-as any dropped connection (see [Closing](#closing)): its account keeps the document's
-Planner for the grace period in [Ownership](#ownership). The operator sets the
+as any dropped connection (see [Closing](#closing)): a `resumable-sessions` link
+keeps its work, and its account keeps the document's Planner, as
+[Resuming](#resuming-after-a-dropped-link) and [Ownership](#ownership) describe. The operator sets the
 interval, the timeout and the longest silence with `AGENT_CONNECTION_PING_MS`,
 `AGENT_CONNECTION_TIMEOUT_MS` and `AGENT_CONNECTION_MAX_SILENCE_MS`.
 
@@ -237,14 +239,29 @@ refused with `repository-forbidden`.
 
 These are the checks every Planner owner passes. A document has one Planner at a
 time. While a client is attached, any other `attach` for that document is
-refused with `planner-attached`, including one from the same account, and the
-`message` names the holder's GitHub login:
+refused with `planner-attached`, and the `message` names the holder's GitHub login:
 
 ```text
 octocat is attached as this document's Planner. A document has one Planner at a time.
 ```
 
-When the connection closes, whether by `detach` or a dropped socket, its account keeps
+One exception serves a client that left a connection that died unnoticed. A client
+that notices its network failed before Chopin does reconnects at once, while Chopin
+still counts its old link as attached (up to the 120-second timeout in
+[Pings](#pings), longer behind a buffering proxy). If both links belong to the same
+account and offered `resumable-sessions`, Chopin answers the new `attach` with
+`attached` but treats the new link as unconfirmed until its first message. A `resume`
+naming a session the old link holds shows the client is the same one returning and
+its old connection is gone: Chopin closes the old link as the unexpected drop it is,
+keeps its work, and gives it to the new link, which then resumes as usual. Any other
+first message, a `resume` naming nothing the old link holds, or another account, gets
+`refused` with `planner-attached` after `attached`, and the old link is untouched. That
+refusal is a decision, not a reason to retry. A document archived or deleted while the new
+link waited for its first message is refused `document-archived`.
+A browser-bearer client and a paired machine's backend never take each other's links.
+
+When the connection closes by `detach`, or a socket drops with no
+workflow run or open question for the server to keep, its account keeps
 the ownership for a grace period, 2 minutes unless the operator sets
 `PLANNER_ATTACH_GRACE_MS`. During it the same account can attach again and keeps
 the ownership; another account is refused with `planner-attached`, and the
@@ -255,8 +272,26 @@ octocat detached from this document's Planner and holds it until 2026-10-10T19:4
 ```
 
 When the grace period ends the ownership is released and any eligible account
-can attach. A server restart releases every attachment and ownership at once;
-reattach after it.
+can attach. The grace period is a lease on the ownership of a connection that is
+no longer there, not a timeout on active work: it is 2 minutes by default and at
+most one hour (`PLANNER_ATTACH_GRACE_MS` accepts 0 to 3600000), and it never runs
+while a connection is attached.
+
+A link that offered `resumable-sessions` and dropped unexpectedly while it held a
+live or paused workflow run or an open question runs no grace period at all. Its
+account keeps the ownership, as the document's **disconnected** Planner, for as long
+as its work is kept: until its client [resumes](#resuming-after-a-dropped-link) or something
+explicit ends it (see [What still ends it for good](#resuming-after-a-dropped-link)).
+Another account is refused with `planner-attached` and a `message` that says the
+holder's connection dropped and its work is kept until it reconnects:
+
+```text
+octocat is this document's Planner, and its connection dropped. Its work is kept until it reconnects. A document has one Planner at a time.
+```
+
+A server restart releases every attachment and ownership at once; reattach after
+it. What a disconnected link kept does not survive that: see
+[After a server restart](#after-a-server-restart).
 
 The server checks the account's admission and push or administration access
 again before every `start` and every `turn`, and every 5 minutes while the connection
@@ -304,14 +339,23 @@ This document's Planner ownership was released, so octocat is no longer attached
 | `document-unavailable` | 4404       | No document matches, or it is being deleted                            |
 | `document-archived`    | 4404       | The document is archived                                               |
 | `access-revoked`       | 4403       | Access or the Planner ownership was lost after attaching (see above)   |
-| `unavailable`          | 1011       | The server could not check the document                                |
+| `unavailable`          | 1011       | The server could not check the document or the account; `retry` is set |
+
+Every code is a decision about this account or document, final for a client that is
+resuming, except `unavailable`: Chopin could not decide, so the refusal carries
+`"retry": true`, and such a client keeps what it holds and tries again with the same
+`resume` on its own backoff. No retry is promised to succeed. An HTTP 503 at the upgrade
+(GitHub unavailable or rate limiting) is the same kind of refusal. A refusal without
+`retry`, and an `error`, ends what the client held.
 
 ### Without an attached Planner
 
 On a server running `HARNESS=remote`, an `@chopin` message in the browser and
 an MCP `invoke_planner` call for a document with no attached client are refused
 with the code `planner-not-attached`, and nothing is posted or queued. A
-document whose Planner is within its grace period counts as unattached, and so
+document whose Planner is within its grace period, or disconnected with its work kept
+(the message then says so, and that it carries on when it reconnects), counts as
+unattached, and so
 does one whose attached connection the request finds stale: its owner's browser
 sign-in has ended or the stored ownership no longer names it. The request closes
 that connection before it is refused.
@@ -384,10 +428,18 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   name outside the turn's `tools`, a call for a turn or session that has ended,
   and a result too large for one frame. A call Chopin's permission policy
   refuses has `output` `{ "type": "execution-denied", "reason?": "" }`.
-- `input-result` answers an `input-request` (see [Questions](#questions)).
+- `input-result` answers an `input-request` (see [Questions](#questions)). With
+  `resumable-sessions`, the client acknowledges every `input-result` it receives with
+  `input-received` (see below).
 - `stop` and `resume` are **Stop Planner** and **Resume Planner**: pause or
   resume every workflow run of the session, or only `run`. Answer with
-  `control-result` within **10 seconds**.
+  `control-result` within **10 seconds**; an answer that comes later is still an
+  answer and clears the Stop on the server. A `stop` may arrive again for a run it
+  already paused, because the server cannot tell an answer it never received from a
+  `stop` the client never heard (see
+  [Resuming](#resuming-after-a-dropped-link)). It pauses, so a repeat changes
+  nothing; answer it `ok: true`. A client that answers `ok: false`, for a run that
+  has since ended, only has the refusal logged for a `stop` sent again.
 - `destroy` ends the session; abandon its turn, its waiting host calls, and its
   questions.
 - `error` precedes a close for a protocol violation (see [Closing](#closing)).
@@ -406,7 +458,12 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "runs", "session": "", "active": [], "paused": [], "cards": [] }
 { "type": "control-result", "request": "", "ok": true, "message?": "" }
 { "type": "detach" }
+{ "type": "resume", "sessions": [{ "session": "", "requests": [""] }] }
+{ "type": "input-received", "request": "" }
 ```
+
+`resume` and `input-received` belong to the `resumable-sessions` feature and are defined in
+[Resuming after a dropped link](#resuming-after-a-dropped-link) and below.
 
 - `started` or `start-failed` answers `start`. Cut `message` here, in
   `turn-end`, `control-result`, and an `error` part to 4000 characters: a longer
@@ -425,6 +482,22 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   shown), or `aborted`. Every turn needs exactly one. A host tool still running
   in the server when the turn ends is stopped, and a Decision it opened is
   withdrawn.
+- `input-received`, with `resumable-sessions`, is `{ "type": "input-received", "request": "" }`:
+  the client has the `input-result` for `request` and settled its question. Send it on
+  receiving every `input-result`, including a repeated one for a question already settled,
+  and nothing else is needed for it to be idempotent: a client ignores an `input-result`
+  for a request it already settled, but still acknowledges it. Until it arrives, the server
+  keeps the result, and the session that waits to deliver it, because a result written into
+  a socket that died unnoticed reaches nobody. If the link drops first, the server keeps
+  the result for the client's return and sends it again after `resumed` when `resume`
+  still names the request; a request `resume` no longer names was settled, so the result is
+  let go. Nothing but the acknowledgement releases it: no timer does, and neither does
+  anything else the client sends or answers meanwhile, since such a frame can have crossed
+  the result on the wire. A client with the feature that never acknowledges breaks it, and
+  its session simply stays retained while the link is attached, as any session waiting on
+  its client does, and moves to the outbox when the link closes.
+  A client without the feature never sends it, and one that sends it anyway is a
+  `protocol` violation.
 - `input-request` and `input-cancel` ask and withdraw questions. A `request` id
   may not repeat on the connection, even after its question has its `input-result`.
   The server remembers every open id and the last 1,024 ids it received; a
@@ -438,7 +511,12 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   [Automatic follow-ups](local-agent-mcp.md#automatic-follow-ups).
 - `control-result` answers `stop` or `resume`.
 - `detach` closes the connection with code 1000. The account keeps the document's
-  Planner for the grace period in [Ownership](#ownership).
+  Planner for the grace period in [Ownership](#ownership). It ends everything the
+  link held, even with `resumable-sessions`: only a link that drops without it keeps
+  anything.
+- `resume`, with `resumable-sessions`, is the first message after `attached`: the
+  sessions the client still holds from a dropped link (see
+  [Resuming](#resuming-after-a-dropped-link)).
 
 Messages for a session or turn that has ended are ignored, except a
 `host-tool-call`, which gets an error result (`The turn has ended.` or
@@ -598,7 +676,9 @@ names the block the same way, in the options of its host input request.
   questionnaire after others were answered, `answers` keeps those others; it is
   empty in every other case. The package client settles a question withdrawn
   before it was sent, or one still open when the connection closes, with a local
-  `cancelled` result that has a `message` and no `value`.
+  `cancelled` result that has a `message` and no `value`. With
+  `resumable-sessions`, a question still open when the link drops unexpectedly
+  does not end: see [Resuming](#resuming-after-a-dropped-link).
 - `failed`: the request could not become Decisions, for example in an isolated
   session or with 16 requests already open on the connection.
 
@@ -657,7 +737,8 @@ run ends: Atomic delivers activity and lifecycle events in no shared order, so
 a run can start before its activity does. A `finished` card is finished only
 with `ended`, the time its root run ended; without it, Chat shows the run as
 still live and posts no finish notice. When the connection closes, the server
-shows the reported live runs as stopped.
+shows the reported live runs as stopped, except where a link with
+`resumable-sessions` dropped unexpectedly and its session is [kept](#resuming-after-a-dropped-link).
 
 A full card's `stages` replace every stage Chopin stores for the run, unless
 it has none (see [Run stage deltas](#run-stage-deltas)). Chopin stores all of a
@@ -810,9 +891,135 @@ needs no feature check: an older Chopin shows the same text unformatted.
 a repeated `input-request` id the server remembers. When the connection closes for
 any reason, the server ends a running turn with an error, stops the turn's host
 tools still running, withdraws open questions and the Decisions those tools
-opened, and forgets the connection; reattaching starts new sessions. The account keeps
-the document's Planner ownership for the grace period described in
-[Ownership](#ownership). A server never replays an interrupted turn.
+opened, and forgets the connection; reattaching starts new sessions, except
+where [resuming](#resuming-after-a-dropped-link) keeps them. The account keeps
+the document's Planner ownership as described in [Ownership](#ownership): for the
+grace period, or with no deadline while a `resumable-sessions` link's work is kept.
+A server never replays an interrupted turn.
+
+### Resuming after a dropped link
+
+A network that fails ends a link without a `detach`. A lost connection never ends
+a client's work by itself. A client that asks for the `resumable-sessions`
+[feature](#features) can come back without losing what it was doing, however long it
+is away: nothing times it out, and the grace period in [Ownership](#ownership) does
+not apply to it.
+
+- **What drops.** The socket closes with no `detach` and no `refused`, or the
+  server closes it as `unresponsive` (see [Pings](#pings)). The turn under way
+  still fails with an error and its host tools stop, as on any close.
+- **What is kept.** Each started session that has a live or paused run, or a
+  question the client asked and nobody has answered, stays as it was: its run
+  cards keep the status last reported, not `stopped`, marked `disconnected` for the
+  people reading them, its Decisions stay open in the document and can be answered,
+  and an answer given meanwhile is held. Other sessions end as they always did.
+  Chat says once that the Planner disconnected, and once that it came back.
+  Nothing waits on the client in the meantime: `@chopin` and `invoke_planner` are
+  refused as [without an attached Planner](#without-an-attached-planner), and no
+  other account can attach. The document is not let go either: a Default machine's
+  idle period, a machine that went quiet, and the owner's GitHub credential being
+  renewed end nothing.
+- **Nothing but an explicit end.** There is no deadline. The operator's
+  `PLANNER_ATTACH_GRACE_MS` leases only a connection that detached, or dropped with
+  nothing to keep. A client may be away for minutes or for days; it resumes the same
+  session, receives what was answered or cancelled meanwhile, and its runs go on.
+- **A question the client withdraws.** Cancelling a question while the link is down
+  ends the client's wait at once, with a local `cancelled` result, and the next link
+  does not name it, which withdraws the Decision in Chopin before anything else
+  happens. A client that sent `input-cancel` on a link that then dropped is
+  treated the same way.
+- **Stop is held, not lost.** A Stop Planner, or one run's pause, that cannot
+  reach the client is held for its return, and Chat says that the workflows will
+  pause when the Planner reconnects; the run cards keep their last reported status
+  until the client reports otherwise. That covers a Stop pressed while the link is
+  down and one already sent whose `control-result` had not come when the link
+  dropped. A `stop` the client did not answer within 10 seconds while the link was
+  still attached is kept too: Chat says the Planner has not confirmed it, never that
+  it stopped, and once the link is found dead (see [Pings](#pings)) says once that the
+  Stop is kept and will be delivered when the Planner reconnects. Chat says a Stop
+  stopped the Planner only when the client confirmed it, that it was asked to when
+  its connection is known to be down, and that it was not confirmed otherwise. After `resumed`, before anything else,
+  the server sends the client one `stop` for every run (or one per run named),
+  however many times it was pressed, and the client answers `control-result` as
+  for any `stop`. The client may already have applied the original, whose answer
+  was lost, so it can receive a `stop` for runs that are paused; repeating it
+  changes nothing. A `stop` the client answered, whether it applied or refused it,
+  is not sent again. One it never answered stays owed, and a `resume` the client did
+  answer undoes it only for the runs that `resume` covers: a Stop of every run
+  stands for the other runs, and a Stop of one run is undone only by a `resume` of
+  that run or of every run. A held Stop whose answer is lost because the link dropped once
+  more is sent again with the next `resume`. A Resume pressed meanwhile is not
+  held: Chat says the workflows could not be resumed, and it can be pressed again
+  once the client is back. Stop on a Planner that only waits on a question
+  withdraws the question explicitly, and Chat says so; the client learns of it when it
+  resumes. That ends what the link kept, and the account holds the document for the
+  grace period as a detached one does.
+- **How to resume.** The same account attaches again, offering
+  `resumable-sessions`, and sends `resume` as its first message after `attached`:
+  `{ "type": "resume", "sessions": [{ "session": "", "requests": [""] }] }`, every
+  session it still holds with the `input-request` ids it still waits on. The server
+  answers `resumed` in the same shape: the sessions it kept and gave back, each with
+  the requests it still holds, whether open or answered while the link was down. It
+  then sends each answered request's `input-result` the client has not acknowledged,
+  and the client acknowledges it with `input-received`. The client sends `runs`
+  again for the sessions it got back, as after any `attach`. A session or request the client does not name has
+  ended and is withdrawn; one the server does not list has ended there: the client
+  settles its questions as cancelled and calls its `destroy` handler for the session.
+  A client that sends anything else first, or does not offer the feature, holds
+  nothing to resume. A `refused` with `retry` (`unavailable`, see
+  [Ownership](#ownership)) does not end the client's questions: Chopin could not decide,
+  so the same `resume` is sent again on the client's backoff, which may or may not
+  succeed. Any other `refused` (`planner-attached` included, whoever holds the
+  document) and any `error` ends them.
+- **A client that does not offer the feature.** It behaves as it always did: when its
+  link drops, Chopin ends the turn, withdraws the questions the client asked, shows
+  its live runs as `stopped` and forgets its sessions. Such a client settles its own
+  waiting questions when its socket closes and holds nothing it could resume, so
+  keeping them open would promise answers nobody can receive. A client that wants its
+  work to survive a drop must offer `resumable-sessions`; the package client does by
+  default (`resumable: false` opts out).
+- **What a client implements.** Offer `resumable-sessions` in `Chopin-Agent-Features`
+  and check that `attached` lists it; acknowledge every `input-result` with
+  `input-received`, including one for a request already settled; keep each session and
+  its waiting `input-request` ids across a drop; on the next connection send `resume`
+  first and handle `resumed`, then the redelivered `input-result`s and `stop`s, then
+  `runs`; retry the same `resume` on a `refused` with `retry`, and treat any other
+  `refused` or `error` as final.
+- **What still ends it for good.** Its own `detach`; any definitive `refused` (every
+  one without `retry`) or protocol error; the owner's sign-out or its expiry; a Planner reset; revoking or unpairing
+  the machine that attached it; the document's owner choosing another machine for it;
+  archiving or deleting the document; a Stop that withdraws its last question; the
+  same account attaching with a client that does not resume, which includes a browser
+  sign-in attaching over a paired machine's parked work, since that client cannot
+  resume it; and a server restart. Of these, all but a server restart withdraw the
+  questions and show the runs as `stopped`, and a later `resume` finds nothing (a
+  restart is described below). A person with write access can always end a disconnected
+  Planner by resetting it.
+
+#### After a server restart
+
+The server keeps sessions, holds and open requests in memory only, so a restart ends
+what a disconnected link kept, and a graceful one ends it exactly as a crash does. The
+server tells every link it is going down before it closes any socket, and no link
+withdraws a question on the way out, so the Decisions the Planner had asked stay open
+and answerable in the document, as after a crash. A returning client's `resume` finds
+nothing: `resumed` lists no sessions, the client calls its `destroy` handler for each
+session it held and settles every question it still waited on as `cancelled`. The run
+cards Chat stored come back `stopped`: Chopin no longer tracks those workflows and has
+nothing newer than the last report. The client's `runs` for a session the server no
+longer has are ignored, so those cards stay `stopped`, even if the machine is still
+running the workflows, until the Planner starts a session again and reports its runs.
+Neither the link closing nor the shutdown posts a Chat line: no "disconnected" notice
+and no "was stopped after" line, since nobody stopped anything and Chopin merely restarted. An answer given to a Decision nobody
+waits on any more reaches the Planner as a turn of its own once a Planner is attached
+(see [Decisions](decisions.md)). Nothing is reported as the Planner stopping its work
+because of a network drop.
+
+A request is never asked twice: it keeps its `request` id and its card. The package
+client implements resuming and asks for the feature by default: pass
+`connectAgent({ resumable: false })` for a client that wants everything to end when
+its link drops. Its `resumption` settles, when the link closes, with what to pass the
+next `connectAgent` as `resume`, or with nothing when the link ended any other way.
 
 A client that receives a frame it cannot parse should close with 4400 and reason
 `malformed-message`. Node.js's `WebSocket` lets a caller close only with 1000 or
@@ -851,6 +1058,7 @@ Each launch gets the connector's environment, your `--env` values, and these:
 | `CHOPIN_URL`                     | The server's origin.                                                                     |
 | `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin chose this machine.         |
 | `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                 |
+| `CHOPIN_PLANNER_TOKEN_FILE`      | A file (mode `0600`) that always holds a current credential, replaced before it expires. |
 | `CHOPIN_CHECKOUT`                | The absolute root of the document's repository's checkout or clone.                      |
 | `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.     |
 | `CHOPIN_GITHUB_TOKEN`            | The machine owner's token from Chopin's GitHub App, for pushing and draft pull requests. |
@@ -864,6 +1072,14 @@ does, for example:
 ```sh
 git -C "$CHOPIN_CHECKOUT" worktree add "$CHOPIN_WORKTREE" -b <branch>
 ```
+
+The connector renews the Planner credential in `CHOPIN_PLANNER_TOKEN_FILE` 5 minutes
+before it expires, for as long as the backend runs and Chopin still lets the machine run
+the document, and tries again if it cannot reach Chopin, keeping the file it has. It
+deletes the file when the backend exits, when the document is withdrawn, or when Chopin
+refuses the machine for good, such as a revoked pairing. Its content, like the
+launch's credential, never reaches the connector's output. A backend that outlives a
+link, as a `resumable-sessions` one does, reads it again before reattaching.
 
 The connector renews the GitHub token in the file 25 minutes before it expires,
 so read the file before each use. The three `CHOPIN_GITHUB_TOKEN` variables are
@@ -908,10 +1124,30 @@ repository tools act with it.
   subprotocol, with `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach`
   to `CHOPIN_DOCUMENT`.
 - On HTTP 401 at the upgrade, or when the connection closes for any reason other than
-  its own `detach`, exit. Until the credential's 15 minutes have passed a
-  backend may instead reattach with it after 1001 or a dropped socket; after
-  that the credential is refused and it must exit. Chopin forgets a credential
-  once it has expired.
+  its own `detach`, a backend that did not offer `resumable-sessions` exits. Until the
+  credential's 15 minutes have passed it may instead reattach with it after 1001 or a
+  dropped socket; after that the credential is refused and it must exit. Chopin
+  forgets a credential once it has expired.
+- A backend that offers `resumable-sessions` does not exit when its link drops
+  unexpectedly: it keeps its process, its sessions and its runs, and attaches again
+  with `resume`, however long the network or the machine is away. Chopin keeps the
+  document's Planner, its run cards and its open Decisions for it, and holds any
+  Stop meanwhile. Because the credential it was launched with is good for 15 minutes,
+  it reads `CHOPIN_PLANNER_TOKEN_FILE` before each attempt and again whenever the upgrade
+  is refused with 401, retrying on its own backoff. The connector replaces the file
+  before its credential expires; a machine that slept through that renewal gets the
+  new file once the connector's timer next fires, and a backend that meets a refused
+  upgrade in between reads it again and retries. When Chopin refuses its `resume` with
+  `retry` (it could not check the document or the account, as GitHub failing at that
+  moment does), or the upgrade fails with 503, it keeps its sessions and tries again on
+  its backoff, and does not exit. It exits when its own `detach` ends
+  the link, when Chopin refuses the attach for good (any `refused` without `retry`,
+  including `planner-attached`), when the file
+  is gone (the machine was revoked, or Chopin no longer asks it to run the document), or
+  when it holds nothing to resume. This repository ships no first-party backend: the
+  connector provides what a resumable backend needs, the `@chopin/agent-link` package
+  client is the reference implementation of the protocol, and a third-party backend that
+  follows this contract is what people run.
 - Exit on SIGTERM. On Ctrl-C the connector sends it to the backend's process
   group and, 5 seconds later, kills whatever is left in that group, including
   processes the backend started that ignored it. A backend that exits by itself

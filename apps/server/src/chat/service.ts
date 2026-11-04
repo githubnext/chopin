@@ -680,7 +680,43 @@ type Retained = {
 	session: PlannerSession;
 	binding: ActiveOwnerBinding;
 	release: () => Promise<void>;
+	/** Called when `binding` ends; a rebound session watches its new binding with it. */
+	ended: () => void;
 };
+
+const RENEWED_CREDENTIAL = new Set(["credential-rotated", "credential-expired"]);
+
+/** Whether a binding ended because its GitHub credential was renewed, not because its owner left. */
+function credentialRenewed(binding: ActiveOwnerBinding): boolean {
+	let reason = binding.signal.reason;
+	return binding.signal.aborted && reason instanceof Error
+		&& RENEWED_CREDENTIAL.has(reason.message);
+}
+
+/**
+ * Gives a retained session whose owner's credential was renewed a binding to the renewed one, so
+ * work a disconnected Planner kept does not end with the old credential. False when the owner is
+ * no longer the same, or the session cannot take a new binding.
+ */
+async function rebindRetained(context: Room, retained: Retained): Promise<boolean> {
+	let previous = retained.binding;
+	if (!retained.session.rebind || !credentialRenewed(previous)) return false;
+	let binding = await context.activeOwner?.();
+	if (!binding) return false;
+	if (
+		binding.ownerSessionId !== previous.ownerSessionId
+		|| binding.ownerGeneration !== previous.ownerGeneration
+		|| binding.repository.id !== previous.repository.id
+		|| context.chat.retained !== retained
+	) {
+		binding.release();
+		return false;
+	}
+	retained.session.rebind(binding);
+	retained.binding = binding;
+	binding.signal.addEventListener("abort", retained.ended, { once: true });
+	return true;
+}
 
 /**
  * Take a message.
@@ -1320,12 +1356,20 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	let session = chat.retained?.session ?? chat.agent;
 	let runs = session?.runs?.();
 	let live = (runs?.active.length ?? 0) > 0;
-	let notice = (paused: boolean) =>
+	let notice = (paused: boolean, outcome?: "held" | "unconfirmed" | "failed") =>
 		say(chat, server, room, {
 			id: ulid(),
 			author: { kind: "system" },
 			text: paused
 				? `@${ws.data.handle} stopped the Planner and paused its workflows.`
+				: outcome === "held"
+				? `@${ws.data.handle} asked to stop the Planner. Its connection is down, `
+					+ "so its workflows will pause when it reconnects."
+				: outcome === "unconfirmed"
+				? `@${ws.data.handle} asked the Planner to stop its workflows. It has not confirmed `
+					+ "yet, and if its connection is down they will pause when it reconnects."
+				: outcome === "failed" && !turn
+				? `@${ws.data.handle} asked to stop the Planner, but its workflows could not be paused.`
 				: `@${ws.data.handle} stopped the turn.`,
 			ts: now(),
 		});
@@ -1345,7 +1389,8 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 	}
 	if (!turn && !live) {
 		// A Planner that only waits on a question it asked has nothing to pause; Stop withdraws it.
-		if (chat.retained && chat.retained.session.inputs?.open()) {
+		// One whose workflows are paused keeps them and their question for Resume.
+		if (chat.retained && chat.retained.session.inputs?.open() && !runs?.paused.length) {
 			await chat.retained.release();
 			say(chat, server, room, {
 				id: ulid(),
@@ -1367,13 +1412,18 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			paused: false,
 		};
 		stopping.pause = Promise.resolve().then(async () => {
+			let outcome: "held" | "unconfirmed" | "failed" | undefined;
 			try {
-				await pauseRuns.call(session);
-				stopping.paused = true;
+				// A Planner whose link is down, or dropped before it answered, hears the Stop when it
+				// returns, not now; one that has not answered yet may or may not have heard it.
+				let result = await pauseRuns.call(session);
+				if (result) outcome = result;
+				else stopping.paused = true;
 			} catch (err) {
 				console.error("[chat] pausing workflow runs failed:", err);
+				outcome = "failed";
 			}
-			notice(stopping.paused);
+			notice(stopping.paused, outcome);
 		});
 		stoppingRuns.set(session, stopping);
 		stopping.unwatch = session.watchRuns?.(next => {
@@ -1430,7 +1480,16 @@ export async function controlRun(
 	if (!control) return;
 	let text = `@${ws.data.handle} ${pausing ? "paused" : "resumed"} ${run.name}.`;
 	try {
-		await control(run.id);
+		// A Planner whose link is down, or dropped before it answered, hears a pause when it
+		// returns, not now.
+		let outcome = await control(run.id);
+		if (outcome === "held") {
+			text = `@${ws.data.handle} asked to pause ${run.name}. `
+				+ "It will pause when the Planner reconnects.";
+		} else if (outcome === "unconfirmed") {
+			text = `@${ws.data.handle} asked to pause ${run.name}. The Planner has not confirmed `
+				+ "yet, and if its connection is down it will pause when it reconnects.";
+		}
 	} catch (err) {
 		console.error(`[chat] ${pausing ? "pausing" : "resuming"} workflow run failed:`, err);
 		text = `${run.name} could not be ${pausing ? "paused" : "resumed"}.`;
@@ -1466,7 +1525,19 @@ export function mergeRuns(
 }
 
 function stopped(run: Wire.Run, at: number): Wire.Run {
-	return { ...run, status: "stopped", ended: run.ended ?? at, waiting: 0 };
+	let { disconnected: _, ...rest } = run;
+	return { ...rest, status: "stopped", ended: run.ended ?? at, waiting: 0 };
+}
+
+const LIVE_STATUS = new Set<Wire.Run["status"]>(["running", "waiting", "paused"]);
+
+/**
+ * A live card of a session whose Planner is disconnected says so, keeping the status it last
+ * reported: the run goes on when the Planner returns. Any other card carries no such mark.
+ */
+function disconnected(run: Wire.Run, down: boolean): Wire.Run {
+	let { disconnected: _, ...rest } = run;
+	return down && LIVE_STATUS.has(run.status) ? { ...rest, disconnected: true } : rest;
 }
 
 /** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */
@@ -1614,7 +1685,10 @@ async function publishReport(
 			...(shown.earlierStages ? { earlierStages: shown.earlierStages } : {}),
 		};
 	});
-	let own = mergeRuns(mine, incoming, at);
+	let down = !releasing && session.suspended?.() === true;
+	let own = mergeRuns(mine, incoming, at).map(run =>
+		disconnected(run, down && known.get(run.id) === session)
+	);
 	if (releasing) own = mergeRuns(own, undefined, at);
 	let fresh = (runs?.cards ?? []).some(run => !before.has(run.id));
 	let cards = [...others.filter(run => fresh ? !ENDED_RUN[run.status] : true), ...own];
@@ -1676,11 +1750,22 @@ function followUpEndedRun(context: Room, run: Wire.Run, said: string): Promise<v
 }
 
 /**
+ * Whether a question this session asked is still open, or an answer to one has
+ * not yet reached the client that asked it: letting the session go before then
+ * would turn the answer into a cancellation.
+ */
+function owesInput(session: PlannerSession): boolean {
+	let inputs = session.inputs;
+	return !!inputs && (inputs.open() > 0 || inputs.held() > 0);
+}
+
+/**
  * Keep a Planner session that still owns workflow runs, or waits on a question
  * it asked, instead of destroying it with its turn: the runs and the question
  * belong to the session, and the next turn reuses it so the Planner can still
- * see and steer them. It is let go once every run has finished and no question
- * is open, when its owner binding ends, or when the chat closes.
+ * see and steer them. It is let go once every run has finished, no question
+ * is open and every answer has reached its client, when its owner binding
+ * ends, or when the chat closes.
  */
 function retain(
 	context: Room,
@@ -1689,8 +1774,9 @@ function retain(
 	let { chat } = context;
 	let runs = opened.session.runs?.();
 	let live = !!runs && (runs.active.length > 0 || runs.paused.length > 0);
-	// A question no member has answered is open work: its request ends with the session.
-	let asking = (opened.session.inputs?.open() ?? 0) > 0;
+	// A question no member has answered is open work: its request ends with the session. So does
+	// an answer its client has not received.
+	let asking = owesInput(opened.session);
 	if (chat.retained && chat.retained.session !== opened.session) return false;
 	if (opened.binding.signal.aborted) return false;
 	if (!live && !asking) {
@@ -1706,7 +1792,7 @@ function retain(
 			if (chat.busy || chat.retained?.session !== opened.session) return;
 			let current = opened.session.runs?.();
 			if (current && (current.active.length || current.paused.length)) return;
-			if (opened.session.inputs?.open()) return;
+			if (owesInput(opened.session)) return;
 			await chat.retained.release();
 		};
 		let release = () =>
@@ -1724,36 +1810,79 @@ function retain(
 		let stopInputs = opened.session.inputs?.watch(() => {
 			if (chat.retained?.session === opened.session) release();
 		});
+		let stopLink = opened.session.watchLink?.(() => {
+			if (chat.retained?.session !== opened.session) return;
+			linkNotice(context, opened.session);
+			let current = opened.session.runs?.();
+			if (current) void publishRuns(context, opened.session, current);
+		});
 		let released: Promise<void> | undefined;
 		let retained: Retained = {
 			...opened,
+			ended: () => {},
 			release: () =>
 				released ??= (async () => {
 					if (chat.retained === retained) chat.retained = undefined;
 					stopWatching?.();
 					stopInputs?.();
-					opened.binding.signal.removeEventListener("abort", ended);
+					stopLink?.();
+					retained.binding.signal.removeEventListener("abort", ended);
 					try {
 						await opened.session.destroy();
 					} finally {
-						opened.binding.release();
+						retained.binding.release();
 						unhold?.();
 						if (chat.agent === opened.session) {
 							chat.agent = undefined;
 							if (!chat.busy) chat.owner = undefined;
 						}
 						await publishing.get(chat);
-						await publishRuns(context, opened.session, unsaved.get(opened.session), true);
+						// A server going down stopped no run: nothing says so, and the cards stay as stored.
+						if (!opened.session.shuttingDown?.()) {
+							await publishRuns(context, opened.session, unsaved.get(opened.session), true);
+						}
 						gone.add(opened.session);
 					}
 				})(),
 		};
-		let ended = () => void retained.release();
+		let ended = () => {
+			// A Planner whose client is away keeps its work through a renewed credential, however
+			// long that is; its session takes the renewed one when it is next used.
+			if (opened.session.suspended?.() && credentialRenewed(retained.binding)) return;
+			void retained.release();
+		};
+		retained.ended = ended;
 		opened.binding.signal.addEventListener("abort", ended, { once: true });
 		chat.retained = retained;
+		linkNotice(context, opened.session);
 	}
 	if (runs) void report(runs);
 	return true;
+}
+
+const linkNotices = new WeakMap<PlannerSession, boolean>();
+
+/**
+ * Says once in Chat that a retained Planner session's connection dropped, and once that it came
+ * back. What it kept stays as it was, so the notice says what that is and what waits for it.
+ */
+function linkNotice(context: Room, session: PlannerSession): void {
+	let down = session.suspended?.() === true;
+	if (linkNotices.get(session) === down || (!down && !linkNotices.has(session))) return;
+	linkNotices.set(session, down);
+	let { chat, room, server } = context;
+	say(chat, server, room, {
+		id: ulid(),
+		author: { kind: "system" },
+		text: down
+			? "The Planner disconnected. Its workflows and open Decisions are kept, answers will "
+				+ "reach it when it reconnects, and nothing ends until it does unless someone presses Stop."
+				+ (session.keptStop?.()
+					? " A Stop it had not confirmed is kept and will be delivered when it reconnects."
+					: "")
+			: "The Planner reconnected and carries on.",
+		ts: now(),
+	});
 }
 
 function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
@@ -2041,6 +2170,10 @@ async function repositorySession(
 	// A background job keeps its isolated session: it never borrows or ends the retained Planner.
 	if (retained && !context.chat.job) {
 		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
+			context.chat.agent = retained.session;
+			return { session: retained.session, binding: retained.binding };
+		}
+		if (await rebindRetained(context, retained) && await retained.binding.revalidate()) {
 			context.chat.agent = retained.session;
 			return { session: retained.session, binding: retained.binding };
 		}
@@ -2401,11 +2534,16 @@ async function run(
 						: "skipped",
 					reason: jobReason(err),
 				};
-		} else if (!chat.closed && failed) {
+		} else if (!chat.closed && failed && !opened?.session.shuttingDown?.()) {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: err instanceof Error ? err.message : "The agent could not be reached.",
+				text: opened?.session.suspended?.()
+					? "The Planner's connection dropped during this reply. Its workflows and open "
+						+ "Decisions are kept; ask again once it has reconnected."
+					: err instanceof Error
+					? err.message
+					: "The agent could not be reached.",
 				ts: now(),
 			});
 		}
@@ -2422,9 +2560,12 @@ async function run(
 		chat.toolProgress = undefined;
 		let kept = false;
 		try {
-			if (opened && !chat.closed && !jobTurn && (!failed || replyOnly)) {
-				kept = retain(context, opened);
-			}
+			// A turn the Planner's link dropped under fails, but its client may come back for the
+			// runs and questions the session still holds.
+			if (
+				opened && !chat.closed && !jobTurn
+				&& (!failed || replyOnly || opened.session.suspended?.())
+			) kept = retain(context, opened);
 			if (!kept) {
 				if (!jobTurn && chat.retained?.session === opened?.session) await chat.retained?.release();
 				else await opened?.session.destroy();

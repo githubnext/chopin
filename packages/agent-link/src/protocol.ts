@@ -28,6 +28,14 @@ export const AGENT_FEATURES = {
 	 * the turn's host tools include `upload_plan_image`, which stores an image the Planner made.
 	 */
 	decisionOptionPreviews: "decision-option-previews",
+	/**
+	 * After a link drops unexpectedly, the server keeps the sessions that have a live or paused
+	 * run, an open question or an answer the client has not acknowledged, however long the client
+	 * stays away, and the same account's next link takes them back with `resume`. The client
+	 * acknowledges each `input-result` with `input-received`. Without the feature a closed link
+	 * ends everything it held.
+	 */
+	resumableSessions: "resumable-sessions",
 } as const;
 
 /** The upgrade request header naming the features a client asks for, comma-separated. */
@@ -62,6 +70,8 @@ const MAX_RUNS = 64;
 const MAX_STAGES = 64;
 const MAX_QUESTIONS = 16;
 const MAX_OPTIONS = 32;
+/** The most questions one link keeps open at a time. */
+const MAX_OPEN_REQUESTS = 16;
 
 const id = z.string().min(1).max(MAX_ID);
 const name = z.string().min(1).max(MAX_NAME);
@@ -233,6 +243,12 @@ const checkout = z.strictObject({
 	head: z.string().max(MAX_ID).optional(),
 });
 
+/** The sessions a link holds, each with the `input-request` ids still waiting on an answer. */
+const heldSessions = z.array(z.strictObject({
+	session: id,
+	requests: z.array(id).max(MAX_OPEN_REQUESTS),
+})).max(MAX_RUNS);
+
 /** Every message a client sends. */
 export const clientMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({
@@ -280,6 +296,12 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 		input: inputSchema,
 	}),
 	z.strictObject({ type: z.literal("input-cancel"), request: id }),
+	/**
+	 * With `resumable-sessions`: the client has settled the question `request`, whether or not
+	 * this is the first time it hears its `input-result`. The server keeps a result, and the
+	 * session that waits to deliver it, until this arrives.
+	 */
+	z.strictObject({ type: z.literal("input-received"), request: id }),
 	z.strictObject({
 		type: z.literal("runs"),
 		session: id,
@@ -294,6 +316,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 		message: note.optional(),
 	}),
 	z.strictObject({ type: z.literal("detach") }),
+	/**
+	 * With `resumable-sessions`, the first message after `attached`: the sessions this client
+	 * still holds from a link that dropped, and the questions each still waits on.
+	 */
+	z.strictObject({ type: z.literal("resume"), sessions: heldSessions }),
 ]);
 
 const toolSpec = z.strictObject({
@@ -312,7 +339,11 @@ const responseFormat = z.discriminatedUnion("type", [
 	}),
 ]);
 
-/** Why a server refused an attach. */
+/**
+ * Why a server refused an attach. Only `unavailable` is transient, and the refusal says so with
+ * `retry`; every other code is a decision, including `planner-attached`, whoever holds the
+ * document.
+ */
 export const refusalCodeSchema = z.enum([
 	"unsupported-version",
 	"repository-forbidden",
@@ -337,7 +368,17 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		}),
 		features: z.array(identifier).max(16).optional(),
 	}),
-	z.strictObject({ type: z.literal("refused"), code: refusalCodeSchema, message: note }),
+	z.strictObject({
+		type: z.literal("refused"),
+		code: refusalCodeSchema,
+		message: note,
+		/**
+		 * True only when Chopin could not decide (`unavailable`: a check of the document or the
+		 * account failed): a client that resumes keeps what it holds and tries again with the same
+		 * `resume`. Absent on every refusal that is a decision about this account or document.
+		 */
+		retry: z.literal(true).optional(),
+	}),
 	z.strictObject({
 		type: z.literal("error"),
 		code: z.enum(["malformed-message", "message-too-large", "protocol"]),
@@ -377,6 +418,12 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("stop"), request: id, session: id, run: id.optional() }),
 	z.strictObject({ type: z.literal("resume"), request: id, session: id, run: id.optional() }),
 	z.strictObject({ type: z.literal("destroy"), session: id }),
+	/**
+	 * The answer to `resume`: the sessions the server kept and gave back, each with the questions
+	 * it still holds, open or answered meanwhile. Anything the client held that is not listed has
+	 * ended.
+	 */
+	z.strictObject({ type: z.literal("resumed"), sessions: heldSessions }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

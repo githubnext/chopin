@@ -38,6 +38,10 @@ const REVALIDATE_EVERY_MS = 5 * 60_000;
 const MAX_OPEN_INPUTS = 16;
 /** How many settled `input-request` ids a link remembers to refuse their reuse. */
 const REMEMBERED_INPUTS = 1_024;
+/** What an answer that keeps no session waiting calls once it is sent. */
+const NO_DELIVERY = () => {};
+/** How many controls whose wait ran out a link remembers, to hear their late answers. */
+const MAX_LATE_CONTROLS = 64;
 const LIVE_RUN = new Set(["running", "waiting", "paused"]);
 
 export type LinkSocket = {
@@ -49,8 +53,21 @@ export type AttachOutcome =
 	| {
 		ok: true;
 		document: ServerMessageOf<"attached">["document"];
-		/** Lets go of what attaching took, such as the document's Planner ownership. */
-		detach?: () => void;
+		/**
+		 * Lets go of what attaching took, such as the document's Planner ownership. `suspended`
+		 * says the link keeps its sessions for the account's next link to resume.
+		 */
+		detach?: (suspended?: boolean) => void;
+		/** Takes the sessions an earlier link of this document's Planner kept, if any. */
+		claim?: () => AgentLink | undefined;
+		/** A suspended link has nothing left to keep: its ownership runs the ordinary grace period. */
+		lapse?: () => void;
+		/**
+		 * Present when an earlier link of the same account still counts as attached: this link is
+		 * attached only once its first message, a `resume` naming a session that earlier link
+		 * holds, shows that its client is returning to it and its connection is gone.
+		 */
+		takeover?: (names: ClientMessageOf<"resume">["sessions"]) => Promise<AttachOutcome>;
 	}
 	| { ok: false; code: RefusalCode; message: string };
 
@@ -93,12 +110,15 @@ function unsupported(capability: string): HarnessCapabilityUnsupportedError {
 	});
 }
 
+/** The client did not answer in time, which does not say whether it heard. */
+class Unanswered extends Error {}
+
 function within<T>(operation: Promise<T>, ms: number, message: string): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	return Promise.race([
 		operation,
 		new Promise<never>((_, reject) => {
-			timer = setTimeout(() => reject(new Error(message)), ms);
+			timer = setTimeout(() => reject(new Unanswered(message)), ms);
 		}),
 	]).finally(() => clearTimeout(timer));
 }
@@ -142,7 +162,12 @@ function usage(value: LinkUsage) {
 
 type Port = {
 	send(message: ServerMessage): boolean;
-	control(session: string, action: "stop" | "resume", runId?: string): Promise<void>;
+	control(
+		session: string,
+		action: "stop" | "resume",
+		runId?: string,
+		sent?: (request: string) => void,
+	): Promise<void>;
 	forget(session: string): void;
 	/** Throws, closing the link, when the caller can no longer read the document. */
 	revalidate(): Promise<void>;
@@ -171,17 +196,55 @@ type Turn = {
 
 type TurnMessage = ClientMessageOf<"tools" | "part" | "host-tool-call" | "turn-end">;
 
+/** The client answered a Stop or Resume with a refusal: it heard the request, so nothing is owed. */
+class ControlRefused extends Error {}
+
+/**
+ * A Stop sent to the client and not yet answered, naming its run (none: every run). `origin` is
+ * the Stop of every run this one stands for after a Resume of another run undid part of it.
+ */
+type OwedStop = {
+	run: string | undefined;
+	held?: true;
+	origin?: OwedStop;
+	/** The control request that carries it, so a late answer finds it. */
+	request?: string;
+};
+
+/** An answer the client has not acknowledged, and the claim that keeps its session until it has. */
+type Owed = {
+	result: ServerMessageOf<"input-result">;
+	session: string;
+	delivered: () => void;
+};
+
 /** One Planner session whose turns run in the attached client. */
 class RemoteSession {
 	readonly id: string;
 	readonly planner: RemotePlanner;
 	#port: Port;
 	#started = Promise.withResolvers<void>();
+	/** Whether the client has acknowledged `start`: only a started session can be resumed. */
+	#acknowledged = false;
 	#current: Turn | undefined;
 	#closed = false;
 	#roots = new Map<string, string>();
 	/** Every reported stage of each run, by id, in the order first reported. */
 	#stages = new Map<string, Map<string, Wire.RunStage>>();
+	/**
+	 * Stops asked for while the link was down, each naming its run (none: every run), for the
+	 * client to hear first when it resumes. A Stop is never lost to a network failure.
+	 */
+	#held: Array<{ run: string | undefined }> = [];
+	/**
+	 * Stops sent to the client that it has not answered. The client may never have heard one, or
+	 * have applied it and lost only its answer, so a link that drops before the answer still owes
+	 * the client the Stop: `suspend` moves these to `#held`. A Stop that went unanswered for as
+	 * long as the server waits stays here too, for a link that is only noticed to be dead later.
+	 */
+	#unanswered = new Set<OwedStop>();
+	/** The Stops sent and not yet answered, by control request, for an answer that comes late. */
+	#requests = new Map<string, OwedStop>();
 
 	constructor(id: string, planner: RemotePlanner, port: Port) {
 		this.id = id;
@@ -205,14 +268,16 @@ class RemoteSession {
 			this.#port.timeoutMs,
 			"The attached Planner did not start the session.",
 		);
-		this.planner.control = (action, runId) => this.#port.control(this.id, action, runId);
+		this.planner.control = (action, runId) => this.#command(action, runId);
 		this.planner.rootOf = runId => this.#roots.get(runId) ?? runId;
 		return this.#session();
 	}
 
 	acknowledge(message: ClientMessageOf<"started" | "start-failed">): void {
-		if (message.type === "started") this.#started.resolve();
-		else {this.#started.reject(
+		if (message.type === "started") {
+			this.#acknowledged = true;
+			this.#started.resolve();
+		} else {this.#started.reject(
 				new Error(`The attached Planner refused the session: ${message.message}`),
 			);}
 	}
@@ -264,11 +329,155 @@ class RemoteSession {
 		for (let wake of this.planner.waiters ?? []) wake();
 	}
 
-	/** The link is gone: nothing more will arrive for this session. */
+	/** Whether the session has a live or paused run: work the client carries on while unseen. */
+	get working(): boolean {
+		let runs = this.planner.runs;
+		return !this.#closed && !!runs && (runs.active.length > 0 || runs.paused.length > 0);
+	}
+
+	/** Whether the client could take the session back: it started, and is not an isolated job. */
+	get resumable(): boolean {
+		return this.#acknowledged && !this.#closed && !this.planner.isolated;
+	}
+
+	/**
+	 * The link dropped unexpectedly and the session waits for its client to come back. The turn
+	 * under way fails, as it always did, and its host tools stop; the session, its reported runs
+	 * and its open questions are left exactly as they were. A Stop cannot reach the client now,
+	 * so it is held for the client to hear first when it resumes: one pressed from now on, and
+	 * one already sent whose answer never came.
+	 */
+	suspend(): void {
+		// A server going down is not the client dropping: nothing is announced as disconnected.
+		if (!this.planner.stopping) {
+			this.planner.suspended = true;
+			this.planner.keptStop = this.#unanswered.size > 0;
+			this.planner.linkChanged?.();
+		}
+		let turn = this.#current;
+		if (turn) {
+			this.#finish(
+				turn,
+				turn.stopped ? undefined : new Error("The attached Planner disconnected during the turn."),
+			);
+		}
+		for (let owed of this.#unanswered) {
+			owed.held = true;
+			if (owed.origin) owed.origin.held = true;
+			this.#hold("stop", owed.run);
+		}
+		this.#unanswered.clear();
+		this.#requests.clear();
+	}
+
+	/**
+	 * Stops or resumes the client's runs, as Chat's Stop and a run's pause and Resume do. Resolves
+	 * `held` instead of an answer for a Stop the link's drop kept for the client's return, and
+	 * `unconfirmed` for one the client did not answer in time, which stays owed: the caller must
+	 * not report either as done. A Resume cannot be promised, so it is refused while the link is
+	 * down and rejects when unanswered.
+	 */
+	async #command(
+		action: "stop" | "resume",
+		run: string | undefined,
+	): Promise<void | "held" | "unconfirmed"> {
+		if (this.planner.suspended) {
+			this.#hold(action, run);
+			return "held";
+		}
+		let owed: OwedStop | undefined = action === "stop" ? { run } : undefined;
+		if (owed) this.#unanswered.add(owed);
+		try {
+			await this.#port.control(this.id, action, run, request => {
+				if (!owed) return;
+				owed.request = request;
+				this.#requests.set(request, owed);
+			});
+		} catch (error) {
+			if (owed?.held) return "held";
+			// A refusal is an answer. Silence is not, and keeps the Stop owed.
+			if (owed && error instanceof ControlRefused) this.#answered(owed);
+			if (owed && error instanceof Unanswered) return "unconfirmed";
+			throw error;
+		}
+		if (owed) this.#answered(owed);
+		if (action === "resume") this.#undoStops(run);
+	}
+
+	/** The client answered a Stop, in time or late: it, and the Stops split from it, are not owed. */
+	#answered(owed: OwedStop): void {
+		this.#unanswered.delete(owed);
+		if (owed.request) this.#requests.delete(owed.request);
+		for (let other of this.#unanswered) if (other.origin === owed) this.#unanswered.delete(other);
+	}
+
+	/** An answer to a Stop arrived after the wait for it ended. */
+	answeredLate(request: string): void {
+		let owed = this.#requests.get(request);
+		if (owed) this.#answered(owed);
+	}
+
+	/**
+	 * A Resume the client answered came after a Stop it never answered, so that Stop is undone for
+	 * the runs the Resume covers, and stands for the rest: sending it again must not pause a run a
+	 * person resumed, and dropping it must not lose its pause of another. A Stop of every run is
+	 * kept as a Stop of each run the client reports except the one resumed.
+	 */
+	#undoStops(resumed: string | undefined): void {
+		for (let owed of this.#unanswered) {
+			if (resumed !== undefined && owed.run !== undefined && owed.run !== resumed) continue;
+			this.#unanswered.delete(owed);
+			if (resumed === undefined || owed.run !== undefined) continue;
+			for (let card of this.planner.runs?.cards ?? []) {
+				if (card.id === resumed || !LIVE_RUN.has(card.status)) continue;
+				this.#unanswered.add({ run: card.id, origin: owed.origin ?? owed });
+			}
+		}
+	}
+
+	/** Keeps a Stop for the client's return; a Resume cannot be promised, so it is refused. */
+	#hold(action: "stop" | "resume", run: string | undefined): void {
+		if (action !== "stop") {
+			throw new Error("The attached Planner is disconnected, so its runs cannot be resumed yet.");
+		}
+		// Stopping every run covers each one, and a run already named is not named twice.
+		if (this.#held.some(held => held.run === undefined || held.run === run)) return;
+		if (run === undefined) this.#held = [];
+		this.#held.push({ run });
+	}
+
+	/** The server is going down: nothing is reported about this session from here on. */
+	shutdown(): void {
+		this.planner.stopping = true;
+	}
+
+	/** The client is back on another link, which carries the session from here on. */
+	rebind(port: Port): void {
+		this.#port = port;
+		this.planner.suspended = false;
+		this.planner.keptStop = false;
+		this.planner.linkChanged?.();
+	}
+
+	/** Gives the client each Stop held while its link was down, once. */
+	deliverHeldStops(): void {
+		for (let { run } of this.#held.splice(0)) {
+			// A link that drops again before the client answers keeps the Stop for the next one.
+			this.#command("stop", run).catch(error => {
+				if (!this.#closed && !this.planner.suspended) {
+					console.error("[agent] a held Stop failed:", error);
+				}
+			});
+		}
+	}
+
+	/** The link is gone for good: nothing more will arrive for this session. */
 	linkClosed(): void {
+		this.planner.suspended = false;
 		this.#started.reject(new Error("The agent connection closed."));
 		let reported = this.planner.runs;
-		if (reported) {
+		// A server going down stopped nothing: its cards are left as they were reported.
+		if (reported && !this.planner.stopping) {
 			this.reportRuns({
 				active: [],
 				paused: [],
@@ -607,26 +816,65 @@ class RemoteSession {
 export class AgentLink {
 	#socket: LinkSocket;
 	#options: LinkOptions;
-	#state: "waiting" | "attaching" | "attached" | "closed" = "waiting";
+	#state: "waiting" | "attaching" | "attached" | "suspended" | "closed" = "waiting";
 	#channelId: string | undefined;
-	#forget: (() => void) | undefined;
+	#forget: ((suspended?: boolean) => void) | undefined;
+	#lapse: (() => void) | undefined;
 	#sessions = new Map<string, RemoteSession>();
 	#inputs = new Map<string, { session: string; controller: AbortController }>();
 	/** Recent `input-request` ids, oldest first, so a settled one cannot be reused. */
 	#inputIds = new Set<string>();
 	#controls = new Map<string, PromiseWithResolvers<void>>();
+	/** Controls whose wait ended unanswered, by request, with their session: an answer may still come. */
+	#late = new Map<string, string>();
 	#watch: ReturnType<typeof setInterval> | undefined;
 	#port: Port;
+	/**
+	 * Answers that arrived while the link was suspended, for the client to receive when it
+	 * resumes. Each keeps its session until it is delivered or can never be.
+	 */
+	#outbox: Owed[] = [];
+	/**
+	 * Answers sent on this link that its client has not acknowledged with `input-received`, by
+	 * request. One written into a socket that was already dead reaches nobody, so it is kept, with
+	 * the session that waits to deliver it, until the client says it has it.
+	 */
+	#unacked = new Map<string, Owed>();
+	/** Whether the server is shutting down: its questions are left open, as a crash leaves them. */
+	#stopping = false;
+	/**
+	 * A same-account link that attached while this document's earlier link still counted as
+	 * attached: its first message decides whether it is that client returning, and so the earlier
+	 * link's connection is already dead.
+	 */
+	#takeover: ((names: ClientMessageOf<"resume">["sessions"]) => Promise<AttachOutcome>) | undefined;
+	#confirming = false;
+	/** What the client sent while its takeover was being decided, in order. */
+	#queued: ClientMessage[] = [];
+	/** The link that took this suspended link's sessions; what is still sent here goes there. */
+	#successor: AgentLink | undefined;
+	/** Takes the sessions an earlier link kept; present until the client's first message. */
+	#claim: (() => AgentLink | undefined) | undefined;
+	/** Whether the client's first message, where `resume` belongs, has come. */
+	#resumed = false;
+	/** Whether the server or the client chose to end this link, rather than the network failing. */
+	#planned = false;
 
 	constructor(socket: LinkSocket, options: LinkOptions) {
 		this.#socket = socket;
 		this.#options = options;
 		this.#port = {
 			send: message => this.#send(message),
-			control: (session, action, runId) => this.#control(session, action, runId),
+			control: (session, action, runId, sent) => this.#control(session, action, runId, sent),
 			forget: session => {
 				this.#sessions.delete(session);
 				this.#cancelInputs(session);
+				for (let [request, owed] of this.#unacked) {
+					if (owed.session !== session) continue;
+					this.#unacked.delete(request);
+					owed.delivered();
+				}
+				this.#lapsed();
 			},
 			revalidate: () => this.#recheck(),
 			timeoutMs: options.timeoutMs ?? OPERATION_TIMEOUT_MS,
@@ -642,12 +890,31 @@ export class AgentLink {
 		return this.#state === "attached";
 	}
 
+	/** Whether this link offered `resumable-sessions`. */
+	get resumable(): boolean {
+		return this.#options.features?.includes(AGENT_FEATURES.resumableSessions) === true;
+	}
+
+	/** Whether this link holds a session a `resume` names: its client is returning to it. */
+	holds(sessions: ClientMessageOf<"resume">["sessions"]): boolean {
+		return sessions.some(item => this.#sessions.has(item.session));
+	}
+
+	/**
+	 * The server is going down. Whatever the link holds is left as a crash would leave it: no
+	 * question it asked is withdrawn on the way out, so its Decisions stay open.
+	 */
+	shutdown(): void {
+		this.#stopping = true;
+		for (let session of this.#sessions.values()) session.shutdown();
+	}
+
 	/**
 	 * Whether the client waits on the document's members: a question it asked is still open, or
 	 * one of its workflow runs is live or paused.
 	 */
 	get waiting(): boolean {
-		if (this.#state === "closed") return false;
+		if (this.#state === "closed" || this.#state === "suspended") return false;
 		if (this.#inputs.size > 0) return true;
 		for (let session of this.#sessions.values()) {
 			let runs = session.planner.runs;
@@ -661,7 +928,7 @@ export class AgentLink {
 	 * a question still open, or a live workflow run. A paused run alone is not; it waits on people.
 	 */
 	get busy(): boolean {
-		if (this.#state === "closed") return false;
+		if (this.#state === "closed" || this.#state === "suspended") return false;
 		if (this.#inputs.size > 0) return true;
 		for (let session of this.#sessions.values()) {
 			if (session.replying || (session.planner.runs?.active.length ?? 0) > 0) return true;
@@ -708,7 +975,7 @@ export class AgentLink {
 	}
 
 	receive(raw: unknown): void {
-		if (this.#state === "closed") return;
+		if (this.#state === "closed" || this.#state === "suspended") return;
 		let parsed = parseClientMessage(raw);
 		if (!parsed.ok) return this.#violate(parsed.code, parsed.message);
 		let message = parsed.message;
@@ -719,18 +986,56 @@ export class AgentLink {
 			}
 			return this.#violate("protocol", "Send attach first, and nothing else until it is answered.");
 		}
+		if (this.#takeover) return this.#confirm(message);
 		this.#dispatch(message);
+	}
+
+	/**
+	 * The first message of a link that attached beside an earlier link of its account still
+	 * counting as attached. Only a `resume` naming a session that earlier link holds shows the
+	 * client is the one returning, so that link's connection is gone; anything else is a second
+	 * client, refused as such.
+	 */
+	#confirm(message: ClientMessage): void {
+		if (this.#queued.length > 0 || this.#confirming) {
+			this.#queued.push(message);
+			return;
+		}
+		this.#confirming = true;
+		let takeover = this.#takeover!;
+		let names = message.type === "resume" ? message.sessions : [];
+		void takeover(names).then(outcome => {
+			this.#confirming = false;
+			this.#takeover = undefined;
+			if (this.#state !== "attached") {
+				if (outcome.ok) outcome.detach?.();
+				return;
+			}
+			if (!outcome.ok) return this.#refuse(outcome.code, outcome.message);
+			this.#bind(outcome);
+			this.#dispatch(message);
+			for (let later of this.#queued.splice(0)) this.#dispatch(later);
+		}, error => {
+			console.error("[agent] taking over an attachment failed:", error);
+			this.#confirming = false;
+			this.#takeover = undefined;
+			this.#refuse("unavailable", "The document could not be checked.");
+		});
 	}
 
 	/** Tells the client why it is no longer the Planner, then closes the link. */
 	revoke(code: RefusalCode, message: string): void {
-		if (this.#state === "closed") return;
+		if (this.#state === "closed" || this.#state === "suspended") return;
 		this.#refuse(code, message);
 	}
 
 	/** Ends the link from the server side. */
 	close(code: number, reason: string): void {
-		if (this.#state === "closed") return;
+		if (this.#state === "closed" || this.#state === "suspended") return;
+		// A client the server stopped hearing from has most likely lost its network, and may
+		// return; any other reason is the server's or the client's own decision to end. Decided
+		// before the socket closes, as its close event may report back at once.
+		this.#planned = code !== LINK_CLOSE.unresponsive;
 		try {
 			this.#socket.close(code, reason);
 		} finally {
@@ -738,29 +1043,209 @@ export class AgentLink {
 		}
 	}
 
-	/** The socket closed: every open turn ends, and nothing waits on this client again. */
+	/**
+	 * The socket closed. Normally every open turn ends and nothing waits on this client again. A
+	 * link that offered `resumable-sessions` and dropped unexpectedly instead keeps each session
+	 * that has a live or paused run or an open question, for its account to resume whenever it
+	 * returns, unless the server or the client ended the link itself.
+	 */
 	disconnected(): void {
-		if (this.#state === "closed") return;
+		if (this.#state === "closed" || this.#state === "suspended") return;
+		let kept = !this.#planned && this.#state === "attached"
+				&& this.#options.features?.includes(AGENT_FEATURES.resumableSessions)
+			? [...this.#sessions.values()].filter(session =>
+				session.resumable
+				&& (session.working || this.#waitingOn(session.id) > 0 || this.#owedOn(session.id) > 0)
+			)
+			: [];
+		if (kept.length) return this.#suspend(kept);
 		this.#state = "closed";
 		clearInterval(this.#watch);
 		this.#forget?.();
 		this.#forget = undefined;
-		for (let session of this.#sessions.values()) session.linkClosed();
-		this.#sessions.clear();
-		for (let input of this.#inputs.values()) input.controller.abort();
-		this.#inputs.clear();
+		this.#teardown();
+	}
+
+	/**
+	 * Every session a suspended link kept has been let go, as Stop does one that only waits on a
+	 * question: nothing is left for the client to resume, so the link ends and its account holds
+	 * the document only as long as any detached account does.
+	 */
+	#lapsed(): void {
+		if (this.#state !== "suspended" || this.#sessions.size > 0) return;
+		this.#state = "closed";
+		this.#teardown();
+		this.#lapse?.();
+	}
+
+	/** Ends a suspended link for good: nothing will take back what it kept. */
+	terminate(): void {
+		if (this.#state !== "suspended") return;
+		this.#state = "closed";
+		this.#teardown();
+	}
+
+	#waitingOn(session: string): number {
+		let count = 0;
+		for (let input of this.#inputs.values()) if (input.session === session) count++;
+		return count;
+	}
+
+	/** How many answers of `session` its client has not acknowledged. */
+	#owedOn(session: string): number {
+		let count = 0;
+		for (let owed of this.#unacked.values()) if (owed.session === session) count++;
+		return count;
+	}
+
+	#suspend(kept: RemoteSession[]): void {
+		this.#state = "suspended";
+		clearInterval(this.#watch);
+		for (let [id, session] of this.#sessions) {
+			if (kept.includes(session)) {
+				session.suspend();
+				continue;
+			}
+			session.linkClosed();
+			this.#sessions.delete(id);
+			this.#cancelInputs(id);
+		}
 		for (let control of this.#controls.values()) {
 			control.reject(new Error("The agent connection closed."));
 		}
 		this.#controls.clear();
+		this.#late.clear();
+		// An answer written to a link that dropped may never have arrived: it is sent again to the
+		// client that returns and still waits on it.
+		for (let owed of this.#unacked.values()) {
+			if (this.#sessions.has(owed.session)) this.#outbox.push(owed);
+			else owed.delivered();
+		}
+		this.#unacked.clear();
+		this.#forget?.(true);
+		this.#forget = undefined;
+	}
+
+	/** Every session and open question this link still holds ends, as when any link closes. */
+	#teardown(): void {
+		for (let session of this.#sessions.values()) session.linkClosed();
+		this.#sessions.clear();
+		if (!this.#stopping) { for (let input of this.#inputs.values()) input.controller.abort(); }
+		this.#inputs.clear();
+		for (let owed of this.#unacked.values()) {
+			owed.delivered();
+		}
+		this.#unacked.clear();
+		for (let control of this.#controls.values()) {
+			control.reject(new Error("The agent connection closed."));
+		}
+		this.#controls.clear();
+		this.#late.clear();
+		// The answers waiting for a client that is not coming back can never be delivered.
+		for (let { delivered } of this.#outbox.splice(0)) delivered();
+	}
+
+	/** The client is not taking back what an earlier link kept: it ends. */
+	#abandon(): void {
+		let earlier = this.#claim?.();
+		this.#claim = undefined;
+		earlier?.terminate();
+	}
+
+	/**
+	 * The client resumes: it names the sessions it still holds and the questions each still waits
+	 * on. Those sessions, with the questions that are still open or were answered meanwhile, move
+	 * to this link; whatever it does not name ends. Each Stop pressed while the link was down is
+	 * the first thing the client hears after `resumed`.
+	 */
+	#resume(message: ClientMessageOf<"resume">): void {
+		let earlier = this.#claim?.();
+		this.#claim = undefined;
+		let held = new Map(message.sessions.map(item => [item.session, new Set(item.requests)]));
+		let resumed: ServerMessageOf<"resumed">["sessions"] = [];
+		let results: Owed[] = [];
+		if (earlier) results = earlier.#hand(this, held, resumed);
+		this.#send({ type: "resumed", sessions: resumed });
+		for (let { session } of resumed) this.#sessions.get(session)?.deliverHeldStops();
+		for (let { result, session, delivered } of results) this.#answer(result, session, delivered);
+	}
+
+	/** Gives `next` the sessions the client still holds; returns the answers it is still owed. */
+	#hand(
+		next: AgentLink,
+		held: Map<string, Set<string>>,
+		resumed: ServerMessageOf<"resumed">["sessions"],
+	): Owed[] {
+		let owed = this.#outbox;
+		this.#outbox = [];
+		this.#state = "closed";
+		this.#successor = next;
+		next.#inputs = this.#inputs;
+		next.#inputIds = this.#inputIds;
+		let delivered: Owed[] = [];
+		for (let [id, session] of this.#sessions) {
+			let waiting = held.get(id);
+			if (!waiting) {
+				session.linkClosed();
+				this.#cancelInputs(id);
+				continue;
+			}
+			let requests: string[] = [];
+			for (let [request, input] of this.#inputs) {
+				if (input.session !== id) continue;
+				if (waiting.has(request)) requests.push(request);
+				else {
+					input.controller.abort();
+					this.#inputs.delete(request);
+				}
+			}
+			for (let answer of owed) {
+				if (!waiting.has(answer.result.request)) continue;
+				requests.push(answer.result.request);
+				delivered.push(answer);
+			}
+			next.#sessions.set(id, session);
+			session.rebind(next.#port);
+			resumed.push({ session: id, requests });
+		}
+		this.#sessions.clear();
+		// An answer the client does not wait for, or whose session it no longer holds, is not owed.
+		for (let answer of owed) if (!delivered.includes(answer)) answer.delivered();
+		return delivered;
 	}
 
 	#send(message: ServerMessage): boolean {
-		if (this.#state === "closed") return false;
+		if (this.#successor) return this.#successor.#send(message);
+		if (this.#state === "suspended" || this.#state === "closed") return false;
 		let encoded = encodeMessage(message);
 		if (!encoded) return false;
 		this.#socket.send(encoded);
 		return true;
+	}
+
+	/**
+	 * Gives the client an answer, or keeps it for the link that takes this one's sessions. Either
+	 * way, `delivered` runs once the client has acknowledged it, or can never, and only then may
+	 * its session be let go. A client that did not offer `resumable-sessions` cannot acknowledge,
+	 * so for it the answer is delivered once it is sent.
+	 */
+	#answer(result: ServerMessageOf<"input-result">, session: string, delivered: () => void): void {
+		if (this.#successor) return this.#successor.#answer(result, session, delivered);
+		if (this.#state === "suspended") {
+			this.#outbox.push({ result, session, delivered });
+			return;
+		}
+		let sent = false;
+		try {
+			sent = this.#send(result);
+		} finally {
+			if (!sent || !this.resumable) delivered();
+			else this.#awaitAck({ result, session, delivered });
+		}
+	}
+
+	#awaitAck(owed: Owed): void {
+		this.#unacked.set(owed.result.request, owed);
 	}
 
 	#violate(code: ProtocolErrorCode, message: string): void {
@@ -769,7 +1254,12 @@ export class AgentLink {
 	}
 
 	#refuse(code: RefusalCode, message: string): void {
-		this.#send({ type: "refused", code, message });
+		this.#send({
+			type: "refused",
+			code,
+			message,
+			...(code === "unavailable" ? { retry: true } : {}),
+		});
 		this.close(REFUSAL_CLOSE[code], code);
 	}
 
@@ -802,12 +1292,26 @@ export class AgentLink {
 			document: outcome.document,
 			...(features ? { features } : {}),
 		});
+		if (outcome.takeover) {
+			this.#takeover = outcome.takeover;
+			return;
+		}
+		this.#bind(outcome);
+	}
+
+	/** Makes this link the document's Planner: registered, rechecked, and able to resume. */
+	#bind(outcome: Extract<AttachOutcome, { ok: true }>): void {
 		let unregister = this.#options.register?.(outcome.document.id, this);
 		let detach = outcome.detach;
-		this.#forget = () => {
+		this.#lapse = outcome.lapse;
+		this.#forget = suspended => {
 			unregister?.();
-			detach?.();
+			detach?.(suspended);
 		};
+		// Only a client that offered the feature can take back what an earlier link kept.
+		if (outcome.claim && this.#options.features?.includes(AGENT_FEATURES.resumableSessions)) {
+			this.#claim = outcome.claim;
+		} else outcome.claim?.()?.terminate();
 		this.#watch = setInterval(
 			() => void this.#recheckAttached(),
 			this.#options.revalidateEveryMs ?? REVALIDATE_EVERY_MS,
@@ -815,7 +1319,19 @@ export class AgentLink {
 	}
 
 	#dispatch(message: ClientMessage): void {
+		// Resuming is the first thing a client does; anything else means it holds nothing to resume.
+		if (message.type !== "resume") {
+			this.#resumed = true;
+			this.#abandon();
+		}
 		switch (message.type) {
+			case "resume":
+				if (!this.#options.features?.includes(AGENT_FEATURES.resumableSessions)) {
+					return this.#violate("protocol", "resume needs the resumable-sessions feature.");
+				}
+				if (this.#resumed) return this.#violate("protocol", "resume must come first, once.");
+				this.#resumed = true;
+				return this.#resume(message);
 			case "attach":
 				return this.#violate("protocol", "This link is already attached.");
 			case "detach":
@@ -845,18 +1361,40 @@ export class AgentLink {
 			case "control-result": {
 				let control = this.#controls.get(message.request);
 				this.#controls.delete(message.request);
+				let late = this.#late.get(message.request);
+				if (late !== undefined) {
+					this.#late.delete(message.request);
+					this.#sessions.get(late)?.answeredLate(message.request);
+				}
 				if (message.ok) control?.resolve();
-				else control?.reject(new Error(message.message ?? "The attached Planner refused."));
+				else {control?.reject(
+						new ControlRefused(message.message ?? "The attached Planner refused."),
+					);}
 				return;
 			}
 			case "input-request":
 				return void this.#input(message);
 			case "input-cancel":
 				return this.#inputs.get(message.request)?.controller.abort();
+			case "input-received": {
+				if (!this.resumable) {
+					return this.#violate("protocol", "input-received needs the resumable-sessions feature.");
+				}
+				let owed = this.#unacked.get(message.request);
+				if (!owed) return;
+				this.#unacked.delete(message.request);
+				owed.delivered();
+				return;
+			}
 		}
 	}
 
-	async #control(session: string, action: "stop" | "resume", runId?: string): Promise<void> {
+	async #control(
+		session: string,
+		action: "stop" | "resume",
+		runId?: string,
+		sent?: (request: string) => void,
+	): Promise<void> {
 		let request = crypto.randomUUID();
 		let pending = Promise.withResolvers<void>();
 		this.#controls.set(request, pending);
@@ -864,30 +1402,42 @@ export class AgentLink {
 			this.#controls.delete(request);
 			throw new Error("The agent connection is closed.");
 		}
+		sent?.(request);
 		try {
 			await within(
 				pending.promise,
 				this.#port.timeoutMs,
 				`The attached Planner did not answer ${action}.`,
 			);
+		} catch (error) {
+			if (error instanceof Unanswered) {
+				this.#late.set(request, session);
+				if (this.#late.size > MAX_LATE_CONTROLS) this.#late.delete(this.#late.keys().next().value!);
+			}
+			throw error;
 		} finally {
 			this.#controls.delete(request);
 		}
 	}
 
 	async #input(message: ClientMessageOf<"input-request">): Promise<void> {
+		let delivered: () => void = NO_DELIVERY;
 		let reply = (
 			status: ServerMessageOf<"input-result">["status"],
 			value?: unknown,
 			text?: string,
 		) =>
-			this.#send({
-				type: "input-result",
-				request: message.request,
-				status,
-				...(value === undefined ? {} : { value: value as never }),
-				...(text === undefined ? {} : { message: text }),
-			});
+			this.#answer(
+				{
+					type: "input-result",
+					request: message.request,
+					status,
+					...(value === undefined ? {} : { value: value as never }),
+					...(text === undefined ? {} : { message: text }),
+				},
+				message.session,
+				delivered,
+			);
 		if (this.#inputs.has(message.request) || this.#inputIds.has(message.request)) {
 			return this.#violate("protocol", `Input request ${message.request} was repeated.`);
 		}
@@ -904,6 +1454,9 @@ export class AgentLink {
 			return void reply("failed", undefined, "Too many questions are already open.");
 		}
 		let controller = new AbortController();
+		// The session outlives the question until its answer reaches the client: an answer given
+		// to a session with nothing else to keep it would otherwise find it already let go.
+		delivered = session.planner.holdInput?.() ?? delivered;
 		this.#inputs.set(message.request, { session: message.session, controller });
 		if (message.workflowRunId && message.rootRunId) {
 			session.rememberRoot(message.workflowRunId, message.rootRunId);
@@ -942,7 +1495,7 @@ export class AgentLink {
 	#cancelInputs(session: string): void {
 		for (let [request, input] of this.#inputs) {
 			if (input.session !== session) continue;
-			input.controller.abort();
+			if (!this.#stopping) input.controller.abort();
 			this.#inputs.delete(request);
 		}
 	}

@@ -44,7 +44,7 @@ let log = process.argv[2];
 let launches = 0;
 try { launches = readFileSync(log, "utf8").split("\\n").filter(line => line.includes('"argv"')).length; } catch {}
 let env = Object.fromEntries(
-	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "CHOPIN_CHECKOUT", "CHOPIN_WORKTREE", "SOME_FLAG"].map(name => [name, process.env[name]]),
+	["CHOPIN_URL", "CHOPIN_DOCUMENT", "CHOPIN_PLANNER_TOKEN", "CHOPIN_PLANNER_TOKEN_FILE", "CHOPIN_CHECKOUT", "CHOPIN_WORKTREE", "SOME_FLAG"].map(name => [name, process.env[name]]),
 );
 appendFileSync(log, JSON.stringify({ pid: process.pid, cwd: process.cwd(), argv: process.argv, env }) + "\\n");
 if (launches === 0) process.exit(3);
@@ -153,6 +153,7 @@ test(
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[0],
+					CHOPIN_PLANNER_TOKEN_FILE: `${worktree}.planner-token`,
 					CHOPIN_CHECKOUT: checkoutRoot,
 					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
@@ -161,6 +162,7 @@ test(
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[1],
+					CHOPIN_PLANNER_TOKEN_FILE: `${worktree}.planner-token`,
 					CHOPIN_CHECKOUT: checkoutRoot,
 					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
@@ -177,9 +179,15 @@ test(
 				{ authorization: `Bearer ${MACHINE}`, body: { document } },
 			]);
 
+			// The running backend can read its current credential, privately, whenever its link needs one.
+			let tokenFile = `${worktree}.planner-token`;
+			expect(((await stat(tokenFile)).mode & 0o777).toString(8)).toBe("600");
+			expect((await readFile(tokenFile, "utf8")).trim()).toBe(issued[1]);
+
 			connector.kill("SIGINT");
 			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
 				.toBe(0);
+			expect(await stat(tokenFile).catch(() => "missing")).toBe("missing");
 			let running = launches[1].pid as number;
 			expect((await entries(log)).filter(entry => entry.stopped)).toEqual([{ stopped: running }]);
 			expect(() => process.kill(running, 0)).toThrow();

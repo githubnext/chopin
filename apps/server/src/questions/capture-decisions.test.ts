@@ -566,6 +566,15 @@ test("a capture whose paragraph was already repeated when it was read is refused
 	await expectNothingCreated(context, input, 0, "appeared more than once when you read it");
 });
 
+test("a capture of the second of two identical paragraphs is refused once that copy is removed, not moved onto the first", async () => {
+	let context = await setup(
+		"# Draft\n\nProvisional onboarding.\n\nProvisional onboarding.\n\nProvisional collaboration.",
+	);
+	let input = { revision: 0, questions: [question(context.plan, "decision-one", 2)] };
+	await rewrite(context, "# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.");
+	await expectNothingCreated(context, input, 0, "appeared more than once when you read it");
+});
+
 test("a capture read at a revision that is no longer retained is refused instead of guessed", async () => {
 	let context = await setup();
 	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };

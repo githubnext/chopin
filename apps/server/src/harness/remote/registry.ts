@@ -14,8 +14,33 @@ export type RemotePlanner =
 		isolated: boolean;
 		/** Decisions for one client input request; absent for an isolated session. */
 		humanInput?: (report: (status: HumanInputStatus) => void) => HumanInput;
-		/** Stops or resumes the client's workflow runs; set while the session is open. */
-		control?: (action: "stop" | "resume", runId?: string) => Promise<void>;
+		/**
+		 * Keeps the session while a client request has no result at its client: call the returned
+		 * function once the result has been sent, or can never be. A session let go before that
+		 * would turn an answer into a cancellation.
+		 */
+		holdInput?: () => () => void;
+		/**
+		 * The client's link dropped unexpectedly and the session waits for it to resume: nothing
+		 * it holds has ended, but nothing can reach it either.
+		 */
+		suspended?: boolean;
+		/** The server is going down: its links closing says nothing about the client. */
+		stopping?: boolean;
+		/** The drop kept a Stop the client had not confirmed, to be delivered when it returns. */
+		keptStop?: boolean;
+		/** Heard when `suspended` changes: the link dropped, or the client came back on another. */
+		linkChanged?: () => void;
+		/**
+		 * Stops or resumes the client's workflow runs; set while the session is open. A Stop the
+		 * link's drop kept for the client's return, whether pressed while it was down or already
+		 * sent and unanswered when it dropped, resolves `held` rather than done, and one the client
+		 * did not answer in time `unconfirmed`. A Resume is refused while the link is down.
+		 */
+		control?: (
+			action: "stop" | "resume",
+			runId?: string,
+		) => Promise<void | "held" | "unconfirmed">;
 		/**
 		 * Stops the server's host tools for the next turn. That turn aborts it when it
 		 * ends without its caller stopping it, so a host tool still running, such as an

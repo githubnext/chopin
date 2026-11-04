@@ -5,15 +5,21 @@
  * the same generation-guarded storage claim a browser owner takes elsewhere.
  * The owner is the account's live browser login, because Chopin's repository
  * tools act with that login's GitHub App token, never with the link's bearer.
- * A dropped or detached link keeps its ownership for a grace period, so the
- * same account can reattach without losing it; then the ownership is cleared.
- * Ending that login, resetting the document's Planner, or any other release of
- * the stored ownership closes the link and frees the document at once.
+ * A detached link, or one that dropped with nothing to keep, keeps its ownership
+ * for a grace period, so the same account can reattach without losing it; then
+ * the ownership is cleared. A link that dropped unexpectedly while its client had
+ * workflow runs or open questions to resume keeps its ownership with no deadline:
+ * the work waits for the client, however long that takes, and only something
+ * explicit ends it. Ending that login, resetting the document's Planner, choosing
+ * another machine for it, archiving or deleting the document, or any other
+ * release of the stored ownership closes the link and frees the document at once.
  *
  * A paired machine's Planner owns through the machine's delegated login
  * instead, whose GitHub token is the machine's own; it ends when the machine
  * is revoked or must be authorized again, never with a browser sign-out.
  */
+
+import { LINK_CLOSE } from "@chopin/agent-link";
 
 import { GitHubError } from "../../github/client";
 import { attachLink } from "./registry";
@@ -51,11 +57,33 @@ export type AttachRequest = {
 
 export type AttachRefusal = {
 	ok: false;
-	code: "planner-attached" | "sign-in-required" | "repository-forbidden" | "access-revoked";
+	code:
+		| "planner-attached"
+		| "sign-in-required"
+		| "repository-forbidden"
+		| "access-revoked"
+		| "document-archived";
 	message: string;
 };
 
-export type AttachGrant = { ok: true; detach: () => void };
+export type AttachGrant = {
+	ok: true;
+	/** Lets go of the attachment; `suspended` keeps the link's sessions for the next link to resume. */
+	detach: (suspended?: boolean) => void;
+	/** Takes the sessions the account's earlier link kept while it was disconnected, if any. */
+	claim: () => AgentLink | undefined;
+	/** The link that dropped with work kept has none left, so its hold runs a grace period. */
+	lapse: () => void;
+	/**
+	 * Present when the account's earlier link still counted as attached: the grant stands for
+	 * nothing until the client's first message, a resume naming a session that earlier link
+	 * holds, shows its connection is gone. Then the earlier link is closed as the unexpected
+	 * drop it is, its work parked, and `takeover` gives the grant that takes it.
+	 */
+	takeover?: (
+		names: Array<{ session: string; requests: string[] }>,
+	) => Promise<AttachGrant | AttachRefusal>;
+};
 
 /** What a document's members are told about its Planner: only the holder's login and state. */
 export type PlannerAttachment = Session.PlannerAttachment;
@@ -72,6 +100,8 @@ type Hold = {
 	machine?: string;
 	machineId?: string;
 	link?: AgentLink;
+	/** A dropped link that kept its sessions, for the account's next link to resume or something explicit to end. */
+	parked?: AgentLink;
 	forget?: () => void;
 	timer?: ReturnType<typeof setTimeout>;
 	releaseAt?: Date;
@@ -101,6 +131,16 @@ export function notAttachedMessage(url: string, repository: string, machines = f
 }
 
 /**
+ * What `@chopin` and `invoke_planner` say while the document's Planner is disconnected: it has
+ * not stopped, its work and open Decisions are kept, and it carries on when it reconnects.
+ */
+export function disconnectedMessage(login: string | undefined): string {
+	return `This document's Planner${login ? ` (@${login})` : ""} is disconnected, so it cannot take `
+		+ "a message now. Its workflows and open Decisions are kept and answers still reach it, "
+		+ "and it carries on when it reconnects.";
+}
+
+/**
  * What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready:
  * wait a moment, or, once its backend has failed to start more than once, why it cannot.
  */
@@ -121,6 +161,8 @@ export class PlannerAttachments {
 	#graceMs: number;
 	#holds = new Map<string, Hold>();
 	#pending = new Map<string, PendingAttach>();
+	/** How many times each document ended its Planner, so a link that waited through one is refused. */
+	#endings = new Map<string, number>();
 	#queues = new Map<string, Promise<void>>();
 	#listeners = new Set<AttachmentListener>();
 
@@ -134,14 +176,30 @@ export class PlannerAttachments {
 		return this.#holds.get(channelId)?.link !== undefined;
 	}
 
-	/** Whether the client attached to the document waits on its members: an open question or run. */
+	/**
+	 * Whether the client attached to the document waits on its members: an open question or run.
+	 * So does one that disconnected, whose work is kept for it.
+	 */
 	waiting(channelId: string): boolean {
-		return this.#holds.get(channelId)?.link?.waiting ?? false;
+		let hold = this.#holds.get(channelId);
+		return hold?.link ? hold.link.waiting : hold?.parked !== undefined;
 	}
 
-	/** Whether the client attached to the document is mid-work: replying, asking, or running. */
+	/**
+	 * Whether the client attached to the document is mid-work: replying, asking, or running. A
+	 * disconnected client's kept work is mid-work, as nothing says it ended.
+	 */
 	busy(channelId: string): boolean {
-		return this.#holds.get(channelId)?.link?.busy ?? false;
+		let hold = this.#holds.get(channelId);
+		return hold?.link ? hold.link.busy : hold?.parked !== undefined;
+	}
+
+	/**
+	 * Whether the document's Planner holds work that only an explicit end may take away: its link
+	 * waits on its members, or dropped and left its work kept.
+	 */
+	keeping(channelId: string): boolean {
+		return this.waiting(channelId);
 	}
 
 	/** Waits at most `ms` for a client to attach to the document; whether one is attached then. */
@@ -181,7 +239,17 @@ export class PlannerAttachments {
 	 */
 	holding(
 		channelId: string,
-	): { userId: string; login: string; machineId?: string; attached: boolean } | undefined {
+	):
+		| {
+			userId: string;
+			login: string;
+			machineId?: string;
+			attached: boolean;
+			/** The link dropped and its work is kept for it: a hold nothing but something explicit ends. */
+			disconnected: boolean;
+		}
+		| undefined
+	{
 		let hold = this.#holds.get(channelId);
 		if (!hold) return undefined;
 		return {
@@ -189,29 +257,39 @@ export class PlannerAttachments {
 			login: hold.login,
 			...(hold.machineId !== undefined ? { machineId: hold.machineId } : {}),
 			attached: hold.link !== undefined,
+			disconnected: hold.link === undefined && hold.parked !== undefined,
 		};
 	}
 
 	/**
 	 * The Planner backend of paired machine `machineId` stops being the document's Planner, as its
 	 * owner chose another machine or it disconnected: an attached link is refused with `message`
-	 * and closed, and the ownership released without a grace period. A hold through any other
-	 * login, or one already in its grace period, is left as it is.
+	 * and closed, and the ownership released without a grace period, ending what a disconnected
+	 * link kept as well, since a person chose that. A hold through any other login, or one
+	 * already in its grace period, is left as it is.
 	 */
 	stopMachine(channelId: string, machineId: string, message: string): Promise<void> {
 		return this.#serialized(channelId, async () => {
 			let hold = this.#holds.get(channelId);
-			if (!hold?.link || hold.machineId !== machineId) return;
+			if (!(hold?.link || hold?.parked) || hold.machineId !== machineId) return;
 			this.#invalidate(hold, { ok: false, code: "access-revoked", message });
 			await this.#release(hold);
 		});
 	}
 
-	/** Whether the document's Planner is attached, held through a grace period, or free, and by whom. */
+	/**
+	 * Whether the document's Planner is attached, disconnected with its work kept, held through a
+	 * grace period, or free, and by whom.
+	 */
 	status(channelId: string): PlannerAttachment {
 		let hold = this.#holds.get(channelId);
 		if (!hold) return { state: "none" };
-		if (hold.link || !hold.releaseAt) return { state: "attached", login: hold.login };
+		if (hold.link) return { state: "attached", login: hold.login };
+		if (!hold.releaseAt) {
+			return hold.parked
+				? { state: "disconnected", login: hold.login }
+				: { state: "attached", login: hold.login };
+		}
 		return { state: "held", login: hold.login, until: hold.releaseAt.toISOString() };
 	}
 
@@ -243,6 +321,22 @@ export class PlannerAttachments {
 		let held = [...this.#holds.values()].filter(hold => hold.ownerSessionId === sessionId);
 		for (let hold of held) this.#invalidate(hold, endedRefusal(origin, hold));
 		await Promise.all(held.map(hold => this.#release(hold)));
+	}
+
+	/**
+	 * The document was archived or is being deleted: the Planner it held ends with it, whether
+	 * attached or disconnected with work kept, and nothing may attach to it.
+	 */
+	documentEnded(channelId: string): Promise<void> {
+		this.#endings.set(channelId, (this.#endings.get(channelId) ?? 0) + 1);
+		return this.#serialized(channelId, async () => {
+			let pending = this.#pending.get(channelId);
+			let hold = this.#holds.get(channelId);
+			if (pending) pending.invalidated ??= documentEndedRefusal();
+			if (!hold) return;
+			this.#invalidate(hold, documentEndedRefusal());
+			await this.#release(hold);
+		});
 	}
 
 	/** A repository writer reset the document's Planner, which already cleared its stored owner. */
@@ -282,16 +376,45 @@ export class PlannerAttachments {
 		return false;
 	}
 
+	/** The server is going down: no link withdraws a question it asked on its way out. */
+	shutdown(): void {
+		for (let hold of this.#holds.values()) {
+			hold.link?.shutdown();
+			hold.parked?.shutdown();
+		}
+	}
+
 	/** Stops every grace timer. Ownership stays in storage, which startup clears. */
 	close(): void {
-		for (let hold of this.#holds.values()) clearTimeout(hold.timer);
+		for (let hold of this.#holds.values()) {
+			clearTimeout(hold.timer);
+			hold.parked?.terminate();
+		}
 		this.#holds.clear();
 	}
 
 	async #attach(request: AttachRequest, link: AgentLink): Promise<AttachGrant | AttachRefusal> {
 		let { channelId, user } = request;
 		let held = this.#holds.get(channelId);
-		if (held && (held.link || held.userId !== user.id)) return attachedRefusal(held);
+		if (held && (held.link || held.userId !== user.id)) {
+			// The same account's client may be returning to a link whose connection died unnoticed:
+			// only its first message, a resume naming what that link holds, can say so.
+			let earlier = held.link;
+			if (
+				earlier && held.userId === user.id && link.resumable && earlier.resumable
+				&& (request.login ? held.ownerSessionId === request.login : held.machine === undefined)
+			) {
+				let ending = this.#endings.get(channelId) ?? 0;
+				return {
+					ok: true,
+					detach: () => {},
+					claim: () => undefined,
+					lapse: () => {},
+					takeover: names => this.#takeover(request, link, earlier, names, ending),
+				};
+			}
+			return attachedRefusal(held);
+		}
 		let pending: PendingAttach = {
 			login: user.login,
 			...(request.machine !== undefined ? { machine: request.machine } : {}),
@@ -304,6 +427,34 @@ export class PlannerAttachments {
 		} finally {
 			if (this.#pending.get(channelId) === pending) this.#pending.delete(channelId);
 		}
+	}
+
+	/**
+	 * A resume that names a session `earlier` holds shows its client left that link: it is closed
+	 * as the unexpected drop it is, its work parked, and this link attaches and takes it. Any
+	 * other first message, or another link already holding the document, is refused as before.
+	 */
+	#takeover(
+		request: AttachRequest,
+		link: AgentLink,
+		earlier: AgentLink,
+		names: Array<{ session: string; requests: string[] }>,
+		ending: number,
+	): Promise<AttachGrant | AttachRefusal> {
+		return this.#serialized(request.channelId, async () => {
+			// The document archived, or was deleted, while this link waited for its first message.
+			if ((this.#endings.get(request.channelId) ?? 0) !== ending) return documentEndedRefusal();
+			let current = this.#holds.get(request.channelId);
+			if (current?.link) {
+				if (current.link !== earlier || !earlier.holds(names)) return attachedRefusal(current);
+				earlier.close(LINK_CLOSE.unresponsive, "superseded");
+			}
+			let attached = await this.#attach(request, link);
+			if (attached.ok && attached.takeover) {
+				return attachedRefusal(this.#holds.get(request.channelId)!);
+			}
+			return attached;
+		});
 	}
 
 	/**
@@ -446,19 +597,60 @@ export class PlannerAttachments {
 		hold.link = link;
 		hold.forget = attachLink(hold.channelId, link);
 		this.#changed(hold.channelId);
-		return { ok: true, detach: () => this.#detached(hold, link) };
+		return {
+			ok: true,
+			detach: suspended => this.#detached(hold, link, suspended),
+			claim: () => {
+				if (hold.link !== link) return undefined;
+				let parked = hold.parked;
+				hold.parked = undefined;
+				return parked;
+			},
+			lapse: () => this.#lapsed(hold, link),
+		};
 	}
 
-	#detached(hold: Hold, link: AgentLink): void {
-		if (hold.link !== link) return;
-		hold.link = undefined;
-		hold.forget?.();
-		hold.forget = undefined;
-		if (this.#holds.get(hold.channelId) !== hold) return;
+	/** The disconnected link has nothing left to keep: its account holds the document as a detached one does. */
+	#lapsed(hold: Hold, link: AgentLink): void {
+		if (hold.parked !== link || this.#holds.get(hold.channelId) !== hold) return;
+		hold.parked = undefined;
+		if (hold.link) return;
+		this.#startGrace(hold);
+	}
+
+	#startGrace(hold: Hold): void {
 		hold.releaseAt = new Date(this.#auth.clock().getTime() + this.#graceMs);
 		hold.timer = setTimeout(() => void this.#expire(hold), this.#graceMs);
 		hold.timer.unref?.();
 		this.#changed(hold.channelId);
+	}
+
+	#detached(hold: Hold, link: AgentLink, suspended = false): void {
+		if (hold.link !== link) {
+			if (suspended) link.terminate();
+			return;
+		}
+		hold.link = undefined;
+		hold.forget?.();
+		hold.forget = undefined;
+		if (this.#holds.get(hold.channelId) !== hold) {
+			if (suspended) link.terminate();
+			return;
+		}
+		if (suspended) {
+			// Only one earlier link's sessions can wait; a link that dropped before resuming gives
+			// way to the one that kept its own. What it kept has no deadline: the account holds the
+			// document until its client returns or something explicit ends the hold.
+			if (hold.parked && hold.parked !== link) hold.parked.terminate();
+			hold.parked = link;
+		}
+		// A link that came back and dropped again before resuming leaves the earlier one's work
+		// waiting, still with no deadline.
+		if (hold.parked) {
+			this.#changed(hold.channelId);
+			return;
+		}
+		this.#startGrace(hold);
 	}
 
 	#expire(hold: Hold): Promise<void> {
@@ -493,6 +685,9 @@ export class PlannerAttachments {
 		clearTimeout(hold.timer);
 		hold.timer = undefined;
 		if (this.#holds.get(hold.channelId) !== hold) return;
+		// Whatever a dropped link kept goes with the ownership it rested on.
+		hold.parked?.terminate();
+		hold.parked = undefined;
 		this.#holds.delete(hold.channelId);
 		this.#changed(hold.channelId);
 	}
@@ -529,9 +724,20 @@ function resetRefusal(login: string): AttachRefusal {
 	};
 }
 
+function documentEndedRefusal(): AttachRefusal {
+	return {
+		ok: false,
+		code: "document-archived",
+		message: "This document was archived or deleted, so its Planner was released.",
+	};
+}
+
 function attachedRefusal(hold: Hold): AttachRefusal {
-	let message = hold.link || !hold.releaseAt
+	let message = hold.link
 		? `${hold.login} is attached as this document's Planner. A document has one Planner at a time.`
+		: !hold.releaseAt
+		? `${hold.login} is this document's Planner, and its connection dropped. Its work is kept `
+			+ "until it reconnects. A document has one Planner at a time."
 		: `${hold.login} detached from this document's Planner and holds it until `
 			+ `${hold.releaseAt.toISOString()} unless they reattach. A document has one Planner at a time.`;
 	return { ok: false, code: "planner-attached", message };

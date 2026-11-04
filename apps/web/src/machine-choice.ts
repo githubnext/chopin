@@ -27,11 +27,11 @@ export type ChoosableMachine = {
 
 /**
  * Who runs the document's Planner, as its chooser sees it: another account `held` (named), the
- * person's own account `attached` (on which of their machines, if one), the chosen machine's
- * backend `starting`, or `none`.
+ * person's own account `attached` (on which of their machines, if one) or `disconnected` with
+ * its work kept, the chosen machine's backend `starting`, or `none`.
  */
 export type PlannerRunner = {
-	state: "held" | "attached" | "starting" | "none";
+	state: "held" | "attached" | "disconnected" | "starting" | "none";
 	login: string | null;
 	machine: string | null;
 };

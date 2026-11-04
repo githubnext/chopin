@@ -154,10 +154,26 @@ collaborative state and external implementation runs are durable.
   the account's live browser login the document's Planner owner, one client per
   document; nothing else claims ownership. `@chopin` and `invoke_planner` on a
   document without one fail with `planner-not-attached`. Signing out the
-  owner's login, its expiry, or a Planner reset closes the link. A paired
-  machine's Planner backend attaches with a document-scoped credential instead
-  and owns through a cookie-less login carrying the machine's own GitHub token,
-  which only revoking the machine or its authorization ends. See
+  owner's login, its expiry, or a Planner reset closes the link. A lost
+  connection never ends work by itself: a link that offered
+  `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
+  a live run or an open question, however long it stays away, and holds any Stop
+  pressed meanwhile or still unanswered when it dropped for its client's return.
+  Run cards say the Planner is disconnected, not stopped; Decisions stay open and
+  answerable; answers and cancellations made meanwhile are delivered when the
+  same account's client resumes. No timer ends that, and `PLANNER_ATTACH_GRACE_MS`
+  leases only a detached link's ownership. Only an explicit Stop, a sign-out or
+  expiry, a Planner reset, unpairing or revoking the machine, the owner choosing
+  another machine, archiving the document, or the same account attaching with a client that
+  does not resume (a browser sign-in over a machine's parked work included) ends it; no other
+  close keeps it.
+  A server restart, graceful or not, forgets the sessions (a client's `resume` finds
+  nothing) and leaves the Decisions open, and the cards come back stopped and stay so
+  until a session is started again; a graceful shutdown posts no Chat line about it. A same-account
+  client that returns before the server noticed its old link died takes that link's work
+  over with its first `resume`. A paired machine's Planner backend attaches with a document-scoped
+  credential instead and owns through a cookie-less login carrying the machine's
+  own GitHub token, which only revoking the machine or its authorization ends. See
   [Hosted agent](docs/hosted-agent.md#remote-planner).
 - **Repository node IDs are authoritative.** Owner and repository names resolve
   GitHub requests but never replace the stored node identity.
