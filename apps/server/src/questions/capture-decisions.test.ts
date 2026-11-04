@@ -586,3 +586,32 @@ test("a repeated key whose paragraph was rewritten since is refused as a changed
 	}]);
 	await expectNothingCreated(context, input, 1);
 });
+
+test("a repeated key whose paragraph was rewritten beside an identical copy is refused, not replayed onto the copy", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	await edited(context, [{
+		op: "replace",
+		index: 1,
+		source: "Provisional onboarding, rewritten.",
+	}]);
+	await edited(context, [{ op: "insert_root", source: "Provisional onboarding." }]);
+	await expectNothingCreated(context, input, 1);
+});
+
+test("a repeated key naming another intact paragraph is still a different decision when the document has moved on", async () => {
+	let context = await setup();
+	let first = question(context.plan, "decision-one", 1);
+	let other = question(context.plan, "decision-one", 2);
+	await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [first],
+	});
+	await edited(context, [{ op: "insert_root", source: "A late note." }]);
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [other],
+	})).rejects.toThrow(SAME_KEY);
+	expect(context.plan.records.size).toBe(1);
+});

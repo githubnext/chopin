@@ -160,6 +160,18 @@ export async function applyBlockEdit(
 	args: { revision: number; operations: Parameters<typeof edit.apply>[2] },
 	options: { acting?: string; applied?: () => void; signal?: AbortSignal } = {},
 ) {
+	let result = await applyBlocks(target, args, options);
+	// The revision the edit hands back is the one the Planner works from next, so what it holds is
+	// remembered as read, for a later write that finds the document has moved on again.
+	if (result.ok && result.revision === target.plan.revision) edit.outline(target.plan);
+	return result;
+}
+
+async function applyBlocks(
+	target: DocumentRoom,
+	args: { revision: number; operations: Parameters<typeof edit.apply>[2] },
+	options: { acting?: string; applied?: () => void; signal?: AbortSignal },
+) {
 	if (options.signal?.aborted) return { ok: false as const, reason: "cancelled" };
 	if (implementationActive(target.plan)) return { ok: false as const, reason: "locked" };
 	if (args.operations.some(operation => operation.op === "detach_question")) {

@@ -130,3 +130,64 @@ test("open_decisions rebases a stale revision for an authorized Planner and refu
 		await Service.close(fixture.plan);
 	}
 });
+
+test("open_decisions at the revision edit_plan returned survives another writer's edit", async () => {
+	let fixture = await openPlan("# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.");
+	let room: DocumentRoom = {
+		id: fixture.plan.id,
+		plan: fixture.plan,
+		server: fixture.server,
+		persist: () => Service.persist(fixture.plan),
+		exclusive: action => Service.exclusive(fixture.plan, action),
+		publish: mutation => Service.publish(fixture.plan, fixture.server, fixture.plan.id, mutation),
+		anchors: () => {},
+		changes: () => {},
+	};
+	let options = { toolCallId: "edit-then-open", messages: [], context: { room } };
+	try {
+		let read = JSON.parse(
+			await documentTools.read_plan.execute!({}, options as never) as string,
+		) as { revision: number };
+		let written = JSON.parse(
+			await documentTools.edit_plan.execute!({
+				revision: read.revision,
+				operations: [{ op: "insert_root", source: "Written by the Planner." }],
+			}, options as never) as string,
+		) as { ok: boolean; revision: number };
+		expect(written.ok).toBe(true);
+		let other = Edit.apply(fixture.plan, fixture.plan.revision, [{
+			op: "insert_root",
+			source: "Typed by somebody else.",
+		}]);
+		if (!other.ok || !other.mutation) throw new Error("fixture edit failed");
+		await Service.publish(fixture.plan, fixture.server, fixture.plan.id, other.mutation);
+		expect(fixture.plan.revision).toBeGreaterThan(written.revision);
+		let digests = Room.digests(fixture.plan.document);
+		let input = (key: string, index: number) => ({
+			revision: written.revision,
+			questions: [{
+				key,
+				header: "Onboarding",
+				question: "How should onboarding work?",
+				response: "text",
+				options: [],
+				multiple: false,
+				blocks: [{ index, digest: digests[index]! }],
+			}],
+		});
+		let owner = { signal: new AbortController().signal, revalidate: async () => true };
+		let withOwner = { ...options, context: { room, owner } };
+		for (let [key, index] of [["pre-existing", 1], ["the-planners-own", 3]] as const) {
+			let result = JSON.parse(
+				await documentTools.open_decisions.execute!(
+					input(key, index),
+					withOwner as never,
+				) as string,
+			);
+			expect(result.decisions).toEqual([{ key, id: expect.any(String), status: "open" }]);
+		}
+		expect(fixture.plan.records.size).toBe(2);
+	} finally {
+		await Service.close(fixture.plan);
+	}
+});
