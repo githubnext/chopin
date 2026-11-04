@@ -1,13 +1,37 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { redacted } from "./connection";
 import { gitCredentials, type GitHubToken } from "./github-token";
 import { segment, workspace } from "./workspace";
 
 const exec = promisify(execFile);
+
+/** What git says when it reached GitHub over SSH and had nothing to authenticate with. */
+const SSH_FAILURE =
+	/Could not read from remote repository|Permission denied \(publickey\)|Host key verification failed/i;
+
+/**
+ * Why a failed git command went to SSH, when it did: the person's Git configuration rewrites the
+ * repository's https URL (`url.<base>.insteadOf`), and the service has no SSH agent. Asked of
+ * this process's Git configuration as it is, without the rules `gitCredentials` adds, and only for
+ * failures that look like SSH. Undefined when git's own message says it.
+ */
+export function sshCause(detail: string, repository: string): string | undefined {
+	if (!SSH_FAILURE.test(detail)) return undefined;
+	let url = `https://github.com/${repository}.git`;
+	let asked = spawnSync("git", ["ls-remote", "--get-url", url], {
+		encoding: "utf8",
+		timeout: 10_000,
+	});
+	let effective = asked.status === 0 ? asked.stdout.trim() : "";
+	if (!effective || effective.startsWith("https://")) return undefined;
+	return `${detail} Git rewrites ${url} to ${effective} (a url.<base>.insteadOf rule in its configuration), `
+		+ "and this service has no SSH agent or key to use it with. Remove that rule, or clone the "
+		+ "repository over https and give it with --checkout";
+}
 
 /** The checkouts `chopin connect` registered, by GitHub repository (`owner/name`) to their root. */
 export type Registered = Record<string, string>;
@@ -113,7 +137,7 @@ export function checkouts(options: { directory: string; registered: Registered }
 			return locked(path, async () => {
 				let github = await token?.();
 				if (!github) throw new Error(noCheckout(repository));
-				let env = gitCredentials(github.file);
+				let env = gitCredentials(github.file, repository);
 				let run = async (args: string[], cwd?: string) => {
 					try {
 						await exec("git", args, {
@@ -129,6 +153,7 @@ export function checkouts(options: { directory: string; registered: Registered }
 							lines.find(line => line.startsWith("fatal:")) ?? (lines.at(-1)
 								|| (error as Error).message),
 						);
+						detail = sshCause(detail, repository) ?? detail;
 						throw new Error(
 							`Couldn't ${args[0] === "clone" ? "clone" : "fetch"} ${repository} (${detail}).`,
 							{ cause: error },

@@ -5,7 +5,7 @@ import { redacted } from "./connection";
 import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
-import { type GitHubToken, githubToken } from "./github-token";
+import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
 import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
 import type { Checkouts } from "./checkouts";
 
@@ -310,6 +310,7 @@ async function servePlanner(options: {
 				credential.token,
 				worktree,
 				github,
+				repository,
 			);
 			clearTimeout(healthy);
 		} else {
@@ -417,12 +418,16 @@ async function launch(
 	token: string,
 	worktree: string,
 	github?: GitHubToken,
+	repository?: string,
 ): Promise<{ how: string; stderr?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
 			...process.env,
 			...options.env,
+			// Its own git, and its agent's, reach GitHub with this token over https, whatever
+			// the person's Git configuration says about GitHub URLs or SSH.
+			...(github && repository ? gitCredentials(github.file, repository) : {}),
 			CHOPIN_URL: options.url,
 			CHOPIN_DOCUMENT: options.document,
 			CHOPIN_PLANNER_TOKEN: token,

@@ -107,25 +107,67 @@ export async function githubToken(options: {
  * `GITHUB_TOKEN` for gh and other tools, and Git configuration, through the environment, whose
  * credential helper for github.com reads the token file, so a renewed token is used as soon as it
  * is written. Earlier helpers for github.com are cleared, so the agent's own login doesn't win;
- * nothing goes into the repository's own configuration.
+ * nothing goes into the repository's own configuration. With `repository`, the person's
+ * `url.<base>.insteadOf` rules don't send it to SSH either (see `gitCredentials`).
  */
-export function githubEnvironment(github: GitHubToken): Record<string, string> {
-	return { GH_TOKEN: github.token, GITHUB_TOKEN: github.token, ...gitCredentials(github.file) };
+export function githubEnvironment(
+	github: GitHubToken,
+	repository?: string,
+): Record<string, string> {
+	return {
+		GH_TOKEN: github.token,
+		GITHUB_TOKEN: github.token,
+		...gitCredentials(github.file, repository),
+	};
+}
+
+const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
+
+/**
+ * The Git configuration that keeps `repository`'s github.com URLs on https, where the machine's
+ * token applies, whatever the person's own Git configuration says. A `url.<base>.insteadOf` rule
+ * rewrites the longest prefix that matches, and the first of two equally long ones wins, which is
+ * the person's. So the rule here maps the repository's own URL to itself, for fetches and pushes:
+ * it is longer than any rule for `https://github.com/` or for the owner, which is what people
+ * write. The SSH forms of the URL map to https, so a checkout whose origin is `git@github.com:…`
+ * reaches GitHub with the token too, and a service has no SSH agent. Its spelling and its
+ * lowercase are both covered, as prefixes match by case. Other repositories are left as they are.
+ */
+export function githubUrlRules(repository: string): Array<[string, string]> {
+	if (!REPOSITORY.test(repository)) return [];
+	let rules: Array<[string, string]> = [];
+	let spellings = [...new Set([repository, repository.toLowerCase()])];
+	for (let spelling of spellings) {
+		let https = `https://github.com/${spelling}`;
+		rules.push([`url.${https}.insteadOf`, https], [`url.${https}.pushInsteadOf`, https]);
+		for (let ssh of [`git@github.com:${spelling}`, `ssh://git@github.com/${spelling}`]) {
+			rules.push([`url.${https}.insteadOf`, ssh], [`url.${https}.pushInsteadOf`, ssh]);
+		}
+	}
+	return rules;
 }
 
 /**
  * Git configuration, through the environment, whose only credential helper for github.com reads
  * the token in `file`, so a renewed token is used as soon as it is written and the token itself is
- * never on a command line or in a repository's configuration.
+ * never on a command line or in a repository's configuration. With `repository`, its URLs also
+ * stay on https whatever `url.<base>.insteadOf` the person has (see `githubUrlRules`). The rest of
+ * the person's Git configuration applies as it is.
  */
-export function gitCredentials(file: string): Record<string, string> {
+export function gitCredentials(file: string, repository?: string): Record<string, string> {
 	let quoted = `'${file.replaceAll("'", "'\\''")}'`;
-	return {
-		GIT_CONFIG_COUNT: "2",
-		GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
-		GIT_CONFIG_VALUE_0: "",
-		GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
-		GIT_CONFIG_VALUE_1:
+	let entries: Array<[string, string]> = [
+		["credential.https://github.com.helper", ""],
+		[
+			"credential.https://github.com.helper",
 			`!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat ${quoted}; }; f`,
-	};
+		],
+		...repository ? githubUrlRules(repository) : [],
+	];
+	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(entries.length) };
+	entries.forEach(([key, value], index) => {
+		env[`GIT_CONFIG_KEY_${index}`] = key;
+		env[`GIT_CONFIG_VALUE_${index}`] = value;
+	});
+	return env;
 }
