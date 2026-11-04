@@ -373,10 +373,21 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   given in that batch. Late submissions cannot approve withdrawn input.
 - A request has no time limit. It waits until members answer it or it is
   withdrawn: the Planner stops, its run is cancelled, the document is archived
-  or deleted, or the asker's link closes. A document on **Default machine**
+  or deleted, or the asker's link closes for good, which includes its owner's
+  sign-in ending. A lost connection is never such an end. A link that dropped
+  unexpectedly and offered `resumable-sessions` keeps its open questions and live
+  runs for its account to [resume](agent-connection.md#resuming-after-a-dropped-link)
+  however long it stays away: no timer, including `PLANNER_ATTACH_GRACE_MS`, ends
+  them. While it is away Chat shows the runs with their last status, marked
+  disconnected rather than stopped, says once that the Planner disconnected and once
+  that it came back, and the Decisions stay open and answerable, their answers kept
+  for the client. A Stop pressed meanwhile, or sent and still unanswered when the link
+  dropped, is held for the client's return (Chat says so) rather than lost; Stop on
+  a Planner that only waits on a question withdraws it, and Chat says that. A
+  document on **Default machine**
   keeps its Planner running while that Planner is replying or waits on a question
-  or a live or paused workflow run, so nobody viewing the document does not
-  withdraw it or cut its work short.
+  or a live or paused workflow run, a disconnected Planner's kept work included, so
+  nobody viewing the document does not withdraw it or cut its work short.
 - Cards an earlier Chopin closed unanswered after a fixed time stay in the
   document and in Decisions, among the resolved cards, marked
   `status="expired"`; each reads "Nobody answered this question, so the Planner
@@ -469,28 +480,58 @@ produce, is cleared under its generation and the document is claimed again.
 
 One client holds a document's Planner. While it is attached, every other
 `attach` for that document is refused with `planner-attached` (4409) and a
-message naming its GitHub login. A connection that detaches or drops keeps the
-ownership for `PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A connection that
+message naming its GitHub login. A connection that detaches, or drops with no
+workflow run or open question to keep, keeps the ownership for
+`PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A connection that
 answers none of the server's [protocol pings](agent-connection.md#pings) for
 `AGENT_CONNECTION_TIMEOUT_MS` (2 minutes by default) is closed as dropped, so a
 client whose network silently went away does not keep the document attached.
 Within the grace period the same account can attach again and keeps the same
-ownership generation, and anyone
-else is refused. When it ends, the ownership is cleared under its generation, so
-a newer owner is never released by an old timer. An attach, including a grace
+ownership generation; anyone else is refused. A link that offered
+`resumable-sessions` and dropped unexpectedly while it had runs or open questions
+instead keeps the ownership with no deadline, as the document's **disconnected**
+Planner: the same account takes back the sessions, runs and questions whenever its
+client returns, however long that takes, and nobody else can attach meanwhile.
+Nothing but an explicit act ends that hold: a sign-out or expiry of the owner's
+login, a Planner reset, revoking or unpairing the machine, the owner choosing
+another machine for the document, the document being archived, a Stop that
+withdraws the last thing it kept (which then runs the grace period as a detach
+does), or the same account attaching with a client that holds nothing to resume.
+A machine that only went quiet, or a Default machine idle period, never
+does. The grace period is an ownership lease on a connection that is no longer
+there, not a timeout on active work: it never runs while a client is attached or
+disconnected with work kept. When it ends, the ownership is cleared under its
+generation, so a newer owner is never released by an old timer. An attach, including a grace
 reattach, binds only if no sign-out, expiry, or Planner reset of its ownership
 landed while it was checking, including the eligibility checks of the sign-in
 it is about to claim with; otherwise it is refused like an attached connection would
 be closed. Attachments live in the server process; startup already clears
-every owner reference, which releases every attachment.
+every owner reference, which releases every attachment, so a server restart ends
+what a disconnected link kept, and a graceful shutdown ends it as a crash does: the
+server tells every link it is going down first, so none withdraws a question on the way
+out, and posts no Chat line about the links or the runs. Its run cards come back stopped,
+as any live card does after a restart, since Chopin no longer tracks the workflows, and
+stay so, because the client's later `runs` for a session the server no longer has are ignored; its open Decisions stay open and answerable (nobody waits
+on them any more, so an answer starts a Planner turn once one is attached); and the
+client's `resume` finds nothing, so it settles its questions as cancelled.
 
 **Who is attached.** Each room socket hears `session:planner` after
 `session:hello`, and the whole room hears it again whenever an attachment
-changes: an attach, a detach into the grace period with the time it ends, the
-grace period ending, a sign-out, a Planner reset, or the server closing a connection
+changes: an attach, a detach into the grace period with the time it ends, a drop
+that keeps work (`disconnected`, with no deadline), the grace period ending, a sign-out, a Planner reset, or the server closing a connection
 whose ownership was released. It names only the holder's GitHub login and
 state, never a machine, checkout, or token. Chat shows it as one line under the
 composer. Other harnesses never send it, and Chat then shows nothing.
+
+For a `disconnected` Planner that line names the login and says its workflows and
+Decisions are kept and that `@chopin` needs it to reconnect, with no deadline. Its live
+run cards carry `disconnected` beside the status they last reported: each reads
+**disconnected**, not running or stopped, with a still ring instead of the pulse and
+its clock held at the last report; an open card says what it last reported and what
+happens when the Planner returns. A card offers Pause, named as waiting for the Planner
+to reconnect, because Chopin holds it, and no Resume, which it cannot hold. Decisions
+stay where they were and stay answerable. **Build plan** says to reconnect the Planner, and a
+new comment is not sent to Chopin by default, until it does.
 
 While a paired machine is starting the Planner, the state is `starting`. Its
 connector reports each launch of the backend that exits before staying up to
@@ -509,8 +550,10 @@ which it takes to mean no.
 
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
-for a document with no attached client, including one within its grace period,
-is refused with `planner-not-attached` before anything is posted or queued.
+for a document with no attached client, including one within its grace period or
+disconnected with its work kept (the message says the Planner is disconnected and
+carries on when it reconnects), is refused with `planner-not-attached` before
+anything is posted or queued.
 Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
 assigns that owner, it closes the connection, releases the ownership, and refuses the
@@ -705,7 +748,8 @@ until a member answers it or it is withdrawn. A turn whose Chat reply could not
 be verified, or moved into inline decisions, fails without letting go a session
 that still owns runs or waits on a question, so that failure ends no run and
 withdraws no question. An explicit Stop still lets go a session that only waits on
-a question. The
+a question, but changes nothing for one whose workflows are paused: they and the
+question they hold open wait for Resume. The
 "was stopped after N min" line records how long the run had lasted when its
 session was let go, not a limit; run state is durable in Atomic's
 workflow journal, so runs interrupted that way can be resumed from a later

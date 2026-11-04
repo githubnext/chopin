@@ -318,10 +318,58 @@ describe("Agent connection messages", () => {
 			featuresHeader: AGENT_FEATURES_HEADER,
 			runStageDeltas: AGENT_FEATURES.runStageDeltas,
 			decisionOptionPreviews: AGENT_FEATURES.decisionOptionPreviews,
+			resumableSessions: AGENT_FEATURES.resumableSessions,
 		});
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];
 		expect(imports.every(match => match[1])).toBe(true);
+	});
+
+	it("marks a refusal as worth retrying only when the server says so", () => {
+		let transient = { type: "refused", code: "unavailable", message: "x", retry: true } as const;
+		expect(parseServerMessage(encodeMessage(transient))).toEqual({ ok: true, message: transient });
+		expect(parseServerMessage(JSON.stringify({ ...transient, retry: false }))).toMatchObject({
+			ok: false,
+		});
+		expect(
+			parseServerMessage(
+				JSON.stringify({ type: "refused", code: "planner-attached", message: "x" }),
+			),
+		)
+			.toMatchObject({ ok: true });
+	});
+
+	it("carries a client's acknowledgement of an answer by its request, and no more", () => {
+		expect(parseClientMessage(encodeMessage({ type: "input-received", request: "r1" })))
+			.toEqual({ ok: true, message: { type: "input-received", request: "r1" } });
+		for (let message of [{ type: "input-received" }, { type: "input-received", request: "" }]) {
+			expect(parseClientMessage(JSON.stringify(message))).toMatchObject({ ok: false });
+		}
+		expect(parseClientMessage(JSON.stringify({ type: "input-received", request: "r", extra: 1 })))
+			.toMatchObject({ ok: false });
+	});
+
+	it("carries the sessions a resuming client holds, each with the requests it still waits on", () => {
+		let held = [{ session: "s1", requests: ["r1", "r2"] }, { session: "s2", requests: [] }];
+		expect(AGENT_FEATURES.resumableSessions).toBe("resumable-sessions");
+		expect(parseClientMessage(encodeMessage({ type: "resume", sessions: held })))
+			.toEqual({ ok: true, message: { type: "resume", sessions: held } });
+		expect(parseServerMessage(encodeMessage({ type: "resumed", sessions: held })))
+			.toEqual({ ok: true, message: { type: "resumed", sessions: held } });
+		for (
+			let sessions of [
+				[{ session: "", requests: [] }],
+				[{ session: "s", requests: [""] }],
+				[{ session: "s", requests: Array.from({ length: 17 }, (_, i) => `r${i}`) }],
+				[{ session: "s" }],
+				[{ session: "s", requests: [], extra: true }],
+			]
+		) {
+			expect(parseClientMessage(JSON.stringify({ type: "resume", sessions }))).toMatchObject({
+				ok: false,
+				code: "malformed-message",
+			});
+		}
 	});
 
 	it("derives the link URL from a Chopin origin", () => {

@@ -461,6 +461,40 @@ export async function slowUplink(url: string, bytes: number, everyMs: number) {
 }
 
 /**
+ * A TCP proxy in front of a link server whose client side can be cut while its server side stays
+ * open and silent, as a client's network going away looks to a server that has not noticed yet.
+ */
+export async function cuttableProxy(url: string) {
+	let target = new URL(url);
+	let pairs: Array<{ client: Socket; upstream: Socket }> = [];
+	let proxy = createServer(client => {
+		let upstream = createConnection(Number(target.port), target.hostname);
+		pairs.push({ client, upstream });
+		client.on("data", chunk => upstream.write(chunk));
+		upstream.on("data", chunk => {
+			if (!client.destroyed) client.write(chunk);
+		});
+		client.on("error", () => {});
+		upstream.on("error", () => {});
+	});
+	await new Promise<void>(resolve => proxy.listen(0, "127.0.0.1", resolve));
+	return {
+		url: `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`,
+		/** The client's side ends; the server's side stays open and hears nothing more. */
+		cut() {
+			for (let { client } of pairs) client.destroy();
+		},
+		stop() {
+			for (let { client, upstream } of pairs) {
+				client.destroy();
+				upstream.destroy();
+			}
+			proxy.close();
+		},
+	};
+}
+
+/**
  * A TCP proxy to `url` that forwards both ways until `hold()`, then keeps reading
  * what the server sends, one read every `everyMs`, and forwards none of it, as a
  * buffering proxy in front of a client that went quiet. The server's queue keeps
@@ -469,12 +503,14 @@ export async function slowUplink(url: string, bytes: number, everyMs: number) {
 export async function holdingProxy(url: string, everyMs: number) {
 	let target = new URL(url);
 	let sockets: Socket[] = [];
+	let clients: Socket[] = [];
 	let timers: ReturnType<typeof setInterval>[] = [];
 	let held = false;
 	let swallowed = 0;
 	let proxy = createServer(client => {
 		let upstream = createConnection(Number(target.port), target.hostname);
 		sockets.push(client, upstream);
+		clients.push(client);
 		client.on("data", chunk => upstream.write(chunk));
 		upstream.on("data", (chunk: Buffer) => {
 			if (!held) return void client.write(chunk);
@@ -496,6 +532,10 @@ export async function holdingProxy(url: string, everyMs: number) {
 		hold() {
 			held = true;
 			for (let socket of sockets) socket.pause();
+		},
+		/** From now on what the client sends reaches the server again, though the server's bytes still do not. */
+		hearClient() {
+			for (let socket of clients) socket.resume();
 		},
 		/** Server bytes read and dropped since `hold()`. */
 		get swallowed() {
@@ -560,7 +600,8 @@ export function attach(
 	handlers: AgentHandlers,
 	token = MEMBER_TOKEN,
 ): Promise<AgentClient> {
-	return connectAgent({ url, token, document, handlers });
+	// Tests of a drop that ends everything need a client that does not ask to be resumed.
+	return connectAgent({ url, token, document, handlers, resumable: false });
 }
 
 /**

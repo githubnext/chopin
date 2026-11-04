@@ -543,6 +543,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			defaults.delete(channel.id);
 			return undefined;
 		}
+		// A Planner whose connection dropped with its work kept stays on its machine, however long
+		// that machine is away: another machine taking the document over would end that work.
+		let disconnected = options.attachments?.()?.holding(channel.id);
+		if (disconnected?.disconnected && disconnected.machineId) {
+			defaults.set(channel.id, disconnected.machineId);
+			return disconnected.machineId;
+		}
 		let own = ownPlannerMachine(channel);
 		let kept = defaults.get(channel.id);
 		if (kept && readyFor(kept, channel)) {
@@ -629,6 +636,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (!placesPlanner(channel, owner)) continue;
 			let holder = options.attachments?.()?.holding(documentId);
 			if (holder && holder.userId !== connection.owner) continue;
+			// Nor one whose Planner dropped with its work kept on another machine, until it is back.
+			if (holder?.disconnected && holder.machineId !== connection.machineId) continue;
 			await add(channel);
 		}
 		for (let documentId of inUse.keys()) {
@@ -642,7 +651,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (
 				holder
 				&& (holder.userId !== connection.owner
-					|| holder.attached && holder.machineId !== connection.machineId)
+					|| (holder.attached || holder.disconnected)
+						&& holder.machineId !== connection.machineId)
 			) continue;
 			await add(channel);
 		}
@@ -841,8 +851,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		void stopPlanners(
 			connection.machineId,
 			label => `${label} disconnected from Chopin, so it stopped running this document's Planner.`,
-			(_documentId, repositoryId) =>
-				!serves(connection, repositoryId) || others.some(value => serves(value, repositoryId)),
+			// A machine that went quiet may only be asleep: a Planner with work kept for it stays.
+			(documentId, repositoryId) =>
+				!serves(connection, repositoryId) || others.some(value => serves(value, repositoryId))
+				|| !!options.attachments?.()?.keeping(documentId),
 		).then(() => plannersMoved(connection.machineId, connection.owner, !!connection.shared)).catch(
 			error => console.error("chopin: could not stop a disconnected machine's Planner -", error),
 		);
@@ -1474,8 +1486,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * Who runs the document's Planner, as its chooser sees it, or null when Chopin does not run
 	 * Planners on machines: `held` by another account (named), `attached` through the caller's own
-	 * account (with which of their machines, if one), `starting` while the machine chosen for it,
-	 * or Default machine's for its creator, has yet to attach, else `none`.
+	 * account (with which of their machines, if one), `disconnected` when that account's Planner
+	 * dropped with its work kept for it, `starting` while the machine chosen for it, or Default
+	 * machine's for its creator, has yet to attach, else `none`.
 	 */
 	function plannerState(userId: string, channel: ChannelRecord, serving: Array<{ id: string }>) {
 		if (!options.planners || !auth.machines.durable) return null;
@@ -1486,6 +1499,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (holder?.attached) {
 			let machine = serving.some(value => value.id === holder.machineId) ? holder.machineId! : null;
 			return { state: "attached" as const, login: holder.login, machine };
+		}
+		if (holder?.disconnected) {
+			let machine = serving.some(value => value.id === holder.machineId) ? holder.machineId! : null;
+			return { state: "disconnected" as const, login: holder.login, machine };
 		}
 		let machine = plannerMachine(channel, userId);
 		if (machine && plannerReady(machine, channel.repositoryId)) {

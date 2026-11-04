@@ -19,20 +19,27 @@ export type HumanInputStatus = "answered" | "cancelled";
 export type HumanInputOptions = HostInputOptions & { block?: { index: number; digest: string } };
 
 /**
- * The requests a Planner session has made that are still waiting on the document's members. A
- * session that has one open must outlive the turn that ended while it waited: letting it go
- * would withdraw a question nobody has answered.
+ * The requests a Planner session has made that are still waiting on the document's members,
+ * and the requests whose result its client has not received. A session that has either must
+ * outlive the turn that ended while it waited: letting it go would withdraw a question nobody
+ * has answered, or take an answer away from the client that asked for it.
  */
 export class PendingInputs {
 	#open = 0;
+	#held = 0;
 	#listeners = new Set<() => void>();
 
-	/** How many requests are waiting. */
+	/** How many requests are waiting on a member's answer. */
 	open(): number {
 		return this.#open;
 	}
 
-	/** Calls `listener` whenever a request ends; returns the unsubscribe function. */
+	/** How many requests have not yet given their client a result, answered or not. */
+	held(): number {
+		return this.#held;
+	}
+
+	/** Calls `listener` whenever a request ends or its result is delivered; returns the unsubscribe function. */
 	watch(listener: () => void): () => void {
 		this.#listeners.add(listener);
 		return () => this.#listeners.delete(listener);
@@ -45,12 +52,32 @@ export class PendingInputs {
 			return await work;
 		} finally {
 			this.#open--;
-			for (let listener of this.#listeners) {
-				try {
-					listener();
-				} catch (error) {
-					console.error("[agent] a pending input watcher failed:", error);
-				}
+			this.#notify();
+		}
+	}
+
+	/**
+	 * Counts one request from now until the returned function is called: when its result has
+	 * reached the client, or never can. A request that settles is no longer waiting, but its
+	 * session still owes the client that result. Calling it again does nothing.
+	 */
+	hold(): () => void {
+		this.#held++;
+		let held = true;
+		return () => {
+			if (!held) return;
+			held = false;
+			this.#held--;
+			this.#notify();
+		};
+	}
+
+	#notify(): void {
+		for (let listener of this.#listeners) {
+			try {
+				listener();
+			} catch (error) {
+				console.error("[agent] a pending input watcher failed:", error);
 			}
 		}
 	}

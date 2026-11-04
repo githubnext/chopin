@@ -14,6 +14,7 @@ import { ConnectorError } from "./mcp";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
+import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
 import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
 import type { Checkouts } from "./checkouts";
 
@@ -322,6 +323,7 @@ async function servePlanner(options: {
 				: { renewBeforeMs: options.renewGitHubBeforeMs }),
 		});
 		let launched = Date.now();
+		let tokens: PlannerTokenFile | undefined;
 		let outcome: { how: string; stderr?: string; reason?: string };
 		let checkout = await options.checkouts.resolve(repository, async () => github).then(
 			value => value.root,
@@ -340,13 +342,23 @@ async function servePlanner(options: {
 					report(reportedAs, undefined);
 				}
 			}, healthyMs);
+			// The backend may outlive its credential when its link drops, so it can read a new one.
+			tokens = await plannerTokenFile({
+				url: options.url,
+				machine: options.machine,
+				document,
+				file: `${worktree}.planner-token`,
+				first: credential,
+			});
 			outcome = await launch(
 				{ ...options, document, cwd: checkout },
 				credential.token,
 				worktree,
 				github,
 				repository,
+				tokens,
 			);
+			await tokens?.stop();
 			clearTimeout(healthy);
 		} else {
 			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
@@ -357,7 +369,12 @@ async function servePlanner(options: {
 		// Renamed while it ran: say so by its new address.
 		document = current();
 		// What the backend printed may hold its credential, a GitHub token or an --env value.
-		let secrets = [credential.token, ...github?.secrets() ?? [], ...values];
+		let secrets = [
+			credential.token,
+			...tokens?.secrets() ?? [],
+			...github?.secrets() ?? [],
+			...values,
+		];
 		let ended = Date.now();
 		let early = ended - launched < healthyMs;
 		streak = early ? streak + 1 : 0;
@@ -499,6 +516,7 @@ async function launch(
 	worktree: string,
 	github?: GitHubToken,
 	repository?: string,
+	tokens?: PlannerTokenFile,
 ): Promise<{ how: string; stderr?: string; reason?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
@@ -511,6 +529,7 @@ async function launch(
 			CHOPIN_URL: options.url,
 			CHOPIN_DOCUMENT: options.document,
 			CHOPIN_PLANNER_TOKEN: token,
+			...(tokens ? { CHOPIN_PLANNER_TOKEN_FILE: tokens.file } : {}),
 			CHOPIN_CHECKOUT: options.cwd,
 			CHOPIN_WORKTREE: worktree,
 			...(github
@@ -526,7 +545,12 @@ async function launch(
 		detached: process.platform !== "win32",
 	});
 	// Read as each line is passed on, so a GitHub token renewed meanwhile is masked too.
-	let secrets = () => [token, ...github?.secrets() ?? [], ...Object.values(options.env ?? {})];
+	let secrets = () => [
+		token,
+		...tokens?.secrets() ?? [],
+		...github?.secrets() ?? [],
+		...Object.values(options.env ?? {}),
+	];
 	let first: string | undefined;
 	// The last lines it printed, for the one that says why it exited.
 	let tail: string[] = [];

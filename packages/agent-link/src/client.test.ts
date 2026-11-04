@@ -80,7 +80,8 @@ function fakeServer(options: { features?: string[] } = {}) {
 		upgrades,
 		asked,
 		next,
-		send: (message: ServerMessage) => socket!.send(JSON.stringify(message)),
+		send: (message: ServerMessage | string) =>
+			socket!.send(typeof message === "string" ? message : JSON.stringify(message)),
 		close: () => socket!.close(1000, "gone"),
 	};
 }
@@ -111,7 +112,9 @@ describe("Agent connection client", () => {
 	it("asks for stage deltas and splits a report too large for one frame across several", async () => {
 		let server = fakeServer({ features: ["run-stage-deltas"] });
 		let client = await connect(server, { turn() {} });
-		expect(server.asked).toEqual(["run-stage-deltas, decision-option-previews"]);
+		expect(server.asked).toEqual([
+			"run-stage-deltas, decision-option-previews, resumable-sessions",
+		]);
 		expect(client.features).toEqual(["run-stage-deltas"]);
 		let stages = Array.from({ length: 2_000 }, (_, index) => ({
 			id: `s${index}`,
@@ -200,6 +203,204 @@ describe("Agent connection client", () => {
 			{ output: { error: "The turn was aborted." }, isError: true },
 			{ output: { error: "The turn was aborted." }, isError: true },
 		]);
+	});
+
+	it("settles a question withdrawn while its link is down at once, and a resumed link does not name it", async () => {
+		let server = fakeServer({ features: ["resumable-sessions"] });
+		let attaching = connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+		});
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [] });
+		let client = await attaching;
+		stops.push(() => client.detach());
+		server.send({ type: "start", session: "s", mode: "planner" });
+		await server.next("started");
+		let controller = new AbortController();
+		let withdrawn = client.ask("s", { method: "confirm", title: "Ship?", message: "Now." }, {
+			signal: controller.signal,
+		});
+		let kept = client.ask("s", { method: "confirm", title: "Also?", message: "Now." });
+		let [first, second] = [await server.next("input-request"), await server.next("input-request")];
+		server.close();
+		let resumption = await client.resumption;
+		expect(resumption).toBeDefined();
+		controller.abort();
+		expect(await withdrawn).toMatchObject({ type: "input-result", status: "cancelled" });
+
+		let again = connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+			resume: resumption!,
+		});
+		let resume = await server.next("resume");
+		expect(resume.sessions).toEqual([{ session: "s", requests: [second.request] }]);
+		expect(first.request).not.toBe(second.request);
+		server.send({ type: "resumed", sessions: [{ session: "s", requests: [second.request] }] });
+		let next = await again;
+		stops.push(() => next.detach());
+		server.send({ type: "input-result", request: second.request, status: "answered", value: true });
+		expect(await kept).toMatchObject({ status: "answered", value: true });
+	});
+
+	/** A resumable client with a session `s` and one question asked, after its link dropped. */
+	async function dropped(handlers: AgentHandlers = { turn() {} }) {
+		let server = fakeServer({ features: ["resumable-sessions"] });
+		let attaching = connectAgent({ url: server.url, token: "t", document: "d", handlers });
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [] });
+		let client = await attaching;
+		stops.push(() => client.detach());
+		server.send({ type: "start", session: "s", mode: "planner" });
+		server.send({ type: "start", session: "gone", mode: "planner" });
+		await server.next("started");
+		await server.next("started");
+		let controller = new AbortController();
+		let asked = client.ask("s", { method: "confirm", title: "Ship?", message: "Now." }, {
+			signal: controller.signal,
+		});
+		let { request } = await server.next("input-request");
+		server.close();
+		let resumption = await client.resumption;
+		expect(resumption).toBeDefined();
+		let again = (extra: Partial<Parameters<typeof connectAgent>[0]> = {}) =>
+			connectAgent({
+				url: server.url,
+				token: "t",
+				document: "d",
+				handlers,
+				resume: resumption!,
+				...extra,
+			});
+		return { server, asked, controller, request, again };
+	}
+
+	it("acknowledges each result it is given, including one for a question it already settled", async () => {
+		let server = fakeServer({ features: ["resumable-sessions"] });
+		let attaching = connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+		});
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [] });
+		let client = await attaching;
+		stops.push(() => client.detach());
+		let asked = client.ask("s", { method: "confirm", title: "Ship?", message: "Now." });
+		let { request } = await server.next("input-request");
+		server.send({ type: "input-result", request, status: "answered", value: true });
+		expect(await asked).toMatchObject({ status: "answered" });
+		expect(await server.next("input-received")).toEqual({ type: "input-received", request });
+		server.send({ type: "input-result", request, status: "answered", value: true });
+		expect(await server.next("input-received")).toEqual({ type: "input-received", request });
+	});
+
+	it("sends no acknowledgement to a server that did not accept the feature", async () => {
+		let server = fakeServer();
+		let client = await connect(server, { turn() {} });
+		let asked = client.ask("s", { method: "confirm", title: "Ship?", message: "Now." });
+		let { request } = await server.next("input-request");
+		server.send({ type: "input-result", request, status: "answered", value: true });
+		await asked;
+		await Bun.sleep(50);
+		expect(server.received.filter(message => message.type === "input-received")).toEqual([]);
+	});
+
+	it("cancels in Chopin a question withdrawn while its link was being resumed", async () => {
+		let { server, asked, controller, request, again } = await dropped();
+		let next = again();
+		expect((await server.next("resume")).sessions).toContainEqual({
+			session: "s",
+			requests: [request],
+		});
+		controller.abort();
+		expect(await asked).toMatchObject({ status: "cancelled" });
+		server.send({ type: "resumed", sessions: [{ session: "s", requests: [request] }] });
+		stops.push(async () => (await next).detach());
+		await next;
+		expect(await server.next("input-cancel")).toEqual({ type: "input-cancel", request });
+	});
+
+	it("ends everything for good when the server sends what it cannot read, though it offered the feature", async () => {
+		let server = fakeServer({ features: ["resumable-sessions"] });
+		let attaching = connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+		});
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [] });
+		let client = await attaching;
+		let asked = client.ask("s", { method: "confirm", title: "Ship?", message: "Now." });
+		await server.next("input-request");
+		let settled = false;
+		void asked.then(() => settled = true);
+		server.send("not JSON");
+		expect(await client.closed).toMatchObject({ code: 4400 });
+		expect(await client.resumption).toBeUndefined();
+		expect(await asked).toMatchObject({ status: "cancelled" });
+		expect(settled).toBe(true);
+	});
+
+	it("destroys the sessions the server does not give back, and settles their questions as cancelled", async () => {
+		let destroyed: string[] = [];
+		let { server, asked, request, again } = await dropped({
+			turn() {},
+			destroy: message => void destroyed.push(message.session),
+		});
+		let next = again();
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [{ session: "s", requests: [] }] });
+		stops.push(async () => (await next).detach());
+		await next;
+		expect(destroyed).toEqual(["gone"]);
+		expect(await asked).toMatchObject({ request, status: "cancelled" });
+	});
+
+	it("keeps its questions pending when its resume is refused with retry, because Chopin could not decide, and settles them for every other refusal", async () => {
+		let { server, asked, request, again } = await dropped();
+		let refused = again();
+		await server.next("resume");
+		server.send({ type: "refused", code: "unavailable", message: "x", retry: true });
+		await expect(refused).rejects.toMatchObject({ code: "unavailable", retry: true });
+		let outcome: unknown;
+		void asked.then(value => outcome = value);
+		await Bun.sleep(50);
+		expect(outcome).toBeUndefined();
+		// Chopin can be asked again, and the same resumption succeeds.
+		let next = again();
+		expect((await server.next("resume")).sessions).toContainEqual({
+			session: "s",
+			requests: [request],
+		});
+		server.send({ type: "resumed", sessions: [{ session: "s", requests: [request] }] });
+		stops.push(async () => (await next).detach());
+		await next;
+		server.send({ type: "input-result", request, status: "answered", value: true });
+		expect(await asked).toMatchObject({ status: "answered", value: true });
+
+		for (
+			let code of [
+				"planner-attached",
+				"access-revoked",
+				"sign-in-required",
+				"document-archived",
+			] as const
+		) {
+			let other = await dropped();
+			let denied = other.again();
+			await other.server.next("resume");
+			other.server.send({ type: "refused", code, message: "x" });
+			await expect(denied).rejects.toMatchObject({ code, retry: false });
+			expect(await other.asked).toMatchObject({ status: "cancelled" });
+		}
 	});
 
 	it("withdraws a question whose signal is already aborted without asking it", async () => {

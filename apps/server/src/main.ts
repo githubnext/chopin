@@ -23,6 +23,7 @@ import {
 	openAgentSocket,
 } from "./harness/remote/endpoint";
 import {
+	disconnectedMessage,
 	notAttachedMessage,
 	PlannerAttachments,
 	startingMessage,
@@ -943,6 +944,9 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
  * still starting it, or how to get one.
  */
 async function plannerNotAttached(channelId: string, url: string, repository: string) {
+	if (plannerAttachments?.status(channelId).state === "disconnected") {
+		return disconnectedMessage(plannerAttachments.holder(channelId));
+	}
 	let starting = await experiments?.plannerStarting(channelId);
 	if (starting) return startingMessage(starting.login, starting.failure);
 	return notAttachedMessage(url, repository, !!experiments?.plannerMachines);
@@ -1878,6 +1882,8 @@ function drain(): Promise<void> {
 				record(err);
 			}
 		};
+		// Before the sockets close, so no link withdraws its questions on the way out.
+		plannerAttachments?.shutdown();
 		if (server) await attempt(() => server.stop(true));
 		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 		if (experimentTimer) clearInterval(experimentTimer);
@@ -2021,6 +2027,8 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 			}
 			return storage.channels.archive({ id: channelId, now });
 		});
+		// An archived document keeps no Planner, not even one whose connection dropped.
+		await plannerAttachments?.documentEnded(channelId);
 		announceChannel(result.channel);
 		void Service.announceCatalogueUnanswered(server, storage, result.channel);
 		return result;

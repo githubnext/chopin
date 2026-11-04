@@ -179,8 +179,8 @@ async function dispatchServer() {
 			return (await issued.json()).token as string;
 		}
 		/** The backend the connector starts: a credential for the document, then a link that attaches. */
-		async function backend() {
-			let raw = await rawLink(server.url, await credential());
+		async function backend(feature?: string) {
+			let raw = await rawLink(server.url, await credential(), feature);
 			raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			return raw;
 		}
@@ -952,13 +952,13 @@ describe("a document on Default machine", () => {
 	});
 
 	/** A Default machine Planner, attached and running a session, on a document nobody has open. */
-	async function unwatched() {
+	async function unwatched(resumable = false) {
 		let dispatch = await dispatchServer();
 		let { machine, visit, channel, server, runtime, open } = dispatch;
 		let laptop = await machine("member", "U_member", "laptop");
 		await visit();
 		await laptop.poll([]);
-		let link = await laptop.backend();
+		let link = await laptop.backend(resumable ? "resumable-sessions" : undefined);
 		await link.next("attached");
 		let room = await hostInputRoom();
 		cleanups.push(room.close);
@@ -1023,6 +1023,57 @@ describe("a document on Default machine", () => {
 		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
 		expect(await idle(2_000)).toBe(false);
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+	});
+
+	it("keeps a Planner whose machine went quiet, with its work, however long it stays away, and offers its document to no other machine", async () => {
+		let { link, laptop, idle, machine, channel, runtime, server, url, choice } = await unwatched(
+			true,
+		);
+		link.send({
+			type: "runs",
+			session: "planner-session",
+			active: ["root"],
+			paused: [],
+			cards: [],
+		});
+		await Bun.sleep(50);
+		let desk = await machine("member", "U_member", "desk");
+		// The machine sleeps: its backend's link and its connector's connection both end.
+		link.socket.close();
+		await link.closed;
+		await laptop.disconnect();
+		await Bun.sleep(100);
+		expect(server.attachments.status(channel.id)).toEqual({
+			state: "disconnected",
+			login: "member",
+		});
+		// What the document's machine menu reads says the same, not that a Planner is starting.
+		expect((await choice("member")).planner)
+			.toEqual({ state: "disconnected", login: "member", machine: laptop.id });
+		// Hours past the idle period, with nobody viewing: nothing stops it, and no other machine
+		// of its owner is asked to take the document over.
+		for (let ms of [PLANNER_IDLE_MS + 60_000, PLANNER_IDLE_MS * 4, PLANNER_IDLE_MS * 40]) {
+			await runtime.sweep();
+			expect(await idle(ms)).toBe(false);
+			expect(await desk.poll([])).toEqual({ waiting: true });
+			expect(server.attachments.status(channel.id)).toEqual({
+				state: "disconnected",
+				login: "member",
+			});
+		}
+		// It wakes: its connector is asked for the document again, and its backend resumes.
+		await laptop.reconnect();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let back = await laptop.backend("resumable-sessions");
+		await back.next("attached");
+		back.send({ type: "resume", sessions: [{ session: "planner-session", requests: [] }] });
+		expect(await back.next("resumed")).toEqual({
+			type: "resumed",
+			sessions: [{ session: "planner-session", requests: [] }],
+		});
 	});
 
 	it("keeps the Planner while one of its workflow runs is live or paused", async () => {

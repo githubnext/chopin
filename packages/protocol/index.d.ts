@@ -106,15 +106,18 @@ export declare namespace Session {
 	};
 
 	/**
-	 * Who holds this document's remote Planner. `held` is a client that detached or
-	 * dropped and keeps the document until `until` (ISO 8601) unless it reattaches.
-	 * `starting` is a paired machine of `login`'s asked to start it, which has yet to
+	 * Who holds this document's remote Planner. `held` is a client that detached and
+	 * keeps the document until `until` (ISO 8601) unless it reattaches. `disconnected`
+	 * is a client whose connection dropped while it had workflow runs or open questions
+	 * Chopin keeps for it: there is no deadline, and it resumes them when it reconnects
+	 * (see docs/agent-connection.md). `starting` is a paired machine of `login`'s asked to start it, which has yet to
 	 * attach; with `failure`, its backend has exited before attaching more than once in a
 	 * row. Only the GitHub login is named, never its machine or checkout.
 	 */
 	export type PlannerAttachment =
 		| { state: "attached"; login: string }
 		| { state: "held"; login: string; until: string }
+		| { state: "disconnected"; login: string }
 		| { state: "starting"; login: string; failure?: PlannerStartFailure }
 		| { state: "none" };
 
@@ -133,7 +136,7 @@ export declare namespace Session {
 
 	/**
 	 * Sent only under `HARNESS=remote`: once after `Hello`, then to the whole room
-	 * whenever a client attaches, detaches, its grace period ends, or its ownership
+	 * whenever a client attaches, detaches or disconnects, its grace period ends, or its ownership
 	 * is released by a sign-out, a Planner reset or the server closing its link, and
 	 * whenever a machine is asked to start it or stops being asked.
 	 * Other harnesses never send it.

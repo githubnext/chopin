@@ -985,6 +985,71 @@ test("an explicit Stop, and the document closing, still end a Planner that waits
 	}
 });
 
+test("an explicit Stop leaves a Planner whose workflows are paused and whose question is open as it was, so the workflows can still resume", async () => {
+	let { context, user, planner, withdrawn, status } = await askingPlanner("settled");
+	let ws = { data: { handle: "ana" } } as unknown as Socket;
+	await Chat.invoke(context, user, "Plan it");
+	await context.chat.running;
+	await tick();
+	expect(status()).toEqual(["open"]);
+	// A run it owns was paused, and untilUnpaused holds its question open with it.
+	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
+	await tick();
+	let spoken = context.chat.entries.length;
+
+	await Chat.abort(context, ws);
+	expect(planner.calls).not.toContain("destroy");
+	expect(withdrawn.signal.aborted).toBe(false);
+	expect(context.chat.retained).toBeDefined();
+	expect(status()).toEqual(["open"]);
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["paused"]);
+	expect(context.chat.entries).toHaveLength(spoken);
+
+	await Chat.resume(context, ws);
+	expect(planner.calls.at(-1)).toBe("resume");
+	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed the Planner's workflows.");
+});
+
+test("a turn the Planner's dropped link ended keeps the session whose client may return, and lets it go for good once the link is given up", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let began = Math.floor(Date.now() / 1000) - 31 * 60;
+	let planner = runningSession({
+		active: ["run-1"],
+		paused: [],
+		cards: [{ ...card("waiting"), started: began, updated: began }],
+	});
+	let suspended = true;
+	Object.assign(planner.session, { suspended: () => suspended });
+	planner.session.stream = async () => {
+		throw new Error("The attached Planner disconnected during the turn.");
+	};
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	await tick();
+	let said = () => context.chat.entries.map(entry => entry.text);
+	expect(said()).toContain(
+		"The Planner's connection dropped during this reply. Its workflows and open Decisions are kept; ask again once it has reconnected.",
+	);
+	expect(planner.calls).not.toContain("destroy");
+	expect(context.chat.retained).toBeDefined();
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["waiting"]);
+	expect(said().some(text => text.includes("was stopped"))).toBe(false);
+
+	// The client never came back: the link's end reports its runs stopped, and the session goes.
+	suspended = false;
+	let ended = Math.floor(Date.now() / 1000);
+	planner.set({
+		active: [],
+		paused: [],
+		cards: [{ ...card("stopped"), started: began, updated: ended, ended }],
+	});
+	for (let attempt = 0; attempt < 10 && context.chat.retained; attempt++) await tick();
+	expect(context.chat.retained).toBeUndefined();
+	expect(planner.calls.at(-1)).toBe("destroy");
+	expect(context.chat.runs?.map(run => run.status)).toEqual(["stopped"]);
+});
+
 test("a run that outlives a refused reply still ends as finished, never as stopped", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let began = Math.floor(Date.now() / 1000) - 31 * 60;
@@ -1146,7 +1211,7 @@ test("Stop can retry when pausing a retained Planner's workflows fails", async (
 	await Chat.abort(context, ws);
 	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
 	expect(context.chat.entries.map(entry => entry.text).slice(-2)).toEqual([
-		"@ana stopped the turn.",
+		"@ana asked to stop the Planner, but its workflows could not be paused.",
 		"@ana stopped the Planner and paused its workflows.",
 	]);
 });
