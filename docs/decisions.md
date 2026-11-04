@@ -28,7 +28,11 @@ Planner first writes provisional prose, then supplies the current document revis
 key and related block addresses for each card. Written responses use `response: "text"`,
 `options: []`, and `multiple: false`; choices retain their existing form. Cards appear beside
 their primary passage and the tool returns immediately. Retrying a key reuses the same card,
-including after it has been saved or discarded. Stop Planner does not withdraw committed cards.
+including after it has been saved or discarded. When the document changed after the
+Planner read it, each related block that still carries the digest it read keeps its
+place and is found where it now stands; a block that changed or became ambiguous
+refuses the batch, so the Planner reads again, and nothing is created for a refused
+batch. Stop Planner does not withdraw committed cards.
 
 Each Save queues an update to the related prose. Decisions sharing a passage share its write
 scope, so later answers preserve earlier saved answers. Source, updated anchors and receipts

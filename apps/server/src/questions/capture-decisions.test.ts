@@ -1,6 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { ULID } from "@chopin/dialect";
 import * as Question from "@chopin/question";
+import * as Edit from "../plan/edit";
 import * as Room from "../plan/room";
 import * as Plan from "../plan/service";
 import { openPlan } from "../testing/plan";
@@ -124,7 +125,7 @@ test("capture replay survives Save and restart without rebinding the saved card"
 	expect(context.plan.records.get(id)!.followUp).toEqual(captured);
 });
 
-test("mixed replay and new capture requires the current revision and reuses a paragraph scope", async () => {
+test("mixed replay and new capture after the document moved on rebases and reuses a paragraph scope", async () => {
 	let context = await setup();
 	let firstQuestion = question(context.plan, "decision-one");
 	let first = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
@@ -135,17 +136,89 @@ test("mixed replay and new capture requires the current revision and reuses a pa
 		revision: 0,
 		questions: [firstQuestion, question(context.plan, "decision-two")],
 	};
-	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, input))
-		.rejects.toThrow(/changed/);
-	expect(context.plan.records.size).toBe(1);
-	let result = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
-		...input,
-		revision: first.revision,
-	});
+	expect(first.revision).toBeGreaterThan(input.revision);
+	let result = await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
 	expect(result.decisions[0]!.id).toBe(first.decisions[0]!.id);
 	expect(context.plan.records.size).toBe(2);
 	let scopes = result.decisions.map(item => context.plan.records.get(item.id)!.followUp!.scope);
 	expect(scopes[0]).toBe(scopes[1]);
+});
+
+async function rewrite(context: Awaited<ReturnType<typeof setup>>, source: string) {
+	let outcome = Edit.apply(context.plan, context.plan.revision, [{ op: "replace_root", source }]);
+	if (!outcome.ok) throw new Error("fixture edit failed");
+	if (outcome.mutation) {
+		await Plan.publish(context.plan, context.server, context.plan.id, outcome.mutation);
+	}
+}
+
+test("a capture read before an unrelated edit still lands beside its paragraph, once, however often it is retried", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await rewrite(
+		context,
+		"# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.\n\nA late note.",
+	);
+	expect(context.plan.revision).toBeGreaterThan(input.revision);
+	let first = await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	let id = first.decisions[0]!.id;
+	expect(first.revision).toBe(context.plan.revision);
+	expect(
+		Room.matchesAnchor(
+			context.plan.document,
+			context.plan.records.get(id)!.followUp!.target[0]!,
+			1,
+		),
+	)
+		.toBe(true);
+	expect(Room.questionnaireIndex(context.plan.document, id)).toBe(2);
+	let again = await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	expect(again.decisions).toEqual(first.decisions);
+	expect(context.plan.records.size).toBe(1);
+	expect(context.plan.questions.open.size).toBe(1);
+});
+
+test("a capture read before a paragraph moved follows the paragraph by its digest", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await rewrite(
+		context,
+		"# Draft\n\nA new introduction.\n\nProvisional onboarding.\n\nProvisional collaboration.",
+	);
+	let result = await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	let id = result.decisions[0]!.id;
+	expect(
+		Room.matchesAnchor(
+			context.plan.document,
+			context.plan.records.get(id)!.followUp!.target[0]!,
+			2,
+		),
+	)
+		.toBe(true);
+	expect(Room.questionnaireIndex(context.plan.document, id)).toBe(3);
+});
+
+test("a capture whose paragraph changed since it was read is refused and creates nothing", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await rewrite(
+		context,
+		"# Draft\n\nProvisional onboarding, rewritten.\n\nProvisional collaboration.",
+	);
+	let frames = context.broadcasts.length;
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, input))
+		.rejects.toThrow("The document changed; read it again before opening a decision");
+	expect(context.plan.records.size).toBe(0);
+	expect(context.plan.questions.open.size).toBe(0);
+	expect(context.broadcasts).toHaveLength(frames);
+	let fresh = {
+		...input,
+		revision: context.plan.revision,
+		questions: [question(context.plan, "decision-one")],
+	};
+	let result = await Capture.captureDecisions(context.plan, context.server, context.plan.id, fresh);
+	expect(result.decisions).toHaveLength(1);
+	expect(context.plan.records.size).toBe(1);
 });
 
 test.each(["empty", "heading", "stale-block", "duplicate-key", "too-many", "nontext-key"])(
