@@ -1114,8 +1114,16 @@ export function matchesAnchor(target: Document, anchor: Anchor, index: number): 
  * identical paragraphs give no way to tell which was meant. The rest are kept
  * and marked orphaned rather than guessed at: a relationship pointing at the
  * wrong passage is worse than one admitting it is lost.
+ *
+ * A match by digest alone may be an identical copy of the block the anchor was
+ * made for, and re-expressing it as a position hides that. With `marking`, such
+ * an anchor says so with `byDigest`, and an anchor already saying so keeps it.
  */
-export function rebase(target: Document, anchors: Anchor[]): Anchor[] {
+export function rebase(
+	target: Document,
+	anchors: Anchor[],
+	options: { marking?: boolean } = {},
+): Anchor[] {
 	let hashes = digests(target);
 	let keys: string[] = [];
 	target.editor.getEditorState().read(() => {
@@ -1136,12 +1144,20 @@ export function rebase(target: Document, anchors: Anchor[]): Anchor[] {
 		if (key) {
 			let index = keys.indexOf(key);
 			let hash = hashes[index];
-			if (hash) return anchorForKey(target, key, hash);
+			if (hash) {
+				return {
+					...anchorForKey(target, key, hash),
+					...(options.marking && anchor.byDigest ? { byDigest: true as const } : {}),
+				};
+			}
 		}
 
 		let matches = byDigest.get(anchor.digest) ?? [];
 		return matches.length === 1
-			? anchorForKey(target, matches[0], anchor.digest)
+			? {
+				...anchorForKey(target, matches[0], anchor.digest),
+				...(options.marking ? { byDigest: true as const } : {}),
+			}
 			: { ...anchor, epoch: target.epoch, orphaned: true as const };
 	});
 }
