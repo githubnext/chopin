@@ -102,10 +102,8 @@ test("open_decisions rebases a stale revision for an authorized Planner and refu
 		}],
 	};
 	try {
-		let edited = Edit.apply(fixture.plan, 0, [{
-			op: "replace_root",
-			source: "# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.\n\nA late note.",
-		}]);
+		await documentTools.read_plan.execute!({}, options as never);
+		let edited = Edit.apply(fixture.plan, 0, [{ op: "insert_root", source: "A late note." }]);
 		if (!edited.ok || !edited.mutation) throw new Error("fixture edit failed");
 		await Service.publish(fixture.plan, fixture.server, fixture.plan.id, edited.mutation);
 		expect(fixture.plan.revision).toBeGreaterThan(input.revision);

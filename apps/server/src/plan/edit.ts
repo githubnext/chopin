@@ -120,10 +120,28 @@ export function source(plan: Plan): string {
 }
 
 /** Describe the top-level blocks an agent can address. */
-export function outline(plan: Plan, value = source(plan)): Block[] {
-	let blocks = parse(value).children.map((node, index) => describe(node, index));
+export function outline(plan: Plan, value?: string): Block[] {
+	let blocks = describeBlocks(value ?? source(plan));
+	if (value === undefined) readAnchors.set(blocks, room.anchorsOfBlocks(plan.document));
 	remember(plan, plan.revision, blocks);
 	return blocks;
+}
+
+function describeBlocks(value: string): Block[] {
+	return parse(value).children.map((node, index) => describe(node, index));
+}
+
+/** The live blocks each remembered outline described, so a later write can tell which block was read. */
+const readAnchors = new WeakMap<Block[], Array<room.Anchor | undefined>>();
+
+/** What the agent saw at `revision`: its blocks, and the live block each one was. */
+export function read(
+	plan: Plan,
+	revision: number,
+): { blocks: Block[]; anchors: Array<room.Anchor | undefined> } | undefined {
+	let blocks = plan.outlines.get(revision);
+	let anchors = blocks && readAnchors.get(blocks);
+	return blocks && anchors ? { blocks, anchors } : undefined;
 }
 
 /**
@@ -251,7 +269,8 @@ export function apply(plan: Plan, revision: number, operations: Operation[]): Re
 		detached,
 		mutation,
 		revision: plan.revision,
-		blocks: outline(plan),
+		// Not remembered: the revision has not moved yet, and what was read at it must stay as read.
+		blocks: describeBlocks(source(plan)),
 		touched: children.flatMap((node, index) => carried.has(node) ? [] : [index]),
 		changes: describeChanges(root.children, children, operations),
 	};
@@ -337,7 +356,8 @@ export function replace(plan: Plan, revision: number, nextSource: string): Resul
 		detached: [],
 		mutation,
 		revision: plan.revision,
-		blocks: outline(plan),
+		// Not remembered: the revision has not moved yet, and what was read at it must stay as read.
+		blocks: describeBlocks(source(plan)),
 		touched: children.flatMap((node, index) => carried.has(node) ? [] : [index]),
 		changes: describeReplacement(root.children, children),
 	};

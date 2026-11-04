@@ -75,7 +75,7 @@ import type { Root, RootContent } from "mdast";
 import type { Decision, Questionnaire, Registry } from "@chopin/dialect";
 import type { Plan } from "@chopin/protocol";
 
-type Anchor = Plan.Anchor;
+export type Anchor = Plan.Anchor;
 type Passage = Plan.Passage;
 
 /** Awareness is relayed, never interpreted here, so a no-op provider suffices. */
@@ -1004,6 +1004,34 @@ export function anchorAt(target: Document, index: number, hash: string): Anchor 
 		key = addressable()[index]?.getKey();
 	});
 	return anchorForKey(target, key, hash);
+}
+
+/** An anchor for every addressable block, in order, with none where a block has no collaborative identity. */
+export function anchorsOfBlocks(target: Document): Array<Anchor | undefined> {
+	let hashes = digests(target);
+	let keys: string[] = [];
+	target.editor.getEditorState().read(() => {
+		keys = addressable().map(node => node.getKey());
+	});
+	return hashes.map((hash, index) => {
+		try {
+			return anchorForKey(target, keys[index], hash);
+		} catch {
+			return undefined;
+		}
+	});
+}
+
+/** The index of the block an anchor still names, whatever that block now says. */
+export function blockNamedBy(target: Document, anchor: Anchor): number | undefined {
+	let key = resolveAnchor(target, anchor);
+	if (!key) return undefined;
+	let keys: string[] = [];
+	target.editor.getEditorState().read(() => {
+		keys = addressable().map(node => node.getKey());
+	});
+	let index = keys.indexOf(key);
+	return index < 0 ? undefined : index;
 }
 
 /** A questionnaire's index in the canonical block address space. */

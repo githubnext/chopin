@@ -33,9 +33,12 @@ question, response kind and choices (apart from options a person added since) an
 must match. A key that already holds a different decision refuses the whole batch with a message
 naming the key, so a new question is never answered with an unrelated card; nothing is created
 or replaced. A discarded card is never recreated by its key. When the document changed after
-the Planner read it, each related block is found where it now stands only if exactly one block
-carries the digest the Planner read. A block that changed, or that another block now repeats,
-refuses the batch, so the Planner reads again, and nothing is created for a refused batch.
+the Planner read it, each related block is matched against the revision the Planner read, not the
+document as it stands: the digest must have named exactly one block then, and that same block
+must still carry it, now alone, wherever it stands. A paragraph rewritten since, one an identical
+copy now repeats, one that was already repeated when it was read, and a read the server no longer
+retains each refuse the batch with a message saying the document changed and to read it again,
+rather than anchoring a card beside a twin. Nothing is created for a refused batch.
 Stop Planner does not withdraw committed cards.
 
 Each Save queues an update to the related prose. Decisions sharing a passage share its write

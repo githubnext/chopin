@@ -84,7 +84,7 @@ export function documentSnapshot(
 		document,
 		revision: plan.revision,
 		source,
-		blocks: edit.outline(plan, source),
+		blocks: edit.outline(plan),
 		/*
 		 * Accepted threads only, which only the earlier lifecycle made.
 		 *
