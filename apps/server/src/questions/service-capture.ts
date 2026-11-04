@@ -114,7 +114,7 @@ export async function captureDecisions(
 			blocks: input.questions.map(question => question.blocks),
 		},
 		revision: input.revision,
-		capture: { identities, signal },
+		capture: { identities, keys: input.questions.map(question => question.key), signal },
 	});
 	return {
 		revision: plan.revision,

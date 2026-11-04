@@ -124,9 +124,11 @@ describe("openPlannerSession", () => {
 				let [card] = await room.cards(1);
 				await clock.pass(31 * 60 * 1_000);
 				expect(room.plan.records.get(card!.id)?.status).toBe("open");
+				expect(session.inputs?.open()).toBe(1);
 				room.controller.abort();
 				expect(await asked).toBe(false);
 				expect(room.plan.records.get(card!.id)?.status).toBe("cancelled");
+				expect(session.inputs?.open()).toBe(0);
 			} finally {
 				clock.restore();
 			}
@@ -176,6 +178,7 @@ describe("openPlannerSession", () => {
 		if (!opened.ok) throw new Error("Planner unavailable");
 		expect(remotePlanner(sessionId)).toMatchObject({ channelId: "channel", isolated: true });
 		expect(remotePlanner(sessionId)!.humanInput).toBeUndefined();
+		expect(opened.value.inputs).toBeUndefined();
 		expect(opened.value.pauseRuns).toBeUndefined();
 		expect(opened.value.activeTools).toEqual(BACKGROUND_TOOL_NAMES.heading);
 		await opened.value.stream("prompt", new AbortController().signal);
@@ -363,8 +366,10 @@ describe("Planner workspaces", () => {
 			let [card] = await room.cards(1);
 			await clock.pass(31 * 60 * 1_000);
 			expect(room.plan.records.get(card!.id)?.status).toBe("open");
+			expect(opened.value.inputs?.open()).toBe(1);
 			await room.answer(card!.id, [0]);
 			expect(await asked).toBe(true);
+			expect(opened.value.inputs?.open()).toBe(0);
 		} finally {
 			clock.restore();
 			await opened.value.destroy();

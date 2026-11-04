@@ -18,7 +18,7 @@ import {
 	resumeOwnedRuns,
 	untilUnpaused,
 } from "./atomic/full";
-import { createHumanInput } from "./atomic/human-input";
+import { createHumanInput, PendingInputs } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
 
@@ -60,6 +60,11 @@ export type PlannerSession = {
 	activeTools?: readonly string[];
 	stream: (prompt: string, abortSignal: AbortSignal) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
+	/**
+	 * The questions this session asked that no member has answered yet. A session with one open
+	 * is kept past a turn that ended without its answer, as one that owns a workflow run is.
+	 */
+	inputs?: Pick<PendingInputs, "open" | "watch">;
 	/** Workflow runs this session owns; only atomic and remote Planner sessions report them. */
 	runs?: () => PlannerRuns | undefined;
 	/** Subscribes to run changes; returns the unsubscribe function. */
@@ -163,12 +168,15 @@ export async function openPlannerSession(
 			: undefined;
 		let planner: FullPlanner | undefined;
 		let listeners = new Set<(runs: PlannerRuns) => void>();
+		let inputs = new PendingInputs();
 		if (workspace) {
 			planner = {
 				cwd: workspace.cwd,
 				humanInput: createHumanInput(
 					channel.room,
 					(runId, signal) => untilUnpaused(planner!, runId, signal),
+					undefined,
+					inputs,
 				),
 				onRuns: runs => {
 					for (let listener of listeners) listener(runs);
@@ -190,6 +198,7 @@ export async function openPlannerSession(
 						channel.room,
 						(runId, signal) => untilUnpaused(held, runId, signal),
 						report,
+						inputs,
 					);
 				held.onRuns = runs => {
 					for (let listener of listeners) listener(runs);
@@ -270,6 +279,7 @@ export async function openPlannerSession(
 					return planner?.activeTools ?? remote?.activeTools ?? fixedTools;
 				},
 				...runControl,
+				...(planner || remote && !job ? { inputs } : {}),
 				stream: (prompt, abortSignal) => {
 					// The remote turn aborts it when the turn ends or the link drops mid-tool.
 					let hostTools = remote ? new AbortController() : undefined;

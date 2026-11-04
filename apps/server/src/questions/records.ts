@@ -24,6 +24,15 @@ export function isOpenStatus(status: Record["status"]): boolean {
 	return status === "open" || status === "reopened";
 }
 
+/**
+ * Whether a card still holds the question it was made for: it waits on a person or carries their
+ * answer. A discarded, cancelled or expired card no longer does, so repeating its key opens
+ * nothing a person will see.
+ */
+export function holdsQuestion(status: Record["status"]): boolean {
+	return isOpenStatus(status) || status === "answered";
+}
+
 /** Fill only fields that did not exist on stored Planner questionnaires. */
 export function normalizeRecord(raw: unknown): Record {
 	let value = object(raw);

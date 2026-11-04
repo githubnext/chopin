@@ -8,6 +8,7 @@ import * as Plan from "../../plan/service";
 import * as Room from "../../plan/room";
 import * as Edit from "../../plan/edit";
 import { hostInputRoom, laterTimers } from "../../testing/decisions";
+import { createHumanInput, PendingInputs } from "./human-input";
 import type { QuestionParams } from "@bastani/atomic";
 
 let cleanups: Array<() => Promise<void>> = [];
@@ -395,6 +396,31 @@ test("host input open past half an hour is withdrawn when its Planner stops", as
 	} finally {
 		clock.restore();
 	}
+});
+
+test("a session counts a request as open from its call until a member answers it or it is withdrawn", async () => {
+	let f = await fixture();
+	let pending = new PendingInputs();
+	let input = createHumanInput(f.room, undefined, undefined, pending);
+	let ended = 0;
+	pending.watch(() => ended++);
+	let confirmed = input.confirm("Confirm", "Proceed?", f.options);
+	expect(pending.open()).toBe(1);
+	let [card] = await f.cards(1);
+	expect(pending.open()).toBe(1);
+	await f.answer(card!.id, [0]);
+	expect(await confirmed).toBe(true);
+	expect(pending.open()).toBe(0);
+	expect(ended).toBe(1);
+
+	let withdrawn = new AbortController();
+	let questionnaire = input.questionnaire(params, { ...f.options, signal: withdrawn.signal });
+	expect(pending.open()).toBe(1);
+	await f.cards(3);
+	withdrawn.abort();
+	expect(await questionnaire).toEqual({ answers: [], cancelled: true });
+	expect(pending.open()).toBe(0);
+	expect(ended).toBe(2);
 });
 
 test("a workflow card shows its question as asked, without run or stage ids", async () => {

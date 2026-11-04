@@ -47,7 +47,11 @@ On every harness, Chat buffers each complete Planner text message and checks it
 with the deployment's decisions classifier before publication. Requests for input
 are withheld and the same session gets one continuation to create inline cards.
 A continuation that repeats cards an earlier turn already created, by their stable
-keys, counts as having created them.
+keys, counts as having created them only while those cards still hold their question:
+open, reopened or answered. A key repeated for a different question or passage is
+refused, and a card a person discarded, or that was cancelled or expired, counts for
+nothing and is never recreated, so the turn still reports that it could not move its
+questions.
 Completed tools and the original request are not replayed. Failed, missing,
 malformed or interrupted checks never publish unchecked prose; uncertain judgments
 also withhold it. Chat prose therefore arrives after validation rather than token
@@ -695,9 +699,13 @@ when the server stopped comes back stopped. A stored run's stages go when its
 card does. Ended rows stay until the next workflow starts in the
 document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
-binding ends, or when the document closes. A turn whose Chat reply could not
+binding ends, or when the document closes. A session that waits on a question
+it asked, such as an `ask_user_question` with no reported run, is kept the same way
+until a member answers it or it is withdrawn. A turn whose Chat reply could not
 be verified, or moved into inline decisions, fails without letting go a session
-that still owns runs, so that failure ends no run and withdraws no question. The
+that still owns runs or waits on a question, so that failure ends no run and
+withdraws no question. An explicit Stop still lets go a session that only waits on
+a question. The
 "was stopped after N min" line records how long the run had lasted when its
 session was let go, not a limit; run state is durable in Atomic's
 workflow journal, so runs interrupted that way can be resumed from a later
