@@ -720,14 +720,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return undefined;
 	}
 	/**
-	 * A document stops being used once nobody has had it open, and its Planner has waited on no
-	 * question or workflow run, for PLANNER_IDLE_MS: the machine Default machine gave its Planner
-	 * stops running it. A question never times out by this route while its Planner waits on it.
+	 * A document stops being used once nobody has had it open, and its Planner has been replying
+	 * to nobody and waiting on no question or workflow run, for PLANNER_IDLE_MS: the machine
+	 * Default machine gave its Planner stops running it. Work under way and a question never
+	 * time out by this route, however long they take.
 	 */
 	async function plannersIdle() {
 		let now = auth.clock().getTime();
 		for (let [documentId, seen] of inUse) {
-			if (options.documentOpen?.(documentId) || options.attachments?.()?.waiting(documentId)) {
+			let attached = options.attachments?.();
+			if (
+				options.documentOpen?.(documentId) || attached?.waiting(documentId)
+				|| attached?.busy(documentId)
+			) {
 				inUse.set(documentId, now);
 				continue;
 			}

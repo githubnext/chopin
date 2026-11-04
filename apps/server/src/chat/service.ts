@@ -48,7 +48,7 @@ import { isChannelId } from "../channels/id";
 import { broadcast, fail, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
-import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
+import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 import { runDuration } from "./run-duration";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
@@ -317,6 +317,8 @@ export type Chat = {
 	owner?: { sessionId: string; generation: number; revision: number };
 	/** User-facing reason an in-flight turn was interrupted. */
 	interruption?: string;
+	/** Decisions the running turn opened or repeated through `open_decisions`, new or not. */
+	captured?: Set<string>;
 	/** Backscroll entries already represented by an opening session's bootstrap. */
 	bootstrapEntries?: Set<string>;
 	/** References available to `read_reference` in the active SDK session. */
@@ -2218,6 +2220,7 @@ async function run(
 	// Where this turn's own messages begin, so its last word can be found again.
 	let firstEntry = chat.entries.length;
 	let failed = false;
+	let replyOnly = false;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -2257,6 +2260,7 @@ async function run(
 		}
 		: undefined;
 	chat.messageIds = new Map();
+	if (!jobTurn) chat.captured = new Set();
 	if (jobTurn) {
 		chat.job = jobTurn.job;
 		chat.jobOutput = undefined;
@@ -2331,6 +2335,11 @@ async function run(
 					[...plan.records.values()].filter(record =>
 						!existingDecisions.has(record.id) && record.origin === "planner" && !!record.followUp
 					).length,
+				keptDecisions: () =>
+					[...plan.records.values()].filter(record =>
+						existingDecisions.has(record.id) && chat.captured?.has(record.id)
+						&& record.origin === "planner" && !!record.followUp
+					).length,
 				publish: part => translate(context, part),
 			});
 		}
@@ -2350,6 +2359,8 @@ async function run(
 		console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
 		failed = !turnController.signal.aborted || !!chat.interruption;
+		// A reply the check refused ended no workflow run and answered no question.
+		replyOnly = err instanceof PlannerReplyError && !chat.interruption;
 		turnController.abort();
 		if (jobTurn) {
 			outcome = chat.closed
@@ -2379,11 +2390,14 @@ async function run(
 		chat.focus = undefined;
 		chat.readiness = undefined;
 		chat.turnController = undefined;
+		chat.captured = undefined;
 		chat.toolFinished = undefined;
 		chat.toolProgress = undefined;
 		let kept = false;
 		try {
-			if (opened && !chat.closed && !jobTurn && !failed) kept = retain(context, opened);
+			if (opened && !chat.closed && !jobTurn && (!failed || replyOnly)) {
+				kept = retain(context, opened);
+			}
 			if (!kept) {
 				if (!jobTurn && chat.retained?.session === opened?.session) await chat.retained?.release();
 				else await opened?.session.destroy();
