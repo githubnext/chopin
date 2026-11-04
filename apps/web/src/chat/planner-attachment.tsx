@@ -4,6 +4,8 @@ import type { Session } from "@chopin/protocol";
  * Who holds this document's remote Planner, beneath the composer, so nobody has
  * to ask a terminal before typing @chopin. Only `HARNESS=remote` reports one; with
  * no report this renders nothing. The words carry the state and the dot repeats it.
+ * `disconnected` is a Planner whose connection dropped with work Chopin keeps for it: no deadline,
+ * so none is named, and what it kept and what waits for it are said instead.
  * `machine` names the viewer's own machine that is starting it, which only they see.
  * Once that machine's backend has failed to start more than once in a row, the line says why,
  * for everyone in the document, and is still the starting state: the machine keeps trying.
@@ -34,6 +36,15 @@ export function PlannerAttachment(
 									minute: "2-digit",
 								})}
 							</time>
+						</>
+					)
+					: planner.state === "disconnected"
+					? (
+						<>
+							{`Planner: ${planner.login} disconnected. `}
+							<span className="composer-planner-detail">
+								Its workflows and Decisions are kept. @chopin needs it to reconnect.
+							</span>
 						</>
 					)
 					: planner.state === "starting" && failure

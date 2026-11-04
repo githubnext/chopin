@@ -4,9 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
 	defaultOpen,
+	disconnectedNote,
 	displayStages,
 	elapsed,
 	orderRuns,
+	runCounts,
 	RunStack,
 	stageWindow,
 	visibleRuns,
@@ -316,4 +318,97 @@ test("expanding a run whose card carries only its latest stages lists every stor
 	let older = stageWindow(card, true, { stages: [], done: true });
 	expect(older.stages).toHaveLength(12);
 	expect(older.unreported).toBe(488);
+});
+
+function away(item: Wire.Run): Wire.Run {
+	return { ...item, disconnected: true };
+}
+
+test("a run whose Planner is disconnected says so, and neither pulses nor reads as ended", () => {
+	let markup = renderToStaticMarkup(createElement(RunStack, {
+		onPause: () => {},
+		runs: [away(run("drafting", "running", 100))],
+	}));
+	expect(markup).toMatch(/aria-live="polite" class="[^"]*">disconnected</);
+	expect(markup).not.toMatch(/aria-live="polite" class="[^"]*">(running|stopped)</);
+	expect(markup).toContain('aria-label="drafting, disconnected, was running, 1m"');
+	// Still the status it last reported, which the card's own grouping and tests key on.
+	expect(markup).toContain('data-run-status="running"');
+	expect(markup).toContain('data-run-disconnected=""');
+	// Nothing is live: the dot is a still ring, in the stages too, and none is marked stopped.
+	expect(markup).not.toContain("data-run-pulse");
+	expect(markup).toMatch(/class="run-ring"[^>]*data-run-disconnected/);
+	expect(markup).toContain('data-run-stage="running"');
+	expect(markup).not.toContain('data-run-stage="stopped"');
+});
+
+test("a disconnected run's clock stops at its last report instead of counting on", () => {
+	let first = away({ ...run("drafting", "running", 100), updated: 400 });
+	let markup = renderToStaticMarkup(createElement(RunStack, { runs: [first] }));
+	expect(markup).toContain(">5m<");
+	// The same run connected counts up to now, which for a run this old is far past five minutes.
+	let { disconnected: _, ...connected } = first;
+	let live = renderToStaticMarkup(createElement(RunStack, { runs: [connected] }));
+	expect(live).not.toContain(">5m<");
+});
+
+test("a disconnected run says what it last reported and what happens when the Planner returns", () => {
+	// A running run opens by default, so its note is on the card.
+	let open = renderToStaticMarkup(
+		createElement(RunStack, { runs: [away(run("drafting", "running", 100))] }),
+	);
+	expect(open).toContain(
+		'data-run-disconnected-note="">Last reported running. It carries on when the Planner reconnects.<',
+	);
+	expect(disconnectedNote(run("asking", "waiting", 100, 1))).toBe(
+		"Last reported waiting on Decisions. Answers reach it when the Planner reconnects.",
+	);
+	expect(disconnectedNote(run("held", "paused", 100))).toBe(
+		"Last reported paused. Resume it once the Planner reconnects.",
+	);
+	// A connected run says nothing of the kind.
+	expect(
+		renderToStaticMarkup(createElement(RunStack, { runs: [run("drafting", "running", 100)] })),
+	).not.toContain("data-run-disconnected-note");
+});
+
+test("a disconnected run still offers Pause, said as pending, and never a Resume it cannot deliver", () => {
+	let markup = renderToStaticMarkup(createElement(RunStack, {
+		onPause: () => {},
+		onResume: () => {},
+		runs: [
+			away(run("drafting", "running", 300)),
+			away(run("held", "paused", 200)),
+			run("elsewhere", "paused", 100),
+		],
+	}));
+	expect(markup).toContain('aria-label="Pause drafting when the Planner reconnects"');
+	expect(markup).not.toContain('aria-label="Resume held"');
+	expect(markup).toContain('aria-label="Resume elsewhere"');
+});
+
+test("a disconnected run waiting on Decisions keeps its way to them and its place first", () => {
+	let markup = renderToStaticMarkup(createElement(RunStack, {
+		onShowDecisions: () => {},
+		runs: [away(run("drafting", "running", 300)), away(run("asking", "waiting", 100, 2))],
+	}));
+	expect(markup).toContain("Waiting on 2 Decisions");
+	expect(markup.indexOf('data-run-status="waiting"')).toBeLessThan(
+		markup.indexOf('data-run-status="running"'),
+	);
+	// Both rows read the same: the Decisions button, not the word "disconnected", asks for people.
+	expect(markup.match(/text-text-tertiary">disconnected</g)).toHaveLength(2);
+	expect(orderRuns([away(run("a", "running", 1)), away(run("b", "waiting", 2, 1))])[0]!.id)
+		.toBe("b");
+});
+
+test("the composer offers Resume only for paused runs whose Planner can hear it", () => {
+	expect(runCounts(undefined)).toEqual({ active: 0, paused: 0 });
+	expect(runCounts([run("a", "running", 1), run("b", "waiting", 2), run("c", "paused", 3)]))
+		.toEqual({ active: 2, paused: 1 });
+	// Disconnected runs are still live work Stop can reach, but a Resume would be refused.
+	expect(runCounts([away(run("a", "running", 1)), away(run("c", "paused", 3))]))
+		.toEqual({ active: 1, paused: 0 });
+	expect(runCounts([away(run("c", "paused", 3)), run("d", "paused", 4)]))
+		.toEqual({ active: 0, paused: 1 });
 });

@@ -74,7 +74,7 @@ import {
 	reviseComposerDraft,
 	withNoticesAfter,
 } from "./references";
-import { RunStack } from "./run-card";
+import { runCounts, RunStack } from "./run-card";
 import { runStages } from "../api";
 import { Transcript } from "./transcript";
 import { initialTranscript, transcriptReducer } from "./transcript-state";
@@ -144,15 +144,6 @@ export type ChatProps = {
 	/** The viewer's own machine that is starting the Planner, by name, when one is. */
 	plannerMachine?: string;
 };
-
-/** How many runs are still live, and how many are paused and resumable. */
-export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
-	let list = runs ?? [];
-	return {
-		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
-		paused: list.filter(run => run.status === "paused").length,
-	};
-}
 
 function draftKey(room: string, handle: string): string {
 	return chatDraftKey(room, isDemoHandle(handle) ? handle : undefined);

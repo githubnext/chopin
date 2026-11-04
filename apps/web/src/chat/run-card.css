@@ -91,6 +91,11 @@
 	color: var(--color-text-quaternary);
 }
 
+/* The Planner is away: still, and not the quiet grey of work that ended, as its dot in Chat. */
+.run-ring[data-run-disconnected] {
+	color: var(--color-warning);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.run-toggle,
 	.run-chevron {

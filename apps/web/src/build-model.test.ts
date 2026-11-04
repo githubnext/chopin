@@ -327,6 +327,26 @@ describe("first build", () => {
 		});
 	});
 
+	it("says a disconnected Planner must reconnect to draft tasks, not that none is connected", () => {
+		let context = {
+			state: idle,
+			live: false,
+			canEdit: true,
+			connected: true,
+			planner: true,
+			hasContent: true,
+			plannerDetached: true,
+		};
+		expect(buildLook(fresh, { ...context, plannerDisconnected: true })).toEqual({
+			kind: "plan",
+			blocked: "Reconnect the Planner to build",
+		});
+		// A Planner that detached, or never attached, is still told to connect one.
+		expect(buildLook(fresh, context)).toMatchObject({
+			blocked: "Connect a Planner to this document to build",
+		});
+	});
+
 	it("maps refused starts and rebuilds to plain copy", () => {
 		expect(buildRefusalCopy("no-workspace")).toBe("Start your local agent, then retry");
 		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
@@ -347,6 +367,13 @@ describe("first build", () => {
 			.toBe("Connect a Planner to this document to build.");
 		expect(draftRefusalCopy("anything", "planner-not-attached"))
 			.toBe("Connect a Planner to this document to build.");
+		// Chopin says so when the Planner is attached but its connection dropped.
+		expect(
+			draftRefusalCopy(
+				"This document's Planner (@mona) is disconnected, so it cannot take a message now.",
+				"planner-not-attached",
+			),
+		).toBe("Reconnect the Planner to build.");
 	});
 
 	it("returns to the button when drafting or starting fails", () => {

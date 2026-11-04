@@ -35,6 +35,46 @@ const STAGE: Record<Wire.RunStage["status"], string> = {
 	stopped: "stopped",
 };
 
+/**
+ * What a run card's status reads. A disconnected Planner's live runs keep the status they last
+ * reported, but say the Planner is away: nothing is running now, and nothing has ended.
+ */
+export function runStatusLabel(run: Wire.Run): string {
+	return run.disconnected ? "disconnected" : STATUS[run.status];
+}
+
+/** What a disconnected run's card says it last reported, and what happens once the Planner is back. */
+export function disconnectedNote(run: Wire.Run): string {
+	let then = `Last reported ${STATUS[run.status]}. `;
+	return run.status === "paused"
+		? `${then}Resume it once the Planner reconnects.`
+		: run.status === "waiting"
+		? `${then}Answers reach it when the Planner reconnects.`
+		: `${then}It carries on when the Planner reconnects.`;
+}
+
+/**
+ * Pause while a run is live, Resume while it is paused. A Planner that is away cannot take a
+ * Resume, which Chopin refuses rather than keeps, so a paused run offers none until it returns.
+ */
+export function runControlKind(run: Wire.Run): "pause" | "resume" | undefined {
+	if (run.status === "running" || run.status === "waiting") return "pause";
+	return run.status === "paused" && !run.disconnected ? "resume" : undefined;
+}
+
+/**
+ * How many runs are still live, and how many are paused and can be resumed now. Stop reaches the
+ * live runs of a disconnected Planner, which holds it for its return; a Resume it cannot hold,
+ * so its paused runs are not counted as resumable.
+ */
+export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
+	let list = runs ?? [];
+	return {
+		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
+		paused: list.filter(run => runControlKind(run) === "resume").length,
+	};
+}
+
 /** Waiting runs first, then running, paused, and ended; newest first within each. */
 const GROUP: Record<Wire.Run["status"], number> = {
 	waiting: 0,
@@ -183,11 +223,18 @@ function RunPulse() {
 }
 
 /** A hollow ring for work that is pending, paused, or was stopped. */
-function RunRing() {
-	return <span aria-hidden="true" className="run-ring" />;
+function RunRing({ away }: { away?: boolean }) {
+	return (
+		<span
+			aria-hidden="true"
+			className="run-ring"
+			{...(away ? { "data-run-disconnected": "" } : {})}
+		/>
+	);
 }
 
-function RunGlyph({ status }: { status: Wire.Run["status"] }) {
+function RunGlyph({ away, status }: { away: boolean; status: Wire.Run["status"] }) {
+	if (away && status !== "waiting") return <RunRing away />;
 	if (status === "running") return <RunPulse />;
 	if (status === "waiting") {
 		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
@@ -201,8 +248,8 @@ function RunGlyph({ status }: { status: Wire.Run["status"] }) {
 	return <RunRing />;
 }
 
-function StageGlyph({ status }: { status: Wire.RunStage["status"] }) {
-	if (status === "running") return <RunPulse />;
+function StageGlyph({ away, status }: { away: boolean; status: Wire.RunStage["status"] }) {
+	if (status === "running") return away ? <RunRing away /> : <RunPulse />;
 	if (status === "completed") {
 		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
 	}
@@ -232,7 +279,9 @@ function RunRow(
 		onToggle: () => void;
 	},
 ) {
-	let live = run.status === "running" || run.status === "waiting";
+	let away = !!run.disconnected;
+	// A disconnected run's clock stays at its last report, as a paused run's does.
+	let live = (run.status === "running" || run.status === "waiting") && !away;
 	let now = useNow(live);
 	let [expanded, setExpanded] = useState(false);
 	let unfolded = open && expanded && stageWindow(run, false).earlier > 0;
@@ -243,15 +292,17 @@ function RunRow(
 	let stagesId = `run-stages-${run.id}`;
 	let listId = `run-stage-list-${run.id}`;
 	let title = tag ? `${run.name} ${tag}` : run.name;
-	let control = live && onPause
-		? { label: `Pause ${title}`, icon: plannerStop, act: () => onPause(run.id), kind: "pause" }
-		: run.status === "paused" && onResume
+	let kind = runControlKind(run);
+	// A Pause is held for the Planner's return, and the control says so.
+	let control = kind === "pause" && onPause
 		? {
-			label: `Resume ${title}`,
-			icon: plannerResume,
-			act: () => onResume(run.id),
-			kind: "resume",
+			label: away ? `Pause ${title} when the Planner reconnects` : `Pause ${title}`,
+			icon: plannerStop,
+			act: () => onPause(run.id),
+			kind,
 		}
+		: kind === "resume" && onResume
+		? { label: `Resume ${title}`, icon: plannerResume, act: () => onResume(run.id), kind }
 		: undefined;
 
 	return (
@@ -260,13 +311,15 @@ function RunRow(
 				<button
 					aria-controls={stagesId}
 					aria-expanded={open}
-					aria-label={`${title}, ${STATUS[run.status]}, ${elapsed(end - run.started)}`}
+					aria-label={`${title}, ${
+						away ? `disconnected, was ${STATUS[run.status]}` : STATUS[run.status]
+					}, ${elapsed(end - run.started)}`}
 					className="run-toggle"
 					data-run-toggle=""
 					onClick={onToggle}
 					type="button"
 				>
-					<RunGlyph status={run.status} />
+					<RunGlyph away={away} status={run.status} />
 					<span className="min-w-0 truncate font-mono text-text-secondary">{run.name}</span>
 					{tag && (
 						<span className="shrink-0 font-mono text-text-quaternary tabular-nums">{tag}</span>
@@ -274,10 +327,10 @@ function RunRow(
 					<span
 						aria-live="polite"
 						className={`shrink-0 ${
-							run.status === "waiting" ? "text-warning-ink" : "text-text-tertiary"
+							run.status === "waiting" && !away ? "text-warning-ink" : "text-text-tertiary"
 						}`}
 					>
-						{STATUS[run.status]}
+						{runStatusLabel(run)}
 					</span>
 					<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
 						{elapsed(end - run.started)}
@@ -303,6 +356,11 @@ function RunRow(
 			</div>
 			{open && (
 				<div className="pb-1 pl-[22px]" id={stagesId}>
+					{away && (
+						<p className="pb-1 text-text-tertiary" data-run-disconnected-note="">
+							{disconnectedNote(run)}
+						</p>
+					)}
 					{earlier > 0 && (
 						<button
 							aria-controls={listId}
@@ -354,7 +412,7 @@ function RunRow(
 								data-run-stage={stage.status}
 								key={stage.id}
 							>
-								<StageGlyph status={stage.status} />
+								<StageGlyph away={away} status={stage.status} />
 								{stage.kind === "tool" && (
 									<WrenchIcon
 										aria-hidden="true"

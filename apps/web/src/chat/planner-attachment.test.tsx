@@ -39,6 +39,20 @@ test("says who detached and until when the document is held for them", () => {
 	expect(markup).toContain('data-planner-state="held"');
 });
 
+test("says a Planner whose connection dropped is disconnected, not detached, and that its work is kept", () => {
+	let markup = render({ state: "disconnected", login: "mona" });
+	expect(words(markup)).toBe(
+		"Planner: mona disconnected. Its workflows and Decisions are kept. "
+			+ "@chopin needs it to reconnect.",
+	);
+	expect(markup).toContain('data-planner-state="disconnected"');
+	expect(markup).toContain('role="status"');
+	// Nothing ends at a time of day, so there is no deadline to name.
+	expect(markup).not.toContain("<time");
+	expect(markup).not.toContain("held until");
+	expect(markup).not.toContain("detached");
+});
+
 test("names the machine starting the Planner when it is the viewer's, else whose it is", () => {
 	let markup = render({ state: "starting", login: "mona" }, "studio");
 	expect(words(markup)).toBe("Planner: starting on studio…");
