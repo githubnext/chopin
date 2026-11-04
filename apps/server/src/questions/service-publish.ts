@@ -105,20 +105,53 @@ function unmatched(key: string): string {
 }
 
 /**
- * The block a stale batch meant, found against the revision the Planner read rather than the
- * document as it stands: the digest must have named exactly one block then, and the block that was
- * read must still carry it, now alone. A paragraph rewritten since, or already repeated when it was
- * read, never resolves to an identical twin; neither does a revision that is no longer retained.
+ * The block the Planner's read named by `digest`: the one block that carried it at `revision`,
+ * found by identity wherever it now stands and whatever it now says. A read the server no longer
+ * retains, a digest that named several blocks then, and a block since deleted name nothing.
  */
-function readBlock(plan: Plan, revision: number, digest: string): number | undefined {
+function readNamed(plan: Plan, revision: number, digest: string): number | undefined {
 	let read = edit.read(plan, revision);
 	if (!read) return undefined;
 	let seen = read.blocks.filter(block => block.digest === digest);
 	let anchor = seen.length === 1 ? read.anchors[seen[0]!.index] : undefined;
-	let index = anchor && room.blockNamedBy(plan.document, anchor);
+	return anchor && room.blockNamedBy(plan.document, anchor);
+}
+
+/**
+ * The block a stale batch meant, found against the revision the Planner read rather than the
+ * document as it stands: the block that was read must still carry the digest, now alone. A
+ * paragraph rewritten since, or already repeated when it was read, never resolves to an identical
+ * twin; neither does a revision that is no longer retained.
+ */
+function readBlock(plan: Plan, revision: number, digest: string): number | undefined {
+	let index = readNamed(plan, revision, digest);
 	return index !== undefined && room.uniqueBlock(plan.document, { digest }) === index
 		? index
 		: undefined;
+}
+
+/** The block each passage of a card still names, or nothing where it can no longer be told. */
+function cardBlocks(plan: Plan, record: Record): Array<number | undefined> {
+	let id = record.definition.questions[0]!.id;
+	let anchors = Anchors.read(record).questions[id]?.anchors ?? [];
+	return room.rebase(plan.document, anchors).map(anchor =>
+		anchor.orphaned ? undefined : room.blockNamedBy(plan.document, anchor)
+	);
+}
+
+/** Whether a stale input points a known key at an intact passage other than the card's own. */
+function namesAnotherPassage(
+	plan: Plan,
+	readAt: number,
+	record: Record,
+	related: Array<{ index: number; digest: string }>,
+): boolean {
+	let hashes = room.digests(plan.document);
+	let blocks = cardBlocks(plan, record);
+	return related.some((block, position) => {
+		let named = readNamed(plan, readAt, block.digest);
+		return named !== undefined && hashes[named] === block.digest && named !== blocks[position];
+	});
 }
 
 /** What identifies a decision's definition, leaving out its ids and any option or criterion in `skip`. */
@@ -155,25 +188,27 @@ function sameDefinition(record: Record, wanted: Question.Item): boolean {
  * appended since, and the same passages. A card that no longer holds its question is only
  * compared on its definition, as its passages no longer mean anything. Nothing is placed, so the
  * card's own anchor says which block it sits beside; the input's digest must still match that block,
- * and its index too unless the document has moved on since the Planner read it.
+ * and its index too unless the document has moved on since the Planner read it, in which case the
+ * block the Planner read, where the server still has that read, must be the card's block.
  */
 function repeats(
 	plan: Plan,
 	record: Record,
 	wanted: Question.Item,
 	related: Array<{ index: number; digest: string }>,
-	stale: boolean,
+	readAt: number | undefined,
 ): boolean {
 	if (!sameDefinition(record, wanted)) return false;
 	if (!holdsQuestion(record.status)) return true;
-	let anchors = Anchors.read(record).questions[record.definition.questions[0]!.id]?.anchors ?? [];
-	if (anchors.length !== related.length) return false;
+	let blocks = cardBlocks(plan, record);
+	if (blocks.length !== related.length) return false;
 	let hashes = room.digests(plan.document);
-	return room.rebase(plan.document, anchors).every((anchor, position) => {
+	let retained = readAt !== undefined && edit.read(plan, readAt) !== undefined;
+	return blocks.every((index, position) => {
 		let block = related[position]!;
-		let index = anchor.orphaned ? undefined : room.blockNamedBy(plan.document, anchor);
-		return index !== undefined && hashes[index] === block.digest
-			&& (stale || index === block.index);
+		if (index === undefined || hashes[index] !== block.digest) return false;
+		if (readAt === undefined) return index === block.index;
+		return !retained || readNamed(plan, readAt, block.digest) === index;
 	});
 }
 
@@ -235,9 +270,12 @@ export async function publishQuestions(
 			definition.questions.forEach((wanted, index) => {
 				let record = plan.records.get(options.capture!.identities[index]!);
 				let related = blocks[index] ?? [];
-				if (record && !repeats(plan, record, wanted, related, stale)) {
+				if (record && !repeats(plan, record, wanted, related, readAt)) {
 					let key = options.capture!.keys?.[index] ?? options.capture!.identities[index]!;
-					if (stale && sameDefinition(record, wanted)) Question.reject(unmatched(key));
+					if (
+						readAt !== undefined && sameDefinition(record, wanted)
+						&& !namesAnotherPassage(plan, readAt, record, related)
+					) Question.reject(unmatched(key));
 					Question.reject(
 						`Decision key "${key}" already holds a different decision, so this one was not opened. `
 							+ "Use a new key for a different question or passage.",
