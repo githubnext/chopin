@@ -206,6 +206,9 @@ async function machine(page: Page, label: string, planner: boolean) {
 			};
 			return JSON.parse(answer.result.content[0]!.text);
 		},
+		/** What the connector tells Chopin when its Planner backend keeps exiting before it attaches. */
+		reportFailure: (body: unknown) =>
+			post("/api/connector/planner/failure", body, { authorization: `Bearer ${paired.token}` }),
 		/** Ctrl-C in chopin connect. */
 		disconnect: () =>
 			post("/connector/mcp", {
@@ -412,6 +415,86 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	await expect(page.getByText("outline the plan").first()).toBeVisible();
 	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
 	await link.detach();
+});
+
+/** What a connector reports when its backend refused its checkout for the `attempts`th time in a row. */
+function refused(document: string, attempts: number) {
+	return {
+		document,
+		failure: {
+			attempts,
+			how: "exit 1",
+			reason:
+				"unsafe-checkout: ~/src/score's own git configuration sets a credential helper, which a Planner will not run in",
+			at: Date.now(),
+		},
+	};
+}
+
+test("a Planner its machine keeps failing to start says why in Chat to everyone in the document, until it attaches", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	// A teammate who has the document open sees the same line, but not whose machine it is by name.
+	let teammate = await open(browser, "hubot", room, DESKTOP);
+	let status = plannerStatus(page);
+	let seen = plannerStatus(teammate);
+	await expect(status).toHaveText("Planner: starting on studio…");
+	await expect(seen).toHaveText("Planner: starting on @mona’s machine…");
+	expect((await studio.poll([])).planners).toHaveLength(1);
+
+	// One launch that exited is a transient failure: still just starting.
+	expect((await studio.reportFailure(refused(room, 1))).status).toBe(200);
+	await expect(status).toHaveText("Planner: starting on studio…");
+
+	// The second in a row says why, to the machine's owner and to the teammate.
+	expect((await studio.reportFailure(refused(room, 2))).status).toBe(200);
+	await expect(status).toContainText("Planner: can’t start on studio");
+	await expect(status).toContainText("unsafe-checkout: ~/src/score");
+	await expect(status).toContainText("Tried 2 times in a row, last at");
+	await expect(status).toContainText("Still trying.");
+	await expect(seen).toContainText("Planner: can’t start on @mona’s machine");
+	await expect(seen).toContainText("unsafe-checkout:");
+	await expect(status).toHaveAttribute("data-planner-state", "starting");
+	await shoot(page, "planner-failing-desktop", page.locator(".chat-composer"));
+	await shoot(teammate, "planner-failing-teammate", teammate.locator(".chat-composer"));
+
+	// More failures update the count; @chopin sent meanwhile is told why, not to try in a moment.
+	await studio.reportFailure(refused(room, 3));
+	await expect(status).toContainText("Tried 3 times in a row");
+	let input = chatInput(teammate);
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	await expect(teammate.getByText(/Planner can't start on @mona's machine: unsafe-checkout/))
+		.toBeVisible({ timeout: 45_000 });
+
+	// It attaches at last, and nothing about the failure is left.
+	let link = await studio.backend(room);
+	await expect(status).toHaveText("Planner: mona attached");
+	await expect(seen).toHaveText("Planner: mona attached");
+	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
+	await link.detach();
+});
+
+test("on a phone, a Planner its machine keeps failing to start says why under the composer", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, PHONE);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: "Chat", exact: true }).tap();
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	await studio.reportFailure(refused(room, 2));
+	await expect(plannerStatus(page)).toContainText("Planner: can’t start on studio");
+	await expect(plannerStatus(page)).toBeInViewport();
+	await shoot(page, "planner-failing-phone");
 });
 
 test("a teammate's document with no machine of its own gets its Planner on a machine shared with teammates", async ({ browser }) => {

@@ -267,6 +267,31 @@
 	background: transparent;
 }
 
+/*
+ * A machine whose Planner backend keeps failing to start: still the starting state, so the dot and
+ * the line sit where they did, but the dot is red and the line has three: what is wrong, in the
+ * same colour, then why, then how often it was tried in the quietest ink. They wrap, so the dot
+ * lines up with the first.
+ */
+.chat-composer .composer-planner[data-planner-failing] {
+	align-items: flex-start;
+}
+.chat-composer .composer-planner[data-planner-failing] .composer-planner-dot {
+	margin-block-start: calc((1lh - 0.375rem) / 2);
+	background: var(--color-danger-graphic);
+}
+.chat-composer .composer-planner-lead,
+.chat-composer .composer-planner-reason,
+.chat-composer .composer-planner-meta {
+	display: block;
+}
+.chat-composer .composer-planner-lead {
+	color: var(--color-danger-text);
+}
+.chat-composer .composer-planner-meta {
+	color: var(--color-text-tertiary);
+}
+
 /* Inside the footer row, so losing the connection moves nothing above it. */
 .chat-composer .composer-connection {
 	display: inline-flex;
