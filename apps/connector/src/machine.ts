@@ -362,6 +362,39 @@ export async function plannerCredential(
 	};
 }
 
+/** Why a document's Planner backend keeps failing to start, as the connector tells Chopin. */
+export type PlannerStartFailure = {
+	/** How many launches in a row exited before staying up. */
+	attempts: number;
+	/** How the last one ended: `exit 1`, `signal SIGKILL`, or why it could not be started. */
+	how: string;
+	/** The last meaningful line it printed to stderr, with credentials masked. */
+	reason?: string;
+	/** When it exited (ms). */
+	at: number;
+};
+
+/**
+ * Tell Chopin why `document`'s Planner backend on this machine keeps failing to start, so the
+ * people in the document can read it; without `failure`, that it no longer does. Chopin shows it
+ * only for a Planner it asked this machine to run. A server that does not know the route answers
+ * 404, which the caller takes to mean it never will.
+ */
+export async function reportPlannerFailure(
+	url: string,
+	token: string,
+	document: string,
+	failure: PlannerStartFailure | undefined,
+	signal?: AbortSignal,
+) {
+	await post(
+		url + "/api/connector/planner/failure",
+		{ document, ...(failure ? { failure } : {}) },
+		token,
+		signal,
+	);
+}
+
 /**
  * The machine's GitHub token for its processes to push to `repository` (`owner/name`) and open
  * draft pull requests as its owner, and when it expires (ms). Chopin refuses when it holds no such

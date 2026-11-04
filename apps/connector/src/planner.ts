@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 import type { Readable } from "node:stream";
 import type { PlannerAssignment } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
-import { classifyConnectorError, connectorMessage, plannerCredential } from "./machine";
+import {
+	classifyConnectorError,
+	connectorMessage,
+	plannerCredential,
+	type PlannerStartFailure,
+	reportPlannerFailure,
+} from "./machine";
+import { ConnectorError } from "./mcp";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
@@ -242,6 +250,24 @@ async function servePlanner(options: {
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
 	let values = Object.values(options.env ?? {});
 	let current = () => options.address?.() ?? options.document;
+	// Launches in a row that exited before staying up, and whether Chopin was told of them.
+	let streak = 0;
+	let reported = false;
+	let unsupported = false;
+	// Best effort: a person reading the document, not the Planner, is who this is for.
+	let report = (document: string, failure: PlannerStartFailure | undefined) => {
+		if (unsupported || signal.aborted) return;
+		void reportPlannerFailure(
+			options.url,
+			options.machine,
+			document,
+			failure,
+			AbortSignal.any([signal, AbortSignal.timeout(REPORT_MS)]),
+		).catch(error => {
+			// A server from before the report does not know the route, and never will.
+			if (error instanceof ConnectorError && error.status === 404) unsupported = true;
+		});
+	};
 	for (let attempt = 0; !signal.aborted;) {
 		let document = current();
 		let started = Date.now();
@@ -276,6 +302,8 @@ async function servePlanner(options: {
 		}
 		// Chopin names the document's repository, whose checkout the backend runs in.
 		let repository = credential.repository ?? "";
+		// Reports name the document by its id, which Chopin can check without asking GitHub.
+		let reportedAs = credential.document ?? options.id ?? document;
 		let worktree = await plannerWorktree(
 			options.directory,
 			repository,
@@ -294,7 +322,7 @@ async function servePlanner(options: {
 				: { renewBeforeMs: options.renewGitHubBeforeMs }),
 		});
 		let launched = Date.now();
-		let outcome: { how: string; stderr?: string };
+		let outcome: { how: string; stderr?: string; reason?: string };
 		let checkout = await options.checkouts.resolve(repository, async () => github).then(
 			value => value.root,
 			(error: unknown) => {
@@ -304,7 +332,14 @@ async function servePlanner(options: {
 		);
 		if (checkout) {
 			output.say(`› Planner for ${document} started.`);
-			let healthy = setTimeout(() => void options.failures?.started(document), healthyMs);
+			let healthy = setTimeout(() => {
+				void options.failures?.started(document);
+				// Once it stays up, what was told to Chopin about its failing is no longer true.
+				if (reported) {
+					reported = false;
+					report(reportedAs, undefined);
+				}
+			}, healthyMs);
 			outcome = await launch(
 				{ ...options, document, cwd: checkout },
 				credential.token,
@@ -316,7 +351,7 @@ async function servePlanner(options: {
 		} else {
 			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
 		}
-		let { how, stderr } = outcome!;
+		let { how, stderr, reason } = outcome!;
 		await github?.stop();
 		if (signal.aborted) return;
 		// Renamed while it ran: say so by its new address.
@@ -325,6 +360,7 @@ async function servePlanner(options: {
 		let secrets = [credential.token, ...github?.secrets() ?? [], ...values];
 		let ended = Date.now();
 		let early = ended - launched < healthyMs;
+		streak = early ? streak + 1 : 0;
 		let failed = (at: number, retryAt?: number) =>
 			options.failures?.failed({
 				kind: "planner",
@@ -345,6 +381,14 @@ async function servePlanner(options: {
 		if (early) {
 			let at = Date.now();
 			await failed(at, at + wait);
+			// What Chopin's people read in the document: why, and how often in a row.
+			reported = true;
+			report(reportedAs, {
+				attempts: streak,
+				how: plain(redacted(how, secrets)),
+				...(reason ? { reason: plain(redacted(reason, secrets)) } : {}),
+				at: ended,
+			});
 		}
 		output.say(
 			output.style.dim(
@@ -355,6 +399,41 @@ async function servePlanner(options: {
 		);
 		await delay(wait, signal);
 	}
+}
+
+/** How many of a backend's last stderr lines are kept to find why it exited. */
+const TAIL_LINES = 8;
+/** How long the connector waits on Chopin to take a report of a failing Planner backend. */
+const REPORT_MS = 10_000;
+/** The longest reason or `how` told to Chopin, in characters. */
+const REASON_CHARS = 300;
+
+// Terminal colors and other control characters are what a backend's colored output adds.
+// oxlint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+// oxlint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/g;
+const TIMESTAMP =
+	/^\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\]?\s*/;
+/** A line that only announces the backend is leaving, which is never why. */
+const LEAVING = /^(?:exiting|exited|shutting down|terminating|aborting|quitting)\b/i;
+
+/**
+ * The line of a backend's last stderr output that says why it exited: the last one that is not
+ * blank and does not merely announce that it is exiting, without its colors or leading time, else
+ * the last line. Undefined when it printed nothing.
+ */
+export function startFailureReason(lines: string[]): string | undefined {
+	let cleaned = lines
+		.map(line => line.replace(ANSI, "").replace(TIMESTAMP, "").replace(CONTROL, " ").trim())
+		.filter(Boolean);
+	return cleaned.findLast(line => !LEAVING.test(line)) ?? cleaned.at(-1);
+}
+
+/** Text told to Chopin: the home directory as `~`, and short. Mask secrets before this. */
+function plain(text: string, home = homedir()) {
+	let shown = home.length > 1 ? text.replaceAll(home, "~") : text;
+	return shown.length > REASON_CHARS ? `${shown.slice(0, REASON_CHARS - 1)}…` : shown;
 }
 
 /** Longer than this, a backend's output line is dropped rather than passed on unmasked. */
@@ -402,7 +481,8 @@ function passMasked(
 }
 
 /**
- * Run the backend once; resolves with how it exited and the first line of its stderr. Its stdout
+ * Run the backend once; resolves with how it exited, the first line of its stderr and the one that
+ * says why it exited (see `startFailureReason`). Its stdout
  * and stderr still reach this process's own, masked by `passMasked`: its credential, the --env
  * values and anything token-shaped. Aborting stops it, then kills it.
  */
@@ -419,7 +499,7 @@ async function launch(
 	worktree: string,
 	github?: GitHubToken,
 	repository?: string,
-): Promise<{ how: string; stderr?: string }> {
+): Promise<{ how: string; stderr?: string; reason?: string }> {
 	let child = spawn(options.command[0]!, options.command.slice(1), {
 		cwd: options.cwd,
 		env: {
@@ -448,10 +528,15 @@ async function launch(
 	// Read as each line is passed on, so a GitHub token renewed meanwhile is masked too.
 	let secrets = () => [token, ...github?.secrets() ?? [], ...Object.values(options.env ?? {})];
 	let first: string | undefined;
+	// The last lines it printed, for the one that says why it exited.
+	let tail: string[] = [];
 	let drained = Promise.all([
 		passMasked(child.stdout!, "stdout", secrets),
 		passMasked(child.stderr!, "stderr", secrets, text => {
-			first ??= text.split("\n").map(line => line.trim()).find(Boolean);
+			let lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+			first ??= lines[0];
+			tail.push(...lines.map(line => line.slice(0, 1000)));
+			if (tail.length > TAIL_LINES) tail.splice(0, tail.length - TAIL_LINES);
 		}),
 	]);
 	let exited = new Promise<string>(resolve => {
@@ -471,7 +556,8 @@ async function launch(
 	if (how === undefined || process.platform !== "win32") await stopBackend(child);
 	how ??= await exited;
 	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
-	return { how, ...(first ? { stderr: first } : {}) };
+	let reason = startFailureReason(tail);
+	return { how, ...(first ? { stderr: first } : {}), ...(reason ? { reason } : {}) };
 }
 
 /** How a backend's processes are stopped: on which platform, running which commands, how patiently. */

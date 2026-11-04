@@ -418,6 +418,18 @@ Connector:  running (pid 4242, chopin 0.0.11, the service)
 A Planner that Chopin refused for good, such as one for a deleted document,
 shows `stopped:` and the reason instead of `failing`.
 
+The people in the document can read why too, not only whoever runs the
+machine. After each launch of a Planner Chopin asked this machine to run that
+exits before staying up, the connector tells Chopin how many launches in a row
+have, how the last one ended and the last line it printed to stderr that says
+why (a closing "Exiting with code 1" notice does not count), with tokens and
+`--env` values masked, your home directory shown as `~` and the line cut at 300
+characters. From the second launch in a row, Chat says **Planner can't start on
+studio:** and the reason, instead of **Planner: starting on studio…**, while the
+connector keeps retrying. Once the Planner attaches, or a launch stays up, it
+goes. A Chopin from before this does not know the report; the connector asks it
+once and carries on.
+
 A connector started with `--planner-command` says it can run Planners, and
 lists each Planner it runs because Chopin asked this machine for it
 beside the `--planner` ones (`canRunPlanners` and `chosenPlanners` in
