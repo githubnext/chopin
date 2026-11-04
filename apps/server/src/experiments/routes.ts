@@ -550,8 +550,22 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		return changed;
 	}
+	/**
+	 * Whether a member's own choice places a document's Planner. A document has one Planner, so its
+	 * creator's choice decides where it runs: another member's choice counts only while the creator
+	 * chose no machine, and never keeps the Planner from a machine its creator chose.
+	 */
+	function placesPlanner(channel: ChannelRecord, userId: string) {
+		return userId === channel.createdBy || !connections.chosen(channel.id, channel.createdBy);
+	}
+	/** The machines whose choice places a document's Planner: its creator's, else any member's. */
+	function plannerChoices(channel: ChannelRecord) {
+		let creators = connections.chosen(channel.id, channel.createdBy);
+		return creators ? [creators] : connections.chosenFor(channel.id);
+	}
 	/** The machine that runs a document's Planner for `userId`: the one they chose, else Default's. */
 	function plannerMachine(channel: ChannelRecord, userId: string) {
+		if (!placesPlanner(channel, userId)) return undefined;
 		return connections.chosen(channel.id, userId)
 			?? (userId === channel.createdBy ? defaultMachine(channel) : undefined);
 	}
@@ -575,6 +589,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (owner !== connection.owner) continue;
 			let channel = await auth.storage.channels.get(documentId);
 			if (!channel || channel.archivedAt || !serves(connection, channel.repositoryId)) continue;
+			// A member's choice yields to the creator's, which keeps its own machine asked instead.
+			if (!placesPlanner(channel, owner)) continue;
 			let holder = options.attachments?.()?.holding(documentId);
 			if (holder && holder.userId !== connection.owner) continue;
 			await add(channel);
@@ -639,7 +655,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!channel || channel.archivedAt) return undefined;
 		await readChoices().catch(() => {});
 		let fallback = defaultMachine(channel);
-		for (let machineId of [...connections.chosenFor(documentId), ...fallback ? [fallback] : []]) {
+		for (let machineId of [...plannerChoices(channel), ...fallback ? [fallback] : []]) {
 			let live = connections.machine(machineId).find(value =>
 				serves(value, channel.repositoryId) && runsPlanners(value)
 			);
@@ -1410,10 +1426,34 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		// Default machine picks again for its creator, as for any change of choice.
 		if (userId === channel.createdBy) defaults.delete(channel.id);
 		let next = plannerMachine(channel, userId);
-		// The machine that ran it stops, unless it is the one that runs it now; the new one starts.
-		if (previous && previous !== next) {
+		// The machines that stop: the one that ran it, unless it is the one that runs it now. The
+		// creator's choice also ends a Planner another member's machine runs or was asked to run,
+		// and that member's choice with it, so it does not take the document back.
+		let stops = new Set(previous && previous !== next ? [previous] : []);
+		if (userId === channel.createdBy) {
+			let holder = options.attachments?.()?.holding(channel.id);
+			let theirs = [
+				...dispatched.entries().filter(([, told]) => told.has(channel.id)).map(([id]) => id),
+				...holder?.machineId ? [holder.machineId] : [],
+			];
+			for (let machineId of theirs) {
+				if (machineId === next || machineId === previous) continue;
+				stops.add(machineId);
+				for (let chooser of connections.choosing(machineId)) {
+					if (chooser.documentId !== channel.id || chooser.owner === userId) continue;
+					await auth.storage.machines.choose(
+						{ channelId: channel.id, userId: chooser.owner },
+						auth.clock(),
+					);
+					connections.choose(channel.id, chooser.owner, undefined);
+					options.chosen?.(channel.id, chooser.owner);
+				}
+			}
+		}
+		// The new machine starts.
+		for (let machineId of stops) {
 			await stopPlanners(
-				previous,
+				machineId,
 				label =>
 					`${session.user.login} chose ${
 						machine ? "another machine" : "Default machine"

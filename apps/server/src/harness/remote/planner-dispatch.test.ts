@@ -366,6 +366,114 @@ describe("choosing a machine for a document", () => {
 		expect((await choice("member")).planner.state).toBe("starting");
 	});
 
+	it("lets the creator's choice take the Planner from a machine another member chose", async () => {
+		let { machine, choose, choice, channel, server, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let rivals = await machine("rival", "U_rival", "rival-box");
+		// The other member chose their machine first, and its Planner attached.
+		await choose("rival", rivals.id);
+		expect(await rivals.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let theirs = await rivals.backend();
+		await theirs.next("attached");
+		expect(server.attachments.holding(channel.id)?.machineId).toBe(rivals.id);
+
+		// The creator chooses their own machine: the other member's Planner stops and their choice goes.
+		let chosen = await choose("member", laptop.id);
+		expect(chosen.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await rivals.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("member chose another machine") },
+		});
+		expect((await choice("rival")).choice).toBeNull();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("member");
+		expect((await choice("member")).planner)
+			.toEqual({ state: "attached", login: "member", machine: laptop.id });
+	});
+
+	it("never lets another member's choice keep the Planner from the creator's chosen machine", async () => {
+		let { machine, choose, choice, channel, server, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let rivals = await machine("rival", "U_rival", "rival-box");
+		await choose("member", laptop.id);
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+
+		// Chosen after the creator's, the other member's machine is never asked.
+		let theirs = await choose("rival", rivals.id);
+		expect(theirs.choice).toBe(rivals.id);
+		expect(theirs.planner).toEqual({ state: "none", login: null, machine: null });
+		expect(await rivals.poll([])).toEqual({ waiting: true });
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("member");
+		expect((await choice("rival")).planner).toEqual({
+			state: "held",
+			login: "member",
+			machine: null,
+		});
+	});
+
+	it("lets the creator take the Planner back with Default machine from a member's choice", async () => {
+		let { machine, choose, choice, visit, channel, server, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let rivals = await machine("rival", "U_rival", "rival-box");
+		await visit();
+		await choose("rival", rivals.id);
+		expect(await rivals.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let theirs = await rivals.backend();
+		await theirs.next("attached");
+		expect(server.attachments.holding(channel.id)?.machineId).toBe(rivals.id);
+
+		// The creator has chosen no machine, yet asking for Default machine claims the document.
+		let back = await choose("member", null);
+		expect(back.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect((await choice("rival")).choice).toBeNull();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("member");
+	});
+
+	it("keeps the creator's Planner when they go back to Default machine after a member chose", async () => {
+		let { machine, choose, choice, visit, channel, server } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let rivals = await machine("rival", "U_rival", "rival-box");
+		await visit();
+		await choose("member", laptop.id);
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		// Inert while the creator's choice stands, and still stored for the member's own builds.
+		await choose("rival", rivals.id);
+		expect(await rivals.poll([], 300)).toEqual({ waiting: true });
+
+		// Default machine gives the Planner to the same machine, so it stays; the member's choice
+		// does not revive and take the document.
+		expect((await choose("member", null)).planner.state).toBe("attached");
+		expect(await rivals.poll([], 300)).toEqual({ waiting: true });
+		expect(server.attachments.holder(channel.id)).toBe("member");
+		expect((await choice("rival")).choice).toBe(rivals.id);
+	});
+
 	it("withdraws a machine's credential once it is no longer asked, so it never attaches after Automatic", async () => {
 		let { machine, choose, channel, server, url } = await dispatchServer();
 		let laptop = await machine("member", "U_member", "laptop");
