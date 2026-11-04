@@ -982,7 +982,7 @@ describe("a document on Default machine", () => {
 			let answer = await laptop.poll([channel.id]);
 			return "waiting" in answer;
 		};
-		return { ...dispatch, laptop, link, room, idle };
+		return { ...dispatch, laptop, link, room, session, idle };
 	}
 
 	it("keeps the Planner while it waits on a question, and stops it once that has been answered for a while", async () => {
@@ -1000,6 +1000,26 @@ describe("a document on Default machine", () => {
 
 		await room.answer(card!.id, [0]);
 		expect(await link.next("input-result")).toMatchObject({ status: "answered", value: true });
+		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
+		expect(await idle(2_000)).toBe(false);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+	});
+
+	it("keeps the Planner through a reply that runs past the idle threshold, and counts idle time only from its end", async () => {
+		let { link, session, idle } = await unwatched();
+		let turn = session.doPromptTurn({
+			prompt: "outline the plan",
+			skills: [],
+			tools: [],
+			emit: () => {},
+		});
+		let { turn: id } = await link.next("turn");
+		await turn;
+		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
+		expect(await idle(PLANNER_IDLE_MS * 4)).toBe(true);
+
+		link.send({ type: "turn-end", session: "planner-session", turn: id, status: "finished" });
+		await Bun.sleep(50);
 		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
 		expect(await idle(2_000)).toBe(false);
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });

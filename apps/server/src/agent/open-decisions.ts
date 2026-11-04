@@ -25,6 +25,7 @@ export async function capture(
 	if (signal.aborted) throw new Error("Decision capture was interrupted.");
 	let input = openDecisions(raw);
 	let result = await Questions.captureDecisions(room.plan, room.server, room.id, input, signal);
+	for (let { id } of result.decisions) room.plan.chat.captured?.add(id);
 	room.anchors();
 	return { ...result, current_plan: await documentView(room.plan) };
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
+import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 
 import type { Decide } from "../conversation-plan/decisions";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -41,6 +41,7 @@ function fixture(turns: Part[][], decide: Decide | undefined = verdict(0)) {
 		signal: controller.signal,
 		decide: decide as Decide | undefined,
 		capturedDecisions: undefined as (() => number) | undefined,
+		keptDecisions: undefined as (() => number) | undefined,
 		publish: (part: Part) => published.push(part),
 	};
 	return { options, published, prompts, controller, run: () => publishPlannerReplies(options) };
@@ -103,6 +104,26 @@ test("saved inline decisions get a factual server summary when both generated re
 	expect(f.published.filter(part => part.type === "text-delta").map(part => part.text))
 		.toEqual(["Added 4 inline decisions to the document."]);
 });
+
+test("decisions the Planner repeated give a factual summary without claiming they were added", async () => {
+	let f = fixture([text("The cards are open."), text("Please answer them.")], verdict(0.19));
+	f.options.keptDecisions = () => 2;
+	await f.run();
+	expect(f.published.filter(part => part.type === "text-delta").map(part => part.text))
+		.toEqual(["2 inline decisions are already in the document."]);
+});
+
+test.each([0, -1, NaN, 1.5])(
+	"a repeated-decision count of %s cannot mask a rejected turn, and the failure keeps the session",
+	async count => {
+		let f = fixture([text("Which scope?"), text("Tell me the scope.")], verdict(1));
+		f.options.keptDecisions = () => count;
+		let failure = await f.run().catch(error => error);
+		expect(failure).toBeInstanceOf(PlannerReplyError);
+		expect(failure.message).toContain("could not move its questions");
+		expect(f.published).toEqual([]);
+	},
+);
 
 test.each([0, -1, NaN, 1.5])("a capture count of %s cannot mask a rejected turn", async count => {
 	let f = fixture([text("Which scope?"), text("Tell me the scope.")], verdict(1));

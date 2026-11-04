@@ -46,6 +46,8 @@ exploration can remain provisional without becoming a Build blocker.
 On every harness, Chat buffers each complete Planner text message and checks it
 with the deployment's decisions classifier before publication. Requests for input
 are withheld and the same session gets one continuation to create inline cards.
+A continuation that repeats cards an earlier turn already created, by their stable
+keys, counts as having created them.
 Completed tools and the original request are not replayed. Failed, missing,
 malformed or interrupted checks never publish unchecked prose; uncertain judgments
 also withhold it. Chat prose therefore arrives after validation rather than token
@@ -368,8 +370,9 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
 - A request has no time limit. It waits until members answer it or it is
   withdrawn: the Planner stops, its run is cancelled, the document is archived
   or deleted, or the asker's link closes. A document on **Default machine**
-  keeps its Planner running while that Planner waits on a question or a live or
-  paused workflow run, so nobody viewing the document does not withdraw it.
+  keeps its Planner running while that Planner is replying or waits on a question
+  or a live or paused workflow run, so nobody viewing the document does not
+  withdraw it or cut its work short.
 - Cards an earlier Chopin closed unanswered after a fixed time stay in the
   document and in Decisions, among the resolved cards, marked
   `status="expired"`; each reads "Nobody answered this question, so the Planner
@@ -692,7 +695,11 @@ when the server stopped comes back stopped. A stored run's stages go when its
 card does. Ended rows stay until the next workflow starts in the
 document. When a run ends, Chat also records a line saying how it ended and how
 long it took. The session is let go when its runs finish, when its owner
-binding ends, or when the document closes; run state is durable in Atomic's
+binding ends, or when the document closes. A turn whose Chat reply could not
+be verified, or moved into inline decisions, fails without letting go a session
+that still owns runs, so that failure ends no run and withdraws no question. The
+"was stopped after N min" line records how long the run had lasted when its
+session was let go, not a limit; run state is durable in Atomic's
 workflow journal, so runs interrupted that way can be resumed from a later
 session. Before disposing the session, the adapter waits, for at most 10
 seconds, on Atomic's `session.workflows.waitForSettled()` for each run that
