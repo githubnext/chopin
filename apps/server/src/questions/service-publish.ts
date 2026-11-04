@@ -99,35 +99,59 @@ function captureScopes(
 
 const STALE_BATCH = "The document changed; read it again before opening a decision";
 
-function unmatched(key: string): string {
+function unmatched(key: string, cause: string): string {
 	return `${STALE_BATCH}. The passage for decision "${key}" cannot be matched to one block of the `
-		+ "document as you read it: it was rewritten or repeated since, or that read is no longer retained.";
+		+ `document as you read it: ${cause}.`;
 }
 
+type Located = { index: number } | { cause: string };
+
 /**
- * The block the Planner's read named by `digest`: the one block that carried it at `revision`,
- * found by identity wherever it now stands and whatever it now says. A read the server no longer
- * retains, a digest that named several blocks then, and a block since deleted name nothing.
+ * The live block the Planner's read named, found by identity wherever it now stands and whatever
+ * it now says, or why none can be named: the server no longer has that read, the address does not
+ * match what was read there, the paragraph appeared more than once when it was read, or the block
+ * that was read has since gone.
  */
-function readNamed(plan: Plan, revision: number, digest: string): number | undefined {
+function locate(
+	plan: Plan,
+	revision: number,
+	block: { index: number; digest: string },
+): Located {
 	let read = edit.read(plan, revision);
-	if (!read) return undefined;
-	let seen = read.blocks.filter(block => block.digest === digest);
-	let anchor = seen.length === 1 ? read.anchors[seen[0]!.index] : undefined;
-	return anchor && room.blockNamedBy(plan.document, anchor);
+	if (!read) return { cause: "the server no longer has that read" };
+	if (read.blocks[block.index]?.digest !== block.digest) {
+		return { cause: "its address does not match the block you read at that position" };
+	}
+	let seen = read.blocks.filter(candidate => candidate.digest === block.digest);
+	if (seen.length > 1) {
+		return { cause: "the same paragraph appeared more than once when you read it" };
+	}
+	let anchor = read.anchors[block.index];
+	let index = anchor && room.blockNamedBy(plan.document, anchor);
+	return index === undefined
+		? { cause: "the block you read has been rewritten, removed or moved since" }
+		: { index };
 }
 
 /**
  * The block a stale batch meant, found against the revision the Planner read rather than the
  * document as it stands: the block that was read must still carry the digest, now alone. A
  * paragraph rewritten since, or already repeated when it was read, never resolves to an identical
- * twin; neither does a revision that is no longer retained.
+ * twin; neither does a revision that is no longer retained. Otherwise, why not.
  */
-function readBlock(plan: Plan, revision: number, digest: string): number | undefined {
-	let index = readNamed(plan, revision, digest);
-	return index !== undefined && room.uniqueBlock(plan.document, { digest }) === index
-		? index
-		: undefined;
+function readBlock(
+	plan: Plan,
+	revision: number,
+	block: { index: number; digest: string },
+): Located {
+	let located = locate(plan, revision, block);
+	if ("cause" in located) return located;
+	if (room.digests(plan.document)[located.index] !== block.digest) {
+		return { cause: "the block you read has been rewritten, removed or moved since" };
+	}
+	return room.uniqueBlock(plan.document, block) === located.index
+		? located
+		: { cause: "an identical paragraph now stands beside it" };
 }
 
 /** The block each passage of a card still names, or nothing where it can no longer be told. */
@@ -137,6 +161,24 @@ function cardBlocks(plan: Plan, record: Record): Array<number | undefined> {
 	return room.rebase(plan.document, anchors).map(anchor =>
 		anchor.orphaned ? undefined : room.blockNamedBy(plan.document, anchor)
 	);
+}
+
+/**
+ * The block a card's widget follows: the nearest block before it that is not another card or a
+ * visual attached to its passage. Where a card's anchor was recovered by digest onto an identical
+ * paragraph elsewhere, this still says where the card actually stands.
+ */
+function blockBeforeCard(plan: Plan, record: Record): number | undefined {
+	let widget = room.questionnaireIndex(plan.document, record.id);
+	if (widget === undefined) return undefined;
+	let blocks = parse(room.project(plan.document)).children;
+	let beside = (block: (typeof blocks)[number]) =>
+		block.type === "table" || block.type === "code" && block.lang === SEECODE_LANGUAGE
+		|| block.type === "mdxJsxFlowElement"
+			&& (block.name === "Questionnaire" || block.name === "Decision");
+	let index = widget - 1;
+	while (index >= 0 && beside(blocks[index]!)) index--;
+	return index >= 0 ? index : undefined;
 }
 
 /** Whether a stale input points a known key at an intact passage other than the card's own. */
@@ -149,8 +191,9 @@ function namesAnotherPassage(
 	let hashes = room.digests(plan.document);
 	let blocks = cardBlocks(plan, record);
 	return related.some((block, position) => {
-		let named = readNamed(plan, readAt, block.digest);
-		return named !== undefined && hashes[named] === block.digest && named !== blocks[position];
+		let located = locate(plan, readAt, block);
+		return !("cause" in located) && hashes[located.index] === block.digest
+			&& located.index !== blocks[position];
 	});
 }
 
@@ -204,11 +247,17 @@ function repeats(
 	if (blocks.length !== related.length) return false;
 	let hashes = room.digests(plan.document);
 	let retained = readAt !== undefined && edit.read(plan, readAt) !== undefined;
+	let standing = readAt !== undefined && !retained ? blockBeforeCard(plan, record) : undefined;
 	return blocks.every((index, position) => {
 		let block = related[position]!;
 		if (index === undefined || hashes[index] !== block.digest) return false;
 		if (readAt === undefined) return index === block.index;
-		return !retained || readNamed(plan, readAt, block.digest) === index;
+		if (retained) {
+			let located = locate(plan, readAt, block);
+			return !("cause" in located) && located.index === index;
+		}
+		// Without the read, only where the card stands says which paragraph it was opened beside.
+		return position > 0 || standing === index;
 	});
 }
 
@@ -275,7 +324,17 @@ export async function publishQuestions(
 					if (
 						readAt !== undefined && sameDefinition(record, wanted)
 						&& !namesAnotherPassage(plan, readAt, record, related)
-					) Question.reject(unmatched(key));
+					) {
+						let cause = related.map(block => readBlock(plan, readAt, block)).find(found =>
+							"cause" in found
+						);
+						Question.reject(unmatched(
+							key,
+							cause && "cause" in cause
+								? cause.cause
+								: "the card for this key no longer stands beside the block you read",
+						));
+					}
 					Question.reject(
 						`Decision key "${key}" already holds a different decision, so this one was not opened. `
 							+ "Use a new key for a different question or passage.",
@@ -303,18 +362,24 @@ export async function publishQuestions(
 				// The block the Planner read, wherever it now stands; one that changed, that another
 				// block repeats, or that was repeated when it was read, is refused, never guessed.
 				let keys = options.capture!.keys;
-				let rebased = placement.blocks.map((related, at) =>
-					related.map(block => ({ index: readBlock(plan, readAt, block.digest), block, at }))
+				let located = placement.blocks.map((related, at) =>
+					related.map(block => ({ found: readBlock(plan, readAt, block), block, at }))
 				);
-				let lost = rebased.flat().find(({ index }) => index === undefined);
-				if (lost) {
-					let position = indices[lost.at]!;
-					Question.reject(unmatched(keys?.[position] ?? options.capture!.identities[position]!));
+				for (let { found, at } of located.flat()) {
+					if (!("cause" in found)) continue;
+					let position = indices[at]!;
+					Question.reject(unmatched(
+						keys?.[position] ?? options.capture!.identities[position]!,
+						found.cause,
+					));
 				}
 				placement = {
 					revision: plan.revision,
-					blocks: rebased.map(related =>
-						related.map(({ index, block }) => ({ index: index!, digest: block.digest }))
+					blocks: located.map(related =>
+						related.map(({ found, block }) => ({
+							index: (found as { index: number }).index,
+							digest: block.digest,
+						}))
 					),
 				};
 			}
