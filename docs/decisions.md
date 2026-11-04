@@ -39,6 +39,11 @@ must still carry it, now alone, wherever it stands. A paragraph rewritten since,
 copy now repeats, one that was already repeated when it was read, and a read the server no longer
 retains each refuse the batch with a message saying the document changed and to read it again,
 rather than anchoring a card beside a twin. Nothing is created for a refused batch.
+Replaying a key whose card exists is judged against the same read. Where the server no longer
+holds it (after a restart, or once more than eight revisions have been read since), a replay is
+accepted only for a card standing beside the single passage it was opened on; a card with several
+passages is refused until the Planner reads again, since a later passage cannot then be told from
+an identical copy.
 Stop Planner does not withdraw committed cards.
 
 Each Save queues an update to the related prose. Decisions sharing a passage share its write

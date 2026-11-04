@@ -256,8 +256,9 @@ function repeats(
 			let located = locate(plan, readAt, block);
 			return !("cause" in located) && located.index === index;
 		}
-		// Without the read, only where the card stands says which paragraph it was opened beside.
-		return position > 0 || standing === index;
+		// Without the read, only where the card stands says which paragraph it was opened beside,
+		// and it stands beside the first passage alone; a later one cannot be told from a twin.
+		return position === 0 && standing === index;
 	});
 }
 
