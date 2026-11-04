@@ -1,8 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 
 import { createChildDocuments } from "../chat/children";
+import { reading } from "../document-reading.test-fixtures";
 import * as Service from "../plan/service";
 import { openPlan, seedOpenThread } from "../testing/plan";
+import { readingOutput } from "./reading-output";
 import { type DocumentRoom, documentTools } from "./tools";
 
 import type { Plan } from "../plan/service";
@@ -162,6 +164,32 @@ test("read_child returns the child's revision, source, and addressable blocks", 
 	expect(read.source).toContain("Original finding.");
 	expect(read.revision).toBe(child.plan.revision);
 	expect(read.blocks.length).toBeGreaterThan(0);
+});
+
+test("read_child keeps its structured result and the model reads it in parts that name the child", async () => {
+	let { call, child } = await rooted();
+	let id = child.channel.id;
+	let read = await call("read_child", { child: id, offset: 1, limit: 2 });
+	expect(read.source).toBe("# Child report\n\nOriginal finding.\n");
+	expect(read.child).toEqual({ id, title: expect.any(String) });
+	let model = (input: Record<string, unknown>) =>
+		reading(readingOutput({ toolName: "read_child", input, output: JSON.stringify(read) })!);
+
+	let first = model({ child: id, offset: 1, limit: 2 });
+	expect(first.fields.child).toBe(id);
+	expect(first.source).toBe("# Child report\n\n");
+	expect(first.next).toEqual({ child: id, offset: 3 });
+	let rest = model({ child: id, offset: 3 });
+	expect(rest.source).toBe("Original finding.\n");
+	expect(rest.next).toBeUndefined();
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		expect(await call("read_child", { child: id, offset: 4 })).toContain("outside the document");
+		expect(await call("read_child", { child: id, column: 2 })).toContain("pass `offset` with it");
+		expect(await call("read_child", { child: id, extra: true })).toContain("unexpected field");
+	} finally {
+		errors.mockRestore();
+	}
 });
 
 test("edit_child commits the child before broadcasting and leaves the root alone", async () => {

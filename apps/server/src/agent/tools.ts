@@ -16,14 +16,17 @@ import {
 	answer,
 	applyAnchors,
 	applyBlockEdit,
+	currentPlan,
 	documentSnapshot,
-	documentView,
 	EDIT_OPERATIONS_SCHEMA,
+	readableView,
 } from "./document-ops";
 import * as Comments from "../comments/service";
 import * as edit from "../plan/edit";
 import * as Questions from "../questions/service";
 import { limits, ULID } from "@chopin/dialect";
+import { READING_IN_PARTS } from "../document-reading";
+import { readingModelOutput } from "./reading-output";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
 import { documentIdentity, implementationActive } from "../plan/service";
 import { childTools, Refusal, shielded } from "./child-tools";
@@ -208,17 +211,31 @@ export const documentTools = {
 	...experimentTools,
 	read_plan: tool({
 		contextSchema: roomContext,
-		description: "Read the plan: its revision, canonical source, the top-level blocks you can "
-			+ "address when editing, and the questions it holds. Read before editing — "
-			+ "`edit_plan` refuses a batch aimed at a revision that has moved on. `document.url` is "
-			+ "this document's current link; `document.earlier_urls`, when present, are links it had "
-			+ "before a rename, which still open it.",
-		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
+		description: "Read the plan as text: a short header (document id and url, revision, size), "
+			+ "the top-level blocks you can address when editing with their lines, the questions it "
+			+ "holds, then its canonical source with its real newlines, verbatim. Read before editing — "
+			+ "`edit_plan` refuses a batch aimed at a revision that has moved on. `url` is this "
+			+ "document's current link; `earlier urls`, when present, are links it had before a "
+			+ `rename, which still open it. ${READING_IN_PARTS}`,
+		inputSchema: jsonSchema({
+			type: "object",
+			properties: {
+				offset: { type: "integer", minimum: 1, description: "First line to read, from 1." },
+				limit: { type: "integer", minimum: 1, description: "Most lines to read." },
+				column: {
+					type: "integer",
+					minimum: 1,
+					description: "Character in line `offset` to start at.",
+				},
+			},
+			additionalProperties: false,
+		}),
 		// Reading the document the agent is here to write is not a decision
 		// anybody needs to approve.
 		metadata: { skipPermission: true },
-		execute: (_raw, { context: { room: context } }) =>
-			answer("read_plan", () => documentView(context.plan)),
+		execute: (raw, { context: { room: context } }) =>
+			answer("read_plan", () => readableView(context.plan, Arguments.readRange(raw, "read_plan"))),
+		toModelOutput: readingModelOutput("read_plan"),
 	}),
 
 	read_reference: tool({
@@ -575,8 +592,10 @@ export const documentTools = {
 			+ "independent questions into one call before waiting. Each question becomes a separate "
 			+ "card beside its related prose. The questionnaire is recorded in the plan and the "
 			+ "answer is attributed to whoever gave it. If current_plan is present after "
-			+ "an answer, it has read_plan's revision, source, and blocks; edit from that "
-			+ "revision. Otherwise call read_plan before editing. Reread if an edit is stale. "
+			+ "an answer, it is the view read_plan is built from, as JSON, with its revision, "
+			+ "source, and blocks; edit from that revision. When the document is large it says "
+			+ "`source_omitted` instead, with the revision: call read_plan before editing. "
+			+ "Reread if an edit is stale. "
 			+ "Ask only what the repository cannot tell you, and do not ask for permission "
 			+ "to proceed. Use the revision from "
 			+ "`read_plan` and relate every question to its returned blocks.",
@@ -646,7 +665,9 @@ export const documentTools = {
 						);
 					})().catch(() => undefined);
 					let current = await Promise.race([capture, stop.promise]);
-					return disposed || stopped() || !current ? result : { ...result, current_plan: current };
+					return disposed || stopped() || !current
+						? result
+						: { ...result, current_plan: currentPlan(current, "read_plan") };
 				} finally {
 					dispose();
 					clearTimeout(timer);

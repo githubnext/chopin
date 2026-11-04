@@ -24,6 +24,7 @@ import {
 
 import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
+import { READ_BYTES } from "../document-reading";
 import { COACHING } from "./coaching";
 import { DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING } from "./visual-authoring";
 
@@ -207,9 +208,17 @@ An open question never hides or replaces existing prose.
 
 The plan is yours to write. Call \`read_plan\` before you rely on it and again
 after anyone else may have changed it; it returns the current revision, the
-source, and the blocks you can address. After \`open_decisions\` or blocking \`ask\`, use \`current_plan\` when
-present: it has those same fields, so you can edit from its revision without
-another read. Otherwise call \`read_plan\` before editing. Write with
+blocks you can address, and the source as text. One result holds at most ${
+	READ_BYTES.toLocaleString("en-US")
+}
+bytes, so a long plan comes back in parts: read every part you need by making the
+\`next:\` call each result ends its header with, until a result has none. \`next:\`
+may name a \`column\` to continue a line too long for one result. \`offset\` and
+\`limit\` (lines) read any part; a \`limit\` is a most, and a result says when it
+stopped sooner. After \`open_decisions\` or blocking \`ask\`, use \`current_plan\` when
+present: it has the same fields as JSON, so you can edit from its revision without
+another read. When it says \`source_omitted\` instead, or you have not read the
+blocks you mean to edit, call \`read_plan\` before editing. Write with
 \`edit_plan\`, quoting the revision you read. If the plan moved on, your batch is
 refused and you are told
 which blocks changed — read again and retry rather than forcing the edit.

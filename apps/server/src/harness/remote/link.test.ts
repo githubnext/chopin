@@ -16,7 +16,12 @@ import * as Store from "../../questions/store";
 import * as Plan from "../../plan/service";
 import * as Edit from "../../plan/edit";
 import * as Room from "../../plan/room";
+import { documentTools } from "../../agent/tools";
+import { readingOutput } from "../../agent/reading-output";
+import { fieldNotes, reading } from "../../document-reading.test-fixtures";
+import { openPlan } from "../../testing/plan";
 import { createPlannerAgent, createResearchAgent } from "../agents";
+import { withModelOutput } from "../model-output";
 import { openWorkerSession } from "../../jobs/worker-session";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
@@ -1147,6 +1152,52 @@ describe("Agent connection protocol", () => {
 			"declared",
 		);
 		expect(isolated.errors.join("\n")).toContain("An isolated Planner turn cannot offer bash");
+	});
+
+	it("sends the attached client read_plan as paged text, the way its model is to read it", async () => {
+		let seen: Array<{ output: unknown; isError: boolean }> = [];
+		let { server, channel } = await setup({
+			async turn(context) {
+				seen.push(await context.callHostTool("read_plan", { offset: 1 }));
+				finishTurn(context);
+			},
+		});
+		let fixture = await openPlan(fieldNotes(60_000));
+		cleanups.push(() => Plan.close(fixture.plan));
+		let agent = new HarnessAgent({
+			harness: withModelOutput(
+				adapterFor(server, { channelId: channel.id, isolated: false }),
+				readingOutput,
+			),
+			tools: { read_plan: documentTools.read_plan },
+			activeTools: ["read_plan"],
+			toolsContext: {
+				read_plan: {
+					room: {
+						id: fixture.plan.id,
+						plan: fixture.plan,
+						server: fixture.server,
+						persist: () => Plan.persist(fixture.plan),
+						exclusive: action => Plan.exclusive(fixture.plan, action),
+						publish: async () => {},
+						anchors: () => {},
+						changes: () => {},
+					},
+				},
+			},
+			permissionMode: "allow-reads",
+		});
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		let outcome = await streamOn(agent as never, session as never, "read");
+		expect(outcome.errors).toEqual([]);
+		expect(seen).toHaveLength(1);
+		let text = seen[0]!.output as string;
+		expect(seen[0]!.isError).toBe(false);
+		expect(text).not.toStartWith("{");
+		expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16_000);
+		expect(reading(text).fields.document).toBe(fixture.plan.id);
+		expect(reading(text).next).toBeDefined();
 	});
 
 	it("gives the server and the client the same error when a host result cannot cross the link", async () => {

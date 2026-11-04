@@ -214,6 +214,25 @@ choose another title and retry under a new idempotency key. `idempotency-conflic
 means the same key was reused with a different request, and validation failures
 return `issues`. Every one of these outcomes matches the tool's output schema.
 
+## Reading a large document
+
+`read_document` returns the document as Markdown text with real newlines after a
+short header (`id`, `title`, `revision`, `url`, size) and the brief when it has
+one, and the whole document, unchanged, in `structuredContent`. An agent harness
+may keep only the head and tail of a long text result (Atomic keeps the first
+and last 10 KiB of one over 20 KiB), so one result's text carries at most 16,000
+UTF-8 bytes in all, header and brief included. A document over that returns its
+outline (headings with line numbers), its first part and a `next:` call. Pass
+`offset` (a 1-based line) and optionally `limit` (most lines) to read any part:
+the text states the total line count, and where a slice fits it is exact. A
+`limit` is a maximum: a result the budget cuts says so and names `next:`. A line
+too long for one result continues with `column`, a 1-based character in line
+`offset`. The text after the `--- source ... ---` line is the source verbatim, so
+following `next:` returns every character exactly once. A long brief is trimmed
+in the text; `structuredContent.brief` has all of it. An `offset` or `column`
+outside the document is a JSON-RPC invalid-params error. See
+[Reading a large document](hosted-agent.md#reading-a-large-document).
+
 ## Document URLs and IDs
 
 The `url` returned by `create_document`, `update_document`, and `read_document` is

@@ -84,7 +84,12 @@ Decisions.
 
 1. Read the supplied canonical document URL or UUID with `read_document`. Work
    from its latest `source` and `revision`, not a copied plan or an earlier tool
-   result. Confirm that the requested change belongs to this document.
+   result. Confirm that the requested change belongs to this document. The text of
+   one result holds at most 16,000 bytes, so a long document comes back in parts:
+   make each `next:` call (it may name a `column`, for a line too long for one
+   result) until a result has none, because `update_document` replaces the whole
+   document. The text after each `--- source` line is the source verbatim;
+   `structuredContent` has it whole.
 2. Prepare the full replacement MDX in `plan`, including unchanged prose. Copy
    existing Questionnaire, Decision, and Research projections unchanged,
    including their ids and answers. Do not invent, remove, or rewrite those

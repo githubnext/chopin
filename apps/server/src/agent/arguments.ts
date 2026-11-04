@@ -12,6 +12,7 @@
 import * as Question from "@chopin/question";
 import { isChannelId } from "../channels/id";
 
+import type { ReadRange } from "../document-reading";
 import type { Operation } from "../plan/edit";
 import type { Operation as GraphOperation, Revision, Task } from "../tasks/graphs";
 
@@ -321,6 +322,23 @@ export function askPlan(raw: unknown): { revision: number; questions: Positioned
 		});
 
 	return { revision, questions };
+}
+
+/** The optional range of a document read: a line, a most-lines count, and a character in the line. */
+export function readRange(raw: unknown, name: string): ReadRange {
+	let args = record(raw, `${name} arguments`);
+	fields(args, ["offset", "limit", "column"], [], `${name} arguments`);
+	for (let key of ["offset", "limit", "column"] as const) {
+		let value = args[key];
+		if (value !== undefined && (!Number.isSafeInteger(value) || (value as number) < 1)) {
+			fail(`\`${key}\` must be an integer of at least 1.`);
+		}
+	}
+	return {
+		offset: args.offset as number | undefined,
+		limit: args.limit as number | undefined,
+		column: args.column as number | undefined,
+	};
 }
 
 export function openDecisions(raw: unknown) {

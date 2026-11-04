@@ -193,7 +193,8 @@ Chopin's tools available to the Planner under every harness are:
   current plan-oriented tool names);
 - Chopin's child document tools (`list_children`, `read_child`, `edit_child`,
   `anchor_child`), bound to the root document's own children and rechecked on
-  every call (owner access, parentage, repository, and archive state). They are
+  every call (owner access, parentage, repository, and archive state); `read_child`
+  [pages like `read_plan`](#reading-a-large-document). They are
   never offered to background jobs, and unexpected storage errors reach the
   model only as a generic message;
 - bounded file and tree reads plus commit history using the session's default
@@ -660,24 +661,36 @@ every turn.
   descriptions and legacy summaries under durable `document-summary@1` are
   separate and are not bootstrap context.
 - The Planner reads the current document through the plan-named `read_plan` tool
-  instead of receiving a stale embedded copy. That result, and every structured
-  `edit_plan` result (success, or a locked, stale, or invalid refusal), carry
-  `document: { id, url }`: the room's own document id and the canonical URL MCP
-  `read_document` returns for it, nested under the parent for a child document. A
-  renamed top-level document adds `earlier_urls`, the links it had before, which
-  still open it, so the Planner can tell its current link from an old one by data.
-  Argument and storage errors return plain error text without it. Code running
-  inside the session, such as an Atomic extension, can use either to address
-  that document over MCP.
+  instead of receiving a stale embedded copy. The tool's own result is still that
+  structured view as JSON, and the model is shown it as
+  [text it can page through](#reading-a-large-document). A short header names the
+  `document` id, the canonical `url` MCP `read_document` returns for it (nested
+  under the parent for a child document), the `revision` and the size. A renamed
+  top-level document adds `earlier urls`, the links it had before, which still
+  open it, so the Planner can tell its current link from an old one by data.
+  Every structured `edit_plan` result (success, or a locked, stale, or invalid
+  refusal) still carries `document: { id, url }`, and `earlier_urls` after a
+  rename. Argument and storage errors return plain error text without it. Code
+  running inside the session, such as an Atomic extension, can use either to
+  address that document over MCP.
 
 After an `ask` questionnaire has a saved answer, its result may include
 `current_plan` with the same document, revision, source, block outline, comments,
-and question records as `read_plan`. The Planner can edit from that revision and
+and question records as the structured view `read_plan` is built from. The
+Planner can edit from that revision and
 still uses `anchor_plan` to relate the answer to prose. The optional snapshot
 has a 50 ms budget for document lookup, owner revalidation, and room access;
 if it cannot finish, the saved answer returns without waiting and the Planner
 can call `read_plan`. When none of a batch's questions were answered, or lookup
-or revalidation fails, the result contains only the outcomes.
+or revalidation fails, the result contains only the outcomes. `open_decisions`
+returns `current_plan` the same way. Once that view, as JSON, would take more
+than half of one read's 16,000 bytes (8,000 bytes), `current_plan` keeps
+`document`, `revision`, and the newest `questions` and `comments` that fit, with
+`questions_omitted` and `comments_omitted` counting any left out, and replaces
+`source` and `blocks` with `source_omitted`, which gives the source's size, the
+block count and the call that reads them. A result that carries the plan stays
+within one read's bytes. Edit from that revision only after `read_plan` has
+returned the blocks.
 
 Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.
@@ -691,6 +704,97 @@ room-fixed target of `read_plan` or editing tools.
 
 Messages from people retain their GitHub handles so disagreement is not merged
 into one anonymous user voice.
+
+### Reading a large document
+
+A host tool result reaches the model as one string, and a harness may keep only
+the head and tail of a long one: Atomic's MCP adapter keeps the first and last
+10 KiB of a result over 20 KiB of UTF-8 and drops the middle without a word.
+`read_plan`, `read_child` and MCP `read_document` therefore return Markdown with
+real newlines, and one result never carries more than **16,000 UTF-8 bytes in
+all** (`READ_BYTES` in `apps/server/src/document-reading.ts`). The budget covers
+the header, the outline, the lists, the block listing, the source and the lines
+that say how to continue; nothing sits outside it. It is well under the 20 KiB
+Atomic keeps and the 50,000 characters a harness reads at once.
+
+`read_plan` and `read_child` still return their structured view as JSON, so a
+caller that runs the tool itself, or reads the result of a tool-run in the
+server, sees the whole document unchanged. The Copilot SDK, Atomic and the
+attached client show their model whatever a host tool returned, and the agent
+harness applies a tool's `toModelOutput` only to the messages it returns when a
+turn ends. `withModelOutput` (`apps/server/src/harness/model-output.ts`) wraps
+each real harness, so the result it hands the runtime for these two tools is the
+text below, made from the same view. The harness the end-to-end suite fakes, and
+`HARNESS` values added later, see the JSON until they are wrapped. The `remote`
+harness sends the attached client the same text as `host-tool-result.output`.
+
+```text
+document: <id>
+url: /documents/<owner>/<repository>/<slug>
+revision: 7
+size: 168421 characters, 5566 lines, 2214 blocks
+lines: 1-120 of 5566
+next: read_plan {"offset":121}
+This document is larger than one result holds (16000 bytes), so this is its outline and first part. ...
+
+Outline (line, heading):
+L1 # Quarterly field notes
+L3 ## Site 1: harbour survey
+
+Decisions (their text, options and answers are in the source):
+- <id>: open: Which quay?
+
+Blocks starting on lines 1-120 (index type lines digest):
+0 heading L1-1 sha256:...
+
+--- source lines 1-120 of 5566 ---
+# Quarterly field notes
+...
+```
+
+- The source is last, after a `--- source lines A-B of N ---` line, and is
+  verbatim: the source sections of the results `next:` leads through, joined,
+  are the document exactly, with its final newline, CRLF and blank lines. Lines
+  are separated by `\n`; a final newline does not start another line, so `lines`
+  is the count of lines, not of newlines.
+- Without arguments, a document whose whole text fits in 16,000 bytes is
+  returned whole (`lines: all N`). A larger one returns its outline (shallow
+  headings first, with the line each starts on, in at most 2,500 bytes and with
+  a count of any left out) and its first part, and says `next:` with the exact
+  call that continues. That is the threshold: `read_document` returns a document of
+  up to about 15,000 characters whole, and `read_plan`, whose block listing takes
+  about 90 bytes a block, about 6,000 characters of short blocks or more of long
+  ones.
+- `offset` (a 1-based line) and `limit` (lines) return that slice and the total
+  line count. Where the slice fits in the budget it is exact. **`limit` is a
+  maximum:** a result that would pass 16,000 bytes stops sooner, and its header
+  says so (`limit: asked for 4000 lines from line 1, but one result holds at
+  most 16000 bytes, so this one stops at line 521`) with a `next:` for the rest.
+  The cap is what keeps a harness from silently cutting the middle of a result,
+  so it wins over an exact slice. An `offset` outside the document is an error
+  that names the line count.
+- A line too long for one result is read in pieces. `column` is a 1-based
+  position in line `offset`, counted in Unicode code points (a line's characters
+  and then its newline, if it has one), so a piece never splits an emoji or a CJK
+  character. A result that ends inside a line says `ends mid-line: line 3 after
+  character 30703 of 50001` and its `next:` names `offset` and `column`; the
+  result that continues says `starts mid-line`. A `column` needs its `offset`
+  and must lie inside that line. Following `next:` covers every character
+  exactly once.
+- Lists that come with the first part are trimmed to their own budgets, and the
+  last line of each says what was left out: the decisions (1,500 bytes; every
+  decision, with its options and answers, is in the source), the accepted
+  comments (1,500 bytes) and, for MCP, the brief (2,000 bytes; the whole brief is
+  in `structuredContent.brief`). A header value is one line of at most 300
+  characters.
+- A part lists the top-level blocks that start on its lines, with their index,
+  type, line range and digest, so a Planner can aim `edit_plan` and `anchor_plan`
+  at a block it has read. `read_plan` on a small document lists every block.
+- `read_child` has the same text, with `child` and `title` in the header, the
+  same `offset`, `limit` and `column`, and a `next:` that names the child. MCP
+  `read_document` has the same shape with the document's `id`, `title` and `url`,
+  and no blocks. Its `structuredContent` is the whole document as before,
+  whatever slice the text carries.
 
 ## Session lifecycle
 

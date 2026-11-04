@@ -4,7 +4,9 @@ import { isAbsolute } from "node:path";
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
 import { forgetWorkspaces, workflowJournal } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
+import { withModelOutput } from "./model-output";
 import { createRemoteAdapter } from "./remote/adapter";
+import { readingOutput } from "../agent/reading-output";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { AtomicAuthMode } from "./atomic/adapter";
@@ -31,10 +33,17 @@ function createRemoteHarness(): HarnessV1 & { shutdown(): Promise<void> } {
 	return createRemoteAdapter();
 }
 
+/** Each real harness shows the model `read_plan` and `read_child` as text; see `withModelOutput`. */
+function reading<Settings>(
+	create: (settings: Settings) => HarnessV1 & { shutdown(): Promise<void> },
+) {
+	return (settings: Settings) => withModelOutput(create(settings), readingOutput);
+}
+
 export const harnesses = {
-	"copilot-sdk": createCopilotSdk,
-	atomic: createAtomicHarness,
-	remote: createRemoteHarness,
+	"copilot-sdk": reading(createCopilotSdk),
+	atomic: reading(createAtomicHarness),
+	remote: reading(createRemoteHarness),
 } satisfies Record<
 	string,
 	(settings: {
