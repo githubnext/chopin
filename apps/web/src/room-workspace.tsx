@@ -699,8 +699,10 @@ export function RoomWorkspace(
 		};
 	});
 	let typing = useDocumentEditing(room);
+	// A disconnected Planner is as unable to take a message or draft tasks as a detached one.
 	let plannerDetached = plannerAttachment.wire === wire && !!plannerAttachment.planner
 		&& plannerAttachment.planner.state !== "attached";
+	let plannerDisconnected = plannerDetached && plannerAttachment.planner?.state === "disconnected";
 	// The machine button beside Build plan chooses where work runs; Build plan says when it is offline.
 	let machineChoice = useMachineChoice(
 		room,
@@ -722,6 +724,7 @@ export function RoomWorkspace(
 		live: liveBuild,
 		planner: agent,
 		plannerDetached,
+		plannerDisconnected,
 		room,
 		userId,
 		wire,

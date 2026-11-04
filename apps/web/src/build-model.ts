@@ -375,6 +375,7 @@ export function startedBy(snapshot: Snapshot | undefined, userId: string): strin
  * not, which reads as Chopin failing to draft.
  */
 export function draftRefusalCopy(message: string, code?: string): string | undefined {
+	if (/Planner.* is disconnected/.test(message)) return "Reconnect the Planner to build.";
 	if (code === "planner-not-attached" || /No Planner is attached/.test(message)) {
 		return "Connect a Planner to this document to build.";
 	}
@@ -594,6 +595,8 @@ export type BuildContext = {
 	 * drafting needs one: starting drafted tasks, Retry and rebuilds do not.
 	 */
 	plannerDetached?: boolean;
+	/** The Planner is attached to this document but its connection dropped; it must reconnect. */
+	plannerDisconnected?: boolean;
 	hasContent: boolean;
 };
 
@@ -627,7 +630,9 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 		return "Chopin isn’t running for this document";
 	}
 	if (phase.kind === "drafting" && context.plannerDetached) {
-		return "Connect a Planner to this document to build";
+		return context.plannerDisconnected
+			? "Reconnect the Planner to build"
+			: "Connect a Planner to this document to build";
 	}
 }
 

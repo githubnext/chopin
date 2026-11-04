@@ -5,7 +5,7 @@
  * one against a database of its own, created beside local-auth's.
  */
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 
 import { SQL } from "bun";
 
@@ -13,10 +13,11 @@ import { connectAgent } from "../packages/agent-link/src/client";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
+import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { HARNESS, HOST, ROOT } from "./servers";
 
-import type { Page } from "@playwright/test";
-import type { AgentClient } from "../packages/agent-link/src/client";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
+import type { AgentClient, AgentHandlers } from "../packages/agent-link/src/client";
 
 const PORT = 8793;
 const ORIGIN = `http://${HOST}:${PORT}`;
@@ -500,6 +501,228 @@ test("an attached Planner stores the images it made and shows one under each opt
 		});
 	} finally {
 		await client.detach();
+	}
+});
+
+/** Set to a directory to keep the screenshots a pull request shows. */
+const SHOTS = process.env.CHOPIN_SHOTS;
+
+function chatPane(page: Page) {
+	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
+}
+
+async function snap(target: Page | Locator, name: string): Promise<void> {
+	if (!SHOTS) return;
+	await mkdir(SHOTS, { recursive: true });
+	await target.screenshot({ path: `${SHOTS}/${name}.png`, animations: "disabled" });
+}
+
+const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
+
+test("a Planner whose connection drops is shown as disconnected for longer than the grace period, never stopped, and carries on with its Decision and a held Stop when it returns", async ({ browser, page }) => {
+	test.setTimeout(150_000);
+	let database = await freshDatabase();
+	await migrate(database);
+	await remoteServer(database);
+	registerTestDatabase(PORT, database);
+	let room = crypto.randomUUID();
+	await createChannel(PORT, room);
+	await seedChannel(PORT, room, "# Release\nShip when ready.\n");
+	await authenticate(page, HANDLE, ORIGIN);
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+
+	// The package client keeps its socket to itself; a subclass hands it to the test, which then
+	// closes it as a network failure does, with no detach.
+	let sockets: WebSocket[] = [];
+	let Native = globalThis.WebSocket;
+	globalThis.WebSocket = class extends Native {
+		constructor(...args: ConstructorParameters<typeof Native>) {
+			super(...args);
+			sockets.push(this);
+		}
+	} as typeof WebSocket;
+	let link: AgentClient | undefined;
+	let returning: AgentClient | undefined;
+	let asked: Promise<{ status: string; value?: unknown }> | undefined;
+	let controls: string[] = [];
+	let started = Math.floor(Date.now() / 1000) - 300;
+	let card = (status: "running" | "paused") => ({
+		id: "run-1",
+		name: "plan-review",
+		status,
+		started,
+		updated: started + 240,
+		stages: [{
+			id: "run-1:review",
+			name: "review-draft",
+			status: status === "running" ? ("running" as const) : ("paused" as const),
+			started,
+		}],
+		waiting: 0,
+	});
+	let handlers: AgentHandlers = {
+		turn(context) {
+			// Turns of Chopin's own background jobs, after it attaches, ask nothing.
+			if (asked) return;
+			link!.reportRuns(context.message.session, {
+				active: ["run-1"],
+				paused: [],
+				cards: [card("running")],
+			});
+			asked = link!.ask(context.message.session, {
+				method: "confirm",
+				title: "Ship it?",
+				message: "Now.",
+			});
+		},
+		control(message) {
+			controls.push(message.type);
+			if (message.type === "stop") {
+				(returning ?? link!).reportRuns(message.session, {
+					active: [],
+					paused: ["run-1"],
+					cards: [card("paused")],
+				});
+			}
+		},
+	};
+	let phone: BrowserContext | undefined;
+	try {
+		link = await connectAgent({
+			url: ORIGIN,
+			token: `ghu_e2e_${HANDLE}_1`,
+			document: room,
+			handlers,
+		});
+		let planner = plannerStatus(page);
+		await expect(planner).toHaveAttribute("data-planner-state", "attached");
+		let input = chatInput(page);
+		await fillChat(input, "@chopin review the release");
+		await input.press("Enter");
+		let decision = content(page).locator("article[data-plan-sidecar-questionnaire]");
+		await expect(decision).toBeVisible();
+		let runs = chatPane(page).getByRole("region", { name: "Workflow runs" });
+		await expect(runs.getByRole("button", { name: /^plan-review, running, \d+m$/ })).toBeVisible();
+		await expect(chatPane(page).getByText("The Planner disconnected.")).toHaveCount(0);
+		await snap(page, "link-drop-connected-desktop");
+
+		sockets[0]!.close(3000, "network failed");
+		let held = await link.resumption;
+		expect(held).toBeDefined();
+
+		// Disconnected, not stopped: the Planner line, the run card and Chat all say so, and the
+		// work and the Decision are as they were.
+		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		await expect(planner).toHaveText(
+			`Planner: ${HANDLE} disconnected. Its workflows and Decisions are kept. `
+				+ "@chopin needs it to reconnect.",
+		);
+		let away = runs.getByRole("button", {
+			name: /^plan-review, disconnected, was running, 4m$/,
+		});
+		await expect(away).toBeVisible();
+		await expect(away).toContainText("disconnected");
+		await expect(runs.locator("[data-run-disconnected-note]")).toHaveText(
+			"Last reported running. It carries on when the Planner reconnects.",
+		);
+		await expect(runs).not.toContainText("stopped");
+		await expect(
+			chatPane(page).getByText(
+				"The Planner disconnected. Its workflows and open Decisions are kept",
+			),
+		)
+			.toBeVisible();
+		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+		await snap(page, "link-drop-disconnected-desktop");
+		await snap(chatPane(page), "link-drop-disconnected-chat-desktop");
+
+		// The same on a phone, in the Chat pane.
+		phone = await browser.newContext(PHONE);
+		let handset = await phone.newPage();
+		await authenticate(handset, HANDLE, ORIGIN);
+		await handset.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(handset);
+		await handset.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await expect.poll(async () => (await chatPane(handset).boundingBox())?.x).toBe(0);
+		let handsetRuns = chatPane(handset).getByRole("region", { name: "Workflow runs" });
+		await expect(handsetRuns.getByRole("button", { name: /^plan-review, disconnected/ }))
+			.toBeVisible();
+		await expect(plannerStatus(handset)).toContainText("disconnected");
+		await expectNoHorizontalOverflow(handset);
+		await expectInsideViewport(plannerStatus(handset));
+		await expectInsideViewport(handsetRuns);
+		await snap(handset, "link-drop-disconnected-phone");
+
+		// Well past the grace period, nothing has ended: the Decision is open and the run is shown.
+		await page.waitForTimeout(GRACE_MS + 4_000);
+		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		await expect(away).toBeVisible();
+		await expect(runs).not.toContainText("stopped");
+
+		// A reload asks the server again and hears the same: disconnected, with its work kept.
+		await page.reload();
+		await ready(page);
+		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		await expect(away).toBeVisible();
+		await expect(runs).not.toContainText("stopped");
+		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+
+		// The Decision stays answerable while the Planner is away; the answer is kept for it.
+		await decision.getByText("Yes", { exact: true }).click();
+		await decision.getByRole("button", { name: "Save", exact: true }).click();
+		await expect(decision.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+
+		// A Stop pressed meanwhile is said to be pending, and nothing claims to have stopped.
+		await page.getByRole("button", { name: "Stop Chopin", exact: true }).click();
+		await expect(
+			chatPane(page).getByText(
+				"asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+			),
+		).toBeVisible();
+		await expect(away).toBeVisible();
+		await expect(runs).not.toContainText("stopped");
+		await expect(runs).not.toContainText("paused");
+		// Pause is offered, said as pending, and Resume is not.
+		await expect(
+			runs.getByRole("button", { name: "Pause plan-review when the Planner reconnects" }),
+		)
+			.toBeVisible();
+		expect(controls).toEqual([]);
+
+		returning = await connectAgent({
+			url: ORIGIN,
+			token: `ghu_e2e_${HANDLE}_1`,
+			document: room,
+			handlers,
+			resume: held!,
+		});
+		await expect(planner).toHaveAttribute("data-planner-state", "attached");
+		await expect(planner).toHaveText(`Planner: ${HANDLE} attached`);
+		// The held Stop reached it, and it reported the run paused; nothing is disconnected now.
+		await expect.poll(() => controls).toEqual(["stop"]);
+		await expect(runs.getByRole("button", { name: /^plan-review, paused, \d+m$/ })).toBeVisible();
+		await expect(runs).not.toContainText("disconnected");
+		await expect(runs.locator("[data-run-disconnected-note]")).toHaveCount(0);
+		await expect(chatPane(page).getByText("The Planner reconnected and carries on.")).toBeVisible();
+		await expect(runs.getByRole("button", { name: "Resume plan-review" })).toBeVisible();
+		// The answer given while it was away reached it.
+		expect(await asked).toMatchObject({ status: "answered", value: true });
+		await snap(page, "link-drop-reconnected-desktop");
+		await snap(chatPane(page), "link-drop-reconnected-chat-desktop");
+		await expect(plannerStatus(handset)).toHaveText(`Planner: ${HANDLE} attached`);
+		await expect(
+			chatPane(handset).getByRole("region", { name: "Workflow runs" })
+				.getByRole("button", { name: /^plan-review, paused/ }),
+		).toBeVisible();
+		await snap(handset, "link-drop-reconnected-phone");
+	} finally {
+		globalThis.WebSocket = Native;
+		await phone?.close();
+		await returning?.detach();
+		await link?.detach();
 	}
 });
 

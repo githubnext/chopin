@@ -87,6 +87,7 @@ export function useBuildPlan(
 		live,
 		planner,
 		plannerDetached,
+		plannerDisconnected,
 		room,
 		userId,
 		wire,
@@ -100,6 +101,8 @@ export function useBuildPlan(
 		planner: boolean;
 		/** `session:planner` reports no Planner client attached (remote harness only). */
 		plannerDetached?: boolean;
+		/** That Planner's connection dropped, and it keeps its work for its return. */
+		plannerDisconnected?: boolean;
 		room: string;
 		userId?: string;
 		wire?: Wire;
@@ -225,6 +228,7 @@ export function useBuildPlan(
 			connected,
 			planner,
 			plannerDetached,
+			plannerDisconnected,
 			hasContent,
 		})
 		: { kind: "plan" as const, blocked: "A child document is never built" };
