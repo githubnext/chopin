@@ -109,13 +109,27 @@ export declare namespace Session {
 	 * Who holds this document's remote Planner. `held` is a client that detached or
 	 * dropped and keeps the document until `until` (ISO 8601) unless it reattaches.
 	 * `starting` is a paired machine of `login`'s asked to start it, which has yet to
-	 * attach. Only the GitHub login is named, never its machine or checkout.
+	 * attach; with `failure`, its backend has exited before attaching more than once in a
+	 * row. Only the GitHub login is named, never its machine or checkout.
 	 */
 	export type PlannerAttachment =
 		| { state: "attached"; login: string }
 		| { state: "held"; login: string; until: string }
-		| { state: "starting"; login: string }
+		| { state: "starting"; login: string; failure?: PlannerStartFailure }
 		| { state: "none" };
+
+	/**
+	 * Why a machine's Planner backend keeps failing to start, as its connector last said.
+	 * `reason` is the last line the backend wrote to stderr that says why, else how it ended,
+	 * with credentials masked and the home directory as `~`. `attempts` counts the launches
+	 * in a row that exited before staying up and `at` is when the last one did (ISO 8601).
+	 * The connector is retrying until the Planner attaches, which clears it.
+	 */
+	export type PlannerStartFailure = {
+		attempts: number;
+		reason: string;
+		at: string;
+	};
 
 	/**
 	 * Sent only under `HARNESS=remote`: once after `Hello`, then to the whole room

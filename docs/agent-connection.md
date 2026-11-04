@@ -323,6 +323,14 @@ waits up to 30 seconds for it to attach, and is refused only if it has not:
 This document's Planner is still starting on @<login>'s machine. Try again in a moment.
 ```
 
+Once the machine's backend has exited before attaching more than once in a row,
+the refusal says why, from what its connector reported (see
+[Hosted agent](hosted-agent.md#remote-planner)), and still only names the login:
+
+```text
+This document's Planner can't start on @<login>'s machine: <reason> (3 attempts in a row). It keeps trying; try again once that is fixed.
+```
+
 If no machine is starting one, the message says how to get one. Where Chopin
 runs Planners on paired machines:
 

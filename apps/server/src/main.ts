@@ -944,7 +944,7 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
  */
 async function plannerNotAttached(channelId: string, url: string, repository: string) {
 	let starting = await experiments?.plannerStarting(channelId);
-	if (starting) return startingMessage(starting.login);
+	if (starting) return startingMessage(starting.login, starting.failure);
 	return notAttachedMessage(url, repository, !!experiments?.plannerMachines);
 }
 
@@ -965,7 +965,13 @@ async function plannerStatus(channelId: string): Promise<PlannerAttachment> {
 	let status = plannerAttachments!.status(channelId);
 	if (status.state !== "none") return status;
 	let starting = await experiments?.plannerStarting(channelId);
-	return starting ? { state: "starting", login: starting.login } : status;
+	return starting
+		? {
+			state: "starting",
+			login: starting.login,
+			...(starting.failure ? { failure: starting.failure } : {}),
+		}
+		: status;
 }
 
 /** Each document's latest status announcement, so an earlier one that resolves later is dropped. */
