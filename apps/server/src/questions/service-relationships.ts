@@ -60,7 +60,7 @@ export function rebase(plan: Plan, previousSource = plan.persistence?.committedS
 }
 
 export function carry(plan: Plan, set: Wired.AnchorSet): Wired.AnchorSet {
-	let anchors = room.rebase(plan.document, set.anchors);
+	let anchors = room.rebase(plan.document, set.anchors, { marking: true });
 	let lost = anchors.some(anchor => anchor.orphaned);
 	return {
 		anchors,

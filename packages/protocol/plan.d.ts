@@ -49,6 +49,12 @@ export declare namespace Plan {
 		orphaned?: true;
 		/** A unique disappeared prose block may recover on the next document edit only. */
 		recoverOnNextEdit?: true;
+		/**
+		 * A decision's anchor that was found again by its digest after its position was lost, and
+		 * since re-expressed as a position on what it found, which may be an identical copy of the
+		 * block it was made for. It stays until the anchor is replaced.
+		 */
+		byDigest?: true;
 	};
 
 	/** The editable paragraph a decided card became, kept even when its block is lost. */

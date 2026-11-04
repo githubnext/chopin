@@ -104,6 +104,8 @@ function unmatched(key: string, cause: string): string {
 		+ `document as you read it: ${cause}.`;
 }
 
+const NO_READ = "the server no longer has that read";
+
 type Located = { index: number } | { cause: string };
 
 /**
@@ -118,7 +120,7 @@ function locate(
 	block: { index: number; digest: string },
 ): Located {
 	let read = edit.read(plan, revision);
-	if (!read) return { cause: "the server no longer has that read" };
+	if (!read) return { cause: NO_READ };
 	if (read.blocks[block.index]?.digest !== block.digest) {
 		return { cause: "its address does not match the block you read at that position" };
 	}
@@ -154,13 +156,25 @@ function readBlock(
 		: { cause: "an identical paragraph now stands beside it" };
 }
 
-/** The block each passage of a card still names, or nothing where it can no longer be told. */
-function cardBlocks(plan: Plan, record: Record): Array<number | undefined> {
+/** Where each passage of a card now is, brought forward onto the document as it stands. */
+function cardAnchors(plan: Plan, record: Record) {
 	let id = record.definition.questions[0]!.id;
 	let anchors = Anchors.read(record).questions[id]?.anchors ?? [];
-	return room.rebase(plan.document, anchors).map(anchor =>
-		anchor.orphaned ? undefined : room.blockNamedBy(plan.document, anchor)
-	);
+	return room.rebase(plan.document, anchors, { marking: true });
+}
+
+/**
+ * The block each passage of a card still names, or nothing where it can no longer be told, and
+ * whether the card's anchor found it by digest alone, now or on an earlier rebase.
+ */
+function cardBlocks(
+	plan: Plan,
+	record: Record,
+): Array<{ index: number; byDigest: boolean } | undefined> {
+	return cardAnchors(plan, record).map(anchor => {
+		let index = anchor.orphaned ? undefined : room.blockNamedBy(plan.document, anchor);
+		return index === undefined ? undefined : { index, byDigest: anchor.byDigest === true };
+	});
 }
 
 /**
@@ -193,7 +207,7 @@ function namesAnotherPassage(
 	return related.some((block, position) => {
 		let located = locate(plan, readAt, block);
 		return !("cause" in located) && hashes[located.index] === block.digest
-			&& located.index !== blocks[position];
+			&& located.index !== blocks[position]?.index;
 	});
 }
 
@@ -232,7 +246,9 @@ function sameDefinition(record: Record, wanted: Question.Item): boolean {
  * compared on its definition, as its passages no longer mean anything. Nothing is placed, so the
  * card's own anchor says which block it sits beside; the input's digest must still match that block,
  * and its index too unless the document has moved on since the Planner read it, in which case the
- * block the Planner read, where the server still has that read, must be the card's block.
+ * block the Planner read, where the server still has that read, must be the card's block. Where it
+ * does not, the card must stand right after the one passage it was opened on and its anchor must
+ * never have been found again by digest alone: such an anchor may sit on an identical copy.
  */
 function repeats(
 	plan: Plan,
@@ -248,17 +264,19 @@ function repeats(
 	let hashes = room.digests(plan.document);
 	let retained = readAt !== undefined && edit.read(plan, readAt) !== undefined;
 	let standing = readAt !== undefined && !retained ? blockBeforeCard(plan, record) : undefined;
-	return blocks.every((index, position) => {
+	return blocks.every((found, position) => {
 		let block = related[position]!;
-		if (index === undefined || hashes[index] !== block.digest) return false;
-		if (readAt === undefined) return index === block.index;
+		if (!found || hashes[found.index] !== block.digest) return false;
+		if (readAt === undefined) return found.index === block.index;
 		if (retained) {
 			let located = locate(plan, readAt, block);
-			return !("cause" in located) && located.index === index;
+			return !("cause" in located) && located.index === found.index;
 		}
 		// Without the read, only where the card stands says which paragraph it was opened beside,
 		// and it stands beside the first passage alone; a later one cannot be told from a twin.
-		return position === 0 && standing === index;
+		// An anchor found again by digest alone says nothing more: it may sit on an identical copy
+		// of a paragraph rewritten since, which is also the block before the card.
+		return position === 0 && standing === found.index && !found.byDigest;
 	});
 }
 
@@ -326,15 +344,18 @@ export async function publishQuestions(
 						readAt !== undefined && sameDefinition(record, wanted)
 						&& !namesAnotherPassage(plan, readAt, record, related)
 					) {
-						let cause = related.map(block => readBlock(plan, readAt, block)).find(found =>
-							"cause" in found
+						let found = related.map(block => readBlock(plan, readAt, block)).find(block =>
+							"cause" in block
 						);
-						Question.reject(unmatched(
-							key,
-							cause && "cause" in cause
-								? cause.cause
-								: "the card for this key no longer stands beside the block you read",
-						));
+						let cause = found && "cause" in found
+							? found.cause
+							: "the card for this key no longer stands beside the block you read";
+						// Without that read, a card found again by digest alone may be on a copy.
+						if (cause === NO_READ && cardBlocks(plan, record).some(block => block?.byDigest)) {
+							cause += ", and the card's paragraph can only be found again by its text, which an "
+								+ "identical copy would match too";
+						}
+						Question.reject(unmatched(key, cause));
 					}
 					Question.reject(
 						`Decision key "${key}" already holds a different decision, so this one was not opened. `
