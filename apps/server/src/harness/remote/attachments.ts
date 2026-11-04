@@ -100,8 +100,15 @@ export function notAttachedMessage(url: string, repository: string, machines = f
 		+ `that session becomes this document's Planner.`;
 }
 
-/** What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready. */
-export function startingMessage(login: string): string {
+/**
+ * What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready:
+ * wait a moment, or, once its backend has failed to start more than once, why it cannot.
+ */
+export function startingMessage(login: string, failure?: Session.PlannerStartFailure): string {
+	if (failure) {
+		return `This document's Planner can't start on @${login}'s machine: ${failure.reason} `
+			+ `(${failure.attempts} attempts in a row). It keeps trying; try again once that is fixed.`;
+	}
 	return `This document's Planner is still starting on @${login}'s machine. Try again in a moment.`;
 }
 

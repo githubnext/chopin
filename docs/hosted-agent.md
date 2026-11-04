@@ -485,6 +485,21 @@ whose ownership was released. It names only the holder's GitHub login and
 state, never a machine, checkout, or token. Chat shows it as one line under the
 composer. Other harnesses never send it, and Chat then shows nothing.
 
+While a paired machine is starting the Planner, the state is `starting`. Its
+connector reports each launch of the backend that exits before staying up to
+`POST /api/connector/planner/failure`: how many in a row, how it ended and the
+last stderr line that says why (colors and credentials removed, the home
+directory shown as `~`, at most 300 characters). From the second in a row, the
+`starting` state also carries `failure` with the count, the reason and when
+the last launch exited, so everyone in the document reads why the Planner has
+not attached; the time is the server's own, not the connector's clock. The report
+counts only for a document Chopin asked that machine to run, and is forgotten
+when the Planner attaches, when the connector says a launch stayed up, when the
+machine is no longer asked for the document, and with a restart. It is a new
+route, not a new connector protocol: a connector that does not report is
+unaffected, and a server without the route answers a reporting connector 404,
+which it takes to mean no.
+
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period,

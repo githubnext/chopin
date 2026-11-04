@@ -18,6 +18,7 @@ import {
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
 import { hostInputRoom } from "../../testing/decisions";
+import { startingMessage } from "./attachments";
 import { MachinePlanners } from "./machine-planners";
 
 import type { RemotePlanner } from "./registry";
@@ -183,6 +184,17 @@ async function dispatchServer() {
 			raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 			return raw;
 		}
+		/** What the connector tells Chopin about its Planner backend's failing to start. */
+		async function report(body: unknown) {
+			return send("/api/connector/planner/failure", {
+				bearer: token,
+				headers: {
+					[CONNECTOR_VERSION_HEADER]: "dev",
+					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
+				},
+				body,
+			});
+		}
 		let disconnect = () =>
 			send("/connector/mcp", {
 				bearer: connection,
@@ -208,6 +220,7 @@ async function dispatchServer() {
 			poll,
 			credential,
 			backend,
+			report,
 			disconnect,
 			reconnect,
 		};
@@ -265,6 +278,158 @@ async function upgrade(url: string, credential: string) {
 	let response = await upgradeRequest(url, { authorization: `Bearer ${credential}` });
 	return response.status;
 }
+
+/** What a connector says when its backend exited before attaching `attempts` times in a row. */
+function failing(document: string, attempts: number, reason = "unsafe-checkout: refused") {
+	return { document, failure: { attempts, how: "exit 1", reason, at: Date.now() } };
+}
+
+describe("a Planner backend that keeps failing to start", () => {
+	it("is told to the document's people from the second launch in a row, and goes once the Planner attaches", async () => {
+		let { machine, choose, runtime, channel, server } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+
+		// One launch that exited is a transient failure: the document still just says starting.
+		expect((await laptop.report(failing(channel.id, 1))).status).toBe(200);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+
+		// The second in a row is not.
+		let reason = "unsafe-checkout: ~/src/score's own git configuration sets a credential helper";
+		let before = Date.now();
+		expect(await (await laptop.report(failing(channel.id, 2, reason))).json())
+			.toEqual({ recorded: true });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+			failure: {
+				attempts: 2,
+				reason,
+				at: expect.any(String),
+			},
+		});
+		let { failure } = (await runtime.plannerStarting(channel.id))!;
+		// The time is the server's own, so a connector's clock cannot skew what people read.
+		expect(Date.parse(failure!.at)).toBeGreaterThanOrEqual(before);
+
+		// It attaches at last; once it lets go and the grace period ends, nothing old is told.
+		let link = await laptop.backend();
+		await link.next("attached");
+		link.send({ type: "detach" });
+		for (let deadline = Date.now() + 4_000; server.attachments.holding(channel.id);) {
+			if (Date.now() > deadline) throw new Error("the Planner was never released");
+			await Bun.sleep(50);
+		}
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+	});
+
+	it("goes when the connector says its backend stays up, or the machine stops being asked for the document", async () => {
+		let { machine, choose, runtime, channel } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let desk = await machine("member", "U_member", "desk");
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		await laptop.report(failing(channel.id, 3));
+		expect((await runtime.plannerStarting(channel.id))?.failure?.attempts).toBe(3);
+		// A launch that stays up: no failure to report any more.
+		expect(await (await laptop.report({ document: channel.id })).json())
+			.toEqual({ recorded: true });
+		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
+
+		// A failure of the laptop does not follow the document to the desk, or back again.
+		await laptop.report(failing(channel.id, 2));
+		await choose("member", desk.id);
+		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+	});
+
+	it("is taken only from a machine Chopin asked to run the document's Planner, for its people to read", async () => {
+		let { machine, choose, runtime, channel, send } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let desk = await machine("member", "U_member", "desk");
+		let rival = await machine("rival", "U_rival", "rival-box");
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+
+		// Not asked: the desk was never chosen, and the rival's machine cannot touch the document.
+		for (let other of [desk, rival]) {
+			let answer = await other.report(failing(channel.id, 4, "not for you"));
+			expect(answer.status).toBe(200);
+			expect(await answer.json()).toEqual({ recorded: false });
+		}
+		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
+
+		// Nor anyone who is not a paired machine.
+		let stranger = await send("/api/connector/planner/failure", {
+			bearer: `chopin_m_${"x".repeat(43)}`,
+			headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "4" },
+			body: failing(channel.id, 2),
+		});
+		expect(stranger.status).toBe(401);
+		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
+	});
+
+	it("is what an @chopin request is told while the Planner cannot start, instead of to try again in a moment", () => {
+		expect(startingMessage("mona")).toBe(
+			"This document's Planner is still starting on @mona's machine. Try again in a moment.",
+		);
+		expect(
+			startingMessage("mona", {
+				attempts: 3,
+				reason: "unsafe-checkout: refused",
+				at: "2026-11-04T02:00:00.000Z",
+			}),
+		).toBe(
+			"This document's Planner can't start on @mona's machine: unsafe-checkout: refused "
+				+ "(3 attempts in a row). It keeps trying; try again once that is fixed.",
+		);
+	});
+
+	it("keeps what is told short and plain", async () => {
+		let { machine, choose, runtime, channel } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		await laptop.report(failing(channel.id, 2, `\u001b[31m${"x".repeat(1_500)}\u0007\r\nend`));
+		let reason = (await runtime.plannerStarting(channel.id))!.failure!.reason;
+		expect(reason).toHaveLength(300);
+		expect([...reason].some(character => character.charCodeAt(0) < 32)).toBe(false);
+		// A report that says nothing about why still says how it ended.
+		await laptop.report({
+			document: channel.id,
+			failure: { attempts: 2, how: "signal SIGKILL", at: Date.now() },
+		});
+		expect((await runtime.plannerStarting(channel.id))!.failure).toEqual({
+			attempts: 2,
+			reason: "signal SIGKILL",
+			at: expect.any(String),
+		});
+		// Malformed ones are refused.
+		for (
+			let body of [{ document: channel.id, failure: { attempts: 0, how: "x", at: 1 } }, {
+				failure: {},
+			}]
+		) {
+			expect((await laptop.report(body)).status).toBe(409);
+		}
+	});
+});
 
 describe("choosing a machine for a document", () => {
 	it("tells that machine to run the document's Planner, and stops it when another is chosen", async () => {
@@ -635,7 +800,10 @@ describe("a document on Default machine", () => {
 		expect(await laptop.poll([])).toEqual({ waiting: true });
 		expect((await choice("member")).planner)
 			.toEqual({ state: "starting", login: null, machine: desk.id });
-		expect(await runtime.plannerStarting(channel.id)).toEqual({ login: "member" });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: desk.id,
+		});
 
 		let link = await desk.backend();
 		await link.next("attached");
@@ -868,7 +1036,10 @@ describe("a teammate's machine shared with teammates", () => {
 		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
 		expect((await choice("member")).planner)
 			.toEqual({ state: "starting", login: "rival", machine: box.id });
-		expect(await runtime.plannerStarting(channel.id)).toEqual({ login: "rival" });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "rival",
+			machineId: box.id,
+		});
 
 		expect(await plain.poll([])).toEqual({ waiting: true });
 
