@@ -6,7 +6,7 @@ import { ConnectorStopped, failureKind, redacted } from "./connection";
 import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
-import { githubEnvironment, type GitHubToken, githubToken } from "./github-token";
+import { gitCredentials, githubEnvironment, type GitHubToken, githubToken } from "./github-token";
 import { runAgent } from "./acp";
 import type { AgentInfo } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
@@ -246,7 +246,13 @@ export async function runWork(
 			input,
 			implementation ? undefined : claim.generation,
 			undefined,
-			checkout.env,
+			// A registered checkout needs no token to be found, but fetching the run's commit into it
+			// takes one, as an agent's push does, and the machine's own login may not reach GitHub.
+			Object.keys(checkout.env).length > 0 || claim.spike
+				? checkout.env
+				: await token().then(value =>
+					value ? gitCredentials(value.file, input.source.repository) : {}
+				),
 		);
 		let path = prepared.path;
 		let worktrees = { root: path, extras: prepared.extras };
@@ -276,7 +282,7 @@ export async function runWork(
 				...options.env,
 				// Where a build's agent adds any extra worktrees, as its prompt says.
 				...(implementation ? { CHOPIN_RUN_WORKTREES: prepared.extras } : {}),
-				...(github ? githubEnvironment(github) : {}),
+				...(github ? githubEnvironment(github, input.source.repository) : {}),
 				...(claim.spike ? noPushEnvironment() : {}),
 			},
 			onStart: failure =>

@@ -1127,6 +1127,14 @@ test.skipIf(process.platform === "win32")(
 		);
 		await chmod(join(bin, "gh"), 0o755);
 		let seen = join(scratch, "github.json");
+		// The person's own Git configuration sends GitHub over SSH, which a service can't use.
+		let global = join(scratch, "gitconfig");
+		await writeFile(
+			global,
+			'[url "git@github.com:"]\n\tinsteadOf = https://github.com/\n\tpushInsteadOf = https://github.com/\n',
+		);
+		let { GIT_CONFIG_GLOBAL } = process.env;
+		process.env.GIT_CONFIG_GLOBAL = global;
 		let path = process.env.PATH;
 		process.env.PATH = `${bin}:${path}`;
 		process.env.CHOPIN_TEST_GITHUB = seen;
@@ -1154,6 +1162,10 @@ test.skipIf(process.platform === "win32")(
 				GITHUB_TOKEN: token,
 				credential: `protocol=https\nhost=github.com\nusername=x-access-token\npassword=${token}\n`,
 				gh: 0,
+				// The checkout's origin is an SSH address, and the rewrite sends https to SSH too:
+				// the agent's fetches and pushes still go over https, where the token is used.
+				fetch: "https://github.com/org/repo.git",
+				push: "https://github.com/org/repo.git",
 			});
 			expect((await readFile(join(scratch, "gh"), "utf8")).split("\n")).toEqual([
 				token,
@@ -1167,6 +1179,8 @@ test.skipIf(process.platform === "win32")(
 			expect(written).not.toContain(token);
 		} finally {
 			process.env.PATH = path;
+			if (GIT_CONFIG_GLOBAL === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+			else process.env.GIT_CONFIG_GLOBAL = GIT_CONFIG_GLOBAL;
 			delete process.env.CHOPIN_TEST_GITHUB;
 			await chopin.stop(true);
 			await rm(scratch, { recursive: true, force: true });

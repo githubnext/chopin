@@ -554,6 +554,21 @@ The machine uses your own `gh` and Git login instead when:
 The GitHub App can't push to octo-org/score (it needs Contents and Pull requests write), so this machine uses its own GitHub login for it.
 ```
 
+### Your Git configuration
+
+Where Chopin gives the machine a token, the connector's Git commands for that
+repository, and those of the Planner and agent it starts, use the repository's
+`https://github.com/` address and the token, whatever your own Git
+configuration says. A `url.<base>.insteadOf` or `pushInsteadOf` rule that sends
+GitHub to SSH, which a background service has no agent or key for, doesn't
+reach them, and a checkout whose `origin` is an SSH address is fetched and
+pushed over https. The rest of your configuration (identity, signing, other
+rules and repositories) applies as it is, and nothing is written to your global
+configuration or the checkout's own.
+
+If a Git command still reaches GitHub over SSH and fails, the error names the
+rule that rewrites the address.
+
 ## Update
 
 ```sh

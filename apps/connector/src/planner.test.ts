@@ -1484,14 +1484,18 @@ test.skipIf(process.platform === "win32")(
 
 /** A Planner backend that records what it was given for GitHub, then reads its token file again. */
 const GITHUB_BACKEND = `
+import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync, statSync } from "node:fs";
 let log = process.argv[2];
+// Where git, under this environment, would fetch or push the repository's https address.
+let url = spawnSync("git", ["ls-remote", "--get-url", "https://github.com/octo-org/score.git"], { encoding: "utf8" }).stdout.trim();
 let file = process.env.CHOPIN_GITHUB_TOKEN_FILE;
 let seen = () => file ? { content: readFileSync(file, "utf8"), mode: (statSync(file).mode & 0o777).toString(8) } : null;
 appendFileSync(log, JSON.stringify({
 	token: process.env.CHOPIN_GITHUB_TOKEN ?? null,
 	expiresAt: process.env.CHOPIN_GITHUB_TOKEN_EXPIRES_AT ?? null,
 	file: file ?? null,
+	url,
 	argv: process.argv,
 	seen: seen(),
 }) + "\\n");
@@ -1540,6 +1544,11 @@ test.skipIf(process.platform === "win32")(
 		let script = join(directory, "backend.ts");
 		let log = join(directory, "launches.jsonl");
 		await writeFile(script, GITHUB_BACKEND);
+		// The person's own Git configuration sends GitHub over SSH, which a service can't use.
+		let global = join(directory, "gitconfig");
+		await writeFile(global, '[url "git@github.com:"]\n\tinsteadOf = https://github.com/\n');
+		let saved = process.env.GIT_CONFIG_GLOBAL;
+		process.env.GIT_CONFIG_GLOBAL = global;
 		let written = "";
 		let capture = {
 			write: (chunk: string | Uint8Array) => {
@@ -1568,6 +1577,8 @@ test.skipIf(process.platform === "win32")(
 				expiresAt: new Date(expiries[0]!).toISOString(),
 				file,
 				seen: { content: `${tokens[0]}\n`, mode: "600" },
+				// Its own git and its agent's keep to https for this repository, rewrite or not.
+				url: "https://github.com/octo-org/score.git",
 			});
 			// Never in its arguments.
 			expect(JSON.stringify(first.argv)).not.toContain("ghu_");
@@ -1583,6 +1594,8 @@ test.skipIf(process.platform === "win32")(
 			expect(await stat(file).catch(() => "missing")).toBe("missing");
 			for (let token of tokens) expect(written).not.toContain(token);
 		} finally {
+			if (saved === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+			else process.env.GIT_CONFIG_GLOBAL = saved;
 			abort.abort();
 			await chopin.stop();
 		}

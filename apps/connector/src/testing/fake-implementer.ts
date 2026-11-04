@@ -7,6 +7,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+function remoteUrl(cwd: string, ...args: string[]) {
+	let asked = spawnSync("git", ["-C", cwd, "remote", ...args], { encoding: "utf8" });
+	return asked.status === 0 ? asked.stdout.trim() : null;
+}
+
 if (process.argv.includes("--fail-start")) process.exit(1);
 
 let servers: McpServer[] = [];
@@ -61,6 +66,9 @@ let app = new AgentApp()
 					GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? null,
 					credential: fill.status === 0 ? fill.stdout : null,
 					gh: gh.status,
+					// Where `git fetch` and `git push` would go for origin, under this environment.
+					fetch: remoteUrl(cwd, "get-url", "origin"),
+					push: remoteUrl(cwd, "get-url", "--push", "origin"),
 				}),
 			);
 			return { stopReason: "end_turn" as const };
