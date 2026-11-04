@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { documentTools } from "./tools";
 import { askPlan, openDecision } from "./arguments";
 import { openPlan } from "../testing/plan";
+import * as Edit from "../plan/edit";
+import * as Room from "../plan/room";
 import * as Service from "../plan/service";
 import * as Questions from "../questions/service";
 import { member } from "../questions/text-response.test-fixtures";
@@ -67,6 +69,65 @@ test("open_decision returns an open card promptly, preserves one identity on ret
 		});
 		let settled = await documentTools.open_decision.execute!(input, options as never);
 		expect(JSON.parse(settled as string)).toEqual({ id, status: "discarded" });
+	} finally {
+		await Service.close(fixture.plan);
+	}
+});
+
+test("open_decisions rebases a stale revision for an authorized Planner and refuses one whose access lapsed", async () => {
+	let fixture = await openPlan("# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.");
+	let access = false;
+	let room: DocumentRoom = {
+		id: fixture.plan.id,
+		plan: fixture.plan,
+		server: fixture.server,
+		persist: () => Service.persist(fixture.plan),
+		exclusive: action => Service.exclusive(fixture.plan, action),
+		publish: async () => {},
+		anchors: () => {},
+		changes: () => {},
+	};
+	let owner = { signal: new AbortController().signal, revalidate: async () => access };
+	let options = { toolCallId: "open-many", messages: [], context: { room, owner } };
+	let input = {
+		revision: 0,
+		questions: [{
+			key: "onboarding-1",
+			header: "Onboarding",
+			question: "How should onboarding work?",
+			response: "text",
+			options: [],
+			multiple: false,
+			blocks: [{ index: 1, digest: Room.digests(fixture.plan.document)[1]! }],
+		}],
+	};
+	try {
+		let edited = Edit.apply(fixture.plan, 0, [{
+			op: "replace_root",
+			source: "# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.\n\nA late note.",
+		}]);
+		if (!edited.ok || !edited.mutation) throw new Error("fixture edit failed");
+		await Service.publish(fixture.plan, fixture.server, fixture.plan.id, edited.mutation);
+		expect(fixture.plan.revision).toBeGreaterThan(input.revision);
+
+		expect(await documentTools.open_decisions.execute!(input, options as never))
+			.toContain("Planner access could not be confirmed");
+		expect(fixture.plan.records.size).toBe(0);
+
+		access = true;
+		let first = JSON.parse(
+			await documentTools.open_decisions.execute!(input, options as never) as string,
+		);
+		expect(first.decisions).toEqual([{
+			key: "onboarding-1",
+			id: expect.any(String),
+			status: "open",
+		}]);
+		let again = JSON.parse(
+			await documentTools.open_decisions.execute!(input, options as never) as string,
+		);
+		expect(again.decisions).toEqual(first.decisions);
+		expect(fixture.plan.records.size).toBe(1);
 	} finally {
 		await Service.close(fixture.plan);
 	}

@@ -147,7 +147,8 @@ export async function publishQuestions(
 		);
 		if (!indices.length) return;
 		if (options.capture?.signal?.aborted) Question.reject("Decision capture was cancelled");
-		if (options.revision !== undefined && options.revision !== plan.revision) {
+		let stale = options.revision !== undefined && options.revision !== plan.revision;
+		if (stale && !options.capture) {
 			Question.reject("The document changed; read it again before opening a decision");
 		}
 		let fresh = { questions: indices.map(index => definition.questions[index]!) };
@@ -158,6 +159,22 @@ export async function publishQuestions(
 			}
 			let blocks = placement.blocks;
 			placement = { ...placement, blocks: indices.map(index => blocks[index]!) };
+			if (stale) {
+				// A block still carrying its digest is the passage the Planner read, wherever it now
+				// stands; one that changed or is ambiguous is refused, never guessed.
+				let rebased = placement.blocks.map(related =>
+					related.map(block => ({ index: room.resolveBlock(plan.document, block), block }))
+				);
+				if (rebased.some(related => related.some(({ index }) => index === undefined))) {
+					Question.reject("The document changed; read it again before opening a decision");
+				}
+				placement = {
+					revision: plan.revision,
+					blocks: rebased.map(related =>
+						related.map(({ index, block }) => ({ index: index!, digest: block.digest }))
+					),
+				};
+			}
 		}
 		let near = placement && "near" in placement ? nearBlock(plan, placement.near) : undefined;
 		if (!near && options.section && !(placement && "blocks" in placement)) {
