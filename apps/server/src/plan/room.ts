@@ -1442,6 +1442,16 @@ export function resolveBlock(
 	return matches.length === 1 ? matches[0] : undefined;
 }
 
+/**
+ * The block carrying `at.digest` when exactly one does, wherever it now stands. Unlike
+ * `resolveBlock`, a repeated digest never resolves, even where the addressed index still
+ * matches: identical paragraphs give no way to tell which one was meant.
+ */
+export function uniqueBlock(target: Document, at: { digest: string }): number | undefined {
+	let matches = digests(target).flatMap((hash, index) => hash === at.digest ? [index] : []);
+	return matches.length === 1 ? matches[0] : undefined;
+}
+
 /** Where an investigation card went; `present` means an earlier call already placed it. */
 export type InvestigationPlacement = "anchored" | "appended" | "present";
 

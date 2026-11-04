@@ -361,3 +361,151 @@ test("blocking ask retains its own wait and cancellation lifecycle without follo
 	controller.abort();
 	expect((await pending)[0]!.status).toBe("cancelled");
 });
+
+const SAME_KEY = "already holds a different decision";
+
+test.each([
+	["question", true, { question: "What should collaboration teach?" }],
+	["description", true, { description: "Think about the first hour." }],
+	["response kind", true, {
+		response: undefined,
+		options: [{ label: "First task", description: "Begin with a useful action" }],
+	}],
+	["choices", false, { options: [{ label: "Tour", description: "Walk through" }] }],
+])(
+	"a repeated key with a different %s is refused and the first card is untouched",
+	async (_, written, change) => {
+		let context = await setup();
+		let first = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+			revision: 0,
+			questions: [question(context.plan, "decision-one", 1, written)],
+		});
+		let id = first.decisions[0]!.id;
+		let before = structuredClone(context.plan.records.get(id)!.definition);
+		let source = Room.project(context.plan.document);
+		let frames = context.broadcasts.length;
+		let { response: _response, ...base } = question(context.plan, "decision-one", 1, written);
+		let changed = { ...base, ...(written ? { response: "text" as const } : {}), ...change };
+		if ("response" in change) delete (changed as { response?: unknown }).response;
+		await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+			revision: context.plan.revision,
+			questions: [changed],
+		})).rejects.toThrow(SAME_KEY);
+		expect(context.plan.records.size).toBe(1);
+		expect(context.plan.records.get(id)!.definition).toEqual(before);
+		expect(context.plan.questions.open.size).toBe(1);
+		expect(Room.project(context.plan.document)).toBe(source);
+		expect(context.broadcasts).toHaveLength(frames);
+	},
+);
+
+test("a repeated key naming another paragraph is refused instead of keeping the card beside the first", async () => {
+	let context = await setup();
+	let first = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [question(context.plan, "decision-one", 1)],
+	});
+	let moved = question(context.plan, "decision-one", 2);
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [moved],
+	})).rejects.toThrow(SAME_KEY);
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: context.plan.revision,
+		questions: [question(context.plan, "decision-one", 3)],
+	})).rejects.toThrow(SAME_KEY);
+	expect(context.plan.records.size).toBe(1);
+	expect(first.decisions).toHaveLength(1);
+	expect(
+		Room.matchesAnchor(
+			context.plan.document,
+			context.plan.records.get(first.decisions[0]!.id)!.followUp!.target[0]!,
+			1,
+		),
+	)
+		.toBe(true);
+});
+
+test("one mismatched key refuses the whole batch, so no replay is repeated and no new card is made", async () => {
+	let context = await setup();
+	let one = question(context.plan, "decision-one", 1);
+	let two = question(context.plan, "decision-two", 2);
+	await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [one, two],
+	});
+	let source = Room.project(context.plan.document);
+	let frames = context.broadcasts.length;
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [
+			one,
+			{ ...two, question: "What else should collaboration teach?" },
+			question(context.plan, "decision-three", 1),
+		],
+	})).rejects.toThrow(SAME_KEY);
+	expect(context.plan.records.size).toBe(2);
+	expect(context.plan.questions.open.size).toBe(2);
+	expect(Room.project(context.plan.document)).toBe(source);
+	expect(context.broadcasts).toHaveLength(frames);
+});
+
+test("an identical replay stays idempotent after a person added an option to the open card", async () => {
+	let context = await setup();
+	let choices = question(context.plan, "decision-one", 1, false);
+	let first = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [choices],
+	});
+	let id = first.decisions[0]!.id;
+	let actor = member();
+	await Questions.addOption(context.plan, context.server, context.plan.id, actor.ws, {
+		kind: "question:option",
+		ts: 0,
+		rid: "add",
+		id,
+		question: context.plan.records.get(id)!.definition.questions[0]!.id,
+		key: "added-option",
+		label: "Shadow a teammate",
+	});
+	expect(context.plan.records.get(id)!.definition.questions[0]!.options).toHaveLength(3);
+	let again = await Capture.captureDecisions(context.plan, context.server, context.plan.id, {
+		revision: 0,
+		questions: [choices],
+	});
+	expect(again.decisions).toEqual(first.decisions);
+	expect(context.plan.records.get(id)!.definition.questions[0]!.options).toHaveLength(3);
+	expect(context.plan.records.size).toBe(1);
+});
+
+test("a capture read before an identical paragraph appeared is refused as ambiguous and creates nothing", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await rewrite(
+		context,
+		"# Draft\n\nProvisional onboarding.\n\nProvisional onboarding.\n\nProvisional collaboration.",
+	);
+	let source = Room.project(context.plan.document);
+	let frames = context.broadcasts.length;
+	await expect(Capture.captureDecisions(context.plan, context.server, context.plan.id, input))
+		.rejects.toThrow("The document changed; read it again before opening a decision");
+	expect(context.plan.records.size).toBe(0);
+	expect(context.plan.questions.open.size).toBe(0);
+	expect(Room.project(context.plan.document)).toBe(source);
+	expect(context.broadcasts).toHaveLength(frames);
+	// Read again, the Planner names the very block it means and the card goes there.
+	let fresh = {
+		revision: context.plan.revision,
+		questions: [question(context.plan, "decision-one", 2)],
+	};
+	let result = await Capture.captureDecisions(context.plan, context.server, context.plan.id, fresh);
+	let id = result.decisions[0]!.id;
+	expect(
+		Room.matchesAnchor(
+			context.plan.document,
+			context.plan.records.get(id)!.followUp!.target[0]!,
+			2,
+		),
+	)
+		.toBe(true);
+});

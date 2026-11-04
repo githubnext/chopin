@@ -10,6 +10,7 @@ import { applyEvent } from "../conversation-plan/events";
 import { MAX_EVENTS, MAX_THREADS } from "../conversation-plan/validation";
 
 import * as room from "../plan/room";
+import { holdsQuestion } from "./records";
 import * as Store from "./store";
 
 import { broadcast } from "../wire";
@@ -95,6 +96,60 @@ function captureScopes(
 	});
 }
 
+/** What identifies a decision's definition, leaving out its ids and any option or criterion in `skip`. */
+function shape(item: Question.Item, skip = new Set<string>()): string {
+	return JSON.stringify([
+		item.header,
+		item.question,
+		item.description ?? null,
+		item.response ?? null,
+		item.multiple,
+		item.verbatim ?? false,
+		item.options.filter(option => !skip.has(option.id)).map(option => [
+			option.label,
+			option.description,
+			option.preview ?? null,
+		]),
+		(item.criteria ?? []).filter(criterion => !skip.has(criterion.id)).map(criterion =>
+			criterion.label
+		),
+	]);
+}
+
+/**
+ * Whether a card an earlier call made under this stable key is the decision the repeated input
+ * describes: the same question, response kind and choices, apart from options or criteria people
+ * appended since, and the same passages. A card that no longer holds its question is only
+ * compared on its definition, as its passages no longer mean anything.
+ */
+function repeats(
+	plan: Plan,
+	record: Record,
+	wanted: Question.Item,
+	related: Array<{ index: number; digest: string }>,
+	stale: boolean,
+): boolean {
+	let stored = record.definition.questions[0];
+	if (!stored || record.definition.questions.length !== 1) return false;
+	let appended = new Set(Object.values(record.appended ?? {}));
+	if (shape(stored, appended) !== shape(wanted)) return false;
+	if (!holdsQuestion(record.status)) return true;
+	let anchors = Anchors.read(record).questions[stored.id]?.anchors ?? [];
+	if (anchors.length !== related.length) return false;
+	let hashes = room.digests(plan.document);
+	return room.rebase(plan.document, anchors).every((anchor, position) => {
+		let block = related[position]!;
+		// Fresh, the addressed index must still carry the digest; stale, the digest must name one block.
+		let index = stale
+			? room.uniqueBlock(plan.document, block)
+			: hashes[block.index] === block.digest
+			? block.index
+			: undefined;
+		return index !== undefined && !anchor.orphaned
+			&& room.matchesAnchor(plan.document, anchor, index);
+	});
+}
+
 /** Create records, drafts and their document projections in one durable mutation. */
 export async function publishQuestions(
 	plan: Plan,
@@ -108,7 +163,7 @@ export async function publishQuestions(
 		/** Stable identity for a retryable single-card creation. */
 		identity?: string;
 		/** Anchored nonblocking Planner cards, with one retry identity per question. */
-		capture?: { identities: string[]; signal?: AbortSignal };
+		capture?: { identities: string[]; keys?: string[]; signal?: AbortSignal };
 		/** Somebody waits on the answer, which therefore reaches them rather than a new turn. */
 		awaited?: boolean;
 		/**
@@ -142,12 +197,28 @@ export async function publishQuestions(
 			// The actor-scoped request identity survives later retitling and resolution.
 			return;
 		}
+		let stale = options.revision !== undefined && options.revision !== plan.revision;
+		if (options.capture && options.placement && "blocks" in options.placement) {
+			// A repeated key replays only the decision it made. Anything else would hand the
+			// Planner an unrelated card as though its new question were already in the document.
+			let { blocks } = options.placement;
+			definition.questions.forEach((wanted, index) => {
+				let record = plan.records.get(options.capture!.identities[index]!);
+				if (record && !repeats(plan, record, wanted, blocks[index] ?? [], stale)) {
+					Question.reject(
+						`Decision key "${
+							options.capture!.keys?.[index] ?? options.capture!.identities[index]
+						}" already holds a different decision, so this one was not opened. `
+							+ "Use a new key for a different question or passage.",
+					);
+				}
+			});
+		}
 		let indices = definition.questions.flatMap((_, index) =>
 			options.capture && plan.records.has(options.capture.identities[index]!) ? [] : [index]
 		);
 		if (!indices.length) return;
 		if (options.capture?.signal?.aborted) Question.reject("Decision capture was cancelled");
-		let stale = options.revision !== undefined && options.revision !== plan.revision;
 		if (stale && !options.capture) {
 			Question.reject("The document changed; read it again before opening a decision");
 		}
@@ -160,10 +231,10 @@ export async function publishQuestions(
 			let blocks = placement.blocks;
 			placement = { ...placement, blocks: indices.map(index => blocks[index]!) };
 			if (stale) {
-				// A block still carrying its digest is the passage the Planner read, wherever it now
-				// stands; one that changed or is ambiguous is refused, never guessed.
+				// The one block carrying its digest is the passage the Planner read, wherever it now
+				// stands; one that changed, or that another block now repeats, is refused, never guessed.
 				let rebased = placement.blocks.map(related =>
-					related.map(block => ({ index: room.resolveBlock(plan.document, block), block }))
+					related.map(block => ({ index: room.uniqueBlock(plan.document, block), block }))
 				);
 				if (rebased.some(related => related.some(({ index }) => index === undefined))) {
 					Question.reject("The document changed; read it again before opening a decision");

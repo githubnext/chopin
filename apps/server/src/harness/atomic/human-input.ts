@@ -18,6 +18,44 @@ export type HumanInputStatus = "answered" | "cancelled";
  */
 export type HumanInputOptions = HostInputOptions & { block?: { index: number; digest: string } };
 
+/**
+ * The requests a Planner session has made that are still waiting on the document's members. A
+ * session that has one open must outlive the turn that ended while it waited: letting it go
+ * would withdraw a question nobody has answered.
+ */
+export class PendingInputs {
+	#open = 0;
+	#listeners = new Set<() => void>();
+
+	/** How many requests are waiting. */
+	open(): number {
+		return this.#open;
+	}
+
+	/** Calls `listener` whenever a request ends; returns the unsubscribe function. */
+	watch(listener: () => void): () => void {
+		this.#listeners.add(listener);
+		return () => this.#listeners.delete(listener);
+	}
+
+	/** Counts one request from now until `work` settles. */
+	async track<T>(work: Promise<T>): Promise<T> {
+		this.#open++;
+		try {
+			return await work;
+		} finally {
+			this.#open--;
+			for (let listener of this.#listeners) {
+				try {
+					listener();
+				} catch (error) {
+					console.error("[agent] a pending input watcher failed:", error);
+				}
+			}
+		}
+	}
+}
+
 /** Chopin's HostInput, whose methods also take the block a request concerns. */
 export type HumanInput = {
 	[Method in keyof HostInput]: HostInput[Method] extends (...args: infer A) => infer R
@@ -39,8 +77,11 @@ export function createHumanInput(
 	room: DocumentRoom,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	report?: (status: HumanInputStatus) => void,
+	pending?: PendingInputs,
 ): HumanInput {
-	async function questionnaire(
+	const questionnaire = (params: QuestionParams, options: HumanInputOptions) =>
+		pending ? pending.track(asking(params, options)) : asking(params, options);
+	async function asking(
 		params: QuestionParams,
 		options: HumanInputOptions,
 	): Promise<QuestionnaireResult> {
