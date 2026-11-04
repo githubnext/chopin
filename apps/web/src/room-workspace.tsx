@@ -723,15 +723,10 @@ export function RoomWorkspace(
 		planner: agent,
 		plannerDetached,
 		room,
-		unanswered,
 		userId,
 		wire,
 	});
-	let namedBuildBlockers = useMemo(() => buildBlockers(build.snapshot, entries, cardMetadata), [
-		build.snapshot,
-		entries,
-		cardMetadata,
-	]);
+	let namedBuildBlockers = useMemo(() => buildBlockers(build.snapshot), [build.snapshot]);
 	// Touch has no tooltips, so a phone tap on Build, or on the build slot, says why it can't open.
 	let buildUnavailable = build.look.kind === "plan" && build.look.blocked
 		? build.look.blocked
@@ -1087,18 +1082,8 @@ export function RoomWorkspace(
 			card.focus({ preventScroll: true });
 		});
 	};
-	let showNamedBuildBlocker = (item: BuildBlocker) => {
-		if (item.kind === "decision") showPlan(item.id, item.question);
-		else showInvestigation(item.id);
-	};
+	let showNamedBuildBlocker = (item: BuildBlocker) => showInvestigation(item.id);
 	let showBuildBlocker = (reason: string) => {
-		let entry = firstOpenDecision(entries, cardMetadata);
-		let question = entry?.value.questions.find(value => value.answer === undefined)?.id
-			?? entry?.value.questions[0]?.id;
-		if (build.snapshot?.blockers.includes("unanswered questionnaires") && entry && question) {
-			showPlan(entry.id, question);
-			return;
-		}
 		let investigation = build.snapshot?.buildInvestigations?.[0];
 		if (investigation) {
 			showInvestigation(investigation.id);
@@ -2065,10 +2050,8 @@ export function RoomWorkspace(
 								build={build}
 								canEdit={!!workspaceCanEdit && status === "connected"}
 								comments={acceptedComments}
-								onShowDecisions={() => selectDestination("decisions")}
 								onShowDocument={() => selectDestination("plan")}
 								room={room}
-								unanswered={unanswered}
 								userId={userId}
 							/>
 						)}

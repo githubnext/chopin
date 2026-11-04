@@ -1110,21 +1110,7 @@ test("chat-started tools retain only the current member request provenance", asy
 	}]);
 });
 
-test("planner graph edits name readiness blockers before changing a graph", async () => {
-	let { plan, server } = await opened("Prepare the implementation.\n");
-	plan.records.set("open", {
-		id: "open",
-		status: "open",
-		definition: {
-			questions: [{
-				id: "question",
-				header: "Readiness",
-				question: "May implementation begin?",
-				multiple: false,
-				options: [{ id: "yes", label: "Yes", description: "" }],
-			}],
-		},
-	} as never);
+async function graphEdit({ plan, server }: Awaited<ReturnType<typeof opened>>) {
 	let graph = fixtureTools({
 		plan,
 		server,
@@ -1142,28 +1128,61 @@ test("planner graph edits name readiness blockers before changing a graph", asyn
 		operations: [{
 			op: "add",
 			task: {
-				id: "blocked",
-				title: "Blocked graph",
-				context: "The plan still has an open decision.",
-				goal: "Demonstrate that preparation is refused.",
-				acceptance: ["The tool names the blocker.", "No graph is created."],
+				id: "first",
+				title: "First task",
+				context: "The plan is ready enough to build.",
+				goal: "Demonstrate the graph edit.",
+				acceptance: ["The tool answers.", "The graph reflects the answer."],
 				dependsOn: [],
 			},
 		}],
 	};
-	let response = await graph.handler(args, {
-		sessionId: "session",
-		toolCallId: "call",
-		toolName: "edit_implementation_graph",
-		arguments: args,
-	});
+	return JSON.parse(
+		await graph.handler(args, {
+			sessionId: "session",
+			toolCallId: "call",
+			toolName: "edit_implementation_graph",
+			arguments: args,
+		}) as string,
+	);
+}
 
-	expect(JSON.parse(response as string)).toEqual({
+test("planner graph edits name readiness blockers before changing a graph", async () => {
+	let context = await opened("Prepare the implementation.\n");
+	let { plan } = context;
+	plan.threads.set("accepted", { id: "accepted", status: "accepted", notes: [] } as never);
+
+	expect(await graphEdit(context)).toEqual({
 		ok: false,
 		reason: "not-ready",
-		blockers: ["unanswered questionnaires"],
+		blockers: ["accepted comments awaiting plan changes"],
 	});
 	expect(plan.graph).toBeUndefined();
+});
+
+test("planner graph edits go ahead while decisions are open, and leave them open", async () => {
+	let context = await opened("Prepare the implementation.\n");
+	let { plan } = context;
+	for (let status of ["open", "reopened"] as const) {
+		plan.records.set(status, {
+			id: status,
+			status,
+			definition: {
+				questions: [{
+					id: "question",
+					header: "Readiness",
+					question: "May implementation begin?",
+					multiple: false,
+					options: [{ id: "yes", label: "Yes", description: "" }],
+				}],
+			},
+		} as never);
+	}
+
+	expect(await graphEdit(context)).toMatchObject({ ok: true });
+	expect(plan.graph?.versions).toHaveLength(1);
+	expect(plan.records.get("open")?.status).toBe("open");
+	expect(plan.records.get("reopened")?.status).toBe("reopened");
 });
 
 test("the graph tool advertises exactly the task fields its validators accept", async () => {

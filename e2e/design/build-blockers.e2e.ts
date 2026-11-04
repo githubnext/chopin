@@ -5,19 +5,19 @@ test.use({ visualReview: true });
 
 test("named blockers use one row hover surface and no arrow tooltip", async ({ page }) => {
 	let trigger = plate(page, "build-blockers").getByRole("button", {
-		name: "1 decision left. Show blockers",
+		name: "1 investigation left. Show blockers",
 		exact: true,
 	});
 	await trigger.click();
 	let popup = page.getByRole("dialog", { name: "Build blockers", exact: true });
 	let row = popup.getByRole("button", {
-		name: "Review: How should the cache expire?",
+		name: "Open: Compare cold-start times",
 		exact: true,
 	});
 	await expect(row).toBeVisible();
 	await expect(popup.getByRole("button")).toHaveCount(1);
 	let rest = await row.evaluate(element => getComputedStyle(element).backgroundColor);
-	await row.getByText("How should the cache expire?", { exact: true }).hover();
+	await row.getByText("Compare cold-start times", { exact: true }).hover();
 	await expect.poll(() => row.evaluate(element => getComputedStyle(element).backgroundColor)).not
 		.toBe(rest);
 	await expect(row.locator("svg")).toHaveCount(2);
@@ -34,7 +34,7 @@ test("named blockers use one row hover surface and no arrow tooltip", async ({ p
 		.toBe(await peer.evaluate(element => getComputedStyle(element).fontSize));
 	await row.click();
 	await expect(popup).not.toBeVisible();
-	await expect(peer).toHaveText("Review: How should the cache expire?");
+	await expect(peer).toHaveText("Open: Compare cold-start times");
 });
 
 test("blocker keyboard and outside dismissal retain the selected investigation identity", async ({ page }) => {
@@ -62,7 +62,7 @@ test("blocker keyboard and outside dismissal retain the selected investigation i
 
 test("hover previews can be pinned by click without closing or stealing focus", async ({ page }) => {
 	let trigger = plate(page, "build-blockers").getByRole("button", {
-		name: "1 decision left. Show blockers",
+		name: "1 investigation left. Show blockers",
 		exact: true,
 	});
 	await trigger.hover();

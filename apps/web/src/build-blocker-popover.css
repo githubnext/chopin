@@ -4,15 +4,8 @@
 	gap: calc(var(--spacing) / 2);
 	flex-shrink: 0;
 }
-.build-blocker-decision {
-	color: var(--color-success);
-}
 .build-blocker-investigation {
 	color: var(--color-brand);
-}
-.build-blocker-capsule[data-tone="decision"] {
-	--blocker-ink: var(--color-success-ink);
-	--blocker-wash: var(--color-success-wash);
 }
 .build-blocker-capsule[data-tone="investigation"] {
 	--blocker-ink: var(--color-brand-ink);

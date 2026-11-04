@@ -289,12 +289,20 @@ plan can approve and dispatch a graph through the owner-paired ACP connector;
 its run-scoped bridge exposes the document and lifecycle reporting tools. The
 Planner cannot approve, lock, or start a graph. See docs/local-launcher.md.
 
+Open or reopened decisions never block a build. **Build plan**, **Build** and
+**Retry** go ahead: the coding agent builds on its best judgment, reads each
+unanswered decision as `unapprovedDecisions` (in `read_implementation` and
+`read_rebuild`), and is told to put that list in the body of every pull request
+it opens. The decisions stay open and answerable once the active build releases
+its lock; building never answers or closes one.
+
 A person's press is the approval. **Build plan** approves and starts the
 drafted graph. Once a build has delivered, with or without `LIVE_BUILD`, a
 rebuild appends its tasks as an approved, completed graph version from the
 coding agent's report, with no separate review: without `LIVE_BUILD` that
 approval is the person pressing **Build** (or **Retry**) on the changes, which
-the server refuses while decisions or accepted comments are open; under
+the server refuses while accepted comments await plan changes or required
+investigations are open, but never for an open decision; under
 `LIVE_BUILD` it is the Build plan press that made the document live.
 
 An approved graph binds one plan revision, graph version, and graph revision.

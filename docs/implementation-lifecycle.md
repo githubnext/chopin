@@ -1,6 +1,6 @@
 # Experimental implementation lifecycle
 
-One current planning-specific workflow hands a document used as a settled plan
+One current planning-specific workflow hands a document used as a plan
 to an external coding agent. It persists a versioned dependency graph, lets a
 coding agent claim an approved version, records task and pull-request progress,
 and requires graph-wide verification before releasing a successful run. The
@@ -39,10 +39,11 @@ Only **Build plan** in the document header sends `implementation:draft`, and
 only when the document has no tasks for its current revision, or its last build
 was returned for changes. Opening the Build tab never drafts or starts anything;
 the tab stays off until the plan has been built or a press is under way. Build
-plan is always present for writers. While the document is empty, has open
-decisions, accepted comments, or required investigations, it is inert and names
-what is waiting. Pressing a blocked Build reveals the related decision or
-investigation card. A completeness score cannot disable Build. With `LIVE_BUILD`,
+plan is always present for writers. While the document is empty, has accepted
+comments awaiting plan changes, or has required investigations, it is inert and
+names what is waiting. Pressing a blocked Build reveals the related
+investigation card. Open decisions never hold it back, and neither does a
+completeness score; see [Open decisions](#open-decisions-never-block-a-build). With `LIVE_BUILD`,
 a debounced assessment instead asks the existing owner-bound Planner to place
 necessary decisions and investigations in the document and explain them in Chat.
 It never claims an owner or runs an investigation. After the press the same slot becomes a status capsule:
@@ -57,8 +58,9 @@ A browser build that delivers records its built source even without
 capsule's **Build** sends them to `POST /api/channels/:id/implementation/rebuild`.
 That route queues one rebuild of the edits onto the existing pull requests, on
 the presser's own connected agent, and persists it before answering. Like
-Build plan, it is refused while decisions or accepted comments are open, and
-the capsule's Build is inert with that reason. The press is the approval: the
+Build plan, it is refused while accepted comments await plan changes or
+required investigations are open, and the capsule's Build is inert with that
+reason. Open decisions never refuse it. The press is the approval: the
 rebuild's tasks join the graph as an approved, completed version from the
 coding agent's report, without a separate review. Under
 `LIVE_BUILD` the same rebuild starts by itself once editing settles, so the
@@ -66,9 +68,9 @@ capsule shows a clock instead of **Build**. **Retry** on a failed rebuild uses
 the same route.
 
 The server rechecks write access and the room exactly as for a Chat message to
-the Planner, refuses a child document, unresolved decisions or accepted
-comments, and an active implementation, then writes the instruction itself from
-the plan. No member message is posted: Chat records a system line saying who
+the Planner, refuses a child document, accepted comments awaiting plan
+changes, required investigations and an active implementation, then writes the
+instruction itself from the plan. No member message is posted: Chat records a system line saying who
 asked, and the turn runs under the asker's
 login for Planner ownership like any member turn. The notice is persisted
 before the turn starts or queues. A queued draft is not shown in the Chat
@@ -84,6 +86,32 @@ broadcasts `queued`, `running` and `ended`; `ended` follows the turn's own
 persistence, so a snapshot read then shows any tasks it saved. Whether tasks
 arrived is the snapshot's answer, not the broadcast's. Draft records are
 in-memory, like the turn they ride.
+
+## Open decisions never block a build
+
+A decision nobody has answered, or one somebody reopened, never holds back
+**Build plan**, **Build** or **Retry**. Chopin does not wait for it, answer it or
+close it. The coding agent is told which decisions are unanswered and builds on
+its best judgment, and what it assumed stays visible:
+
+- `read_implementation` (the run-scoped bridge and `/mcp`) and `read_rebuild`
+  return `unapprovedDecisions` when any decision is open: each unanswered
+  question with its options, instructions to use best judgment and never answer
+  or close one, and a `pullRequestSection` Markdown block headed **Assumed, not
+  yet approved**.
+- The connector's prompts tell the agent to put that block, unchanged, at the end
+  of the body of every pull request it opens (a rebuild also puts it on the pull
+  requests it pushes to), adding a few words on what it assumed. The list is
+  Chopin's data; the agent writes the body, so Chopin cannot guarantee it.
+- When the Planner drafts the tasks, its instruction says open decisions do not
+  hold the graph back and asks it to name the assumption in an affected task's
+  goal.
+
+The decisions stay open and answerable. While a build is queued or active the
+usual lock applies, so answering waits until it finishes or is returned for
+changes. Everything else that held a build back still does: accepted comments
+awaiting plan changes, required investigations, a stale plan revision and an
+active implementation.
 
 ## Graph states and counters
 
@@ -119,7 +147,8 @@ graph counter.
 
 ## Intended workflow
 
-1. The team settles the plan and resolves its questions and comments.
+1. The team writes the plan and resolves its accepted comments. Open decisions
+   may remain; the build lists them as assumptions.
 2. The hosted Planner reads the latest plan and drafts a dependency graph.
 3. A person reviews and approves that exact graph and plan revision.
 4. A coding agent passes the canonical document URL, or its UUID, to

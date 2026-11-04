@@ -291,6 +291,40 @@ test("a draft whose turn finishes before its answer is answered as ended", async
 	expect(context.chat.draft).toBeUndefined();
 });
 
+test("open decisions neither refuse a draft nor make the Planner wait for them", async () => {
+	let { plan } = await openPlan("# Plan\n\nReady enough to build.\n");
+	expect(draftInstruction(plan, "ana").text).not.toContain("still open");
+	for (let status of ["open", "reopened"] as const) {
+		plan.records.set(status, {
+			id: status,
+			status,
+			origin: "planner",
+			definition: {
+				questions: [{
+					id: "question",
+					header: "Rollout",
+					question: "How should we deploy?",
+					multiple: false,
+					options: [],
+				}],
+			},
+			history: [],
+			optionOrigins: {},
+			editors: [],
+		});
+	}
+	expect(draftRefusal(plan)).toBeUndefined();
+	for (let build of [false, true]) {
+		let { text } = draftInstruction(plan, "ana", build);
+		expect(text).toContain("Decisions that are still open do not hold this graph back");
+		expect(text).toContain("best judgment");
+		expect(text).toContain("never answer or close a decision");
+	}
+	// Every other blocker still refuses it.
+	plan.threads.set("accepted", { id: "accepted", status: "accepted", notes: [] } as never);
+	expect(draftRefusal(plan)).toBe("resolve accepted comments awaiting plan changes first");
+});
+
 test("the draft instruction comes from the plan and refuses an unsettled one", async () => {
 	let { plan } = await openPlan("# Settled\n\nReady to build.\n");
 	let prepare = draftInstruction(plan, "ana");

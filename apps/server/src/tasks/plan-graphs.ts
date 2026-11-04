@@ -170,15 +170,15 @@ export function reportImplementationLifecycle(
 	});
 }
 
-/** Whether the settled plan can be turned into implementation work. */
+/**
+ * Whether the plan can be turned into implementation work. Open decisions never hold it back:
+ * the coding agent proceeds on its best judgment and is told which ones were still unanswered.
+ */
 export function implementationReadiness(
 	plan: Plan,
 	revision: unknown,
 ): { ok: true; revision: number } | { ok: false; blockers: string[] } {
 	let blockers: string[] = [];
-	if ([...plan.records.values()].some(record => record.status === "open")) {
-		blockers.push("unanswered questionnaires");
-	}
 	if (Comments.outstanding(plan).length > 0) {
 		blockers.push("accepted comments awaiting plan changes");
 	}

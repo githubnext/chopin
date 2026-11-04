@@ -139,11 +139,10 @@ describe("buildPhase", () => {
 	it("names each blocker before drafting", () => {
 		expect(buildPhase(snapshot({
 			graph: undefined,
-			blockers: ["unanswered questionnaires", "accepted comments awaiting plan changes"],
-		}))).toEqual({ kind: "blocked", decisions: true, comments: true, stale: true });
+			blockers: ["accepted comments awaiting plan changes"],
+		}))).toEqual({ kind: "blocked", comments: true, stale: true });
 		expect(buildPhase(snapshot({ blockers: ["invalid plan revision"] }))).toEqual({
 			kind: "blocked",
-			decisions: false,
 			comments: false,
 			stale: false,
 		});
@@ -243,8 +242,8 @@ describe("attribution", () => {
 
 describe("refusals", () => {
 	it("explains the refusals the server names and leaves the rest to the failure line", () => {
-		expect(draftRefusalCopy("resolve unanswered questionnaires first"))
-			.toBe("Answer the open decisions first.");
+		expect(draftRefusalCopy("resolve accepted comments awaiting plan changes first"))
+			.toBe("Update the document for accepted comments first.");
 		expect(draftRefusalCopy("implementation is already active")).toBe(
 			"A build is already running.",
 		);
@@ -318,7 +317,6 @@ describe("first build", () => {
 			connected: true,
 			planner: true,
 			hasContent: true,
-			unanswered: 0,
 		};
 		expect(buildLook(fresh, { ...context, plannerDetached: true })).toEqual({
 			kind: "plan",
@@ -332,7 +330,8 @@ describe("first build", () => {
 	it("maps refused starts and rebuilds to plain copy", () => {
 		expect(buildRefusalCopy("no-workspace")).toBe("Start your local agent, then retry");
 		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
-		expect(buildRefusalCopy("unanswered questionnaires")).toBe("Answer the open decisions first");
+		expect(buildRefusalCopy("accepted comments awaiting plan changes"))
+			.toBe("Update the document for accepted comments first");
 		expect(buildRefusalCopy("something internal")).toBe("The build couldn’t start. Try again");
 		// The person's machine choice cannot be read; the Build never goes to another machine.
 		expect(buildRefusalCopy("Can't read your machine choice right now. Try again.")).toBe(
@@ -369,12 +368,12 @@ describe("first build", () => {
 		expect(firstBuildStep(snapshot(), noAgent)).toEqual({ view: "idle" });
 	});
 
-	it("waits through a decision the draft raised, then redrafts and starts", () => {
+	it("waits through a blocker the draft raised, then redrafts and starts", () => {
 		let requested = { buildRequested: { by: "me", revision: 4 } };
 		let state = advanceFirstBuild(advanceFirstBuild(idle, { type: "press" }), {
 			type: "draft-sent",
 		});
-		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		let blocked = snapshot({ blockers: ["accepted comments awaiting plan changes"], ...requested });
 		expect(firstBuildStep(blocked, state, "me")).toEqual({ view: "waiting", next: "wait" });
 		state = advanceFirstBuild(state, { type: "wait" });
 		expect(state).toEqual({ stage: "waiting" });
@@ -392,7 +391,7 @@ describe("first build", () => {
 
 	it("resumes a request the server kept across a reload", () => {
 		let requested = { buildRequested: { by: "me", revision: 4 } };
-		let blocked = snapshot({ blockers: ["unanswered questionnaires"], ...requested });
+		let blocked = snapshot({ blockers: ["accepted comments awaiting plan changes"], ...requested });
 		expect(firstBuildStep(blocked, idle, "me")).toEqual({ view: "waiting", next: "resume" });
 		expect(firstBuildStep(snapshot(requested), idle, "me"))
 			.toEqual({ view: "working", next: "resume" });
@@ -412,8 +411,13 @@ describe("first build", () => {
 		expect(state).toEqual({ stage: "waiting" });
 		expect(firstBuildStep(snapshot(requested), state, "me").next).toBe("start");
 		// Cancelled: the request is gone, so the wait ends.
-		expect(firstBuildStep(snapshot({ blockers: ["unanswered questionnaires"] }), state, "me"))
-			.toEqual({ view: "idle", next: "reset" });
+		expect(
+			firstBuildStep(
+				snapshot({ blockers: ["accepted comments awaiting plan changes"] }),
+				state,
+				"me",
+			),
+		).toEqual({ view: "idle", next: "reset" });
 	});
 });
 
@@ -711,25 +715,23 @@ describe("build status", () => {
 		connected: true,
 		planner: true,
 		hasContent: true,
-		unanswered: 0,
 	};
 	let look = (value: ImplementationSnapshot | undefined, change = {}) =>
 		buildLook(value, { ...context, ...change });
 
-	it("names decisions and investigations together instead of a hidden completeness veto", () => {
+	it("names the required investigations instead of a hidden completeness veto", () => {
 		expect(look(
 			snapshot({
-				blockers: ["unanswered questionnaires", "required investigations"],
+				blockers: ["required investigations"],
 				buildInvestigations: [{
 					id: "investigation",
 					brief: "Measure startup",
 					reason: "Choose approach",
 				}],
 			}),
-			{ unanswered: 2 },
 		)).toEqual({
 			kind: "plan",
-			blocked: "Waiting on 2 decisions and 1 investigation",
+			blocked: "Waiting on 1 investigation",
 		});
 		expect(look(snapshot({ buildReady: false }))).toEqual({ kind: "plan", blocked: undefined });
 	});
@@ -740,10 +742,10 @@ describe("build status", () => {
 			kind: "plan",
 			blocked: "Write the document first",
 		});
-		expect(look(snapshot({ blockers: ["unanswered questionnaires"] }), { unanswered: 2 }))
-			.toEqual({ kind: "plan", blocked: "Waiting on 2 decisions" });
-		expect(look(snapshot({ blockers: ["accepted comments awaiting plan changes"] })).kind)
-			.toBe("plan");
+		expect(look(snapshot({ blockers: ["accepted comments awaiting plan changes"] }))).toEqual({
+			kind: "plan",
+			blocked: "Update the document for accepted comments first",
+		});
 		expect(look(snapshot({ buildReady: false }))).toEqual({
 			kind: "plan",
 			blocked: undefined,
@@ -872,13 +874,14 @@ describe("build status", () => {
 		});
 	});
 
-	it("holds Build with its reason while decisions or comments are open, like Build plan", () => {
+	it("holds Build with its reason while investigations or comments are open, like Build plan", () => {
 		let blocked = live({ outOfSync: true, changes: 2 });
-		blocked.blockers = ["unanswered questionnaires"];
-		expect(look(blocked, { unanswered: 1 })).toMatchObject({
+		blocked.blockers = ["required investigations"];
+		blocked.buildInvestigations = [{ id: "evidence", brief: "Measure startup", reason: "Choose" }];
+		expect(look(blocked)).toMatchObject({
 			kind: "stale",
 			build: true,
-			blocked: "Waiting on 1 decision",
+			blocked: "Waiting on 1 investigation",
 		});
 		let failed = live({ outOfSync: true, rebuild: rebuild("failed") });
 		failed.blockers = ["accepted comments awaiting plan changes"];
@@ -890,13 +893,13 @@ describe("build status", () => {
 
 	it("names live rebuild blockers even without a manual Build action", () => {
 		let blocked = live({ outOfSync: true, changes: 2 });
-		blocked.blockers = ["required investigations", "unanswered questionnaires"];
+		blocked.blockers = ["required investigations"];
 		blocked.buildInvestigations = [{ id: "evidence", brief: "Measure startup", reason: "Choose" }];
-		let result = look(blocked, { live: true, unanswered: 2 });
+		let result = look(blocked, { live: true });
 		expect(result).toMatchObject({
 			kind: "stale",
 			build: false,
-			tip: "Waiting on 2 decisions and 1 investigation",
+			tip: "Waiting on 1 investigation",
 		});
 		expect(buildLabel(result)).toBe("Waiting to build");
 	});

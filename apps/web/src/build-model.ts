@@ -10,7 +10,7 @@ export type BuildPhase =
 	/** Tasks are missing, out of date or were returned; `draft` is the Planner request to send. */
 	| { kind: "drafting"; draft: "prepare" | "revise" | "returned" }
 	/** `stale` when there are no tasks for the current revision to show beneath the blockers. */
-	| { kind: "blocked"; decisions: boolean; comments: boolean; stale: boolean }
+	| { kind: "blocked"; comments: boolean; stale: boolean }
 	| { kind: "review" }
 	| { kind: "building" }
 	/** The build ended before it claimed the tasks; a retry is safe. */
@@ -303,7 +303,6 @@ export function buildPhase(snapshot: Snapshot | undefined): BuildPhase {
 	if (snapshot.blockers.length > 0) {
 		return {
 			kind: "blocked",
-			decisions: snapshot.blockers.includes("unanswered questionnaires"),
 			comments: snapshot.blockers.includes("accepted comments awaiting plan changes"),
 			stale: !snapshot.graph || snapshot.graph.planRevision !== snapshot.planRevision,
 		};
@@ -379,7 +378,6 @@ export function draftRefusalCopy(message: string, code?: string): string | undef
 	if (code === "planner-not-attached" || /No Planner is attached/.test(message)) {
 		return "Connect a Planner to this document to build.";
 	}
-	if (/unanswered questionnaires/.test(message)) return "Answer the open decisions first.";
 	if (/accepted comments/.test(message)) {
 		return "Update the document for accepted comments first.";
 	}
@@ -517,7 +515,7 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
  *
  * Once pressed it reads as `working` until the build runs or the attempt ends;
  * `reset` hands any later state back to the snapshot. A draft that raises a
- * decision does not drop the press: it reads `waiting` until the blockers
+ * blocker does not drop the press: it reads `waiting` until the blockers
  * clear, then drafts again if the tasks are stale and starts them. The server
  * keeps the press (`buildRequested`), so a reload `resume`s it. A build that
  * failed before it claimed its tasks starts again from the same tasks.
@@ -597,7 +595,6 @@ export type BuildContext = {
 	 */
 	plannerDetached?: boolean;
 	hasContent: boolean;
-	unanswered: number;
 };
 
 /** Tasks of the current build that have a pull request, out of all of them. */
@@ -607,18 +604,11 @@ function progressCount(snapshot: Snapshot): { done: number; total: number } {
 	return { done: tasks.filter(task => task.state === "completed").length, total };
 }
 
-/** The open decisions or accepted comments that hold any build, or nothing. */
-function blockerReason(snapshot: Snapshot, unanswered: number): string | undefined {
+/** The required investigations or accepted comments that hold any build, or nothing. */
+function blockerReason(snapshot: Snapshot): string | undefined {
 	let investigations = snapshot.buildInvestigations?.length ?? 0;
-	let decisions = snapshot.blockers.includes("unanswered questionnaires")
-		? Math.max(1, unanswered)
-		: 0;
-	if (decisions || investigations) {
-		let waiting = [
-			decisions && plural(decisions, "decision", "decisions"),
-			investigations && plural(investigations, "investigation", "investigations"),
-		].filter(Boolean);
-		return `Waiting on ${waiting.join(" and ")}`;
+	if (investigations) {
+		return `Waiting on ${plural(investigations, "investigation", "investigations")}`;
 	}
 	if (snapshot.blockers.includes("accepted comments awaiting plan changes")) {
 		return "Update the document for accepted comments first";
@@ -630,7 +620,7 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 	if (!context.hasContent) return "Write the document first";
 	if (!context.connected || !snapshot) return "Chopin isn’t connected";
 	let phase = buildPhase(snapshot);
-	let reason = blockerReason(snapshot, context.unanswered);
+	let reason = blockerReason(snapshot);
 	if (reason) return reason;
 	if (phase.kind === "blocked") return "This document can’t be built yet";
 	if (phase.kind === "drafting" && !context.planner) {
@@ -680,7 +670,7 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 			};
 		}
 		let act = context.canEdit && context.connected;
-		let blocked = act ? blockerReason(snapshot, context.unanswered) : undefined;
+		let blocked = act ? blockerReason(snapshot) : undefined;
 		if (sync.reason === "failed") {
 			return {
 				kind: "failed",
@@ -749,7 +739,7 @@ export function buildLook(snapshot: Snapshot | undefined, context: BuildContext)
 	}
 	if (step.view === "working") return { kind: "tasks", tip: "Breaking the document into tasks" };
 	if (step.view === "waiting") {
-		return { kind: "plan", blocked: blockerReason(snapshot, context.unanswered) };
+		return { kind: "plan", blocked: blockerReason(snapshot) };
 	}
 	let retry = context.canEdit && context.connected;
 	if (context.state.stage === "failed" && context.state.agent) {
