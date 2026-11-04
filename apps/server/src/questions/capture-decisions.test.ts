@@ -519,12 +519,14 @@ async function expectNothingCreated(
 	context: Awaited<ReturnType<typeof setup>>,
 	input: Parameters<typeof Capture.captureDecisions>[3],
 	cards = 0,
+	cause?: string,
 ) {
 	let source = Room.project(context.plan.document);
 	let frames = context.broadcasts.length;
 	let refusal = await Capture.captureDecisions(context.plan, context.server, context.plan.id, input)
 		.then(() => undefined, (error: unknown) => error as Error);
 	expect(refusal?.message).toContain(REFUSED);
+	if (cause) expect(refusal?.message).toContain(cause);
 	expect(refusal?.message).not.toContain("different decision");
 	expect(refusal?.message).not.toContain("new key");
 	expect(context.plan.records.size).toBe(cards);
@@ -542,7 +544,7 @@ test("a capture whose paragraph was rewritten beside an identical copy is refuse
 		source: "Provisional onboarding, rewritten.",
 	}]);
 	await edited(context, [{ op: "insert_root", source: "Provisional onboarding." }]);
-	await expectNothingCreated(context, input);
+	await expectNothingCreated(context, input, 0, "has been rewritten, removed or moved since");
 	let fresh = {
 		revision: context.plan.revision,
 		questions: [question(context.plan, "decision-one", 3)],
@@ -561,7 +563,7 @@ test("a capture whose paragraph was already repeated when it was read is refused
 		index: 1,
 		source: "Provisional onboarding, rewritten.",
 	}]);
-	await expectNothingCreated(context, input);
+	await expectNothingCreated(context, input, 0, "appeared more than once when you read it");
 });
 
 test("a capture read at a revision that is no longer retained is refused instead of guessed", async () => {
@@ -572,7 +574,7 @@ test("a capture read at a revision that is no longer retained is refused instead
 		"# Draft\n\nProvisional onboarding.\n\nProvisional collaboration.\n\nA late note.",
 	);
 	context.plan.outlines.clear();
-	await expectNothingCreated(context, input);
+	await expectNothingCreated(context, input, 0, "the server no longer has that read");
 });
 
 test("a repeated key whose paragraph was rewritten since is refused as a changed document, not as a different decision", async () => {
@@ -614,4 +616,30 @@ test("a repeated key naming another intact paragraph is still a different decisi
 		questions: [other],
 	})).rejects.toThrow(SAME_KEY);
 	expect(context.plan.records.size).toBe(1);
+});
+
+test("a repeated key whose read was evicted is refused when its card no longer stands beside the paragraph", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one")] };
+	await Capture.captureDecisions(context.plan, context.server, context.plan.id, input);
+	await edited(context, [{
+		op: "replace",
+		index: 1,
+		source: "Provisional onboarding, rewritten.",
+	}]);
+	await edited(context, [{ op: "insert_root", source: "Provisional onboarding." }]);
+	for (let note = 0; note < 9; note++) {
+		await edited(context, [{ op: "insert_root", source: `Note ${note}.` }]);
+		Edit.outline(context.plan);
+	}
+	expect(Edit.read(context.plan, 0)).toBeUndefined();
+	await expectNothingCreated(context, input, 1, "the server no longer has that read");
+});
+
+test("a stale address whose index disagrees with its digest is refused as the fresh one is", async () => {
+	let context = await setup();
+	let input = { revision: 0, questions: [question(context.plan, "decision-one", 1)] };
+	input.questions[0]!.blocks[0]!.digest = Room.digests(context.plan.document)[2]!;
+	await edited(context, [{ op: "insert_root", source: "A late note." }]);
+	await expectNothingCreated(context, input, 0, "does not match the block you read");
 });
