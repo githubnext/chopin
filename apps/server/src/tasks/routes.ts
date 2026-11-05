@@ -1,6 +1,13 @@
 import { documentPath } from "@chopin/protocol/document-url";
 import { z } from "zod";
-import { liveSnapshot, queueBuild, queueRebuild, reportBuild, requestBuild } from "./builds";
+import {
+	liveSnapshot,
+	queueBuild,
+	queueRebuild,
+	reportBuild,
+	requestBuild,
+	runner,
+} from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { planningReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
@@ -27,8 +34,19 @@ type Options = {
 	liveBuild?: boolean;
 	/** CHOPIN_BUILD_RESUME_MS: how long after a restart a build's machine may come back to it. */
 	resumeMs?: number;
-	/** Throws `machine-offline` naming the machine the person chose, else `no-workspace`. */
+	/**
+	 * Throws `machine-offline` naming the machine the person chose, `machine-unavailable` when it is
+	 * a teammate's that no longer takes their work, else `no-workspace`.
+	 */
 	refuseOffline?: (owner: string, documentId: string) => Promise<never>;
+	/**
+	 * The live connections that may take the work `owner` asks for on a document: their own, and
+	 * the teammate's shared machine they chose while its owner can push to the repository. Without
+	 * it, only their own.
+	 */
+	takers?: (owner: string, repositoryId: string, documentId: string) => Promise<Connection[]>;
+	/** Whether a connection may take `person`'s work on a document now, as `takers` decides. */
+	mayTake?: (connection: Connection, person: string, documentId: string) => Promise<boolean>;
 	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
 	machineChoices?: () => Promise<void>;
 	/**
@@ -77,8 +95,8 @@ async function body<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
 }
 
 /**
- * The person's machine choice refuses the work: the machine they chose is offline (409), or their
- * choice cannot be read right now (503). The message says which.
+ * The person's machine choice refuses the work: the machine they chose is offline or no longer
+ * takes their work (409), or their choice cannot be read right now (503). The message says which.
  */
 class MachineRefused extends Error {
 	constructor(readonly code: string, message: string, readonly status: number) {
@@ -86,8 +104,14 @@ class MachineRefused extends Error {
 	}
 }
 
-/** A browser build runs on the clicker's own connection for the document's repository. */
+/**
+ * A browser build runs on the machine the clicker chose for the document: their own connection for
+ * its repository, or a teammate's shared machine whose owner can push there.
+ */
 export function registerImplementationRoutes(router: Router, auth: HostedAuth, options: Options) {
+	let takers = options.takers
+		?? (async (owner: string, repositoryId: string, id: string) =>
+			options.connections.candidates(repositoryId, owner, id));
 	let connector = implementationConnector(
 		options.withPlan,
 		options.connections,
@@ -101,7 +125,11 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		},
 		async id => !!await auth.storage.channels.get(id),
 		options.liveBuild ? options.busy : undefined,
-		options.resumeMs === undefined ? {} : { resumeMs: options.resumeMs },
+		{
+			...options.resumeMs === undefined ? {} : { resumeMs: options.resumeMs },
+			...options.mayTake ? { mayTake: options.mayTake } : {},
+			login: async id => (await auth.storage.users.get(id))?.login,
+		},
 	);
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {
 		try {
@@ -131,7 +159,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		return { session, channel, repository };
 	}
 	/**
-	 * The caller's live connections for a repository that can take a build for `id`: idle ones
+	 * The live connections that can take the caller's build for `id`: idle ones
 	 * first, then those still running a prototype, then those building another document, which
 	 * queue the build until theirs finishes. Within each, the one last used for this document
 	 * first, then the most recently heard from. A build already waiting on this document does not
@@ -141,7 +169,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		if (!options.liveBuild) {
 			// Without LIVE_BUILD a busy connection is refused, never queued.
 			let idle: Connection[] = [];
-			for (let connection of options.connections.candidates(repositoryId, owner, id)) {
+			for (let connection of await takers(owner, repositoryId, id)) {
 				let here = options.connections.assigned(connection.id) === id;
 				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
 					continue;
@@ -154,7 +182,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		let free: Connection[] = [];
 		let prototyping: Connection[] = [];
 		let building: Connection[] = [];
-		for (let connection of options.connections.candidates(repositoryId, owner, id)) {
+		for (let connection of await takers(owner, repositoryId, id)) {
 			let here = options.connections.assigned(connection.id) === id
 				|| options.connections.queued(connection.id).includes(id);
 			let list = !here && await connector.busy(connection)
@@ -169,19 +197,23 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 	}
 	/**
 	 * Refuse a Build that nothing can take: `machine-offline` naming the machine the person chose
-	 * for the document, never silently another, `machine-choice-unavailable` while that choice
-	 * cannot be read, or else `no-workspace`.
+	 * for the document, never silently another, `machine-unavailable` when it is a teammate's that
+	 * no longer takes their work, `machine-choice-unavailable` while that choice cannot be read, or
+	 * else `no-workspace`.
 	 */
 	async function unavailable(owner: string, repositoryId: string, id: string): Promise<void> {
 		try {
 			await options.machineChoices?.();
-			if (options.connections.candidates(repositoryId, owner, id).length) return;
+			if ((await takers(owner, repositoryId, id)).length) return;
 			await options.refuseOffline?.(owner, id);
 		} catch (error) {
 			let code = (error as { code?: unknown } | undefined)?.code;
-			if (code === "machine-offline" || code === "machine-choice-unavailable") {
+			if (
+				code === "machine-offline" || code === "machine-unavailable"
+				|| code === "machine-choice-unavailable"
+			) {
 				let message = (error as Error).message;
-				throw new MachineRefused(code, message, code === "machine-offline" ? 409 : 503);
+				throw new MachineRefused(code, message, code === "machine-choice-unavailable" ? 503 : 409);
 			}
 		}
 		throw new GitHubError("no-workspace", 409);
@@ -193,7 +225,8 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			let { session, channel } = await browser(request, id);
 			connector.track(id);
 			// Cheap on purpose: whether one is free is decided when Build is pressed.
-			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0;
+			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0
+				|| options.connections.chosenShared(channel.repositoryId, session.user.id, id).length > 0;
 			// Read before the plan lock; the experiment store has its own.
 			let queued = options.liveBuild
 				? await options.withPlan(id, async plan => plan.builds.at(-1))
@@ -258,6 +291,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				if (!machine) continue;
 				buildMachines[build.id] = {
 					label: machine.label,
+					...(build.machineOwner !== undefined
+						? { owner: (await auth.storage.users.get(build.machineOwner))?.login }
+						: {}),
 					service: build.machineService === true,
 					// Only the starter learns whether their own machine is online.
 					...(build.user === session.user.id
@@ -325,6 +361,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						let build = await queueBuild(plan, {
 							...input,
 							user: session.user.id,
+							...(connection.owner !== session.user.id ? { machineOwner: connection.owner } : {}),
 							connectionId: connection.id,
 							machineId: connection.machineId,
 							...(connection.about?.service ? { machineService: true as const } : {}),
@@ -361,9 +398,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			await unavailable(session.user.id, channel.repositoryId, id);
 			// Like Build: a connection running a prototype or another document's build is busy.
 			let free: Connection[] = [];
-			for (
-				let connection of options.connections.candidates(channel.repositoryId, session.user.id, id)
-			) {
+			for (let connection of await takers(session.user.id, channel.repositoryId, id)) {
 				let here = options.connections.assigned(connection.id) === id;
 				if (await options.busy?.(connection.id) || !here && await connector.busy(connection)) {
 					continue;
@@ -381,11 +416,15 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						get: connectionId =>
 							idle.has(connectionId) ? options.connections.get(connectionId) : undefined,
 						list: (repositoryId, owner) =>
-							options.connections.list(repositoryId, owner).filter(item => idle.has(item.id)),
+							[
+								...options.connections.list(repositoryId, owner),
+								...owner ? options.connections.chosenShared(repositoryId, owner, id) : [],
+							].filter(item => idle.has(item.id)),
 						assign: (connectionId, documentId) =>
 							options.connections.assign(connectionId, documentId),
 						assigned: connectionId => options.connections.assigned(connectionId),
-						allows: (documentId, connection) => options.connections.allows(documentId, connection),
+						allows: (documentId, connection, person) =>
+							options.connections.allows(documentId, connection, person),
 					}, { by: session.user.id }),
 			);
 			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
@@ -420,7 +459,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				}
 				try {
 					// A human interruption must not publish unfinished work as a delivered live build.
-					await reportBuild(plan, build.user, build.connectionId, build.id, {
+					await reportBuild(plan, runner(build), build.connectionId, build.id, {
 						state: "failed",
 						error: "Stopped in Chopin.",
 						stoppedByUser: true,

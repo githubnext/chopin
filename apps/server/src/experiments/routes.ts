@@ -6,7 +6,13 @@ import type { HostedAuth } from "../auth/routes";
 import { AdmissionDenied } from "../auth/admission";
 import { ownOrigin } from "../auth/config";
 import { MachineError } from "../auth/machines";
-import type { GitHubTokenGrant } from "../github/client";
+import type {
+	GitHubInstallation,
+	GitHubTokenGrant,
+	InstallationPage,
+	Repository,
+	RepositoryPage,
+} from "../github/client";
 import type { ChannelRecord, StoredMachine } from "../storage/model";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
@@ -86,6 +92,16 @@ export function offlineMessage(label = "The machine you chose") {
 	return `${label} is offline. Start chopin connect on it, or choose another machine.`;
 }
 
+/**
+ * What a person is told when the teammate's shared machine they chose for a document no longer
+ * takes their builds, runs or investigations: its owner stopped sharing it or can't push to the
+ * repository.
+ */
+export function unavailableMessage(label: string) {
+	return `${label} no longer takes this work: its owner stopped sharing it or can't push to this `
+		+ "repository. Choose another machine.";
+}
+
 /** What a person is told while their machine choices cannot be read; their work is refused. */
 export const CHOICE_UNAVAILABLE = "Can't read your machine choice right now. Try again.";
 /** Reads of the stored machine choices one request makes before refusing, and their spacing. */
@@ -144,6 +160,28 @@ const connectionSchema = z.union([
 	z.object({ label, checkouts: z.array(checkoutSchema.strict()).max(100) }).strict(),
 ]);
 
+/** A repository as GitHub names it, for the checks of whether someone can push to it. */
+type ReachRepository = { id: string; owner: string; name: string };
+
+/** The key of a held push check: who was asked, a machine or `viewer:` and a person, and what. */
+function reachKey(who: string, repositoryId: string) {
+	return `${who}\n${repositoryId}`;
+}
+
+/** The repository as GitHub names it when `access` lets its account push to it, else none. */
+function pushing(access: Repository | undefined, repository: ReachRepository) {
+	return access && access.id === repository.id && access.permissions.pull
+			&& (access.permissions.push || access.permissions.admin)
+		? { id: access.id, owner: access.owner, name: access.name }
+		: undefined;
+}
+
+/** The repository a checkout names as `owner/name`, with its id; none when it names no owner. */
+function named(repository: string, id: string): ReachRepository[] {
+	let [owner, name] = repository.split("/");
+	return owner && name ? [{ id, owner, name }] : [];
+}
+
 /** Whoever a GitHub repository check runs for: a browser login or a paired machine. */
 type Caller = {
 	userId: string;
@@ -171,6 +209,12 @@ export const PLANNER_IDLE_MS = 30 * 60_000;
  */
 export const SHARED_REACH_MS = 10 * 60_000;
 const SHARED_RETRY_MS = 60_000;
+/** How many of a machine's checkouts the Machines page checks with GitHub at once. */
+const SHARED_CHECKED_AT_ONCE = 8;
+/** How long the Machines page remembers the repositories a person can push to. */
+const SHARED_VIEWER_MS = 60_000;
+/** The pages of installations, and of repositories in each, a list of what someone can push to reads. */
+const LISTED_PAGES = 100;
 /** Why a machine that is no longer shared stopped a teammate's Planner, told to its connector. */
 function stoppedSharing(login: string) {
 	return (label: string) =>
@@ -390,7 +434,39 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		return repository;
 	}
-	/** Work only ever runs on the clicker's own live connection for the document's repository. */
+	/**
+	 * Whether a machine its owner shares may take a document's work: its owner can push to the
+	 * repository, as Default machine requires.
+	 */
+	async function sharedReaches(machineId: string, documentId: string) {
+		let channel = await auth.storage.channels.get(documentId);
+		return !!channel && await ownerReaches(machineId, {
+			id: channel.repositoryId,
+			owner: channel.repositoryOwner,
+			name: channel.repositoryName,
+		});
+	}
+	/**
+	 * Whether a connection may take `person`'s work on a document now: one of their own machines,
+	 * or the teammate's shared machine they chose while its owner still shares it and can push.
+	 */
+	async function mayTake(connection: Connection, person: string, documentId: string) {
+		if (connection.owner === person) return true;
+		return !!connection.shared && connections.chosen(documentId, person) === connection.machineId
+			&& await sharedReaches(connection.machineId, documentId);
+	}
+	/**
+	 * The live connections that may take the work `owner` asks for on a document: their own, and the
+	 * teammate's shared machine they chose. Automatic work never reaches a teammate's machine.
+	 */
+	async function takers(owner: string, repositoryId: string, documentId: string) {
+		let found: Connection[] = [];
+		for (let connection of connections.requested(repositoryId, owner, documentId)) {
+			if (await mayTake(connection, owner, documentId)) found.push(connection);
+		}
+		return found;
+	}
+	/** Work only ever runs on a live connection of the machine the clicker chose, or their own. */
 	async function busy(connection: Connection) {
 		return (await service.store.active()).some(item =>
 			item.connectionId === connection.id && ["running", "publishing"].includes(item.state)
@@ -402,13 +478,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	async function choose(owner: string, repositoryId: string, documentId: string) {
 		await readChoices();
-		let live = connections.candidates(repositoryId, owner, documentId);
+		let live = await takers(owner, repositoryId, documentId);
 		if (!live.length) await refuseOffline(owner, documentId);
 		for (let connection of live) if (!await busy(connection)) return connection;
 		return live[0];
 	}
 	/**
 	 * Nothing can take the work: `machine-offline`, naming the machine, when the person chose one,
+	 * `machine-unavailable` when it is a teammate's that is online but no longer takes their work,
 	 * else `no-workspace`; `machine-choice-unavailable` while their choice cannot be read. A chosen
 	 * machine is never silently replaced by another.
 	 */
@@ -416,7 +493,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await readChoices();
 		let chosen = connections.chosen(documentId, owner);
 		if (!chosen) fail("no-workspace");
-		fail("machine-offline", offlineMessage((await auth.storage.machines.get(chosen))?.label));
+		let machine = await auth.storage.machines.get(chosen);
+		if (machine && machine.userId !== owner && connections.machine(machine.id).length) {
+			fail("machine-unavailable", unavailableMessage(machine.label));
+		}
+		fail("machine-offline", offlineMessage(machine?.label));
 	}
 	/**
 	 * The documents whose Planner each paired machine was told to run, by machine id, each with its
@@ -439,12 +520,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	function runsPlanners(connection: Connection) {
 		return !!options.planners && auth.machines.durable && !!connection.about?.plannerCommand
 			&& (connection.protocol ?? 1) >= 4;
-	}
-	/** Whether a machine has a connection that can run Planners in a repository now. */
-	function plannerReady(machineId: string, repositoryId: string) {
-		return connections.machine(machineId).some(value =>
-			serves(value, repositoryId) && runsPlanners(value)
-		);
 	}
 	/**
 	 * Documents someone uses, by id, with when they last were seen in use: open in Chopin, their
@@ -474,12 +549,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!failures.size) startFailures.delete(documentId);
 	}
 	/**
-	 * Whether each shared machine's owner can push to a repository, by machine and repository id,
-	 * as GitHub last said with the machine's own token; a machine shared with teammates runs only
-	 * the Planners of documents its owner could work on themselves.
+	 * Whether someone can push to a repository, by who was asked and the repository id, as GitHub
+	 * last said: each shared machine's owner, with the machine's own token (a machine shared with
+	 * teammates runs only the Planners of documents its owner could work on themselves), and a
+	 * person the Machines page asks about with their own login, with the repository's name.
 	 */
-	let reach = new Map<string, { ok: boolean; until: number }>();
-	let reachKey = (machineId: string, repositoryId: string) => `${machineId}\n${repositoryId}`;
+	let reach = new Map<string, { ok: boolean; until: number; repository?: ReachRepository }>();
+	let reaching = new Map<string, Promise<ReachRepository | undefined>>();
 	/**
 	 * Machines whose owner stopped sharing them while teammates' Planners on them were mid-work, by
 	 * machine id: who stopped, and those documents. Each keeps its Planner there until its work
@@ -499,14 +575,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		)?.machineId;
 	}
 	/**
-	 * Whether a machine can run a document's Planner: its creator's own, one shared with them, or
-	 * one that stopped being shared while finishing this document's work.
+	 * Whether a machine can run a document's Planner for `user` (its creator unless said): their
+	 * own, one shared with them, or one that stopped being shared while finishing this document's
+	 * work.
 	 */
-	function readyFor(machineId: string, channel: ChannelRecord) {
+	function readyFor(machineId: string, channel: ChannelRecord, user = channel.createdBy) {
 		let finishes = !!finishing.get(machineId)?.documents.has(channel.id);
 		return connections.machine(machineId).some(value =>
 			serves(value, channel.repositoryId) && runsPlanners(value)
-			&& (value.owner === channel.createdBy || finishes
+			&& (value.owner === user || finishes
 				|| !!value.shared && !!reach.get(reachKey(machineId, channel.repositoryId))?.ok)
 		);
 	}
@@ -533,12 +610,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * document, then any of theirs), counting only machines that can run Planners. A creator with
 	 * none gets a teammate's machine shared with teammates, its owner's favorite first. Once the
 	 * creator has a machine of their own, a Planner on a teammate's machine moves to it unless it
-	 * is attached there.
+	 * is attached there. None while a member's stored choice places it on a machine that can run
+	 * it now (see placesElsewhere()).
 	 */
 	function defaultMachine(channel: ChannelRecord): string | undefined {
 		if (
 			!inUse.has(channel.id) || channel.archivedAt || channel.parentChannelId
 			|| !connections.choicesRead || connections.chosen(channel.id, channel.createdBy)
+			|| placesElsewhere(channel)
 		) {
 			defaults.delete(channel.id);
 			return undefined;
@@ -562,36 +641,157 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return next;
 	}
 	/**
-	 * Ask GitHub, with each shared machine's own token, whether its owner can push to a document's
-	 * repository, for a document whose creator has no machine of their own that can run its Planner.
-	 * Whether any answer changed.
+	 * What GitHub last said of `key`'s push check (the repository as it names it, when they can),
+	 * asked again once SHARED_REACH_MS (a pass) or a minute (a refusal, a failed check included) is
+	 * up; however many ask at once, it is asked once.
 	 */
-	async function reachShared(channel: ChannelRecord): Promise<boolean> {
-		if (!options.planners || !auth.machines.durable || channel.parentChannelId) return false;
-		if (ownPlannerMachine(channel)) return false;
-		let changed = false;
-		let asked = new Set<string>();
-		for (let connection of connections.shared(channel.repositoryId, channel.createdBy)) {
-			if (!runsPlanners(connection) || asked.has(connection.machineId)) continue;
-			asked.add(connection.machineId);
-			let key = reachKey(connection.machineId, channel.repositoryId);
-			let known = reach.get(key);
-			let now = auth.clock().getTime();
-			if (known && known.until > now) continue;
-			let ok = false;
+	async function reached(
+		key: string,
+		ask: () => Promise<ReachRepository | undefined>,
+	): Promise<ReachRepository | undefined> {
+		let known = reach.get(key);
+		let now = auth.clock().getTime();
+		if (known && known.until > now) return known.repository;
+		let pending = reaching.get(key);
+		if (pending) return pending;
+		let asked = ask().then(repository => {
+			reach.set(key, {
+				ok: !!repository,
+				until: now + (repository ? SHARED_REACH_MS : SHARED_RETRY_MS),
+				...repository ? { repository } : {},
+			});
+			return repository;
+		}).finally(() => reaching.delete(key));
+		reaching.set(key, asked);
+		return asked;
+	}
+	/**
+	 * Whether a shared machine's owner can push to a repository, as GitHub last said with the
+	 * machine's own token.
+	 */
+	async function ownerReaches(
+		machineId: string,
+		repository: ReachRepository,
+	): Promise<boolean> {
+		return !!await reached(reachKey(machineId, repository.id), async () => {
 			try {
-				let machine = await auth.machines.current(connection.machineId);
-				await documentAccess(await machineCaller(machine), channel.id, true);
-				ok = true;
+				let machine = await auth.machines.current(machineId);
+				return pushing(
+					await (await machineCaller(machine)).use(token =>
+						auth.github.repositoryAccess(token, repository.owner, repository.name)
+					),
+					repository,
+				);
 			} catch (error) {
 				if (!(error instanceof ExperimentError || error instanceof MachineError)) {
 					console.error("chopin: could not check a shared machine's repository access -", error);
 				}
+				return undefined;
 			}
-			reach.set(key, { ok, until: now + (ok ? SHARED_REACH_MS : SHARED_RETRY_MS) });
+		});
+	}
+	/**
+	 * Ask GitHub, with each shared machine's own token, whether its owner can push to a document's
+	 * repository, for a document whose creator has no machine of their own that can run its
+	 * Planner, and for a machine someone chose for it. Whether any answer changed.
+	 */
+	async function reachShared(channel: ChannelRecord): Promise<boolean> {
+		if (!options.planners || !auth.machines.durable || channel.parentChannelId) return false;
+		let chosen = new Set(connections.chosenFor(channel.id));
+		let own = !!ownPlannerMachine(channel);
+		let changed = false;
+		let asked = new Set<string>();
+		for (let connection of connections.shared(channel.repositoryId, channel.createdBy)) {
+			if (!runsPlanners(connection) || asked.has(connection.machineId)) continue;
+			if (own && !chosen.has(connection.machineId)) continue;
+			asked.add(connection.machineId);
+			let known = reach.get(reachKey(connection.machineId, channel.repositoryId));
+			let ok = await ownerReaches(connection.machineId, {
+				id: channel.repositoryId,
+				owner: channel.repositoryOwner,
+				name: channel.repositoryName,
+			});
 			if (ok !== known?.ok) changed = true;
 		}
 		return changed;
+	}
+	/**
+	 * The machines their owners share with teammates that are not `viewer`'s: those a person may
+	 * see and choose, for their builds and runs wherever Chopin has machines, and for their Planner
+	 * where it runs Planners on them. Checking a repository takes the machine's own token, which a
+	 * machine borrows from its owner's live login under AUTH_MODE=local, so one that needs its
+	 * GitHub authorization renewed is none of them.
+	 */
+	async function sharedByOthers(viewer: string) {
+		return (await auth.machines.shared()).filter(machine =>
+			machine.userId !== viewer && !machine.reauthorizeAt
+		);
+	}
+	/**
+	 * Which of `machines` serve work, and where: one that is connected serves the repositories its
+	 * connections say (every repository, from connector protocol 5 on, whatever checkouts it has or
+	 * none), one that is not may serve any, and its owner must be able to push to the repository,
+	 * as Default machine requires. A repository `candidates` names for a machine is checked with
+	 * GitHub, SHARED_CHECKED_AT_ONCE at a time: `viewer`, when given, must be able to push there
+	 * too and gives the repository's name. A machine that serves every repository also serves those
+	 * `together` names, which both can push to already.
+	 */
+	async function sharedServing(
+		machines: StoredMachine[],
+		candidates: (machine: StoredMachine) => Promise<ReachRepository[]>,
+		viewer?: (repository: ReachRepository) => Promise<ReachRepository | undefined>,
+		together?: (machine: StoredMachine) => Promise<ReachRepository[]>,
+	) {
+		let found: Array<{ machine: StoredMachine; repositories: string[] }> = [];
+		for (let machine of machines) {
+			let live = connections.machine(machine.id);
+			let names: string[] = [];
+			let looked = await candidates(machine);
+			for (let first = 0; first < looked.length; first += SHARED_CHECKED_AT_ONCE) {
+				let checked = await Promise.all(
+					looked.slice(first, first + SHARED_CHECKED_AT_ONCE).map(async candidate => {
+						let repository = viewer ? await viewer(candidate) : candidate;
+						if (!repository || live.length && !live.some(value => serves(value, repository.id))) {
+							return undefined;
+						}
+						return await ownerReaches(machine.id, repository)
+							? `${repository.owner}/${repository.name}`
+							: undefined;
+					}),
+				);
+				names.push(...checked.filter(name => name !== undefined));
+			}
+			if (together && (!live.length || live.some(value => value.anyRepository))) {
+				names = [
+					...new Set([
+						...names,
+						...(await together(machine)).map(value => `${value.owner}/${value.name}`),
+					]),
+				];
+			}
+			if (names.length) found.push({ machine, repositories: names });
+		}
+		return found;
+	}
+	/**
+	 * What a teammate may know of a machine shared with them: its name, its owner, its release and
+	 * whether it is a server. Not its host, system or agent, nor anything its owner alone sets.
+	 */
+	async function teammateFacts(machine: StoredMachine) {
+		let live = connections.machine(machine.id);
+		let owner = await auth.storage.users.get(machine.userId);
+		return {
+			id: machine.id,
+			label: machine.label,
+			teammate: true as const,
+			owner: { login: owner?.login ?? machine.userId, avatarUrl: owner?.avatarUrl ?? "" },
+			lastSeenAt: machine.lastSeenAt.getTime(),
+			version: live.find(value => value.version)?.version ?? null,
+			// An offline machine keeps its server or computer icon.
+			service: live.length
+				? live.some(value => value.about?.service)
+				: !!connections.about(machine.id)?.service,
+		};
 	}
 	/**
 	 * Whether a member's own choice places a document's Planner. A document has one Planner, so its
@@ -601,10 +801,32 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	function placesPlanner(channel: ChannelRecord, userId: string) {
 		return userId === channel.createdBy || !connections.chosen(channel.id, channel.createdBy);
 	}
-	/** The machines whose choice places a document's Planner: its creator's, else any member's. */
-	function plannerChoices(channel: ChannelRecord) {
+	/** The machines some member chose for a document that may run its Planner for them now. */
+	function ableChoices(channel: ChannelRecord) {
+		return [...new Set(connections.chosenFor(channel.id))].filter(machineId =>
+			connections.choosing(machineId).some(value =>
+				value.documentId === channel.id && readyFor(machineId, channel, value.owner)
+			)
+		);
+	}
+	/** Those of them that place a document's Planner: the creator's choice, else any member's. */
+	function placedChoices(channel: ChannelRecord) {
 		let creators = connections.chosen(channel.id, channel.createdBy);
-		return creators ? [creators] : connections.chosenFor(channel.id);
+		return ableChoices(channel).filter(machineId => !creators || machineId === creators);
+	}
+	/**
+	 * Whether a member's stored choice places a document's Planner, while its creator chose no
+	 * machine, on a machine that can run it now: Default machine is then asked for none, so the
+	 * choice, which survives a restart, decides it however the machines connect afterwards. The
+	 * exception is a Planner already attached (or kept with its work) on another machine: it
+	 * stays there and is never interrupted by a machine that merely became able; the chosen one is
+	 * asked once it ends.
+	 */
+	function placesElsewhere(channel: ChannelRecord) {
+		let placed = placedChoices(channel);
+		if (!placed.length) return false;
+		let holder = options.attachments?.()?.holding(channel.id);
+		return !(holder?.machineId && !placed.includes(holder.machineId));
 	}
 	/** The machine that runs a document's Planner for `userId`: the one they chose, else Default's. */
 	function plannerMachine(channel: ChannelRecord, userId: string) {
@@ -629,9 +851,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				repositoryId: channel.repositoryId,
 			});
 		for (let { documentId, owner } of connections.choosing(connection.machineId)) {
-			if (owner !== connection.owner) continue;
 			let channel = await auth.storage.channels.get(documentId);
 			if (!channel || channel.archivedAt || !serves(connection, channel.repositoryId)) continue;
+			// A teammate's choice of this machine counts only while its owner shares it and can push.
+			if (owner !== connection.owner && !readyFor(connection.machineId, channel, owner)) continue;
 			// A member's choice yields to the creator's, which keeps its own machine asked instead.
 			if (!placesPlanner(channel, owner)) continue;
 			let holder = options.attachments?.()?.holding(documentId);
@@ -707,7 +930,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!channel || channel.archivedAt) return undefined;
 		await readChoices().catch(() => {});
 		let fallback = defaultMachine(channel);
-		for (let machineId of [...plannerChoices(channel), ...fallback ? [fallback] : []]) {
+		// A machine chosen for it starts it for whoever chose it, if that machine may run it for them.
+		for (let machineId of [...placedChoices(channel), ...fallback ? [fallback] : []]) {
 			let live = connections.machine(machineId).find(value =>
 				serves(value, channel.repositoryId) && runsPlanners(value)
 			);
@@ -784,6 +1008,49 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (channel?.createdBy === owner) found.push(channel);
 		}
 		return found;
+	}
+	/**
+	 * The machines, other than `keep`, that run a document's Planner, were asked to, or were
+	 * `placing` it by a member's choice before `by` chose where it runs: the choices other members
+	 * made of them go, so none takes it back, even one whose connector had not been asked yet.
+	 * Those machines, to be stopped.
+	 */
+	async function displaced(
+		channel: ChannelRecord,
+		by: string,
+		keep: Array<string | undefined>,
+		placing: string[],
+	) {
+		let holder = options.attachments?.()?.holding(channel.id);
+		let found = new Set([
+			...dispatched.entries().filter(([, told]) => told.has(channel.id)).map(([id]) => id),
+			...holder?.machineId ? [holder.machineId] : [],
+			...placing,
+		]);
+		for (let machineId of keep) if (machineId) found.delete(machineId);
+		for (let machineId of found) {
+			for (let chooser of connections.choosing(machineId)) {
+				if (chooser.documentId !== channel.id || chooser.owner === by) continue;
+				await auth.storage.machines.choose(
+					{ channelId: channel.id, userId: chooser.owner },
+					auth.clock(),
+				);
+				connections.choose(channel.id, chooser.owner, undefined);
+				options.chosen?.(channel.id, chooser.owner);
+			}
+		}
+		return found;
+	}
+	/** Stop a document's Planner on `machines`, saying who chose otherwise: `chose` names them. */
+	async function stopDisplaced(channel: ChannelRecord, machines: Iterable<string>, chose: string) {
+		for (let machineId of machines) {
+			await stopPlanners(
+				machineId,
+				label => `${chose} for this document, so ${label} stopped running its Planner.`,
+				documentId => documentId !== channel.id,
+				channel.id,
+			);
+		}
 	}
 	/**
 	 * Stop the Planner backends `machineId` was told to run, except where `keep` says otherwise:
@@ -925,7 +1192,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					},
 					code === "authentication-required"
 						|| code.startsWith("machine-") && code !== "machine-offline"
-							&& code !== "machine-choice-unavailable"
+							&& code !== "machine-unavailable" && code !== "machine-choice-unavailable"
 						? 401
 						: code.includes("forbidden") || code === "pairing-key-invalid"
 						? 403
@@ -1297,38 +1564,181 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await disconnectMachine(machine.id);
 		return json({ revoked: true });
 	});
+	/**
+	 * Add the repositories a token can push to among its GitHub App installations to `into`, as
+	 * the repository picker lists them, every one of them.
+	 */
+	async function listPushable(token: string, into: ReachRepository[]) {
+		let installations: GitHubInstallation[] = [];
+		for (let page: number | undefined = 1, pages = 0; page && pages < LISTED_PAGES; pages++) {
+			let listing: InstallationPage = await auth.github.installations(token, page);
+			installations.push(...listing.installations);
+			page = listing.nextPage;
+		}
+		for (let installation of installations) {
+			if (installation.suspended || !installation.permissions.contents) continue;
+			for (let page: number | undefined = 1, pages = 0; page && pages < LISTED_PAGES; pages++) {
+				let listing: RepositoryPage = await auth.github.installationRepositories(
+					token,
+					installation.id,
+					page,
+				);
+				for (let value of listing.repositories) {
+					if (value.permissions.pull && (value.permissions.push || value.permissions.admin)) {
+						into.push({ id: value.id, owner: value.owner, name: value.name });
+					}
+				}
+				page = listing.nextPage;
+			}
+		}
+	}
+	/**
+	 * What someone can push to among their installations, whoever's list it is: a person's own held
+	 * a minute, a machine owner's, listed with the token of the machine that asked first, as long
+	 * as a pass of a check is, and either a minute after a failure; asked once however many ask at
+	 * once. Evicted as it runs out, as a listing begins.
+	 */
+	let pushable = new Map<string, { until: number; found: Promise<ReachRepository[]> }>();
+	function pushableRepositories(who: string, held: number, caller: () => Caller | Promise<Caller>) {
+		let now = auth.clock().getTime();
+		for (let [key, entry] of pushable) if (entry.until <= now) pushable.delete(key);
+		let known = pushable.get(who);
+		if (known) return known.found;
+		let entry = { until: Infinity, found: Promise.resolve<ReachRepository[]>([]) };
+		entry.found = (async () => {
+			let repositories: ReachRepository[] = [];
+			let listed = false;
+			try {
+				await (await caller()).use(token => listPushable(token, repositories));
+				listed = true;
+			} catch (error) {
+				if (!(error instanceof ExperimentError || error instanceof MachineError)) {
+					console.error("chopin: could not list the repositories someone can push to -", error);
+				}
+			}
+			// What GitHub said of a list it could not finish stands, and it is asked again soon.
+			entry.until = auth.clock().getTime() + (listed ? held : SHARED_RETRY_MS);
+			return repositories;
+		})();
+		pushable.set(who, entry);
+		return entry.found;
+	}
+	function viewerRepositories(session: AuthenticatedSession) {
+		return pushableRepositories(
+			`viewer:${session.user.id}`,
+			SHARED_VIEWER_MS,
+			() => browser(session),
+		);
+	}
+	function ownerRepositories(machine: StoredMachine) {
+		return pushableRepositories(
+			`owner:${machine.userId}`,
+			SHARED_REACH_MS,
+			() => machineCaller(machine),
+		);
+	}
+	/**
+	 * Whether a person can push to a repository, by its id with GitHub's name for it: from those
+	 * they can push to among their installations, else asked with their own login, which `reach`
+	 * holds like a machine owner's answer, whichever listing asks. A repository GitHub can't vouch
+	 * for is left out. Answers that have run out are forgotten as a person's check begins.
+	 */
+	function viewerPushes(session: AuthenticatedSession) {
+		let who = `viewer:${session.user.id}`;
+		let now = auth.clock().getTime();
+		for (let [key, value] of reach) {
+			if (key.startsWith("viewer:") && value.until <= now) reach.delete(key);
+		}
+		return async (repository: ReachRepository) => {
+			let listed = (await viewerRepositories(session)).find(value => value.id === repository.id);
+			return listed ?? await reached(reachKey(who, repository.id), async () => {
+				try {
+					return pushing(
+						await browser(session).use(token =>
+							auth.github.repositoryAccess(token, repository.owner, repository.name)
+						),
+						repository,
+					);
+				} catch {
+					return undefined;
+				}
+			});
+		};
+	}
+	/**
+	 * The repositories a machine says it has checkouts of: those it was paired with and those it
+	 * connected, which the Machines page asks about one at a time.
+	 */
+	async function checkedOutOf(machine: StoredMachine): Promise<ReachRepository[]> {
+		let candidates = [
+			...machine.repositories.flatMap(value => named(value.repository, value.repositoryId)),
+			...connections.machine(machine.id).flatMap(value =>
+				value.checkouts.flatMap(checkout => named(checkout.repository, checkout.repositoryId))
+			),
+		];
+		return [...new Map(candidates.map(value => [value.id, value])).values()];
+	}
+	/**
+	 * The repositories both a person and a machine's owner can push to, from the two lists of what
+	 * each can push to: no check of a repository, however many either can push to. A person who
+	 * can push to none leaves the owner's list unasked.
+	 */
+	async function pushableTogether(session: AuthenticatedSession, machine: StoredMachine) {
+		let mine = await viewerRepositories(session);
+		if (!mine.length) return [];
+		let theirs = new Set((await ownerRepositories(machine)).map(value => value.id));
+		return mine.filter(value => theirs.has(value.id));
+	}
 	route("GET", "/api/connector/machines", async request => {
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let machines = await auth.machines.list(session.user.id);
+		// Teammates' machines shared with them, in the repositories both can push to, read-only.
+		let others = await sharedByOthers(session.user.id);
+		let teammates = others.length
+			? await sharedServing(
+				others,
+				checkedOutOf,
+				viewerPushes(session),
+				machine => pushableTogether(session, machine),
+			)
+			: [];
 		// The star shows only once the favorite is known; the list itself never waits on it.
 		await readChoices().catch(() => {});
 		let favorite = connections.choicesRead ? connections.favorite(session.user.id) : undefined;
 		return json({
-			machines: machines.map(machine => ({
-				id: machine.id,
-				label: machine.label,
-				favorite: machine.id === favorite,
-				// The checkouts it said it has; it serves every repository its owner can push to.
-				repositories: [
-					...new Set([
-						...machine.repositories.map(value => value.repository),
-						...connections.machine(machine.id).flatMap(value =>
-							value.checkouts.map(checkout => checkout.repository)
-						),
-					]),
-				],
-				autoRun: machine.autoRun,
-				shared: !!machine.shared,
-				// Teammates' documents it still runs the Planner of until their work finishes.
-				finishing: finishing.get(machine.id)?.documents.size ?? 0,
-				createdAt: machine.createdAt.getTime(),
-				lastSeenAt: machine.lastSeenAt.getTime(),
-				connected: connections.machine(machine.id).length > 0,
-				version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
-				...described(connections.machine(machine.id)),
-				reauthorize: !!machine.reauthorizeAt,
-			})),
+			machines: [
+				...machines.map(machine => ({
+					id: machine.id,
+					label: machine.label,
+					teammate: false,
+					favorite: machine.id === favorite,
+					// The checkouts it said it has; it serves every repository its owner can push to.
+					repositories: [
+						...new Set([
+							...machine.repositories.map(value => value.repository),
+							...connections.machine(machine.id).flatMap(value =>
+								value.checkouts.map(checkout => checkout.repository)
+							),
+						]),
+					],
+					autoRun: machine.autoRun,
+					shared: !!machine.shared,
+					// Teammates' documents it still runs the Planner of until their work finishes.
+					finishing: finishing.get(machine.id)?.documents.size ?? 0,
+					createdAt: machine.createdAt.getTime(),
+					lastSeenAt: machine.lastSeenAt.getTime(),
+					connected: connections.machine(machine.id).length > 0,
+					version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
+					...described(connections.machine(machine.id)),
+					reauthorize: !!machine.reauthorizeAt,
+				})),
+				...await Promise.all(teammates.map(async ({ machine, repositories }) => ({
+					...await teammateFacts(machine),
+					repositories,
+					connected: connections.machine(machine.id).length > 0,
+				}))),
+			],
 		});
 	});
 	/** The owner renames a machine: the name shown in Chopin and by `chopin status`. */
@@ -1374,10 +1784,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ favorite: connections.favorite(userId) ?? null });
 	});
 	/**
-	 * The owner shares a machine with teammates, or stops. Shared, it may run the Planner of a
-	 * document on Default machine whose creator has no machine of their own that can, in a
-	 * repository its owner can push to. Stopping takes no new teammate documents and ends the
-	 * Planners it runs for teammates: at once where idle, else once their current work finishes.
+	 * The owner shares a machine with teammates, or stops. Shared, teammates can see and choose it,
+	 * and it may run the Planner of a document on Default machine whose creator has no machine of
+	 * their own that can, in a repository its owner can push to. Stopping takes no new teammate
+	 * documents, clears the teammates' choices of it, and ends the Planners it runs for them: at
+	 * once where idle, else once their current work finishes.
 	 */
 	route("POST", "/api/connector/machines/:id/shared", async (request, params) => {
 		let session = await auth.sessions.authenticate(request);
@@ -1389,6 +1800,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		finishing.delete(params.id);
 		let teammates: ChannelRecord[] = [];
 		if (!shared) {
+			// A teammate's choice of the machine ends with the sharing, so it never holds back their
+			// own work; the Planner it placed there finishes and stops as Default machine's does.
+			// Only a document the machine ran, was asked to run or was placing the Planner of, or
+			// that someone uses, is then given to Default machine; any other just loses the choice.
+			for (let { documentId, owner } of connections.choosing(params.id)) {
+				if (owner === userId) continue;
+				let channel = await auth.storage.channels.get(documentId);
+				let ran = !!channel && (
+					options.attachments?.()?.holding(documentId)?.machineId === params.id
+					|| !!dispatched.get(params.id)?.has(documentId)
+					|| placedChoices(channel).includes(params.id)
+				);
+				await auth.storage.machines.choose({ channelId: documentId, userId: owner }, auth.clock());
+				connections.choose(documentId, owner, undefined);
+				options.chosen?.(documentId, owner);
+				if (!ran && !inUse.has(documentId)) continue;
+				defaults.set(documentId, params.id);
+				inUse.set(documentId, auth.clock().getTime());
+			}
 			for (let [documentId, machineId] of defaults) {
 				if (machineId !== params.id) continue;
 				let channel = await auth.storage.channels.get(documentId);
@@ -1422,12 +1852,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ revoked: true });
 	});
 	/**
-	 * The caller's own machines, whatever repositories they have checkouts of, the one they chose
-	 * for a document (null for automatic), and the machine automatic would use now. A machine is
-	 * connected for the document when one of its live connections serves its repository. Only ever
-	 * the caller's own.
+	 * The caller's own machines, whatever repositories they have checkouts of, and the machines
+	 * teammates share that serve the document's repository while their owners can push to it (for
+	 * a caller who can push to it too); the one they chose for a document (null for automatic), and
+	 * the machine automatic would use now. A machine is connected for the document when one of its
+	 * live connections serves its repository.
 	 */
-	async function machineChoice(userId: string, channel: ChannelRecord) {
+	async function machineChoice(userId: string, channel: ChannelRecord, canPush: boolean) {
 		let { id: documentId, repositoryId } = channel;
 		await readChoices();
 		let serving = await auth.machines.list(userId);
@@ -1443,6 +1874,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		automatic ??= live[0];
 		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
+		let others = canPush ? await sharedByOthers(userId) : [];
+		let teammates = others.length
+			? await sharedServing(others, async () => [{
+				id: repositoryId,
+				owner: channel.repositoryOwner,
+				name: channel.repositoryName,
+			}])
+			: [];
 		let favorite = connections.favorite(userId);
 		let capable = (machineId: string) => {
 			let live = connections.machine(machineId);
@@ -1463,24 +1902,32 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					favorite: automatic.machineId === favorite,
 				}
 				: null,
-			machines: serving.map(machine => {
-				let live = connections.machine(machine.id);
-				return {
-					id: machine.id,
-					label: machine.label,
-					connected: live.some(value => serves(value, repositoryId)),
-					reauthorize: !!machine.reauthorizeAt,
-					lastSeenAt: machine.lastSeenAt.getTime(),
-					version: live.find(value => value.version)?.version ?? null,
-					...described(live),
-					// An offline machine keeps its server or computer icon.
-					service: live.length
-						? live.some(value => value.about?.service)
-						: !!connections.about(machine.id)?.service,
-					// Whether it can run the document's Planner when chosen: it has a Planner command.
+			machines: [
+				...serving.map(machine => {
+					let live = connections.machine(machine.id);
+					return {
+						id: machine.id,
+						label: machine.label,
+						teammate: false,
+						connected: live.some(value => serves(value, repositoryId)),
+						reauthorize: !!machine.reauthorizeAt,
+						lastSeenAt: machine.lastSeenAt.getTime(),
+						version: live.find(value => value.version)?.version ?? null,
+						...described(live),
+						// An offline machine keeps its server or computer icon.
+						service: live.length
+							? live.some(value => value.about?.service)
+							: !!connections.about(machine.id)?.service,
+						// Whether it can run the document's Planner when chosen: it has a Planner command.
+						runsPlanners: capable(machine.id),
+					};
+				}),
+				...await Promise.all(teammates.map(async ({ machine }) => ({
+					...await teammateFacts(machine),
+					connected: connections.machine(machine.id).some(value => serves(value, repositoryId)),
 					runsPlanners: capable(machine.id),
-				};
-			}),
+				}))),
+			],
 		};
 	}
 	/**
@@ -1504,8 +1951,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			let machine = serving.some(value => value.id === holder.machineId) ? holder.machineId! : null;
 			return { state: "disconnected" as const, login: holder.login, machine };
 		}
-		let machine = plannerMachine(channel, userId);
-		if (machine && plannerReady(machine, channel.repositoryId)) {
+		// Its creator is told where a member's choice that can run it places it, as Default would.
+		let machine = plannerMachine(channel, userId)
+			?? (userId === channel.createdBy ? placedChoices(channel)[0] : undefined);
+		if (machine && readyFor(machine, channel, userId)) {
 			// A teammate's shared machine says whose it is; the caller's own is named by its id.
 			let teammate = connections.machine(machine).find(value => value.owner !== userId);
 			return { state: "starting" as const, login: teammate?.login ?? null, machine };
@@ -1513,12 +1962,18 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return { state: "none" as const, login: null, machine: null };
 	}
 	route("GET", "/api/documents/:id/machine", async (request, params) => {
-		let { session, channel } = await access(
+		let { session, channel, repository } = await access(
 			await auth.sessions.authenticate(request),
 			params.id,
 			false,
 		);
-		return json(await machineChoice(session.user.id, channel));
+		return json(
+			await machineChoice(
+				session.user.id,
+				channel,
+				repository.permissions.push || repository.permissions.admin,
+			),
+		);
 	});
 	/** Choose one of the caller's machines for a document's work, or null for automatic. */
 	route("POST", "/api/documents/:id/machine", async (request, params) => {
@@ -1534,7 +1989,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		// Choosing replaces a stored choice, so the stored ones must be known first.
 		await readChoices();
 		if (machine !== null) {
-			let current = await machineChoice(userId, channel);
+			let current = await machineChoice(userId, channel, true);
 			if (!current.machines.some(value => value.id === machine)) {
 				let owned = (await auth.machines.list(userId)).some(value => value.id === machine);
 				fail(owned ? "repository-unserved" : "not-found");
@@ -1544,52 +1999,41 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			{ channelId: channel.id, userId, ...(machine ? { machineId: machine } : {}) },
 			auth.clock(),
 		);
-		// Where the person's Planner of the document runs now, chosen or Default machine's.
+		// Where the person's Planner of the document runs now, chosen or Default machine's; and the
+		// machines members' choices place it on, while its creator chose none.
 		let previous = plannerMachine(channel, userId);
+		let placing = connections.chosen(channel.id, channel.createdBy) ? [] : ableChoices(channel);
 		connections.choose(channel.id, userId, machine ?? undefined);
 		// Default machine picks again for its creator, as for any change of choice.
 		if (userId === channel.createdBy) defaults.delete(channel.id);
 		let next = plannerMachine(channel, userId);
-		// The machines that stop: the one that ran it, unless it is the one that runs it now. The
-		// creator's choice also ends a Planner another member's machine runs or was asked to run,
-		// and that member's choice with it, so it does not take the document back.
+		// The machines that stop: the one that ran it, unless it is the one that runs it now.
 		let stops = new Set(previous && previous !== next ? [previous] : []);
-		if (userId === channel.createdBy) {
-			let holder = options.attachments?.()?.holding(channel.id);
-			let theirs = [
-				...dispatched.entries().filter(([, told]) => told.has(channel.id)).map(([id]) => id),
-				...holder?.machineId ? [holder.machineId] : [],
-			];
-			for (let machineId of theirs) {
-				if (machineId === next || machineId === previous) continue;
+		// A choice that places the Planner also ends it on every other machine that runs it, was
+		// asked to, or was placing it, and the other members' choices of those machines with it, so
+		// none takes it back. The creator's always places it. A member's does only where its machine
+		// can run it for them now; one that cannot (a machine without a Planner command, an offline
+		// one, one whose owner can't push) is stored and stops nothing else: the Planner keeps
+		// running where it is, a reply under way included, and the machine takes it once it can and
+		// the Planner there has ended.
+		let places = userId === channel.createdBy
+			|| machine !== null && placesPlanner(channel, userId)
+				&& placedChoices(channel).includes(machine);
+		if (places) {
+			for (let machineId of await displaced(channel, userId, [next, previous], placing)) {
 				stops.add(machineId);
-				for (let chooser of connections.choosing(machineId)) {
-					if (chooser.documentId !== channel.id || chooser.owner === userId) continue;
-					await auth.storage.machines.choose(
-						{ channelId: channel.id, userId: chooser.owner },
-						auth.clock(),
-					);
-					connections.choose(channel.id, chooser.owner, undefined);
-					options.chosen?.(channel.id, chooser.owner);
-				}
 			}
 		}
 		// The new machine starts.
-		for (let machineId of stops) {
-			await stopPlanners(
-				machineId,
-				label =>
-					`${session.user.login} chose ${
-						machine ? "another machine" : "Default machine"
-					} for this document, so ${label} stopped running its Planner.`,
-				documentId => documentId !== channel.id,
-				channel.id,
-			);
-		}
+		await stopDisplaced(
+			channel,
+			stops,
+			`${session.user.login} chose ${machine ? "another machine" : "Default machine"}`,
+		);
 		connections.wake(channel.repositoryId);
 		options.chosen?.(channel.id, userId);
 		options.plannerStatus?.(channel.id);
-		return json(await machineChoice(userId, channel));
+		return json(await machineChoice(userId, channel, true));
 	});
 	route("GET", "/api/documents/:id/experiments", async (request, params) => {
 		await access(await auth.sessions.authenticate(request), params.id, false);
@@ -2298,6 +2742,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		json,
 		sweep,
 		refuseOffline,
+		takers,
+		mayTake,
 		machineChoices: readChoices,
 		plannerChanged,
 		plannerUsed,

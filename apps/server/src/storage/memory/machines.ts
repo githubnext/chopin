@@ -52,6 +52,12 @@ export class MemoryMachineStore implements MachineStore {
 			.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 			.map(copy);
 	}
+	async shared() {
+		return [...this.#machines.values()]
+			.filter(value => value.shared && !value.revokedAt)
+			.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+			.map(copy);
+	}
 	async seen(id: string, now: Date) {
 		let found = this.#machines.get(id);
 		if (found && !found.revokedAt) found.lastSeenAt = new Date(now);
@@ -116,7 +122,7 @@ export class MemoryMachineStore implements MachineStore {
 			return;
 		}
 		let found = this.#machines.get(choice.machineId);
-		if (!found || found.revokedAt || found.userId !== choice.userId) {
+		if (!found || found.revokedAt || found.userId !== choice.userId && !found.shared) {
 			throw missing(`machine ${choice.machineId} is not the person's`);
 		}
 		if (!this.channelExists(choice.channelId)) {

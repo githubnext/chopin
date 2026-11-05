@@ -75,7 +75,11 @@ function MachineLabel({ machine }: { machine: BuildMachine }) {
 	return (
 		<span
 			className="build-card-machine"
-			title={machine.connected === false ? `${machine.label} is offline` : undefined}
+			title={machine.connected === false
+				? `${machine.label} is offline`
+				: machine.owner
+				? `${machine.label}, ${machine.owner}'s machine`
+				: undefined}
 		>
 			{machine.connected === undefined
 				? (

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { machineFeed, machinesLabel, summarizeMachines, updateAvailable } from "./machine-summary";
 
+import type { TeammateMachine } from "./machine-summary";
+
 let machine = (connected: boolean) => ({ connected });
 
 test("the summary counts paired machines and those connected now", () => {
@@ -115,10 +117,38 @@ test("a failed answer keeps the list it had and says why; a hidden page asks not
 	await feed.load();
 	fail = true;
 	await feed.load();
-	expect(feed.snapshot()).toEqual({ machines: [machineOf("box", true)], error: "unavailable" });
+	expect(feed.snapshot()).toEqual({
+		machines: [machineOf("box", true)],
+		teammates: [],
+		error: "unavailable",
+	});
 	visible = false;
 	await feed.load();
 	expect(answers).toBe(2);
 	feed.update(list => list.filter(machine => machine.id !== "box"));
 	expect(feed.snapshot().machines).toEqual([]);
+});
+
+test("the feed keeps teammates' shared machines apart from the person's own", async () => {
+	let shared: TeammateMachine = {
+		id: "theirs",
+		label: "build-box",
+		teammate: true,
+		owner: { login: "rival", avatarUrl: "" },
+		repositories: ["octo-org/score"],
+		connected: true,
+		lastSeenAt: 1,
+		version: null,
+		service: false,
+	};
+	let feed = machineFeed(async () => [machineOf("mine", true), shared]);
+	await feed.load();
+	expect(feed.snapshot().machines?.map(machine => machine.id)).toEqual(["mine"]);
+	expect(feed.snapshot().teammates).toEqual([shared]);
+	// Counts, the favorite star and the sidebar read the person's own list alone.
+	expect(summarizeMachines(feed.snapshot().machines!)).toEqual({ paired: 1, connected: 1 });
+	// A change to the person's own list leaves the teammates' alone.
+	feed.update(list => list.filter(machine => machine.id !== "mine"));
+	expect(feed.snapshot().machines).toEqual([]);
+	expect(feed.snapshot().teammates).toEqual([shared]);
 });

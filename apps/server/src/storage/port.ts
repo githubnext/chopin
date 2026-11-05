@@ -115,6 +115,8 @@ export interface MachineStore {
 	byToken(tokenHash: Uint8Array): Promise<StoredMachine | undefined>;
 	/** An owner's unrevoked machines, most recently paired first. */
 	list(userId: string): Promise<StoredMachine[]>;
+	/** Every unrevoked machine its owner shares with teammates, most recently paired first. */
+	shared(): Promise<StoredMachine[]>;
 	seen(id: string, now: Date): Promise<void>;
 	rotate(id: string, expectedRevision: number, credentials: MachineCredentials): Promise<boolean>;
 	/** Drop credentials GitHub refused at `expectedRevision`; the owner must pair again. */

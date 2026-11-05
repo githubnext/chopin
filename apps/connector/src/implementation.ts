@@ -104,6 +104,18 @@ function openDecisionLines(read: "read_implementation" | "read_rebuild") {
 	];
 }
 
+/**
+ * A build asked for by a teammate runs on this machine with its owner's GitHub account, so its pull
+ * requests come from the owner. The server says whose request it was; the agent passes that on.
+ */
+function requestedByLines(read: "read_implementation" | "read_rebuild") {
+	return [
+		`If ${read} returns requestedBy, a teammate asked for this build: put its pullRequestNote,`
+		+ " unchanged, at the end of the body of every pull request you open or update, so the"
+		+ " pull request says whose request it was.",
+	];
+}
+
 export function implementationPrompt(worktrees: RunWorktrees) {
 	return [
 		"Read the human-approved graph and document with read_implementation from Chopin's MCP server.",
@@ -116,6 +128,7 @@ export function implementationPrompt(worktrees: RunWorktrees) {
 		"Open small reviewable draft pull requests (`gh pr create --draft`), linking the document URL",
 		"and its #task-ID anchors. Never merge PRs.",
 		...openDecisionLines("read_implementation"),
+		...requestedByLines("read_implementation"),
 		"If a task needs no code change, open no pull request: call complete_task with noChange, giving",
 		"the reason and Markdown evidence of what you checked. Its dependents build on the same base.",
 		"If a new human decision is needed, block the affected task with its question and stop that work.",
@@ -138,6 +151,7 @@ export function liveImplementationPrompt(worktrees: RunWorktrees) {
 		"Open small reviewable draft pull requests (`gh pr create --draft`), linking the document URL",
 		"and its #task-ID anchors. Never merge PRs.",
 		...openDecisionLines("read_implementation"),
+		...requestedByLines("read_implementation"),
 		"If a task needs no code change, open no pull request: call complete_task with noChange, giving",
 		"the reason and Markdown evidence of what you checked. Its dependents build on the same base.",
 		"If a new human decision is needed, block the affected task with its question and stop that work.",
@@ -163,6 +177,7 @@ export function rebuildPrompt(worktrees: RunWorktrees) {
 		"that has none.",
 		"Never open any other pull request. Never merge.",
 		...openDecisionLines("read_rebuild"),
+		...requestedByLines("read_rebuild"),
 		"Code that fits no existing pull request goes on the most closely related one.",
 		"If the change needs no code and nothing is outstanding, make no commits.",
 		"Finally call report_rebuild with a summary, every commit you pushed, and one task per new change.",

@@ -263,10 +263,12 @@ export function AddServerPage() {
 							setShared(value);
 							if (pairing.state !== "idle") reset();
 						}}
-						title="Plan teammates' documents"
+						title="Run teammates' work"
 					>
-						Off: nobody else's work runs here. On: when a teammate's document has no machine of its
-						own, its Planner runs here as you, in repositories you can push to. Builds stay yours.
+						Off: nobody else's work runs here. On: teammates see this machine and can choose it for
+						a document, and that document's Planner, builds and runs then run here as you, with your
+						GitHub account, in repositories you can push to. Rebuilds and prototypes Chopin starts
+						by itself stay yours.
 					</Setting>
 				</div>
 			</li>

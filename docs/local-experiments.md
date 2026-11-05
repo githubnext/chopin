@@ -41,7 +41,8 @@ On any open line of the document, type `/` and choose **Investigate**, next to
 `<Investigation id="…" />` card where the caret was, marked **Ready to run**. The
 document holds only that id; the investigation record owns the brief, state and
 result. Select **Run**:
-the work runs on your own local agent, never on another person's. Chopin
+the work runs on your own local agent, or on a teammate's shared machine if you
+chose one for the document, never on another machine by itself. Chopin
 prefers the connection that last ran work for this document, then your most
 recently active one that is not busy. When all of yours are busy, the work
 queues behind one of them and starts when it is free. Without any, the card shows the connector command to start, and you select

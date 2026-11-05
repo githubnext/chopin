@@ -2,27 +2,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { machines as liveMachines } from "./machine-summary";
 
-import type { Machine } from "./machine-summary";
+import type { Machine, TeammateMachine } from "./machine-summary";
 
-/** One of the person's machines serving a document's repository, as the server lists it. */
+/**
+ * A machine serving a document's repository, as the server lists it: one of the person's own, or
+ * a teammate's that its owner shares and can push to the repository from.
+ */
 export type ChoosableMachine = {
 	id: string;
 	label: string;
 	/** It has a live connection for this repository now. */
 	connected: boolean;
-	/** GitHub stopped accepting its authorization; it needs pairing again. */
-	reauthorize: boolean;
+	/** GitHub stopped accepting its authorization; it needs pairing again. Only the person's own say. */
+	reauthorize?: boolean;
 	lastSeenAt: number;
 	version: string | null;
-	hostname: string | null;
-	platform: { os: string; arch: string } | null;
-	agent: { name: string; version?: string } | null;
+	hostname?: string | null;
+	platform?: { os: string; arch: string } | null;
+	agent?: { name: string; version?: string } | null;
 	/** The background service runs it. */
 	service: boolean;
 	/** It can run Planners. */
-	planner: boolean;
+	planner?: boolean;
 	/** It has a Planner command, so it can run the Planner of a document it is chosen for. */
 	runsPlanners?: boolean;
+	/** A teammate's machine: its owner shares it, and only they change it. */
+	teammate?: boolean;
+	owner?: { login: string; avatarUrl: string };
 };
 
 /**
@@ -81,15 +87,18 @@ function automaticLabel(state: MachineChoiceState) {
 }
 
 /**
- * Whether a document offers the machine choice: its button left of Build plan. Only once the
- * person has added a machine, connected or not, and whatever repositories its checkouts are of;
- * before that the Machines page is the way to add one.
+ * Whether a document offers the machine choice: its button left of Build plan. Once the person
+ * has added a machine, connected or not, and whatever repositories its checkouts are of, or the
+ * document lists a teammate's shared machine; before that the Machines page is the way to add one.
  */
-export function showsMachineChoice(machines: readonly Pick<Machine, "id">[] | undefined): boolean {
-	return !!machines?.length;
+export function showsMachineChoice(
+	machines: readonly Pick<Machine, "id">[] | undefined,
+	state?: MachineChoiceState,
+): boolean {
+	return !!machines?.length || !!state?.machines.some(machine => machine.teammate);
 }
 
-/** Why Build can't start: the chosen machine is offline, named. Automatic never is. */
+/** Why Build can't start: the chosen machine, the person's or a teammate's, is offline. Named. Automatic never is. */
 export function offlineChoice(state: MachineChoiceState | undefined): string | undefined {
 	let chosen = chosenMachine(state);
 	return chosen && !chosen.connected ? `${chosen.label} is offline` : undefined;
@@ -118,10 +127,15 @@ export type MachineRow = {
 	disabled: boolean;
 	/** The machine the background service runs, which the menu lists under Cloud. */
 	cloud: boolean;
+	/** The login of the teammate whose machine it is, which the menu lists it under; else undefined. */
+	owner?: string;
 	machine: ChoosableMachine;
 };
 
-/** The menu's rows, one per machine: Local ones first, then Cloud, offline ones disabled. */
+/**
+ * The menu's rows, one per machine: the person's Local ones first, then Cloud, then each teammate's
+ * under their login, offline ones disabled.
+ */
 export function machineRows(state: MachineChoiceState): MachineRow[] {
 	let shown = shownMachine(state);
 	let rows = state.machines.map(machine => ({
@@ -129,11 +143,20 @@ export function machineRows(state: MachineChoiceState): MachineRow[] {
 		label: machine.label,
 		detail: STATE_WORDS[machineState(machine)],
 		checked: shown?.id === machine.id,
-		disabled: !machine.connected || machine.reauthorize,
+		disabled: !machine.connected || !!machine.reauthorize,
 		cloud: machine.service,
+		...(machine.teammate ? { owner: machine.owner?.login ?? "a teammate" } : {}),
 		machine,
 	}));
-	return [...rows.filter(row => !row.cloud), ...rows.filter(row => row.cloud)];
+	let own = rows.filter(row => !row.owner);
+	let theirs = rows.filter(row => row.owner);
+	return [
+		...own.filter(row => !row.cloud),
+		...own.filter(row => row.cloud),
+		...[...new Set(theirs.map(row => row.owner))].flatMap(owner =>
+			theirs.filter(row => row.owner === owner)
+		),
+	];
 }
 
 function endpoint(room: string) {
@@ -149,10 +172,18 @@ async function answer(response: Response): Promise<MachineChoiceState> {
 /** How often the choice is read again while the document is open, so states stay current. */
 const REFRESH_MS = 15_000;
 
-/** What of the person's machines a document's choice depends on: which are paired and online. */
-export function presence(list: readonly Machine[] | undefined): string | undefined {
-	return list?.map(machine => `${machine.id}:${machine.connected}:${machine.reauthorize}`)
-		.sort().join(" ");
+/**
+ * What of the machines a document's choice depends on: which of the person's are paired and online,
+ * and which teammates' shared machines are.
+ */
+export function presence(
+	list: readonly Machine[] | undefined,
+	teammates: readonly TeammateMachine[] = [],
+): string | undefined {
+	return list && [
+		...list.map(machine => `${machine.id}:${machine.connected}:${machine.reauthorize}`),
+		...teammates.map(machine => `${machine.id}:${machine.connected}:shared`),
+	].sort().join(" ");
 }
 
 export type MachineChoice = {
@@ -225,9 +256,10 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 	// A machine going offline or coming back changes what the buttons and Build plan show.
 	useEffect(() => {
 		if (!enabled) return;
-		let seen = presence(liveMachines.snapshot().machines);
+		let seen = presence(liveMachines.snapshot().machines, liveMachines.snapshot().teammates);
 		let unwatch = liveMachines.watch(() => {
-			let now = presence(liveMachines.snapshot().machines);
+			let { machines, teammates } = liveMachines.snapshot();
+			let now = presence(machines, teammates);
 			if (now === undefined || now === seen) return;
 			let changed = seen !== undefined;
 			seen = now;

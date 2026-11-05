@@ -18,7 +18,7 @@ const KEY = /^chopin_k_[A-Za-z0-9_-]{43}$/;
 
 /**
  * `autoRun`: whether the machine it pairs lets Chopin build and prototype automatically.
- * `shared`: whether it runs teammates' Planners on Default machine.
+ * `shared`: whether teammates may choose it, so it runs their Planners, builds and runs.
  */
 type Key = {
 	userId: string;

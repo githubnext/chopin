@@ -47,6 +47,24 @@ const CREATOR_WRITABLE = new Set(["archive-1", "archive-8", "archive-9"]);
 // octo-org/score: a reader may pull but not push, and an outsider cannot see it.
 const SCORE_READER = "score-reader-";
 const SCORE_OUTSIDER = "score-outsider-";
+// Someone who shares a machine in a test sees one repository, a private one of their own, so the
+// machine is listed to nobody else on the server: a shared machine serves every repository its
+// owner can push to, and a teammate sees it wherever they can push to one too.
+const MACHINE_SHARER = "machine-sharer-";
+
+function sharerRepository(handle: string) {
+	let name = `relay-${handle.slice(MACHINE_SHARER.length)}`;
+	return {
+		node_id: `R_${name}`,
+		owner: { login: "octo-org", avatar_url: "https://example.invalid/octo-org.png" },
+		name,
+		full_name: `octo-org/${name}`,
+		private: true,
+		html_url: `https://github.com/octo-org/${name}`,
+		default_branch: "main",
+		permissions: { pull: true, push: true, admin: false },
+	};
+}
 
 const installations = [
 	{
@@ -211,6 +229,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				? [{ ...repository, permissions: { ...repository.permissions, push: true } }]
 				: [repository];
 		});
+		if (handle.startsWith(MACHINE_SHARER)) accessibleRepositories = [sharerRepository(handle)];
 		let tagged = (value: unknown, etag: string, responseInit: ResponseInit = {}) => {
 			let headers = new Headers(responseInit.headers);
 			headers.set("etag", etag);
@@ -280,6 +299,8 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 				`"repositories-${handle}-102-${url.searchParams.get("page") ?? "1"}"`,
 			);
 		}
+		// The head a machine with no checkout of octo-org/score clones.
+		if (url.pathname === "/repos/octo-org/score/commits/main") return json({ sha: "b".repeat(40) });
 		let reference = /^\/repos\/octo-org\/score\/((?:pulls|issues)\/\d+)$/.exec(url.pathname);
 		let summary = reference && references.get(reference[1]!);
 		if (summary) return tagged(summary, `"reference-${reference![1]}"`);

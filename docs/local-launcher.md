@@ -30,9 +30,14 @@ normal tools, project instructions and configured services.
    document, it asks the hosted Planner to draft them without posting a Chat
    message, then starts them without a separate review. See
    [drafting tasks from Build plan](implementation-lifecycle.md#drafting-tasks-from-build-plan).
-3. The build runs on your own local agent: the server picks your idle
-   connection for the repository, preferring the one that last ran work for this
-   document, and derives the checkout from it. Without one, the header reads
+3. The build runs on the machine you chose for the document: the server picks
+   your idle connection for the repository, preferring the one that last ran work
+   for this document, and derives the checkout from it. If you chose a
+   teammate's shared machine, it runs there instead, as that machine's owner (see
+   [Share a machine with teammates](chopin-cli.md#share-a-machine-with-teammates)):
+   the connection it queues on belongs to the owner, the build records you as
+   the person who asked, and only that connection claims and reports it, while
+   the machine is shared and its owner can push to the repository. Without one, the header reads
    **Build stopped**, and Build says your local agent isn't connected and shows
    the connector command to run in your project folder; **Retry** tries again
    once connected. Approval persists the document and graph

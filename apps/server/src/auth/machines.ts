@@ -50,7 +50,7 @@ export type PairMachine = {
 	label: string;
 	repositories: MachineRepository[];
 	autoRun: boolean;
-	/** Whether teammates' documents may run their Planner here on Default machine. */
+	/** Whether teammates may choose this machine for their documents' Planners, builds and runs. */
 	shared?: boolean;
 	/** The machine's own GitHub authorization; GitHub refresh tokens are single-use, never shared. */
 	grant?: GitHubTokenGrant;
@@ -142,6 +142,11 @@ export class Machines {
 
 	list(userId: string): Promise<StoredMachine[]> {
 		return this.#storage.machines.list(userId);
+	}
+
+	/** Every live machine its owner shares with teammates. */
+	shared(): Promise<StoredMachine[]> {
+		return this.#storage.machines.shared();
 	}
 
 	/** Rename the owner's live machine; false for another person's or a revoked one. */

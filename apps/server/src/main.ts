@@ -2793,6 +2793,8 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 	resumeMs: config.buildResumeMs,
 	connections: experiments.connections,
 	refuseOffline: experiments.refuseOffline,
+	takers: experiments.takers,
+	mayTake: experiments.mayTake,
 	machineChoices: experiments.machineChoices,
 	sourceFor: experiments.sourceFor,
 	busy: async connectionId =>

@@ -13,7 +13,7 @@ export function expiryLabel(expiresAt: number, now: number): string {
 	return left > 0 ? `Works once and expires in ${Math.ceil(left / 60_000)} min` : "Expired";
 }
 
-/** What the machine a key pairs may do: build on its own, and plan teammates' documents. */
+/** What the machine a key pairs may do: build on its own, and run teammates' work. */
 export type KeyChoices = { autoRun: boolean; shared: boolean };
 
 export type PairingKey =

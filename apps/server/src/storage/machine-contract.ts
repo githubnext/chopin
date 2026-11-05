@@ -226,6 +226,37 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		it("lets a person choose a teammate's machine only while its owner shares it", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId: owner, channelId } = await userAndChannel(storage);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				let teammate = id("machine-teammate");
+				await storage.users.put({ id: teammate, login: "teammate", avatarUrl: "", now });
+				let theirs = machine(owner);
+				await storage.machines.create(theirs);
+				let chosen = () =>
+					storage.machines.choices().then(list =>
+						list.filter(value => value.channelId === channelId)
+					);
+				await expect(
+					storage.machines.choose({ channelId, userId: teammate, machineId: theirs.id }, now),
+				)
+					.rejects.toBeInstanceOf(StorageError);
+				await storage.machines.share(theirs.id, owner, true);
+				await storage.machines.choose({ channelId, userId: teammate, machineId: theirs.id }, now);
+				expect(await chosen()).toEqual([{ channelId, userId: teammate, machineId: theirs.id }]);
+				await storage.machines.revoke(theirs.id, owner, now);
+				expect(await chosen()).toEqual([]);
+				await expect(
+					storage.machines.choose({ channelId, userId: teammate, machineId: theirs.id }, now),
+				)
+					.rejects.toBeInstanceOf(StorageError);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("forgets the choices of a revoked machine", async () => {
 			let storage = await openedStorage(factory);
 			try {
@@ -294,6 +325,32 @@ export function machineContract(name: string, factory: StorageFactory) {
 				expect((await storage.machines.get(input.id))?.shared).toBeUndefined();
 				await storage.machines.revoke(paired.id, userId, now);
 				expect(await storage.machines.share(paired.id, userId, true)).toBe(false);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("lists the machines their owners share with teammates, never a revoked or unshared one", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let shared = machine(userId, { shared: true });
+				let plain = machine(userId);
+				let revoked = machine(userId, { shared: true });
+				for (let input of [shared, plain, revoked]) await storage.machines.create(input);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				await storage.machines.revoke(revoked.id, userId, now);
+				// The database may hold other tests' machines; this owner's are the ones to read.
+				let ids = async () =>
+					(await storage.machines.shared()).filter(value => value.userId === userId)
+						.map(value => value.id);
+				expect(await ids()).toEqual([shared.id]);
+				expect((await storage.machines.shared()).find(value => value.id === shared.id))
+					.toMatchObject({ userId, shared: true });
+				await storage.machines.share(plain.id, userId, true);
+				expect((await ids()).sort()).toEqual([shared.id, plain.id].sort());
+				await storage.machines.share(shared.id, userId, false);
+				expect(await ids()).toEqual([plain.id]);
 			} finally {
 				await storage.close();
 			}

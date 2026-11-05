@@ -468,7 +468,11 @@ Planner backend command it starts per document
 access is checked with the machine's own GitHub authorization, and it owns the
 document through a delegated login of the machine's owner that no browser holds
 (`apps/server/src/harness/remote/machine-planners.ts`), so no browser sign-in is
-needed and signing out does not release it. Revoking the machine, or GitHub
+needed and signing out does not release it. A machine its owner shares with
+teammates does the same for a teammate's document as its owner; the same sharing
+is the owner's consent for that teammate's builds and runs to run on the machine
+too, as the owner (see
+[Share a machine with teammates](chopin-cli.md#share-a-machine-with-teammates)). Revoking the machine, or GitHub
 refusing its authorization, ends that login and closes its connections with
 `access-revoked`.
 

@@ -41,18 +41,23 @@ import {
 import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
 
 import type { ReactNode } from "react";
-import type { Machine } from "../machine-summary";
+import type { Machine, TeammateMachine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 import type { CopyItem, Owner, useMachines } from "./machines";
 
 export type MachineState = "connected" | "offline" | "reauthorize";
 
-export function machineState(machine: Machine): MachineState {
+export function machineState(
+	machine: Pick<Machine, "connected"> & { reauthorize?: boolean },
+): MachineState {
 	return machine.reauthorize ? "reauthorize" : machine.connected ? "connected" : "offline";
 }
 
 /** What the dot means, in words: the status line beside it, and the dot's own name where alone. */
-export function statusWords(machine: Machine, now: number): string {
+export function statusWords(
+	machine: Pick<Machine, "connected" | "lastSeenAt"> & { reauthorize?: boolean },
+	now: number,
+): string {
 	let state = machineState(machine);
 	if (state === "reauthorize") return "Needs reconnecting";
 	if (state === "connected") return "Connected";
@@ -75,7 +80,9 @@ function agentName(agent: Machine["agent"]): string | undefined {
  * repository identifies it.
  */
 /** Machines by kind, Local then Cloud, each in list order; a kind with none is left out. */
-export function groupMachines(list: Machine[]): { kind: "local" | "cloud"; machines: Machine[] }[] {
+export function groupMachines<T extends Pick<Machine, "service">>(
+	list: T[],
+): { kind: "local" | "cloud"; machines: T[] }[] {
 	let groups = [
 		{ kind: "local" as const, machines: list.filter(machine => !machine.service) },
 		{ kind: "cloud" as const, machines: list.filter(machine => machine.service) },
@@ -103,15 +110,17 @@ export function machineMatches(machine: Machine, query: string, login: string | 
 	].some(value => value?.toLowerCase().includes(words));
 }
 
-/** The owner's GitHub login, after their avatar where GitHub has one. */
+/** The owner's GitHub login, after their avatar where GitHub has one and it loads. */
 function OwnerName({ owner }: { owner: Owner }) {
+	let [broken, setBroken] = useState(false);
 	return (
 		<span className="machines-owner">
-			{owner.avatarUrl && (
+			{owner.avatarUrl && !broken && (
 				<img
 					alt=""
 					className="machines-owner-avatar"
 					height={16}
+					onError={() => setBroken(true)}
 					src={owner.avatarUrl}
 					width={16}
 				/>
@@ -134,7 +143,12 @@ export function StatusDot({ label, state }: { label?: string; state: MachineStat
 }
 
 /** The dot, then the state in quiet words, as the Last seen column shows it. */
-function Status({ machine, now }: { machine: Machine; now: number }) {
+function Status(
+	{ machine, now }: {
+		machine: Pick<Machine, "connected" | "lastSeenAt"> & { reauthorize?: boolean };
+		now: number;
+	},
+) {
 	return (
 		<span className="machines-status">
 			<StatusDot state={machineState(machine)} />
@@ -154,9 +168,11 @@ function Dash({ label }: { label: string }) {
 
 /** What sharing a machine with teammates does, as the switch's tooltip and the phone row say. */
 export const SHARE_DETAIL =
-	"A teammate's document with no machine of its own can run its Planner here, as you, "
-	+ "in repositories you can push to. Builds stay yours. Turned off, a teammate's Planner "
-	+ "finishes the reply, question or run it is on first.";
+	"Teammates see this machine under Shared with you and can choose it for a document. That "
+	+ "document's Planner, builds and runs then run here, as you, with your GitHub account, in "
+	+ "repositories you can push to; a Planner also runs here on Default machine when its creator "
+	+ "has no machine of their own. Rebuilds and prototypes Chopin starts by itself stay yours. "
+	+ "Turned off, a teammate's Planner or build finishes the work it is on first.";
 
 /**
  * Whether teammates' documents may plan on a machine: a switch, named for the machine, that
@@ -487,6 +503,152 @@ function MachineTable(
 	);
 }
 
+/** A teammate's repositories, a few by name and the rest counted. */
+const SHOWN_REPOSITORIES = 2;
+
+function TeammateRepositories({ machine }: { machine: TeammateMachine }) {
+	let shown = machine.repositories.slice(0, SHOWN_REPOSITORIES);
+	let more = machine.repositories.length - shown.length;
+	return (
+		<span className="machines-stack">
+			{shown.map(name => <span className="machines-truncate" key={name} title={name}>{name}</span>)}
+			{more > 0 && <span className="machines-secondary">{more} more</span>}
+		</span>
+	);
+}
+
+/** What a teammate's machine shows: no star, switch or actions, as only its owner changes it. */
+function TeammateTable({ labelledBy, list }: { labelledBy: string; list: TeammateMachine[] }) {
+	let now = Date.now();
+	return (
+		<Table aria-labelledby={labelledBy} className="machines-table" variant="contained">
+			<TableHeader>
+				<TableRow>
+					<TableHead>Machine</TableHead>
+					<TableHead>Owner</TableHead>
+					<TableHead>Version</TableHead>
+					<TableHead>Repositories</TableHead>
+					<TableHead className="machines-status-column">Last seen</TableHead>
+				</TableRow>
+			</TableHeader>
+			{groupMachines(list).map(group => (
+				<TableBody key={group.kind}>
+					<TableRow>
+						<TableHead className="machines-group-head" colSpan={5} scope="rowgroup">
+							<span className="machines-group-title">
+								<GroupIcon kind={group.kind} />
+								{GROUP_LABEL[group.kind]}
+							</span>
+						</TableHead>
+					</TableRow>
+					{group.machines.map(machine => (
+						<TableRow key={machine.id}>
+							<TableCell>
+								<span className="machines-stack">
+									<span className="machines-name-line">
+										<span className="machines-name" title={machine.label}>{machine.label}</span>
+									</span>
+								</span>
+							</TableCell>
+							<TableCell>
+								<span className="machines-stack">
+									<OwnerName owner={machine.owner} />
+								</span>
+							</TableCell>
+							<TableCell>
+								<span className="machines-stack">
+									{machine.version
+										? <span className="tabular-nums">chopin {machine.version}</span>
+										: <Dash label="Version unknown" />}
+								</span>
+							</TableCell>
+							<TableCell>
+								<TeammateRepositories machine={machine} />
+							</TableCell>
+							<TableCell className="machines-status-column">
+								<Status machine={machine} now={now} />
+							</TableCell>
+						</TableRow>
+					))}
+				</TableBody>
+			))}
+		</Table>
+	);
+}
+
+/** A phone's teammates' rows: the dot before the name, who owns it, then its repositories. */
+function TeammateRows({ list }: { list: TeammateMachine[] }) {
+	let now = Date.now();
+	return (
+		<div className="machines-rows">
+			{groupMachines(list).map(group => (
+				<div className="machines-rows-group" key={group.kind}>
+					<h4 className="machines-group-title">
+						<GroupIcon kind={group.kind} />
+						{GROUP_LABEL[group.kind]}
+					</h4>
+					<ul>
+						{group.machines.map(machine => {
+							let parts = [machine.owner.login, machine.version && `chopin ${machine.version}`]
+								.filter(Boolean);
+							return (
+								<li key={machine.id}>
+									<div className="machines-row">
+										<span className="machines-row-text">
+											<span className="machines-row-name">
+												<StatusDot
+													label={statusWords(machine, now)}
+													state={machineState(machine)}
+												/>
+												<span className="machines-name" title={machine.label}>{machine.label}</span>
+											</span>
+											<span className="machines-secondary machines-truncate">
+												{parts.map((part, index) => (
+													<span className="machines-detail-part" key={index}>
+														{index > 0 && " "}
+														{part}
+													</span>
+												))}
+											</span>
+											<span className="machines-secondary machines-truncate">
+												{machine.repositories.join(", ")}
+											</span>
+										</span>
+									</div>
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			))}
+		</div>
+	);
+}
+
+/**
+ * Machines teammates share with the person: a table, or on a phone rows, of each machine's name,
+ * owner, release, repositories and state. Nothing in it changes a machine; only its owner does,
+ * and the person chooses one for a document from that document's machine button. Nothing at all
+ * until a teammate shares one that serves a repository they can push to.
+ */
+export function SharedWithYou({ machines }: { machines: ReturnType<typeof useMachines> }) {
+	let headingId = useId();
+	let phone = usePhoneWidth();
+	let list = machines.teammates;
+	if (!list?.length) return null;
+	return (
+		<section aria-labelledby={headingId} className="machines-section">
+			<div className="machines-shared-heading">
+				<h2 className="text-base font-semibold" id={headingId}>Shared with you</h2>
+				<p className="machines-detail">
+					Machines your teammates share. Only their owners change them.
+				</p>
+			</div>
+			{phone ? <TeammateRows list={list} /> : <TeammateTable labelledBy={headingId} list={list} />}
+		</section>
+	);
+}
+
 /** Where the phone list was scrolled, so coming back from a machine finds it there. */
 const SCROLL_KEY = "chopin:machines:scroll";
 
@@ -696,7 +858,7 @@ export function MachineDetail(
 			[
 				machine.service && "stays connected",
 				machine.autoRun && "builds automatically",
-				machine.shared && "plans teammates' documents",
+				machine.shared && "runs teammates' work",
 			].filter(Boolean).join(", "),
 		],
 	];
