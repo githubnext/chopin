@@ -9,6 +9,7 @@ export * as limits from "./limits";
 
 export {
 	CALLOUT_TYPES,
+	climbsOutOfRepository,
 	COMPONENT_NAMES,
 	COMPONENTS,
 	DIFF_LANGUAGE,

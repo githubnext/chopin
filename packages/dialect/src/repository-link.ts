@@ -8,7 +8,7 @@
  * never changes; only where it opens does.
  */
 
-import { disguisedUrl } from "./dialect";
+import { climbsOutOfRepository, disguisedUrl, REPOSITORY_STAND_IN as STAND_IN } from "./dialect";
 
 /** The repository a document's links resolve against, and the ref they open at. */
 export type LinkRepository = {
@@ -24,10 +24,6 @@ export type LinkRepository = {
  */
 export const BARE_EMAIL: RegExp = /^[^\s@/]+@[^\s@/]+\.[a-z]{2,}$/i;
 
-const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-
-const STAND_IN = new URL("https://repository.invalid/root/");
-
 /**
  * The file on GitHub that a repository-relative link target opens, or nothing
  * when the target is not a path in the repository and should be left as it is.
@@ -39,14 +35,14 @@ const STAND_IN = new URL("https://repository.invalid/root/");
  */
 export function repositoryLinkUrl(target: string, repository: LinkRepository): string | undefined {
 	// A path from the root of the site is one of Chopin's own: a link to another document, say.
-	if (!target || /^[#?/]/.test(target) || SCHEME.test(target) || BARE_EMAIL.test(target)) return;
-	if (disguisedUrl(target) !== undefined) return;
+	if (
+		!target || /^[#?/]/.test(target) || /^[a-z][a-z0-9+.-]*:/i.test(target)
+		|| BARE_EMAIL.test(target)
+	) return;
+	if (disguisedUrl(target) !== undefined || climbsOutOfRepository(target)) return;
 
-	// Settled against a stand-in root first, which the parser cannot leave except by climbing
-	// above it: dot segments, encoded ones included, are its to read, not ours. The target is
-	// appended rather than resolved, so nothing in it can name another host or fail to parse.
+	// Settled against a stand-in root, which the parser cannot leave except by climbing, and that is refused above.
 	let settled = new URL(STAND_IN.href + target);
-	if (!settled.pathname.startsWith(STAND_IN.pathname)) return;
 
 	let ref = repository.ref.split("/");
 	let root = [repository.owner, repository.name, "blob", ...ref].map(encodeURIComponent).join("/");

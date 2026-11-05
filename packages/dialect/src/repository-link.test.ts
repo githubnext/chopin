@@ -99,10 +99,18 @@ describe("repositoryLinkUrl", () => {
 				`docs/${String.fromCharCode(0x202e)}gpj.md`,
 				`docs/re${String.fromCharCode(0x200b)}view.md`,
 				"java\tscript:alert(1)",
+				"../secret.md",
+				"docs/../../secret.md",
+				"docs/%2e%2e/%2e%2e/secret.md",
 			]
 		) {
 			expect(disguisedUrl(target)).toBeDefined();
 			expect(repositoryLinkUrl(target, REPOSITORY)).toBeUndefined();
 		}
+	});
+
+	it("lets a dot segment that stays inside the repository be stored and opened", () => {
+		expect(disguisedUrl("docs/../README.md")).toBeUndefined();
+		expect(repositoryLinkUrl("docs/../README.md", REPOSITORY)).toMatch(/\/blob\/.+\/README\.md$/);
 	});
 });

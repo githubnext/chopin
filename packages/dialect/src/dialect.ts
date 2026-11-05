@@ -410,6 +410,19 @@ export function leavesRepository(url: string): boolean {
 	return url.startsWith("//") || url.includes("\\");
 }
 
+/** A root no repository-relative path can leave except by climbing above it with dot segments. */
+export const REPOSITORY_STAND_IN: URL = new URL("https://repository.invalid/root/");
+
+/**
+ * Whether a repository-relative path climbs above the repository root, dot segments and
+ * encoded ones included. The target is appended to a stand-in root rather than resolved
+ * against it, so nothing in it can name another host or fail to parse.
+ */
+export function climbsOutOfRepository(url: string): boolean {
+	if (!url || /^[#?/]/.test(url) || /^[a-z][a-z0-9+.-]*:/i.test(url)) return false;
+	return !new URL(REPOSITORY_STAND_IN.href + url).pathname.startsWith(REPOSITORY_STAND_IN.pathname);
+}
+
 /**
  * Why a URL is unsafe to newly store, or nothing if it is fine.
  *
@@ -426,7 +439,9 @@ export function disguisedUrl(url: string, kind: "link" | "image" = "link"): stri
 	if (!scheme.test(url) && scheme.test(url.replace(/\s/g, ""))) {
 		return `${noun} hides a protocol behind whitespace`;
 	}
-	if (kind === "link" && !scheme.test(url) && leavesRepository(url)) {
+	if (
+		kind === "link" && !scheme.test(url) && (leavesRepository(url) || climbsOutOfRepository(url))
+	) {
 		return "Link without a protocol must stay in the repository";
 	}
 	return undefined;
