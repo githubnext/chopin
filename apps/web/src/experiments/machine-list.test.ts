@@ -106,6 +106,7 @@ const theirs: TeammateMachine = {
 	owner: { login: "rival", avatarUrl: "https://example.test/rival.png" },
 	repositories: ["octo-org/score", "octo-org/site"],
 	connected: true,
+	createdAt: NOW - 3_600_000,
 	lastSeenAt: NOW,
 	version: "0.1.5",
 	service: true,
@@ -145,6 +146,42 @@ test("teammates' machines are in the one table with the person's own, under Loca
 	expect(theirRow).toContain("Connected");
 	// The person's own row says it is theirs.
 	expect(row(markup, "laptop")).toContain("ada");
+});
+
+test("a teammate's machine is in the table where its age puts it among the person's own, in Local and Cloud", () => {
+	let own = (id: string, label: string, createdAt: number, service = false): Machine => ({
+		...base,
+		id,
+		label,
+		createdAt,
+		service,
+	});
+	let shared = (id: string, label: string, createdAt: number, service: boolean) => ({
+		...theirs,
+		id,
+		label,
+		createdAt,
+		service,
+	});
+	let markup = table(
+		[
+			own("m1", "oldest", NOW - 9_000_000),
+			own("m2", "newest", NOW),
+			own("m3", "owncloud", NOW - 6_000_000, true),
+		],
+		[
+			shared("t1", "middle", NOW - 5_000_000, false),
+			shared("t2", "oldcloud", NOW - 8_000_000, true),
+			shared("t3", "newcloud", NOW - 100, true),
+		],
+	);
+	// Each group is newest first whoever owns the machine, so no group of the person's own comes first.
+	let names = ["newest", "middle", "oldest", "newcloud", "owncloud", "oldcloud"];
+	expect(names.toSorted((a, b) => markup.indexOf(`>${a}<`) - markup.indexOf(`>${b}<`))).toEqual(
+		names,
+	);
+	expect(markup.indexOf(">oldest<")).toBeLessThan(markup.indexOf(">Cloud<"));
+	expect(markup.indexOf(">Cloud<")).toBeLessThan(markup.indexOf(">newcloud<"));
 });
 
 test("the count counts a teammate's machine alone, and one machine reads as one", () => {

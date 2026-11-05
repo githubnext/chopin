@@ -59,7 +59,9 @@ A browser build that delivers records its built source even without
 `LIVE_BUILD`. Later edits then read as **N changes to build**, and the
 capsule's **Build** sends them to `POST /api/channels/:id/implementation/rebuild`.
 That route queues one rebuild of the edits onto the existing pull requests, on
-the presser's own connected agent, and persists it before answering. Like
+the presser's own connected agent, or the teammate's shared machine they chose
+for the document or, choosing none, made their default (which comes before the
+connection of the build before it), and persists it before answering. Like
 Build plan, it is refused while accepted comments await plan changes or
 required investigations are open, and the capsule's Build is inert with that
 reason. Open decisions never refuse it. The press is the approval: the

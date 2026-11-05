@@ -1504,8 +1504,28 @@ describe("a teammate's shared machine, listed read-only", () => {
 			service: false,
 			// Whether it is the viewer's own favorite, which no one else sees.
 			favorite: false,
+			// When it was paired: the order the person's own machines are listed in, newest first.
+			createdAt: expect.any(Number),
 			lastSeenAt: expect.any(Number),
 		});
+	});
+
+	it("gives a teammate's machine the creation time the person's own are listed by, in the Machines list and in the document's menu", async () => {
+		let { listing, choice, storage, machine, box } = await teammates();
+		let laptop = await machine("member", "U_member", "laptop", { bare: true });
+		let created = async (id: string) => (await storage.machines.get(id))!.createdAt.getTime();
+		let rows = await listing("member");
+		expect(rows.find(value => value.id === box.id)).toMatchObject({
+			teammate: true,
+			createdAt: await created(box.id),
+		});
+		expect(rows.find(value => value.id === laptop.id)).toMatchObject({
+			teammate: false,
+			createdAt: await created(laptop.id),
+		});
+		let menu = (await choice("member")).machines as Array<{ id: string; createdAt: number }>;
+		expect(menu.find(value => value.id === box.id)?.createdAt).toBe(await created(box.id));
+		expect(menu.find(value => value.id === laptop.id)?.createdAt).toBe(await created(laptop.id));
 	});
 
 	it("lists a shared machine once to its owner, as theirs, never as a teammate's", async () => {
@@ -1530,7 +1550,6 @@ describe("a teammate's shared machine, listed read-only", () => {
 				"reauthorize",
 				"finishing",
 				"shared",
-				"createdAt",
 				"hostname",
 				"platform",
 				"agent",
@@ -2095,6 +2114,7 @@ describe("a teammate's shared machine, in a document's machine menu", () => {
 			teammate: true,
 			owner: { login: "rival", avatarUrl: "" },
 			connected: true,
+			createdAt: expect.any(Number),
 			lastSeenAt: expect.any(Number),
 			version: "0.1.5",
 			service: false,

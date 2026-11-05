@@ -3158,6 +3158,93 @@ test("a favorite shared machine whose owner can't push to the repository takes n
 	}
 });
 
+/**
+ * A person's favorite request is held after it stored the favorite and before it published it,
+ * while `act` runs: the machine's owner stops sharing it, revokes it, or unpairs it. `act` either
+ * goes ahead of the request's publication or waits for it, and the person is left with no
+ * favorite, in storage or in memory, whichever it does.
+ */
+async function favoriteMeetsOwner(
+	context: Awaited<ReturnType<typeof setup>>,
+	act: (machine: { machine: string; machineToken: string }) => Promise<Response>,
+) {
+	let { theirs, favor } = await favored(context);
+	expect((await favor(theirs.machine, false)).status).toBe(200);
+	let machines = context.storage.machines;
+	let store = machines.favor.bind(machines);
+	let stored = Promise.withResolvers<void>();
+	let released = Promise.withResolvers<void>();
+	machines.favor = async (...args) => {
+		await store(...args);
+		stored.resolve();
+		await released.promise;
+	};
+	let request = favor(theirs.machine);
+	await stored.promise;
+	let acted = act(theirs);
+	// Where the owner's change waits for the request, it cannot end first: give it time to try.
+	await Promise.race([acted, Bun.sleep(100)]);
+	released.resolve();
+	expect((await request).status).toBe(200);
+	expect((await acted).status).toBe(200);
+	expect((await context.storage.machines.favorites()).some(value => value.userId === "U_test"))
+		.toBe(false);
+	expect(context.experiments.connections.favorite("U_test")).toBeUndefined();
+	return theirs;
+}
+
+test("a machine's owner stopping sharing it while a person's favorite is being saved leaves them no favorite, even when it is shared again", async () => {
+	let context = await setup();
+	try {
+		let owner = (url: string, value: unknown) =>
+			context.call(url, value, undefined, undefined, context.otherCookie);
+		let theirs = await favoriteMeetsOwner(
+			context,
+			machine => owner(`/api/connector/machines/${machine.machine}/shared`, { shared: false }),
+		);
+		expect(
+			(await owner(`/api/connector/machines/${theirs.machine}/shared`, { shared: true })).status,
+		).toBe(200);
+		expect(context.experiments.connections.favorite("U_test")).toBeUndefined();
+		let state = await (await context.call(`/api/documents/${context.plan.id}/machine`)).json();
+		expect(state.favorite).toBeNull();
+		expect(state.automatic?.id).not.toBe(theirs.machine);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a machine's owner revoking it while a person's favorite is being saved leaves them no favorite", async () => {
+	let context = await setup();
+	try {
+		await favoriteMeetsOwner(
+			context,
+			machine =>
+				context.call(
+					`/api/connector/machines/${machine.machine}/revoke`,
+					{},
+					undefined,
+					undefined,
+					context.otherCookie,
+				),
+		);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a machine unpairing itself while a person's favorite is being saved leaves them no favorite", async () => {
+	let context = await setup();
+	try {
+		await favoriteMeetsOwner(
+			context,
+			machine => context.call("/api/connector/machine/revoke", {}, machine.machineToken),
+		);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
 test("a person's rebuild goes to their favorite shared machine, and automatic work still never does", async () => {
 	let context = await setup();
 	context.plan.persistence.liveBuild = true;
@@ -3195,6 +3282,88 @@ test("a person's rebuild goes to their favorite shared machine, and automatic wo
 			connectionId: theirs.connection.id,
 		});
 		expect(connections.assigned(mine!.connection.id)).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+/** A first build, claimed on the machine, reports its one task and stops, as a living document's does. */
+async function deliver(
+	context: Awaited<ReturnType<typeof setup>>,
+	machine: { token: string },
+	built: { id: string },
+) {
+	let claim = await tool(context, machine.token, "claim_implementation_build", { id: built.id });
+	await tool(context, machine.token, "report_implementation_build", {
+		id: built.id,
+		state: "running",
+		session: "session",
+	});
+	for (
+		let [name, args] of [
+			["start_task", { taskId: "first", idempotencyKey: "start" }],
+			["report_pr", { taskId: "first", idempotencyKey: "pr", url: pullRequest, state: "open" }],
+			["complete_task", { taskId: "first", idempotencyKey: "done", summary: "Launched" }],
+		] as const
+	) expect((await tool(context, claim.runToken, name, args)).isError).toBeUndefined();
+	await tool(context, machine.token, "report_implementation_build", {
+		id: built.id,
+		state: "stopped",
+	});
+}
+
+test("a person's rebuild goes to the shared machine they made their favorite after the first build ran on their own", async () => {
+	let context = await setup();
+	context.plan.persistence.liveBuild = true;
+	try {
+		let { mine, theirs, favor } = await favored(context, true);
+		// Their own machine was their favorite when the document was first built.
+		expect((await favor(mine!.machine)).status).toBe(200);
+		let built = await (await context.call(context.path, review)).json();
+		expect(built.connectionId).toBe(mine!.connection.id);
+		await deliver(context, mine!, built);
+		expect((await favor(theirs.machine)).status).toBe(200);
+		expect((await edit(context.plan, "A rebuilt paragraph.")).ok).toBe(true);
+		let rebuilt = await context.call(`${context.path}/rebuild`, {});
+		expect(rebuilt.status).toBe(200);
+		expect(await rebuilt.json()).toMatchObject({
+			kind: "rebuild",
+			user: "U_test",
+			machineOwner: "U_other",
+			connectionId: theirs.connection.id,
+			machineId: theirs.machine,
+		});
+		expect(context.experiments.connections.assigned(theirs.connection.id)).toBe(context.plan.id);
+		expect((await tool(context, theirs.token, "wait_for_work")).kind).toBe("implementation");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a person's rebuild stays where the first build ran while their shared favorite is offline, and goes to the machine they chose for the document before it", async () => {
+	let context = await setup();
+	context.plan.persistence.liveBuild = true;
+	try {
+		let { mine, theirs, favor } = await favored(context, true);
+		expect((await favor(mine!.machine)).status).toBe(200);
+		let built = await (await context.call(context.path, review)).json();
+		await deliver(context, mine!, built);
+		expect((await favor(theirs.machine)).status).toBe(200);
+		expect((await edit(context.plan, "A rebuilt paragraph.")).ok).toBe(true);
+		// The favorite is offline, so the rebuild goes where the first build ran.
+		await tool(context, theirs.token, "disconnect_workspace");
+		let offline = await (await context.call(`${context.path}/rebuild`, {})).json();
+		expect(offline).toMatchObject({ kind: "rebuild", connectionId: mine!.connection.id });
+		expect(offline.machineOwner).toBeUndefined();
+		await context.call(`${context.path}/stop`, { id: offline.id });
+		// Online again, a machine they chose for the document still comes before it.
+		await reconnect(context, theirs.machineToken, context.otherCookie);
+		let choose = (machine: string | null) =>
+			context.call(`/api/documents/${context.plan.id}/machine`, { machine });
+		expect((await choose(mine!.machine)).status).toBe(200);
+		let chosen = await (await context.call(`${context.path}/rebuild`, {})).json();
+		expect(chosen).toMatchObject({ kind: "rebuild", connectionId: mine!.connection.id });
+		expect(chosen.machineOwner).toBeUndefined();
 	} finally {
 		await Plan.close(context.plan);
 	}

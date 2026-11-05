@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { machines as liveMachines, ownerHint } from "./machine-summary";
+import { machines as liveMachines, newestFirst, ownerHint } from "./machine-summary";
 
 import type { Machine, TeammateMachine } from "./machine-summary";
 
@@ -15,6 +15,8 @@ export type ChoosableMachine = {
 	connected: boolean;
 	/** GitHub stopped accepting its authorization; it needs pairing again. Only the person's own say. */
 	reauthorize?: boolean;
+	/** When it was paired, in milliseconds: the order the menu lists machines in. */
+	createdAt: number;
 	lastSeenAt: number;
 	version: string | null;
 	hostname?: string | null;
@@ -133,12 +135,12 @@ export type MachineRow = {
 };
 
 /**
- * The menu's rows, one per machine: Local ones first, then Cloud, the person's own before the
- * teammates' shared ones within each, offline ones disabled.
+ * The menu's rows, one per machine: Local ones first, then Cloud, each newest paired first,
+ * the person's own and the teammates' shared ones sorted together, offline ones disabled.
  */
 export function machineRows(state: MachineChoiceState): MachineRow[] {
 	let shown = shownMachine(state);
-	let rows = state.machines.map(machine => {
+	let rows = state.machines.toSorted(newestFirst).map(machine => {
 		let owner = ownerHint(machine, state.machines);
 		return {
 			id: machine.id,
@@ -151,11 +153,7 @@ export function machineRows(state: MachineChoiceState): MachineRow[] {
 			machine,
 		};
 	});
-	return [false, true].flatMap(cloud =>
-		[false, true].flatMap(teammate =>
-			rows.filter(row => row.cloud === cloud && !!row.machine.teammate === teammate)
-		)
-	);
+	return [false, true].flatMap(cloud => rows.filter(row => row.cloud === cloud));
 }
 
 function endpoint(room: string) {

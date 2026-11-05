@@ -1048,6 +1048,59 @@ test("the sidebar counts and lists a teammate's shared machine with the person's
 	expect(after.machines.map(value => [value.label, value.favorite])).toEqual([["Laptop", false]]);
 });
 
+test("teammates' shared machines are sorted with the person's own, newest paired first in Local and Cloud, in the Machines menu, the Machines table and the document's menu", async ({ browser }) => {
+	test.setTimeout(240_000);
+	let room = await remoteServer();
+	let owner = await open(browser, "casey", room, DESKTOP);
+	let page = await open(browser, "drew", room, DESKTOP);
+	// Paired in this order, oldest first: neither person's machines are all older than the other's.
+	await machine(page, "Laptop", true);
+	await machine(owner, "Studio", true);
+	await machine(page, "Desk", true);
+	await machine(owner, "Build box", true, { service: true });
+	await machine(page, "Rack", true, { service: true });
+	await machine(owner, "Edge", true, { service: true });
+	for (let label of ["Studio", "Build box", "Edge"]) await share(owner, label);
+	let live = { timeout: 15_000 };
+	await page.reload();
+	await ready(page);
+	let entry = machinesEntry(page);
+	await expect(entry).toContainText("6/6", live);
+
+	// Local and Cloud each list the newest first, a teammate's among the person's own.
+	await entry.click();
+	let menu = page.getByRole("menu");
+	await expect(menu.getByRole("menuitemradio")).toHaveText(
+		[/^Any connected/, /^Desk/, /^Studio/, /^Laptop/, /^Edge/, /^Rack/, /^Build box/],
+		live,
+	);
+	await expect(menu.getByText(/Shared (by|with)/)).toHaveCount(0);
+	await shoot(page, "machines-menu-order");
+	await page.keyboard.press("Escape");
+
+	await page.goto(`${ORIGIN}/machines`);
+	let table = machinesTable(page);
+	await expect(page.getByText("6 machines", { exact: true })).toBeVisible();
+	await expect(table.getByRole("row")).toHaveText(
+		[/^Machine/, /^Local/, /^Desk/, /^Studio/, /^Laptop/, /^Cloud/, /^Edge/, /^Rack/, /^Build box/],
+		live,
+	);
+	await shoot(page, "machines-table-order");
+
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	let runs = await runOn(page);
+	await expect(runs.getByRole("group", { name: "Local" }).getByRole("menuitemradio")).toHaveText(
+		[/^Desk/, /^Studio/, /^Laptop/],
+		live,
+	);
+	await expect(runs.getByRole("group", { name: "Cloud" }).getByRole("menuitemradio")).toHaveText(
+		[/^Edge/, /^Rack/, /^Build box/],
+		live,
+	);
+	await shoot(page, "machine-button-menu-order");
+});
+
 test("with no machine of their own, a person still opens the Machines menu to a teammate's shared machine, which names its owner only beside a machine of the same name", async ({ browser }) => {
 	test.setTimeout(180_000);
 	let room = await remoteServer();

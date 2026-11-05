@@ -40,6 +40,8 @@ export type TeammateMachine = {
 	/** The repositories it serves the person in: ones its owner and the person can both push to. */
 	repositories: string[];
 	connected: boolean;
+	/** When it was paired, in milliseconds: the order machines are listed in, as the person's own are. */
+	createdAt: number;
 	lastSeenAt: number;
 	/** The chopin release it runs, known only while it is connected with a release build. */
 	version: string | null;
@@ -69,13 +71,24 @@ export function summarizeMachines(machines: readonly Pick<Machine, "connected">[
 }
 
 /**
- * Everything the person can run work on, as one list: their own machines, then the teammates'
- * shared with them, each in the order the server gave; undefined until the first answer.
+ * The order every list of machines is in: newest paired first, then by id, as the server lists
+ * the person's own machines (`created_at DESC, id`). Their own and teammates' use this one.
+ */
+export function newestFirst(
+	a: { id: string; createdAt: number },
+	b: { id: string; createdAt: number },
+): number {
+	return b.createdAt - a.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/**
+ * Everything the person can run work on, as one list: their own machines and the teammates'
+ * shared with them, sorted together, newest first; undefined until the first answer.
  */
 export function allMachines(
 	{ machines, teammates }: Pick<LiveMachines, "machines" | "teammates">,
 ): Array<Machine | TeammateMachine> | undefined {
-	return machines && [...machines, ...teammates ?? []];
+	return machines && [...machines, ...teammates ?? []].sort(newestFirst);
 }
 
 /** The summary of everything in a live list: the person's own machines and the teammates' machines shared with them. */

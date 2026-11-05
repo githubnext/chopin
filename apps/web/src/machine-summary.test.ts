@@ -41,6 +41,7 @@ const shared: TeammateMachine = {
 	owner: { login: "rival", avatarUrl: "" },
 	repositories: ["octo-org/score"],
 	connected: true,
+	createdAt: 1_000,
 	lastSeenAt: 1,
 	version: null,
 	service: false,
@@ -63,10 +64,31 @@ test("the count includes teammates' shared machines, so one own and one shared, 
 	expect(summarizeLive({ machines: own, error: "" })).toEqual({ total: 1, connected: 1 });
 });
 
-test("the machines list the person's own first, then the teammates' shared with them", () => {
-	let own = [{ id: "a" }, { id: "b" }] as never;
-	expect(allMachines({ machines: own, teammates: [shared] })?.map(value => value.id))
-		.toEqual(["a", "b", "theirs"]);
+test("the machines list is one list, newest first as the person's own are stored, a teammate's shared machine among them", () => {
+	let own = [
+		{ id: "own-new", createdAt: 3_000 },
+		{ id: "own-old", createdAt: 500 },
+	] as never;
+	// A shared machine newer than one of the person's own is above it, older is below.
+	let teammates = [
+		{ ...shared, id: "shared-newest", createdAt: 4_000 },
+		{ ...shared, id: "shared-middle", createdAt: 1_000 },
+	];
+	expect(allMachines({ machines: own, teammates })?.map(value => value.id))
+		.toEqual(["shared-newest", "own-new", "shared-middle", "own-old"]);
+	// Whatever order the lists arrive in.
+	expect(
+		allMachines({ machines: [...own].toReversed(), teammates: [...teammates].toReversed() })?.map(
+			value => value.id,
+		),
+	).toEqual(["shared-newest", "own-new", "shared-middle", "own-old"]);
+	// Machines paired at the same moment keep the order storage gives them: by id.
+	let tied = [{ id: "b", createdAt: 7 }, { id: "a", createdAt: 7 }] as never;
+	expect(
+		allMachines({ machines: tied, teammates: [{ ...shared, id: "c", createdAt: 7 }] })?.map(
+			value => value.id,
+		),
+	).toEqual(["a", "b", "c"]);
 	expect(allMachines({})).toBeUndefined();
 });
 

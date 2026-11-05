@@ -238,9 +238,9 @@ choice is yours alone and holds for that document until you change it:
 - Where Chopin runs Planners on machines, the document's Planner runs there
   too, and on **Default machine** it runs on the creator's; see
   [Run a Planner on this machine](#run-a-planner-on-this-machine).
-- The list also shows machines teammates share, among your own under **Local**
-  or **Cloud**, when they serve the document's repository and their owner can
-  push to it. Anyone who can edit the document may choose one, and its Planner,
+- The list also shows machines teammates share, sorted with your own, newest
+  paired first, under **Local** or **Cloud**, when they serve the document's
+  repository and their owner can push to it. Anyone who can edit the document may choose one, and its Planner,
   your builds and your runs then run there, as its owner; see
   [Share a machine with teammates](#share-a-machine-with-teammates).
 - If the machine you chose is offline, **Build plan** is greyed out, as offline
@@ -258,8 +258,9 @@ Disconnecting a machine clears every choice of it, and everyone's default of it.
 
 Choose your default machine from **Machines** in the sidebar: it opens a menu
 listing **Any connected** and each machine you can use under **Local** or
-**Cloud** with its state, yours and the ones teammates share together, then **Add
-machine** and **Manage machines** for the full page. Beside the machines it
+**Cloud** with its state, yours and the ones teammates share sorted together,
+newest paired first, then **Add machine** and **Manage machines** for the full
+page. Beside the machines it
 shows how many are connected out of all of them, such as **2/2**. The default is
 the machine marked as your favorite on the **Machines** page too (its star, or
 **Set as favorite** in its menu). Only one machine is your
@@ -379,7 +380,7 @@ runs, and whether it is connected (a green dot) or when it was last seen.
 Search finds a machine by any of these. **Edit machine name…** in a machine's
 menu renames it in Chopin, and `chopin status` shows that name. Only you see
 your machines, except one you share with teammates: they see it in the same
-table, among their own, read-only: its name, its owner, its chopin release and
+table, sorted with their own, read-only: its name, its owner, its chopin release and
 whether it is online, with its **Shared** switch on and disabled. A teammate
 who can push to a repository you both can sees it there without having opened a
 document in it; see
@@ -528,8 +529,9 @@ stops being true, and ends within a few seconds saying so. A build already
 running keeps going until it finishes, like a Planner mid-reply.
 
 - A teammate sees a shared machine, read-only, in the one table on
-  **Machines**, among their own under **Local** or **Cloud**: its name, its owner,
-  whether it is online and its chopin release. It serves every repository its
+  **Machines**, sorted with their own, newest paired first, under **Local** or
+  **Cloud**: its name, its owner, when it was paired (the order of the list, not
+  shown), whether it is online and its chopin release. It serves every repository its
   owner can push to, so a machine with no checkouts counts too. A machine that
   is not shared, or whose owner can't push to a repository, is never listed to
   anyone who works there; nobody but its owner can rename it, change its sharing
@@ -585,8 +587,10 @@ running keeps going until it finishes, like a Planner mid-reply.
   runs their Planner first, and where Automatic sends their builds, runs and
   investigations first, while it is online, serves the repository and its owner
   can push to it; where it doesn't, they go where they would without it. A
-  choice for the document comes before it. Rebuilds and prototypes Chopin starts
-  by itself stay on their builder's own machines.
+  choice for the document comes before it. A rebuild they press follows their
+  default as it is now, so a shared machine they made their default after the
+  first build runs it, ahead of the machine that build ran on. Rebuilds and
+  prototypes Chopin starts by itself stay on their builder's own machines.
 - With several shared machines, each owner's default goes first.
 - Once the creator connects a machine of their own, the Planner moves there,
   unless it is already attached on the shared machine; then it stays until it
