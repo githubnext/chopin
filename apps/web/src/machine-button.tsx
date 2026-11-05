@@ -60,7 +60,15 @@ function RowContent({ row }: { row: MachineRow }) {
 	return (
 		<>
 			<MachineGlyph machine={row.machine} />
-			<span className="machine-menu-title" title={row.label}>{row.label}</span>
+			<span className="machine-menu-title" title={row.label}>
+				{row.label}
+				{row.owner && (
+					<>
+						{" "}
+						<span className="machine-menu-owner">{row.owner}</span>
+					</>
+				)}
+			</span>
 			<span className="app-menu-item-meta">{row.detail}</span>
 		</>
 	);
@@ -68,10 +76,9 @@ function RowContent({ row }: { row: MachineRow }) {
 
 /**
  * Which machine runs this document's Planner and builds: an icon with its state dot, the chosen
- * machine's, or the one Automatic uses now. Its menu lists the person's machines serving the
- * repository under Local and Cloud, then each teammate's shared machine under its owner, offline
- * ones disabled, and Add machine. The sidebar's
- * Machines menu sets the default. Every button for a document shares one `choice`. A phone opens
+ * machine's, or the one Automatic uses now. Its menu lists the machines serving the repository,
+ * the person's own and teammates' shared ones together, under Local and Cloud, offline ones
+ * disabled, and Add machine. The sidebar's Machines menu sets the default. Every button for a document shares one `choice`. A phone opens
  * the same rows as a sheet from the bottom edge.
  */
 export function MachineButton(
@@ -87,7 +94,6 @@ export function MachineButton(
 	let state = choice.state;
 	let shown = shownMachine(state);
 	let rows = state ? machineRows(state) : [];
-	let owners = [...new Set(rows.flatMap(row => row.owner ? [row.owner] : []))];
 	let close = (restoreFocus: boolean) => {
 		setOpen(false);
 		if (restoreFocus) trigger.current?.focus();
@@ -211,11 +217,8 @@ export function MachineButton(
 		);
 	let body = (sheet: boolean) => (
 		<>
-			{group("Local", rows.filter(row => !row.cloud && !row.owner), sheet)}
-			{group("Cloud", rows.filter(row => row.cloud && !row.owner), sheet)}
-			{owners.map(owner =>
-				group(`Shared by ${owner}`, rows.filter(row => row.owner === owner), sheet)
-			)}
+			{group("Local", rows.filter(row => !row.cloud), sheet)}
+			{group("Cloud", rows.filter(row => row.cloud), sheet)}
 			{rows.length > 0 && <div className="app-menu-separator" role="separator" />}
 			{addItem(sheet)}
 		</>

@@ -167,13 +167,6 @@
 	gap: calc(var(--spacing) * 3);
 }
 
-/* The heading of the machines teammates share, and the line that says only their owners change them. */
-.machines-shared-heading {
-	display: flex;
-	flex-direction: column;
-	gap: calc(var(--spacing) * 0.5);
-}
-
 /* The pairing confirmation and the server's steps sit on the page surface, raised off the ground. */
 .machines-steps,
 .machines-card {

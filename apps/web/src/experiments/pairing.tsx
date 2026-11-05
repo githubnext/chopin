@@ -2,11 +2,12 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, CheckIcon, MachineIcon, RestartIcon } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
+import { allMachines } from "../machine-summary";
 import { motionImmediately } from "../motion-input";
 import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
 import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
-import { MachineDetail, SharedWithYou, YourMachines } from "./machine-list";
+import { MachineDetail, YourMachines } from "./machine-list";
 import { goTo, useArrivedMachine, useMachines, useOwner } from "./machines";
 import { pairingProblem } from "./pairing-problems";
 import { SETUP_GUIDE } from "./setup-commands";
@@ -129,7 +130,6 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 				</section>
 			)}
 			<YourMachines machines={machines} owner={owner} />
-			<SharedWithYou machines={machines} />
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
 					motion={dialog}
@@ -180,7 +180,7 @@ function MachinesPage() {
 function MachinePage({ id }: { id: string }) {
 	let machines = useMachines();
 	let owner = useOwner();
-	let machine = machines.machines?.find(value => value.id === id);
+	let machine = allMachines(machines)?.find(value => value.id === id);
 	return (
 		<MachinesFrame
 			lead={

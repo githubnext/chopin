@@ -100,3 +100,9 @@
 .machines-menu .app-menu-item[data-highlighted] .machines-menu-dot {
 	border-color: var(--color-hover);
 }
+
+/* A teammate's login after a name another machine has too, set apart by a space and quiet ink. */
+.machines-menu-owner {
+	margin-inline-start: calc(var(--spacing) * 0.5);
+	color: var(--color-text-tertiary);
+}

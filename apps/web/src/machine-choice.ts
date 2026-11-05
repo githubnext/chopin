@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { machines as liveMachines } from "./machine-summary";
+import { machines as liveMachines, ownerHint } from "./machine-summary";
 
 import type { Machine, TeammateMachine } from "./machine-summary";
 
@@ -127,36 +127,35 @@ export type MachineRow = {
 	disabled: boolean;
 	/** The machine the background service runs, which the menu lists under Cloud. */
 	cloud: boolean;
-	/** The login of the teammate whose machine it is, which the menu lists it under; else undefined. */
+	/** The login of a teammate's machine's owner, only where another machine has its name; else undefined. */
 	owner?: string;
 	machine: ChoosableMachine;
 };
 
 /**
- * The menu's rows, one per machine: the person's Local ones first, then Cloud, then each teammate's
- * under their login, offline ones disabled.
+ * The menu's rows, one per machine: Local ones first, then Cloud, the person's own before the
+ * teammates' shared ones within each, offline ones disabled.
  */
 export function machineRows(state: MachineChoiceState): MachineRow[] {
 	let shown = shownMachine(state);
-	let rows = state.machines.map(machine => ({
-		id: machine.id,
-		label: machine.label,
-		detail: STATE_WORDS[machineState(machine)],
-		checked: shown?.id === machine.id,
-		disabled: !machine.connected || !!machine.reauthorize,
-		cloud: machine.service,
-		...(machine.teammate ? { owner: machine.owner?.login ?? "a teammate" } : {}),
-		machine,
-	}));
-	let own = rows.filter(row => !row.owner);
-	let theirs = rows.filter(row => row.owner);
-	return [
-		...own.filter(row => !row.cloud),
-		...own.filter(row => row.cloud),
-		...[...new Set(theirs.map(row => row.owner))].flatMap(owner =>
-			theirs.filter(row => row.owner === owner)
-		),
-	];
+	let rows = state.machines.map(machine => {
+		let owner = ownerHint(machine, state.machines);
+		return {
+			id: machine.id,
+			label: machine.label,
+			detail: STATE_WORDS[machineState(machine)],
+			checked: shown?.id === machine.id,
+			disabled: !machine.connected || !!machine.reauthorize,
+			cloud: machine.service,
+			...(owner ? { owner } : {}),
+			machine,
+		};
+	});
+	return [false, true].flatMap(cloud =>
+		[false, true].flatMap(teammate =>
+			rows.filter(row => row.cloud === cloud && !!row.machine.teammate === teammate)
+		)
+	);
 }
 
 function endpoint(room: string) {

@@ -105,6 +105,12 @@
 	white-space: nowrap;
 }
 
+/* A teammate's login after a name another machine has too, set apart by a space and quiet ink. */
+.machine-menu-owner {
+	margin-inline-start: calc(var(--spacing) * 0.5);
+	color: var(--color-text-tertiary);
+}
+
 /*
  * Phone: the same rows on a sheet, each a 44px target or taller. One column the sheet's width, so a
  * long name truncates (the row's accessible name keeps it whole) and its state stays put.

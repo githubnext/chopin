@@ -14,7 +14,7 @@ import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { documentMenuKeyAction } from "../document-actions-menu";
 import { IconButton } from "../icon-button";
 import { setFavorite, setShared } from "../machine-choice";
-import { machines as liveMachines, useLiveMachines } from "../machine-summary";
+import { allMachines, machines as liveMachines, useLiveMachines } from "../machine-summary";
 import { useMenuDismissal } from "../menu-dismissal";
 import { MenuItem, MenuSeparator } from "../menu-item";
 import { motionImmediately } from "../motion-input";
@@ -48,12 +48,10 @@ export function useMachines() {
 	let retry = useCallback(() => void liveMachines.load(), []);
 	/** Set or clear the favorite: starred at once, then as the server says. */
 	let favor = async (id: string, favorite: boolean) => {
-		let mark = (chosen: string | null) =>
-			liveMachines.update(list => list.map(value => ({ ...value, favorite: value.id === chosen })));
-		let before = machines?.find(value => value.favorite)?.id ?? null;
-		mark(favorite ? id : before === id ? null : before);
+		let before = allMachines({ machines, teammates })?.find(value => value.favorite)?.id ?? null;
+		liveMachines.favor(favorite ? id : before === id ? null : before);
 		try {
-			mark(await setFavorite(id, favorite));
+			liveMachines.favor(await setFavorite(id, favorite));
 		} catch {
 			void liveMachines.load();
 		}

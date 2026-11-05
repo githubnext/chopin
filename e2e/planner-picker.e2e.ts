@@ -649,9 +649,15 @@ async function left(target: ReturnType<Page["locator"]>) {
 	return (await target.boundingBox())!.x;
 }
 
-/** The Machines page's list of machines teammates share. */
-function sharedWithYou(page: Page) {
-	return page.getByRole("region", { name: "Shared with you" });
+/** The Machines page's one table, the person's own machines and the ones teammates share. */
+function machinesTable(page: Page) {
+	return page.getByRole("table", { name: "Your machines" });
+}
+
+/** The sidebar's Machines entry, with its count. */
+function machinesEntry(page: Page) {
+	return page.getByRole("complementary", { name: "Projects" })
+		.getByRole("button", { name: /^Machines/ });
 }
 
 /** The document's machine button, left of Build plan. */
@@ -667,7 +673,7 @@ async function share(owner: Page, label: string, shared = true) {
 	await expect(sharing).toHaveAttribute("aria-checked", String(shared));
 }
 
-test("teammates' shared machines are listed read-only under Shared with you, and go when unshared", async ({ browser }) => {
+test("teammates' shared machines are in the one Machines table, read-only, and go when unshared", async ({ browser }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let owner = await open(browser, "casey", room, DESKTOP);
@@ -676,27 +682,34 @@ test("teammates' shared machines are listed read-only under Shared with you, and
 	let teammate = await open(browser, "drew", room, DESKTOP);
 	let reader = await openReader(browser, room);
 
-	// Nothing is shared yet: a teammate's Machines page has no such section.
+	// Nothing is shared yet: a teammate's Machines page has no table.
 	await teammate.goto(`${ORIGIN}/machines`);
 	await expect(teammate.getByRole("heading", { name: "Add your first machine" })).toBeVisible();
-	await expect(sharedWithYou(teammate)).toHaveCount(0);
+	await expect(machinesTable(teammate)).toHaveCount(0);
 
 	// casey shares Build box but not Desk.
 	await share(owner, "Build box");
-	let section = sharedWithYou(teammate);
-	await expect(section).toBeVisible({ timeout: 15_000 });
-	let row = section.getByRole("row", { name: /Build box/ });
+	let table = machinesTable(teammate);
+	await expect(table).toBeVisible({ timeout: 15_000 });
+	await expect(teammate.getByRole("region", { name: "Shared with you" })).toHaveCount(0);
+	let row = table.getByRole("row", { name: /Build box/ });
 	await expect(row).toContainText("casey");
 	await expect(row).toContainText(`chopin ${RELEASE}`);
-	await expect(row).toContainText("octo-org/score");
 	await expect(row).toContainText("Connected");
-	await expect(section.getByRole("rowgroup").filter({ hasText: "Cloud" })).toBeVisible();
-	await expect(section.getByText("Desk")).toHaveCount(0);
-	// Read-only: nothing in it renames, favorites, shares, disconnects or sets anything up.
-	await expect(section.getByRole("button")).toHaveCount(0);
-	await expect(section.getByRole("switch")).toHaveCount(0);
-	await expect(section.getByRole("link")).toHaveCount(0);
-	await shoot(teammate, "machines-shared-with-you");
+	await expect(table.getByRole("rowgroup").filter({ hasText: "Cloud" })).toBeVisible();
+	await expect(table.getByText("Desk")).toHaveCount(0);
+	// The page counts it, as the sidebar does.
+	await expect(teammate.getByText("1 machine", { exact: true })).toBeVisible();
+	await expect(machinesEntry(teammate)).toContainText("1/1");
+	// Read-only: its Shared switch is on and out of reach, and nothing renames, disconnects or sets
+	// it up. The star is the teammate's own, to make it their default.
+	let sharing = row.getByRole("switch", { name: "Share Build box with teammates" });
+	await expect(sharing).toBeChecked();
+	await expect(sharing).toBeDisabled();
+	await expect(row.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+	await expect(row.getByRole("button", { name: "Favorite Build box" })).toBeEnabled();
+	await expect(row.getByRole("link")).toHaveCount(0);
+	await shoot(teammate, "machines-table-shared");
 
 	// Chopin refuses the owner-only routes to a teammate, whatever they send.
 	let listed = await (await teammate.request.get(`${ORIGIN}/api/connector/machines`)).json() as {
@@ -729,7 +742,7 @@ test("teammates' shared machines are listed read-only under Shared with you, and
 	// Someone who can't push to the repository never sees it.
 	await reader.goto(`${ORIGIN}/machines`);
 	await expect(reader.getByRole("heading", { name: "Add your first machine" })).toBeVisible();
-	await expect(sharedWithYou(reader)).toHaveCount(0);
+	await expect(machinesTable(reader)).toHaveCount(0);
 
 	// Offline, it stays listed, with when it was last seen.
 	await box.disconnect();
@@ -738,10 +751,10 @@ test("teammates' shared machines are listed read-only under Shared with you, and
 
 	// Its owner stops sharing it: it leaves the teammate's page.
 	await share(owner, "Build box", false);
-	await expect(sharedWithYou(teammate)).toHaveCount(0, { timeout: 15_000 });
+	await expect(machinesTable(teammate)).toHaveCount(0, { timeout: 15_000 });
 });
 
-test("on a phone, a teammate's shared machine is a row with its owner, version and repositories", async ({ browser }) => {
+test("on a phone, a teammate's shared machine is a row of the one list, with its owner and version", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let owner = await open(browser, "casey", room, DESKTOP);
@@ -749,14 +762,18 @@ test("on a phone, a teammate's shared machine is a row with its owner, version a
 	await share(owner, "Build box");
 	let page = await open(browser, "drew", room, PHONE);
 	await page.goto(`${ORIGIN}/machines`);
-	let section = page.getByRole("region", { name: "Shared with you" });
-	await expect(section).toBeVisible({ timeout: 15_000 });
-	let row = section.getByRole("listitem").filter({ hasText: "Build box" });
+	let row = page.getByRole("listitem").filter({ hasText: "Build box" });
+	await expect(row).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole("region", { name: "Shared with you" })).toHaveCount(0);
 	await expect(row).toContainText("casey");
 	await expect(row).toContainText(`chopin ${RELEASE}`);
-	await expect(row).toContainText("octo-org/score");
-	await expect(section.getByRole("button")).toHaveCount(0);
-	await shoot(page, "machines-shared-with-you-phone");
+	await expect(row.getByRole("button", { name: "Favorite Build box" })).toBeVisible();
+	// Its view offers the star and nothing only its owner changes.
+	await row.locator(".machines-row").click();
+	let actions = page.getByRole("list", { name: "Actions for Build box" });
+	await expect(actions.getByRole("button", { name: "Set as favorite" })).toBeVisible();
+	await expect(actions.getByRole("button")).toHaveCount(1);
+	await shoot(page, "machines-shared-phone");
 });
 
 test("anyone who can edit a document chooses a teammate's shared machine for its Planner; its creator's own choice decides", async ({ browser }) => {
@@ -786,18 +803,20 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 		}).machines,
 	).toEqual([]);
 
-	// Shared, Build box is offered to the editor under its owner's name, Desk is not.
+	// Shared, Build box is offered to the editor among the Cloud machines, Desk is not, and no
+	// group is named for its owner.
 	await share(owner, "Build box");
 	await editor.reload();
 	await ready(editor);
 	let menu = await runOn(editor);
-	let group = menu.getByRole("group", { name: "Shared by casey" });
+	let group = menu.getByRole("group", { name: "Cloud" });
 	await expect(group.getByRole("menuitemradio")).toHaveCount(1);
 	let item = group.getByRole("menuitemradio", { name: /^Build box/ });
 	await expect(item).toContainText("Connected");
 	await expect(item).not.toHaveAttribute("aria-disabled", "true");
 	await expect(menu.getByText("Desk")).toHaveCount(0);
 	await expect(menu.getByRole("group", { name: "Local" })).toHaveCount(0);
+	await expect(menu.getByRole("group", { name: /^Shared by/ })).toHaveCount(0);
 	await shoot(editor, "shared-machine-menu");
 
 	// quinn chooses it: Build box is asked to run the Planner, and the button says where.
@@ -836,7 +855,7 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 	await editor.reload();
 	await ready(editor);
 	menu = await runOn(editor);
-	let offline = menu.getByRole("group", { name: "Shared by casey" })
+	let offline = menu.getByRole("group", { name: "Cloud" })
 		.getByRole("menuitemradio", { name: /^Build box/ });
 	await expect(offline).toHaveAttribute("aria-disabled", "true");
 	await expect(offline).toContainText("Offline");
@@ -860,30 +879,31 @@ test("a shared machine with no checkouts serves every repository its owner can p
 	let box = await machine(owner, "Build box", true, { service: true, bare: true });
 	await share(owner, "Build box");
 
-	// tessa has opened no document: the Machines page still lists it for octo-org/score, which she
-	// and casey can both push to, and its owner's name lines up with its column.
+	// tessa has opened no document: the Machines page still lists it, in its one table among her
+	// own, for octo-org/score, which she and casey can both push to, and its owner's name lines up
+	// with its column.
 	let context = await browser.newContext(DESKTOP);
 	let page = await context.newPage();
 	await authenticate(page, "tessa", ORIGIN);
 	await page.goto(`${ORIGIN}/machines`);
-	let section = sharedWithYou(page);
-	await expect(section).toBeVisible({ timeout: 15_000 });
-	let row = section.getByRole("row", { name: /Build box/ });
+	let table = machinesTable(page);
+	await expect(table).toBeVisible({ timeout: 15_000 });
+	let row = table.getByRole("row", { name: /Build box/ });
 	await expect(row).toContainText("casey");
-	await expect(row).toContainText("octo-org/score");
 	await expect(row).toContainText("Connected");
-	let machineOffset = await left(row.getByText("Build box", { exact: true }))
-		- await left(section.getByRole("columnheader", { name: "Machine" }));
+	let versionOffset = await left(row.getByText(`chopin ${RELEASE}`))
+		- await left(table.getByRole("columnheader", { name: "Version" }));
 	let ownerOffset = await left(row.getByText("casey", { exact: true }))
-		- await left(section.getByRole("columnheader", { name: "Owner" }));
-	expect(Math.abs(ownerOffset - machineOffset)).toBeLessThan(1.5);
+		- await left(table.getByRole("columnheader", { name: "Owner" }));
+	expect(Math.abs(ownerOffset - versionOffset)).toBeLessThan(1.5);
 	await shoot(page, "machines-shared-no-checkout");
 
-	// Her document's machine menu offers it under casey's name, and choosing it is a choice like any.
+	// Her document's machine menu offers it among the Cloud machines, and choosing it is a choice
+	// like any.
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
 	let menu = await runOn(page);
-	let item = menu.getByRole("group", { name: "Shared by casey" })
+	let item = menu.getByRole("group", { name: "Cloud" })
 		.getByRole("menuitemradio", { name: /^Build box/ });
 	await expect(item).toContainText("Connected");
 	await item.click();
@@ -915,7 +935,7 @@ test("a shared machine with no checkouts serves every repository its owner can p
 	await shoot(page, "shared-machine-building");
 });
 
-test("on a phone, the machine sheet lists a teammate's shared machine under its owner", async ({ browser }) => {
+test("on a phone, the machine sheet lists a teammate's shared machine plainly among the Cloud machines", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let owner = await open(browser, "casey", room, DESKTOP);
@@ -926,11 +946,148 @@ test("on a phone, the machine sheet lists a teammate's shared machine under its 
 		.getByRole("button", { name: "Chat", exact: true }).tap();
 	await page.locator(".phone-top-bar").getByRole("button", { name: /^Runs on/ }).tap();
 	let sheet = page.getByRole("dialog", { name: "Runs on", exact: true });
-	let group = sheet.getByRole("group", { name: "Shared by casey" });
+	let group = sheet.getByRole("group", { name: "Cloud" });
 	await expect(group.getByRole("menuitemradio", { name: /^Build box/ })).toContainText("Connected");
+	await expect(sheet.getByRole("group", { name: /^Shared by/ })).toHaveCount(0);
 	await shoot(page, "shared-machine-phone-sheet");
 	await group.getByRole("menuitemradio", { name: /^Build box/ }).tap();
 	await expect(sheet).toBeHidden();
 	await expect(page.locator(".phone-top-bar").getByRole("button", { name: /^Runs on/ }))
 		.toHaveAccessibleName("Runs on Build box");
+});
+
+test("the sidebar counts and lists a teammate's shared machine with the person's own, and chooses it as their default", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await remoteServer();
+	let owner = await open(browser, "casey", room, DESKTOP);
+	let box = await machine(owner, "Build box", true, { service: true });
+	let page = await open(browser, "drew", room, DESKTOP);
+	await machine(page, "Laptop", true);
+	await page.reload();
+	await ready(page);
+	let entry = machinesEntry(page);
+	let live = { timeout: 15_000 };
+	await expect(entry).toHaveAccessibleName("Machines, 1 connected", live);
+	await expect(entry).toContainText("1/1");
+
+	// casey shares Build box: it counts with drew's own machine, 2 of 2.
+	await share(owner, "Build box");
+	await expect(entry).toHaveAccessibleName("Machines, 2 connected", live);
+	await expect(entry).toContainText("2/2");
+	await shoot(page, "machines-count-shared", entry);
+
+	// The menu lists it beside his own, plainly, under Local and Cloud, with no group of its own.
+	await entry.click();
+	let menu = page.getByRole("menu");
+	let option = (name: string) => menu.getByRole("menuitemradio", { name: new RegExp(`^${name}`) });
+	await expect(menu.getByText("Local", { exact: true })).toBeVisible();
+	await expect(menu.getByText("Cloud", { exact: true })).toBeVisible();
+	await expect(menu.getByRole("menuitemradio")).toHaveCount(3);
+	await expect(option("Laptop")).toContainText("Connected");
+	await expect(option("Build box")).toContainText("Connected");
+	await expect(menu.getByText(/Shared (by|with)/)).toHaveCount(0);
+	await expect(option("Any connected")).toHaveAttribute("aria-checked", "true");
+	await shoot(page, "machines-menu-shared");
+
+	// Choosing it makes it his default, which Automatic prefers for his documents.
+	await option("Build box").click();
+	await expect(menu).toBeHidden();
+	await entry.click();
+	await expect(option("Build box")).toHaveAttribute("aria-checked", "true");
+	await expect(option("Any connected")).toHaveAttribute("aria-checked", "false");
+	await page.keyboard.press("Escape");
+	let listed = await (await page.request.get(`${ORIGIN}/api/connector/machines`)).json() as {
+		machines: Array<{ label: string; favorite: boolean; teammate: boolean }>;
+	};
+	expect(listed.machines.map(value => [value.label, value.teammate, value.favorite]).sort())
+		.toEqual([["Build box", true, true], ["Laptop", false, false]]);
+
+	// The Machines page lists them in one table and counts both, with his default starred.
+	await page.goto(`${ORIGIN}/machines`);
+	let table = machinesTable(page);
+	await expect(page.getByText("2 machines", { exact: true })).toBeVisible();
+	await expect(table.getByRole("row", { name: /Laptop/ })).toBeVisible();
+	let theirs = table.getByRole("row", { name: /Build box/ });
+	await expect(theirs.getByRole("button", { name: "Remove Build box as favorite" }))
+		.toHaveAttribute("aria-pressed", "true");
+	await expect(theirs.getByRole("switch")).toBeDisabled();
+	await expect(table.getByRole("row", { name: /Laptop/ }).getByRole("switch")).toBeEnabled();
+	await shoot(page, "machines-table-shared-and-own");
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	await expect(runsOnButton(page)).toHaveAccessibleName("Runs on Build box", live);
+
+	// The document's own menu lists the same machines the same way, Build box the one in use.
+	let runs = await runOn(page);
+	await expect(runs.getByRole("group", { name: "Local" }).getByRole("menuitemradio"))
+		.toHaveCount(1);
+	let cloud = runs.getByRole("group", { name: "Cloud" });
+	await expect(cloud.getByRole("menuitemradio", { name: /^Build box/ }))
+		.toHaveAttribute("aria-checked", "true");
+	await expect(runs.getByRole("group", { name: /^Shared by/ })).toHaveCount(0);
+	await shoot(page, "machine-button-menu-shared");
+	await page.keyboard.press("Escape");
+
+	// Offline, the count says so, and the warning says the default is the one that is.
+	await box.disconnect();
+	await expect(entry).toHaveAccessibleName(/^Machines, 1 of 2 connected/, live);
+	await expect(entry).toHaveAccessibleName(/your default is offline$/);
+	await expect(entry).toContainText("1/2");
+
+	// Its owner stops sharing it: the count, the menu and drew's default all let it go.
+	await share(owner, "Build box", false);
+	await expect(entry).toHaveAccessibleName("Machines, 1 connected", live);
+	await expect(entry).toContainText("1/1");
+	await entry.click();
+	await expect(option("Any connected")).toHaveAttribute("aria-checked", "true");
+	await expect(menu.getByRole("menuitemradio", { name: /^Build box/ })).toHaveCount(0);
+	await page.keyboard.press("Escape");
+	let after = await (await page.request.get(`${ORIGIN}/api/connector/machines`)).json() as {
+		machines: Array<{ label: string; favorite: boolean }>;
+	};
+	expect(after.machines.map(value => [value.label, value.favorite])).toEqual([["Laptop", false]]);
+});
+
+test("with no machine of their own, a person still opens the Machines menu to a teammate's shared machine, which names its owner only beside a machine of the same name", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await remoteServer();
+	let owner = await open(browser, "casey", room, DESKTOP);
+	await machine(owner, "Desk", true);
+	await share(owner, "Desk");
+	let page = await open(browser, "tessa", room, DESKTOP);
+	let entry = machinesEntry(page);
+	let live = { timeout: 15_000 };
+
+	// Not a link to the page: the entry opens the menu, with the shared machine in it.
+	await expect(entry).toHaveAccessibleName("Machines, 1 connected", live);
+	await expect(entry).toContainText("1/1");
+	await entry.click();
+	let menu = page.getByRole("menu");
+	await expect(menu.getByRole("menuitemradio", { name: /^Desk/ })).toContainText("Connected");
+	await expect(menu.getByRole("menuitem", { name: "Manage machines" })).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	// Her document's machine button is there for the same reason, and its menu lists it plainly.
+	let runs = await runOn(page);
+	await expect(
+		runs.getByRole("group", { name: "Local" }).getByRole("menuitemradio", {
+			name: /^Desk/,
+		}),
+	).toHaveCount(1);
+	await expect(runs.getByText("casey")).toHaveCount(0);
+	await page.keyboard.press("Escape");
+
+	// A machine of her own with the same name: the teammate's says whose it is, hers does not.
+	await machine(page, "Desk", true);
+	await page.reload();
+	await ready(page);
+	await expect(entry).toHaveAccessibleName("Machines, 2 connected", live);
+	await entry.click();
+	await expect(menu.getByRole("menuitemradio", { name: /^Desk casey/ })).toHaveCount(1);
+	await expect(menu.getByRole("menuitemradio", { name: /^Desk Connected/ })).toHaveCount(1);
+	await shoot(page, "machines-menu-same-name");
+	await page.keyboard.press("Escape");
+	runs = await runOn(page);
+	await expect(runs.getByRole("menuitemradio", { name: /^Desk casey/ })).toHaveCount(1);
+	await expect(runs.getByRole("menuitemradio", { name: /^Desk Connected/ })).toHaveCount(1);
 });

@@ -356,7 +356,7 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 	await expect(build).toHaveAttribute("aria-disabled", "true", live);
 	await expect(build).toHaveAccessibleDescription("build-box is offline");
 	await expect(plan).toHaveClass(/\bmachine-offline\b/);
-	await expect(entry).toHaveAccessibleName("Machines, 2 paired, 1 connected", live);
+	await expect(entry).toHaveAccessibleName("Machines, 1 of 2 connected", live);
 	await expect(entry).toContainText("1/2");
 	await shoot(page, "live-offline-full");
 
@@ -374,7 +374,7 @@ test("a chosen machine going offline and coming back shows within seconds, witho
 	await expect(rows.getByRole("row", { name: /laptop/ })).toContainText("Connected");
 	await laptop.disconnect();
 	await expect(rows.getByRole("row", { name: /laptop/ })).not.toContainText("Connected", live);
-	await expect(entry).toHaveAccessibleName("Machines, 2 paired, 1 connected", live);
+	await expect(entry).toHaveAccessibleName("Machines, 1 of 2 connected", live);
 });
 
 /** Pair and connect `count` machines, the last with a long name; keys pair ten at most. */

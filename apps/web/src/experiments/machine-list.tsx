@@ -26,7 +26,7 @@ import {
 import { ago } from "../build-model";
 import { FavoriteStar } from "../favorite-star";
 import { IconButton } from "../icon-button";
-import { updateAvailable } from "../machine-summary";
+import { allMachines, isTeammate, updateAvailable } from "../machine-summary";
 import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
@@ -42,6 +42,9 @@ import { pairCommand, UPDATE_COMMAND } from "./setup-commands";
 
 import type { ReactNode } from "react";
 import type { Machine, TeammateMachine } from "../machine-summary";
+
+/** A row of the list: one of the person's own machines, or a teammate's shared with them. */
+type Listed = Machine | TeammateMachine;
 import type { NavigationDialogMotion } from "../navigation-dialog";
 import type { CopyItem, Owner, useMachines } from "./machines";
 
@@ -74,11 +77,6 @@ function agentName(agent: Machine["agent"]): string | undefined {
 	return agent ? [agent.name, agent.version].filter(Boolean).join(" ") : undefined;
 }
 
-/**
- * Whether a search finds the machine, by anything the list shows about it: its name, owner, host,
- * version, agent and system. A machine serves every repository its owner can push to, so no
- * repository identifies it.
- */
 /** Machines by kind, Local then Cloud, each in list order; a kind with none is left out. */
 export function groupMachines<T extends Pick<Machine, "service">>(
 	list: T[],
@@ -97,16 +95,23 @@ function GroupIcon({ kind }: { kind: "local" | "cloud" }) {
 	return <Icon aria-hidden="true" className="machines-group-icon" size={16} />;
 }
 
-export function machineMatches(machine: Machine, query: string, login: string | undefined) {
+/**
+ * Whether a search finds the machine, by anything the list shows about it: its name, owner, host,
+ * version, agent and system. A machine serves every repository its owner can push to, so no
+ * repository identifies it. The owner is the person's own login, `login`, unless the machine is
+ * a teammate's.
+ */
+export function machineMatches(machine: Listed, query: string, login: string | undefined) {
 	let words = query.trim().toLowerCase();
 	if (!words) return true;
+	let own = isTeammate(machine) ? undefined : machine;
 	return [
 		machine.label,
-		login,
+		isTeammate(machine) ? machine.owner.login : login,
 		machine.version,
-		machine.hostname,
-		agentName(machine.agent),
-		platformName(machine.platform),
+		own?.hostname,
+		agentName(own?.agent ?? null),
+		platformName(own?.platform ?? null),
 	].some(value => value?.toLowerCase().includes(words));
 }
 
@@ -168,30 +173,33 @@ function Dash({ label }: { label: string }) {
 
 /** What sharing a machine with teammates does, as the switch's tooltip and the phone row say. */
 export const SHARE_DETAIL =
-	"Teammates see this machine under Shared with you and can choose it for a document. That "
-	+ "document's Planner, builds and runs then run here, as you, with your GitHub account, in "
-	+ "repositories you can push to; a Planner also runs here on Default machine when its creator "
-	+ "has no machine of their own. Rebuilds and prototypes Chopin starts by itself stay yours. "
-	+ "Turned off, a teammate's Planner or build finishes the work it is on first.";
+	"Teammates see this machine in their list and can choose it for a document or make it their "
+	+ "default. That document's Planner, builds and runs then run here, as you, with your GitHub "
+	+ "account, in repositories you can push to; a Planner also runs here on Default machine when "
+	+ "its creator has no machine of their own. Rebuilds and prototypes Chopin starts by itself "
+	+ "stay yours. Turned off, a teammate's Planner or build finishes the work it is on first.";
 
 /**
  * Whether teammates' documents may plan on a machine: a switch, named for the machine, that
- * changes at once and settles as the server says.
+ * changes at once and settles as the server says. On a teammate's machine it shows it shared, and
+ * only its owner changes it.
  */
 function ShareSwitch(
-	{ machine, onChange }: { machine: Machine; onChange: (shared: boolean) => void },
+	{ machine, onChange }: { machine: Listed; onChange: (shared: boolean) => void },
 ) {
 	let finishingId = useId();
-	let finishing = !machine.shared && finishingWords(machine);
+	let shared = isTeammate(machine) || machine.shared;
+	let finishing = !isTeammate(machine) && !machine.shared && finishingWords(machine);
 	return (
 		<span className="machines-stack">
 			<button
-				aria-checked={machine.shared}
+				aria-checked={shared}
 				aria-describedby={finishing ? finishingId : undefined}
 				aria-label={`Share ${machine.label} with teammates`}
 				className="machines-switch"
-				data-tooltip={machine.shared ? "Shared with teammates" : "Share with teammates"}
-				onClick={() => onChange(!machine.shared)}
+				data-tooltip={shared ? "Shared with teammates" : "Share with teammates"}
+				disabled={isTeammate(machine)}
+				onClick={() => onChange(!shared)}
 				role="switch"
 				type="button"
 			>
@@ -362,13 +370,15 @@ function useMachineDialogs(machines: ReturnType<typeof useMachines>, onDisconnec
 }
 
 /**
- * The desktop table, as Tailscale's: machine, owner, host, version, agent, last seen, and actions.
- * A machine is its name and badges alone: it serves every repository its owner can push to.
+ * The desktop table, as Tailscale's: machine, owner, host, version, agent, shared, last seen, and
+ * actions. A machine is its name and badges alone: it serves every repository its owner can push
+ * to. A teammate's machine fills the columns it has the facts for, shows its switch on and out of
+ * reach, and has no actions: only its owner changes it. The star, the person's default, is theirs.
  */
 function MachineTable(
 	{ labelledBy, list, owner, machines, onRename, onDisconnect }: {
 		labelledBy: string;
-		list: Machine[];
+		list: Listed[];
 		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 		onRename: (machine: Machine) => void;
@@ -412,6 +422,9 @@ function MachineTable(
 						</TableHead>
 					</TableRow>
 					{group.machines.map(machine => {
+						let theirs = isTeammate(machine) ? machine : undefined;
+						let own = isTeammate(machine) ? undefined : machine;
+						let who = theirs?.owner ?? owner;
 						return (
 							<TableRow key={machine.id}>
 								<TableCell>
@@ -423,7 +436,7 @@ function MachineTable(
 												onToggle={() => void machines.favor(machine.id, !machine.favorite)}
 											/>
 											<span className="machines-name" title={machine.label}>{machine.label}</span>
-											{machine.autoRun && (
+											{own?.autoRun && (
 												<Badge
 													icon={PlayIcon}
 													label="Auto builds"
@@ -437,13 +450,13 @@ function MachineTable(
 								</TableCell>
 								<TableCell>
 									<span className="machines-stack">
-										{owner ? <OwnerName owner={owner} /> : <Dash label="Owner unknown" />}
+										{who ? <OwnerName owner={who} /> : <Dash label="Owner unknown" />}
 									</span>
 								</TableCell>
 								<TableCell>
 									<span className="machines-stack">
-										{machine.hostname
-											? <span>{machine.hostname}</span>
+										{own?.hostname
+											? <span>{own.hostname}</span>
 											: <Dash label="Hostname unknown" />}
 									</span>
 								</TableCell>
@@ -453,7 +466,7 @@ function MachineTable(
 											{machine.version
 												? <span className="tabular-nums">chopin {machine.version}</span>
 												: <Dash label="Version unknown" />}
-											{updateAvailable(machine.version, machines.recommended) && (
+											{own && updateAvailable(own.version, machines.recommended) && (
 												<Badge
 													icon={ArrowUpIcon}
 													label="Update"
@@ -463,17 +476,17 @@ function MachineTable(
 												/>
 											)}
 										</span>
-										{machine.platform && (
-											<span className="machines-secondary">{platformName(machine.platform)}</span>
+										{own?.platform && (
+											<span className="machines-secondary">{platformName(own.platform)}</span>
 										)}
 									</span>
 								</TableCell>
 								<TableCell>
 									<span className="machines-stack">
-										{machine.agent
-											? <span>{agentName(machine.agent)}</span>
+										{own?.agent
+											? <span>{agentName(own.agent)}</span>
 											: <Dash label="Agent unknown" />}
-										{machine.planner && <span className="machines-secondary">Planner</span>}
+										{own?.planner && <span className="machines-secondary">Planner</span>}
 									</span>
 								</TableCell>
 								<TableCell className="machines-share-column">
@@ -486,13 +499,15 @@ function MachineTable(
 									<Status machine={machine} now={now} />
 								</TableCell>
 								<TableCell className="machines-actions-column">
-									<MachineActions
-										copies={copiesFor(machine, machines.recommended)}
-										machine={machine}
-										onDisconnect={() => onDisconnect(machine)}
-										onFavorite={() => void machines.favor(machine.id, !machine.favorite)}
-										onRename={() => onRename(machine)}
-									/>
+									{own && (
+										<MachineActions
+											copies={copiesFor(own, machines.recommended)}
+											machine={own}
+											onDisconnect={() => onDisconnect(own)}
+											onFavorite={() => void machines.favor(own.id, !own.favorite)}
+											onRename={() => onRename(own)}
+										/>
+									)}
 								</TableCell>
 							</TableRow>
 						);
@@ -500,152 +515,6 @@ function MachineTable(
 				</TableBody>
 			))}
 		</Table>
-	);
-}
-
-/** A teammate's repositories, a few by name and the rest counted. */
-const SHOWN_REPOSITORIES = 2;
-
-function TeammateRepositories({ machine }: { machine: TeammateMachine }) {
-	let shown = machine.repositories.slice(0, SHOWN_REPOSITORIES);
-	let more = machine.repositories.length - shown.length;
-	return (
-		<span className="machines-stack">
-			{shown.map(name => <span className="machines-truncate" key={name} title={name}>{name}</span>)}
-			{more > 0 && <span className="machines-secondary">{more} more</span>}
-		</span>
-	);
-}
-
-/** What a teammate's machine shows: no star, switch or actions, as only its owner changes it. */
-function TeammateTable({ labelledBy, list }: { labelledBy: string; list: TeammateMachine[] }) {
-	let now = Date.now();
-	return (
-		<Table aria-labelledby={labelledBy} className="machines-table" variant="contained">
-			<TableHeader>
-				<TableRow>
-					<TableHead>Machine</TableHead>
-					<TableHead>Owner</TableHead>
-					<TableHead>Version</TableHead>
-					<TableHead>Repositories</TableHead>
-					<TableHead className="machines-status-column">Last seen</TableHead>
-				</TableRow>
-			</TableHeader>
-			{groupMachines(list).map(group => (
-				<TableBody key={group.kind}>
-					<TableRow>
-						<TableHead className="machines-group-head" colSpan={5} scope="rowgroup">
-							<span className="machines-group-title">
-								<GroupIcon kind={group.kind} />
-								{GROUP_LABEL[group.kind]}
-							</span>
-						</TableHead>
-					</TableRow>
-					{group.machines.map(machine => (
-						<TableRow key={machine.id}>
-							<TableCell>
-								<span className="machines-stack">
-									<span className="machines-name-line">
-										<span className="machines-name" title={machine.label}>{machine.label}</span>
-									</span>
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									<OwnerName owner={machine.owner} />
-								</span>
-							</TableCell>
-							<TableCell>
-								<span className="machines-stack">
-									{machine.version
-										? <span className="tabular-nums">chopin {machine.version}</span>
-										: <Dash label="Version unknown" />}
-								</span>
-							</TableCell>
-							<TableCell>
-								<TeammateRepositories machine={machine} />
-							</TableCell>
-							<TableCell className="machines-status-column">
-								<Status machine={machine} now={now} />
-							</TableCell>
-						</TableRow>
-					))}
-				</TableBody>
-			))}
-		</Table>
-	);
-}
-
-/** A phone's teammates' rows: the dot before the name, who owns it, then its repositories. */
-function TeammateRows({ list }: { list: TeammateMachine[] }) {
-	let now = Date.now();
-	return (
-		<div className="machines-rows">
-			{groupMachines(list).map(group => (
-				<div className="machines-rows-group" key={group.kind}>
-					<h4 className="machines-group-title">
-						<GroupIcon kind={group.kind} />
-						{GROUP_LABEL[group.kind]}
-					</h4>
-					<ul>
-						{group.machines.map(machine => {
-							let parts = [machine.owner.login, machine.version && `chopin ${machine.version}`]
-								.filter(Boolean);
-							return (
-								<li key={machine.id}>
-									<div className="machines-row">
-										<span className="machines-row-text">
-											<span className="machines-row-name">
-												<StatusDot
-													label={statusWords(machine, now)}
-													state={machineState(machine)}
-												/>
-												<span className="machines-name" title={machine.label}>{machine.label}</span>
-											</span>
-											<span className="machines-secondary machines-truncate">
-												{parts.map((part, index) => (
-													<span className="machines-detail-part" key={index}>
-														{index > 0 && " "}
-														{part}
-													</span>
-												))}
-											</span>
-											<span className="machines-secondary machines-truncate">
-												{machine.repositories.join(", ")}
-											</span>
-										</span>
-									</div>
-								</li>
-							);
-						})}
-					</ul>
-				</div>
-			))}
-		</div>
-	);
-}
-
-/**
- * Machines teammates share with the person: a table, or on a phone rows, of each machine's name,
- * owner, release, repositories and state. Nothing in it changes a machine; only its owner does,
- * and the person chooses one for a document from that document's machine button. Nothing at all
- * until a teammate shares one that serves a repository they can push to.
- */
-export function SharedWithYou({ machines }: { machines: ReturnType<typeof useMachines> }) {
-	let headingId = useId();
-	let phone = usePhoneWidth();
-	let list = machines.teammates;
-	if (!list?.length) return null;
-	return (
-		<section aria-labelledby={headingId} className="machines-section">
-			<div className="machines-shared-heading">
-				<h2 className="text-base font-semibold" id={headingId}>Shared with you</h2>
-				<p className="machines-detail">
-					Machines your teammates share. Only their owners change them.
-				</p>
-			</div>
-			{phone ? <TeammateRows list={list} /> : <TeammateTable labelledBy={headingId} list={list} />}
-		</section>
 	);
 }
 
@@ -662,7 +531,7 @@ function page() {
  */
 function MachineRows(
 	{ list, owner, machines }: {
-		list: Machine[];
+		list: Listed[];
 		owner: Owner | undefined;
 		machines: ReturnType<typeof useMachines>;
 	},
@@ -694,8 +563,8 @@ function MachineRows(
 							let state = machineState(machine);
 							// Who owns it, where it runs and which chopin; its state is the dot's.
 							let parts = [
-								owner?.login,
-								machine.hostname,
+								isTeammate(machine) ? machine.owner.login : owner?.login,
+								isTeammate(machine) ? undefined : machine.hostname,
 								machine.version && `chopin ${machine.version}`,
 							].filter(Boolean);
 							// Space, never a separator glyph, keeps the parts apart (see DESIGN.md).
@@ -743,9 +612,10 @@ function MachineRows(
 }
 
 /**
- * The person's machines: a search, how many there are, then the table on a desktop or the list on
- * a phone or a window as narrow as one, and With none yet, nothing: the page's banner offers the
- * first. The table asks again every few seconds, so a machine appears as it connects.
+ * The machines the person can use, theirs and the ones teammates share with them: a search, how
+ * many there are, then the table on a desktop or the list on a phone or a window as narrow as one,
+ * and with none yet, nothing: the page's banner offers the first. The table asks again every few
+ * seconds, so a machine appears as it connects.
  */
 export function YourMachines(
 	{ owner, machines }: {
@@ -757,7 +627,7 @@ export function YourMachines(
 	let phone = usePhoneWidth();
 	let [query, setQuery] = useState("");
 	let { dialogs, rename, disconnect } = useMachineDialogs(machines);
-	let all = machines.machines;
+	let all = allMachines(machines);
 	if (!all) {
 		return machines.error
 			? <MachinesProblem code={machines.error} onRetry={machines.retry} />
@@ -818,7 +688,7 @@ export function MachineDetail(
 		machines: ReturnType<typeof useMachines>;
 	},
 ) {
-	let machine = machines.machines?.find(value => value.id === id);
+	let machine = allMachines(machines)?.find(value => value.id === id);
 	let { dialogs, rename, disconnect } = useMachineDialogs(machines, () => goTo("/machines"));
 	let [copied, setCopied] = useState<string>();
 	useEffect(() => {
@@ -833,17 +703,19 @@ export function MachineDetail(
 	}
 	if (!machine) return <p className="machines-empty">This machine was removed.</p>;
 	let now = Date.now();
+	let own = isTeammate(machine) ? undefined : machine;
+	let who = isTeammate(machine) ? machine.owner : owner;
 	let facts: [string, ReactNode][] = [
 		["Status", <Status key="status" machine={machine} now={now} />],
-		["Owner", owner && <OwnerName key="owner" owner={owner} />],
-		["Hostname", machine.hostname],
-		["System", platformName(machine.platform)],
+		["Owner", who && <OwnerName key="owner" owner={who} />],
+		["Hostname", own?.hostname],
+		["System", platformName(own?.platform ?? null)],
 		[
 			"Version",
 			machine.version && (
 				<span className="machines-version" key="version">
 					chopin {machine.version}
-					{updateAvailable(machine.version, machines.recommended) && (
+					{own && updateAvailable(machine.version, machines.recommended) && (
 						<Badge icon={ArrowUpIcon} label="Update available" size="sm" tone="warning" />
 					)}
 				</span>
@@ -851,14 +723,14 @@ export function MachineDetail(
 		],
 		[
 			"Agent",
-			[agentName(machine.agent), machine.planner && "runs Planners"].filter(Boolean).join(", "),
+			[agentName(own?.agent ?? null), own?.planner && "runs Planners"].filter(Boolean).join(", "),
 		],
 		[
 			"Runs",
 			[
 				machine.service && "stays connected",
-				machine.autoRun && "builds automatically",
-				machine.shared && "runs teammates' work",
+				own?.autoRun && "builds automatically",
+				(isTeammate(machine) || own?.shared) && "runs teammates' work",
 			].filter(Boolean).join(", "),
 		],
 	];
@@ -873,12 +745,14 @@ export function MachineDetail(
 				))}
 			</dl>
 			<ul aria-label={`Actions for ${machine.label}`} className="machines-detail-actions">
-				<li>
-					<button className="machines-row" onClick={() => rename(machine)} type="button">
-						<PencilIcon aria-hidden="true" size={16} />
-						Edit machine name…
-					</button>
-				</li>
+				{own && (
+					<li>
+						<button className="machines-row" onClick={() => rename(own)} type="button">
+							<PencilIcon aria-hidden="true" size={16} />
+							Edit machine name…
+						</button>
+					</li>
+				)}
 				<li>
 					<button
 						aria-pressed={machine.favorite}
@@ -890,25 +764,27 @@ export function MachineDetail(
 						{machine.favorite ? "Remove favorite" : "Set as favorite"}
 					</button>
 				</li>
-				<li>
-					<button
-						aria-pressed={machine.shared}
-						className="machines-row"
-						onClick={() => void machines.share(machine.id, !machine.shared)}
-						type="button"
-					>
-						<UsersIcon aria-hidden="true" size={16} />
-						<span className="machines-row-text">
-							{machine.shared ? "Stop sharing with teammates" : "Share with teammates"}
-							<span className="machines-secondary">
-								{!machine.shared && finishingWords(machine)
-									? `${finishingWords(machine)}. Each stops when its current work finishes.`
-									: SHARE_DETAIL}
+				{own && (
+					<li>
+						<button
+							aria-pressed={own.shared}
+							className="machines-row"
+							onClick={() => void machines.share(own.id, !own.shared)}
+							type="button"
+						>
+							<UsersIcon aria-hidden="true" size={16} />
+							<span className="machines-row-text">
+								{own.shared ? "Stop sharing with teammates" : "Share with teammates"}
+								<span className="machines-secondary">
+									{!own.shared && finishingWords(own)
+										? `${finishingWords(own)}. Each stops when its current work finishes.`
+										: SHARE_DETAIL}
+								</span>
 							</span>
-						</span>
-					</button>
-				</li>
-				{copiesFor(machine, machines.recommended).map(item => (
+						</button>
+					</li>
+				)}
+				{own && copiesFor(own, machines.recommended).map(item => (
 					<li key={item.command}>
 						<button
 							className="machines-row"
@@ -927,17 +803,19 @@ export function MachineDetail(
 						</button>
 					</li>
 				))}
-				<li>
-					<button
-						className="machines-row"
-						data-tone="destructive"
-						onClick={() => disconnect(machine)}
-						type="button"
-					>
-						<CloseIcon aria-hidden="true" size={16} />
-						Disconnect machine…
-					</button>
-				</li>
+				{own && (
+					<li>
+						<button
+							className="machines-row"
+							data-tone="destructive"
+							onClick={() => disconnect(own)}
+							type="button"
+						>
+							<CloseIcon aria-hidden="true" size={16} />
+							Disconnect machine…
+						</button>
+					</li>
+				)}
 			</ul>
 			{dialogs}
 		</div>
