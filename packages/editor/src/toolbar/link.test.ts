@@ -100,7 +100,10 @@ describe("following a link", () => {
 		expect(followHref(editor, address!, "mailto:ana@example.com", REPOSITORY))
 			.toBe("mailto:ana@example.com");
 		expect(followHref(editor, address!, "#anchor", REPOSITORY)).toBe("#anchor");
-		expect(followHref(editor, address!, "../secrets.md", REPOSITORY)).toBe("../secrets.md");
+		expect(followHref(editor, address!, "../secrets.md", REPOSITORY)).toBeUndefined();
+		expect(followHref(editor, address!, "docs/%2e%2e/%2e%2e/secrets.md", REPOSITORY))
+			.toBeUndefined();
+		expect(followHref(editor, address!, "../secrets.md", undefined)).toBeUndefined();
 		expect(followHref(editor, address!, "README.md", undefined)).toBe("README.md");
 	});
 });

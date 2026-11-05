@@ -13,7 +13,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $isLinkNode, $toggleLink } from "@lexical/link";
 import { createDOMRange } from "@lexical/selection";
-import { LINK_PROTOCOLS, repositoryLinkUrl } from "@chopin/dialect";
+import { climbsOutOfRepository, LINK_PROTOCOLS, repositoryLinkUrl } from "@chopin/dialect";
 import {
 	$createRangeSelectionFromDom,
 	$findMatchingParent,
@@ -138,14 +138,16 @@ function $linkEditing(
 
 /**
  * Where a link opens. A repository path is the file on GitHub, which an anchor not yet drawn
- * for it cannot say and a bare path would send to the Chopin page instead.
+ * for it cannot say and a bare path would send to the Chopin page instead. A path that climbs
+ * out of the repository opens nothing.
  */
 export function followHref(
 	editor: LexicalEditor,
 	key: NodeKey,
 	url: string,
 	repository: LinkRepository | undefined,
-): string {
+): string | undefined {
+	if (climbsOutOfRepository(url)) return undefined;
 	let file = repository && repositoryLinkUrl(url, repository);
 	return file ?? editor.getElementByKey(key)?.closest("a")?.href ?? url;
 }
@@ -156,7 +158,8 @@ function follow(
 	url: string,
 	repository: LinkRepository | undefined,
 ): void {
-	window.open(followHref(editor, key, url, repository), "_blank", "noopener,noreferrer");
+	let href = followHref(editor, key, url, repository);
+	if (href !== undefined) window.open(href, "_blank", "noopener,noreferrer");
 }
 
 export function LinkSurface(
@@ -292,7 +295,7 @@ export function LinkSurface(
 			if (event.button === 1 || event.metaKey || event.ctrlKey || !link || following) {
 				event.stopPropagation();
 				let href = link ? followHref(editor, link.key, link.url, repository) : anchor.href;
-				window.open(href, "_blank", "noopener,noreferrer");
+				if (href !== undefined) window.open(href, "_blank", "noopener,noreferrer");
 				return;
 			}
 			dismissed.current = undefined;
