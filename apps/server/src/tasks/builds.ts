@@ -273,6 +273,11 @@ export type RebuildConnections = {
 	assigned: (connectionId: string) => string | undefined;
 	/** Whether the connection may take `person`'s work on this document: their machine choice. */
 	allows?: (documentId: string, connection: Connection, person: string) => boolean;
+	/**
+	 * The live connections of the teammate's shared machine that is `person`'s favorite, while they
+	 * chose no machine for the document: what Automatic prefers for work they press.
+	 */
+	favoriteShared?: (repositoryId: string, person: string, documentId: string) => Connection[];
 };
 
 export type RebuildResult =
@@ -301,7 +306,8 @@ export function stoppedForRevision(plan: Plan, revision = plan.revision): boolea
  * Under LIVE_BUILD the live build's user keeps ownership; its original connection is preferred,
  * and another of the same user's connections for this repository stands in once that one has gone.
  * A person who presses Build instead (`by`) builds the edits on their own connection, or on the
- * teammate's shared machine they chose for the document; automatic work never leaves its owner's
+ * teammate's shared machine they chose for the document, or made their favorite while they chose
+ * none, which comes before the original connection; automatic work never leaves its owner's
  * machines. A connection already holding another document's build is skipped so the rebuild cannot
  * strand that build.
  */
@@ -354,7 +360,11 @@ export async function queueRebuild(
 				&& (!options.automatic || connection.autoRun === true)
 				&& (assigned === undefined || assigned === plan.id);
 		};
-		let connection = original && connections.get(original.connectionId);
+		// Their favorite shared machine, where it can take the work, is what Automatic now prefers.
+		let connection = options.automatic
+			? undefined
+			: connections.favoriteShared?.(live.repositoryId, owner, plan.id).find(usable);
+		connection ??= original && connections.get(original.connectionId);
 		if (!usable(connection)) {
 			connection = connections.list(live.repositoryId, owner).find(usable);
 		}

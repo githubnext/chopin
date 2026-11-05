@@ -366,6 +366,30 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	connections.unread();
 	void readChoices().catch(() => {});
+	/**
+	 * Changes to a machine's favorites run one at a time per machine: setting or clearing one,
+	 * stopping sharing the machine and revoking it. Each is stored and then published to
+	 * `connections` without another in between, so the favorite a request stored cannot be
+	 * published after the unshare or revoke that cleared it, and memory never outlives storage.
+	 */
+	let favoriteChanges = new Map<string, Promise<void>>();
+	function changingFavorites<T>(machineId: string, change: () => Promise<T>): Promise<T> {
+		let result = (favoriteChanges.get(machineId) ?? Promise.resolve()).then(change);
+		let settled = result.then(() => {}, () => {});
+		favoriteChanges.set(machineId, settled);
+		void settled.then(() => {
+			if (favoriteChanges.get(machineId) === settled) favoriteChanges.delete(machineId);
+		});
+		return result;
+	}
+	/** Revoke a machine, and forget everyone's favorite of it with the revocation. */
+	function revokeMachine(machineId: string, userId: string) {
+		return changingFavorites(machineId, async () => {
+			let revoked = await auth.machines.revoke(machineId, userId);
+			if (revoked) connections.unfavor(machineId);
+			return revoked;
+		});
+	}
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
 	auth.pairings.ended = sessionId => keys.ended(sessionId);
@@ -789,8 +813,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return found;
 	}
 	/**
-	 * What a teammate may know of a machine shared with them: its name, its owner, its release and
-	 * whether it is a server. Not its host, system or agent, nor anything its owner alone sets.
+	 * What a teammate may know of a machine shared with them: its name, its owner, when it was
+	 * paired (the order machines are listed in), its release and whether it is a server. Not its
+	 * host, system or agent, nor anything its owner alone sets.
 	 */
 	async function teammateFacts(machine: StoredMachine) {
 		let live = connections.machine(machine.id);
@@ -800,6 +825,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			label: machine.label,
 			teammate: true as const,
 			owner: { login: owner?.login ?? machine.userId, avatarUrl: owner?.avatarUrl ?? "" },
+			createdAt: machine.createdAt.getTime(),
 			lastSeenAt: machine.lastSeenAt.getTime(),
 			version: live.find(value => value.version)?.version ?? null,
 			// An offline machine keeps its server or computer icon.
@@ -1575,7 +1601,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			new Uint8Array(createHash("sha256").update(bearer(request)).digest()),
 		);
 		if (!machine || machine.revokedAt) fail("machine-revoked");
-		await auth.machines.revoke(machine.id, machine.userId);
+		await revokeMachine(machine.id, machine.userId);
 		await disconnectMachine(machine.id);
 		return json({ revoked: true });
 	});
@@ -1793,12 +1819,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!listed) fail("not-found");
 		if (favorite || connections.favorite(userId) === params.id) {
 			let machineId = favorite ? params.id : undefined;
-			let changed = connections.favorite(userId) !== machineId;
-			await auth.storage.machines.favor(
-				{ userId, ...(machineId ? { machineId } : {}) },
-				auth.clock(),
-			);
-			connections.favor(userId, machineId);
+			let changed = await changingFavorites(params.id, async () => {
+				let changed = connections.favorite(userId) !== machineId;
+				await auth.storage.machines.favor(
+					{ userId, ...(machineId ? { machineId } : {}) },
+					auth.clock(),
+				);
+				connections.favor(userId, machineId);
+				return changed;
+			});
 			// Default machine's Planners of the person's documents follow the new favorite.
 			for (let channel of changed ? await created(userId) : []) {
 				await reachShared(channel);
@@ -1825,7 +1854,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { shared } = z.object({ shared: z.boolean() }).strict().parse(await body(request));
 		let userId = session.user.id;
 		await readChoices();
-		if (!await auth.machines.share(params.id, userId, shared)) fail("not-found");
+		let found = await changingFavorites(params.id, async () => {
+			let found = await auth.machines.share(params.id, userId, shared);
+			// Storage forgot teammates' favorites of it with the sharing.
+			if (found && !shared) connections.unfavor(params.id, userId);
+			return found;
+		});
+		if (!found) fail("not-found");
 		finishing.delete(params.id);
 		let teammates: ChannelRecord[] = [];
 		if (!shared) {
@@ -1862,8 +1897,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			);
 			if (busy.size) finishing.set(params.id, { login: session.user.login, documents: busy });
 			for (let key of reach.keys()) if (key.startsWith(`${params.id}\n`)) reach.delete(key);
-			// Storage forgot teammates' favorites of it with the sharing.
-			connections.unfavor(params.id, userId);
 		}
 		connections.share(params.id, shared);
 		for (let channel of teammates) {
@@ -1878,7 +1911,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		z.object({}).strict().parse(await body(request));
-		if (!await auth.machines.revoke(params.id, session.user.id)) fail("not-found");
+		if (!await revokeMachine(params.id, session.user.id)) fail("not-found");
 		await disconnectMachine(params.id);
 		return json({ revoked: true });
 	});
@@ -1950,6 +1983,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						teammate: false,
 						connected: live.some(value => serves(value, repositoryId)),
 						reauthorize: !!machine.reauthorizeAt,
+						createdAt: machine.createdAt.getTime(),
 						lastSeenAt: machine.lastSeenAt.getTime(),
 						version: live.find(value => value.version)?.version ?? null,
 						...described(live),

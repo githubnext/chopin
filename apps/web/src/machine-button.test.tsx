@@ -18,6 +18,7 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 				label: "build-box",
 				connected,
 				reauthorize: false,
+				createdAt: 0,
 				lastSeenAt: 0,
 				version: null,
 				hostname: null,

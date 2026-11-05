@@ -204,8 +204,11 @@ collaborative state and external implementation runs are durable.
   grow with teammates or polls. Only a repository the machine has a checkout of is asked
   on its own. A person's one favorite may be a teammate's shared machine they could use (the
   same eligibility as its listing); Automatic and Default machine prefer it where it serves the
-  repository, and fall back where it doesn't. Unsharing clears teammates' choices and favorites of the
-  machine and hands a document to Default machine only where the machine ran its Planner,
+  repository, and fall back where it doesn't, for a pressed rebuild too, ahead of the machine its
+  first build ran on. A favorite is stored and published one change at a time per machine, with
+  unsharing and revoking, so memory never keeps one storage has cleared. Machines, a person's own
+  and teammates' shared ones, are listed together newest paired first. Unsharing clears
+  teammates' choices and favorites of the machine and hands a document to Default machine only where the machine ran its Planner,
   had been asked to, was placing it, or someone uses the document; any other just loses
   the choice.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a

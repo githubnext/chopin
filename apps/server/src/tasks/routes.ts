@@ -428,6 +428,10 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 						assigned: connectionId => options.connections.assigned(connectionId),
 						allows: (documentId, connection, person) =>
 							options.connections.allows(documentId, connection, person),
+						favoriteShared: (repositoryId, person, documentId) =>
+							options.connections.favoriteShared(repositoryId, person, documentId).filter(item =>
+								idle.has(item.id)
+							),
 					}, { by: session.user.id }),
 			);
 			if (result.kind === "busy") throw new GitHubError("implementation is already active", 409);
