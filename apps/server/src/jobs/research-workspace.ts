@@ -956,8 +956,10 @@ async function stage(
 				throw err;
 			}
 			if (!web.ok) {
+				let { reason, classification, durationMs } = web.error.failure;
+				metrics.webFailure = { webFailure: classification, webFailureDurationMs: durationMs };
 				throw publicStageError(
-					"web-search-unavailable",
+					reason,
 					metrics,
 					new Error(
 						web.error.kind === "MissingTool"

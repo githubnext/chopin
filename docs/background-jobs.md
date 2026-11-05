@@ -437,6 +437,20 @@ claim; heartbeats and lease renewal do not depend on it. Use the host wrapper's
 search counters for live progress: the harness can buffer tool lifecycle
 callbacks until the completed step is published.
 
+Before any call, the stage connects to the endpoint and lists its tools. A failure there ends
+the attempt with a reason that separates what Chopin can tell apart: `web-search-credential-rejected`
+when the endpoint answered HTTP 401 or 403, `web-search-not-offered` when it answered without a
+`web_search` tool, and `web-search-unavailable` for anything else. The diagnostic's `webFailure`
+carries the same classification as a call failure, with `connect` or `tools` in place of the call
+phase (`local:connect:mcp-client:http:401`, `local:tools:missing-tool`), and `webFailureDurationMs`
+is how long setup ran before it failed. The `elapsedMs` of the `connecting-web` snapshot is when
+that phase began, so it does not show how long the attempt took. Setup has sent no query, so its
+failure log line, unlike a call failure's, also names the credential type (`ghu_` or `gho_` by
+prefix, never the token) and the client's error name and message, collapsed to one line, with
+token-shaped text and `Bearer` values masked and clipped to 160 characters. That line is
+console-only; the durable reason and the diagnostic still carry no upstream text. See
+[Self-hosting](self-hosting.md#troubleshooting) for what an operator can do about each reason.
+
 ## Publication hooks
 
 A definition may delay completion with `publish()`:

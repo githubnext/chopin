@@ -510,6 +510,75 @@ describe("research workspace execution", () => {
 		}
 	});
 
+	it.each([
+		{
+			scenario: "a credential GitHub refuses",
+			createClient: async () => {
+				throw new MCPClientError({
+					message:
+						"MCP HTTP Transport Error: POSTing to endpoint (HTTP 401): private provider payload",
+					statusCode: 401,
+					responseBody: "private provider payload",
+				});
+			},
+			reason: "web-search-credential-rejected",
+			webFailure: "local:connect:mcp-client:http:401",
+		},
+		{
+			scenario: "a connection that does not offer web_search",
+			createClient: async () => ({ tools: async () => ({}), close: async () => {} }),
+			reason: "web-search-not-offered",
+			webFailure: "local:tools:missing-tool",
+		},
+		{
+			scenario: "a service that cannot be reached",
+			createClient: async () => {
+				throw Object.assign(new Error("Unable to connect private provider payload"), {
+					code: "ConnectionRefused",
+				});
+			},
+			reason: "web-search-unavailable",
+			webFailure: "local:connect:error",
+		},
+	])("fails public research as $reason for $scenario and records why in its diagnostic", async (
+		{ createClient, reason, webFailure },
+	) => {
+		let originalWebSearch = webSearch.webSearchTool;
+		let snapshots: JobExecutionDiagnostic[] = [];
+		let web = spyOn(webSearch, "webSearchTool").mockImplementation((owner, deps) =>
+			originalWebSearch(owner, { ...deps, createClient, log: () => {} })
+		);
+		let opening = spyOn(workerSession, "openWorkerSession");
+		try {
+			let definition = researchEvidenceDefinition({ config: { agent: true, model: "test-model" } });
+			let error = await definition.execute({
+				...execution("research-evidence", {
+					workspaceId: WORKSPACE_ID,
+					turnId: TURN_ID,
+					query: QUERY,
+				}),
+				diagnostic: value => snapshots.push(executionDiagnostic(value)!),
+			}).then(() => undefined, error => error);
+			expect(error).toBeInstanceOf(JobExecutionError);
+			expect(error.progressReason).toBe(reason);
+			expect(error.diagnostic).toMatchObject({
+				stage: "public-web",
+				phase: "connecting-web",
+				webFailure,
+				webFailureDurationMs: expect.any(Number),
+				webCalls: 0,
+				webFailures: 0,
+			});
+			expect(Object.keys(error.diagnostic).length).toBeLessThanOrEqual(20);
+			expect(JSON.stringify(error.diagnostic)).not.toContain("private provider payload");
+			expect(error.message).toBe(`Background job execution failed: ${reason}.`);
+			expect(opening).not.toHaveBeenCalled();
+		} finally {
+			opening.mockRestore();
+			web.mockRestore();
+		}
+	});
+
 	it("keeps the public evidence worker input isolated and retries once", async () => {
 		let observed: unknown;
 		let progress: string[] = [];
