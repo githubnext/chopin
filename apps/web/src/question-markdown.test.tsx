@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { RepositoryLinksProvider } from "@chopin/editor";
 import { QuestionView } from "@chopin/question/react";
 
 import { documentImageUrl, QuestionMarkdownProvider } from "./question-markdown";
@@ -148,4 +149,35 @@ test("an answered card keeps its rendered body", () => {
 	});
 	expect(markup).toContain("<li>Storage: PostgreSQL</li>");
 	expect(heading(markup)).not.toContain("Storage");
+});
+
+test("a repository path in a decision card opens the file on GitHub", () => {
+	let blob = "https://github.com/octo-org/score/blob/main";
+	let markup = renderToStaticMarkup(
+		<RepositoryLinksProvider value={{ owner: "octo-org", name: "score", ref: "main" }}>
+			<QuestionMarkdownProvider document={DOCUMENT}>
+				<QuestionView
+					definition={{
+						questions: [{
+							id: "q",
+							header: "Check",
+							question:
+								"Which?\n\nRead [the review](docs/review.md#L10-L20) and [the site](https://example.com).",
+							multiple: false,
+							options: [{
+								id: "a",
+								label: "Keep",
+								description: "As in [the config](./config/app.toml)",
+							}],
+						}],
+					}}
+					drafts={{}}
+				/>
+			</QuestionMarkdownProvider>
+		</RepositoryLinksProvider>,
+	);
+	expect(markup).toContain(`<a href="${blob}/docs/review.md#L10-L20"`);
+	expect(markup).toContain(`<a href="${blob}/config/app.toml"`);
+	expect(markup).toContain('<a href="https://example.com"');
+	expect(card("Read [the review](docs/review.md)")).toContain('<a href="docs/review.md"');
 });

@@ -41,6 +41,7 @@ import {
 	PlanEditor,
 	PlanStatus,
 	QuestionnaireStore,
+	RepositoryLinksProvider,
 	ResearchLauncher,
 	revealDeckItem,
 	selectDecisionView,
@@ -654,6 +655,15 @@ export function RoomWorkspace(
 		[onResearchChildOpen, onResearchChildPublished, room],
 	);
 	let githubReferences = useMemo(() => new GitHubReferenceCache({ channelId: room }), [room]);
+	let links = useMemo(
+		() => ({ owner: repository.owner, name: repository.name, ref: repository.defaultBranch }),
+		[repository.defaultBranch, repository.name, repository.owner],
+	);
+	// Wherever this room draws a link (the document, an earlier version, Chat, a decision card), a
+	// path in the repository means a file there.
+	let linked = (children: ReactNode) => (
+		<RepositoryLinksProvider value={links}>{children}</RepositoryLinksProvider>
+	);
 	let researchLinks = useResearchOfferLinks(
 		wire,
 		status === "connected",
@@ -1685,7 +1695,7 @@ export function RoomWorkspace(
 			: childTitle?.actions && !childTitle.phone
 			? "parent"
 			: undefined;
-		return (
+		return linked(
 			<div
 				className="child-document flex h-full min-h-0 flex-col bg-page"
 				data-workspace-room={room}
@@ -1765,7 +1775,7 @@ export function RoomWorkspace(
 					{/* With no Decisions pane, a phone saves the child's cards from a bar of its own. */}
 					<DecisionSaveHost phone={phone}>{plan}</DecisionSaveHost>
 				</section>
-			</div>
+			</div>,
 		);
 	}
 
@@ -1833,7 +1843,7 @@ export function RoomWorkspace(
 		? childEdit && { ...childEdit, toggle: () => childToggle.current?.() }
 		: editMode && { docked, editing: editMode === "editing", toggle: toggleEditing };
 
-	return (
+	return linked(
 		<DecisionContexts document={room} page={questionPageRoot}>
 			<ChildPhoneChromeContext.Provider value={childChromeValue}>
 				<ChildTitleContext.Provider value={childTitleValue}>
@@ -2094,7 +2104,7 @@ export function RoomWorkspace(
 					/>
 				</ChildTitleContext.Provider>
 			</ChildPhoneChromeContext.Provider>
-		</DecisionContexts>
+		</DecisionContexts>,
 	);
 }
 

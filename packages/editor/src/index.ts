@@ -54,6 +54,8 @@ export {
 	useQuestionnaires,
 } from "./questionnaires";
 export type { PlanQuestionnaireState, QuestionnaireEntry } from "./questionnaires";
+export { RepositoryLinksProvider, useLinkHref } from "./repository-links";
+export type { LinkRepository } from "./repository-links";
 export { MAX_RESEARCH_BRIEF, ResearchLauncher } from "./research-launcher";
 export type { ResearchLaunchBlock, ResearchLaunchResult } from "./research-launcher";
 export { ResolvedComment } from "./resolved-comment";

@@ -20,6 +20,7 @@ import { GitHubHoverCards } from "./github-hover";
 import { GitHubReferencesPlugin } from "./github-references";
 import { MarkdownPastePlugin } from "./markdown-paste";
 import { QuestionnaireObserver } from "./questionnaires";
+import { RepositoryLinksPlugin } from "./repository-links";
 import { ResolvedLayer } from "./resolved-layer";
 import { TableChrome } from "./table/chrome";
 import { ThreadObserver } from "./threads";
@@ -66,6 +67,7 @@ export const widgetsPlugin = realmPlugin<WidgetOptions>({
 			realm.pub(addComposerChild$, () => <ChangeObserver store={store} />);
 		}
 		realm.pub(addComposerChild$, GitHubReferencesPlugin);
+		realm.pub(addComposerChild$, RepositoryLinksPlugin);
 		realm.pub(addComposerChild$, GitHubHoverCards);
 		realm.pub(addComposerChild$, TabsPlugin);
 		realm.pub(addComposerChild$, ColumnsPlugin);

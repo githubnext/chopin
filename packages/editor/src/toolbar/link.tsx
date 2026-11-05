@@ -13,7 +13,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $isLinkNode, $toggleLink } from "@lexical/link";
 import { createDOMRange } from "@lexical/selection";
-import { LINK_PROTOCOLS } from "@chopin/dialect";
+import { LINK_PROTOCOLS, repositoryLinkUrl } from "@chopin/dialect";
 import {
 	$createRangeSelectionFromDom,
 	$findMatchingParent,
@@ -35,6 +35,7 @@ import { parseGitHubReference } from "@chopin/protocol/github-reference";
 import { GitHubCard } from "../github-card";
 import { useGitHubEntry } from "../github-hover";
 import { useGitHubReferences } from "../github-references";
+import { useRepositoryLinks } from "../repository-links";
 import { registerLinkGuard } from "./link-guard";
 import { placeSurface } from "./placement";
 import { $relativePosition, $resolveRange } from "./position";
@@ -44,6 +45,7 @@ import { checkUrl } from "./url";
 import type { LinkNode } from "@lexical/link";
 import type { GitHubReference } from "@chopin/protocol/github-reference";
 import type { GitHubReferenceStore } from "../widget-options";
+import type { LinkRepository } from "@chopin/dialect";
 import type { Binding } from "@lexical/yjs";
 import type {
 	BaseSelection,
@@ -134,9 +136,27 @@ function $linkEditing(
 	};
 }
 
-function follow(editor: LexicalEditor, key: NodeKey, url: string): void {
-	let href = editor.getElementByKey(key)?.closest("a")?.href ?? url;
-	window.open(href, "_blank", "noopener,noreferrer");
+/**
+ * Where a link opens. A repository path is the file on GitHub, which an anchor not yet drawn
+ * for it cannot say and a bare path would send to the Chopin page instead.
+ */
+export function followHref(
+	editor: LexicalEditor,
+	key: NodeKey,
+	url: string,
+	repository: LinkRepository | undefined,
+): string {
+	let file = repository && repositoryLinkUrl(url, repository);
+	return file ?? editor.getElementByKey(key)?.closest("a")?.href ?? url;
+}
+
+function follow(
+	editor: LexicalEditor,
+	key: NodeKey,
+	url: string,
+	repository: LinkRepository | undefined,
+): void {
+	window.open(followHref(editor, key, url, repository), "_blank", "noopener,noreferrer");
 }
 
 export function LinkSurface(
@@ -149,6 +169,7 @@ export function LinkSurface(
 	},
 ) {
 	let [editor] = useLexicalComposerContext();
+	let repository = useRepositoryLinks();
 	let [open, setOpen] = useState<Open>();
 	/** A link whose preview was dismissed stays quiet until the caret leaves it. */
 	let dismissed = useRef<NodeKey>(undefined);
@@ -216,7 +237,7 @@ export function LinkSurface(
 					});
 					if (!link) return false;
 					event.preventDefault();
-					follow(editor, link.key, link.url);
+					follow(editor, link.key, link.url, repository);
 					return true;
 				},
 				COMMAND_PRIORITY_LOW,
@@ -240,7 +261,7 @@ export function LinkSurface(
 			editor.registerUpdateListener(sync),
 		];
 		return () => stops.forEach(stop => stop());
-	}, [editor, disabled, edit, sync]);
+	}, [editor, disabled, edit, sync, repository]);
 
 	/*
 	 * Clicks on links.
@@ -270,7 +291,8 @@ export function LinkSurface(
 			});
 			if (event.button === 1 || event.metaKey || event.ctrlKey || !link || following) {
 				event.stopPropagation();
-				window.open(anchor.href, "_blank", "noopener,noreferrer");
+				let href = link ? followHref(editor, link.key, link.url, repository) : anchor.href;
+				window.open(href, "_blank", "noopener,noreferrer");
 				return;
 			}
 			dismissed.current = undefined;
@@ -286,7 +308,7 @@ export function LinkSurface(
 			current?.addEventListener("click", click);
 			current?.addEventListener("mouseup", middle);
 		});
-	}, [editor, following, sync]);
+	}, [editor, following, repository, sync]);
 
 	// A reader never sees the preview, including one left open from editing.
 	useEffect(() => {
@@ -552,6 +574,7 @@ function LinkPreview(
 	}, [editor, preview.key]);
 	let position = usePlacement(editor, ref, locate);
 	let store = useGitHubReferences();
+	let repository = useRepositoryLinks();
 	let reference = store ? parseGitHubReference(preview.url) : undefined;
 
 	// Without a caret to move away, a read-only preview needs its own ways out.
@@ -598,7 +621,7 @@ function LinkPreview(
 				</span>
 				<button
 					className="btn btn-sm btn-ghost shrink-0"
-					onClick={() => follow(editor, preview.key, preview.url)}
+					onClick={() => follow(editor, preview.key, preview.url, repository)}
 					title={readOnly ? "Open in a new tab" : "Open in a new tab (⌘↵)"}
 					type="button"
 				>
