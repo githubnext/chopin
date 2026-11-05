@@ -20,6 +20,7 @@ import { SidebarTrigger } from "./project-sidebar-chrome";
 import type { Session } from "@chopin/protocol";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
+import type { PlannerStatus } from "./chat/planner-status";
 import type { MachineChoice } from "./machine-choice";
 import type { TitleEdit } from "./title-edit";
 import type { WorkspacePresentation } from "./workspace-model";
@@ -41,6 +42,8 @@ type PhoneHeaderDocument = {
 	archivedAt?: string;
 	/** The person's machine choice for this document: its button opens a sheet from the bar. */
 	machine?: MachineChoice;
+	/** What is not well with the document's Planner, which the button and its sheet tell. */
+	planner?: PlannerStatus;
 	canManage: boolean;
 	/** The room is a decision's page: its menu is Copy link and Discard decision only. */
 	decision?: boolean;
@@ -138,6 +141,7 @@ export function PhoneHeaderContent(
 		onComments,
 		onEditingChange,
 		onRenamed,
+		planner,
 		lead,
 		room,
 	}: PhoneHeaderDocument,
@@ -239,7 +243,7 @@ export function PhoneHeaderContent(
 						)}
 					</div>
 				)}
-				{machine && <MachineButton choice={machine} phone />}
+				{machine && <MachineButton choice={machine} phone planner={planner} />}
 				{comments > 0 && onComments && (
 					<button
 						aria-haspopup="dialog"

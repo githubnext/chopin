@@ -16,24 +16,68 @@
 	color: var(--color-text-tertiary);
 }
 
-/* The status dot as a badge on the icon's corner, ringed in the surface behind it. */
+/*
+ * The status dot as a badge on the icon's corner, ringed in the surface behind it. The ring is the
+ * surface's own colour wherever the button sits, so a dot that is hollow can be filled with it.
+ */
 .machine-glyph-dot {
+	--machine-dot-ring: var(--color-page);
 	position: absolute;
 	right: calc(var(--spacing) * -1);
 	bottom: calc(var(--spacing) * -1);
 	box-sizing: content-box;
 	border-width: calc(var(--spacing) * 0.5);
 	border-style: solid;
-	border-color: var(--color-page);
+	border-color: var(--machine-dot-ring);
 }
 
 :is(.machine-button:hover, .machine-button[aria-expanded="true"], .app-menu-item:is(:hover:not([data-disabled]), :focus-visible), .machine-sheet-item:active:not([data-disabled]))
 	.machine-glyph-dot {
-	border-color: var(--color-hover);
+	--machine-dot-ring: var(--color-hover);
 }
 
 :is(.app-menu-item, .machine-sheet-item)[aria-checked="true"] .machine-glyph-dot {
-	border-color: var(--color-selected);
+	--machine-dot-ring: var(--color-selected);
+}
+
+/*
+ * The Planner's own state, where it is not simply attached. Away is the muted grey of an offline
+ * machine and a warning is the warning role, each replacing the machine's green. Starting is a
+ * thin petrol ring turning on the surface, so it reads as work under way and not as a state.
+ */
+.machine-glyph .machine-glyph-dot[data-planner="away"] {
+	background: var(--color-text-tertiary);
+}
+
+.machine-glyph .machine-glyph-dot[data-planner="failing"] {
+	background: var(--color-warning-graphic);
+}
+
+.machine-glyph .machine-glyph-dot[data-planner="starting"] {
+	background: var(--machine-dot-ring);
+	/* Larger than a dot, so the ring has room to read as a ring. */
+	width: calc(var(--spacing) * 3);
+	height: calc(var(--spacing) * 3);
+	right: calc(var(--spacing) * -1.5);
+	bottom: calc(var(--spacing) * -1.5);
+}
+
+.machine-glyph .machine-glyph-dot[data-planner="starting"]::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-width: calc(var(--spacing) * 0.5);
+	border-style: solid;
+	border-color: var(--color-selected-strong);
+	border-top-color: var(--color-brand);
+	border-radius: var(--radius-full);
+}
+
+/* Reduced motion keeps the still ring: its tooltip and name say it is starting. */
+@media (prefers-reduced-motion: no-preference) {
+	.machine-glyph .machine-glyph-dot[data-planner="starting"]::after {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
 }
 
 /* The icon alone; its accessible name and tooltip say which machine. */
@@ -174,4 +218,67 @@
 	content: "";
 	position: absolute;
 	inset: min(0px, calc((var(--composer-pill-control) - var(--control-target-coarse)) / 2));
+}
+
+/*
+ * What the Planner is doing, at the top of the menu: a title where it cannot start, then the
+ * reason, what has been tried in quiet ink, and where to fix it. Inset as the menu's rows are, and
+ * set apart from them by the menu's own divider.
+ */
+.machine-planner {
+	display: grid;
+	gap: calc(var(--spacing) * 1.5);
+	padding: calc(var(--spacing) * 2) var(--menu-item-padding-inline-normal);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+	color: var(--color-text-secondary);
+	text-wrap: pretty;
+}
+
+.machine-planner p {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.machine-planner-title {
+	display: flex;
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 1.5);
+	color: var(--color-text-primary);
+	font-weight: 600;
+}
+
+.machine-planner-title svg {
+	--color-icon: var(--color-warning-icon);
+}
+
+.machine-planner-detail {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.machine-planner-link {
+	justify-self: start;
+	color: var(--color-brand-ink);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+/* On a phone's sheet, the rows' own inset and size. */
+.machine-sheet-group .machine-planner {
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+}
+
+.machine-sheet-group .machine-planner-detail {
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.machine-sheet-group .machine-planner-link {
+	min-height: var(--control-target-coarse);
+	display: inline-flex;
+	align-items: center;
 }

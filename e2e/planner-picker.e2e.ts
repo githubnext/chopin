@@ -19,10 +19,13 @@ import {
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { chatInput, fillChat } from "./chat-input";
+import { address, expectHealthy, machineButton, NONE, strip } from "./planner-status";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { RELEASE } from "./release";
 import { HOST, ROOT } from "./servers";
+
+import { expectNoHorizontalOverflow } from "./responsive";
 
 import type { Browser, Page } from "@playwright/test";
 
@@ -379,10 +382,6 @@ async function favor(page: Page, room: string, label: string) {
 	expect(response.status()).toBe(200);
 }
 
-function plannerStatus(page: Page) {
-	return page.getByRole("status").filter({ hasText: /^Planner:/ });
-}
-
 test("a document on Default machine runs its Planner on its creator's favorite machine, and moves it when that one disconnects", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
@@ -394,15 +393,19 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	await page.reload();
 	await ready(page);
 
-	// Nobody chose a machine: the favorite is asked to start the Planner, and Chat says so.
-	let status = plannerStatus(page);
-	await expect(status).toHaveText("Planner: starting on studio…");
+	// Nobody chose a machine: the favorite is asked to start the Planner, and its button says so.
+	let status = machineButton(page);
+	await expect(status).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	await expect(status).toHaveAttribute("data-planner", "starting");
+	await shoot(page, "planner-starting-desktop");
 	expect(await studio.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	let first = await studio.backend(room);
-	await expect(status).toHaveText("Planner: mona attached");
+	// Attached, it is nothing to tell: the button is the machine's alone, with its own dot.
+	await expectHealthy(status);
+	await expect(status.locator(".machine-glyph-dot")).toHaveAttribute("data-state", "connected");
 	await expect(page.locator(".chat-composer").getByRole("button", { name: /^Runs on/ }))
 		.toHaveCount(0);
 	await expect(page.getByRole("button", { name: /^Runs on/ })).toHaveAccessibleName(
@@ -415,13 +418,13 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 
 	// The favorite disconnects: the Planner moves to the other machine without anyone choosing it.
 	await studio.disconnect();
-	await expect(status).toHaveText("Planner: starting on desk…");
+	await expect(status).toHaveAccessibleName("Runs on desk. Connecting to desk");
 	expect(await desk.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	let second = await desk.backend(room);
-	await expect(status).toHaveText("Planner: mona attached");
+	await expectHealthy(status);
 	await expect(page.getByRole("button", { name: /^Runs on/ })).toHaveAccessibleName(
 		"Runs on desk",
 	);
@@ -440,7 +443,9 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	let studio = await machine(page, "studio", true);
 	await page.reload();
 	await ready(page);
-	await expect(plannerStatus(page)).toHaveText("Planner: starting on studio…");
+	await expect(machineButton(page)).toHaveAccessibleName(
+		"Runs on studio. Connecting to studio",
+	);
 
 	// Sent before the Planner attaches, the message waits for it rather than being refused.
 	let input = chatInput(page);
@@ -448,7 +453,7 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	await input.press("Enter");
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let link = await studio.backend(room);
-	await expect(plannerStatus(page)).toHaveText("Planner: mona attached");
+	await expectHealthy(machineButton(page));
 	await expect(page.getByText("outline the plan").first()).toBeVisible();
 	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
 	await link.detach();
@@ -468,7 +473,7 @@ function refused(document: string, attempts: number) {
 	};
 }
 
-test("a Planner its machine keeps failing to start says why in Chat to everyone in the document, until it attaches", async ({ browser }) => {
+test("a Planner its machine keeps failing to start says why on its machine button, and warns everyone at the composer, until it attaches", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP);
@@ -476,48 +481,82 @@ test("a Planner its machine keeps failing to start says why in Chat to everyone 
 	let studio = await machine(page, "studio", true);
 	await page.reload();
 	await ready(page);
-	// A teammate who has the document open sees the same line, but not whose machine it is by name.
+	// A teammate who has the document open has no machine of their own, so no button; they hear of
+	// a failure at the composer, and not by name whose machine it is.
 	let teammate = await open(browser, "hubot", room, DESKTOP);
-	let status = plannerStatus(page);
-	let seen = plannerStatus(teammate);
-	await expect(status).toHaveText("Planner: starting on studio…");
-	await expect(seen).toHaveText("Planner: starting on @mona’s machine…");
+	let button = machineButton(page);
+	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	await expect(machineButton(teammate)).toHaveCount(0);
 	expect((await studio.poll([])).planners).toHaveLength(1);
+	// Starting is not a warning: the composer is left alone, and says it only when addressed.
+	await expect(strip(page)).toHaveCount(0);
+	await address(teammate);
+	await expect(strip(teammate)).toHaveText("Connecting to @mona’s machine");
+	await shoot(teammate, "planner-starting-teammate-desktop", teammate.locator(".chat-composer"));
 
 	// One launch that exited is a transient failure: still just starting.
 	expect((await studio.reportFailure(refused(room, 1))).status).toBe(200);
-	await expect(status).toHaveText("Planner: starting on studio…");
+	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	await expect(strip(page)).toHaveCount(0);
 
 	// The second in a row says why, to the machine's owner and to the teammate.
 	expect((await studio.reportFailure(refused(room, 2))).status).toBe(200);
-	await expect(status).toContainText("Planner: can’t start on studio");
-	await expect(status).toContainText("unsafe-checkout: ~/src/score");
-	await expect(status).toContainText("Tried 2 times in a row, last at");
-	await expect(status).toContainText("Still trying.");
-	await expect(seen).toContainText("Planner: can’t start on @mona’s machine");
-	await expect(seen).toContainText("unsafe-checkout:");
-	await expect(status).toHaveAttribute("data-planner-state", "starting");
-	await shoot(page, "planner-failing-desktop", page.locator(".chat-composer"));
-	await shoot(teammate, "planner-failing-teammate", teammate.locator(".chat-composer"));
+	await expect(button).toHaveAccessibleName("Runs on studio. Can’t connect to studio.");
+	await expect(button).toHaveAttribute("data-planner", "failing");
+	await expect(button.locator(".machine-glyph-dot")).toHaveAttribute("data-planner", "failing");
+	await expect(button).toHaveAccessibleDescription(/unsafe-checkout: ~\/src\/score/);
+	await expect(button).toHaveAccessibleDescription(/Tried 2 times, last at .+\. Still trying\./);
+	// The composer's top edge warns, for anyone, whatever they are typing: the words and where to fix
+	// it. The reason is for a screen reader there, and in full on the machine button's menu.
+	let warning = strip(page);
+	await expect(warning).toHaveText(/^Can’t connect to studio\./);
+	await expect(warning).toHaveAttribute("role", "alert");
+	await expect(warning.getByRole("link", { name: "How to fix" })).toHaveAttribute(
+		"href",
+		/docs\/chopin-cli\.md#cant-connect-to-a-machine$/,
+	);
+	await expect(warning).toContainText("unsafe-checkout: ~/src/score");
+	let seen = strip(teammate);
+	await expect(seen).toHaveAttribute("role", "alert");
+	await expect(seen).toContainText("Can’t connect to @mona’s machine.");
+	await expect(seen.getByRole("link", { name: "How to fix" })).toBeVisible();
+	await shoot(page, "planner-failing-desktop");
+	await shoot(teammate, "planner-failing-teammate-desktop", teammate.locator(".chat-composer"));
+
+	// The machine button opens onto the whole story, above the machines, with the same link.
+	await button.click();
+	let menu = page.getByRole("menu", { name: "Runs on", exact: true });
+	let note = menu.getByRole("group", { name: "Planner", exact: true });
+	await expect(note).toContainText("Can’t connect to studio");
+	await expect(note).toContainText("unsafe-checkout: ~/src/score");
+	await expect(note).toContainText("Tried 2 times, last at");
+	await expect(note).toContainText("Still trying.");
+	await expect(note.getByRole("menuitem", { name: "How to fix" })).toBeVisible();
+	await shoot(page, "planner-failing-menu-desktop");
+	await page.keyboard.press("Escape");
+	await expect(menu).toBeHidden();
+	await expect(button).toBeFocused();
 
 	// More failures update the count; @chopin sent meanwhile is told why, not to try in a moment.
 	await studio.reportFailure(refused(room, 3));
-	await expect(status).toContainText("Tried 3 times in a row");
+	await expect(button).toHaveAccessibleDescription(/Tried 3 times/);
 	let input = chatInput(teammate);
 	await fillChat(input, "@chopin outline the plan");
 	await input.press("Enter");
 	await expect(teammate.getByText(/Planner can't start on @mona's machine: unsafe-checkout/))
 		.toBeVisible({ timeout: 45_000 });
 
-	// It attaches at last, and nothing about the failure is left.
+	// It attaches at last, and nothing about the failure is left, quietly: no word, no mark.
 	let link = await studio.backend(room);
-	await expect(status).toHaveText("Planner: mona attached");
-	await expect(seen).toHaveText("Planner: mona attached");
+	await expectHealthy(button);
+	await expect(strip(page)).toHaveCount(0);
+	// The teammate's refused @chopin message keeps its own notice; the warning is what goes.
+	await expect(strip(teammate).filter({ hasText: "Can’t connect" })).toHaveCount(0);
 	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
 	await link.detach();
 });
 
-test("on a phone, a Planner its machine keeps failing to start says why under the composer", async ({ browser }) => {
+test("on a phone, a Planner its machine keeps failing to start says why at the composer and on the machine button", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
@@ -528,10 +567,25 @@ test("on a phone, a Planner its machine keeps failing to start says why under th
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: "Chat", exact: true }).tap();
 	expect((await studio.poll([])).planners).toHaveLength(1);
+	let button = machineButton(page);
+	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	await expect(button).toBeInViewport();
+	await shoot(page, "planner-starting-phone");
+
 	await studio.reportFailure(refused(room, 2));
-	await expect(plannerStatus(page)).toContainText("Planner: can’t start on studio");
-	await expect(plannerStatus(page)).toBeInViewport();
+	await expect(button).toHaveAttribute("data-planner", "failing");
+	await expect(strip(page)).toContainText("Can’t connect to studio.");
+	await expect(strip(page)).toBeInViewport();
+	await expectNoHorizontalOverflow(page);
 	await shoot(page, "planner-failing-phone");
+
+	// Tapping the button opens its sheet, which tells the whole story above the machines.
+	await button.tap();
+	let note = page.getByRole("group", { name: "Planner", exact: true });
+	await expect(note).toContainText("unsafe-checkout: ~/src/score");
+	await expect(note).toBeInViewport();
+	await expect(note.getByRole("menuitem", { name: "How to fix" })).toBeVisible();
+	await shoot(page, "planner-failing-sheet-phone");
 });
 
 test("a teammate's document with no machine of its own gets its Planner on a machine shared with teammates", async ({ browser }) => {
@@ -544,8 +598,11 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await createdBy(room, "hubot");
 	await page.reload();
 	await ready(page);
-	let status = plannerStatus(page);
-	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.");
+	// Nothing says so until a message is addressed to Chopin, the one time it matters.
+	let status = strip(page);
+	await expect(status).toHaveCount(0);
+	await address(page);
+	await expect(status).toHaveText(NONE);
 
 	// mona shares studio from the Machines table; hubot's document asks it at once.
 	await owner.goto(`${ORIGIN}/machines`);
@@ -553,13 +610,13 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "true");
-	await expect(status).toHaveText("Planner: starting on @mona’s machine…");
+	await expect(status).toHaveText("Connecting to @mona’s machine");
 	expect(await studio.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	let link = await studio.backend(room);
-	await expect(status).toHaveText("Planner: mona attached");
+	await expect(status).toHaveCount(0);
 	await shoot(page, "teammate-planner-attached", page.locator(".chat-composer"));
 
 	// hubot's @chopin reaches the Planner on mona's machine.
@@ -572,7 +629,8 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	// Sharing off: the Planner stops, and hubot's document has none again.
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
-	await expect(status).toHaveText(/^Planner: (none attached|mona detached)/);
+	await address(page);
+	await expect(status).toHaveText(/^(No Planner is attached|@mona’s Planner detached)/);
 	await link.detach().catch(() => {});
 });
 
@@ -589,7 +647,7 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 	await expect(sharing).toHaveAttribute("aria-checked", "true");
 	await page.reload();
 	await ready(page);
-	let status = plannerStatus(page);
+	let status = strip(page);
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let replying = Promise.withResolvers<void>();
 	let started = Promise.withResolvers<void>();
@@ -599,7 +657,8 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 			await replying.promise;
 		},
 	});
-	await expect(status).toHaveText("Planner: mona attached");
+	await address(page);
+	await expect(status).toHaveCount(0);
 
 	// hubot's reply is under way when mona stops sharing studio: it keeps its Planner meanwhile.
 	let input = chatInput(page);
@@ -612,14 +671,13 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 		timeout: 15_000,
 	});
 	await expect(sharing).toHaveAccessibleDescription("Finishing 1 teammate document");
-	await expect(status).toHaveText("Planner: mona attached");
+	await address(page);
+	await expect(status).toHaveCount(0);
 	await shoot(owner, "machines-finishing");
 
 	// The reply ends: the next sweep stops the Planner, and studio no longer says it is finishing.
 	replying.resolve();
-	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.", {
-		timeout: 30_000,
-	});
+	await expect(status).toHaveText(NONE, { timeout: 30_000 });
 	await expect(owner.getByText(/^Finishing/)).toHaveCount(0, { timeout: 15_000 });
 	await link.detach().catch(() => {});
 });
@@ -822,14 +880,16 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 	// quinn chooses it: Build box is asked to run the Planner, and the button says where.
 	await item.click();
 	await expect(menu).toBeHidden();
-	await expect(runsOnButton(editor)).toHaveAccessibleName("Runs on Build box");
+	await expect(runsOnButton(editor)).toHaveAccessibleName(/^Runs on Build box/);
 	let asked = await box.poll([]);
 	expect(asked).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	// The machine is one quinn can see in their own menu, so Chat names it rather than its owner.
-	await expect(plannerStatus(editor)).toHaveText("Planner: starting on Build box…");
+	await expect(machineButton(editor)).toHaveAccessibleName(
+		"Runs on Build box. Connecting to Build box",
+	);
 	// Quinn's builds run there too: Build plan is ready, not greyed out.
 	let plan = editor.getByRole("button", { name: "Build plan", exact: true });
 	await expect(plan).toBeVisible();
@@ -839,7 +899,7 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 	// drew, who created the document, chooses their own machine: that decides, so Build box stops
 	// and quinn's choice goes.
 	await (await runOn(creator)).getByRole("menuitemradio", { name: /^Laptop/ }).click();
-	await expect(runsOnButton(creator)).toHaveAccessibleName("Runs on Laptop");
+	await expect(runsOnButton(creator)).toHaveAccessibleName(/^Runs on Laptop/);
 	expect(await box.poll([room])).toEqual({
 		kind: "planners",
 		planners: [],
@@ -848,7 +908,7 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 	expect(await laptop.poll([])).toMatchObject({ kind: "planners" });
 	await editor.reload();
 	await ready(editor);
-	await expect(runsOnButton(editor)).toHaveAccessibleName("Runs on: no machine connected");
+	await expect(runsOnButton(editor)).toHaveAccessibleName(/^Runs on: no machine connected/);
 
 	// Offline, its row stays but can't be chosen.
 	await box.disconnect();
@@ -908,7 +968,7 @@ test("a shared machine with no checkouts serves every repository its owner can p
 	await expect(item).toContainText("Connected");
 	await item.click();
 	await expect(menu).toBeHidden();
-	await expect(runsOnButton(page)).toHaveAccessibleName("Runs on Build box");
+	await expect(runsOnButton(page)).toHaveAccessibleName(/^Runs on Build box/);
 
 	// Build plan is ready, and pressing it queues the build on casey's machine, for tessa.
 	let plan = page.getByRole("button", { name: "Build plan", exact: true });
@@ -953,7 +1013,7 @@ test("on a phone, the machine sheet lists a teammate's shared machine plainly am
 	await group.getByRole("menuitemradio", { name: /^Build box/ }).tap();
 	await expect(sheet).toBeHidden();
 	await expect(page.locator(".phone-top-bar").getByRole("button", { name: /^Runs on/ }))
-		.toHaveAccessibleName("Runs on Build box");
+		.toHaveAccessibleName(/^Runs on Build box/);
 });
 
 test("the sidebar counts and lists a teammate's shared machine with the person's own, and chooses it as their default", async ({ browser }) => {
@@ -1015,7 +1075,7 @@ test("the sidebar counts and lists a teammate's shared machine with the person's
 	await shoot(page, "machines-table-shared-and-own");
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
-	await expect(runsOnButton(page)).toHaveAccessibleName("Runs on Build box", live);
+	await expect(runsOnButton(page)).toHaveAccessibleName(/^Runs on Build box/, live);
 
 	// The document's own menu lists the same machines the same way, Build box the one in use.
 	let runs = await runOn(page);
@@ -1127,7 +1187,8 @@ test("with no machine of their own, a person still opens the Machines menu to a 
 			name: /^Desk/,
 		}),
 	).toHaveCount(1);
-	await expect(runs.getByText("casey")).toHaveCount(0);
+	// The machine rows do not name its owner; the note above them may, as it names a login.
+	await expect(runs.getByRole("menuitemradio").getByText("casey")).toHaveCount(0);
 	await page.keyboard.press("Escape");
 
 	// A machine of her own with the same name: the teammate's says whose it is, hers does not.

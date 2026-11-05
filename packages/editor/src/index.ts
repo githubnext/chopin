@@ -4,7 +4,15 @@ export { CardMetaStore, useCardMeta } from "./card-meta";
 export { ChopinMark } from "./chopin-mark";
 export { collaborationPlugin } from "./collaboration";
 export type { CollaborationOptions } from "./collaboration";
-export { CONNECTION_GRACE, CONNECTION_STALL, useConnectionNotice } from "./connection-notice";
+export {
+	CONNECTION_GRACE,
+	CONNECTION_STALL,
+	isOffline,
+	offersRetry,
+	offlineAnnouncement,
+	RETRY_AFTER_FAILURES,
+	useConnectionNotice,
+} from "./connection-notice";
 export type { ConnectionNotice } from "./connection-notice";
 export { ContentSwapLayer } from "./content-swap";
 export type { ContentSwapLayerProps, ContentSwapMotion } from "./content-swap";

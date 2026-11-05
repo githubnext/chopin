@@ -14,3 +14,20 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 }
+
+/* The top of a document's content, under the page notice a lost connection brings. */
+.design-audit-page-notice {
+	display: grid;
+	gap: calc(var(--spacing) * 2);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 3);
+}
+
+.design-audit-skeleton-line {
+	height: calc(var(--spacing) * 2.5);
+	border-radius: var(--radius-sm);
+	background: var(--color-selected);
+}
+
+.design-audit-skeleton-line:last-child {
+	width: 60%;
+}

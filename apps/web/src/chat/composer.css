@@ -123,6 +123,30 @@
 	background: var(--color-danger-surface);
 	color: var(--color-danger-text);
 }
+/* Something to act on, in the warning roles; the link keeps the one accent. */
+.chat-composer .composer-notice[data-warning] {
+	background: var(--color-warning-surface);
+	color: var(--color-warning-text);
+}
+.chat-composer .composer-notice-icon {
+	--color-icon: var(--color-warning-icon);
+}
+.chat-composer .composer-notice-link {
+	color: var(--color-brand-ink);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	white-space: nowrap;
+}
+/*
+ * A strip that eases open and shut carries the tuck under the composer itself, so the collapsing
+ * track holds the whole strip and the composer rises over its last half rem as before.
+ */
+.chat-composer .composer-notice-slot {
+	margin-bottom: -0.5rem;
+}
+.chat-composer .composer-notice-slot .composer-notice {
+	margin-bottom: 0;
+}
 .chat-composer .composer-unavailable {
 	display: flex;
 	flex-direction: column;
@@ -231,129 +255,57 @@
 }
 
 /*
- * Who holds the remote Planner: one quiet line under the composer, aligned with
- * the draft's text. The words name the state; the dot only repeats it.
+ * The remote Planner's status, in the row directly under the composer. A healthy Planner has no
+ * row: it is a collapsed grid track until there is something to say, and it eases open and shut
+ * through the shared collapse motion. Quiet states are one muted line in the compact text role;
+ * a Planner that cannot start is a warning notice as wide as the composer, so what the person
+ * must act on is the only thing in colour. Petrol is only the working spinner and the link.
  */
-.chat-composer .composer-planner {
+.chat-composer .planner-status-body {
+	padding-top: calc(var(--spacing) * 2);
+}
+.chat-composer .planner-status-line {
 	display: flex;
-	align-items: center;
-	gap: 0.375rem;
-	padding: 0.375rem 0.75rem 0;
-	color: var(--color-text-secondary);
+	align-items: flex-start;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline: var(--spacing);
+	color: var(--color-text-tertiary);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 }
-.chat-composer .composer-planner-label {
+.chat-composer .planner-status-line:empty {
+	display: none;
+}
+.chat-composer .planner-status-text {
 	min-width: 0;
 	overflow-wrap: anywhere;
 }
-.chat-composer .composer-planner-dot {
-	flex: none;
-	width: 0.375rem;
-	height: 0.375rem;
-	border-radius: var(--radius-full);
-	background: var(--color-success);
+.chat-composer .planner-status-icon {
+	--color-icon: var(--color-neutral-icon);
 }
-.chat-composer .composer-planner[data-planner-state="held"] .composer-planner-dot,
-.chat-composer .composer-planner[data-planner-state="disconnected"] .composer-planner-dot,
-.chat-composer .composer-planner[data-planner-state="starting"] .composer-planner-dot {
-	background: var(--color-warning);
-}
-.chat-composer .composer-planner[data-planner-state="none"] {
-	color: var(--color-text-tertiary);
-}
-/* Hollow: nothing holds the Planner. */
-.chat-composer .composer-planner[data-planner-state="none"] .composer-planner-dot {
-	border: var(--edge-width) solid currentColor;
-	background: transparent;
-}
-
-/*
- * A disconnected Planner says what it kept after its name, in quieter ink, and may wrap, so the
- * dot lines up with the first line.
- */
-.chat-composer .composer-planner[data-planner-state="disconnected"] .composer-planner-detail {
-	color: var(--color-text-tertiary);
-}
-
-/*
- * A machine whose Planner backend keeps failing to start: still the starting state, so the dot and
- * the line sit where they did, but the dot is red and the line has three: what is wrong, in the
- * same colour, then why, then how often it was tried in the quietest ink. They wrap, so the dot
- * lines up with the first.
- */
-.chat-composer .composer-planner[data-planner-failing],
-.chat-composer .composer-planner[data-planner-state="disconnected"] {
-	align-items: flex-start;
-}
-.chat-composer .composer-planner[data-planner-failing] .composer-planner-dot,
-.chat-composer .composer-planner[data-planner-state="disconnected"] .composer-planner-dot {
-	margin-block-start: calc((1lh - 0.375rem) / 2);
-}
-.chat-composer .composer-planner[data-planner-failing] .composer-planner-dot {
-	background: var(--color-danger-graphic);
-}
-.chat-composer .composer-planner-lead,
-.chat-composer .composer-planner-reason,
-.chat-composer .composer-planner-meta {
-	display: block;
-}
-.chat-composer .composer-planner-lead {
-	color: var(--color-danger-text);
-}
-.chat-composer .composer-planner-meta {
-	color: var(--color-text-tertiary);
-}
-
-/* Inside the footer row, so losing the connection moves nothing above it. */
-.chat-composer .composer-connection {
+.chat-composer .planner-status-spinner {
 	display: inline-flex;
-	min-width: 0;
+	width: 0.875rem;
+	height: 0.875rem;
+	color: var(--color-brand);
 }
-.chat-composer .composer-connection-group {
-	display: contents;
+.chat-composer .planner-status-spinner [data-progress-track] {
+	stroke: var(--color-selected-strong);
 }
-.chat-composer .composer-connection-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.375rem;
-	padding-inline: 0.25rem;
-	color: var(--color-text-secondary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	white-space: nowrap;
+.chat-composer .planner-status-spinner [data-progress-arc] {
+	stroke: var(--color-brand);
 }
-.chat-composer .composer-connection-label::before {
-	content: "";
-	width: 0.375rem;
-	height: 0.375rem;
-	flex: none;
-	border-radius: var(--radius-full);
-	background: var(--color-warning);
-}
-/* The same words, tone and dot as the document's own status in its header. */
-.chat-composer .composer-connection-label[data-offline] {
-	color: var(--color-destructive-ink);
-}
-.chat-composer .composer-connection-label[data-offline]::before {
-	display: none;
-}
-@keyframes composer-connection-enter {
-	from {
-		opacity: 0;
-	}
-}
+/* Reduced motion keeps the still ring; its words say it is working. */
 @media (prefers-reduced-motion: no-preference) {
-	.chat-composer .composer-connection-label {
-		animation: composer-connection-enter var(--duration-fast) var(--ease-out);
+	.chat-composer .planner-status-spinner {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
 	}
 }
-/*
- * Side by side with the document, its header already offers Reconnect, and
- * one state gets one action. Without it in view, as on a phone, Chat does.
- */
-[data-workspace-mode="split"] .chat-composer .composer-reconnect {
-	display: none;
+.chat-composer .planner-status-link {
+	color: var(--color-brand-ink);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	white-space: nowrap;
 }
 
 /*
@@ -489,23 +441,8 @@
 	.chat-composer .composer-chopin-chip:active:not(:disabled) {
 		color: var(--color-brand-active);
 	}
-	/* Connection state becomes a slim first row inside the pill. */
-	.chat-composer .composer-connection-group:has(.composer-connection-label) {
-		display: flex;
-		order: 0;
-		flex-basis: 100%;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		padding: 0.125rem 0.25rem 0 0.5rem;
-	}
-	.chat-composer
-		.composer-connection-group:not(:has(.composer-connection-label))
-		.composer-connection {
-		position: absolute;
-	}
-	.chat-composer .composer-connection-group .composer-reconnect {
-		min-height: var(--control-height-compact);
+	.chat-composer .composer-notice-slot {
+		margin-bottom: 0;
 	}
 	/* Status above the pill is one quiet line rather than a tab behind it. */
 	.chat-composer .composer-notice {
@@ -520,6 +457,11 @@
 	.chat-composer .composer-notice[data-error] {
 		margin-bottom: 0.375rem;
 		background: var(--color-danger-surface);
+	}
+	/* Something to act on keeps its warning surface, as a failed send keeps its danger one. */
+	.chat-composer .composer-notice[data-warning] {
+		margin-bottom: 0.375rem;
+		background: var(--color-warning-surface);
 	}
 	.chat-composer .composer-unavailable {
 		flex-basis: 100%;
@@ -555,6 +497,6 @@
 .chat-composer .composer-actions {
 	min-width: 0;
 }
-.chat-composer :is(.composer-left, .composer-connection, .composer-reconnect, .send-action) {
+.chat-composer :is(.composer-left, .send-action) {
 	flex: none;
 }

@@ -46,8 +46,17 @@ type Pending = {
 
 type WireTarget = { channelId: string } | { sidebar: true };
 
+/** A connection that was lost and is being re-established, and how many attempts have failed. */
+export type Outage = { failures: number };
+
 export type WireOptions = WireTarget & {
 	onStatus?: (status: Status, reason?: string) => void;
+	/**
+	 * Told when an outage begins, each time an attempt in it fails, and, with `undefined`, when the
+	 * connection opens again. Automatic attempts and a person's both count, and neither a manual
+	 * reconnect nor the network coming back resets the count: only a connection that opens does.
+	 */
+	onOutage?: (outage: Outage | undefined) => void;
 	onAuthenticationRequired?: () => void;
 	onDeleted?: () => void;
 };
@@ -88,6 +97,8 @@ export class Wire {
 	#listeners = new Map<string, Set<Listener>>();
 	#pending = new Map<string, Pending>();
 	#attempts = 0;
+	/** Attempts that ended without opening since the last connection did. */
+	#failures = 0;
 	#attemptedAt = 0;
 	/** When the current outage began, or undefined while connected. */
 	#lostAt: number | undefined;
@@ -196,11 +207,16 @@ export class Wire {
 		let socket = new WebSocket(endpoint(this.#options));
 		this.#socket = socket;
 
+		let opened = false;
 		socket.addEventListener("open", () => {
 			if (this.#socket !== socket) return;
+			opened = true;
+			let recovered = this.#lostAt !== undefined;
 			this.#everConnected = true;
 			this.#attempts = 0;
+			this.#failures = 0;
 			this.#lostAt = undefined;
+			if (recovered) this.#options.onOutage?.(undefined);
 			this.#set("connected");
 		});
 
@@ -219,6 +235,8 @@ export class Wire {
 				return;
 			}
 			this.#lostAt ??= Date.now();
+			if (!opened) this.#failures++;
+			this.#options.onOutage?.({ failures: this.#failures });
 			this.#abandon("connection lost");
 			void this.#retry();
 		});

@@ -1,0 +1,20 @@
+/* Room for the notice's own focus ring, which the collapsing content would otherwise clip. */
+.offline-notice-inset {
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+}
+
+.offline-notice {
+	flex-shrink: 0;
+}
+
+/*
+ * On a phone the top bar floats over every pane, and each pane's scroller is padded to start below
+ * it. The notice floats just under the bar in the same way, as the document status row does, so it
+ * is never hidden by it and the scroller's own inset is not doubled.
+ */
+.workspace-root[data-workspace-phone] .offline-notice {
+	position: absolute;
+	z-index: 3;
+	inset-inline: 0;
+	inset-block-start: var(--phone-top-chrome);
+}

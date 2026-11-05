@@ -106,10 +106,15 @@ export function offlineChoice(state: MachineChoiceState | undefined): string | u
 	return chosen && !chosen.connected ? `${chosen.label} is offline` : undefined;
 }
 
-/** The person's own machine that is starting the document's Planner, by name, when one is. */
-export function plannerStartingOn(state: MachineChoiceState | undefined): string | undefined {
+/**
+ * The machine the document's Planner is starting on, or was running on when it dropped, by name,
+ * when it is one the person can see. Another account's machine is not named here.
+ */
+export function plannerRunsOn(state: MachineChoiceState | undefined): string | undefined {
 	let planner = state?.planner;
-	if (planner?.state !== "starting" || !planner.machine) return undefined;
+	if (!planner?.machine || (planner.state !== "starting" && planner.state !== "disconnected")) {
+		return undefined;
+	}
 	return state?.machines.find(machine => machine.id === planner.machine)?.label;
 }
 

@@ -1,5 +1,5 @@
 /**
- * The Chat composer's markup: notice, field, footer and Planner attachment.
+ * The Chat composer's markup: notice, field, footer and Planner status.
  *
  * Presentational only. `Chat` owns the draft, pickers, key routing and the wire, and
  * passes what to show; the design audit renders the same component in each live state.
@@ -10,18 +10,29 @@ import type { ReactNode, Ref } from "react";
 
 import { ChopinMark, SendAction } from "@chopin/editor";
 import { usePhone } from "@chopin/editor/pointer";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 import { DraftInput } from "./draft-input";
+import { motionContract } from "../motion-contract";
 import { ModeSwitch } from "./mode-switch";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
 import "./composer.css";
 
+const MOTION = motionContract("collapse");
+
 export type ComposerNotice = {
-	/** An error is a failed send: it alerts, and marks the field and draft invalid. */
-	tone: "error" | "info";
+	/**
+	 * An error is a failed send: it alerts, and marks the field and draft invalid. A warning is
+	 * something to act on, such as a Planner that cannot start: it alerts once, in the warning roles.
+	 */
+	tone: "error" | "info" | "warning";
 	text: string;
+	/** For a screen reader only: what the strip's words do not draw. */
+	detail?: string;
+	/** A link in the strip, in the accent, for where to go about it. */
+	link?: { label: string; href: string };
 	action?: { label: string; onClick: () => void; disabled?: boolean };
 };
 
@@ -43,13 +54,10 @@ export type ChatComposerProps = {
 	sending: boolean;
 	sendDisabled: boolean;
 	onSubmit: () => void;
-	connectionLabel?: string;
-	/** Present when the composer, not the document header, offers Reconnect. */
-	onReconnect?: () => void;
 	run?: { action: "stop" | "resume"; disabled: boolean; onClick: () => void };
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
-	/** The remote Planner attachment line beneath the composer. */
+	/** The remote Planner's status, beneath the composer. */
 	attachment?: ReactNode;
 	input: Omit<
 		DraftInputProps,
@@ -79,8 +87,6 @@ export function ChatComposer(
 		sending,
 		sendDisabled,
 		onSubmit,
-		connectionLabel,
-		onReconnect,
 		run,
 		pickers,
 		attachment,
@@ -89,10 +95,72 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
-	let connectionId = useId();
 	let error = notice?.tone === "error";
 	let phone = usePhone();
 	let chopin = !!mode?.chopin;
+	// A failed send is shown at once; any other strip eases open and shut, so it does not jump
+	// what is above it, and keeps its words while it fades.
+	let strip = useTransitionPresence(
+		notice && notice.tone !== "error" ? notice : undefined,
+		MOTION.closeDuration,
+		false,
+	);
+	let shown = error ? notice : strip.value;
+	let warning = shown?.tone === "warning";
+	let alerting = shown?.tone === "error" || warning;
+	let closing = strip.phase === "closing";
+	let stripBody = shown && (
+		<div
+			className={shown.tone === "error" ? "composer-notice motion-feedback" : "composer-notice"}
+			data-motion-feedback={shown.tone === "error" ? "alert" : undefined}
+			role={alerting ? "alert" : "status"}
+			data-error={shown.tone === "error" || undefined}
+			data-warning={warning || undefined}
+			id={cueId}
+		>
+			{shown.tone === "error"
+				? <WarningIcon className="icon-danger icon-first-line" size={16} />
+				: warning
+				? <WarningIcon className="composer-notice-icon icon-first-line" size={16} />
+				: <InfoIcon className="icon-first-line" size={16} />}
+			<span>
+				{shown.text}
+				{shown.detail && <span className="sr-only">{` ${shown.detail}`}</span>}
+				{shown.link && (
+					<>
+						{" "}
+						<a
+							className="composer-notice-link"
+							href={shown.link.href}
+							rel="noreferrer"
+							target="_blank"
+						>
+							{shown.link.label}
+						</a>
+					</>
+				)}
+			</span>
+			{shown.action && (shown.tone === "error"
+				? (
+					<button
+						className="btn btn-sm btn-outline-danger"
+						disabled={shown.action.disabled}
+						onClick={shown.action.onClick}
+					>
+						{shown.action.label}
+					</button>
+				)
+				: (
+					<button
+						className="btn btn-sm btn-ghost"
+						onClick={shown.action.onClick}
+						type="button"
+					>
+						{shown.action.label}
+					</button>
+				))}
+		</div>
+	);
 	return (
 		<div
 			ref={rootRef}
@@ -104,39 +172,17 @@ export function ChatComposer(
 					Type # to reference a document.
 				</p>
 			)}
-			{!unavailable && notice && (
-				<div
-					className={error ? "composer-notice motion-feedback" : "composer-notice"}
-					data-motion-feedback={error ? "alert" : undefined}
-					role={error ? "alert" : "status"}
-					data-error={error || undefined}
-					id={cueId}
-				>
-					{error
-						? <WarningIcon className="icon-danger icon-first-line" size={16} />
-						: <InfoIcon className="icon-first-line" size={16} />}
-					<span>{notice.text}</span>
-					{notice.action && (error
-						? (
-							<button
-								className="btn btn-sm btn-outline-danger"
-								disabled={notice.action.disabled}
-								onClick={notice.action.onClick}
-							>
-								{notice.action.label}
-							</button>
-						)
-						: (
-							<button
-								className="btn btn-sm btn-ghost"
-								onClick={notice.action.onClick}
-								type="button"
-							>
-								{notice.action.label}
-							</button>
-						))}
-				</div>
-			)}
+			{!unavailable && stripBody && (error
+				? stripBody
+				: (
+					<div
+						aria-hidden={closing || undefined}
+						className={`composer-notice-slot ${MOTION.className} ${strip.className}`}
+						inert={closing}
+					>
+						<div className={MOTION.contentClassName}>{stripBody}</div>
+					</div>
+				))}
 			<div
 				aria-busy={sending}
 				className="composer-surface field"
@@ -195,7 +241,6 @@ export function ChatComposer(
 								aria-describedby={[
 									references ? instructionsId : undefined,
 									notice ? cueId : undefined,
-									connectionLabel ? connectionId : undefined,
 								].filter(Boolean).join(" ") || undefined}
 								aria-disabled={!draftable || sending}
 								aria-invalid={error || undefined}
@@ -231,30 +276,6 @@ export function ChatComposer(
 									)}
 								</div>
 								<div className="composer-actions">
-									{/* A row of its own on a phone; see composer.css. */}
-									<span className="composer-connection-group">
-										{/* Always mounted, so the live region hears its first word. */}
-										<span className="composer-connection" id={connectionId} role="status">
-											{connectionLabel && (
-												<span
-													className="composer-connection-label"
-													data-offline={connectionLabel === "Offline" || undefined}
-												>
-													{connectionLabel}
-												</span>
-											)}
-										</span>
-										{/* Where the document header is out of view; see composer.css. */}
-										{onReconnect && (
-											<button
-												className="composer-reconnect btn btn-sm btn-ghost"
-												onClick={onReconnect}
-												type="button"
-											>
-												Reconnect
-											</button>
-										)}
-									</span>
 									<span className="composer-run-control">
 										{/* Two elements, so Stop and Resume never reuse one button. */}
 										{run?.action === "stop" && (

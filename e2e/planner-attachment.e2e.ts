@@ -11,6 +11,9 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { chatInput, fillChat } from "./chat-input";
+import { height, inBetween } from "./motion";
+import { address, expectNoPlanner, expectPlannerAttached, NONE, strip } from "./planner-status";
+import { trace } from "./motion";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
@@ -123,19 +126,8 @@ test.afterEach(async () => {
 	}
 });
 
-function plannerStatus(page: Page) {
-	return page.getByRole("status").filter({ hasText: /^Planner:/ });
-}
-
-async function shoot(page: Page, name: string): Promise<void> {
-	await page.locator(".chat-composer").screenshot({
-		path: test.info().outputPath(`${name}.png`),
-		animations: "disabled",
-	});
-}
-
-test("Chat says live who holds the document's remote Planner", async ({ page }) => {
-	test.setTimeout(90_000);
+test("Chat says what is wrong with the document's remote Planner only when a message is addressed to Chopin, and nothing while it is attached", async ({ browser, page }) => {
+	test.setTimeout(120_000);
 	let database = await freshDatabase();
 	await migrate(database);
 	await remoteServer(database);
@@ -146,36 +138,95 @@ test("Chat says live who holds the document's remote Planner", async ({ page }) 
 	await authenticate(page, HANDLE, ORIGIN);
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
-	let status = plannerStatus(page);
-	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.");
-	await expect(status).toHaveAttribute("data-planner-state", "none");
-	await shoot(page, "none");
+	let status = strip(page);
+	let composer = page.locator(".chat-composer");
+	let surface = page.locator(".chat-composer .composer-surface");
+	// Not addressed to Chopin, the composer has nothing to say and nothing under it, ever.
+	await expect(status).toHaveCount(0);
+	let field = await surface.boundingBox();
+	await address(page);
+	await expect(status).toHaveText(NONE);
+	await expect(status).toHaveAttribute("role", "status");
+	// The composer itself is the size it was; the strip is above it, on its top edge.
+	expect(await surface.boundingBox()).toMatchObject({ width: field!.width, height: field!.height });
+	await snap(composer, "planner-none-desktop");
 
-	let client = await connectAgent({
-		url: ORIGIN,
-		token: `ghu_e2e_${HANDLE}_1`,
-		document: room,
-		handlers: { turn() {} },
-	});
-	await expect(status).toHaveText(`Planner: ${HANDLE} attached`);
-	await expect(status).toHaveAttribute("data-planner-state", "attached");
-	await shoot(page, "attached");
+	let phone = await browser.newContext(PHONE);
+	try {
+		let handset = await phone.newPage();
+		await authenticate(handset, HANDLE, ORIGIN);
+		await handset.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(handset);
+		await handset.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		// Chat slides in from the side; read it once it has settled.
+		await expect.poll(async () => (await chatPane(handset).boundingBox())?.x).toBe(0);
+		await address(handset);
+		await expect(strip(handset)).toHaveText(NONE);
+		await expectNoHorizontalOverflow(handset);
+		await expectInsideViewport(strip(handset));
+		await snap(handset, "planner-none-phone");
 
-	let detachedAt = Date.now();
-	await client.detach();
-	await expect(status).toHaveText(
-		new RegExp(`^Planner: ${HANDLE} detached, held until \\d{1,2}:\\d{2}`),
-	);
-	await expect(status).toHaveAttribute("data-planner-state", "held");
-	let until = await status.locator("time").getAttribute("datetime");
-	expect(Date.parse(until!)).toBeGreaterThanOrEqual(detachedAt + GRACE_MS - 1_000);
-	await shoot(page, "held");
+		// Attaching closes the strip. It eases shut a frame at a time rather than jumping, and the
+		// field under it is exactly as big as it was.
+		let client: AgentClient | undefined;
+		let closing = await trace(composer, height, async () => {
+			client = await connectAgent({
+				url: ORIGIN,
+				token: `ghu_e2e_${HANDLE}_1`,
+				document: room,
+				handlers: { turn() {} },
+			});
+			await expect(status).toHaveCount(0);
+		});
+		expect(inBetween(closing).length).toBeGreaterThan(0);
+		expect(await surface.boundingBox()).toMatchObject({
+			width: field!.width,
+			height: field!.height,
+		});
+		await expect(strip(handset)).toHaveCount(0);
+		await snap(composer, "planner-attached-desktop");
+		await snap(handset, "planner-attached-phone");
 
-	// The grace period ends with nobody reattaching, and the room hears it without reloading.
-	await expect(status).toHaveText("Planner: none attached. @chopin needs an attached Planner.", {
-		timeout: GRACE_MS + 5_000,
-	});
-	await expect(status).toHaveAttribute("data-planner-state", "none");
+		let opening = await trace(composer, height, async () => {
+			await client!.detach();
+			await expect(status).toHaveText(
+				new RegExp(
+					`^@${HANDLE}’s Planner detached. The document and its Decisions are kept, `
+						+ `and @${HANDLE} can reattach until \\d{1,2}:\\d{2}`,
+				),
+			);
+		});
+		expect(inBetween(opening).length).toBeGreaterThan(0);
+		expect(await surface.boundingBox()).toMatchObject({
+			width: field!.width,
+			height: field!.height,
+		});
+		await expectInsideViewport(strip(handset));
+		await expect(strip(handset)).toContainText("can reattach until");
+		await snap(composer, "planner-held-desktop");
+		await snap(handset, "planner-held-phone");
+
+		// The grace period ends with nobody reattaching, and the room hears it without reloading.
+		await expect(status).toHaveText(NONE, { timeout: GRACE_MS + 5_000 });
+
+		// With reduced motion the same strip opens and shuts at once, with no frames between.
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		let returning: AgentClient | undefined;
+		let instant = await trace(composer, height, async () => {
+			returning = await connectAgent({
+				url: ORIGIN,
+				token: `ghu_e2e_${HANDLE}_1`,
+				document: room,
+				handlers: { turn() {} },
+			});
+			await expect(status).toHaveCount(0);
+		});
+		expect(inBetween(instant)).toEqual([]);
+		await returning!.detach();
+	} finally {
+		await phone.close();
+	}
 });
 
 /** Open a new comment on the document's first paragraph. */
@@ -199,7 +250,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	await authenticate(page, HANDLE, ORIGIN);
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
-	await expect(plannerStatus(page)).toHaveAttribute("data-planner-state", "none");
+	await expectNoPlanner(page);
 
 	let card = await draft(page);
 	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
@@ -222,7 +273,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 		handlers: { turn() {} },
 	});
 	try {
-		await expect(plannerStatus(page)).toHaveAttribute("data-planner-state", "attached");
+		await expectPlannerAttached(page);
 		await expect((await draft(page)).getByRole("checkbox", { name: "Send to Chopin" }))
 			.toBeChecked();
 	} finally {
@@ -273,8 +324,7 @@ test("signing out closes that login's sockets at once, and the Planner is never 
 	await authenticate(reader, "review-b", ORIGIN);
 	await reader.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(reader);
-	let status = plannerStatus(reader);
-	await expect(status).toHaveAttribute("data-planner-state", "none");
+	await expectNoPlanner(reader);
 
 	let leaving = await browser.newContext();
 	let page = await leaving.newPage();
@@ -305,7 +355,7 @@ test("signing out closes that login's sockets at once, and the Planner is never 
 		document: room,
 		handlers: { turn() {} },
 	});
-	await expect(status).toHaveText("Planner: review-b attached");
+	await expectPlannerAttached(reader);
 	expect((await probe(page, "room")).frames.slice(heard)).toEqual([]);
 	await client.detach();
 	await other.close();
@@ -360,7 +410,7 @@ test("an attached Planner's Markdown question reads as a heading over a list, an
 	});
 	link = client;
 	try {
-		await expect(plannerStatus(page)).toHaveText(`Planner: ${HANDLE} attached`);
+		await expectPlannerAttached(page);
 		let input = chatInput(page);
 		await fillChat(input, "@chopin confirm the earlier answers");
 		await input.press("Enter");
@@ -458,7 +508,7 @@ test("an attached Planner stores the images it made and shows one under each opt
 	link = client;
 	try {
 		expect(client.features).toContain("decision-option-previews");
-		await expect(plannerStatus(page)).toHaveText(`Planner: ${HANDLE} attached`);
+		await expectPlannerAttached(page);
 		let input = chatInput(page);
 		await fillChat(input, "@chopin compare the cache options");
 		await input.press("Enter");
@@ -596,10 +646,11 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 			document: room,
 			handlers,
 		});
-		let planner = plannerStatus(page);
-		await expect(planner).toHaveAttribute("data-planner-state", "attached");
 		let input = chatInput(page);
+		let planner = strip(page);
 		await fillChat(input, "@chopin review the release");
+		// Attached, there is nothing to say: the strip that said no Planner was there goes.
+		await expect(planner).toHaveCount(0);
 		await input.press("Enter");
 		let decision = content(page).locator("article[data-plan-sidecar-questionnaire]");
 		await expect(decision).toBeVisible();
@@ -612,12 +663,11 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		let held = await link.resumption;
 		expect(held).toBeDefined();
 
-		// Disconnected, not stopped: the Planner line, the run card and Chat all say so, and the
-		// work and the Decision are as they were.
-		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		// Disconnected, not stopped: the run card and Chat say so, and so does the composer to a
+		// message addressed to Chopin, and the work and the Decision are as they were.
+		await address(page);
 		await expect(planner).toHaveText(
-			`Planner: ${HANDLE} disconnected. Its workflows and Decisions are kept. `
-				+ "@chopin needs it to reconnect.",
+			`@${HANDLE}’s Planner is offline. Its work is kept and picks up when it’s back.`,
 		);
 		let away = runs.getByRole("button", {
 			name: /^plan-review, disconnected, was running, 4m$/,
@@ -650,22 +700,24 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		let handsetRuns = chatPane(handset).getByRole("region", { name: "Workflow runs" });
 		await expect(handsetRuns.getByRole("button", { name: /^plan-review, disconnected/ }))
 			.toBeVisible();
-		await expect(plannerStatus(handset)).toContainText("disconnected");
+		await address(handset);
+		await expect(strip(handset)).toContainText("is offline. Its work is kept");
 		await expectNoHorizontalOverflow(handset);
-		await expectInsideViewport(plannerStatus(handset));
+		await expectInsideViewport(strip(handset));
 		await expectInsideViewport(handsetRuns);
 		await snap(handset, "link-drop-disconnected-phone");
 
 		// Well past the grace period, nothing has ended: the Decision is open and the run is shown.
 		await page.waitForTimeout(GRACE_MS + 4_000);
-		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		await expect(planner).toContainText("is offline. Its work is kept");
 		await expect(away).toBeVisible();
 		await expect(runs).not.toContainText("stopped");
 
 		// A reload asks the server again and hears the same: disconnected, with its work kept.
 		await page.reload();
 		await ready(page);
-		await expect(planner).toHaveAttribute("data-planner-state", "disconnected");
+		// The draft survived the reload, so the composer says it again.
+		await expect(planner).toContainText("is offline. Its work is kept");
 		await expect(away).toBeVisible();
 		await expect(runs).not.toContainText("stopped");
 		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
@@ -699,8 +751,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 			handlers,
 			resume: held!,
 		});
-		await expect(planner).toHaveAttribute("data-planner-state", "attached");
-		await expect(planner).toHaveText(`Planner: ${HANDLE} attached`);
+		await expect(planner).toHaveCount(0);
 		// The held Stop reached it, and it reported the run paused; nothing is disconnected now.
 		await expect.poll(() => controls).toEqual(["stop"]);
 		await expect(runs.getByRole("button", { name: /^plan-review, paused, \d+m$/ })).toBeVisible();
@@ -712,7 +763,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		expect(await asked).toMatchObject({ status: "answered", value: true });
 		await snap(page, "link-drop-reconnected-desktop");
 		await snap(chatPane(page), "link-drop-reconnected-chat-desktop");
-		await expect(plannerStatus(handset)).toHaveText(`Planner: ${HANDLE} attached`);
+		await expect(strip(handset)).toHaveCount(0);
 		await expect(
 			chatPane(handset).getByRole("region", { name: "Workflow runs" })
 				.getByRole("button", { name: /^plan-review, paused/ }),
@@ -770,5 +821,7 @@ test("Chat says nothing about attachments where the Planner runs on the server",
 	await page.goto(`${origin}${roomPath(room)}`);
 	await ready(page);
 	await expect(page.getByRole("combobox", { name: "Message" })).toBeVisible();
-	await expect(plannerStatus(page)).toHaveCount(0);
+	// Nothing is reported, so nothing is said, even addressed to Chopin.
+	await address(page);
+	await expect(strip(page)).toHaveCount(0);
 });

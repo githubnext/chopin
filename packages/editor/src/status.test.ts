@@ -21,25 +21,11 @@ describe("describeStatus", () => {
 		expect(describeStatus({ connection: "connecting", synced: false }).level).toBe("quiet");
 	});
 
-	test("a lost connection reads as reconnecting, with the detail kept for the tooltip", () => {
-		let status = describeStatus({ connection: "reconnecting", synced: true });
-		expect(status).toEqual({
-			level: "notice",
-			label: "Reconnecting…",
-			detail: "Editing resumes once connected.",
-		});
-		expect(describeStatus({ connection: "connecting", synced: true }).level).toBe("notice");
-	});
-
-	test("a connection lost for long enough becomes an offline alert with reload", () => {
-		let status = describeStatus({ connection: "reconnecting", synced: true, stalled: true });
-		expect(status.level).toBe("alert");
-		expect(status.label).toBe("Offline");
-		expect(status.reload).toBe(true);
-		// Reconnecting in place keeps unsent work; a host that can offers it.
-		expect(status.reconnect).toBe(true);
-		expect(describeStatus({ connection: "connecting", synced: false, stalled: true }).level)
-			.toBe("alert");
+	test("a lost connection is the offline notice's to say, so the header stays quiet", () => {
+		for (let connection of ["reconnecting", "connecting"] as const) {
+			expect(describeStatus({ connection, synced: true }).level).toBe("hidden");
+		}
+		expect(describeStatus({ connection: "reconnecting", synced: false }).level).toBe("hidden");
 	});
 
 	test("refusal, closure and open failure are alerts with reload", () => {
@@ -66,8 +52,8 @@ describe("describeStatus", () => {
 	test("connection loss outranks a stale open failure", () => {
 		expect(
 			describeStatus({ connection: "reconnecting", synced: false, failed: "Permission denied" })
-				.label,
-		).toBe("Reconnecting…");
+				.level,
+		).toBe("hidden");
 	});
 });
 
@@ -77,18 +63,18 @@ describe("announcement", () => {
 		expect(announcement("hidden", { level: "quiet", label: "Loading" })).toBe("");
 	});
 
-	test("an outage speaks its label only, not the detail", () => {
+	test("an alert speaks its label only, not the detail", () => {
 		expect(
 			announcement("hidden", {
-				level: "notice",
-				label: "Reconnecting…",
-				detail: "Editing resumes once connected.",
+				level: "alert",
+				label: "No access",
+				detail: "The server refused this connection. Reloading may help.",
 			}),
-		).toBe("Reconnecting…");
-		expect(announcement("notice", { level: "alert", label: "Offline" })).toBe("Offline");
+		).toBe("No access");
+		expect(announcement("notice", { level: "alert", label: "Disconnected" })).toBe("Disconnected");
 	});
 
-	test("leaving an outage is said once as reconnected", () => {
+	test("leaving an alert is said once as reconnected", () => {
 		expect(announcement("alert", { level: "hidden", label: "Ready" })).toBe("Reconnected");
 		expect(announcement("notice", { level: "quiet", label: "Loading" })).toBe("Reconnected");
 	});

@@ -434,9 +434,10 @@ exits before staying up, the connector tells Chopin how many launches in a row
 have, how the last one ended and the last line it printed to stderr that says
 why (a closing "Exiting with code 1" notice does not count), with tokens and
 `--env` values masked, your home directory shown as `~` and the line cut at 300
-characters. From the second launch in a row, Chat says **Planner can't start on
-studio:** and the reason, instead of **Planner: starting on studio…**, while the
-connector keeps retrying. Once the Planner attaches, or a launch stays up, it
+characters. From the second launch in a row, the document's machine button turns
+its dot to a warning and the composer's top edge says **Can’t connect to studio**
+with a **How to fix** link (see [Can’t connect to a machine](#cant-connect-to-a-machine)),
+while the connector keeps retrying. Once the Planner attaches, or a launch stays up, it
 goes. A Chopin from before this does not know the report; the connector asks it
 once and carries on.
 
@@ -494,9 +495,39 @@ workflow run, counts as use, so its work and its questions are never cut short
 however long nobody views the document.
 A Planner stays on its machine while that machine is connected, even when
 another comes online; it moves when the machine disconnects or the creator
-changes the document's machine or their default. Chat says
-**Planner: starting on studio…** (the machine's name) until it attaches, and
-an `@chopin` message sent meanwhile waits for it.
+changes the document's machine or their default. Until it attaches, the
+machine button's dot is a thin spinner and its name says **Connecting to
+studio** (the machine's name), and an `@chopin` message sent meanwhile waits for
+it. Once it has attached the button says nothing more about it.
+
+### Can’t connect to a machine
+
+Chopin asked a machine to run a document's Planner, and the Planner's backend
+exited before it stayed up, more than once in a row. Everyone in the document
+sees it in two places:
+
+- The machine button, left of **Build plan**, has a warning dot. Its menu opens
+  onto **Can’t connect to studio**, the last line the backend wrote to stderr that
+  says why, and how often and when it was tried, such as _Tried 3 times, last at
+  6:29 PM. Still trying._
+- The composer's top edge says **Can’t connect to studio** with a **How to fix**
+  link to this section, whatever is being typed. A screen reader hears the same,
+  with the reason, once as it appears. A teammate who has no machine of their own,
+  and so no button, reads **@mona’s machine** there, since only the owner's login
+  is ever named, never the machine.
+
+Chopin keeps retrying, and the connector backs off between launches, so nothing
+needs pressing once the cause is fixed: the next launch attaches, the warning
+goes without a word, and the button's dot returns to the machine's own.
+
+To fix it, start from the reason: it is the backend's own last line that says why,
+with tokens and your home directory masked. On the machine itself, `chopin status`
+shows the same failure under the connector with how the backend ended, such as
+`exit 127: /usr/bin/env: 'node': No such file or directory` for a program that is
+not on the connector's `PATH`, and the **Log** line it prints names the file with
+what the backend wrote. Change what the reason names on that machine (an
+environment variable passed with `--env`, a missing program, a checkout), or
+choose another machine for the document from the machine button.
 
 #### Share a machine with teammates
 

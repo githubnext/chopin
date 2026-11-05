@@ -347,6 +347,145 @@ describe("status", () => {
 		}
 	});
 
+	describe("outage", () => {
+		/** A server that can be taken down and brought back, and counts the sockets it refused. */
+		function flaky(): { port: number; down: () => void; up: () => void; drop: () => void } {
+			let refusing = false;
+			let sockets = new Set<ServerWebSocket<undefined>>();
+			let server = Bun.serve<undefined>({
+				port: 0,
+				hostname: "127.0.0.1",
+				fetch(request, self) {
+					if (request.headers.get("x-chopin-socket-probe") === "1") {
+						return new Response(null, { status: 204 });
+					}
+					if (refusing) return new Response("try again", { status: 503 });
+					return self.upgrade(request) ? undefined : new Response("no", { status: 400 });
+				},
+				websocket: {
+					open: socket => {
+						sockets.add(socket);
+					},
+					close: socket => {
+						sockets.delete(socket);
+					},
+					message() {},
+				},
+			});
+			servers.push(server);
+			return {
+				port: server.port!,
+				down: () => {
+					refusing = true;
+				},
+				up: () => {
+					refusing = false;
+				},
+				drop: () => {
+					for (let socket of sockets) socket.terminate();
+				},
+			};
+		}
+
+		function watched(
+			port: number,
+		): { wire: Wire; outages: Array<{ failures: number } | undefined> } {
+			globalThis.location = { href: `http://127.0.0.1:${port}/`, protocol: "http:" } as Location;
+			let outages: Array<{ failures: number } | undefined> = [];
+			let wire = new Wire({
+				channelId: "019c1234-1234-4123-8123-123456789abc",
+				onOutage: outage => outages.push(outage),
+			});
+			wires.push(wire);
+			return { wire, outages };
+		}
+
+		it("says nothing while connected, begins when the connection is lost, and ends when it opens again", async () => {
+			let service = flaky();
+			let { wire, outages } = watched(service.port);
+			await until(() => wire.status === "connected", "connected");
+			expect(outages).toEqual([]);
+
+			service.drop();
+			await until(() => outages.length > 0, "outage");
+			expect(outages[0]).toEqual({ failures: 0 });
+
+			await until(() => wire.status === "connected" && outages.at(-1) === undefined, "recovered");
+		});
+
+		it("counts each automatic attempt that fails, and a refused one that a person starts", async () => {
+			let random = Math.random;
+			Math.random = () => 0;
+			try {
+				let service = flaky();
+				let { wire, outages } = watched(service.port);
+				await until(() => wire.status === "connected", "connected");
+
+				service.down();
+				service.drop();
+				await until(() => outages.at(-1)?.failures === 2, "two failed attempts");
+				expect(outages.slice(0, 3)).toEqual([
+					{ failures: 0 },
+					{ failures: 1 },
+					{ failures: 2 },
+				]);
+
+				// Asking to reconnect starts the backoff over, not the count: the attempt that
+				// fails is one more failure in the same outage.
+				let before = outages.at(-1)!.failures;
+				wire.reconnect();
+				await until(() => outages.at(-1)!.failures > before, "a failed manual attempt");
+
+				service.up();
+				await until(() => outages.at(-1) === undefined, "recovered");
+			} finally {
+				Math.random = random;
+			}
+		});
+
+		it("does not forget the count when the network comes back and the server is still down", async () => {
+			let random = Math.random;
+			Math.random = () => 0;
+			try {
+				let service = flaky();
+				let { wire, outages } = watched(service.port);
+				await until(() => wire.status === "connected", "connected");
+				service.down();
+				service.drop();
+				await until(() => outages.at(-1)?.failures === 2, "two failed attempts");
+
+				dispatchEvent(new Event("online"));
+				await until(() => outages.at(-1)!.failures >= 3, "an attempt woken by the network");
+				expect(outages.every(outage => outage !== undefined)).toBe(true);
+			} finally {
+				Math.random = random;
+			}
+		});
+
+		it("is not an outage when the first connection is merely slow", async () => {
+			let service = flaky();
+			let { wire, outages } = watched(service.port);
+			await until(() => wire.status === "connected", "connected");
+			expect(outages).toEqual([]);
+		});
+
+		it("is not an outage once a document is deleted", async () => {
+			let service = deleted("close");
+			globalThis.location = {
+				href: `http://127.0.0.1:${service.port}/`,
+				protocol: "http:",
+			} as Location;
+			let outages: Array<{ failures: number } | undefined> = [];
+			let wire = new Wire({
+				channelId: "019c1234-1234-4123-8123-123456789abc",
+				onOutage: outage => outages.push(outage),
+			});
+			wires.push(wire);
+			await until(() => wire.status === "deleted", "deleted");
+			expect(outages).toEqual([]);
+		});
+	});
+
 	it("ignores a superseded refusal probe after manual reconnection", async () => {
 		let probe = Promise.withResolvers<void>();
 		let release = Promise.withResolvers<void>();

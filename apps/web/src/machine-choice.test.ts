@@ -5,6 +5,7 @@ import {
 	machineButtonLabel,
 	machineRows,
 	offlineChoice,
+	plannerRunsOn,
 	presence,
 	shownMachine,
 	showsMachineChoice,
@@ -251,4 +252,20 @@ test("the choice is read again when a teammate's shared machine goes offline or 
 	expect(presence([box], [desk])).not.toBe(presence([box], []));
 	expect(presence([box], [desk])).toBe(presence([box], [{ ...desk, label: "renamed" }]));
 	expect(presence([box])).toBe(presence([box], []));
+});
+
+test("names the machine a Planner is starting on or dropped from, only when the person can see it", () => {
+	let runner = (planner: NonNullable<MachineChoiceState["planner"]>) => state({ planner });
+	let on = { login: "mona", machine: "M_box" };
+	expect(plannerRunsOn(runner({ state: "starting", ...on }))).toBe("build-box");
+	expect(plannerRunsOn(runner({ state: "disconnected", ...on }))).toBe("build-box");
+	// A machine the person cannot list is not named, so the status names whose it is instead.
+	expect(plannerRunsOn(runner({ state: "starting", login: "mona", machine: "M_other" })))
+		.toBeUndefined();
+	// Attached is healthy, held is another account's, and none runs nowhere.
+	expect(plannerRunsOn(runner({ state: "attached", ...on }))).toBeUndefined();
+	expect(plannerRunsOn(runner({ state: "held", login: "mona", machine: null }))).toBeUndefined();
+	expect(plannerRunsOn(runner({ state: "none", login: null, machine: null }))).toBeUndefined();
+	expect(plannerRunsOn(undefined)).toBeUndefined();
+	expect(plannerRunsOn(state())).toBeUndefined();
 });
