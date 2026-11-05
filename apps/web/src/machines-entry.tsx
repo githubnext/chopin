@@ -6,16 +6,18 @@ import { Fragment, useLayoutEffect, useRef } from "react";
 import { ago } from "./build-model";
 import { setFavorite } from "./machine-choice";
 import {
+	allMachines,
 	machines as liveMachines,
 	machinesLabel,
-	summarizeMachines,
+	ownerHint,
+	summarizeLive,
 	useLiveMachines,
 } from "./machine-summary";
 
 import { useNavigationDocument, useNavigationMenu } from "./navigation-shell";
 import "./machines-entry.css";
 
-import type { Machine } from "./machine-summary";
+import type { Machine, TeammateMachine } from "./machine-summary";
 import type { ReactNode } from "react";
 
 /** Where the Machines page's Add machine flow starts: Add a local machine, opened at once. */
@@ -24,33 +26,36 @@ const ADD_MACHINE_PATH = "/machines?add";
 const ANY = "any";
 
 /**
- * The navigation's way to the person's machines. In the sidebar it opens a menu first: the
- * machine their work runs on by default (their favorite, which Automatic prefers), every paired
- * machine with its state, Add machine, and Manage machines for the full page. Until a machine
- * is paired, and on a phone's documents sheet, it is a link to /machines. Either way it shows how many are connected out of
- * those paired, with a dot while any is connected, or a warning while the default is offline.
+ * The navigation's way to the machines the person can use. In the sidebar it opens a menu first:
+ * the machine their work runs on by default (their favorite, which Automatic prefers), every
+ * machine of theirs and every one a teammate shares with them, with its state, Add machine, and
+ * Manage machines for the full page. Until there is a machine, and on a phone's documents sheet,
+ * it is a link to /machines. Either way it shows how many are connected out of all of them, with
+ * a dot while any is connected, or a warning while the default is offline.
  */
 export function MachinesEntry(
 	{ current = false, placement }: { current?: boolean; placement: "sidebar" | "sheet" },
 ) {
 	let [open, setOpen] = useNavigationMenu();
 	let { navigationRevision } = useNavigationDocument();
-	let { machines: list, error } = useLiveMachines();
-	let summary = list && !error ? summarizeMachines(list) : undefined;
+	let live = useLiveMachines();
+	let { machines: own, error } = live;
+	let list = allMachines(live);
+	let summary = error ? undefined : summarizeLive(live);
 	let favorite = list?.find(machine => machine.favorite);
 	let warn = !!favorite && !favorite.connected;
 	let label = machinesLabel(summary);
-	let adornment = !!summary?.paired && (
+	let adornment = !!summary?.total && (
 		<span aria-hidden="true" className="machines-entry-count">
 			{warn
 				? <WarningIcon className="machines-entry-warning" size={12} />
 				: summary.connected > 0 && <span className="status-dot" data-state="connected" />}
 			<Count appearance="quiet" typography="metadata">
-				{summary.connected}/{summary.paired}
+				{summary.connected}/{summary.total}
 			</Count>
 		</span>
 	);
-	// With nothing paired yet the page itself is the way in, so the entry goes straight there.
+	// With no machine yet the page itself is the way in, so the entry goes straight there.
 	if (placement === "sheet" || !list?.length) {
 		return (
 			<a
@@ -70,18 +75,15 @@ export function MachinesEntry(
 	let choose = async (value: string) => {
 		let id = value === ANY ? favorite?.id : value;
 		if (!id) return;
-		let mark = (chosen: string | null) =>
-			liveMachines.update(machines =>
-				machines.map(machine => ({ ...machine, favorite: machine.id === chosen }))
-			);
-		mark(value === ANY ? null : id);
+		liveMachines.favor(value === ANY ? null : id);
 		try {
-			mark(await setFavorite(id, value !== ANY));
+			liveMachines.favor(await setFavorite(id, value !== ANY));
 		} catch {
 			void liveMachines.load();
 		}
 	};
-	let uses = list?.find(machine => machine.connected)?.label;
+	// Automatic works on the person's own machines, and on a teammate's only once it is their favorite.
+	let uses = own?.find(machine => machine.connected)?.label;
 	return (
 		<Menu.Root
 			key={navigationRevision}
@@ -136,7 +138,10 @@ export function MachinesEntry(
 											value={machine.id}
 										>
 											<MachineMark machine={machine} />
-											<span className="truncate" title={machine.label}>{machine.label}</span>
+											<span className="truncate" title={machine.label}>
+												{machine.label}
+												<MachineOwner machine={machine} all={list} />
+											</span>
 											<span className="app-menu-item-meta">{state(machine)}</span>
 										</Menu.RadioItem>
 									))}
@@ -190,10 +195,27 @@ function MachinesMenuPopup({ children }: { children: ReactNode }) {
 	);
 }
 
+/** A teammate's login after a machine name another machine has too, so the two can be told apart. */
+function MachineOwner(
+	{ machine, all }: { machine: Machine | TeammateMachine; all: readonly { label: string }[] },
+) {
+	let owner = ownerHint(machine, all);
+	return owner && (
+		<>
+			{" "}
+			<span className="machines-menu-owner">{owner}</span>
+		</>
+	);
+}
+
 /** A machine's icon with its state as a dot on the corner, as the Machines page draws it. */
-function MachineMark({ machine }: { machine: Machine }) {
+function MachineMark({ machine }: { machine: Machine | TeammateMachine }) {
 	let Icon = machine.service ? CloudIcon : MachineIcon;
-	let dot = machine.reauthorize ? "reauthorize" : machine.connected ? "connected" : "offline";
+	let dot = "reauthorize" in machine && machine.reauthorize
+		? "reauthorize"
+		: machine.connected
+		? "connected"
+		: "offline";
 	return (
 		<span aria-hidden="true" className="machines-menu-glyph">
 			<Icon />
@@ -203,8 +225,8 @@ function MachineMark({ machine }: { machine: Machine }) {
 }
 
 /** A few quiet words on the row: connected, or when an offline machine was last seen. */
-function state(machine: Machine) {
-	if (machine.reauthorize) return "Needs reconnecting";
+function state(machine: Machine | TeammateMachine) {
+	if ("reauthorize" in machine && machine.reauthorize) return "Needs reconnecting";
 	if (machine.connected) return "Connected";
 	let seen = ago(new Date(machine.lastSeenAt).toISOString(), Date.now());
 	return seen ? `Last seen ${seen}` : "Offline";

@@ -45,9 +45,12 @@ export type TeammateMachine = {
 	version: string | null;
 	/** The background service runs it. */
 	service: boolean;
+	/** The person's own favorite, which Automatic prefers; no one else sees whose. */
+	favorite: boolean;
 };
 
-export type MachineSummary = { paired: number; connected: number };
+/** How many machines the person can run work on, their own and teammates' shared ones, and how many are connected now. */
+export type MachineSummary = { total: number; connected: number };
 
 export async function listMachines(
 	signal?: AbortSignal,
@@ -60,21 +63,51 @@ export async function listMachines(
 
 export function summarizeMachines(machines: readonly Pick<Machine, "connected">[]): MachineSummary {
 	return {
-		paired: machines.length,
+		total: machines.length,
 		connected: machines.filter(machine => machine.connected).length,
 	};
 }
 
 /**
- * The Machines entry's accessible name. It repeats the visible paired count whenever that differs
- * from the connected one, so the name always contains what the entry shows.
+ * Everything the person can run work on, as one list: their own machines, then the teammates'
+ * shared with them, each in the order the server gave; undefined until the first answer.
+ */
+export function allMachines(
+	{ machines, teammates }: Pick<LiveMachines, "machines" | "teammates">,
+): Array<Machine | TeammateMachine> | undefined {
+	return machines && [...machines, ...teammates ?? []];
+}
+
+/** The summary of everything in a live list: the person's own machines and the teammates' machines shared with them. */
+export function summarizeLive(live: LiveMachines): MachineSummary | undefined {
+	let all = allMachines(live);
+	return all && summarizeMachines(all);
+}
+
+/**
+ * The login of a teammate's machine's owner, where another machine in the list has the same
+ * name, to tell them apart; undefined for the person's own and for a name that is alone.
+ */
+export function ownerHint(
+	machine: { label: string; owner?: { login: string } },
+	all: readonly { label: string }[],
+): string | undefined {
+	let name = machine.label.toLowerCase();
+	return machine.owner && all.filter(other => other.label.toLowerCase() === name).length > 1
+		? machine.owner.login
+		: undefined;
+}
+
+/**
+ * The Machines entry's accessible name. It repeats the visible total whenever that differs from
+ * the connected count, so the name always contains what the entry shows.
  */
 export function machinesLabel(summary: MachineSummary | undefined): string {
 	if (!summary) return "Machines";
-	let connected = summary.connected ? `${summary.connected} connected` : "none connected";
-	return summary.paired && summary.paired !== summary.connected
-		? `Machines, ${summary.paired} paired, ${connected}`
-		: `Machines, ${connected}`;
+	if (summary.total && summary.total !== summary.connected) {
+		return `Machines, ${summary.connected || "none"} of ${summary.total} connected`;
+	}
+	return `Machines, ${summary.connected ? `${summary.connected} connected` : "none connected"}`;
 }
 
 /** Whether a machine's chopin release is older than the one this server recommends. */
@@ -96,7 +129,7 @@ export function updateAvailable(version: string | null, recommended: string | nu
 	return current.prerelease && !wanted.prerelease;
 }
 
-function isTeammate(machine: Machine | TeammateMachine): machine is TeammateMachine {
+export function isTeammate(machine: Machine | TeammateMachine): machine is TeammateMachine {
 	return "teammate" in machine && machine.teammate === true;
 }
 
@@ -177,9 +210,24 @@ export function machineFeed(
 			};
 		},
 		load,
-		/** Change the list here at once, as when a machine is removed, before the server says. */
+		/** Change the person's own list here at once, as when a machine is removed, before the server says. */
 		update(change: (machines: Machine[]) => Machine[]) {
 			if (current.machines) set({ ...current, machines: change(current.machines) });
+		},
+		/** Mark the person's favorite, one of the machines in either list or none, before the server says. */
+		favor(chosen: string | null) {
+			if (!current.machines) return;
+			set({
+				...current,
+				machines: current.machines.map(machine => ({
+					...machine,
+					favorite: machine.id === chosen,
+				})),
+				teammates: current.teammates?.map(machine => ({
+					...machine,
+					favorite: machine.id === chosen,
+				})),
+			});
 		},
 	};
 }
@@ -209,8 +257,8 @@ export function useLiveMachines(poll = false): LiveMachines {
 	return value;
 }
 
-/** How many machines are paired and connected, live; undefined until loaded or after a failure. */
+/** How many machines the person can run work on, their own and teammates' shared ones, and how many are connected, live; undefined until loaded or after a failure. */
 export function useMachineSummary(): MachineSummary | undefined {
-	let { machines: list, error } = useLiveMachines();
-	return list && !error ? summarizeMachines(list) : undefined;
+	let live = useLiveMachines();
+	return live.error ? undefined : summarizeLive(live);
 }

@@ -133,7 +133,7 @@ function teammateMachine(overrides: Partial<ChoosableMachine> = {}): ChoosableMa
 	};
 }
 
-test("the menu lists a teammate's machines last, each under its owner, offline ones disabled", () => {
+test("the menu lists a teammate's machines plainly with the person's own, Local then Cloud, offline ones disabled", () => {
 	let rows = machineRows(
 		state({
 			machines: [
@@ -146,16 +146,37 @@ test("the menu lists a teammate's machines last, each under its owner, offline o
 			],
 		}),
 	);
-	expect(rows.map(row => [row.id, row.owner, row.disabled])).toEqual([
-		["M_laptop", undefined, false],
-		["M_box", undefined, false],
-		["M_a", "rival", false],
-		["M_b", "rival", true],
-		["M_d", "rival", false],
-		["M_c", "casey", false],
+	// One Local list and one Cloud list, the person's own first, with no group of a teammate's own.
+	expect(rows.map(row => [row.id, row.cloud, row.disabled])).toEqual([
+		["M_laptop", false, false],
+		["M_a", false, false],
+		["M_c", false, false],
+		["M_d", false, false],
+		["M_box", true, false],
+		["M_b", true, true],
 	]);
 	// A teammate's machine says nothing of its owner's authorization, and is disabled only offline.
 	expect(rows.find(row => row.id === "M_b")?.detail).toBe("Offline");
+	expect(rows.every(row => row.owner === undefined)).toBe(true);
+});
+
+test("a teammate's owner is named on its row only to tell it from a machine of the same name", () => {
+	let rows = machineRows(
+		state({
+			machines: [
+				machine({ id: "M_mine", label: "desk", service: false }),
+				teammateMachine({ id: "M_a", label: "Desk" }),
+				teammateMachine({ id: "M_b", label: "rack", owner: { login: "casey", avatarUrl: "" } }),
+				teammateMachine({ id: "M_c", label: "rack" }),
+			],
+		}),
+	);
+	expect(rows.map(row => [row.id, row.owner])).toEqual([
+		["M_mine", undefined],
+		["M_a", "rival"],
+		["M_b", "casey"],
+		["M_c", "rival"],
+	]);
 });
 
 test("a teammate's chosen machine is shown, and Build runs there unless it is offline", () => {

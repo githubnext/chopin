@@ -1,28 +1,82 @@
 import { expect, test } from "bun:test";
-import { machineFeed, machinesLabel, summarizeMachines, updateAvailable } from "./machine-summary";
+import {
+	allMachines,
+	machineFeed,
+	machinesLabel,
+	ownerHint,
+	summarizeLive,
+	summarizeMachines,
+	updateAvailable,
+} from "./machine-summary";
 
 import type { TeammateMachine } from "./machine-summary";
 
 let machine = (connected: boolean) => ({ connected });
 
-test("the summary counts paired machines and those connected now", () => {
-	expect(summarizeMachines([])).toEqual({ paired: 0, connected: 0 });
+test("the summary counts machines and those connected now", () => {
+	expect(summarizeMachines([])).toEqual({ total: 0, connected: 0 });
 	expect(summarizeMachines([machine(true), machine(false), machine(true)])).toEqual({
-		paired: 3,
+		total: 3,
 		connected: 2,
 	});
 });
 
 test("the Machines entry names how many machines are connected", () => {
 	expect(machinesLabel(undefined)).toBe("Machines");
-	expect(machinesLabel({ paired: 0, connected: 0 })).toBe("Machines, none connected");
-	expect(machinesLabel({ paired: 1, connected: 1 })).toBe("Machines, 1 connected");
-	expect(machinesLabel({ paired: 2, connected: 2 })).toBe("Machines, 2 connected");
+	expect(machinesLabel({ total: 0, connected: 0 })).toBe("Machines, none connected");
+	expect(machinesLabel({ total: 1, connected: 1 })).toBe("Machines, 1 connected");
+	expect(machinesLabel({ total: 2, connected: 2 })).toBe("Machines, 2 connected");
 });
 
-test("the name repeats the visible count when some paired machines are offline", () => {
-	expect(machinesLabel({ paired: 2, connected: 1 })).toBe("Machines, 2 paired, 1 connected");
-	expect(machinesLabel({ paired: 1, connected: 0 })).toBe("Machines, 1 paired, none connected");
+test("the name repeats the visible total when some machines are offline", () => {
+	expect(machinesLabel({ total: 2, connected: 1 })).toBe("Machines, 1 of 2 connected");
+	expect(machinesLabel({ total: 1, connected: 0 })).toBe("Machines, none of 1 connected");
+	expect(machinesLabel({ total: 3, connected: 0 })).toBe("Machines, none of 3 connected");
+});
+
+const shared: TeammateMachine = {
+	id: "theirs",
+	label: "build-box",
+	teammate: true,
+	owner: { login: "rival", avatarUrl: "" },
+	repositories: ["octo-org/score"],
+	connected: true,
+	lastSeenAt: 1,
+	version: null,
+	service: false,
+	favorite: false,
+};
+
+test("the count includes teammates' shared machines, so one own and one shared, both connected, are 2 of 2", () => {
+	let own = [{ ...machine(true), id: "mine" }] as never;
+	let live = { machines: own, teammates: [shared], error: "" };
+	expect(summarizeLive(live)).toEqual({ total: 2, connected: 2 });
+	expect(machinesLabel(summarizeLive(live))).toBe("Machines, 2 connected");
+	// An offline shared machine counts in the total only.
+	let offline = { ...live, teammates: [{ ...shared, connected: false }] };
+	expect(summarizeLive(offline)).toEqual({ total: 2, connected: 1 });
+	expect(machinesLabel(summarizeLive(offline))).toBe("Machines, 1 of 2 connected");
+	// A person with only a teammate's machine has it counted too; nothing is known before an answer.
+	expect(summarizeLive({ machines: [], teammates: [shared], error: "" }))
+		.toEqual({ total: 1, connected: 1 });
+	expect(summarizeLive({ error: "" })).toBeUndefined();
+	expect(summarizeLive({ machines: own, error: "" })).toEqual({ total: 1, connected: 1 });
+});
+
+test("the machines list the person's own first, then the teammates' shared with them", () => {
+	let own = [{ id: "a" }, { id: "b" }] as never;
+	expect(allMachines({ machines: own, teammates: [shared] })?.map(value => value.id))
+		.toEqual(["a", "b", "theirs"]);
+	expect(allMachines({})).toBeUndefined();
+});
+
+test("a teammate's owner is named only where another machine has the same name", () => {
+	let desk = { label: "Desk", owner: { login: "rival" } };
+	let all = [{ label: "desk" }, desk, { label: "rack" }];
+	expect(ownerHint(desk, all)).toBe("rival");
+	expect(ownerHint({ label: "rack", owner: { login: "rival" } }, all)).toBeUndefined();
+	// The person's own machine never names an owner, whatever it shares a name with.
+	expect(ownerHint({ label: "desk" }, all)).toBeUndefined();
 });
 
 test("a machine has an update when its release is older than the one the server recommends", () => {
@@ -130,25 +184,29 @@ test("a failed answer keeps the list it had and says why; a hidden page asks not
 });
 
 test("the feed keeps teammates' shared machines apart from the person's own", async () => {
-	let shared: TeammateMachine = {
-		id: "theirs",
-		label: "build-box",
-		teammate: true,
-		owner: { login: "rival", avatarUrl: "" },
-		repositories: ["octo-org/score"],
-		connected: true,
-		lastSeenAt: 1,
-		version: null,
-		service: false,
-	};
 	let feed = machineFeed(async () => [machineOf("mine", true), shared]);
 	await feed.load();
 	expect(feed.snapshot().machines?.map(machine => machine.id)).toEqual(["mine"]);
 	expect(feed.snapshot().teammates).toEqual([shared]);
-	// Counts, the favorite star and the sidebar read the person's own list alone.
-	expect(summarizeMachines(feed.snapshot().machines!)).toEqual({ paired: 1, connected: 1 });
-	// A change to the person's own list leaves the teammates' alone.
+	// The person's own list alone is what a removal changes.
 	feed.update(list => list.filter(machine => machine.id !== "mine"));
 	expect(feed.snapshot().machines).toEqual([]);
 	expect(feed.snapshot().teammates).toEqual([shared]);
+});
+
+test("a favorite marks one machine, the person's own or a teammate's, and none after it is cleared", async () => {
+	let feed = machineFeed(async () => [
+		{ ...machineOf("mine", true), favorite: true } as never,
+		shared,
+	]);
+	await feed.load();
+	let favorites = () => [
+		...feed.snapshot().machines!.map(value => [value.id, value.favorite]),
+		...feed.snapshot().teammates!.map(value => [value.id, value.favorite]),
+	];
+	expect(favorites()).toEqual([["mine", true], ["theirs", false]]);
+	feed.favor("theirs");
+	expect(favorites()).toEqual([["mine", false], ["theirs", true]]);
+	feed.favor(null);
+	expect(favorites()).toEqual([["mine", false], ["theirs", false]]);
 });

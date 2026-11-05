@@ -8,8 +8,8 @@ import {
 	machineState,
 	platformName,
 	SHARE_DETAIL,
-	SharedWithYou,
 	statusWords,
+	YourMachines,
 } from "./machine-list";
 
 import type { Machine, TeammateMachine } from "../machine-summary";
@@ -101,54 +101,98 @@ test("sharing a machine says teammates' Planners, builds and runs run on it, as 
 
 const theirs: TeammateMachine = {
 	id: "t1",
-	label: "build-box",
+	label: "rack",
 	teammate: true,
 	owner: { login: "rival", avatarUrl: "https://example.test/rival.png" },
-	repositories: ["octo-org/score", "octo-org/site", "octo-org/notes", "octo-org/docs"],
+	repositories: ["octo-org/score", "octo-org/site"],
 	connected: true,
 	lastSeenAt: NOW,
 	version: "0.1.5",
 	service: true,
+	favorite: false,
 };
 
-function shared(teammates: TeammateMachine[] | undefined) {
+function table(own: Machine[] | undefined, teammates: TeammateMachine[] | undefined) {
 	return renderToStaticMarkup(
-		createElement(SharedWithYou, { machines: { teammates } as never }),
+		createElement(YourMachines, {
+			owner: { login: "ada" },
+			machines: { machines: own, teammates, error: "", recommended: null } as never,
+		}),
 	);
 }
 
-test("teammates' machines are listed read-only under Shared with you: owner, state, version, repositories", () => {
-	let markup = shared([theirs]);
-	expect(markup).toContain("Shared with you");
-	expect(markup).toContain(">build-box<");
-	expect(markup).toContain("rival");
-	expect(markup).toContain("chopin 0.1.5");
-	expect(markup).toContain("Connected");
-	// A few repositories by name, the rest counted.
-	expect(markup).toContain("octo-org/score");
-	expect(markup).toContain("octo-org/site");
-	expect(markup).not.toContain("octo-org/notes");
-	expect(markup).toContain("2 more");
-	// Grouped by kind, as the person's own are.
+/** The table's rows with `name` in them, as markup. */
+function row(markup: string, name: string) {
+	return markup.split("<tr").find(value => value.includes(`>${name}<`)) ?? "";
+}
+
+test("teammates' machines are in the one table with the person's own, under Local and Cloud, and counted", () => {
+	let markup = table([{ ...base, label: "laptop" }, { ...base, id: "m2", label: "box" }], [theirs]);
+	expect(markup).not.toContain("Shared with you");
+	expect(markup).toContain("3 machines");
+	expect(markup.match(/<table/g)).toHaveLength(1);
+	// Local holds the person's own, Cloud the teammate's server, as one table with the same columns.
+	expect(markup).toContain(">Local<");
 	expect(markup).toContain(">Cloud<");
-	// Nothing changes the machine: no star, switch, rename, disconnect or actions menu.
-	for (
-		let managing of [
-			"switch",
-			"Actions",
-			"favorite",
-			"Set as favorite",
-			"Disconnect",
-			"Edit machine",
-		]
-	) expect(markup).not.toContain(managing);
-	expect(markup).not.toContain("<button");
+	for (let column of ["Machine", "Owner", "Host", "Version", "Agent", "Shared", "Last seen"]) {
+		expect(markup).toContain(`>${column}<`);
+	}
+	expect(markup.indexOf(">laptop<")).toBeLessThan(markup.indexOf(">rack<"));
+	// A teammate's row fills what the API gives it: name, owner, release and state.
+	let theirRow = row(markup, "rack");
+	expect(theirRow).toContain("rival");
+	expect(theirRow).toContain("chopin 0.1.5");
+	expect(theirRow).toContain("Connected");
+	// The person's own row says it is theirs.
+	expect(row(markup, "laptop")).toContain("ada");
 });
 
-test("an offline teammate's machine says when it was last seen; none, or no answer yet, shows nothing", () => {
-	// The table reads the clock itself, so the time is relative to it.
-	expect(shared([{ ...theirs, connected: false, lastSeenAt: Date.now() - 3 * 3_600_000 }]))
-		.toContain("Last seen 3h ago");
-	expect(shared([])).toBe("");
-	expect(shared(undefined)).toBe("");
+test("the count counts a teammate's machine alone, and one machine reads as one", () => {
+	expect(table([], [theirs])).toContain("1 machine<");
+	expect(table([base], [])).toContain("1 machine<");
+	expect(table([], [])).toBe("");
+});
+
+test("a teammate's row shows its Shared switch on and out of reach, and nothing only its owner changes", () => {
+	let markup = table([{ ...base, shared: false, label: "laptop" }], [theirs]);
+	let theirRow = row(markup, "rack");
+	let theirSwitch = theirRow.match(/<button[^>]*role="switch"[^>]*>/)?.[0] ?? "";
+	expect(theirSwitch).toContain('aria-checked="true"');
+	expect(theirSwitch).toContain("disabled");
+	// No actions menu: rename, disconnect, setup and update are the owner's. The star is the person's own.
+	expect(theirRow).not.toContain("Actions for");
+	expect(theirRow).not.toContain("Update");
+	expect(theirRow).toContain("Favorite rack");
+	// The person's own row has the menu, and a switch that works.
+	let ownRow = row(markup, "laptop");
+	expect(ownRow).toContain("Actions for laptop");
+	let ownSwitch = ownRow.match(/<button[^>]*role="switch"[^>]*>/)?.[0] ?? "";
+	expect(ownSwitch).toContain('aria-checked="false"');
+	expect(ownSwitch).not.toContain("disabled");
+});
+
+test("a teammate's machine can be the favorite, and shows it", () => {
+	let markup = table([base], [{ ...theirs, favorite: true }]);
+	expect(row(markup, "rack")).toContain("Remove rack as favorite");
+	expect(row(markup, "build-box")).toContain("Favorite build-box");
+});
+
+test("search finds a teammate's machine by its owner, and its name; it has no host or agent to match", () => {
+	let box = { ...base, hostname: "ada-host" } as Machine;
+	expect(machineMatches(theirs, "rival", "ada")).toBe(true);
+	expect(machineMatches(theirs, "rack", "ada")).toBe(true);
+	expect(machineMatches(theirs, "0.1.5", "ada")).toBe(true);
+	// The person's own login is not its owner.
+	expect(machineMatches(theirs, "ada", "ada")).toBe(false);
+	expect(machineMatches(theirs, "ada-host", "ada")).toBe(false);
+	expect(machineMatches(box, "ada-host", "ada")).toBe(true);
+});
+
+test("a teammate's machine is a Cloud machine here as it is in a document's menu, and groups with the person's", () => {
+	expect(
+		groupMachines([base, theirs, { ...base, id: "c", service: true }]).map(group => [
+			group.kind,
+			group.machines.map(value => value.id),
+		]),
+	).toEqual([["local", ["m1"]], ["cloud", ["t1", "c"]]]);
 });
