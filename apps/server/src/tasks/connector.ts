@@ -16,6 +16,7 @@ import {
 	renewQueued,
 	reportBuild,
 	reportRebuild,
+	runner,
 } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { unapprovedContext } from "./open-decisions";
@@ -26,6 +27,9 @@ export const RESTARTED = "Chopin restarted, so this build ended.";
 export const DISCONNECTED = "Your local agent disconnected.";
 /** The build's heartbeat stopped while its machine may still be connected. */
 export const UNRESPONSIVE = "Your local agent stopped responding.";
+/** A queued build on a teammate's shared machine that stopped taking it. */
+export const WITHDRAWN =
+	"The machine stopped taking this build: it is no longer shared, its owner can no longer push to this repository, or another machine was chosen.";
 /** A run credential's build is resumable, but its machine has not come back since the restart. */
 export const RESUMING =
 	"Chopin restarted and is waiting for this machine's connector to come back. Retry in a few seconds.";
@@ -164,8 +168,21 @@ export function implementationConnector(
 	documentExists: (id: string) => Promise<boolean>,
 	/** Whether a prototype is executing on a connection; a build queued behind it waits. */
 	prototyping?: (connectionId: string) => Promise<boolean>,
-	options: { retryMs?: number; retries?: number; resumeMs?: number } = {},
+	options: {
+		retryMs?: number;
+		retries?: number;
+		resumeMs?: number;
+		/**
+		 * Whether a connection may take `person`'s work on a document now: their own machine, or the
+		 * teammate's shared machine they chose while its owner can push. Without it, only their own.
+		 */
+		mayTake?: (connection: Connection, person: string, documentId: string) => Promise<boolean>;
+		/** The GitHub login of a person, for the agent to credit in the pull requests it opens. */
+		login?: (userId: string) => Promise<string | undefined>;
+	} = {},
 ) {
+	let mayTake = options.mayTake
+		?? (async (connection: Connection, person: string) => connection.owner === person);
 	/** When this process started; a build it never connected may still resume until the window ends. */
 	let started = Date.now();
 	let resumeMs = options.resumeMs ?? RESUME_MS;
@@ -182,6 +199,26 @@ export function implementationConnector(
 		) return false;
 		let back = build.machineId ? connections.connectedSince(build.machineId) : undefined;
 		return back === undefined || Date.now() < back + RECONNECTED_MS;
+	};
+	/**
+	 * What the agent of a build on a teammate's shared machine is told besides the document: who
+	 * asked for it, and the note for every pull request it opens. The pull requests come from the
+	 * machine owner's GitHub account, so the note says whose request it was.
+	 */
+	let requestedBy = async (plan: Plan, build: BuildRequest, connection: Connection) => {
+		if (build.machineOwner === undefined) return;
+		let asked = await options.login?.(build.user) ?? "a teammate";
+		let owner = connection.login;
+		return {
+			requestedBy: {
+				login: asked,
+				instructions:
+					`${asked} asked for this build, which runs on ${owner}'s shared machine with ${owner}'s GitHub account, so its pull requests come from ${owner}. Put pullRequestNote, unchanged, at the end of the body of every pull request you open or update.`,
+				pullRequestNote: `Requested by ${asked} in ${await documentUrl(
+					plan.id,
+				)}. Built by a coding agent on ${owner}'s shared machine, with ${owner}'s GitHub account.`,
+			},
+		};
 	};
 	let tracked = new Set<string>();
 	// Lifecycle calls of one run apply in arrival order, one at a time.
@@ -205,7 +242,7 @@ export function implementationConnector(
 				let build = await documentExists(documentId)
 					? await withPlan(documentId, async plan => {
 						let build = plan.builds.at(-1);
-						return build?.connectionId === connection.id && build.user === connection.owner
+						return build?.connectionId === connection.id && runner(build) === connection.owner
 							? build
 							: undefined;
 					})
@@ -244,9 +281,14 @@ export function implementationConnector(
 		},
 		async waiting(connection: Connection) {
 			let build = await pending(connection);
-			return build?.state === "queued"
-				? { id: build.id, kind: "implementation" as const }
-				: undefined;
+			if (build?.state !== "queued") return undefined;
+			// A teammate's machine is offered the build only while it may still take it.
+			let documentId = connections.assigned(connection.id);
+			if (
+				build.machineOwner !== undefined
+				&& !(documentId && await mayTake(connection, build.user, documentId))
+			) return undefined;
+			return { id: build.id, kind: "implementation" as const };
 		},
 		async busy(connection: Connection) {
 			let build = await pending(connection);
@@ -329,7 +371,7 @@ export function implementationConnector(
 					let own = plan.builds.find(item => item.id === grant.run!.id);
 					if (
 						own?.kind === "rebuild" && own.state === "stopped" && grant.run.generation === 1
-						&& own.connectionId === connection.id && own.user === connection.owner
+						&& own.connectionId === connection.id && runner(own) === connection.owner
 					) {
 						let report = rebuildReportSchema.safeParse(args);
 						if (!report.success) fail("invalid-request");
@@ -356,7 +398,7 @@ export function implementationConnector(
 					let own = plan.builds.find(item => item.id === args.id);
 					if (
 						own?.kind === "rebuild" && own.state === "stopped"
-						&& own.connectionId === connection.id && own.user === connection.owner
+						&& own.connectionId === connection.id && runner(own) === connection.owner
 						&& serves(connection, own.repositoryId)
 					) {
 						return name === "renew_implementation_build"
@@ -381,7 +423,7 @@ export function implementationConnector(
 				// owner.
 				if (
 					build && !grant.run && build.connectionId !== connection.id && build.id === args.id
-					&& build.machineId === connection.machineId && build.user === connection.owner
+					&& build.machineId === connection.machineId && runner(build) === connection.owner
 					&& serves(connection, build.repositoryId)
 					&& ["renew_implementation_build", "report_implementation_build"].includes(name)
 					&& ["starting", "running"].includes(build.state)
@@ -409,7 +451,7 @@ export function implementationConnector(
 					refuse("build-forbidden", build);
 				}
 				if (
-					!build || build.connectionId !== connection.id || build.user !== connection.owner
+					!build || build.connectionId !== connection.id || runner(build) !== connection.owner
 					|| !serves(connection, build.repositoryId)
 					|| build.id !== (grant.run?.id ?? args.id)
 				) refuse("build-forbidden", build);
@@ -422,7 +464,8 @@ export function implementationConnector(
 					) refuse("build-inactive", build);
 					if (rebuild) {
 						if (name === "read_rebuild") {
-							return await readRebuild(plan, build.id) ?? fail("build-inactive");
+							let read = await readRebuild(plan, build.id) ?? fail("build-inactive");
+							return { ...read, ...await requestedBy(plan, build, connection) };
 						}
 						if (name !== "report_rebuild") fail("tool-forbidden");
 						let report = rebuildReportSchema.safeParse(args);
@@ -448,6 +491,7 @@ export function implementationConnector(
 								lifecycle: plan.lifecycle,
 							}),
 							...unapprovedContext(plan.records.values()),
+							...await requestedBy(plan, build, connection),
 						}));
 					}
 					let parsed = lifecycleCall(name, { ...args, id: plan.id, runId: build.id });
@@ -458,6 +502,10 @@ export function implementationConnector(
 				}
 				if (name === "claim_implementation_build") {
 					if (build.expiresAt <= Date.now()) fail("build-expired");
+					// A teammate's machine claims only while it may still take the requester's work.
+					if (build.machineOwner !== undefined && !await mayTake(connection, build.user, plan.id)) {
+						refuse("build-forbidden", build);
+					}
 					let picked = await pickBuild(
 						plan,
 						connection.owner,
@@ -523,7 +571,7 @@ export function implementationConnector(
 							graphRevision: build.graphRevision,
 							run: {
 								id: build.id,
-								user: connection.owner,
+								user: build.user,
 								client: { name: "chopin-acp", version: "0.1.0" },
 								session: report.session,
 								graphVersion: build.graphVersion,
@@ -555,7 +603,7 @@ export function implementationConnector(
 						build?.connectionId !== connectionId
 						|| !["queued", "starting", "running"].includes(build.state)
 					) return;
-					await reportBuild(plan, build.user, connectionId, build.id, {
+					await reportBuild(plan, runner(build), connectionId, build.id, {
 						state: "failed",
 						error: DISCONNECTED,
 					});
@@ -578,6 +626,19 @@ export function implementationConnector(
 						return;
 					}
 					let connected = !!connections.get(build.connectionId);
+					// A teammate's machine that stopped taking it would only let it expire unclaimed.
+					if (connected && build.state === "queued" && build.machineOwner !== undefined) {
+						let held = connections.get(build.connectionId)!;
+						if (!await mayTake(held, build.user, id)) {
+							await reportBuild(plan, runner(build), held.id, build.id, {
+								state: "failed",
+								error: WITHDRAWN,
+							});
+							connections.release(held.id, id);
+							tracked.delete(id);
+							return;
+						}
+					}
 					// Queued behind another document's build on the same connection.
 					let behind = connections.assigned(build.connectionId) !== id
 						&& connections.queued(build.connectionId).includes(id);
@@ -604,7 +665,7 @@ export function implementationConnector(
 							`chopin: build ${build.id} of document ${id} on connection ${build.connectionId} `
 								+ `of machine ${build.machineId ?? "unknown"} ended - ${error}`,
 						);
-						await reportBuild(plan, build.user, build.connectionId, build.id, {
+						await reportBuild(plan, runner(build), build.connectionId, build.id, {
 							state: "failed",
 							error,
 						});

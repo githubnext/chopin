@@ -29,12 +29,13 @@ import type { Machine } from "../machine-summary";
 import type { NavigationDialogMotion } from "../navigation-dialog";
 
 /**
- * The signed-in person's machines, asked for again every few seconds while the page is in view.
- * `machines` is undefined until the first answer; `error` is the server's code for the last
- * failed answer, which the page turns into words. The sidebar's count shares the same list.
+ * The signed-in person's machines, and the teammates' machines shared with them, asked for again
+ * every few seconds while the page is in view. `machines` is undefined until the first answer;
+ * `error` is the server's code for the last failed answer, which the page turns into words. The
+ * sidebar's count shares the same list.
  */
 export function useMachines() {
-	let { machines, error } = useLiveMachines(true);
+	let { machines, teammates, error } = useLiveMachines(true);
 	let [recommended, setRecommended] = useState<string | null>(null);
 	useEffect(() => {
 		let abort = new AbortController();
@@ -70,7 +71,7 @@ export function useMachines() {
 			void liveMachines.load();
 		}
 	};
-	return { machines, error, recommended, forget, retry, favor, share };
+	return { machines, teammates, error, recommended, forget, retry, favor, share };
 }
 
 /**

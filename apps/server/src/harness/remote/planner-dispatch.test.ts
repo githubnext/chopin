@@ -7,7 +7,12 @@ import {
 } from "@chopin/protocol/connector";
 
 import { Machines } from "../../auth/machines";
-import { PLANNER_IDLE_MS, registerExperimentRoutes } from "../../experiments/routes";
+import {
+	offlineMessage,
+	PLANNER_IDLE_MS,
+	registerExperimentRoutes,
+	unavailableMessage,
+} from "../../experiments/routes";
 import { Router } from "../../http/router";
 import {
 	linkAuth,
@@ -21,6 +26,7 @@ import { hostInputRoom } from "../../testing/decisions";
 import { startingMessage } from "./attachments";
 import { MachinePlanners } from "./machine-planners";
 
+import type { RepositoryPage } from "../../github/client";
 import type { RemotePlanner } from "./registry";
 
 let cleanups: Array<() => unknown> = [];
@@ -32,52 +38,72 @@ afterEach(async () => {
  * A HARNESS=remote server whose accounts pair machines that connect checkouts of octo-org/score,
  * choose them for the linked document, and run its Planner on them over the agent connection.
  */
-async function dispatchServer() {
+async function dispatchServer(
+	/** `planners: false` is a server that runs no Planner on machines, as with AGENT=off. */
+	{ planners: runsPlanners = true }: { planners?: boolean } = {},
+) {
 	let linked = await linkAuth();
 	let { auth, storage, sessions, cookies, channel } = linked;
-	let machines = new Machines(storage, () => new Date(), {
-		key: new Uint8Array(32).fill(7),
-		origin: auth.config.origin,
-		clientId: "client",
-		authorize: async (userId, token) => (await auth.admission.user(token)).id === userId,
-	});
-	let planners = new MachinePlanners({
-		machines,
-		sessions,
-		storage,
-		github: auth.github,
-		config: auth.config,
-	});
-	let server = linkServer(auth, 2_000, undefined, 300, undefined, planners);
-	cleanups.push(server.stop);
-	let router = new Router();
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	/** Documents open in Chopin now, as `main.ts` says from its rooms; and how far the clock moved. */
 	let open = new Set<string>();
 	let skew = { ms: 0 };
 	let clock = () => new Date(Date.now() + skew.ms);
-	let runtime = registerExperimentRoutes(
-		router,
-		{ ...auth, clock, machines, pairings: {} } as never,
-		{
-			lease: () => lease,
-			changed: () => {},
-			context: async () => ({ source: "# Context", revision: 0 }),
-			planners,
-			attachments: () => server.attachments,
-			documentOpen: id => open.has(id),
-			// No builds wait anywhere; only the Planner poll is exercised.
-			implementations: () =>
-				({
-					waiting: async () => undefined,
-					busy: async () => false,
-					disconnected: async () => {},
-					sweep: async () => {},
-					call: async () => ({}),
-				}) as never,
-		},
-	);
-	server.attachments.onChange(channelId => runtime.plannerChanged(channelId));
+	let machines!: Machines;
+	let planners!: MachinePlanners;
+	let server!: ReturnType<typeof linkServer>;
+	let router!: Router;
+	let runtime!: ReturnType<typeof registerExperimentRoutes>;
+	/**
+	 * One server process over the same storage: its machines' credentials, agent connection and
+	 * routes, and everything they keep in memory. `restart()` starts another, as a deploy does.
+	 */
+	function start() {
+		machines = new Machines(storage, () => new Date(), {
+			key: new Uint8Array(32).fill(7),
+			origin: auth.config.origin,
+			clientId: "client",
+			authorize: async (userId, token) => (await auth.admission.user(token)).id === userId,
+		});
+		planners = new MachinePlanners({
+			machines,
+			sessions,
+			storage,
+			github: auth.github,
+			config: auth.config,
+		});
+		server = linkServer(auth, 2_000, undefined, 300, undefined, planners);
+		cleanups.push(server.stop);
+		router = new Router();
+		runtime = registerExperimentRoutes(
+			router,
+			{ ...auth, clock, machines, pairings: {} } as never,
+			{
+				lease: () => lease,
+				changed: () => {},
+				context: async () => ({ source: "# Context", revision: 0 }),
+				...runsPlanners ? { planners } : {},
+				attachments: () => server.attachments,
+				documentOpen: id => open.has(id),
+				// No builds wait anywhere; only the Planner poll is exercised.
+				implementations: () =>
+					({
+						waiting: async () => undefined,
+						busy: async () => false,
+						disconnected: async () => {},
+						sweep: async () => {},
+						call: async () => ({}),
+					}) as never,
+			},
+		);
+		server.attachments.onChange(channelId => runtime.plannerChanged(channelId));
+	}
+	start();
+	/** The server process ends and another starts: every machine connects again, as its connector does. */
+	async function restart() {
+		await server.stop();
+		start();
+	}
 
 	async function send(
 		path: string,
@@ -108,7 +134,15 @@ async function dispatchServer() {
 		login: string,
 		userId: string,
 		label: string,
-		connector: { protocol?: number; plannerCommand?: boolean; shared?: boolean } = {},
+		connector: {
+			protocol?: number;
+			plannerCommand?: boolean;
+			shared?: boolean;
+			/** Connect with no checkout, as a protocol 5 connector does where it clones what it needs. */
+			bare?: boolean;
+			/** The chopin release it says it runs. */
+			version?: string;
+		} = {},
 	) {
 		let { machine, token } = await machines.pair({
 			userId,
@@ -123,14 +157,16 @@ async function dispatchServer() {
 				refreshExpiresIn: 15_897_600,
 			},
 		});
-		let protocol = connector.protocol ?? 4;
+		let protocol = connector.protocol ?? (connector.bare ? 5 : 4);
 		/** `chopin connect` on the machine: a connection of its own, as after a restart. */
 		async function connect() {
 			let opened = await send("/api/connector/connections", {
 				bearer: token,
-				body: { repository: "octo-org/score", commit: "a".repeat(40), label: "score" },
+				body: connector.bare
+					? { label: "score", checkouts: [] }
+					: { repository: "octo-org/score", commit: "a".repeat(40), label: "score" },
 				headers: {
-					[CONNECTOR_VERSION_HEADER]: "dev",
+					[CONNECTOR_VERSION_HEADER]: connector.version ?? "dev",
 					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
 					...(connector.plannerCommand ?? true ? { [CONNECTOR_PLANNER_COMMAND_HEADER]: "1" } : {}),
 				},
@@ -248,6 +284,11 @@ async function dispatchServer() {
 		});
 		return response.status;
 	};
+	/** `GET /api/connector/machines` as a signed-in person: their own and their teammates'. */
+	let listing = async (login: string) =>
+		(await (await send("/api/connector/machines", { login })).json()).machines as Array<
+			Record<string, unknown>
+		>;
 	/** Someone opens the document in Chopin; closing it starts its idle time. */
 	let visit = async (id = channel.id) => {
 		open.add(id);
@@ -256,10 +297,20 @@ async function dispatchServer() {
 	let url = expect.stringContaining(`https://chopin.test/`);
 	return {
 		...linked,
-		machines,
-		planners,
-		server,
-		runtime,
+		// The current process's: another after `restart()`.
+		get machines() {
+			return machines;
+		},
+		get planners() {
+			return planners;
+		},
+		get server() {
+			return server;
+		},
+		get runtime() {
+			return runtime;
+		},
+		restart,
 		open,
 		skew,
 		send,
@@ -268,6 +319,7 @@ async function dispatchServer() {
 		choice,
 		favor,
 		share,
+		listing,
 		visit,
 		url,
 	};
@@ -277,6 +329,105 @@ async function dispatchServer() {
 async function upgrade(url: string, credential: string) {
 	let response = await upgradeRequest(url, { authorization: `Bearer ${credential}` });
 	return response.status;
+}
+
+/**
+ * Count the GitHub calls each token makes: repository checks (`asked`), and the installation and
+ * repository listings that make up a list of what someone can push to (`listed`); and how many
+ * repository checks run at once.
+ */
+function counting(github: {
+	repositoryAccess: (token: string, owner: string, name: string) => Promise<unknown>;
+	installations: (token: string, page: number) => Promise<unknown>;
+	installationRepositories: (token: string, installation: string, page: number) => Promise<unknown>;
+}) {
+	let asked = new Map<string, number>();
+	let listed = new Map<string, number>();
+	let running = { now: 0, most: 0 };
+	let access = github.repositoryAccess;
+	github.repositoryAccess = async (token, owner, name) => {
+		asked.set(token, (asked.get(token) ?? 0) + 1);
+		running.now++;
+		running.most = Math.max(running.most, running.now);
+		try {
+			await Bun.sleep(5);
+			return await access(token, owner, name);
+		} finally {
+			running.now--;
+		}
+	};
+	let installations = github.installations;
+	github.installations = async (token, page) => {
+		listed.set(token, (listed.get(token) ?? 0) + 1);
+		await Bun.sleep(5);
+		return installations(token, page);
+	};
+	let repositories = github.installationRepositories;
+	github.installationRepositories = async (token, installation, page) => {
+		listed.set(token, (listed.get(token) ?? 0) + 1);
+		await Bun.sleep(5);
+		return repositories(token, installation, page);
+	};
+	return {
+		asked: (token: string) => asked.get(token) ?? 0,
+		listed: (token: string) => listed.get(token) ?? 0,
+		running,
+	};
+}
+
+/**
+ * What GitHub lists of the App's one installation: for each token the repositories of octo-org
+ * `names` gives, all of them pushable, a hundred to a page; for a token it names none, what the
+ * account can really do.
+ */
+function installed(
+	github: {
+		installationRepositories: (
+			token: string,
+			installation?: string,
+			page?: number,
+		) => Promise<RepositoryPage>;
+	},
+	names: (token: string) => string[] | undefined,
+) {
+	let original = github.installationRepositories;
+	github.installationRepositories = async (token, installation, page = 1) => {
+		let all = names(token);
+		if (!all) return original(token, installation, page);
+		let first = (page - 1) * 100;
+		return {
+			repositories: all.slice(first, first + 100).map(name => ({
+				id: `R_${name}`,
+				owner: "octo-org",
+				name,
+				fullName: `octo-org/${name}`,
+				private: true,
+				url: `https://github.test/octo-org/${name}`,
+				defaultBranch: "main",
+				permissions: { pull: true, push: true, admin: false },
+			})),
+			nextPage: first + 100 < all.length ? page + 1 : undefined,
+		};
+	};
+}
+
+/** GitHub failing to list installations for the tokens that start with `prefix`, while `down.now`. */
+function unavailable(
+	github: { installations: (token: string, page: number) => Promise<unknown> },
+	prefix: string,
+) {
+	let down = { now: true };
+	let listed = github.installations;
+	github.installations = async (token, page) => {
+		if (down.now && token.startsWith(prefix)) throw new Error("GitHub is unavailable");
+		return listed(token, page);
+	};
+	return down;
+}
+
+/** `count` repositories, `repo-0` on, then the ones named in `last`. */
+function others(count: number, ...last: string[]) {
+	return [...Array.from({ length: count }, (_, index) => `repo-${index}`), ...last];
 }
 
 /** What a connector says when its backend exited before attaching `attempts` times in a row. */
@@ -620,7 +771,7 @@ describe("choosing a machine for a document", () => {
 	});
 
 	it("keeps the creator's Planner when they go back to Default machine after a member chose", async () => {
-		let { machine, choose, choice, visit, channel, server } = await dispatchServer();
+		let { machine, choose, choice, visit, channel, server, url } = await dispatchServer();
 		let laptop = await machine("member", "U_member", "laptop");
 		let rivals = await machine("rival", "U_rival", "rival-box");
 		await visit();
@@ -637,6 +788,19 @@ describe("choosing a machine for a document", () => {
 		expect(await rivals.poll([], 300)).toEqual({ waiting: true });
 		expect(server.attachments.holder(channel.id)).toBe("member");
 		expect((await choice("rival")).choice).toBe(rivals.id);
+
+		// The creator chose no machine now, so the member's stored choice counts again: it is asked
+		// once the Planner on Default machine has ended, and Default machine no more.
+		mine.send({ type: "detach" });
+		for (let deadline = Date.now() + 4_000; server.attachments.holder(channel.id);) {
+			expect(Date.now()).toBeLessThan(deadline);
+			await Bun.sleep(50);
+		}
+		expect(await rivals.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
 	});
 
 	it("withdraws a machine's credential once it is no longer asked, so it never attaches after Automatic", async () => {
@@ -1310,6 +1474,1073 @@ describe("a teammate's machine shared with teammates", () => {
 		let { machine, share } = await dispatchServer();
 		let box = await machine("rival", "U_rival", "build-box");
 		expect(await share("member", box.id)).toBe(404);
+	});
+});
+
+describe("a teammate's shared machine, listed read-only", () => {
+	/** rival's shared build-box, with no checkout, and member who can push to octo-org/score. */
+	async function teammates() {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("rival", "U_rival", "build-box", {
+			bare: true,
+			shared: true,
+			version: "0.1.5",
+		});
+		return { ...dispatch, box };
+	}
+
+	it("shows a machine with no checkouts to a teammate for the repositories its owner and they can push to", async () => {
+		let { listing, box } = await teammates();
+		let [row, ...rest] = await listing("member");
+		expect(rest).toEqual([]);
+		expect(row).toEqual({
+			id: box.id,
+			label: "build-box",
+			teammate: true,
+			owner: { login: "rival", avatarUrl: "" },
+			repositories: ["octo-org/score"],
+			connected: true,
+			version: "0.1.5",
+			service: false,
+			lastSeenAt: expect.any(Number),
+		});
+	});
+
+	it("lists a shared machine once to its owner, as theirs, never as a teammate's", async () => {
+		let { listing, choice, box } = await teammates();
+		// rival can push to the repository too, so the machine would qualify for them as a teammate's.
+		let own = (await listing("rival")).filter(value => value.id === box.id);
+		expect(own).toHaveLength(1);
+		expect(own[0]).toMatchObject({ teammate: false, shared: true });
+		let menu = (await choice("rival")).machines.filter((value: { id: string }) =>
+			value.id === box.id
+		);
+		expect(menu).toHaveLength(1);
+		expect(menu[0]).toMatchObject({ teammate: false });
+	});
+
+	it("leaves out what only the owner may see or change", async () => {
+		let { listing, box } = await teammates();
+		let [row] = await listing("member");
+		for (
+			let owned of [
+				"autoRun",
+				"reauthorize",
+				"finishing",
+				"favorite",
+				"shared",
+				"createdAt",
+				"hostname",
+				"platform",
+				"agent",
+			]
+		) {
+			expect(row).not.toHaveProperty(owned);
+		}
+		// The owner's own row has them all, and says it is theirs.
+		expect((await listing("rival")).find(value => value.id === box.id)).toMatchObject({
+			teammate: false,
+			autoRun: false,
+			shared: true,
+			reauthorize: false,
+			finishing: 0,
+			favorite: false,
+		});
+	});
+
+	it("never shows a machine that is not shared, or whose owner can't push to the repository", async () => {
+		let { machine, listing, share, box } = await teammates();
+		// Not shared: nobody but its owner sees it.
+		let plain = await machine("rival", "U_rival", "private", { bare: true });
+		expect((await listing("member")).map(value => value.id)).toEqual([box.id]);
+		expect((await listing("rival")).map(value => value.id).sort())
+			.toEqual([box.id, plain.id].sort());
+		// Shared by an owner who can only pull: it serves nothing a teammate could push to.
+		let viewers = await machine("viewer", "U_viewer", "viewer-box", { bare: true, shared: true });
+		expect((await listing("member")).map(value => value.id)).toEqual([box.id]);
+		expect((await listing("viewer")).map(value => value.id)).toEqual([viewers.id]);
+		expect(await share("rival", plain.id)).toBe(200);
+		expect((await listing("member")).map(value => value.id).sort())
+			.toEqual([box.id, plain.id].sort());
+	});
+
+	it("shows nothing to someone who can't push to any repository the machine serves", async () => {
+		let { listing } = await teammates();
+		// A reader can pull from the repository, but can't push to it.
+		expect(await listing("viewer")).toEqual([]);
+	});
+
+	it("says whether a teammate's machine is online, and keeps listing it offline", async () => {
+		let { listing, box } = await teammates();
+		expect((await listing("member"))[0]).toMatchObject({ connected: true, version: "0.1.5" });
+		await box.disconnect();
+		let [row] = await listing("member");
+		expect(row).toMatchObject({ id: box.id, connected: false, version: null, teammate: true });
+	});
+
+	it("takes a machine back off the list when its owner stops sharing it", async () => {
+		let { listing, share, box } = await teammates();
+		expect(await listing("member")).toHaveLength(1);
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await listing("member")).toEqual([]);
+		expect(await listing("rival")).toHaveLength(1);
+		expect(await share("rival", box.id)).toBe(200);
+		expect(await listing("member")).toHaveLength(1);
+	});
+
+	it("never offers a revoked machine", async () => {
+		let { listing, send, box } = await teammates();
+		let revoked = await send(`/api/connector/machines/${box.id}/revoke`, {
+			login: "rival",
+			body: {},
+		});
+		expect(revoked.status).toBe(200);
+		expect(await listing("member")).toEqual([]);
+	});
+
+	it("never lets a teammate rename, favorite, share, stop sharing or disconnect it", async () => {
+		let { send, listing, box } = await teammates();
+		for (
+			let [action, body] of [
+				["label", { label: "mine now" }],
+				["favorite", { favorite: true }],
+				["shared", { shared: false }],
+				["revoke", {}],
+			] as const
+		) {
+			let refused = await send(`/api/connector/machines/${box.id}/${action}`, {
+				login: "member",
+				body,
+			});
+			expect(refused.status).toBe(404);
+		}
+		let [row] = await listing("member");
+		expect(row).toMatchObject({ id: box.id, label: "build-box", connected: true });
+		expect((await listing("rival"))[0]).toMatchObject({ shared: true, favorite: false });
+	});
+
+	it("shows a machine with no checkouts for the repositories both can push to, with no project opened", async () => {
+		let { machine, listing } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		// Neither member nor rival has opened a document in octo-org/score, which both can push to.
+		expect(await listing("member")).toEqual([
+			expect.objectContaining({ id: box.id, teammate: true, repositories: ["octo-org/score"] }),
+		]);
+	});
+
+	it("lists a machine for the repositories it has checkouts of even when GitHub can't list the person's installations", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		auth.github.installations = async () => {
+			throw new Error("GitHub is unavailable");
+		};
+		// A checkout of octo-org/score, as the connector registers it.
+		let box = await machine("rival", "U_rival", "build-box", { shared: true });
+		expect(await listing("member")).toEqual([
+			expect.objectContaining({ id: box.id, repositories: ["octo-org/score"] }),
+		]);
+	});
+
+	it("never names a repository the person can't push to, even one the machine has a checkout of", async () => {
+		let { machine, listing } = await dispatchServer();
+		// The checkout is of octo-org/score, which viewer can only pull.
+		await machine("rival", "U_rival", "build-box", { shared: true });
+		expect(await listing("viewer")).toEqual([]);
+	});
+
+	it("lists every repository both can push to for a machine with no checkouts, however many their installations list", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		// member's installation lists 250 repositories over three pages, octo-org/score the last;
+		// rival's lists three of them, octo-org/score too.
+		installed(auth.github, token =>
+			token.startsWith("rival")
+				? ["repo-3", "score", "repo-120"]
+				: others(249, "score"));
+		await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		let [row] = await listing("member");
+		expect(row!.repositories).toEqual(["octo-org/repo-3", "octo-org/repo-120", "octo-org/score"]);
+	});
+
+	it("lists a machine with no checkouts for someone with no projects whose only repository both can push to comes after their first fifty", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		installed(auth.github, token => token.startsWith("rival") ? ["score"] : others(50, "score"));
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		expect(await listing("member")).toEqual([
+			expect.objectContaining({ id: box.id, repositories: ["octo-org/score"] }),
+		]);
+	});
+
+	it("asks GitHub for the machine owner's repositories once for everyone and every poll, a pass held ten minutes", async () => {
+		let { auth, machine, listing, skew } = await dispatchServer();
+		// Both signed-in teammates can push to 120 repositories, the owner to octo-org/score alone,
+		// so a check of each of theirs with the owner's token would ask 120 times.
+		installed(auth.github, token => token.startsWith("guest") ? ["score"] : others(120, "score"));
+		let box = await machine("guest", "U_guest", "build-box", { bare: true, shared: true });
+		let github = counting(auth.github);
+		let polled = async () => {
+			for (let poll = 0; poll < 20; poll++) {
+				for (let login of ["member", "rival"]) {
+					expect((await listing(login)).map(value => value.id)).toEqual([box.id]);
+				}
+			}
+		};
+		await polled();
+		// The owner's installations and one repository listing, each person's and no more.
+		expect(github.listed("guest-machine-1")).toBe(2);
+		expect(github.asked("guest-machine-1")).toBe(0);
+		for (let login of ["member", "rival"]) {
+			expect(github.listed(`${login}-browser-login`)).toBe(3);
+			expect(github.asked(`${login}-browser-login`)).toBe(0);
+		}
+		// A minute on, the people's lists are asked for again, not the owner's.
+		skew.ms = 61_000;
+		await polled();
+		expect(github.listed("guest-machine-1")).toBe(2);
+		for (let login of ["member", "rival"]) {
+			expect(github.listed(`${login}-browser-login`)).toBe(6);
+		}
+		skew.ms = 9 * 60_000;
+		await polled();
+		expect(github.listed("guest-machine-1")).toBe(2);
+		skew.ms = 11 * 60_000;
+		await polled();
+		expect(github.listed("guest-machine-1")).toBe(4);
+		expect(github.asked("guest-machine-1")).toBe(0);
+	});
+
+	it("asks for the machine owner's repositories once, not per machine of theirs", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		installed(auth.github, token => token.startsWith("guest") ? ["score"] : others(60, "score"));
+		let first = await machine("guest", "U_guest", "build-box", { bare: true, shared: true });
+		let second = await machine("guest", "U_guest", "desk", { bare: true, shared: true });
+		let github = counting(auth.github);
+		for (let poll = 0; poll < 5; poll++) {
+			expect((await listing("member")).map(value => value.id).sort())
+				.toEqual([first.id, second.id].sort());
+		}
+		expect(github.listed("guest-machine-1")).toBe(2);
+	});
+
+	it("lists the machines of an owner whose other machine needs its GitHub authorization renewed, from the machine that can ask", async () => {
+		let { auth, storage, machine, listing, choice } = await dispatchServer();
+		installed(auth.github, token => token.startsWith("guest") ? ["score"] : others(60, "score"));
+		let stale = await machine("guest", "U_guest", "stale-box", { bare: true, shared: true });
+		let fresh = await machine("guest", "U_guest", "fresh-box", { bare: true, shared: true });
+		await storage.machines.reauthorize(stale.id, 1, new Date());
+		let github = counting(auth.github);
+		expect((await listing("member")).map(value => value.id)).toEqual([fresh.id]);
+		expect((await choice("member")).machines.map((value: { id: string }) => value.id))
+			.toEqual([fresh.id]);
+		expect(github.listed("guest-machine-1")).toBe(2);
+	});
+
+	it("holds a refusal of the machine owner's repositories for a minute, however often it is asked, then asks again", async () => {
+		let { auth, machine, listing, skew } = await dispatchServer();
+		let box = await machine("guest", "U_guest", "build-box", { bare: true, shared: true });
+		let down = unavailable(auth.github, "guest");
+		let github = counting(auth.github);
+		for (let poll = 0; poll < 10; poll++) expect(await listing("member")).toEqual([]);
+		expect(github.listed("guest-machine-1")).toBe(1);
+		down.now = false;
+		expect(await listing("member")).toEqual([]);
+		skew.ms = 61_000;
+		expect((await listing("member")).map(value => value.id)).toEqual([box.id]);
+		expect(github.listed("guest-machine-1")).toBe(3);
+	});
+
+	it("never lists a machine whose owner can only pull, whatever the person can push to", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		installed(auth.github, token => token.startsWith("viewer") ? undefined : others(60, "score"));
+		await machine("viewer", "U_viewer", "viewer-box", { bare: true, shared: true });
+		expect(await listing("member")).toEqual([]);
+	});
+
+	it("remembers a refusal of the person's own push check between listings, and asks again a minute on", async () => {
+		let { auth, machine, listing, skew } = await dispatchServer();
+		// viewer can only pull octo-org/score, which the machine has a checkout of.
+		await machine("rival", "U_rival", "build-box", { shared: true });
+		let github = counting(auth.github);
+		for (let poll = 0; poll < 5; poll++) expect(await listing("viewer")).toEqual([]);
+		expect(github.asked("viewer-browser-login")).toBe(1);
+		skew.ms = 61_000;
+		expect(await listing("viewer")).toEqual([]);
+		expect(await listing("viewer")).toEqual([]);
+		expect(github.asked("viewer-browser-login")).toBe(2);
+	});
+
+	it("remembers that the person can push to a repository their installations don't list for ten minutes", async () => {
+		let { auth, machine, listing, skew } = await dispatchServer();
+		// Their installations list nothing of the machine's checkout, so they are asked with their own login.
+		auth.github.installationRepositories = async () => ({ repositories: [], nextPage: undefined });
+		let box = await machine("rival", "U_rival", "build-box", { shared: true });
+		let github = counting(auth.github);
+		let listed = async () => (await listing("member")).map(value => value.id);
+		for (let poll = 0; poll < 5; poll++) expect(await listed()).toEqual([box.id]);
+		expect(github.asked("member-browser-login")).toBe(1);
+		skew.ms = 9 * 60_000;
+		expect(await listed()).toEqual([box.id]);
+		expect(github.asked("member-browser-login")).toBe(1);
+		skew.ms = 11 * 60_000;
+		expect(await listed()).toEqual([box.id]);
+		expect(github.asked("member-browser-login")).toBe(2);
+	});
+
+	it("asks GitHub once for listings that overlap, for the person and for the machine's owner", async () => {
+		let { auth, machine, listing } = await dispatchServer();
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		let github = counting(auth.github);
+		let lists = await Promise.all(Array.from({ length: 5 }, () => listing("member")));
+		for (let list of lists) expect(list.map(value => value.id)).toEqual([box.id]);
+		expect(github.listed("member-browser-login")).toBe(2);
+		expect(github.listed("rival-machine-1")).toBe(2);
+	});
+
+	it("checks the repositories a machine has checkouts of a few at a time", async () => {
+		let { auth, storage, machine, listing } = await dispatchServer();
+		installed(auth.github, () => others(40));
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		for (let name of others(40)) {
+			await storage.machines.serve(box.id, {
+				repositoryId: `R_${name}`,
+				repository: `octo-org/${name}`,
+				commit: "a".repeat(40),
+			});
+		}
+		let github = counting(auth.github);
+		let [row] = await listing("member");
+		expect(row!.repositories).toHaveLength(40);
+		expect(github.asked("rival-machine-1")).toBe(40);
+		expect(github.running.most).toBeGreaterThan(1);
+		expect(github.running.most).toBeLessThan(40);
+		// Polled again, nothing is asked again of either.
+		expect((await listing("member"))[0]!.repositories).toHaveLength(40);
+		expect(github.asked("rival-machine-1")).toBe(40);
+		expect(github.asked("member-browser-login")).toBe(0);
+	});
+
+	it("lists shared machines where Chopin runs no Planners on machines", async () => {
+		let { machine, listing, choice } = await dispatchServer({ planners: false });
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		expect((await listing("member")).map(value => value.id)).toEqual([box.id]);
+		expect((await choice("member")).machines).toEqual([
+			expect.objectContaining({ id: box.id, teammate: true, connected: true, runsPlanners: false }),
+		]);
+	});
+});
+
+/** The machine with an id in a listing of machines. */
+function teammate(list: Array<Record<string, unknown>>, id: string) {
+	return list.find(value => value.id === id);
+}
+
+describe("a teammate's shared machine, in a document's machine menu", () => {
+	async function menu() {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("rival", "U_rival", "build-box", {
+			bare: true,
+			shared: true,
+			version: "0.1.5",
+		});
+		let desk = await dispatch.machine("member", "U_member", "desk", { plannerCommand: false });
+		return { ...dispatch, box, desk };
+	}
+
+	it("lists it beside the person's own, under its owner, without what only its owner sees", async () => {
+		let { choice, box, desk } = await menu();
+		let { machines } = await choice("member");
+		expect(machines.map((value: Record<string, unknown>) => value.id).sort())
+			.toEqual([box.id, desk.id].sort());
+		expect(teammate(machines, box.id)).toEqual({
+			id: box.id,
+			label: "build-box",
+			teammate: true,
+			owner: { login: "rival", avatarUrl: "" },
+			connected: true,
+			lastSeenAt: expect.any(Number),
+			version: "0.1.5",
+			service: false,
+			runsPlanners: true,
+		});
+		expect(teammate(machines, desk.id)).toMatchObject({ teammate: false, reauthorize: false });
+	});
+
+	it("serves any repository its owner can push to, with no checkout of it", async () => {
+		let { choice, box } = await menu();
+		// The machine connected with no checkouts at all, and still serves the document's repository.
+		expect(teammate((await choice("member")).machines, box.id)).toMatchObject({ connected: true });
+	});
+
+	it("is listed offline, and nothing else changes", async () => {
+		let { choice, box } = await menu();
+		await box.disconnect();
+		expect(teammate((await choice("member")).machines, box.id)).toMatchObject({
+			connected: false,
+			teammate: true,
+			version: null,
+		});
+	});
+
+	it("is never listed unless it is shared, and goes when its owner stops sharing it", async () => {
+		let { choice, share, machine, box } = await menu();
+		let plain = await machine("rival", "U_rival", "plain", { bare: true });
+		expect(teammate((await choice("member")).machines, plain.id)).toBeUndefined();
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(teammate((await choice("member")).machines, box.id)).toBeUndefined();
+		// The owner still lists it, as their own.
+		expect(teammate((await choice("rival")).machines, box.id)).toMatchObject({ teammate: false });
+	});
+
+	it("is never listed when its owner can't push to the document's repository", async () => {
+		let { choice, machine } = await menu();
+		let readers = await machine("viewer", "U_viewer", "reader-box", { bare: true, shared: true });
+		expect(teammate((await choice("member")).machines, readers.id)).toBeUndefined();
+	});
+
+	it("is never listed to someone who can only read the document", async () => {
+		let { choice, box } = await menu();
+		let read = await choice("viewer");
+		expect(teammate(read.machines, box.id)).toBeUndefined();
+		expect(read.machines).toEqual([]);
+	});
+});
+
+describe("choosing a teammate's shared machine for a document", () => {
+	/** guest's shared build-box, with no checkout, for a document member created and rival edits. */
+	async function chosen() {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("guest", "U_guest", "build-box", { bare: true, shared: true });
+		let path = `/api/documents/${dispatch.channel.id}/machine`;
+		return { ...dispatch, box, path };
+	}
+
+	it("lets anyone who can edit the document choose it, and runs the Planner there, as its owner", async () => {
+		let { choose, choice, box, channel, server, url } = await chosen();
+		// rival neither created the document nor owns the machine.
+		let picked = await choose("rival", box.id);
+		expect(picked.choice).toBe(box.id);
+		expect(picked.planner).toEqual({ state: "starting", login: "guest", machine: box.id });
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let link = await box.backend();
+		await link.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("guest");
+		expect((await choice("rival")).choice).toBe(box.id);
+		expect((await choice("rival")).planner)
+			.toEqual({ state: "held", login: "guest", machine: null });
+	});
+
+	it("lets the document's creator choose it, and runs the Planner there", async () => {
+		let { choose, box, channel, url } = await chosen();
+		let picked = await choose("member", box.id);
+		expect(picked.planner).toEqual({ state: "starting", login: "guest", machine: box.id });
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+	});
+
+	it("refuses someone who can only read the document", async () => {
+		let { send, box, path, runtime } = await chosen();
+		let refused = await send(path, { login: "viewer", body: { machine: box.id } });
+		expect(refused.status).toBe(403);
+		expect(runtime.connections.choosing(box.id)).toEqual([]);
+	});
+
+	it("refuses a machine that is not shared, or whose owner can't push, as one that is not there", async () => {
+		let { send, machine, share, path, box } = await chosen();
+		let plain = await machine("rival", "U_rival", "plain", { bare: true });
+		let readers = await machine("viewer", "U_viewer", "reader-box", { bare: true, shared: true });
+		for (let target of [plain.id, readers.id]) {
+			let refused = await send(path, { login: "member", body: { machine: target } });
+			expect(refused.status).toBe(404);
+		}
+		// Shared at first, then not: choosing it is refused like any machine that isn't theirs.
+		expect(await share("rival", plain.id)).toBe(200);
+		expect((await send(path, { login: "member", body: { machine: plain.id } })).status).toBe(200);
+		expect(await share("rival", plain.id, false)).toBe(200);
+		expect((await send(path, { login: "member", body: { machine: plain.id } })).status).toBe(404);
+		expect(box.id).toBeString();
+	});
+
+	it("lets the creator's own choice still decide where the Planner runs", async () => {
+		let { choose, choice, machine, box, channel, server, url } = await chosen();
+		let laptop = await machine("member", "U_member", "laptop");
+		// rival chose the teammate's machine first, and its Planner attached.
+		await choose("rival", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let theirs = await box.backend();
+		await theirs.next("attached");
+		expect(server.attachments.holding(channel.id)?.machineId).toBe(box.id);
+
+		// The creator chooses their own machine: the teammate's Planner stops, rival's choice goes.
+		let picked = await choose("member", laptop.id);
+		expect(picked.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await box.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("member chose another machine") },
+		});
+		expect((await choice("rival")).choice).toBeNull();
+	});
+
+	it("never asks it for an editor's choice while the creator chose another machine", async () => {
+		let { choose, choice, machine, box, channel, url } = await chosen();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let theirs = await choose("rival", box.id);
+		expect(theirs.choice).toBe(box.id);
+		expect(theirs.planner).toEqual({ state: "none", login: null, machine: null });
+		expect(await box.poll([])).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: null, machine: laptop.id });
+	});
+
+	it("offers it no more, and stops asking it, once its owner can no longer push", async () => {
+		let { auth, choose, choice, box, skew, channel, runtime } = await chosen();
+		await choose("rival", box.id);
+		expect(await box.poll([])).toMatchObject({ kind: "planners" });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "guest",
+			machineId: box.id,
+		});
+		expect((await choice("rival")).machines.map((value: { id: string }) => value.id))
+			.toEqual([box.id]);
+		// GitHub now refuses its owner's token, which Chopin finds out when it next asks.
+		let github = auth.github;
+		let asked = github.repositoryAccess;
+		github.repositoryAccess = async (token, owner, name) =>
+			token.startsWith("guest-machine") ? undefined : asked(token, owner, name);
+		skew.ms = 11 * 60_000;
+		let after = await choice("rival");
+		expect(after.machines).toEqual([]);
+		expect(after.planner).toEqual({ state: "none", login: null, machine: null });
+		expect(await runtime.plannerStarting(channel.id)).toBeUndefined();
+		// Its connector, still running the Planner, is told to stop.
+		expect(await box.poll([channel.id])).toMatchObject({ kind: "planners", planners: [] });
+	});
+
+	it("runs the chooser's investigation there, and refuses it once the machine is offline or no longer takes their work", async () => {
+		let { auth, choose, send, box, channel, runtime, skew } = await chosen();
+		await choose("member", box.id);
+		let run = async () => {
+			let id = crypto.randomUUID();
+			let created = await send(`/api/documents/${channel.id}/experiments`, {
+				login: "member",
+				body: { id, brief: "Measure startup" },
+			});
+			expect(created.status).toBe(200);
+			let started = await send(`/api/documents/${channel.id}/experiments/${id}/run`, {
+				login: "member",
+				body: {},
+			});
+			return { id, started };
+		};
+		// Online: the run is the chooser's, on the teammate's machine.
+		let first = await run();
+		expect(first.started.status).toBe(200);
+		let stored = await runtime.service.store.get(first.id);
+		expect(stored).toMatchObject({ connectionId: box.connectionId, requester: "U_member" });
+		expect(stored?.input?.authorizer).toBe("U_member");
+		// Offline: the machine's own words, never another machine.
+		await box.disconnect();
+		let offline = await run();
+		expect(offline.started.status).toBe(409);
+		expect(await offline.started.json()).toEqual({
+			error: "machine-offline",
+			message: offlineMessage("build-box"),
+		});
+		expect((await runtime.service.store.get(offline.id))?.connectionId).toBeUndefined();
+		// Back online, but its owner can no longer push to the repository.
+		await box.reconnect();
+		let github = auth.github;
+		let asked = github.repositoryAccess;
+		github.repositoryAccess = async (token, owner, name) =>
+			token.startsWith("guest-machine") ? undefined : asked(token, owner, name);
+		skew.ms = 11 * 60_000;
+		let unavailable = await run();
+		expect(unavailable.started.status).toBe(409);
+		expect(await unavailable.started.json()).toEqual({
+			error: "machine-unavailable",
+			message: unavailableMessage("build-box"),
+		});
+		expect((await runtime.service.store.get(unavailable.id))?.connectionId).toBeUndefined();
+	});
+
+	it("takes the choice back when its owner stops sharing the machine, and stops its Planner", async () => {
+		let dispatch = await dispatchServer();
+		let { machine, choose, choice, share, channel, url } = dispatch;
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		await choose("member", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+
+		expect(await share("rival", box.id, false)).toBe(200);
+		// The teammate's choice goes with the sharing, so their own work is never held for it.
+		expect((await choice("member")).choice).toBeNull();
+		expect(await box.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped sharing build-box") },
+		});
+	});
+
+	it("keeps a teammate's Planner through its reply when sharing stops, then stops it", async () => {
+		let dispatch = await dispatchServer();
+		let { machine, choose, share, channel, server, url } = dispatch;
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		await choose("member", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let link = await box.backend();
+		await link.next("attached");
+		let room = await hostInputRoom();
+		cleanups.push(room.close);
+		let planner: RemotePlanner = {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(room.room, undefined, report),
+		};
+		let started = link.next("start").then(start => {
+			link.send({ type: "started", session: start.session });
+		});
+		let session = await server.links.at(-1)!.startSession("planner-session", planner);
+		cleanups.push(() => session.doDestroy?.());
+		await started;
+		let turn = session.doPromptTurn({
+			prompt: "outline the plan",
+			skills: [],
+			tools: [],
+			emit: () => {},
+		});
+		let { turn: id } = await link.next("turn");
+		await turn;
+		let stillRuns = async () => {
+			await dispatch.runtime.sweep();
+			return "waiting" in await box.poll([channel.id]);
+		};
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await stillRuns()).toBe(true);
+		link.send({ type: "turn-end", session: "planner-session", turn: id, status: "finished" });
+		await Bun.sleep(50);
+		expect(await stillRuns()).toBe(false);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+	});
+
+	/**
+	 * member created the document and runs Default machine's Planners on their desk; nobody has it
+	 * open. rival's shared build-box is the machine member chooses for it.
+	 */
+	async function chosenByCreator(connector: { plannerCommand?: boolean } = {}) {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("rival", "U_rival", "build-box", {
+			bare: true,
+			shared: true,
+			...connector,
+		});
+		let desk = await dispatch.machine("member", "U_member", "desk");
+		return { ...dispatch, box, desk };
+	}
+
+	it("starts nothing on Default machine for a document whose Planner it never ran, when sharing stops", async () => {
+		let { choose, choice, share, box, desk } = await chosenByCreator({ plannerCommand: false });
+		// A choice for the person's builds only: the machine runs no Planners, and nobody opened it.
+		await choose("member", box.id);
+		expect(await desk.poll([], 200)).toEqual({ waiting: true });
+
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect((await choice("member")).choice).toBeNull();
+		expect(await desk.poll([], 200)).toEqual({ waiting: true });
+		expect((await choice("member")).planner).toEqual({ state: "none", login: null, machine: null });
+	});
+
+	it("hands the document to Default machine when sharing stops, if the machine ran its Planner or was about to", async () => {
+		let { choose, share, box, desk, channel, url } = await chosenByCreator();
+		await choose("member", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await desk.poll([], 200)).toEqual({ waiting: true });
+
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await desk.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await box.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped sharing build-box") },
+		});
+
+		// Chosen and able to run it, but its connector had not asked yet: the same.
+		let other = await chosenByCreator();
+		await other.choose("member", other.box.id);
+		expect(await other.share("rival", other.box.id, false)).toBe(200);
+		expect(await other.desk.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: other.channel.id, url }],
+		});
+	});
+
+	it("hands a document someone has open to Default machine when sharing stops, whatever the machine ran", async () => {
+		let { choose, share, visit, box, desk, channel, url } = await chosenByCreator({
+			plannerCommand: false,
+		});
+		await visit();
+		// The creator's own choice keeps the document off Default machine while it stands.
+		await choose("member", box.id);
+		expect(await desk.poll([], 200)).toEqual({ waiting: true });
+
+		// The desk's connector is already waiting for work when sharing stops, and is told at once.
+		let waiting = desk.poll([], 5_000);
+		await Bun.sleep(50);
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await waiting).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+	});
+});
+
+describe("an editor's choice of a teammate's shared machine, on a document on Default machine", () => {
+	/**
+	 * member created the document and their laptop runs its Planner on Default machine; guest's shared
+	 * build-box is the machine rival, who can edit it, chooses.
+	 */
+	async function contested(connector: { plannerCommand?: boolean } = {}) {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("guest", "U_guest", "build-box", {
+			bare: true,
+			shared: true,
+			...connector,
+		});
+		let laptop = await dispatch.machine("member", "U_member", "laptop");
+		await dispatch.visit();
+		return { ...dispatch, box, laptop };
+	}
+	/** Wait until nobody holds the document's Planner, as after its backend detached. */
+	async function released(
+		server: { attachments: { holder(id: string): string | undefined } },
+		id: string,
+	) {
+		for (let deadline = Date.now() + 4_000; server.attachments.holder(id);) {
+			expect(Date.now()).toBeLessThan(deadline);
+			await Bun.sleep(50);
+		}
+	}
+
+	it("takes the Planner from an attached Default machine, which stops, and asks only the chosen machine", async () => {
+		let { choose, choice, visit, box, laptop, channel, server, url } = await contested();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect(server.attachments.holding(channel.id)?.machineId).toBe(laptop.id);
+
+		let picked = await choose("rival", box.id);
+		expect(picked.planner).toEqual({ state: "starting", login: "guest", machine: box.id });
+		expect(await mine.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("rival chose another machine") },
+		});
+		// Only the chosen machine is asked, and the document staying in use does not ask the other.
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		await visit();
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: "guest", machine: box.id });
+		let theirs = await box.backend();
+		await theirs.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("guest");
+		expect((await choice("rival")).choice).toBe(box.id);
+	});
+
+	it("takes it from a Default machine that was asked but has not attached, and withdraws its credential", async () => {
+		let { choose, box, laptop, channel, server, url } = await contested();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let credential = await laptop.credential();
+
+		await choose("rival", box.id);
+		expect(await laptop.poll([channel.id])).toMatchObject({ kind: "planners", planners: [] });
+		expect(await upgrade(server.url, credential)).toBe(401);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+	});
+
+	it("asks only the chosen machine for a Default machine that would have attached", async () => {
+		let { choose, box, laptop, channel, url } = await contested();
+		// The laptop's connector has not polled yet; the choice comes first.
+		await choose("rival", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+	});
+
+	it("goes back to Default machine when the choice is cleared", async () => {
+		let { choose, choice, box, laptop, channel, url } = await contested();
+		await choose("rival", box.id);
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+		let cleared = await choose("rival", null);
+		expect(cleared.choice).toBeNull();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: null, machine: laptop.id });
+	});
+
+	it("never takes it from a machine the creator chose", async () => {
+		let { choose, choice, box, laptop, channel, server } = await contested();
+		await choose("member", laptop.id);
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect((await choose("rival", box.id)).planner)
+			.toEqual({ state: "held", login: "member", machine: null });
+		expect(await box.poll([], 200)).toEqual({ waiting: true });
+		expect(server.attachments.holder(channel.id)).toBe("member");
+		expect((await choice("member")).planner)
+			.toEqual({ state: "attached", login: "member", machine: laptop.id });
+	});
+
+	it("keeps an attached Default machine Planner when the chosen machine runs no Planners", async () => {
+		let { choose, choice, box, laptop, channel, server, url } = await contested({
+			plannerCommand: false,
+		});
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let mine = await laptop.backend();
+		await mine.next("attached");
+
+		// A builds-only machine cannot run the Planner, so choosing it stops nothing.
+		let picked = await choose("rival", box.id);
+		expect(picked.choice).toBe(box.id);
+		expect(picked.planner).toEqual({ state: "held", login: "member", machine: null });
+		expect(server.attachments.holding(channel.id)).toMatchObject({
+			machineId: laptop.id,
+			attached: true,
+		});
+		expect(await laptop.poll([channel.id], 200)).toEqual({ waiting: true });
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect(await box.poll([], 200)).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "attached", login: "member", machine: laptop.id });
+		// The editor's choice stands for their own builds and runs.
+		expect((await choice("rival")).choice).toBe(box.id);
+	});
+
+	it("never interrupts a Default machine Planner mid-reply for a choice that cannot take over", async () => {
+		let { choose, box, laptop, channel, server, url } = await contested({ plannerCommand: false });
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let link = await laptop.backend();
+		await link.next("attached");
+		let room = await hostInputRoom();
+		cleanups.push(room.close);
+		let planner: RemotePlanner = {
+			channelId: channel.id,
+			isolated: false,
+			humanInput: report => createHumanInput(room.room, undefined, report),
+		};
+		let started = link.next("start").then(start => {
+			link.send({ type: "started", session: start.session });
+		});
+		let session = await server.links.at(-1)!.startSession("planner-session", planner);
+		cleanups.push(() => session.doDestroy?.());
+		await started;
+		let turn = session.doPromptTurn({
+			prompt: "outline the plan",
+			skills: [],
+			tools: [],
+			emit: () => {},
+		});
+		let { turn: id } = await link.next("turn");
+		await turn;
+		expect(server.attachments.busy(channel.id)).toBe(true);
+
+		await choose("rival", box.id);
+		expect(server.attachments.busy(channel.id)).toBe(true);
+		expect(server.attachments.holding(channel.id)).toMatchObject({
+			machineId: laptop.id,
+			attached: true,
+		});
+		expect(await laptop.poll([channel.id], 200)).toEqual({ waiting: true });
+		// The reply ends as it would have, and the Planner is still its.
+		link.send({ type: "turn-end", session: "planner-session", turn: id, status: "finished" });
+		await Bun.sleep(50);
+		expect(server.attachments.busy(channel.id)).toBe(false);
+		expect(server.attachments.attached(channel.id)).toBe(true);
+	});
+
+	it("keeps an attached Default machine Planner when the chosen machine is offline, and the machine takes it once it is back and the Planner is no longer attached", async () => {
+		let { choose, choice, box, laptop, channel, server, url } = await contested();
+		await box.disconnect();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let mine = await laptop.backend();
+		await mine.next("attached");
+
+		let picked = await choose("rival", box.id);
+		expect(picked.choice).toBe(box.id);
+		expect(picked.planner).toEqual({ state: "held", login: "member", machine: null });
+		expect(server.attachments.holding(channel.id)).toMatchObject({
+			machineId: laptop.id,
+			attached: true,
+		});
+		expect(await laptop.poll([channel.id], 200)).toEqual({ waiting: true });
+
+		// It comes back and can run the Planner, but never interrupts the one attached.
+		await box.reconnect();
+		expect(await box.poll([], 200)).toEqual({ waiting: true });
+		expect(await laptop.poll([channel.id], 200)).toEqual({ waiting: true });
+		expect(server.attachments.attached(channel.id)).toBe(true);
+
+		// Once that Planner ends, the machine the editor chose runs it and Default machine is not asked.
+		mine.send({ type: "detach" });
+		await released(server, channel.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: "guest", machine: box.id });
+	});
+
+	it("keeps a Default machine Planner that was only asked when the chosen machine is offline", async () => {
+		let { choose, choice, box, laptop, channel, server, url } = await contested();
+		await box.disconnect();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let credential = await laptop.credential();
+		expect((await choose("rival", box.id)).choice).toBe(box.id);
+		expect(await laptop.poll([channel.id], 200)).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: null, machine: laptop.id });
+		// Its backend can still attach with the credential it was given.
+		expect(await upgrade(server.url, credential)).toBe(101);
+	});
+
+	it("asks only the chosen machine after a restart, and Default machine again once it can't run the Planner", async () => {
+		let dispatch = await contested();
+		let { choose, choice, box, laptop, channel, url } = dispatch;
+		await choose("rival", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+
+		// The deploy forgets what Default machine gave the document, but the editor's choice is stored.
+		await dispatch.restart();
+		await laptop.reconnect();
+		await box.reconnect();
+		await dispatch.visit();
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect((await choice("rival")).choice).toBe(box.id);
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: "guest", machine: box.id });
+
+		// The chosen machine goes away: the document is not left without a Planner.
+		await box.disconnect();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: null, machine: laptop.id });
+		// And back to the chosen machine when it returns.
+		await box.reconnect();
+		await dispatch.visit();
+		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+	});
+
+	it("never asks both machines after a restart, whichever one connects first", async () => {
+		let dispatch = await contested();
+		let { choose, box, laptop, channel, url } = dispatch;
+		await choose("rival", box.id);
+		await dispatch.restart();
+		// Default machine's machine is back first and is asked, as nothing yet says otherwise.
+		await laptop.reconnect();
+		await dispatch.visit();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		// Then the chosen machine, which can run it: Default machine's is no longer asked.
+		await box.reconnect();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await laptop.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+		expect(await laptop.poll([], 200)).toEqual({ waiting: true });
+	});
+
+	it("keeps the creator's own choice ahead of the editor's after a restart", async () => {
+		let dispatch = await contested();
+		let { choose, choice, box, laptop, channel, url } = dispatch;
+		await choose("member", laptop.id);
+		await choose("rival", box.id);
+		await dispatch.restart();
+		await laptop.reconnect();
+		await box.reconnect();
+		await dispatch.visit();
+		expect(await box.poll([], 200)).toEqual({ waiting: true });
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect((await choice("rival")).choice).toBe(box.id);
+	});
+
+	it("lets the creator take it back with Default machine from a choice no machine was asked for yet", async () => {
+		let { choose, choice, box, laptop, channel, url } = await contested();
+		// The chosen machine can run it, but its connector has not polled yet.
+		await choose("rival", box.id);
+		let back = await choose("member", null);
+		expect(back.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect((await choice("rival")).choice).toBeNull();
+		expect(await box.poll([], 200)).toEqual({ waiting: true });
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+	});
+
+	it("lets the creator's own machine, or Default machine, take it back from the editor's choice", async () => {
+		let { choose, choice, box, laptop, channel, server, url } = await contested();
+		let take = async () => {
+			await choose("rival", box.id);
+			expect(await box.poll([])).toMatchObject({ kind: "planners" });
+			let theirs = await box.backend();
+			await theirs.next("attached");
+			return theirs;
+		};
+		let theirs = await take();
+		// The creator's own machine.
+		let own = await choose("member", laptop.id);
+		expect(own.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect((await choice("rival")).choice).toBeNull();
+		let mine = await laptop.backend();
+		await mine.next("attached");
+		expect(server.attachments.holder(channel.id)).toBe("member");
+
+		// And again, with Default machine, once the editor chooses it anew.
+		mine.send({ type: "detach" });
+		for (let deadline = Date.now() + 4_000; server.attachments.holder(channel.id);) {
+			expect(Date.now()).toBeLessThan(deadline);
+			await Bun.sleep(50);
+		}
+		await choose("member", null);
+		theirs = await take();
+		let back = await choose("member", null);
+		expect(back.planner).toEqual({ state: "starting", login: null, machine: laptop.id });
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect((await choice("rival")).choice).toBeNull();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
 	});
 });
 

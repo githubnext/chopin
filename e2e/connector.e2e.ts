@@ -171,7 +171,7 @@ test("a paired machine reconnects without pairing, until it is disconnected in t
 		).not.toBeChecked();
 		await expect(
 			page.getByRole("checkbox", {
-				name: "Let teammates' documents plan on this machine",
+				name: "Let teammates run their work on this machine",
 				exact: true,
 			}),
 		).not.toBeChecked();

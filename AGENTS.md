@@ -186,6 +186,25 @@ collaborative state and external implementation runs are durable.
   `LIVE_SPIKES` prototypes run only passages the consenting editor changed, on a
   push-refusing throwaway worktree, under hourly caps and a 20-minute deadline;
   see [Prototype spikes](docs/local-experiments.md#prototype-spikes-live_spikes).
+- **A shared machine runs teammates' work as its owner.** An owner who shares a machine
+  consents to the Planner, builds and runs of a document whose editor chose it, in repositories
+  the owner can push to (checked with the machine's own token, as Default machine does). The
+  agent runs with the owner's GitHub account; the build records the editor as `user` and the
+  owner as `machineOwner`, and only the connection it was queued on may claim or report it.
+  Automatic work never leaves its builder's own machines. Where a document's Planner runs is
+  derived from stored choices (the creator's, else an editor's whose machine can run it now),
+  never from process memory, so a restart asks one machine; a choice that cannot run it yet
+  stops nothing and never interrupts an attached Planner. That check is held per machine and
+  repository (a pass 10 minutes, a refusal a minute, asked once however many listings ask
+  at once). The Machines page, polled every few seconds, lists a machine that serves every
+  repository from two held lists of what can be pushed to, not a check per repository: the
+  person's own (a minute) and its owner's, listed with the machine's token once per owner
+  for everyone (10 minutes, a failure a minute), so its cost to the owner's token does not
+  grow with teammates or polls. Only a repository the machine has a checkout of is asked
+  on its own. Unsharing clears teammates' choices of the
+  machine and hands a document to Default machine only where the machine ran its Planner,
+  had been asked to, was placing it, or someone uses the document; any other just loses
+  the choice.
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 

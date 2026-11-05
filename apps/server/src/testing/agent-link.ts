@@ -13,7 +13,7 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { AddressInfo, Socket } from "node:net";
 import type { ServerWebSocket } from "bun";
-import type { Repository } from "../github/client";
+import type { Repository, RepositoryPage } from "../github/client";
 import type { AttachmentAuth } from "../harness/remote/attachments";
 import type { AgentAuth, AgentSocketData } from "../harness/remote/endpoint";
 import type { AgentLink } from "../harness/remote/link";
@@ -139,6 +139,47 @@ export async function linkAuth(channelId?: string) {
 				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
 					?? machineAccount(token);
 				return account ? scoreRepository(owner, name, account.push) : undefined;
+			},
+			/** The head of octo-org/score's default branch, which a machine with no checkout clones. */
+			async branchHead() {
+				return "b".repeat(40);
+			},
+			/** The App is installed on octo-org for every account that has a browser login or a machine. */
+			async installations(token: string) {
+				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
+					?? machineAccount(token);
+				return {
+					installations: account
+						? [{
+							id: "1",
+							account: { login: "octo-org", avatarUrl: "", type: "organization" },
+							repositorySelection: "all",
+							configureUrl: "https://github.test/octo-org",
+							suspended: false,
+							permissions: {
+								contents: true,
+								pullRequests: true,
+								checks: false,
+								statuses: false,
+								issues: false,
+							},
+						}]
+						: [],
+					nextPage: undefined,
+				};
+			},
+			/** octo-org/score, with the role the account has there. */
+			async installationRepositories(
+				token: string,
+				_installation?: string,
+				_page?: number,
+			): Promise<RepositoryPage> {
+				let account = Object.values(ACCOUNTS).find(value => loginToken(value.login) === token)
+					?? machineAccount(token);
+				return {
+					repositories: account ? [scoreRepository("octo-org", "score", account.push)] : [],
+					nextPage: undefined,
+				};
 			},
 		},
 	};

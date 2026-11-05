@@ -6,7 +6,7 @@ import { motionImmediately } from "../motion-input";
 import { AddServerPage } from "./add-server";
 import { experimentRequest } from "./api";
 import { AddComputerDialog, AddMachineMenu } from "./machine-setup";
-import { MachineDetail, YourMachines } from "./machine-list";
+import { MachineDetail, SharedWithYou, YourMachines } from "./machine-list";
 import { goTo, useArrivedMachine, useMachines, useOwner } from "./machines";
 import { pairingProblem } from "./pairing-problems";
 import { SETUP_GUIDE } from "./setup-commands";
@@ -129,6 +129,7 @@ function MachinesHome({ onServer }: { onServer: () => void }) {
 				</section>
 			)}
 			<YourMachines machines={machines} owner={owner} />
+			<SharedWithYou machines={machines} />
 			{dialog.phase !== "closed" && (
 				<AddComputerDialog
 					motion={dialog}
@@ -256,7 +257,7 @@ export default function PairingPage() {
 	// Off by default: without it, work reaches this machine only when its owner presses Build or
 	// Run (apps/server/src/experiments/routes.ts runs pressed work on the presser's own connection).
 	let [autoRun, setAutoRun] = useState(false);
-	// Off by default too: shared, a teammate's document with no machine may plan here as its owner.
+	// Off by default too: shared, teammates may choose this machine and their work runs here as its owner.
 	let [shared, setShared] = useState(false);
 	let helpId = useId();
 	let shareHelpId = useId();
@@ -403,12 +404,13 @@ export default function PairingPage() {
 											onChange={event => setShared(event.target.checked)}
 											type="checkbox"
 										/>
-										<span>Let teammates' documents plan on this machine</span>
+										<span>Let teammates run their work on this machine</span>
 									</label>
 									<p className="machines-detail machines-auto-help" id={shareHelpId}>
-										Off: nobody else's work runs here. On: when a teammate's document has no machine
-										of its own, its Planner runs here as you, in repositories you can push to.
-										Builds stay yours. Change it any time on Machines.
+										Off: nobody else's work runs here. On: teammates see this machine and can choose
+										it for a document, and that document's Planner, builds and runs then run here as
+										you, with your GitHub account, in repositories you can push to. Rebuilds and
+										prototypes Chopin starts by itself stay yours. Change it any time on Machines.
 									</p>
 								</div>
 								<div className="machines-pairing-actions">

@@ -9,8 +9,9 @@ export function implementationEndpoint(room: string): string {
 export async function implementationResponse<T>(result: Response): Promise<T> {
 	let value = await result.json();
 	if (!result.ok) {
-		// A machine the person chose is offline, or their choice cannot be read: the server's sentence.
-		let sentence = value.error === "machine-offline"
+		// A machine the person chose is offline or no longer takes their work, or their choice
+		// cannot be read: the server's sentence.
+		let sentence = value.error === "machine-offline" || value.error === "machine-unavailable"
 			|| value.error === "machine-choice-unavailable";
 		let message = sentence && value.message ? value.message : value.error;
 		throw new ApiError(message ?? "Build is unavailable", result.status);

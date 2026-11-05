@@ -238,8 +238,10 @@ choice is yours alone and holds for that document until you change it:
 - Where Chopin runs Planners on machines, the document's Planner runs there
   too, and on **Default machine** it runs on the creator's; see
   [Run a Planner on this machine](#run-a-planner-on-this-machine).
-- You can choose only your own machines. A teammate's machine can run the
-  document's Planner only on **Default machine**; see
+- The list also shows machines teammates share, under **Shared by** and their
+  name, when they serve the document's repository and their owner can push to
+  it. Anyone who can edit the document may choose one, and its Planner, your
+  builds and your runs then run there, as its owner; see
   [Share a machine with teammates](#share-a-machine-with-teammates).
 - If the machine you chose is offline, **Build plan** is greyed out, as offline
   machines are in the list, and starts nothing. It changes within a few seconds
@@ -374,7 +376,11 @@ about itself: its hostname, its chopin release and system, the coding agent it
 runs, and whether it is connected (a green dot) or when it was last seen.
 Search finds a machine by any of these. **Edit machine name…** in a machine's
 menu renames it in Chopin, and `chopin status` shows that name. Only you see
-your machines.
+your machines, except one you share with teammates: they see its name, its
+owner, its chopin release, whether it is online and the repositories you both
+can push to, read-only, under **Shared with you**. A teammate who can push to a
+repository sees it there without having opened a document in it; see
+[Share a machine with teammates](#share-a-machine-with-teammates).
 
 On the machine:
 
@@ -490,29 +496,101 @@ an `@chopin` message sent meanwhile waits for it.
 
 #### Share a machine with teammates
 
-A teammate who has no machine of their own can still get a Planner on a
-document they create, on a machine someone shared with teammates. Sharing is
-off unless its owner turns it on: with **Plan teammates' documents** as they
-add the machine (**Let teammates' documents plan on this machine** on the
-pairing card), or later with the machine's **Shared** switch on the
-**Machines** page (**Share with teammates** in its view on a phone).
+Sharing a machine lets teammates run their work on it. It is off unless its
+owner turns it on: with **Run teammates' work** as they add the machine
+(**Let teammates run their work on this machine** on the pairing card), or later
+with the machine's **Shared** switch on the **Machines** page (**Share with
+teammates** in its view on a phone). Turning it on is the owner's consent to
+three things for a document whose teammate chose the machine, in repositories
+the owner can push to:
 
-- Only a document left on **Default machine** whose creator has no connected
-  machine that can run Planners uses a shared one. A document whose creator
-  chose a machine never does, and nobody's builds, runs or investigations go
-  to a teammate's machine.
-- The machine runs the Planner as its owner, with the owner's GitHub
-  authorization, so only in repositories its owner can push to. Chopin checks
-  that with the machine's own token before it asks, and again every 10 minutes.
+- its **Planner** runs there, as the owner, with the owner's GitHub
+  authorization; on **Default machine** it also does so for a document whose
+  creator has no machine of their own that can run Planners;
+- **Build plan**, **Build**, **Retry**, **Run** and investigations the teammate
+  starts run there, behind any work the machine is already running. The agent
+  runs on the owner's machine with the owner's GitHub account, so its pull
+  requests are opened by the owner, not the teammate. Chopin records the
+  teammate as the person who asked, shows their name on the build, and tells the
+  agent to end each pull request body with a note naming who requested it;
+- nothing automatic: rebuilds and prototypes Chopin starts by itself still run
+  only on the machine of the person whose living document they are, and only
+  where that machine's owner ticked automatic work. They never run on a
+  teammate's machine, chosen or not.
+
+A build there is claimed and reported only by the machine it was queued on. It
+is queued only while the machine is shared, its owner can push to the
+repository, and the teammate has chosen it; it is not taken once any of those
+stops being true, and ends within a few seconds saying so. A build already
+running keeps going until it finishes, like a Planner mid-reply.
+
+- A teammate sees a shared machine, read-only, under **Shared with you** on
+  **Machines**: its name, its owner, whether it is online, its chopin release
+  and the repositories it serves them in. It serves every repository its owner
+  can push to, so a machine with no checkouts counts too. A machine that is not
+  shared, or whose owner can't push to a repository, is never listed to anyone
+  who works there; nobody but its owner can rename it, star it, change its
+  sharing or disconnect it. For a machine that serves every repository, the page
+  intersects two lists of what can be pushed to among GitHub App installations:
+  the teammate's own, held a minute, and its owner's, listed with the machine's
+  own token and held 10 minutes for everyone who looks (a minute after a failure).
+  Neither list is cut short, and nothing is asked of GitHub for each repository,
+  so the page's refresh every few seconds, and any number of teammates, cost the
+  owner's GitHub rate limit a few listings every 10 minutes. A teammate need not
+  have opened a document in a repository first. For the repositories a machine
+  has checkouts of, each is asked on its own a few at a time and held as the
+  owner's check is (below): the teammate's own check, for a repository their
+  installations don't list, is made with their own login and kept 10 minutes for a
+  pass and a minute for a refusal. It is listed wherever Chopin has machines,
+  with or without Planners on machines; under `AUTH_MODE=local`, where machines
+  hold no GitHub authorization of their own, only while its owner is signed in.
+- A document's **Machine** list offers it the same way, under **Shared by** and
+  its owner, to anyone who can edit the document and push to its repository, and
+  online or offline like your own. Choosing it sends your builds and runs there,
+  and that document's Planner too where the rules below allow. Chopin checks
+  with the machine's own token that its owner can push to the repository before
+  it lists or asks it, and again every 10 minutes. If it is offline, **Build
+  plan** is greyed out and says so, as for your own; if its owner stopped
+  sharing it or can't push any more, a build or run fails saying that, and never
+  moves to another machine.
+- The document's creator's choice still decides where its Planner runs. Another
+  editor's choice of a machine places it only while the creator has chosen no
+  machine, and only on a machine that can run it for them now: online, started
+  with `--planner-command`, and (for a teammate's) its owner able to push. Then
+  it takes the Planner from Default machine's machine: a Planner attached there
+  stops, one that was only asked is withdrawn, and only the chosen machine is
+  asked. The choice is stored, so it still holds after Chopin restarts, and
+  Default machine is not asked for the document while a stored choice places it.
+  A choice of a machine that can't run the Planner now (offline, started without
+  a Planner command, or its owner can no longer push) is stored and stops
+  nothing: the Planner keeps running where it is, a reply under way included.
+  The chosen machine takes it once it can run it: at once when no Planner is
+  attached on Default machine, otherwise once that one has ended. A machine
+  coming online never interrupts an attached Planner. Choosing another machine
+  replaces your earlier choice, so a Planner on the machine you chose before
+  stops. When the creator chooses their own machine, or Default machine, the
+  Planner on an editor's machine stops and the editor's choice that placed it
+  goes, even if that machine had not been asked yet. An editor's choice made
+  while the creator's own stood is only stored, for their own builds and runs,
+  and counts again once the creator chooses no machine. Builds and runs follow
+  each person's own choice, whoever created the document.
+- A document left on **Default machine** whose creator has no connected
+  machine that can run Planners uses a shared one too. Builds, runs and
+  investigations never go to a teammate's machine unless the person chose it.
 - With several shared machines, each owner's default goes first.
 - Once the creator connects a machine of their own, the Planner moves there,
   unless it is already attached on the shared machine; then it stays until it
   stops.
-- Turning sharing off takes no new teammate documents. A teammate's Planner
-  that is idle, or waits only on a paused run, stops at once; one that is
-  replying, has a question open, or has a live run keeps going until that work
-  finishes, then stops within 15 seconds. Meanwhile the machine's row on
-  **Machines** says **Finishing 1 teammate document**. Each stop prints why:
+- Turning sharing off takes the machine off teammates' lists and clears their
+  choices of it, and takes no new teammate work. A build still waiting on it
+  ends. A document whose Planner the machine was not running, had not been asked
+  to run and was not about to run, and that nobody is using, only loses the
+  choice: nothing starts for it on the creator's machine. A teammate's Planner
+  that is idle, or waits only on a paused run, stops
+  at once; one that is replying, has a question open, or has a live run keeps
+  going until that work finishes, then stops within 15 seconds. A build or run
+  already going finishes. Meanwhile the machine's row on **Machines** says
+  **Finishing 1 teammate document**. Each stop prints why:
   `<owner> stopped sharing <machine> with teammates`. A paused run stays on the
   machine and resumes if its owner shares it again.
 

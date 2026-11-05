@@ -11,7 +11,7 @@ import {
 } from "./machine-choice";
 
 import type { ChoosableMachine, MachineChoiceState } from "./machine-choice";
-import type { Machine } from "./machine-summary";
+import type { Machine, TeammateMachine } from "./machine-summary";
 
 const NOW = Date.UTC(2026, 9, 14, 12);
 
@@ -114,4 +114,77 @@ test("the machine choice shows only once the person has a paired machine, connec
 	// One paired machine, even offline, whatever repositories its checkouts are of.
 	expect(showsMachineChoice([paired])).toBe(true);
 	expect(showsMachineChoice([paired, { ...paired, id: "M_two", connected: true }])).toBe(true);
+});
+
+const theirs = { login: "rival", avatarUrl: "" };
+
+function teammateMachine(overrides: Partial<ChoosableMachine> = {}): ChoosableMachine {
+	return {
+		id: "M_theirs",
+		label: "desk",
+		teammate: true,
+		owner: theirs,
+		connected: true,
+		lastSeenAt: NOW,
+		version: "0.1.5",
+		service: false,
+		runsPlanners: true,
+		...overrides,
+	};
+}
+
+test("the menu lists a teammate's machines last, each under its owner, offline ones disabled", () => {
+	let rows = machineRows(
+		state({
+			machines: [
+				teammateMachine({ id: "M_a", label: "desk" }),
+				machine(),
+				teammateMachine({ id: "M_b", label: "rack", connected: false, service: true }),
+				machine({ id: "M_laptop", label: "laptop", service: false }),
+				teammateMachine({ id: "M_c", label: "studio", owner: { login: "casey", avatarUrl: "" } }),
+				teammateMachine({ id: "M_d", label: "lab", owner: theirs }),
+			],
+		}),
+	);
+	expect(rows.map(row => [row.id, row.owner, row.disabled])).toEqual([
+		["M_laptop", undefined, false],
+		["M_box", undefined, false],
+		["M_a", "rival", false],
+		["M_b", "rival", true],
+		["M_d", "rival", false],
+		["M_c", "casey", false],
+	]);
+	// A teammate's machine says nothing of its owner's authorization, and is disabled only offline.
+	expect(rows.find(row => row.id === "M_b")?.detail).toBe("Offline");
+});
+
+test("a teammate's chosen machine is shown, and Build runs there unless it is offline", () => {
+	let chosen = state({ choice: "M_theirs", machines: [machine(), teammateMachine()] });
+	expect(machineButtonLabel(chosen)).toBe("Runs on desk");
+	expect(machineRows(chosen).find(row => row.checked)?.id).toBe("M_theirs");
+	// Online, it takes the person's builds like one of their own: nothing greys Build plan out.
+	expect(offlineChoice(chosen)).toBeUndefined();
+	// Offline, it says so, as one of their own does.
+	expect(
+		offlineChoice(
+			state({ choice: "M_theirs", machines: [teammateMachine({ connected: false })] }),
+		),
+	).toBe("desk is offline");
+	expect(offlineChoice(state({ choice: "M_box" }))).toBeUndefined();
+});
+
+test("a teammate's shared machine alone is enough to offer the machine choice", () => {
+	expect(showsMachineChoice([], state({ machines: [teammateMachine()] }))).toBe(true);
+	expect(showsMachineChoice(undefined, state({ machines: [teammateMachine()] }))).toBe(true);
+	expect(showsMachineChoice([], state({ machines: [] }))).toBe(false);
+	expect(showsMachineChoice(undefined, undefined)).toBe(false);
+});
+
+test("the choice is read again when a teammate's shared machine goes offline or comes back", () => {
+	let box = { id: "m1", connected: true, reauthorize: false } as Machine;
+	let desk = { id: "t1", connected: true } as TeammateMachine;
+	expect(presence([box], [desk])).not.toBe(presence([box], [{ ...desk, connected: false }]));
+	expect(presence([box], [desk])).not.toBe(presence([box], []));
+	expect(presence([box], [desk])).toBe(presence([box], [{ ...desk, label: "renamed" }]));
+	expect(presence([box])).toBe(presence([box], []));
 });

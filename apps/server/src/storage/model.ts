@@ -203,8 +203,9 @@ export type StoredMachine = {
 	repositories: MachineRepository[];
 	autoRun: boolean;
 	/**
-	 * The owner lets Default machine run the Planner of a teammate's document here, when the
-	 * teammate has no machine of their own that can. Off unless the owner turns it on.
+	 * The owner lets teammates choose this machine for a document: its Planner, builds and runs
+	 * then run here as the owner, and Default machine may run the Planner of a teammate's document
+	 * whose creator has no machine of their own that can. Off unless the owner turns it on.
 	 */
 	shared?: boolean;
 	tokenHash: Uint8Array;

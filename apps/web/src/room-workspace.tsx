@@ -718,9 +718,9 @@ export function RoomWorkspace(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
 	);
-	// The choice shows only while the person has a paired machine, live: it appears with their
-	// first and goes with their last.
-	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines);
+	// The choice shows only while the person has a paired machine, live, or the document lists a
+	// teammate's shared one: it appears with their first and goes with their last.
+	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines, machineChoice.state);
 	// Refresh the machine choice when the Planner moves to another machine.
 	let refreshMachine = machineChoice.refresh;
 	useEffect(() => {

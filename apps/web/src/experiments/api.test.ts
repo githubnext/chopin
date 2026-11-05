@@ -17,6 +17,9 @@ test("a refused Run says the server's sentence about the person's machine choice
 	let offline = "build-box is offline. Start chopin connect on it, or choose another machine.";
 	answer(409, { error: "machine-offline", message: offline });
 	await expect(experimentRequest("/run", {})).rejects.toThrow(offline);
+	let unavailable = "build-box no longer takes this work: its owner stopped sharing it.";
+	answer(409, { error: "machine-unavailable", message: unavailable });
+	await expect(experimentRequest("/run", {})).rejects.toThrow(unavailable);
 	// Other refusals keep their code, which the card turns into copy.
 	answer(409, { error: "workspace-busy" });
 	await expect(experimentRequest("/run", {})).rejects.toThrow("workspace-busy");

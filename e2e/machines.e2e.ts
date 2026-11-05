@@ -16,7 +16,7 @@ import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { compiledChopin } from "../apps/connector/src/testing/binary";
 import { assets, fakeRelease } from "../apps/connector/src/testing/release";
 import { agentCommand, setupCommand } from "../apps/web/src/experiments/setup-commands";
-import { expect, test } from "./room";
+import { authenticate, expect, test } from "./room";
 import { RELEASE } from "./release";
 import { ROOT } from "./servers";
 
@@ -40,18 +40,32 @@ function person() {
 	return `mia-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/**
+ * Sign in as someone who shares machines, in a repository of their own: a machine shared with
+ * teammates is listed to everyone who can push to a repository its owner can, so one shared in
+ * octo-org/score would show up, for as long as it lasts, in other tests' machine lists and menus
+ * on this server, whatever order and beside whichever tests these run.
+ */
+async function sharer(page: Page, baseURL: string) {
+	let suffix = crypto.randomUUID().slice(0, 8);
+	let login = `machine-sharer-${suffix}`;
+	await authenticate(page, login, baseURL);
+	await page.goto("/machines");
+	return { login, repository: `octo-org/relay-${suffix}` };
+}
+
 function machinesEntry(page: Page, name: string) {
 	return page.getByRole("complementary", { name: "Projects" })
 		.getByRole("link", { name, exact: true });
 }
 
 /**
- * A machine to paste the setup command into: a checkout of octo-org/score, a home of its own,
+ * A machine to paste the setup command into: a checkout of `repository`, a home of its own,
  * the GitHub Copilot CLI (the fake ACP agent), and systemctl and loginctl that stand in for
  * systemd, whose `enable --now` starts the service's connect as systemd would. Its install.sh
  * downloads a compiled chopin from a local release.
  */
-async function machine() {
+async function machine(repository = "octo-org/score") {
 	let home = await mkdtemp(join(tmpdir(), "chopin-machines-home-"));
 	let root = join(home, "score");
 	let bin = join(home, "bin");
@@ -62,7 +76,7 @@ async function machine() {
 	git("init");
 	git("config", "user.name", "Fixture");
 	git("config", "user.email", "fixture@example.test");
-	git("remote", "add", "origin", "https://github.com/octo-org/score.git");
+	git("remote", "add", "origin", `https://github.com/${repository}.git`);
 	await writeFile(join(root, "sample.txt"), "sample");
 	git("add", ".");
 	git("commit", "-m", "fixture");
@@ -241,9 +255,9 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 	}
 });
 
-test("server or VM: a generated script pairs with its single-use key, automatic work as chosen", async ({ baseURL, join: enter }) => {
+test("server or VM: a generated script pairs with its single-use key, automatic work as chosen", async ({ baseURL, page }) => {
 	test.setTimeout(240_000);
-	let page = await enter(person());
+	let { repository } = await sharer(page, baseURL!);
 	let minted = keyRequests(page);
 	await page.goto("/machines");
 	await addMachine(page, "Cloud");
@@ -262,8 +276,8 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	await expect(automatic).toHaveAttribute("aria-checked", "false");
 	await automatic.click();
 	await expect(automatic).toHaveAttribute("aria-checked", "true");
-	// Planning teammates' documents is off until asked for, and the key carries it to the machine.
-	let teammates = page.getByRole("switch", { name: "Plan teammates' documents", exact: true });
+	// Running teammates' work is off until asked for, and the key carries it to the machine.
+	let teammates = page.getByRole("switch", { name: "Run teammates' work", exact: true });
 	await expect(teammates).toHaveAttribute("aria-checked", "false");
 	await teammates.click();
 	await expect(teammates).toHaveAttribute("aria-checked", "true");
@@ -309,7 +323,7 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	// The page ends at the command, as Tailscale's does: no wait for the machine.
 	await expect(page.getByText(/Waiting/)).toHaveCount(0);
 
-	let server = await machine();
+	let server = await machine(repository);
 	try {
 		// Pasted on the machine as it is: it pairs at once, with nothing opened in a browser.
 		expect(await server.run(command), server.output()).toBe(0);
@@ -372,7 +386,12 @@ const CONNECTOR = {
  * Pair a machine for the person signed in on `page` with a key, as Add a server's script would,
  * and, given `about`, connect a checkout with what its connector says about it.
  */
-async function pairedMachine(page: Page, label: string, about?: Record<string, string>) {
+async function pairedMachine(
+	page: Page,
+	label: string,
+	about?: Record<string, string>,
+	repository = "octo-org/score",
+) {
 	let origin = new URL(page.url()).origin;
 	await page.goto("/auth/github/connector?key");
 	await expect(page).toHaveURL(/\/machines\?server$/);
@@ -380,7 +399,7 @@ async function pairedMachine(page: Page, label: string, about?: Record<string, s
 		data: {},
 		headers: { origin },
 	})).json() as { key: string };
-	let checkout = { repository: "octo-org/score", commit: "a".repeat(40), label };
+	let checkout = { repository, commit: "a".repeat(40), label };
 	// As a machine would: no browser cookies, so no browser origin either.
 	let post = (path: string, body: unknown, headers: Record<string, string>) =>
 		fetch(new URL(path, origin), {
@@ -400,28 +419,27 @@ async function pairedMachine(page: Page, label: string, about?: Record<string, s
 }
 
 /** Three machines: a Linux server running as the service, a Mac, and one never connected. */
-async function threeMachines(page: Page) {
+async function threeMachines(page: Page, repository?: string) {
 	await pairedMachine(page, "build-box", {
 		[CONNECTOR_HOST_HEADER]: "build-box.internal",
 		[CONNECTOR_PLATFORM_HEADER]: "linux arm64",
 		[CONNECTOR_SERVICE_HEADER]: "1",
 		[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
-	});
+	}, repository);
 	await pairedMachine(page, "studio", {
 		[CONNECTOR_HOST_HEADER]: "studio.local",
 		[CONNECTOR_PLATFORM_HEADER]: "darwin arm64",
 		[CONNECTOR_AGENT_HEADER]: "Atomic",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
-	});
-	await pairedMachine(page, "old-laptop");
+	}, repository);
+	await pairedMachine(page, "old-laptop", undefined, repository);
 	await page.goto("/machines");
 }
 
-test("the machines table: search, Tailscale's columns, a row's menu and renaming", async ({ join: enter }) => {
-	let login = person();
-	let page = await enter(login);
-	await threeMachines(page);
+test("the machines table: search, Tailscale's columns, a row's menu and renaming", async ({ baseURL, page }) => {
+	let { login, repository } = await sharer(page, baseURL!);
+	await threeMachines(page, repository);
 	let table = page.getByRole("table", { name: "Your machines" });
 	// A row's name starts with its favorite star's.
 	let row = (name: string) =>

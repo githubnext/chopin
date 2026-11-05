@@ -1136,7 +1136,13 @@ forgets it as it releases every attachment.
 
 Attached this way, the document's Planner owner is a login of the machine's
 owner that no browser holds, whose GitHub token is the machine's own; Chopin's
-repository tools act with it.
+repository tools act with it. That holds for a teammate's document too, when the
+machine's owner shares it and someone chose it (or Default machine gave it): the
+Planner runs as the owner. So do the builds and runs that person starts on the
+machine, which the connector claims with the same machine token; Chopin records
+the person as who asked, and the build's agent is told to name them in each
+pull request (see
+[Share a machine with teammates](chopin-cli.md#share-a-machine-with-teammates)).
 
 ### What the backend must do
 
