@@ -4,6 +4,7 @@ import { useId } from "react";
 import { DecisionViewControl } from "../../decision-view-control";
 import { DocumentTitleBar } from "../../document-title-bar";
 import { LostEditsNotice, UndoRefusedNotice } from "../../document-status-notices";
+import { OfflineNoticeBody } from "../../offline-notice";
 import { SurfaceToggle } from "../../workspace";
 import { AuditPlate, StateLabel } from "../frame";
 
@@ -14,7 +15,6 @@ let STATUS_SPECIMENS: { label: string; notice?: ReactNode; status: PlanStatusPro
 	{ label: "Connected", status: { connection: "connected", synced: true } },
 	{ label: "Loading", status: { synced: false } },
 	{ label: "Busy", status: { busy: true, synced: true } },
-	{ label: "Reconnect", status: { connection: "reconnecting", synced: true } },
 	{ label: "Error", status: { failed: "Permission denied", synced: false } },
 	{ label: "No access", status: { connection: "denied", synced: true } },
 	{
@@ -29,11 +29,16 @@ let STATUS_SPECIMENS: { label: string; notice?: ReactNode; status: PlanStatusPro
 	},
 ];
 
+let PAGE_NOTICES = [
+	{ label: "Offline", retry: false },
+	{ label: "Offline, after repeated failed reconnects", retry: true },
+];
+
 export function LoadingStatusPlate() {
 	let chat = useId();
 	return (
 		<AuditPlate
-			description="Document status sits at the end of the document title bar, silent while connected and idle."
+			description="Document status sits at the end of the document title bar, silent while connected and idle. A lost connection is one notice at the top of the document's content, after a short grace period."
 			item="loading"
 			title="Loading and status"
 		>
@@ -70,6 +75,16 @@ export function LoadingStatusPlate() {
 									/>
 								}
 							/>
+						</div>
+					</div>
+				))}
+				{PAGE_NOTICES.map(({ label, retry }) => (
+					<div key={label}>
+						<StateLabel>{label}</StateLabel>
+						<div className="design-audit-page-notice">
+							<OfflineNoticeBody onRetry={retry ? () => {} : undefined} />
+							<span className="design-audit-skeleton-line" />
+							<span className="design-audit-skeleton-line" />
 						</div>
 					</div>
 				))}

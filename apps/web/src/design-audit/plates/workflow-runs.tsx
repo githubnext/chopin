@@ -1,4 +1,3 @@
-import { PlannerAttachment } from "../../chat/planner-attachment";
 import { RunStack } from "../../chat/run-card";
 import { AuditPlate, StateLabel } from "../frame";
 
@@ -108,7 +107,6 @@ export function WorkflowRunsPlate() {
 							},
 						]}
 					/>
-					<PlannerAttachment planner={{ state: "disconnected", login: "mona" }} />
 				</div>
 				<StateLabel>Ended</StateLabel>
 				<RunStack

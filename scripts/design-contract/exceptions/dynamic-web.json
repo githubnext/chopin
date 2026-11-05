@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "2e3c08c1ffa3e5e6c04e4a7a64331836157d6f37f80d62cea953e5b923413a79"
+		"sourceHash": "115502c708cd330add8f1ab027dc66b08ebfe38d1d6d8b4439f3da611510d5e1"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -325,7 +325,7 @@
 				1
 			]
 		],
-		"sourceHash": "2b773daf3e1b26be5a5f7e68cc838690465b5abc4798748091e85ad3e0a98996"
+		"sourceHash": "cada28fddb110122ed1881bd3f0024ee6a3da4cfee3a355787bd3220a82e1b18"
 	},
 	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
@@ -354,5 +354,61 @@
 			]
 		],
 		"sourceHash": "28471a91af2b9315664313e20fdca8f5c675ed4c03cce97166509c9f3313928b"
+	},
+	{
+		"file": "apps/web/src/chat/composer.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"MOTION.className",
+				"class > ChatComposer > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"strip.className",
+				"class > ChatComposer > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MOTION.contentClassName",
+				"class > ChatComposer > <div>",
+				1
+			]
+		],
+		"sourceHash": "d6189d40b93c185edaa655a3292dbd628d265bad02489551ee35eb11ed8889f2"
+	},
+	{
+		"file": "apps/web/src/offline-notice.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"MOTION.className",
+				"class > OfflineNotice > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > OfflineNotice > <div>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"MOTION.contentClassName",
+				"class > OfflineNotice > <div>",
+				1
+			]
+		],
+		"sourceHash": "965ad1ea7767af169a8ad43b65504b5e7fa07f003455eb24b5f6ed4f37ecedfe"
 	}
 ]

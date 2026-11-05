@@ -70,14 +70,75 @@ test("read-only and archived documents replace the draft and hide notices", () =
 	expect(render({ unavailable: "archived" })).toContain("Document archived");
 });
 
-test("shows the connection, Reconnect, and one run control", () => {
-	let markup = render({
-		connectionLabel: "Offline",
-		onReconnect: () => {},
-		run: { action: "stop", disabled: false, onClick: () => {} },
-	});
-	expect(markup).toContain('data-offline="true"');
-	expect(markup).toContain("Reconnect");
+test("shows one run control, and no connection state of its own", () => {
+	let markup = render({ run: { action: "stop", disabled: false, onClick: () => {} } });
 	expect(markup).toContain('aria-label="Stop Chopin"');
 	expect(markup).not.toContain('aria-label="Resume Chopin"');
+	// The document says when the connection is lost, once, at the top of its content.
+	expect(markup).not.toContain("composer-connection");
+	expect(markup).not.toContain("Reconnect");
+	expect(markup).not.toContain("Retry");
+});
+
+test("puts nothing beneath the composer, whatever the Planner is doing", () => {
+	let markup = render({
+		notice: {
+			tone: "warning",
+			text: "Can’t connect to Build box.",
+			link: { label: "How to fix", href: "https://example.test/fix" },
+		},
+	});
+	expect(markup.endsWith("</div></div></div>")).toBe(true);
+	expect(markup.lastIndexOf("composer-notice")).toBeLessThan(markup.indexOf("composer-surface"));
+});
+
+test("a warning is an alert on the composer's top edge: the words, a link, and what a screen reader adds", () => {
+	let markup = render({
+		notice: {
+			tone: "warning",
+			text: "Can’t connect to Build box.",
+			detail: "The reason. Tried 3 times, last at 6:29 PM. Still trying.",
+			link: { label: "How to fix", href: "https://example.test/fix" },
+		},
+	});
+	expect(markup).toMatch(/<div class="composer-notice" role="alert" data-warning="true"/);
+	expect(markup).toContain("composer-notice-icon");
+	expect(markup).toContain("Can’t connect to Build box.");
+	expect(markup).toContain(
+		'<span class="sr-only"> The reason. Tried 3 times, last at 6:29 PM. Still trying.</span>',
+	);
+	expect(markup).toContain(
+		'<a class="composer-notice-link" href="https://example.test/fix" rel="noreferrer" target="_blank">How to fix</a>',
+	);
+	// A warning is not a failed send: the field is not invalid and nothing offers Retry.
+	expect(markup).not.toContain("aria-invalid");
+	expect(markup).not.toContain("btn-outline-danger");
+	// It eases open and shut in the shared collapse track, above the field.
+	expect(markup).toMatch(
+		/<div class="composer-notice-slot motion-collapse is-open"><div class="motion-collapse-content">/,
+	);
+	expect(markup.indexOf("composer-notice-slot")).toBeLessThan(markup.indexOf("composer-surface"));
+});
+
+test("a failed send is shown at once, not in the easing track", () => {
+	let markup = render({ notice: { tone: "error", text: "Message not sent." } });
+	expect(markup).toContain('class="composer-notice motion-feedback"');
+	expect(markup).not.toContain("composer-notice-slot");
+});
+
+test("an information strip eases like a warning, and stays a polite status", () => {
+	let markup = render({
+		notice: { tone: "info", text: "No Planner is attached. @chopin needs one to reply." },
+	});
+	expect(markup).toMatch(/<div class="composer-notice" role="status"/);
+	expect(markup).toContain("composer-notice-slot motion-collapse is-open");
+});
+
+test("a read-only document replaces the strip, whatever it was saying", () => {
+	let markup = render({
+		unavailable: "readonly",
+		notice: { tone: "warning", text: "Can’t connect to Build box." },
+	});
+	expect(markup).not.toContain("The Planner can’t start");
+	expect(markup).not.toContain("composer-notice");
 });

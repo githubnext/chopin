@@ -2,8 +2,10 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Drawer } from "@base-ui/react/drawer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CloudIcon, MachineIcon, PlusIcon } from "@chopin/icons";
+import { CloudIcon, MachineIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
+import { PLANNER_HOW_TO_FIX, plannerButtonLabel, plannerGlyph } from "./chat/planner-status";
+import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
 import { documentMenuKeyAction } from "./document-actions-menu";
 import {
 	chosenMachine,
@@ -29,10 +31,13 @@ export const ADD_MACHINE_PATH = "/machines?add";
  * A machine as an icon with its state as a dot on the icon's corner: the cloud icon for one the
  * background service runs, the laptop otherwise, the same two as Add machine's menu. The dot is
  * the Machines page's status dot. With no machine it is the laptop in tertiary ink, no dot.
+ * While the document's Planner is not simply attached the dot is its: a thin petrol spinner as
+ * it starts, a warning where it cannot, a muted grey while it is away.
  */
 export function MachineGlyph(
-	{ machine, size = 16 }: {
+	{ machine, planner, size = 16 }: {
 		machine?: Pick<ChoosableMachine, "service" | "connected" | "reauthorize">;
+		planner?: PlannerGlyph;
 		size?: 16 | 18;
 	},
 ) {
@@ -46,8 +51,46 @@ export function MachineGlyph(
 			style={{ "--machine-glyph-size": `${size}px` } as CSSProperties}
 		>
 			<Icon size={size} />
-			{state && <span className="status-dot machine-glyph-dot" data-state={state} />}
+			{(state || planner) && (
+				<span className="status-dot machine-glyph-dot" data-planner={planner} data-state={state} />
+			)}
 		</span>
+	);
+}
+
+/**
+ * What the Planner is doing, at the top of the machine menu, where the person is already looking
+ * for where it runs. A Planner that cannot start says why in full and where to fix it; every
+ * other state is the one sentence that tells it.
+ */
+export function PlannerNote({ status }: { status: PlannerStatus }) {
+	return (
+		<>
+			<div aria-label="Planner" className="machine-planner" data-kind={status.kind} role="group">
+				{status.kind === "cant-start"
+					? (
+						<>
+							<p className="machine-planner-title">
+								<WarningIcon aria-hidden="true" className="icon-first-line" size={16} />
+								{status.title}
+							</p>
+							<p>{status.reason}</p>
+							<p className="machine-planner-detail">{status.detail}</p>
+							<a
+								className="machine-planner-link"
+								href={PLANNER_HOW_TO_FIX}
+								rel="noreferrer"
+								role="menuitem"
+								target="_blank"
+							>
+								How to fix
+							</a>
+						</>
+					)
+					: <p>{status.text}</p>}
+			</div>
+			<div className="app-menu-separator" role="separator" />
+		</>
 	);
 }
 
@@ -82,9 +125,14 @@ function RowContent({ row }: { row: MachineRow }) {
  * the same rows as a sheet from the bottom edge.
  */
 export function MachineButton(
-	{ choice, phone = false }: { choice: MachineChoice; phone?: boolean },
+	{ choice, phone = false, planner }: {
+		choice: MachineChoice;
+		phone?: boolean;
+		planner?: PlannerStatus;
+	},
 ) {
 	let id = useId();
+	let detailId = useId();
 	let trigger = useRef<HTMLButtonElement>(null);
 	let menu = useRef<HTMLDivElement>(null);
 	let [open, setOpen] = useNavigationMenu();
@@ -190,7 +238,8 @@ export function MachineButton(
 		// A row scrolled out of the panel comes into view as it takes focus.
 		items[next]?.scrollIntoView({ block: "nearest" });
 	};
-	let label = machineButtonLabel(state);
+	let label = plannerButtonLabel(machineButtonLabel(state), planner);
+	let glyph = plannerGlyph(planner);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. The menu row says why.
 	let offline = !!shown && !shown.connected;
@@ -217,6 +266,7 @@ export function MachineButton(
 		);
 	let body = (sheet: boolean) => (
 		<>
+			{planner && <PlannerNote status={planner} />}
 			{group("Local", rows.filter(row => !row.cloud), sheet)}
 			{group("Cloud", rows.filter(row => row.cloud), sheet)}
 			{rows.length > 0 && <div className="app-menu-separator" role="separator" />}
@@ -242,11 +292,13 @@ export function MachineButton(
 			<button
 				aria-busy={choice.saving || undefined}
 				aria-controls={open && !phone ? id : undefined}
+				aria-describedby={planner?.kind === "cant-start" ? detailId : undefined}
 				aria-expanded={open}
 				aria-haspopup="menu"
 				aria-label={label}
 				className={offline ? "machine-button machine-offline" : "machine-button"}
 				data-phone={phone || undefined}
+				data-planner={glyph ?? (planner ? planner.kind : undefined)}
 				data-tooltip={label}
 				data-tooltip-verbatim=""
 				onClick={() => open ? close(false) : openAt("first")}
@@ -258,8 +310,11 @@ export function MachineButton(
 				ref={trigger}
 				type="button"
 			>
-				<MachineGlyph machine={shown} />
+				<MachineGlyph machine={shown} planner={glyph} />
 			</button>
+			{planner?.kind === "cant-start" && (
+				<span className="sr-only" id={detailId}>{`${planner.reason} ${planner.detail}`}</span>
+			)}
 			{choice.error && <span className="sr-only" role="alert">{choice.error}</span>}
 			{!phone && mounted && createPortal(
 				<div

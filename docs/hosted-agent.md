@@ -531,11 +531,17 @@ client's `resume` finds nothing, so it settles its questions as cancelled.
 changes: an attach, a detach into the grace period with the time it ends, a drop
 that keeps work (`disconnected`, with no deadline), the grace period ending, a sign-out, a Planner reset, or the server closing a connection
 whose ownership was released. It names only the holder's GitHub login and
-state, never a machine, checkout, or token. Chat shows it as one line under the
-composer. Other harnesses never send it, and Chat then shows nothing.
+state, never a machine, checkout, or token. A healthy, attached Planner shows
+nothing. Otherwise the document's machine button carries it (a thin spinner while
+the machine is connecting, a warning dot where it cannot connect, a muted grey dot
+while the Planner is away) with its words in the button's name and at the top of its
+menu, and the composer's top edge warns when the machine cannot be connected to, and
+says the rest only while a message is addressed to Chopin. Other harnesses never
+send it, and Chat then shows nothing.
 
-For a `disconnected` Planner that line names the login and says its workflows and
-Decisions are kept and that `@chopin` needs it to reconnect, with no deadline. Its live
+For a `disconnected` Planner the words name the machine when it is the viewer's own,
+else the login, and say its work is kept and picks up when it is back, with no
+deadline. Its live
 run cards carry `disconnected` beside the status they last reported: each reads
 **disconnected**, not running or stopped, with a still ring instead of the pulse and
 its clock held at the last report; an open card says what it last reported and what
@@ -550,8 +556,8 @@ connector reports each launch of the backend that exits before staying up to
 last stderr line that says why (colors and credentials removed, the home
 directory shown as `~`, at most 300 characters). From the second in a row, the
 `starting` state also carries `failure` with the count, the reason and when
-the last launch exited, so everyone in the document reads why the Planner has
-not attached; the time is the server's own, not the connector's clock. The report
+the last launch exited, so everyone in the document reads why it cannot connect to
+the machine; the time is the server's own, not the connector's clock. The report
 counts only for a document Chopin asked that machine to run, and is forgotten
 when the Planner attaches, when the connector says a launch stayed up, when the
 machine is no longer asked for the document, and with a restart. It is a new

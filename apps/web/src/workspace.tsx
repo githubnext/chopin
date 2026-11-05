@@ -147,8 +147,13 @@ export type WorkspaceProps = {
 	/** A phone tapped Build while it cannot open. */
 	onBuildUnavailable?: () => void;
 	controls: ReactNode;
-	/** Connection and document status, right-aligned in the document title bar. */
+	/** Document status, right-aligned in the document title bar. */
 	status?: ReactNode;
+	/**
+	 * A notice for the whole page, such as a lost connection, in flow at the top of the document's
+	 * content, or at the top of Chat where Chat is all that shows.
+	 */
+	notice?: ReactNode;
 	/** People present in the room, at the end of the document title bar. */
 	presence?: ReactNode;
 	ids: WorkspaceIds;
@@ -242,6 +247,7 @@ export function Workspace(
 		header,
 		identity,
 		mode,
+		notice,
 		onBuildHover,
 		onChatOpen,
 		onDesktopChatOpen,
@@ -586,6 +592,7 @@ export function Workspace(
 									{status}
 								</div>
 							)}
+							{presentation.documentVisible && notice}
 							<div
 								className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 								data-workspace-document-swap
@@ -678,6 +685,7 @@ export function Workspace(
 						<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
 							Chat
 						</h2>
+						{!presentation.documentVisible && notice}
 						<div className="workspace-chat-body relative min-h-0 flex-1">
 							{presentation.separatorVisible && (
 								<ResizeHandle

@@ -27,7 +27,8 @@ import {
 import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
 import type { DraftInputHandle } from "./draft-input";
-import { PlannerAttachment } from "./planner-attachment";
+import { plannerNotice } from "./planner-status";
+import type { PlannerStatus } from "./planner-status";
 import { TypingReporter } from "./typing";
 import { ChatComposer } from "./composer";
 
@@ -84,7 +85,7 @@ import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-over
 import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
 
-import type { Chat as Wire, ConversationPlan, Session } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
@@ -139,10 +140,13 @@ export type ChatProps = {
 	notice?: string;
 	/** One calm line shown while the transcript has loaded and is still empty. */
 	emptyNotice?: string;
-	/** Who holds the document's remote Planner; absent under every other harness. */
-	planner?: Session.PlannerAttachment;
-	/** The viewer's own machine that is starting the Planner, by name, when one is. */
-	plannerMachine?: string;
+	/**
+	 * What is not well with the document's remote Planner, when something is: its machine button
+	 * says so all the time, and the composer says so when it cannot start, or when a message is
+	 * addressed to Chopin that nothing can answer yet. Absent while it is attached, and under every
+	 * other harness.
+	 */
+	planner?: PlannerStatus;
 };
 
 function draftKey(room: string, handle: string): string {
@@ -213,7 +217,6 @@ export function Chat(
 		notice,
 		emptyNotice,
 		planner,
-		plannerMachine,
 		onShowDecisions,
 		onResearch,
 		onShowResearch,
@@ -265,8 +268,7 @@ export function Chat(
 	let submission = useRef<object | undefined>(undefined);
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
-	// A reload, including the header's fallback when reconnecting keeps
-	// failing, must not take an unsent message with it. Kept as it changes
+	// A reload must not take an unsent message with it. Kept as it changes
 	// rather than on unload, which a browser does not promise to announce.
 	useEffect(() => keepDraft(room, handle, draft), [room, handle, draft]);
 	let pickerId = useId();
@@ -288,14 +290,8 @@ export function Chat(
 	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
+	// The document says when the connection is lost; Chat only holds back what it cannot send.
 	let connectionNotice = useConnectionNotice(!connected);
-	let connectionLabel = connectionNotice === "none"
-		? undefined
-		: connectionNotice === "offline" || wire?.status === "closed" || wire?.status === "denied"
-		? "Offline"
-		: wire?.status === "connecting"
-		? "Connecting…"
-		: "Reconnecting…";
 	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
 		|| addressedOutsideReferences(draft.text, draft.references));
 	let workingTurn = transcriptReady ? turn : undefined;
@@ -719,7 +715,6 @@ export function Chat(
 				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
-					<PlannerAttachment machine={plannerMachine} planner={planner} />
 				</div>
 			</div>
 		);
@@ -772,7 +767,7 @@ export function Chat(
 					? { tone: "info", text: "Research isn’t available in this document" }
 					: !agent
 					? { tone: "info", text: "Chopin unavailable" }
-					: undefined}
+					: plannerNotice(planner, effectiveMode)}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled
 					? {
@@ -794,8 +789,6 @@ export function Chat(
 					|| blockedCommand
 					|| (connectionNotice !== "none" && !draftCommand(draft.text))}
 				onSubmit={submit}
-				connectionLabel={connectionLabel}
-				onReconnect={connectionNotice === "offline" && wire ? () => wire.reconnect() : undefined}
 				run={agent && (busy || counts.active > 0)
 					? {
 						action: "stop",
@@ -842,7 +835,6 @@ export function Chat(
 						)}
 					</>
 				}
-				attachment={<PlannerAttachment machine={plannerMachine} planner={planner} />}
 				input={{
 					"aria-activedescendant": commandOpen
 						? referenceOptionId(commandPickerId, commandActive)

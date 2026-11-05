@@ -278,7 +278,16 @@ describe("design audit specimens", () => {
 		expect(chat).toContain('class="workspace-root');
 		expect(chat).toContain('class="composer-surface field"');
 		expect(chat).toContain('class="composer-notice motion-feedback"');
-		expect(chat).toContain("Reconnect");
+		// The Planner's states: a warning on the composer's edge, and the machine button's dot and note.
+		expect(chat).toMatch(/class="composer-notice" role="alert" data-warning="true"/);
+		expect(chat).toContain("Can’t connect to Build box.");
+		expect(chat).toContain("How to fix");
+		expect(chat).toContain("Connecting to Build box");
+		expect(chat).toContain("Build box is offline. Its work is kept and picks up when it’s back.");
+		expect(chat).toContain('data-planner="starting"');
+		expect(chat).toContain('data-planner="failing"');
+		expect(chat).toContain('data-planner="away"');
+		expect(chat).not.toContain("Reconnect");
 		expect(chat).toContain('aria-label="Stop Chopin"');
 		expect(chat).toContain("Read-only access");
 		expect(chat).toContain("Document archived");
