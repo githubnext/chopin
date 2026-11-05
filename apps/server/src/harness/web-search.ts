@@ -68,13 +68,16 @@ function mcpCodes(error: unknown): string {
 
 /** One masked, clipped line of a setup error. No query has been sent when setup fails. */
 function setupMessage(error: unknown, token: string): string {
-	if (!(error instanceof Error)) return "a value that is not an Error was thrown";
 	let mask = (text: string) => {
 		if (token.length >= 8) text = text.replaceAll(token, "[redacted]");
 		return text.replace(SECRET_TEXT, (_match, bearer?: string) => `${bearer ?? ""}[redacted]`)
 			.replace(/[\s\p{Cc}]+/gu, " ")
 			.trim();
 	};
+	if (typeof error === "string") return `thrown string: ${mask(error).slice(0, 160)}`;
+	if (!(error instanceof Error)) {
+		return `a ${error === null ? "null" : typeof error} value that is not an Error was thrown`;
+	}
 	let name = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/.test(error.name) ? mask(error.name) : "Error";
 	return `${name}: ${mask(error.message).slice(0, 160)}`;
 }

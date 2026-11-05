@@ -9,9 +9,10 @@ export function researchFailureMessage(reason: string | undefined): string {
 		"attempt-timeout": "Research timed out before it returned a result.",
 		"web-search-timeout": "A public web-search request timed out.",
 		"web-search-authorization-timeout": "Authorization for public web search timed out.",
-		"web-search-unavailable": "The public web-search service was unavailable.",
+		"web-search-unavailable":
+			"The public web-search service was unavailable. The server log has the details.",
 		"web-search-credential-rejected":
-			"GitHub refused the credential from this sign-in for public web search. "
+			"GitHub refused this sign-in's GitHub App user access token for public web search. "
 			+ "The server log has the details.",
 		"web-search-not-offered":
 			"GitHub did not offer public web search to this sign-in. The server log has the details.",

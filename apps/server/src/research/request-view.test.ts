@@ -8,10 +8,13 @@ test.each([
 		"attempts-exhausted:web-search-authorization-timeout",
 		"Authorization for public web search timed out.",
 	],
-	["web-search-unavailable", "The public web-search service was unavailable."],
+	[
+		"web-search-unavailable",
+		"The public web-search service was unavailable. The server log has the details.",
+	],
 	[
 		"attempts-exhausted:web-search-credential-rejected",
-		"GitHub refused the credential from this sign-in for public web search. "
+		"GitHub refused this sign-in's GitHub App user access token for public web search. "
 		+ "The server log has the details.",
 	],
 	[

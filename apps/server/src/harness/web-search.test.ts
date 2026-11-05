@@ -212,7 +212,7 @@ it("keeps other setup failures unavailable and says what kind of token was used"
 			new MCPClientError({ message: "bad gateway", statusCode: 502 }),
 			new MCPClientError({ message: "no such method", code: -32601 }),
 			Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" }),
-			"offline",
+			"TLS handshake failed for opaque-token-value",
 		]
 	) {
 		let result = await webSearchTool({ ...credential(), token: "opaque-token-value" }, {
@@ -239,6 +239,8 @@ it("keeps other setup failures unavailable and says what kind of token was used"
 		expect(line).toContain("credential: token of an unrecognized type");
 		expect(line).not.toContain("Troubleshooting");
 	}
+	expect(logs[3]).toContain("thrown string: TLS handshake failed for [redacted]");
+	expect(logs[3]).not.toContain("opaque-token-value");
 });
 
 it("masks credentials and clips a setup failure before it is logged", async () => {
