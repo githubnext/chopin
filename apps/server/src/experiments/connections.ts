@@ -448,38 +448,53 @@ export class Connections {
 			);
 	}
 	/**
-	 * The live connections of the teammate's shared machine `owner` chose for `documentId`. Whether
-	 * its owner can push to the repository is checked where work is queued and claimed.
+	 * The live connections of the teammate's shared machine `machineId`, for `owner`. Whether its
+	 * owner can push to the repository is checked where work is queued and claimed.
 	 */
-	chosenShared(repositoryId: string, owner: string, documentId: string) {
-		let chosen = this.chosen(documentId, owner);
-		return !chosen || !this.#choicesRead
+	#sharedOn(repositoryId: string, owner: string, machineId: string | undefined) {
+		return !machineId || !this.#choicesRead
 			? []
 			: this.list(repositoryId).filter(value =>
-				value.machineId === chosen && value.owner !== owner && value.shared
+				value.machineId === machineId && value.owner !== owner && value.shared
 			);
 	}
+	/** The live connections of the teammate's shared machine `owner` chose for `documentId`. */
+	chosenShared(repositoryId: string, owner: string, documentId: string) {
+		return this.#sharedOn(repositoryId, owner, this.chosen(documentId, owner));
+	}
 	/**
-	 * The connections that may take the work `owner` asks for on `documentId`: those candidates()
-	 * offers, then the teammate's shared machine they chose. Never for automatic work, which stays
-	 * on its own owner's machines.
+	 * The live connections of the teammate's shared machine that is `owner`'s favorite, while they
+	 * chose no machine for `documentId`: Automatic prefers it where it serves the repository.
+	 */
+	favoriteShared(repositoryId: string, owner: string, documentId: string) {
+		return this.chosen(documentId, owner)
+			? []
+			: this.#sharedOn(repositoryId, owner, this.#favorites.get(owner));
+	}
+	/**
+	 * The connections that may take the work `owner` asks for on `documentId`: a teammate's shared
+	 * machine that is their favorite, then those candidates() offers, then the teammate's shared
+	 * machine they chose. Never for work Chopin starts by itself, which stays on its own owner's
+	 * machines.
 	 */
 	requested(repositoryId: string, owner: string, documentId: string) {
 		return [
+			...this.favoriteShared(repositoryId, owner, documentId),
 			...this.candidates(repositoryId, owner, documentId),
 			...this.chosenShared(repositoryId, owner, documentId),
 		];
 	}
 	/**
 	 * Whether a connection may take `person`'s work on `documentId` (its owner's unless said), as
-	 * candidates() decides. A teammate's machine takes only the work of someone who chose it.
+	 * candidates() decides. A teammate's machine takes only the work of someone who chose it, or,
+	 * where they chose none, made it their favorite.
 	 */
 	allows(documentId: string, connection: Connection, person = connection.owner) {
 		if (!this.#choicesRead) return false;
 		let chosen = this.chosen(documentId, person);
 		return connection.owner === person
 			? chosen === undefined || connection.machineId === chosen
-			: connection.machineId === chosen;
+			: connection.machineId === (chosen ?? this.#favorites.get(person));
 	}
 	/**
 	 * Whether the stored choices have been read. Until they are, no connection takes anyone's
@@ -535,7 +550,13 @@ export class Connections {
 	/** A revoked machine is nobody's choice, or favorite, any more. */
 	unchoose(machineId: string) {
 		for (let [key, value] of this.#choices) if (value === machineId) this.#choices.delete(key);
-		for (let [key, value] of this.#favorites) if (value === machineId) this.#favorites.delete(key);
+		this.unfavor(machineId);
+	}
+	/** Forget everyone's favorite of a machine, except `keep`'s: its owner's own stays. */
+	unfavor(machineId: string, keep?: string) {
+		for (let [owner, value] of this.#favorites) {
+			if (value === machineId && owner !== keep) this.#favorites.delete(owner);
+		}
 	}
 	runToken(
 		connectionId: string,

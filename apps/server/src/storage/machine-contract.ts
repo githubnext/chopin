@@ -273,7 +273,7 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		it("keeps one favorite machine per person, only their own, until cleared or revoked", async () => {
+		it("keeps one favorite machine per person, theirs or a teammate's shared one, until cleared or revoked", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let userId = await owner(storage);
@@ -289,7 +289,7 @@ export function machineContract(name: string, factory: StorageFactory) {
 				expect(await mine()).toEqual([{ userId, machineId: second.id }]);
 				await storage.machines.favor({ userId }, now);
 				expect(await mine()).toEqual([]);
-				// Someone else's machine is never anyone's favorite.
+				// Someone else's machine is nobody's favorite until its owner shares it.
 				let other = id("machine-stranger");
 				await storage.users.put({ id: other, login: "other", avatarUrl: "", now });
 				await expect(storage.machines.favor({ userId: other, machineId: first.id }, now))
@@ -299,6 +299,67 @@ export function machineContract(name: string, factory: StorageFactory) {
 				expect(await mine()).toEqual([]);
 				await expect(storage.machines.favor({ userId, machineId: first.id }, now))
 					.rejects.toBeInstanceOf(StorageError);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("lets a person favor a teammate's machine only while its owner shares it, in place of any favorite of their own", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let person = await owner(storage);
+				let teammate = await owner(storage);
+				let mine = machine(person);
+				let theirs = machine(teammate);
+				await storage.machines.create(mine);
+				await storage.machines.create(theirs);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				let favorites = async () =>
+					(await storage.machines.favorites()).filter(value =>
+						value.userId === person || value.userId === teammate
+					);
+				await expect(storage.machines.favor({ userId: person, machineId: theirs.id }, now))
+					.rejects.toBeInstanceOf(StorageError);
+				await storage.machines.share(theirs.id, teammate, true);
+				await storage.machines.favor({ userId: person, machineId: mine.id }, now);
+				await storage.machines.favor({ userId: person, machineId: theirs.id }, now);
+				expect(await favorites()).toEqual([{ userId: person, machineId: theirs.id }]);
+				// The owner's own favorite is theirs alone; the two don't disturb each other.
+				await storage.machines.favor({ userId: teammate, machineId: theirs.id }, now);
+				expect(await favorites()).toHaveLength(2);
+				// Owner-only actions stay with the owner.
+				expect(await storage.machines.rename(theirs.id, person, "taken")).toBe(false);
+				expect(await storage.machines.share(theirs.id, person, false)).toBe(false);
+				expect(await storage.machines.revoke(theirs.id, person, now)).toBe(false);
+				expect((await storage.machines.get(theirs.id))?.revokedAt).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		it("clears teammates' favorites of a machine when its owner stops sharing it, and everyone's when it is revoked", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let owned = await owner(storage);
+				let teammate = await owner(storage);
+				let theirs = machine(owned, { shared: true });
+				await storage.machines.create(theirs);
+				let now = new Date("2026-01-05T03:04:05.000Z");
+				let favorites = async () =>
+					(await storage.machines.favorites()).filter(value =>
+						value.userId === owned || value.userId === teammate
+					).map(value => value.userId).sort();
+				await storage.machines.favor({ userId: owned, machineId: theirs.id }, now);
+				await storage.machines.favor({ userId: teammate, machineId: theirs.id }, now);
+				expect(await favorites()).toEqual([owned, teammate].sort());
+				// Stopping sharing takes the machine off the teammate's menu, and out of their favorite.
+				expect(await storage.machines.share(theirs.id, owned, false)).toBe(true);
+				expect(await favorites()).toEqual([owned]);
+				await storage.machines.share(theirs.id, owned, true);
+				await storage.machines.favor({ userId: teammate, machineId: theirs.id }, now);
+				expect(await favorites()).toEqual([owned, teammate].sort());
+				expect(await storage.machines.revoke(theirs.id, owned, now)).toBe(true);
+				expect(await favorites()).toEqual([]);
 			} finally {
 				await storage.close();
 			}

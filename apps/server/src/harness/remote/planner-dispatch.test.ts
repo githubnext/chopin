@@ -1502,6 +1502,8 @@ describe("a teammate's shared machine, listed read-only", () => {
 			connected: true,
 			version: "0.1.5",
 			service: false,
+			// Whether it is the viewer's own favorite, which no one else sees.
+			favorite: false,
 			lastSeenAt: expect.any(Number),
 		});
 	});
@@ -1527,7 +1529,6 @@ describe("a teammate's shared machine, listed read-only", () => {
 				"autoRun",
 				"reauthorize",
 				"finishing",
-				"favorite",
 				"shared",
 				"createdAt",
 				"hostname",
@@ -1598,12 +1599,11 @@ describe("a teammate's shared machine, listed read-only", () => {
 		expect(await listing("member")).toEqual([]);
 	});
 
-	it("never lets a teammate rename, favorite, share, stop sharing or disconnect it", async () => {
+	it("never lets a teammate rename, share, stop sharing or disconnect it", async () => {
 		let { send, listing, box } = await teammates();
 		for (
 			let [action, body] of [
 				["label", { label: "mine now" }],
-				["favorite", { favorite: true }],
 				["shared", { shared: false }],
 				["revoke", {}],
 			] as const
@@ -1824,6 +1824,246 @@ describe("a teammate's shared machine, listed read-only", () => {
 		expect((await choice("member")).machines).toEqual([
 			expect.objectContaining({ id: box.id, teammate: true, connected: true, runsPlanners: false }),
 		]);
+	});
+});
+
+describe("favoriting a teammate's shared machine", () => {
+	/** rival's shared build-box and member's own desk, both with a Planner command and online. */
+	async function favorites() {
+		let dispatch = await dispatchServer();
+		let box = await dispatch.machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		let desk = await dispatch.machine("member", "U_member", "desk");
+		let favor = async (login: string, machine: string, favorite = true) => {
+			let response = await dispatch.send(`/api/connector/machines/${machine}/favorite`, {
+				login,
+				body: { favorite },
+			});
+			return { status: response.status, body: await response.json() };
+		};
+		let starred = async (login: string) =>
+			(await dispatch.listing(login)).filter(value => value.favorite).map(value => value.id);
+		return { ...dispatch, box, desk, favor, starred };
+	}
+
+	it("lets a person make an eligible shared machine their favorite, shown on its row for them alone", async () => {
+		let { favor, starred, listing, choice, box } = await favorites();
+		expect(await favor("member", box.id)).toEqual({ status: 200, body: { favorite: box.id } });
+		expect(await starred("member")).toEqual([box.id]);
+		expect((await listing("member")).find(value => value.id === box.id)).toMatchObject({
+			teammate: true,
+			favorite: true,
+		});
+		expect((await choice("member")).favorite).toBe(box.id);
+		// Its owner's own favorite is their own; they have none, and member's doesn't change that.
+		expect(await starred("rival")).toEqual([]);
+		expect((await choice("rival")).favorite).toBeNull();
+		expect(await favor("member", box.id, false)).toEqual({ status: 200, body: { favorite: null } });
+		expect(await starred("member")).toEqual([]);
+	});
+
+	it("refuses a machine that is not shared, whose owner can't push, or that the person can't use", async () => {
+		let { favor, machine, share, starred, box } = await favorites();
+		let plain = await machine("rival", "U_rival", "plain", { bare: true });
+		let readers = await machine("viewer", "U_viewer", "reader-box", { bare: true, shared: true });
+		expect((await favor("member", plain.id)).status).toBe(404);
+		expect((await favor("member", readers.id)).status).toBe(404);
+		// viewer can only pull, so rival's machine serves them nothing they could push to.
+		expect((await favor("viewer", box.id)).status).toBe(404);
+		expect((await favor("member", "no-such-machine")).status).toBe(404);
+		expect(await starred("member")).toEqual([]);
+		// Shared, it is theirs to favor.
+		expect(await share("rival", plain.id)).toBe(200);
+		expect((await favor("member", plain.id)).status).toBe(200);
+	});
+
+	it("keeps one favorite per person, across their own machines and teammates'", async () => {
+		let { favor, starred, box, desk } = await favorites();
+		await favor("member", desk.id);
+		expect(await starred("member")).toEqual([desk.id]);
+		await favor("member", box.id);
+		expect(await starred("member")).toEqual([box.id]);
+		await favor("member", desk.id);
+		expect(await starred("member")).toEqual([desk.id]);
+	});
+
+	it("keeps the owner's favorite apart from a teammate's, and clears only the teammate's when sharing stops", async () => {
+		let { favor, share, starred, choice, listing, box } = await favorites();
+		await favor("rival", box.id);
+		await favor("member", box.id);
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await starred("rival")).toEqual([box.id]);
+		expect(await starred("member")).toEqual([]);
+		// Shared again, it is no longer anyone's favorite but its owner's.
+		expect(await share("rival", box.id)).toBe(200);
+		expect((await choice("member")).favorite).toBeNull();
+		expect((await listing("member")).find(value => value.id === box.id)).toMatchObject({
+			favorite: false,
+		});
+		expect(await starred("rival")).toEqual([box.id]);
+	});
+
+	it("clears every favorite of a machine when its owner disconnects it", async () => {
+		let { favor, send, share, starred, choice, box } = await favorites();
+		await favor("member", box.id);
+		let revoked = await send(`/api/connector/machines/${box.id}/revoke`, {
+			login: "rival",
+			body: {},
+		});
+		expect(revoked.status).toBe(200);
+		expect((await choice("member")).favorite).toBeNull();
+		expect(await starred("member")).toEqual([]);
+		expect(await share("rival", box.id)).toBe(404);
+		expect((await favor("member", box.id)).status).toBe(404);
+	});
+
+	it("clears only a favorite the person has, of a teammate's machine", async () => {
+		let { favor, starred, box } = await favorites();
+		// Clearing a favorite that is not the person's is a refusal, as for any machine that isn't theirs.
+		expect((await favor("member", box.id, false)).status).toBe(404);
+		await favor("member", box.id);
+		expect((await favor("member", box.id, false)).status).toBe(200);
+		expect(await starred("member")).toEqual([]);
+	});
+
+	it("is what Automatic uses for the document while it is connected, ahead of the person's own", async () => {
+		let { favor, choice, box, desk } = await favorites();
+		expect((await choice("member")).automatic)
+			.toEqual({ id: desk.id, label: "desk", favorite: false });
+		await favor("member", box.id);
+		expect((await choice("member")).automatic)
+			.toEqual({ id: box.id, label: "build-box", favorite: true });
+		// Offline, it falls back as Automatic does without it, and the choice still says it is theirs.
+		await box.disconnect();
+		let fallen = await choice("member");
+		expect(fallen.automatic).toEqual({ id: desk.id, label: "desk", favorite: false });
+		expect(fallen.favorite).toBe(box.id);
+	});
+
+	it("keeps rename, share and disconnect with the owner for a machine a teammate favored", async () => {
+		let { send, favor, box } = await favorites();
+		await favor("member", box.id);
+		for (
+			let [action, body] of [
+				["label", { label: "mine now" }],
+				["shared", { shared: false }],
+				["revoke", {}],
+			] as const
+		) {
+			expect(
+				(await send(`/api/connector/machines/${box.id}/${action}`, { login: "member", body }))
+					.status,
+			).toBe(404);
+		}
+	});
+});
+
+describe("a document on Default machine whose creator's favorite is a teammate's shared machine", () => {
+	/** member's laptop, rival's shared build-box, and member's favorite: build-box. */
+	async function preferring() {
+		let dispatch = await dispatchServer();
+		let { machine, favor } = dispatch;
+		let laptop = await machine("member", "U_member", "laptop");
+		let box = await machine("rival", "U_rival", "build-box", { bare: true, shared: true });
+		await favor("member", box.id);
+		return { ...dispatch, laptop, box };
+	}
+
+	it("runs its Planner there, as its owner, rather than on the creator's own machine", async () => {
+		let { visit, choice, laptop, box, channel, runtime, url } = await preferring();
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await laptop.poll([])).toEqual({ waiting: true });
+		expect((await choice("member")).planner)
+			.toEqual({ state: "starting", login: "rival", machine: box.id });
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "rival",
+			machineId: box.id,
+		});
+	});
+
+	it("falls back to the creator's own machine while the favorite is offline", async () => {
+		let { visit, laptop, box, channel, url } = await preferring();
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect((await box.disconnect()).status).toBe(200);
+		expect(await laptop.poll([], 1_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		// Back online, it does not take a Planner that works elsewhere back.
+		await box.reconnect();
+		expect(await box.poll([])).toEqual({ waiting: true });
+		expect(await laptop.poll([channel.id])).toEqual({ waiting: true });
+	});
+
+	it("falls back to the creator's own machine when its owner stops sharing it", async () => {
+		let { visit, share, laptop, box, channel, url } = await preferring();
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		expect(await share("rival", box.id, false)).toBe(200);
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect(await box.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("stopped sharing build-box") },
+		});
+	});
+
+	it("falls back to the creator's own machine where the owner can no longer push to the repository", async () => {
+		let { auth, visit, laptop, box, channel, skew, url } = await preferring();
+		await visit();
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let access = auth.github.repositoryAccess;
+		auth.github.repositoryAccess = async (token, owner, name) => {
+			let found = await access(token, owner, name);
+			return token.startsWith("rival") && found
+				? { ...found, permissions: { pull: true, push: false, admin: false } }
+				: found;
+		};
+		// Its owner's push check is asked again once its ten minutes are up.
+		skew.ms = 11 * 60_000;
+		await visit();
+		expect(await laptop.poll([], 1_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		expect(await box.poll([channel.id])).toEqual({ kind: "planners", planners: [] });
+	});
+
+	it("moves the Planner from the creator's own machine when they favor a teammate's, and back when they favor their own", async () => {
+		let { visit, favor, laptop, box, channel, url } = await dispatchServer().then(
+			async dispatch => {
+				let laptop = await dispatch.machine("member", "U_member", "laptop");
+				let box = await dispatch.machine("rival", "U_rival", "build-box", {
+					bare: true,
+					shared: true,
+				});
+				return { ...dispatch, laptop, box };
+			},
+		);
+		await visit();
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let link = await laptop.backend();
+		await link.next("attached");
+
+		await favor("member", box.id);
+		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+		let theirs = await box.backend();
+		await theirs.next("attached");
+
+		await favor("member", laptop.id);
+		expect(await theirs.next("refused")).toMatchObject({ code: "access-revoked" });
+		expect(await laptop.poll([], 1_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
 	});
 });
 

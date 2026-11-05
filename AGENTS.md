@@ -187,11 +187,12 @@ collaborative state and external implementation runs are durable.
   push-refusing throwaway worktree, under hourly caps and a 20-minute deadline;
   see [Prototype spikes](docs/local-experiments.md#prototype-spikes-live_spikes).
 - **A shared machine runs teammates' work as its owner.** An owner who shares a machine
-  consents to the Planner, builds and runs of a document whose editor chose it, in repositories
-  the owner can push to (checked with the machine's own token, as Default machine does). The
+  consents to the Planner, builds and runs of a document whose editor chose it, or made it
+  their favorite and chose none, in repositories the owner can push to (checked with the machine's
+  own token, as Default machine does). The
   agent runs with the owner's GitHub account; the build records the editor as `user` and the
   owner as `machineOwner`, and only the connection it was queued on may claim or report it.
-  Automatic work never leaves its builder's own machines. Where a document's Planner runs is
+  Work Chopin starts by itself never leaves its builder's own machines. Where a document's Planner runs is
   derived from stored choices (the creator's, else an editor's whose machine can run it now),
   never from process memory, so a restart asks one machine; a choice that cannot run it yet
   stops nothing and never interrupts an attached Planner. That check is held per machine and
@@ -201,7 +202,9 @@ collaborative state and external implementation runs are durable.
   person's own (a minute) and its owner's, listed with the machine's token once per owner
   for everyone (10 minutes, a failure a minute), so its cost to the owner's token does not
   grow with teammates or polls. Only a repository the machine has a checkout of is asked
-  on its own. Unsharing clears teammates' choices of the
+  on its own. A person's one favorite may be a teammate's shared machine they could use (the
+  same eligibility as its listing); Automatic and Default machine prefer it where it serves the
+  repository, and fall back where it doesn't. Unsharing clears teammates' choices and favorites of the
   machine and hands a document to Default machine only where the machine ran its Planner,
   had been asked to, was placing it, or someone uses the document; any other just loses
   the choice.

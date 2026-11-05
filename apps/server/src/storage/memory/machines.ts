@@ -92,7 +92,10 @@ export class MemoryMachineStore implements MachineStore {
 		let found = this.#machines.get(id);
 		if (!found || found.userId !== userId || found.revokedAt) return false;
 		if (shared) found.shared = true;
-		else delete found.shared;
+		else {
+			delete found.shared;
+			this.#unfavor(id, userId);
+		}
 		return true;
 	}
 	async revoke(id: string, userId: string, now: Date) {
@@ -101,8 +104,14 @@ export class MemoryMachineStore implements MachineStore {
 		delete found.credentials;
 		found.revokedAt = new Date(now);
 		for (let [key, choice] of this.#choices) if (choice.machineId === id) this.#choices.delete(key);
-		if (this.#favorites.get(userId) === id) this.#favorites.delete(userId);
+		this.#unfavor(id);
 		return true;
+	}
+	/** Forget everyone's favorite of a machine, except `keep`'s: its owner's own stays. */
+	#unfavor(machineId: string, keep?: string) {
+		for (let [userId, favorite] of this.#favorites) {
+			if (favorite === machineId && userId !== keep) this.#favorites.delete(userId);
+		}
 	}
 	async serve(id: string, repository: MachineRepository) {
 		let found = this.#machines.get(id);
@@ -143,7 +152,7 @@ export class MemoryMachineStore implements MachineStore {
 			return;
 		}
 		let found = this.#machines.get(favorite.machineId);
-		if (!found || found.revokedAt || found.userId !== favorite.userId) {
+		if (!found || found.revokedAt || found.userId !== favorite.userId && !found.shared) {
 			throw missing(`machine ${favorite.machineId} is not the person's`);
 		}
 		this.#favorites.set(favorite.userId, favorite.machineId);

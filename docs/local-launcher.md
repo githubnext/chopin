@@ -33,7 +33,8 @@ normal tools, project instructions and configured services.
 3. The build runs on the machine you chose for the document: the server picks
    your idle connection for the repository, preferring the one that last ran work
    for this document, and derives the checkout from it. If you chose a
-   teammate's shared machine, it runs there instead, as that machine's owner (see
+   teammate's shared machine, or made one your default and chose none, it runs
+   there instead, as that machine's owner (see
    [Share a machine with teammates](chopin-cli.md#share-a-machine-with-teammates)):
    the connection it queues on belongs to the owner, the build records you as
    the person who asked, and only that connection claims and reports it, while

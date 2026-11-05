@@ -226,7 +226,9 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			connector.track(id);
 			// Cheap on purpose: whether one is free is decided when Build is pressed.
 			let localAgent = options.connections.list(channel.repositoryId, session.user.id).length > 0
-				|| options.connections.chosenShared(channel.repositoryId, session.user.id, id).length > 0;
+				|| options.connections.chosenShared(channel.repositoryId, session.user.id, id).length > 0
+				|| options.connections.favoriteShared(channel.repositoryId, session.user.id, id).length
+					> 0;
 			// Read before the plan lock; the experiment store has its own.
 			let queued = options.liveBuild
 				? await options.withPlan(id, async plan => plan.builds.at(-1))
@@ -417,6 +419,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							idle.has(connectionId) ? options.connections.get(connectionId) : undefined,
 						list: (repositoryId, owner) =>
 							[
+								...owner ? options.connections.favoriteShared(repositoryId, owner, id) : [],
 								...options.connections.list(repositoryId, owner),
 								...owner ? options.connections.chosenShared(repositoryId, owner, id) : [],
 							].filter(item => idle.has(item.id)),
