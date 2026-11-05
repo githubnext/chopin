@@ -448,16 +448,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * Whether a connection may take `person`'s work on a document now: one of their own machines,
-	 * or the teammate's shared machine they chose while its owner still shares it and can push.
+	 * or the teammate's shared machine they chose, or made their favorite where they chose none,
+	 * while its owner still shares it and can push.
 	 */
 	async function mayTake(connection: Connection, person: string, documentId: string) {
 		if (connection.owner === person) return true;
-		return !!connection.shared && connections.chosen(documentId, person) === connection.machineId
+		return !!connection.shared
+			&& (connections.chosen(documentId, person) ?? connections.favorite(person))
+				=== connection.machineId
 			&& await sharedReaches(connection.machineId, documentId);
 	}
 	/**
 	 * The live connections that may take the work `owner` asks for on a document: their own, and the
-	 * teammate's shared machine they chose. Automatic work never reaches a teammate's machine.
+	 * teammate's shared machine they chose or favor. Work Chopin starts by itself never reaches a
+	 * teammate's machine.
 	 */
 	async function takers(owner: string, repositoryId: string, documentId: string) {
 		let found: Connection[] = [];
@@ -574,6 +578,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			runsPlanners(value) && reach.get(reachKey(value.machineId, channel.repositoryId))?.ok
 		)?.machineId;
 	}
+	/** The teammate's shared machine the creator favors, when it can run the document's Planner now and its owner can push. */
+	function favoritePlannerMachine(channel: ChannelRecord) {
+		let favorite = connections.favorite(channel.createdBy);
+		return connections.shared(channel.repositoryId, channel.createdBy).find(value =>
+			value.machineId === favorite && runsPlanners(value)
+			&& reach.get(reachKey(value.machineId, channel.repositoryId))?.ok
+		)?.machineId;
+	}
 	/**
 	 * Whether a machine can run a document's Planner for `user` (its creator unless said): their
 	 * own, one shared with them, or one that stopped being shared while finishing this document's
@@ -607,11 +619,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * The machine Default machine runs a document's Planner on, while someone uses it and its
 	 * creator chose no machine for it: the machine it already runs on while that one can, else the
 	 * machine the creator's builds would go to (their favorite, then the one last used for the
-	 * document, then any of theirs), counting only machines that can run Planners. A creator with
-	 * none gets a teammate's machine shared with teammates, its owner's favorite first. Once the
-	 * creator has a machine of their own, a Planner on a teammate's machine moves to it unless it
-	 * is attached there. None while a member's stored choice places it on a machine that can run
-	 * it now (see placesElsewhere()).
+	 * document, then any of theirs), counting only machines that can run Planners; a teammate's
+	 * shared machine the creator favors comes before all of them while it can run it. A creator
+	 * with none gets a teammate's machine shared with teammates, its owner's favorite first. Once
+	 * the creator has a machine of their own, a Planner on a teammate's machine other than their
+	 * favorite moves to it unless it is attached there. None while a member's stored choice places
+	 * it on a machine that can run it now (see placesElsewhere()).
 	 */
 	function defaultMachine(channel: ChannelRecord): string | undefined {
 		if (
@@ -635,7 +648,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			let teammates = connections.machine(kept)[0]?.owner !== channel.createdBy;
 			if (!teammates || !own || options.attachments?.()?.holding(channel.id)) return kept;
 		}
-		let next = own ?? sharedPlannerMachine(channel);
+		let next = favoritePlannerMachine(channel) ?? own ?? sharedPlannerMachine(channel);
 		if (next) defaults.set(channel.id, next);
 		else defaults.delete(channel.id);
 		return next;
@@ -693,17 +706,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * Ask GitHub, with each shared machine's own token, whether its owner can push to a document's
 	 * repository, for a document whose creator has no machine of their own that can run its
-	 * Planner, and for a machine someone chose for it. Whether any answer changed.
+	 * Planner, and for a machine someone chose for it or its creator favors. Whether any answer
+	 * changed.
 	 */
 	async function reachShared(channel: ChannelRecord): Promise<boolean> {
 		if (!options.planners || !auth.machines.durable || channel.parentChannelId) return false;
 		let chosen = new Set(connections.chosenFor(channel.id));
+		let favorite = connections.favorite(channel.createdBy);
 		let own = !!ownPlannerMachine(channel);
 		let changed = false;
 		let asked = new Set<string>();
 		for (let connection of connections.shared(channel.repositoryId, channel.createdBy)) {
 			if (!runsPlanners(connection) || asked.has(connection.machineId)) continue;
-			if (own && !chosen.has(connection.machineId)) continue;
+			if (own && !chosen.has(connection.machineId) && connection.machineId !== favorite) continue;
 			asked.add(connection.machineId);
 			let known = reach.get(reachKey(connection.machineId, channel.repositoryId));
 			let ok = await ownerReaches(connection.machineId, {
@@ -1689,20 +1704,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let theirs = new Set((await ownerRepositories(machine)).map(value => value.id));
 		return mine.filter(value => theirs.has(value.id));
 	}
+	/**
+	 * Which of `machines`, teammates' shared ones, the Machines page lists to a person, with the
+	 * repositories each serves them: those both they and its owner can push to.
+	 */
+	function listedTo(session: AuthenticatedSession, machines: StoredMachine[]) {
+		return sharedServing(
+			machines,
+			checkedOutOf,
+			viewerPushes(session),
+			machine => pushableTogether(session, machine),
+		);
+	}
 	route("GET", "/api/connector/machines", async request => {
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let machines = await auth.machines.list(session.user.id);
-		// Teammates' machines shared with them, in the repositories both can push to, read-only.
+		// Teammates' machines shared with them, in the repositories both can push to.
 		let others = await sharedByOthers(session.user.id);
-		let teammates = others.length
-			? await sharedServing(
-				others,
-				checkedOutOf,
-				viewerPushes(session),
-				machine => pushableTogether(session, machine),
-			)
-			: [];
+		let teammates = others.length ? await listedTo(session, others) : [];
 		// The star shows only once the favorite is known; the list itself never waits on it.
 		await readChoices().catch(() => {});
 		let favorite = connections.choicesRead ? connections.favorite(session.user.id) : undefined;
@@ -1736,6 +1756,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				...await Promise.all(teammates.map(async ({ machine, repositories }) => ({
 					...await teammateFacts(machine),
 					repositories,
+					// Only the viewer's own favorite, never its owner's.
+					favorite: machine.id === favorite,
 					connected: connections.machine(machine.id).length > 0,
 				}))),
 			],
@@ -1750,7 +1772,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ label });
 	});
 	/**
-	 * The owner sets one of their machines as their favorite, which Automatic prefers, or clears
+	 * A person sets one of their machines, or a teammate's machine listed to them (shared, its owner
+	 * and they able to push to a repository), as their favorite, which Automatic prefers, or clears
 	 * it. Only one machine is a person's favorite.
 	 */
 	route("POST", "/api/connector/machines/:id/favorite", async (request, params) => {
@@ -1760,9 +1783,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let userId = session.user.id;
 		// Replacing the favorite needs the stored one known first.
 		await readChoices();
-		if (!(await auth.machines.list(userId)).some(machine => machine.id === params.id)) {
-			fail("not-found");
-		}
+		let own = (await auth.machines.list(userId)).some(machine => machine.id === params.id);
+		let listed = own || (favorite
+			? (await listedTo(
+				session,
+				(await sharedByOthers(userId)).filter(machine => machine.id === params.id),
+			)).length > 0
+			: connections.favorite(userId) === params.id);
+		if (!listed) fail("not-found");
 		if (favorite || connections.favorite(userId) === params.id) {
 			let machineId = favorite ? params.id : undefined;
 			let changed = connections.favorite(userId) !== machineId;
@@ -1773,6 +1801,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			connections.favor(userId, machineId);
 			// Default machine's Planners of the person's documents follow the new favorite.
 			for (let channel of changed ? await created(userId) : []) {
+				await reachShared(channel);
 				await redefault(
 					channel,
 					label =>
@@ -1833,6 +1862,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			);
 			if (busy.size) finishing.set(params.id, { login: session.user.login, documents: busy });
 			for (let key of reach.keys()) if (key.startsWith(`${params.id}\n`)) reach.delete(key);
+			// Storage forgot teammates' favorites of it with the sharing.
+			connections.unfavor(params.id, userId);
 		}
 		connections.share(params.id, shared);
 		for (let channel of teammates) {
@@ -1863,17 +1894,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await readChoices();
 		let serving = await auth.machines.list(userId);
 		let chosen = connections.chosen(documentId, userId);
-		// What Automatic would use now, shown beside it even while a machine is chosen.
-		let automatic: Connection | undefined;
-		let live = connections.candidates(repositoryId, userId, documentId, null);
-		for (let connection of live) {
-			if (!await busy(connection)) {
-				automatic = connection;
-				break;
-			}
-		}
-		automatic ??= live[0];
-		let label = (id: string) => serving.find(machine => machine.id === id)?.label ?? null;
 		let others = canPush ? await sharedByOthers(userId) : [];
 		let teammates = others.length
 			? await sharedServing(others, async () => [{
@@ -1883,6 +1903,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}])
 			: [];
 		let favorite = connections.favorite(userId);
+		// What Automatic would use now, shown beside it even while a machine is chosen: the
+		// favorite where it is a teammate's machine listed here, else the person's own.
+		let automatic: Connection | undefined;
+		let live = [
+			...connections.shared(repositoryId, userId).filter(value =>
+				value.machineId === favorite && teammates.some(({ machine }) => machine.id === favorite)
+			),
+			...connections.candidates(repositoryId, userId, documentId, null),
+		];
+		for (let connection of live) {
+			if (!await busy(connection)) {
+				automatic = connection;
+				break;
+			}
+		}
+		automatic ??= live[0];
+		let label = (id: string) =>
+			serving.find(machine => machine.id === id)?.label
+				?? teammates.find(({ machine }) => machine.id === id)?.machine.label ?? null;
 		let capable = (machineId: string) => {
 			let live = connections.machine(machineId);
 			return live.length
@@ -1892,7 +1931,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		};
 		return {
 			choice: chosen ?? null,
-			/** The caller's favorite machine, which Automatic prefers where it serves the repository. */
+			/** The caller's favorite machine, theirs or a teammate's, which Automatic prefers where it serves the repository. */
 			favorite: favorite ?? null,
 			planner: plannerState(userId, channel, serving),
 			automatic: automatic

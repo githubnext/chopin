@@ -708,13 +708,14 @@ test("teammates' shared machines are listed read-only under Shared with you, and
 		owner: expect.objectContaining({ login: "casey" }),
 		repositories: ["octo-org/score"],
 		connected: true,
+		favorite: false,
 	})]);
 	let id = listed.machines[0]!.id as string;
 	for (
-		let [action, data] of [["label", { label: "mine" }], ["favorite", { favorite: true }], [
-			"shared",
-			{ shared: false },
-		], ["revoke", {}]] as const
+		let [action, data] of [["label", { label: "mine" }], ["shared", { shared: false }], [
+			"revoke",
+			{},
+		]] as const
 	) {
 		let refused = await teammate.request.post(`${ORIGIN}/api/connector/machines/${id}/${action}`, {
 			data,

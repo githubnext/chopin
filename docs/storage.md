@@ -111,7 +111,7 @@ The migration runner owns `chopin_migrations`, including a checksum for each
 applied migration. The application schema contains:
 
 | `machine_choices` | Each person's chosen machine for one document; no row is automatic. Revoking the machine or deleting the document removes it. |
-| `machine_favorites` | Each person's one favorite machine, which Automatic prefers; no row is none. Revoking the machine removes it. |
+| `machine_favorites` | Each person's one favorite machine, their own or a teammate's shared one, which Automatic prefers; no row is none. Revoking the machine removes it; its owner no longer sharing it removes teammates' (not its owner's). |
 | `document_versions` | Activity history: one row per editing session with its author (absent for Chopin), the canonical MDX it left, revision, hash, and start and end times. |
 | `workflow_run_stages` | Every stage of each workflow run a document's Chat shows, keyed by document, run ID and stage ID, with its order, status, name, kind, parent stage IDs and start and end seconds. Bounded per stage, not per run. A run's rows go when Chat stops showing its card, or with the document. |
 | `decision_answers` | Saved answers to decisions the Planner left open, one row per document and decision: the saved generation, when it was saved, the Planner turn claimed to carry it and when that turn was delivered. A newer generation replaces the row and waits again; a delivered row stays marked so it never runs twice. Rows go with the document. |

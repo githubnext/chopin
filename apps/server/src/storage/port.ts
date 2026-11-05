@@ -136,9 +136,15 @@ export interface MachineStore {
 		choice: Omit<MachineChoice, "machineId"> & { machineId?: string },
 		now: Date,
 	): Promise<void>;
-	/** Every person's favorite unrevoked machine. Revoking a machine forgets it as a favorite. */
+	/**
+	 * Every person's favorite unrevoked machine. Revoking a machine forgets it as a favorite, and
+	 * its owner no longer sharing it forgets teammates' (not its owner's own).
+	 */
 	favorites(): Promise<MachineFavorite[]>;
-	/** Set a person's favorite to one of their own machines, or without `machineId` clear it. */
+	/**
+	 * Set a person's favorite to one of their own machines or a teammate's that its owner shares,
+	 * or without `machineId` clear it.
+	 */
 	favor(
 		favorite: Omit<MachineFavorite, "machineId"> & { machineId?: string },
 		now: Date,
