@@ -75,6 +75,20 @@ each owner's GitHub App user token and does not consume `HARNESS_AUTH`;
 setting `auto` on loopback passes the startup guard but does not enable host
 login in that adapter.
 
+Under `HARNESS=copilot-sdk` the Copilot CLI runs with a minimal environment of
+its own, not the server's. Behind an HTTP or HTTPS proxy, set these on the
+server process and the CLI receives them unchanged: `HTTPS_PROXY`,
+`HTTP_PROXY`, `NO_PROXY` and their lowercase forms, and the certificate
+variables a proxy that re-signs TLS needs, `NODE_EXTRA_CA_CERTS`,
+`SSL_CERT_FILE` and `SSL_CERT_DIR`. A variable the server has not set is not
+passed, and one set to an empty string is passed as empty. The CLI also gets
+`COPILOT_PLUGIN_DIR_ONLY=true` and the variables the Copilot SDK itself sets;
+nothing else from the server's environment reaches it, including tokens and
+`COPILOT_ENABLE_BUILTIN_GITHUB_MCP`. If the host reaches GitHub only through a
+proxy that the server learns some other way, such as a system setting, set
+these variables on the server process too: otherwise the CLI connects directly,
+and a Planner turn fails with "The Planner stream failed."
+
 `HARNESS=atomic` runs Atomic 0.9.71 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
