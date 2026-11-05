@@ -156,7 +156,9 @@ test("a parent rename while its child closes publishes the parent as the visited
 		let body = request.postDataJSON() as { documentId?: string };
 		if (body.documentId) visits.push(body.documentId);
 	});
-	await authenticate(page, "ana", baseURL!);
+	// The last visited document is one record per account, so this test signs in as its own account:
+	// any page another test opens as ana would overwrite it.
+	await authenticate(page, `ana-${room}`, baseURL!);
 	await page.goto(child.path);
 	let parent = page.locator(`[data-workspace-room="${room}"]`);
 	await expect(page.locator(`[data-workspace-room="${child.id}"]`)).toBeVisible();
