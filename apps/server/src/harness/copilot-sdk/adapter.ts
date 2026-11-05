@@ -76,7 +76,37 @@ function bounded<T>(
 	});
 }
 
-function defaultConnect(): RuntimeSource {
+/**
+ * The only variables the CLI inherits from the server besides its own
+ * hardening flag: a proxy and the certificate authorities a proxy setup
+ * needs. The SDK treats the `env` it is given as the CLI's whole
+ * environment, so anything not listed here never reaches it.
+ */
+const FORWARDED_ENV = [
+	"HTTPS_PROXY",
+	"HTTP_PROXY",
+	"NO_PROXY",
+	"https_proxy",
+	"http_proxy",
+	"no_proxy",
+	"NODE_EXTRA_CA_CERTS",
+	"SSL_CERT_FILE",
+	"SSL_CERT_DIR",
+];
+
+function cliEnvironment(source: NodeJS.ProcessEnv): Record<string, string> {
+	let env: Record<string, string> = {};
+	for (let name of FORWARDED_ENV) {
+		let value = source[name];
+		if (value !== undefined) env[name] = value;
+	}
+	// Deliberately omits COPILOT_ENABLE_BUILTIN_GITHUB_MCP: GitHub tools
+	// reach the Planner as host tools instead.
+	env.COPILOT_PLUGIN_DIR_ONLY = "true";
+	return env;
+}
+
+export function defaultConnect(): RuntimeSource {
 	let cli = locate();
 	if (!cli.ok) throw new Error(cli.reason);
 	let home = mkdtempSync(join(tmpdir(), "chopin-copilot-planner-"));
@@ -87,9 +117,7 @@ function defaultConnect(): RuntimeSource {
 			baseDirectory: home,
 			connection: RuntimeConnection.forStdio({ path: cli.path }),
 			useLoggedInUser: false,
-			// Deliberately omits COPILOT_ENABLE_BUILTIN_GITHUB_MCP: GitHub tools
-			// reach the Planner as host tools instead.
-			env: { COPILOT_PLUGIN_DIR_ONLY: "true" },
+			env: cliEnvironment(process.env),
 			logLevel: "info",
 		});
 		return { client, cleanup: () => rmSync(home, { recursive: true, force: true }) };

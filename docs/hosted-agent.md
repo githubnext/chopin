@@ -174,6 +174,12 @@ disposable session receives its owner's token when created and has no
 client-level service token or logged-in-user fallback. That detail is specific to
 the Copilot SDK adapter, not a property every harness in `HARNESS` shares.
 
+The CLI process does not inherit the server's environment. It receives the
+proxy variables (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, lowercase forms) and the
+certificate variables (`NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE`, `SSL_CERT_DIR`) the
+server has set, so a server behind a proxy reaches GitHub through it, and nothing
+else; see [Self-hosting](self-hosting.md).
+
 The two pull-request tool names and input schemas are available when a Planner
 session opens. GitHub MCP discovery runs on the first pull-request tool call,
 using the owner's current credential. An unavailable server or missing required
