@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import { useLinkHref } from "@chopin/editor";
 
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
@@ -30,12 +31,15 @@ export const CHAT_ELEMENTS = [
 
 let paragraph: NonNullable<Components["p"]> = ({ children }) => <p>{children}</p>;
 
+/** A link someone wrote: a path in the repository opens the file on GitHub, as in the document. */
+export const ChatLink: NonNullable<Components["a"]> = ({ children, href }) => (
+	<a href={useLinkHref(href)} rel="noopener noreferrer" target="_blank">
+		{children}
+	</a>
+);
+
 export const CHAT_COMPONENTS: Components = {
-	a: ({ children, href }) => (
-		<a href={href} rel="noopener noreferrer" target="_blank">
-			{children}
-		</a>
-	),
+	a: ChatLink,
 	h1: paragraph,
 	h2: paragraph,
 	h3: paragraph,
@@ -115,11 +119,7 @@ export function MessageMarkdown(
 							{reference.label}
 						</a>
 					)
-				: (
-					<a href={href} rel="noopener noreferrer" target="_blank">
-						{children}
-					</a>
-				);
+				: <ChatLink href={href}>{children}</ChatLink>;
 		},
 	};
 	return (

@@ -8,7 +8,7 @@
  * is before it becomes a node.
  */
 
-import { HIDDEN_URL_CHARACTERS, leavesRepository } from "@chopin/dialect";
+import { BARE_EMAIL, HIDDEN_URL_CHARACTERS, leavesRepository } from "@chopin/dialect";
 
 export type UrlRules = {
 	protocols: readonly string[];
@@ -60,7 +60,6 @@ const FILES = new Set([
 	"yml",
 ]);
 
-const EMAIL = /^[^\s@/]+@[^\s@/]+\.[a-z]{2,}$/i;
 const HOST = /^((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,}))(?::\d+)?(?:[/?#]|$)/i;
 const LOCALHOST = /^localhost(?::\d+)?(?:[/?#]|$)/i;
 
@@ -84,7 +83,7 @@ export function checkUrl(entered: string, rules: UrlRules): Checked {
 	let host = HOST.exec(value);
 	let web = LOCALHOST.test(value) || (host && !FILES.has(host[2]!.toLowerCase()));
 	if (web && rules.protocols.includes("https:")) value = `https://${value}`;
-	else if (!SCHEME.test(value) && EMAIL.test(value) && rules.protocols.includes("mailto:")) {
+	else if (!SCHEME.test(value) && BARE_EMAIL.test(value) && rules.protocols.includes("mailto:")) {
 		value = `mailto:${value}`;
 	}
 

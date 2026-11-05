@@ -23,6 +23,8 @@ export {
 	WIREFRAME_LANGUAGE,
 } from "./dialect";
 export type { Attribute, Component, Content, Kind } from "./dialect";
+export { BARE_EMAIL, repositoryLinkUrl } from "./repository-link";
+export type { LinkRepository } from "./repository-link";
 
 export { topLevelChunks } from "./chunk";
 export type { MdxChunk } from "./chunk";

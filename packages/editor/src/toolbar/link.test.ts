@@ -4,7 +4,7 @@ import { $getRoot, $isElementNode, $isTextNode, createEditor } from "lexical";
 
 import { $exportPlan, $importPlan, registry } from "@chopin/dialect";
 
-import { $linkAt, $updateLink } from "./link";
+import { $linkAt, $updateLink, followHref } from "./link";
 
 import type { LinkNode } from "@lexical/link";
 import type { TextNode } from "lexical";
@@ -72,5 +72,35 @@ describe("changing a link in place", () => {
 		let { write } = open();
 		let out = write(() => $updateLink($links()[1]!.getKey(), null));
 		expect(out).toBe("Read [the docs](https://example.com/docs) before starting.\n");
+	});
+});
+
+describe("following a link", () => {
+	const REPOSITORY = { owner: "octo-org", name: "score", ref: "main" };
+
+	/** The keys of the two links in the source, whose targets are an address and a path. */
+	function keys(editor: ReturnType<typeof open>["editor"]): string[] {
+		return editor.getEditorState().read(() => $links().map(link => link.getKey()));
+	}
+
+	it("opens a repository path as the file on GitHub, not as a path on the page", () => {
+		let { editor } = open();
+		let [, path] = keys(editor);
+		expect(followHref(editor, path!, "README.md", REPOSITORY))
+			.toBe("https://github.com/octo-org/score/blob/main/README.md");
+		expect(followHref(editor, path!, "./docs/review.md#L10-L20", REPOSITORY))
+			.toBe("https://github.com/octo-org/score/blob/main/docs/review.md#L10-L20");
+	});
+
+	it("leaves every other link to open where it did", () => {
+		let { editor } = open();
+		let [address] = keys(editor);
+		expect(followHref(editor, address!, "https://example.com/docs", REPOSITORY))
+			.toBe("https://example.com/docs");
+		expect(followHref(editor, address!, "mailto:ana@example.com", REPOSITORY))
+			.toBe("mailto:ana@example.com");
+		expect(followHref(editor, address!, "#anchor", REPOSITORY)).toBe("#anchor");
+		expect(followHref(editor, address!, "../secrets.md", REPOSITORY)).toBe("../secrets.md");
+		expect(followHref(editor, address!, "README.md", undefined)).toBe("README.md");
 	});
 });
