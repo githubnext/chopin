@@ -185,6 +185,11 @@ Compose project.
 Set `AGENT=off` to prevent Planner turns and disable the background-job runner.
 This does not disable the `/mcp` endpoint used by external coding agents.
 
+`/research` public web search calls GitHub's Copilot MCP endpoint with the signed-in
+user's App user access token. Whether that endpoint accepts a self-registered App's
+tokens for `web_search` is unconfirmed. If it refuses, the research card and server log
+say so, and [Self-hosting](docs/self-hosting.md#troubleshooting) lists what to check.
+
 ## Collaborate with the Planner
 
 The web composer treats `@chopin` as an instruction for the Planner:

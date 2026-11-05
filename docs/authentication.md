@@ -60,7 +60,12 @@ approve it.
 
 Chopin uses no App ID, private key, JWT, installation access token, or webhook
 secret. It acts as each signed-in user, with their App user access token,
-so repository-role checks and Copilot entitlement stay theirs.
+so repository-role checks and Copilot entitlement stay theirs. That token is also
+what Chopin sends to GitHub's Copilot MCP endpoint for the Planner's pull request
+tools and for public web search in `/research`. GitHub does not document which tokens
+that endpoint accepts for `web_search`; see
+[Troubleshooting](self-hosting.md#troubleshooting) if `/research` reports a refused
+credential or no web search.
 
 Configure Chopin with the App's slug and OAuth client credentials. A minimal
 production environment contains:

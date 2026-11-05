@@ -35,6 +35,87 @@ export type WebSearchFailureDiagnostic = {
 	webFailureToolCallId?: string;
 };
 
+export type WebSearchSetupFailure = {
+	/** The reason the research request fails with, and the card explains. */
+	reason: "web-search-credential-rejected" | "web-search-not-offered" | "web-search-unavailable";
+	/** Token-safe, for example `local:connect:mcp-client:http:401`. */
+	classification: string;
+	durationMs: number;
+};
+
+export type WebSearchSetupError = GitHubToolsError & { failure: WebSearchSetupFailure };
+
+const CREDENTIAL_TYPES: Array<[prefix: string, name: string]> = [
+	["ghu_", "GitHub App user access token"],
+	["gho_", "OAuth app access token"],
+];
+const SECRET_TEXT = /\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]+|\b(Bearer\s+)\S+/gi;
+
+function credentialType(token: string): string {
+	let known = CREDENTIAL_TYPES.find(([prefix]) => token.startsWith(prefix));
+	return known ? `${known[1]} (${known[0]})` : "token of an unrecognized type";
+}
+
+function mcpCodes(error: unknown): string {
+	if (!MCPClientError.isInstance(error)) return "";
+	let codes = "";
+	if (Number.isSafeInteger(error.code)) codes += `:rpc:${error.code}`;
+	if (
+		Number.isSafeInteger(error.statusCode) && error.statusCode! >= 100 && error.statusCode! <= 599
+	) codes += `:http:${error.statusCode}`;
+	return codes;
+}
+
+/** One masked, clipped line of a setup error. No query has been sent when setup fails. */
+function setupMessage(error: unknown, token: string): string {
+	if (!(error instanceof Error)) return "a value that is not an Error was thrown";
+	let mask = (text: string) => {
+		if (token.length >= 8) text = text.replaceAll(token, "[redacted]");
+		return text.replace(SECRET_TEXT, (_match, bearer?: string) => `${bearer ?? ""}[redacted]`)
+			.replace(/[\s\p{Cc}]+/gu, " ")
+			.trim();
+	};
+	let name = /^[A-Za-z][A-Za-z0-9_.]{0,63}$/.test(error.name) ? mask(error.name) : "Error";
+	return `${name}: ${mask(error.message).slice(0, 160)}`;
+}
+
+function setupFailure(
+	step: "connect" | "tools",
+	error: GitHubToolsError,
+	context: { token: string; began: number; log: (line: string) => void },
+): WebSearchSetupError {
+	let cause = error.kind === "Unavailable" ? error.cause : undefined;
+	let refused = MCPClientError.isInstance(cause)
+		&& (cause.statusCode === 401 || cause.statusCode === 403);
+	let kind = MCPClientError.isInstance(cause)
+		? "mcp-client"
+		: cause instanceof Error
+		? "error"
+		: "unknown";
+	let failure: WebSearchSetupFailure = {
+		reason: error.kind === "MissingTool"
+			? "web-search-not-offered"
+			: refused
+			? "web-search-credential-rejected"
+			: "web-search-unavailable",
+		classification: error.kind === "MissingTool"
+			? `local:${step}:missing-tool`
+			: `local:${step}:${kind}${mcpCodes(cause)}`,
+		durationMs: Math.round(performance.now() - context.began),
+	};
+	context.log(
+		`chopin: web_search unavailable at ${step} - ${failure.classification} in ${failure.durationMs}ms; `
+			+ `credential: ${credentialType(context.token)}; `
+			+ (error.kind === "MissingTool"
+				? "the endpoint answered but did not offer web_search"
+				: setupMessage(cause, context.token))
+			+ (failure.reason === "web-search-unavailable"
+				? ""
+				: "; see Troubleshooting in docs/self-hosting.md"),
+	);
+	return { ...error, failure };
+}
+
 /** Calls one evidence attempt may start; the upstream tool takes about two minutes each. */
 export const WEB_SEARCH_MAX_CALLS = 4;
 /** Below this much remaining attempt time a new call cannot finish usefully. */
@@ -81,7 +162,9 @@ export async function webSearchTool(
 		now?: () => number;
 		log?: (line: string) => void;
 	} = {},
-): Promise<Result<{ tool: ToolSet["web_search"]; close: () => Promise<void> }, GitHubToolsError>> {
+): Promise<
+	Result<{ tool: ToolSet["web_search"]; close: () => Promise<void> }, WebSearchSetupError>
+> {
 	// The upstream tool runs an AI research agent, so a valid response can take over a minute.
 	let timeoutMs = deps.timeoutMs ?? 180_000;
 	let now = deps.now ?? Date.now;
@@ -91,6 +174,7 @@ export async function webSearchTool(
 		throw new Error("Invalid web search timeout");
 	}
 	let client: Client;
+	let context = { token: credential.token, began: performance.now(), log };
 	try {
 		client = await (deps.createClient ?? (createMCPClient as CreateClient))({
 			transport: {
@@ -104,14 +188,14 @@ export async function webSearchTool(
 			},
 		});
 	} catch (cause) {
-		return { ok: false, error: { kind: "Unavailable", cause } };
+		return { ok: false, error: setupFailure("connect", { kind: "Unavailable", cause }, context) };
 	}
 	try {
 		let raw = await client.tools({ schemas: WEB_SEARCH_SCHEMA });
 		let picked = requireTools(raw, ["web_search"]);
 		if (!picked.ok) {
 			await client.close();
-			return picked;
+			return { ok: false, error: setupFailure("tools", picked.error, context) };
 		}
 		let source = picked.value.web_search!;
 		if (!source.execute) throw new Error("MCP web_search has no execution handler");
@@ -209,20 +293,9 @@ export async function webSearchTool(
 									? "error"
 									: "unknown";
 								let diagnostic: WebSearchFailureDiagnostic = {
-									webFailure: `local:${phase}:${kind}`,
+									webFailure: `local:${phase}:${kind}${mcpCodes(error)}`,
 									webFailureDurationMs: Math.round(performance.now() - began),
 								};
-								if (MCPClientError.isInstance(error)) {
-									if (Number.isSafeInteger(error.code)) {
-										diagnostic.webFailure += `:rpc:${error.code}`;
-									}
-									if (
-										Number.isSafeInteger(error.statusCode) && error.statusCode! >= 100
-										&& error.statusCode! <= 599
-									) {
-										diagnostic.webFailure += `:http:${error.statusCode}`;
-									}
-								}
 								if (
 									/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
 										options.toolCallId,
@@ -246,6 +319,6 @@ export async function webSearchTool(
 		};
 	} catch (cause) {
 		await client.close().catch(() => {});
-		return { ok: false, error: { kind: "Unavailable", cause } };
+		return { ok: false, error: setupFailure("tools", { kind: "Unavailable", cause }, context) };
 	}
 }

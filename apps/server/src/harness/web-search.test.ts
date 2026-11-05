@@ -86,6 +86,7 @@ it("loads only the host GitHub MCP web_search and binds execution to the owner",
 it("fails closed when MCP does not offer web_search or connection fails", async () => {
 	let closed = 0;
 	let missing = await webSearchTool(credential(), {
+		log: () => {},
 		createClient: async () => ({
 			tools: async () => ({}),
 			close: async () => {
@@ -93,14 +94,183 @@ it("fails closed when MCP does not offer web_search or connection fails", async 
 			},
 		}),
 	});
-	expect(missing).toEqual({ ok: false, error: { kind: "MissingTool", name: "web_search" } });
+	expect(missing).toMatchObject({ ok: false, error: { kind: "MissingTool", name: "web_search" } });
 	expect(closed).toBe(1);
 	let unavailable = await webSearchTool(credential(), {
+		log: () => {},
 		createClient: async () => {
 			throw new Error("offline");
 		},
 	});
 	expect(unavailable).toMatchObject({ ok: false, error: { kind: "Unavailable" } });
+});
+
+it("names a credential the endpoint refuses at connect, with its type and a redacted message", async () => {
+	let secret = "ghu_abcdefghijklmnopqrstuvwxyz0123456789";
+	let logs: string[] = [];
+	let result = await webSearchTool({ ...credential(), token: secret }, {
+		log: line => logs.push(line),
+		createClient: async () => {
+			throw new MCPClientError({
+				message: "MCP HTTP Transport Error: POSTing to endpoint (HTTP 401): "
+					+ `unauthorized: token authentication failed for Bearer ${secret}`,
+				statusCode: 401,
+				url: "https://api.githubcopilot.com/mcp/",
+			});
+		},
+	});
+	expect(result).toMatchObject({
+		ok: false,
+		error: {
+			kind: "Unavailable",
+			failure: {
+				reason: "web-search-credential-rejected",
+				classification: "local:connect:mcp-client:http:401",
+				durationMs: expect.any(Number),
+			},
+		},
+	});
+	expect(logs).toHaveLength(1);
+	expect(logs[0]).toStartWith("chopin: web_search unavailable at connect - ");
+	expect(logs[0]).toContain("local:connect:mcp-client:http:401");
+	expect(logs[0]).toContain("GitHub App user access token (ghu_)");
+	expect(logs[0]).toContain("unauthorized: token authentication failed");
+	expect(logs[0]).not.toContain(secret);
+	expect(logs[0]).not.toContain("abcdefghijkl");
+	expect(logs[0]).not.toContain("\n");
+});
+
+it("reads a refusal while listing tools as the same rejected credential", async () => {
+	let logs: string[] = [];
+	let closed = 0;
+	let result = await webSearchTool({ ...credential(), token: "gho_0123456789abcdefghijklmnop" }, {
+		log: line => logs.push(line),
+		createClient: async () => ({
+			tools: async () => {
+				throw new MCPClientError({
+					message: "MCP HTTP Transport Error: POSTing to endpoint (HTTP 403): forbidden",
+					statusCode: 403,
+					code: -32001,
+				});
+			},
+			close: async () => {
+				closed++;
+			},
+		}),
+	});
+	expect(result).toMatchObject({
+		ok: false,
+		error: {
+			failure: {
+				reason: "web-search-credential-rejected",
+				classification: "local:tools:mcp-client:rpc:-32001:http:403",
+			},
+		},
+	});
+	expect(closed).toBe(1);
+	expect(logs).toHaveLength(1);
+	expect(logs[0]).toStartWith("chopin: web_search unavailable at tools - ");
+	expect(logs[0]).toContain("OAuth app access token (gho_)");
+});
+
+it("reports a connection that is accepted without web_search as not offered", async () => {
+	let logs: string[] = [];
+	let result = await webSearchTool({
+		...credential(),
+		token: "ghu_abcdefghijklmnopqrstuvwxyz0123456789",
+	}, {
+		log: line => logs.push(line),
+		createClient: async () => ({
+			tools: async () => ({
+				list_pull_requests: tool({ inputSchema: z.object({}), execute: async () => ({}) }),
+			}),
+			close: async () => {},
+		}),
+	});
+	expect(result).toMatchObject({
+		ok: false,
+		error: {
+			kind: "MissingTool",
+			name: "web_search",
+			failure: {
+				reason: "web-search-not-offered",
+				classification: "local:tools:missing-tool",
+			},
+		},
+	});
+	expect(logs).toEqual([
+		expect.stringMatching(
+			/^chopin: web_search unavailable at tools - local:tools:missing-tool in \d+ms; credential: GitHub App user access token \(ghu_\); the endpoint answered but did not offer web_search; see Troubleshooting in docs\/self-hosting\.md$/,
+		),
+	]);
+});
+
+it("keeps other setup failures unavailable and says what kind of token was used", async () => {
+	let logs: string[] = [];
+	for (
+		let cause of [
+			new MCPClientError({ message: "bad gateway", statusCode: 502 }),
+			new MCPClientError({ message: "no such method", code: -32601 }),
+			Object.assign(new Error("Unable to connect"), { code: "ConnectionRefused" }),
+			"offline",
+		]
+	) {
+		let result = await webSearchTool({ ...credential(), token: "opaque-token-value" }, {
+			log: line => logs.push(line),
+			createClient: async () => {
+				throw cause;
+			},
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			error: { failure: { reason: "web-search-unavailable" } },
+		});
+		if (result.ok) throw new Error("fixture failed");
+		expect(executionDiagnostic({ webFailure: result.error.failure.classification }))
+			.toBeDefined();
+	}
+	expect(logs.map(line => /- (\S+) in /.exec(line)?.[1])).toEqual([
+		"local:connect:mcp-client:http:502",
+		"local:connect:mcp-client:rpc:-32601",
+		"local:connect:error",
+		"local:connect:unknown",
+	]);
+	for (let line of logs) {
+		expect(line).toContain("credential: token of an unrecognized type");
+		expect(line).not.toContain("Troubleshooting");
+	}
+});
+
+it("masks credentials and clips a setup failure before it is logged", async () => {
+	let secret = "opaque-credential-value";
+	let message = [
+		`MCP HTTP Transport Error: POSTing to endpoint (HTTP 401): rejected echo ${secret}`,
+		`Authorization: Bearer ${secret}`,
+		"retry with github_pat_11ABCDEFG0123456789_abcdefghijklmnop or ghs_abcdefghijklmnopqrstuvwxyz0123456789",
+		`\u001b[31mcolour\u001b[0m ${secret} ${"x".repeat(900)}`,
+	].join("\n");
+	for (let name of [`Bearer ${secret}`, "ghu_abcdefghijklmnopqrstuvwxyz0123456789"]) {
+		let logs: string[] = [];
+		await webSearchTool({ ...credential(), token: secret }, {
+			log: line => logs.push(line),
+			createClient: async () => {
+				throw Object.assign(new MCPClientError({ message, statusCode: 401 }), { name });
+			},
+		});
+		expect(logs).toHaveLength(1);
+		let line = logs[0]!;
+		expect(line).not.toContain(secret);
+		expect(line).not.toContain("github_pat_");
+		expect(line).not.toContain("ghs_");
+		expect(line).not.toContain("ghu_abcdefghijkl");
+		expect(line).not.toContain("abcdefghijkl");
+		expect(line).not.toMatch(/\p{Cc}/u);
+		expect(line).toContain(
+			"rejected echo [redacted] Authorization: Bearer [redacted] retry with [redacted] or [redacted]",
+		);
+		expect(line).toMatch(/; (?:Error|\[redacted\]): MCP HTTP Transport Error: POSTing/);
+		expect(line.length).toBeLessThan(500);
+	}
 });
 
 it("does not count a resolved MCP error as a successful search", async () => {

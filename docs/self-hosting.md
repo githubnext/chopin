@@ -328,6 +328,10 @@ headers.
 - For `copilot-sdk`, an active Copilot entitlement for each user who may own a
   hosted agent session. For `atomic`, model credentials for the chosen
   `HARNESS_AUTH` mode instead.
+- For public web research (`/research` with `WEB_RESEARCH` on), GitHub's Copilot
+  MCP endpoint must offer its `web_search` tool to each user's App user access
+  token. GitHub does not document that tool's requirements, so verify it on your
+  deployment; see [Troubleshooting](#troubleshooting).
 
 ## Register the GitHub App
 
@@ -686,7 +690,10 @@ After the first deployment:
    entitlement for `copilot-sdk`, or the `HARNESS_AUTH` credentials for
    `atomic`)
    and the hosted agent runtime.
-8. Connect a local coding agent and call `list_documents` if MCP is part of the
+8. Run `/research` with a short brief to verify public web search. It reaches
+   GitHub's Copilot MCP endpoint with the signed-in user's App user access
+   token, a separate check from step 7.
+9. Connect a local coding agent and call `list_documents` if MCP is part of the
    deployment's intended surface.
 
 The image health check calls `/api/session`. It confirms HTTP liveness but does
@@ -786,6 +793,45 @@ process to loopback for local-only use. See [Choose and trust a harness](#choose
 entitlement, the model, App permissions, repository write access, and Copilot
 CLI startup logs. Planner and research request execution validate these
 dependencies lazily.
+
+**Public web research fails before it searches.** `/research` finds public sources through
+the `web_search` tool of GitHub's Copilot MCP endpoint (`https://api.githubcopilot.com/mcp/`).
+It authorizes with the signed-in user's App user access token (`ghu_`), the same credential the
+Planner's pull request tools send to that endpoint. When setup fails, the research card says
+which of three things happened and the server log names the step and the cause:
+
+- `web-search-credential-rejected`: "GitHub refused the credential from this sign-in for public
+  web search." The endpoint answered HTTP 401 or 403 while connecting or listing tools.
+- `web-search-not-offered`: "GitHub did not offer public web search to this sign-in." The endpoint
+  accepted the connection, but its tool list had no `web_search`.
+- `web-search-unavailable`: "The public web-search service was unavailable." Any other setup
+  failure, such as a network error, an HTTP 5xx, or a JSON-RPC error.
+
+The log line names the step (`connect` or `tools`), a classification with any HTTP status and
+JSON-RPC code, how long setup ran, the type of credential Chopin sent, and the client's error
+with tokens and `Bearer` values masked and clipped to one short line. It never contains the token
+or the `Authorization` header:
+
+```text
+chopin: web_search unavailable at connect - local:connect:mcp-client:http:401 in 180ms; credential: GitHub App user access token (ghu_); MCPClientError: ...
+```
+
+The `elapsedMs` on the `connecting-web` progress line records when that phase began, not when it
+failed; read the duration from the failure line.
+
+Chopin cannot tell from these responses why the endpoint refused the credential or withheld the
+tool. GitHub's Copilot SDK documentation lists GitHub App user access tokens (`ghu_`) as supported
+for Copilot requests, but GitHub documents no token requirement for this endpoint's `web_search`
+tool, and the tool is not part of GitHub's open-source MCP server. A deployment that signs in
+through its own GitHub App reported this step failing while a classic OAuth token (`gho_`) for the
+same account was accepted by the endpoint's `initialize` request. Whether the endpoint refuses
+App user access tokens for `web_search` is unconfirmed.
+
+Check the log line first, then the account's Copilot entitlement and the settings that gate web
+search and MCP servers for the user and, in an organization, its Copilot policies. No Chopin
+setting sends a different credential to this endpoint. If setup keeps failing, set
+`WEB_RESEARCH=off` to stop offering public web research until you have verified it, and report
+the log line, which holds no token.
 
 **MCP returns 401 or 403.** A 401 indicates an invalid or expired bearer. A 403
 indicates failed instance admission or a supplied Origin that differs from

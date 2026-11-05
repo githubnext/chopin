@@ -49,6 +49,13 @@ such as waiting for a web-search response or waiting for the model's findings.
 A failed request exposes its safe failure explanation and **Retry research** in
 the same card. Retrying keeps the accepted brief and request identity.
 
+Public web search is reached through GitHub's Copilot MCP endpoint with the
+signed-in user's App user access token. When connecting to it fails, the card
+says whether GitHub refused the credential (HTTP 401 or 403), did not offer
+public web search to this sign-in, or the service was unavailable, and the server
+log names the cause. See [self-hosting troubleshooting](self-hosting.md#troubleshooting)
+for what an operator can check.
+
 ## Processing and persistence
 
 Both analysis queues commit with the saved message. Each has independent outcomes
