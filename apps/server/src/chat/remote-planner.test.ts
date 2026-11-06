@@ -648,6 +648,7 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 	let down = await resumablePlanner({ ask: true, graceMs: GRACE_MS });
 	let { context, server } = down;
 	let id = [...context.plan.records.keys()][0]!;
+	let lines = down.said();
 	await down.drop();
 	expect(server.attachments.status(down.channel.id)).toEqual({
 		state: "disconnected",
@@ -658,7 +659,8 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 		"running",
 		true,
 	]]);
-	expect(down.said().filter(text => text.startsWith("The machine disconnected."))).toHaveLength(1);
+	// The machine's state lives on the machine button and the run cards: Chat says nothing of it.
+	expect(down.said()).toEqual(lines);
 
 	// The owner's GitHub credential of eight hours is renewed meanwhile, and a day goes by: past
 	// the configured grace, the one-hour maximum and every other timer, nothing ends.
@@ -680,13 +682,14 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 	expect(await Chat.invoke(context, RIVAL, "Anything?")).toBe("planner-not-attached");
 	expect(await context.plannerNotAttached!()).toContain("machine is offline");
 
+	lines = down.said();
 	let client = await down.reconnect();
 	expect(context.plan.records.size).toBe(1);
 	client.reportRuns(down.session(), { active: ["run-1"], paused: [], cards: [card("running")] });
 	await until(() => context.chat.runs?.[0]?.disconnected === undefined);
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
-	expect(down.said().filter(text => text === "The machine reconnected and carries on."))
-		.toHaveLength(1);
+	// Nothing confirms its return either: the card's mark going is all there is.
+	expect(down.said()).toEqual(lines);
 	// The renewed credential serves the session when it is next used, and nothing was reopened.
 	expect(context.chat.retained).toBeDefined();
 	expect(await Chat.invoke(context, RIVAL, "Carry on")).toBeUndefined();
@@ -1014,23 +1017,20 @@ test("an answer the client never acknowledged is kept through a frame that cross
 	expect(context.plan.records.get(id)?.status).toBe("answered");
 });
 
-test("a Stop pressed before the server notices the link died says it was not confirmed, and says it is kept once the drop is noticed", async () => {
+test("a Stop pressed before the server notices the link died says it was not confirmed, and Chat says no more once the drop is noticed", async () => {
 	let down = await resumablePlanner({ proxied: true, operationMs: 150 });
 	let { context, server } = down;
 	down.proxy!.hold();
 	await Chat.abort(context, down.ws);
-	expect(down.said().at(-1)).toBe(
-		"@rival asked Chopin to stop its workflows. It has not confirmed yet, and if its "
-			+ "machine is disconnected they will pause when it reconnects.",
-	);
+	let stop = "@rival asked Chopin to stop its workflows. It has not confirmed yet, and if its "
+		+ "machine is disconnected they will pause when it reconnects.";
+	expect(down.said().at(-1)).toBe(stop);
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	await down.proxy!.stop();
 	down.setHeld(await down.first().resumption);
 	await until(() => server.links.length === 0);
-	await until(() => down.said().some(text => text.startsWith("The machine disconnected.")));
-	expect(down.said().at(-1)).toContain(
-		"A Stop it had not confirmed is kept and will be delivered when it reconnects.",
-	);
+	await until(() => context.chat.runs?.[0]?.disconnected === true);
+	expect(down.said().at(-1)).toBe(stop);
 	expect(down.said().some(text => text === "@rival stopped the turn.")).toBe(false);
 	await down.reconnect();
 	await until(() => down.controls.length >= 1);
@@ -1159,7 +1159,7 @@ test("a transient failure while Chopin checks the account during a resume ends n
 	expect(context.plan.records.get(id)?.status).toBe("answered");
 });
 
-test("a Stop the client confirms after the wait for it ended is not announced as kept when the link later drops, and is not sent again", async () => {
+test("a Stop the client confirms after the wait for it ended is not sent again when the link later drops", async () => {
 	let down = await resumablePlanner({ operationMs: 150 });
 	let { context } = down;
 	(down.handlers as AgentHandlers).control = async message => {
@@ -1171,10 +1171,7 @@ test("a Stop the client confirms after the wait for it ended is not announced as
 	// The client paused and said so, after the server stopped waiting.
 	await Bun.sleep(600);
 	await down.drop();
-	await until(() => down.said().some(text => text.startsWith("The machine disconnected.")));
-	expect(down.said().some(text => text.includes("A Stop it had not confirmed is kept"))).toBe(
-		false,
-	);
+	await until(() => context.chat.runs?.[0]?.disconnected === true);
 	await down.reconnect();
 	await Bun.sleep(300);
 	expect(down.controls).toEqual(["stop"]);

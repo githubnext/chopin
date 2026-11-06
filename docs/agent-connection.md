@@ -946,7 +946,8 @@ not apply to it.
   cards keep the status last reported, not `stopped`, marked `disconnected` for the
   people reading them, its Decisions stay open in the document and can be answered,
   and an answer given meanwhile is held. Other sessions end as they always did.
-  Chat says once that the machine disconnected, and once that it came back.
+  Chat says nothing of the connection itself: the machine button, its menu and
+  the run cards carry that state, and nothing confirms it came back.
   Nothing waits on the client in the meantime: `@chopin` and `invoke_planner` are
   refused as [without an attached Planner](#without-an-attached-planner), and no
   other account can attach. The document is not let go either: a Default machine's
@@ -968,8 +969,8 @@ not apply to it.
   down and one already sent whose `control-result` had not come when the link
   dropped. A `stop` the client did not answer within 10 seconds while the link was
   still attached is kept too: Chat says Chopin has not confirmed it, never that
-  it stopped, and once the link is found dead (see [Pings](#pings)) says once that the
-  Stop is kept and will be delivered when the machine reconnects. Chat says a Stop
+  it stopped, and that the workflows will pause when the machine reconnects, and
+  says nothing more when the link is found dead (see [Pings](#pings)). Chat says a Stop
   stopped Chopin only when the client confirmed it, that it was asked to when
   its connection is known to be down, and that it was not confirmed otherwise. After `resumed`, before anything else,
   the server sends the client one `stop` for every run (or one per run named),

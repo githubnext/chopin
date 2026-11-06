@@ -696,12 +696,8 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 			"Last reported running. It carries on when the machine reconnects.",
 		);
 		await expect(runs).not.toContainText("stopped");
-		await expect(
-			chatPane(page).getByText(
-				"The machine disconnected. Its workflows and open questions are kept",
-			),
-		)
-			.toBeVisible();
+		// The machine's state is told on the run card and the composer's top edge, not again in Chat.
+		await expect(chatPane(page).getByText(/The machine (disconnected|reconnected)/)).toHaveCount(0);
 		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 		await snap(page, "link-drop-disconnected-desktop");
 		await snap(chatPane(page), "link-drop-disconnected-chat-desktop");
@@ -774,7 +770,8 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(runs.getByRole("button", { name: /^plan-review, paused, \d+m$/ })).toBeVisible();
 		await expect(runs).not.toContainText("disconnected");
 		await expect(runs.locator("[data-run-disconnected-note]")).toHaveCount(0);
-		await expect(chatPane(page).getByText("The machine reconnected and carries on.")).toBeVisible();
+		// Nothing confirms it: the card's mark and the composer's strip going are all there is.
+		await expect(chatPane(page).getByText(/The machine (disconnected|reconnected)/)).toHaveCount(0);
 		await expect(runs.getByRole("button", { name: "Resume plan-review" })).toBeVisible();
 		// The answer given while it was away reached it.
 		expect(await asked).toMatchObject({ status: "answered", value: true });

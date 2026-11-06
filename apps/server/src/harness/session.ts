@@ -78,8 +78,6 @@ export type PlannerSession = {
 	suspended?: () => boolean;
 	/** Whether the server is going down, so what its links close says nothing about the client. */
 	shuttingDown?: () => boolean;
-	/** Whether its link dropped with a Stop the client had not confirmed, kept for its return. */
-	keptStop?: () => boolean;
 	/** Takes the binding of the owner's renewed credential in place of one that ended. */
 	rebind?: (owner: ActiveOwnerBinding) => void;
 	/** Calls `listener` when `suspended` changes; returns the unsubscribe function. */
@@ -316,7 +314,6 @@ export async function openPlannerSession(
 						},
 						suspended: () => remote.suspended === true,
 						shuttingDown: () => remote.stopping === true,
-						keptStop: () => remote.keptStop === true,
 						watchLink: (listener: () => void) => {
 							linkListeners.add(listener);
 							return () => linkListeners.delete(listener);

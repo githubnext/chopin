@@ -1812,7 +1812,6 @@ function retain(
 		});
 		let stopLink = opened.session.watchLink?.(() => {
 			if (chat.retained?.session !== opened.session) return;
-			linkNotice(context, opened.session);
 			let current = opened.session.runs?.();
 			if (current) void publishRuns(context, opened.session, current);
 		});
@@ -1854,35 +1853,9 @@ function retain(
 		retained.ended = ended;
 		opened.binding.signal.addEventListener("abort", ended, { once: true });
 		chat.retained = retained;
-		linkNotice(context, opened.session);
 	}
 	if (runs) void report(runs);
 	return true;
-}
-
-const linkNotices = new WeakMap<PlannerSession, boolean>();
-
-/**
- * Says once in Chat that a retained Planner session's connection dropped, and once that it came
- * back. What it kept stays as it was, so the notice says what that is and what waits for it.
- */
-function linkNotice(context: Room, session: PlannerSession): void {
-	let down = session.suspended?.() === true;
-	if (linkNotices.get(session) === down || (!down && !linkNotices.has(session))) return;
-	linkNotices.set(session, down);
-	let { chat, room, server } = context;
-	say(chat, server, room, {
-		id: ulid(),
-		author: { kind: "system" },
-		text: down
-			? "The machine disconnected. Its workflows and open questions are kept, answers will "
-				+ "reach it when it reconnects, and nothing ends until it does unless someone presses Stop."
-				+ (session.keptStop?.()
-					? " A Stop it had not confirmed is kept and will be delivered when it reconnects."
-					: "")
-			: "The machine reconnected and carries on.",
-		ts: now(),
-	});
 }
 
 function currentMemberRequest(chat: Chat): ActiveMemberRequest | undefined {
