@@ -60,7 +60,7 @@ import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
 import { DocumentHistory } from "./channels/history";
 import * as Comments from "./comments/service";
-import { proxy, serve } from "./client";
+import { clientBuild, proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
@@ -170,6 +170,8 @@ const router = new Router();
 
 /** Where the built client lands. Used only when there is no dev client. */
 const CLIENT = join(import.meta.dir, "../../web/dist");
+/** What `session:hello` names as this server's client build; none in development. */
+const CLIENT_BUILD = clientBuild(CLIENT);
 
 /**
  * How long an empty room is kept before its document is released.
@@ -1717,6 +1719,7 @@ function openRoomSocket(ws: Socket): void {
 		backgroundJobs: config.backgroundJobs,
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
+		...(CLIENT_BUILD && !config.devClient ? { build: CLIENT_BUILD } : {}),
 	});
 	if (plannerAttachments) {
 		tell(ws, { kind: "session:planner", ts: 0, planner: plannerAttachments.status(room.id) });

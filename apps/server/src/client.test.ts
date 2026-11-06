@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { serve } from "./client";
+import { clientBuild, serve } from "./client";
 
 async function createClient(files: Record<string, string>) {
 	let directory = await mkdtemp(join(tmpdir(), "chopin-client-"));
@@ -114,5 +114,21 @@ test("a missing built client keeps its existing 404 response", async () => {
 		expect(await response.text()).toContain("bun run build");
 	} finally {
 		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test("the build is the entry script the page loads, and none where there is no built client", async () => {
+	let client = await createClient({
+		"index.html":
+			'<html><head><script type="module" crossorigin src="/assets/index-AjK9nqi6.js"></script></head></html>',
+	});
+	let empty = await createClient({ "index.html": "<html></html>" });
+	try {
+		expect(clientBuild(client.directory)).toBe("/assets/index-AjK9nqi6.js");
+		expect(clientBuild(empty.directory)).toBeUndefined();
+		expect(clientBuild(join(client.directory, "missing"))).toBeUndefined();
+	} finally {
+		await client.close();
+		await empty.close();
 	}
 });

@@ -56,7 +56,14 @@ async function until(check: () => boolean, ms = 4_000) {
  * session running a workflow run and waiting on one question a member has not answered.
  */
 async function held(
-	options: { graceMs?: number; feature?: boolean; proxied?: boolean; runs?: boolean } = {},
+	options: {
+		graceMs?: number;
+		feature?: boolean;
+		/** The whole `Chopin-Agent-Features` header, where the test offers more than the one. */
+		offer?: string;
+		proxied?: boolean;
+		runs?: boolean;
+	} = {},
 ) {
 	let f = await hostInputRoom();
 	cleanups.push(f.close);
@@ -64,7 +71,7 @@ async function held(
 	let server = linkServer(auth, 300, undefined, options.graceMs ?? LONGEST_GRACE);
 	cleanups.push(server.stop);
 	revocations.add(id => server.attachments.sessionRevoked(id));
-	let feature = options.feature === false ? undefined : FEATURE;
+	let feature = options.feature === false ? undefined : options.offer ?? FEATURE;
 	let proxy = options.proxied ? await holdingProxy(server.url, 10) : undefined;
 	if (proxy) cleanups.push(proxy.stop);
 	let raw = await rawLink(proxy?.url ?? server.url, MEMBER_TOKEN, feature);
@@ -145,6 +152,56 @@ function controlOf(planner: RemotePlanner) {
 		return planner.control(action, run);
 	};
 }
+
+describe("a link the server closes because it is restarting", () => {
+	it("tells a client that offered restart-notice when to expect the new process, closes with 1012, and keeps its work for a resume", async () => {
+		let h = await held({ offer: `${FEATURE}, restart-notice` });
+		expect(h.attached.features).toEqual([FEATURE, "restart-notice"]);
+		h.server.links.at(-1)!.restart(10_000);
+		expect(await h.raw.next("restarting")).toEqual({
+			type: "restarting",
+			reconnectWithinMs: 10_000,
+		});
+		expect(await h.raw.closed).toEqual({ code: 1012, reason: "server restarting" });
+		await until(() => h.server.links.length === 0);
+		expect(h.planner.suspended).toBe(true);
+		expect(h.status()).toBe("open");
+
+		let next = await h.reattach();
+		await next.next("attached");
+		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
+		expect(await next.next("resumed")).toEqual({
+			type: "resumed",
+			sessions: [{ session: h.sessionId, requests: ["ask-1"] }],
+		});
+	});
+
+	it("only closes with 1012 for a client that did not offer restart-notice, and still keeps its work", async () => {
+		let h = await held();
+		h.server.links.at(-1)!.restart(10_000);
+		expect(await h.raw.closed).toEqual({ code: 1012, reason: "server restarting" });
+		expect(h.raw.messages.some(message => message.type === "restarting")).toBe(false);
+		await until(() => h.server.links.length === 0);
+		expect(h.planner.suspended).toBe(true);
+		expect(h.status()).toBe("open");
+	});
+
+	it("ends everything for a client that never offered resumable-sessions, as any close does", async () => {
+		let h = await held({ feature: false });
+		h.server.links.at(-1)!.restart(10_000);
+		await h.raw.closed;
+		await until(() => h.server.links.length === 0);
+		expect(h.planner.suspended).not.toBe(true);
+	});
+
+	it("is not kept for a link the server ends any other deliberate way, 1012 being the only close of its own", async () => {
+		let h = await held({ offer: `${FEATURE}, restart-notice` });
+		h.server.links.at(-1)!.close(1000, "done");
+		expect((await h.raw.closed).code).toBe(1000);
+		await until(() => h.server.links.length === 0);
+		expect(h.planner.suspended).not.toBe(true);
+	});
+});
 
 describe("a resumable link that drops", () => {
 	it("keeps its open question and live run however long its client is away, and gives them back to the same account", async () => {

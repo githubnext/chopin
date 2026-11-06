@@ -1,8 +1,9 @@
 import { hasPendingWork } from "@chopin/protocol/pending-work";
+import { entryOf } from "@chopin/protocol/restart";
 import { describe, expect, it } from "bun:test";
 
 import { ResearchDraftStore } from "../../../packages/editor/src/research-draft";
-import { entryOf, isNewerBuild, recoverFromPreloadError, RELOAD_GAP_MS } from "./preload-recovery";
+import { isNewerBuild, recoverFromPreloadError, RELOAD_GAP_MS } from "./preload-recovery";
 
 import type { Reloading } from "./preload-recovery";
 

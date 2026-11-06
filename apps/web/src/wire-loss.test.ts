@@ -5,10 +5,12 @@ import { RESTART_QUIET_MS } from "@chopin/protocol/restart";
 import {
 	lossOf,
 	quietLeft,
+	readsConnected,
 	refusalOf,
 	RESTART_JITTER_MS,
 	restartDelay,
 	restartRetryDelay,
+	runningBuild,
 } from "./wire-loss";
 
 describe("lossOf", () => {
@@ -18,6 +20,11 @@ describe("lossOf", () => {
 
 	it("reads 4404 as a deleted document, which nothing can reconnect to", () => {
 		expect(lossOf(4404)).toBe("deleted");
+	});
+
+	it("reads any close after session:restarting as a restart, but a deleted document still as deleted", () => {
+		for (let code of [1000, 1001, 1006, 1011]) expect(lossOf(code, true)).toBe("restart");
+		expect(lossOf(4404, true)).toBe("deleted");
 	});
 
 	it("reads every other close as an ordinary loss, 1001 and 1006 included", () => {
@@ -61,6 +68,30 @@ describe("quietLeft", () => {
 	});
 });
 
+describe("readsConnected", () => {
+	it("holds through a restart the page is waiting out in silence, so what it draws does not change", () => {
+		expect(readsConnected("reconnecting", true, true)).toBe(true);
+		expect(readsConnected("connecting", true, true)).toBe(true);
+	});
+
+	it("lets go once the restart outlasts its silence, and for a loss that was not a restart, however short", () => {
+		expect(readsConnected("reconnecting", true, false)).toBe(false);
+		expect(readsConnected("reconnecting", false, true)).toBe(false);
+		expect(readsConnected("reconnecting", false, false)).toBe(false);
+	});
+
+	it("is connected whenever the connection is", () => {
+		expect(readsConnected("connected", false, false)).toBe(true);
+		expect(readsConnected("connected", true, false)).toBe(true);
+	});
+
+	it("is not connected for a document that was refused, deleted or closed, whatever else is said", () => {
+		for (let status of ["denied", "deleted", "closed"]) {
+			expect(readsConnected(status, false, true)).toBe(false);
+		}
+	});
+});
+
 describe("refusalOf", () => {
 	it("takes a 4xx as a refusal only when Chopin marked it", () => {
 		for (let status of [400, 403, 404, 429]) {
@@ -79,5 +110,16 @@ describe("refusalOf", () => {
 			expect(refusalOf(status, true)).toBeUndefined();
 			expect(refusalOf(status, false)).toBeUndefined();
 		}
+	});
+});
+
+describe("runningBuild", () => {
+	it("is the entry script's address, and nothing where there is no page or no script", () => {
+		let page = (src: string | null) => ({
+			querySelector: () => src === null ? null : { getAttribute: () => src },
+		});
+		expect(runningBuild(page("/assets/index-AbCd1234.js"))).toBe("/assets/index-AbCd1234.js");
+		expect(runningBuild(page(null))).toBeUndefined();
+		expect(runningBuild(undefined)).toBeUndefined();
 	});
 });

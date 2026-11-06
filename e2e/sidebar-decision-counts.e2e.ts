@@ -40,7 +40,8 @@ const QUIET = channel("cccccccc-0000-4000-8000-000000000003", "Settled plan", 0)
 const LATER = channel("cccccccc-0000-4000-8000-000000000004", "Later page", 5);
 
 const LIVE_COUNTS = new Set(["sidebar:decisions", "sidebar:snapshot"]);
-const SIDEBAR_SOCKET = "**/ws/sidebar";
+// By path, since a tab names its build in the socket's query, which a glob would not match.
+const SIDEBAR_SOCKET = (url: URL) => url.pathname === "/ws/sidebar";
 
 function sidebar(page: Page) {
 	return page.getByRole("complementary", { name: "Projects" });

@@ -137,6 +137,7 @@ import {
 import { ResearchRequestStore } from "./research-requests";
 import { GitHubReferenceCache } from "./github-references";
 import { Wire } from "./wire";
+import { readsConnected } from "./wire-loss";
 import { ExperimentStore } from "./experiments/store";
 import { InvestigationReference, removableInvestigation } from "./experiments/card";
 import { EvidenceDecisions, ViewDecision } from "./experiments/evidence";
@@ -573,6 +574,8 @@ export function RoomWorkspace(
 	}, [room]);
 	// Controls dim only once a loss outlasts a blip; actions still read `status`.
 	let treatAsConnected = useConnectionNotice(status !== "connected", wire?.restarting) === "none";
+	// What the page draws holds through a restart it is waiting out in silence.
+	let shownConnected = readsConnected(status, !!wire?.restarting, treatAsConnected);
 	// A lost connection is said once, at the top of the page: decided here, above wherever the
 	// notice is drawn, so a person switching between Chat and the document neither waits out the
 	// grace period again nor hears of it twice.
@@ -765,8 +768,8 @@ export function RoomWorkspace(
 		refreshMachine();
 	}, [plannerAttachment.planner, refreshMachine]);
 	let build = useBuildPlan({
-		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && status === "connected",
-		connected: status === "connected",
+		canEdit: effectiveCanEdit && !(archivedAt ?? metadata.archivedAt) && shownConnected,
+		connected: shownConnected,
 		enabled: profile.implementation,
 		hasContent: hasPlanContent,
 		live: liveBuild,
@@ -1403,7 +1406,7 @@ export function RoomWorkspace(
 		}),
 		[formatDock, planVisible, reportChildEdit],
 	);
-	let investigationsEditable = !!workspaceCanEdit && status === "connected";
+	let investigationsEditable = !!workspaceCanEdit && shownConnected;
 	// Read through a ref so the editor keeps one stable set of resources while people come and go.
 	let pageRequest = useRef(0);
 	let exploreState = useRef({ cardMetadata, handle, members, presentation, wire });
@@ -1885,7 +1888,7 @@ export function RoomWorkspace(
 				documentURL={new URL(documentPath(repository.owner, repository.name, slug), location.origin)
 					.href}
 				machineOffline={offlineChoice(machineChoice.state)}
-				canEdit={!!workspaceCanEdit && status === "connected"}
+				canEdit={!!workspaceCanEdit && shownConnected}
 				compact={mode !== "split"}
 				hot={buildHover === "tab"}
 				onExplain={showBuildBlocker}
@@ -2139,7 +2142,7 @@ export function RoomWorkspace(
 							<BuildView
 								active={workspacePresentation.documentVisible && view === "build"}
 								build={build}
-								canEdit={!!workspaceCanEdit && status === "connected"}
+								canEdit={!!workspaceCanEdit && shownConnected}
 								comments={acceptedComments}
 								onShowDocument={() => selectDestination("plan")}
 								room={room}
@@ -2153,7 +2156,7 @@ export function RoomWorkspace(
 								additional={
 									<EvidenceDecisions
 										store={experiments}
-										canEdit={!!workspaceCanEdit && status === "connected"}
+										canEdit={!!workspaceCanEdit && shownConnected}
 									/>
 								}
 								hasAdditional={[...experiments.values.values()].some(item =>

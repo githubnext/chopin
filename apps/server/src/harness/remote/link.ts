@@ -1029,13 +1029,25 @@ export class AgentLink {
 		this.#refuse(code, message);
 	}
 
+	/**
+	 * Ends the link because the server is restarting. A client that offered `restart-notice` is
+	 * told when to expect the new process first. The close is unplanned as far as the client's
+	 * work is concerned, so a resumable link keeps its sessions for the client to resume.
+	 */
+	restart(reconnectWithinMs: number): void {
+		if (this.#options.features?.includes(AGENT_FEATURES.restartNotice)) {
+			this.#send({ type: "restarting", reconnectWithinMs });
+		}
+		this.close(LINK_CLOSE.restarting, "server restarting");
+	}
+
 	/** Ends the link from the server side. */
 	close(code: number, reason: string): void {
 		if (this.#state === "closed" || this.#state === "suspended") return;
 		// A client the server stopped hearing from has most likely lost its network, and may
 		// return; any other reason is the server's or the client's own decision to end. Decided
 		// before the socket closes, as its close event may report back at once.
-		this.#planned = code !== LINK_CLOSE.unresponsive;
+		this.#planned = code !== LINK_CLOSE.unresponsive && code !== LINK_CLOSE.restarting;
 		try {
 			this.#socket.close(code, reason);
 		} finally {

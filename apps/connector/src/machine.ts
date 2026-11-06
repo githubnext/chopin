@@ -501,6 +501,9 @@ export const classifyConnectorError: Classify = error => {
 	// The MCP client's request timeout and closed connection, then an HTTP status refusal.
 	if (status === -32001 || status === -32000) return "retry";
 	if (status === 401) return "forgotten";
+	// A 4xx that carries none of Chopin's own error codes came from something in front of it, such
+	// as a proxy with no upstream during a restart, and says nothing about this machine.
+	if (!code && status >= 400 && status < 500) return "retry";
 	return status >= 500 || status === 429 || status === 408 ? "retry" : "fatal";
 };
 

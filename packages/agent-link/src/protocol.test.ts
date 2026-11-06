@@ -8,10 +8,12 @@ import {
 	AGENT_SUBPROTOCOL,
 	AGENT_VERSION,
 	encodeMessage,
+	LINK_CLOSE,
 	MAX_LINK_MESSAGE_BYTES,
 	MAX_LINK_NOTE_LENGTH,
 	parseClientMessage,
 	parseServerMessage,
+	RESTART_RESUME_RETRY_MS,
 	toolErrorSchema,
 } from "./protocol";
 
@@ -319,7 +321,11 @@ describe("Agent connection messages", () => {
 			runStageDeltas: AGENT_FEATURES.runStageDeltas,
 			decisionOptionPreviews: AGENT_FEATURES.decisionOptionPreviews,
 			resumableSessions: AGENT_FEATURES.resumableSessions,
+			restartNotice: AGENT_FEATURES.restartNotice,
+			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
+		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
+		expect(LINK_CLOSE.restarting).toBe(1012);
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];
 		expect(imports.every(match => match[1])).toBe(true);
@@ -337,6 +343,18 @@ describe("Agent connection messages", () => {
 			),
 		)
 			.toMatchObject({ ok: true });
+	});
+
+	it("tells a client when a new process is expected, with a whole number of milliseconds", () => {
+		let restarting = { type: "restarting", reconnectWithinMs: 10_000 } as const;
+		expect(parseServerMessage(encodeMessage(restarting))).toEqual({
+			ok: true,
+			message: restarting,
+		});
+		for (let reconnectWithinMs of [-1, 1.5, "10", undefined]) {
+			expect(parseServerMessage(JSON.stringify({ type: "restarting", reconnectWithinMs })))
+				.toMatchObject({ ok: false });
+		}
 	});
 
 	it("carries a client's acknowledgement of an answer by its request, and no more", () => {

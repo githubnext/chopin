@@ -13,11 +13,25 @@ export type Loss = "deleted" | "restart" | "lost";
 
 /**
  * How the socket's close code reads. 1012 is the server saying it is restarting, so the client
- * comes back quietly; 4404 is a document that no longer exists, which no retry can reach.
+ * comes back quietly; 4404 is a document that no longer exists, which no retry can reach. A
+ * restart the server announced with `session:restarting` (`announced`) is one whatever code the
+ * close carries, as a proxy in between may change it.
  */
-export function lossOf(code: number): Loss {
+export function lossOf(code: number, announced = false): Loss {
 	if (code === 4404) return "deleted";
-	return code === SERVICE_RESTART ? "restart" : "lost";
+	return code === SERVICE_RESTART || announced ? "restart" : "lost";
+}
+
+/**
+ * The build the running page came from: the entry script its HTML loads, which the socket's URL
+ * names so that a server of another build can tell. Undefined where there is no page to ask.
+ */
+export function runningBuild(
+	page:
+		| { querySelector(selectors: string): { getAttribute(name: string): string | null } | null }
+		| undefined,
+): string | undefined {
+	return page?.querySelector('script[type="module"][src]')?.getAttribute("src") ?? undefined;
 }
 
 /**
@@ -51,6 +65,17 @@ export function restartRetryDelay(random: number): number {
 export function quietLeft(restarting: boolean, lostAt: number | undefined, now: number): number {
 	if (!restarting || lostAt === undefined) return 0;
 	return Math.max(0, lostAt + RESTART_QUIET_MS - now);
+}
+
+/**
+ * Whether the page reads the connection as there, for what it draws and not for what it sends: it
+ * is, or the server said it is restarting and the page is still waiting that out in silence
+ * (`quiet`, before the one notice would speak). A restart that ends in moments changes nothing a
+ * person sees, so Build plan, the editors' controls and the rest stay as they were; whatever has
+ * to send still reads the connection itself. Any other loss reads as it is.
+ */
+export function readsConnected(status: string, restarting: boolean, quiet: boolean): boolean {
+	return status === "connected" || (restarting && quiet);
 }
 
 export type Denial = "authentication" | "denied";
