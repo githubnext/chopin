@@ -88,6 +88,11 @@ if (database) {
 			await ready(9071);
 			let session = await fetch("http://127.0.0.1:9071/api/session");
 			expect(await session.json()).toEqual({ user: null, agent: false });
+			// Started means the lease is held and recovery has finished, for a caller with no login.
+			for (let [path, answer] of [["live", "live"], ["ready", "ready"]]) {
+				let health = await fetch(`http://127.0.0.1:9071/api/health/${path}`);
+				expect([health.status, await health.text()]).toEqual([200, answer]);
+			}
 
 			let storage = new PostgresStorage(database);
 			let now = new Date();

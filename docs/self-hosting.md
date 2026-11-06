@@ -700,6 +700,20 @@ The image health check calls `/api/session`. It confirms HTTP liveness but does
 not prove that a browser bundle is present, a new database transaction can
 complete, GitHub is reachable, or the Planner can start.
 
+Two unauthenticated endpoints answer with a status word and nothing else, for a
+proxy or platform that routes on them:
+
+- `GET /api/health/live` answers `200 live` while the process runs.
+- `GET /api/health/ready` answers `200 ready` once the process holds the writer
+  lease and has finished startup recovery. It answers `503 starting` before
+  that, and `503 draining` from the moment a shutdown begins.
+
+Send new connections only to a ready process. Readiness does not check that
+GitHub is reachable or that a model answers. Both endpoints answer `HEAD` the
+same way.
+They are the first step of Stage 1 of the zero-downtime upgrades design,
+invisible restarts on one server.
+
 ## Operations
 
 ### Backups and restore
