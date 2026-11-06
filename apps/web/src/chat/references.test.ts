@@ -19,9 +19,11 @@ import {
 	restoreDraftSubmission,
 	reviseComposerDraft,
 	selectedReplacement,
+	sendFailure,
+	shownSendFailure,
 	withNoticesAfter,
 } from "./references";
-import { WireRefusal } from "../wire";
+import { WireLost, WireRefusal } from "../wire";
 
 import type { ReferenceDraft, ReferenceTarget } from "./references";
 
@@ -469,6 +471,42 @@ describe("acknowledged composer drafts", () => {
 		expect(bounded.length).toBeLessThanOrEqual(138);
 		expect(bounded).toEndWith("...");
 		expect(boundedChatError(new Error("connection lost"))).toContain("Check the connection");
+	});
+
+	test("knows a send the connection cut off from a refusal, and says the same of it", () => {
+		let cut = [
+			new WireLost("connection lost"),
+			new WireLost("disposed"),
+			new Error("not connected"),
+		];
+		for (let error of cut) {
+			expect(sendFailure(error)).toEqual({ text: boundedChatError(error), lost: true });
+			expect(sendFailure(error).text).toContain("Check the connection");
+		}
+		let refused = [
+			new WireRefusal("Unavailable"),
+			new WireRefusal("x".repeat(500)),
+			new WireRefusal(
+				"Still connecting to @mona's machine. Try again in a moment.",
+				"planner-not-attached",
+			),
+			new WireLost("document deleted"),
+		];
+		for (let error of refused) {
+			expect(sendFailure(error)).toEqual({ text: boundedChatError(error), lost: false });
+		}
+	});
+
+	test("tells a send the connection cut off only while the connection is up, and any other failure always", () => {
+		let cut = sendFailure(new WireLost("connection lost"));
+		let refused = sendFailure(new WireRefusal("Unavailable"));
+		// The page's offline notice speaks for a lost connection, so a blip and an outage alike
+		// leave nothing beside the composer.
+		expect(shownSendFailure(cut, false)).toBeUndefined();
+		expect(shownSendFailure(cut, true)).toBe(cut);
+		expect(shownSendFailure(refused, false)).toBe(refused);
+		expect(shownSendFailure(refused, true)).toBe(refused);
+		expect(shownSendFailure(undefined, false)).toBeUndefined();
 	});
 
 	test("shows the instructions for a missing machine whole, however long", () => {
