@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { ChatComposer } from "../../chat/composer";
-import { plannerPlacement, plannerStatus } from "../../chat/planner-status";
+import { plannerGlyph, plannerPlacement, plannerStatus } from "../../chat/planner-status";
 import { MachineGlyph, PlannerNote } from "../../machine-button";
 import { boundedChatError } from "../../chat/references";
 import { mentionCandidates } from "../../chat/mentions";
@@ -108,28 +108,27 @@ let WITHOUT_BUTTON = [
 		planner: { state: "disconnected", login: "mona" },
 	},
 	{
-		label: "No machine button: detached, held",
+		label: "No machine button: stepped away",
 		planner: { state: "held", login: "mona", until: "2026-11-04T18:31:00.000Z" },
 	},
-	{ label: "No machine button: no Planner", planner: { state: "none" } },
+	{ label: "No machine button: no machine connected", planner: { state: "none" } },
 ] as const satisfies readonly { label: string; planner: Session.PlannerAttachment }[];
 
-/** The machine button's dot and the top of its menu, as the Planner's state changes them. */
+/**
+ * The machine button's dot and the top of its menu, as the state of the document's machine changes
+ * them. Each dot comes from the same `plannerGlyph` as the real button: a healthy machine leaves
+ * its own green, and no machine connected has no dot at all, never that green.
+ */
 let PRESENCE = [
-	{ label: "Planner attached: the machine's own dot", glyph: undefined, planner: undefined },
-	{ label: "Connecting to the machine", glyph: "starting", planner: status(STARTING) },
-	{ label: "Can't connect to the machine", glyph: "failing", planner: status(FAILING) },
+	{ label: "Connected: the machine's own dot", planner: undefined },
+	{ label: "Connecting to the machine", planner: status(STARTING) },
+	{ label: "Can't connect to the machine", planner: status(FAILING) },
+	{ label: "Machine offline", planner: status({ state: "disconnected", login: "mona" }) },
 	{
-		label: "Planner disconnected",
-		glyph: "away",
-		planner: status({ state: "disconnected", login: "mona" }),
-	},
-	{
-		label: "Planner detached, held",
-		glyph: "away",
+		label: "Machine stepped away",
 		planner: status({ state: "held", login: "mona", until: "2026-11-04T18:31:00.000Z" }),
 	},
-	{ label: "No Planner attached", glyph: undefined, planner: status({ state: "none" }) },
+	{ label: "No machine connected: no dot", planner: status({ state: "none" }) },
 ] as const;
 
 export function ConversationPlate() {
@@ -204,13 +203,13 @@ export function ConversationPlate() {
 				</div>
 			</div>
 			<div className="design-audit-planner-presence">
-				{PRESENCE.map(({ glyph, label, planner }) => (
+				{PRESENCE.map(({ label, planner }) => (
 					<div key={label}>
 						<StateLabel>{label}</StateLabel>
 						<div className="design-audit-planner-glyph">
 							<MachineGlyph
 								machine={{ service: false, connected: true, reauthorize: false }}
-								planner={glyph}
+								planner={plannerGlyph(planner)}
 							/>
 							{planner && <PlannerNote status={planner} />}
 						</div>

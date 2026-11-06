@@ -371,13 +371,20 @@ export function startedBy(snapshot: Snapshot | undefined, userId: string): strin
 }
 
 /**
+ * Why Build plan waits when no machine can draft the tasks, in words that speak of a machine as
+ * the machine button does. The first one also opens how to connect one, so the button keys on it.
+ */
+export const CONNECT_MACHINE_TO_BUILD = "Connect a machine to this document to build";
+const RECONNECT_MACHINE_TO_BUILD = "Reconnect the machine to build";
+
+/**
  * Plain copy for a refusal the server explains, or `undefined` for one it does
  * not, which reads as Chopin failing to draft.
  */
 export function draftRefusalCopy(message: string, code?: string): string | undefined {
-	if (/ is offline, so it can't reply now/.test(message)) return "Reconnect the Planner to build.";
+	if (/ is offline, so it can't reply now/.test(message)) return `${RECONNECT_MACHINE_TO_BUILD}.`;
 	if (code === "planner-not-attached" || /Connect a machine to get a reply/.test(message)) {
-		return "Connect a Planner to this document to build.";
+		return `${CONNECT_MACHINE_TO_BUILD}.`;
 	}
 	if (/accepted comments/.test(message)) {
 		return "Update the document for accepted comments first.";
@@ -630,9 +637,7 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 		return "Chopin isn’t running for this document";
 	}
 	if (phase.kind === "drafting" && context.plannerDetached) {
-		return context.plannerDisconnected
-			? "Reconnect the Planner to build"
-			: "Connect a Planner to this document to build";
+		return context.plannerDisconnected ? RECONNECT_MACHINE_TO_BUILD : CONNECT_MACHINE_TO_BUILD;
 	}
 }
 

@@ -534,8 +534,9 @@ whose ownership was released. It names only the holder's GitHub login and
 state, never a machine, checkout, or token. A healthy, attached Planner shows
 nothing. Otherwise the document's machine button carries it (a thin spinner while
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
-while the Planner is away) with its words in the button's name and at the top of its
-menu, and the composer's top edge warns when the machine cannot be connected to. A
+while the Planner is away, and no dot at all where no machine is connected, the same
+bare icon as a button with no machine, never the machine's own green) with its words in
+the button's name and at the top of its menu, and the composer's top edge warns when the machine cannot be connected to. A
 person with no machine button (no machine paired or shared, a title bar that does not
 show one, a phone whose top bar an open child has taken) has nowhere else to see the
 state, so for them the composer's top edge says every state, and, for a machine that
@@ -556,8 +557,10 @@ run cards carry `disconnected` beside the status they last reported: each reads
 its clock held at the last report; an open card says what it last reported and what
 happens when the Planner returns. A card offers Pause, named as waiting for the Planner
 to reconnect, because Chopin holds it, and no Resume, which it cannot hold. Decisions
-stay where they were and stay answerable. **Build plan** says to reconnect the Planner, and a
-new comment is not sent to Chopin by default, until it does.
+stay where they were and stay answerable. **Build plan** says to reconnect the machine
+(_Reconnect the machine to build_), and a new comment is not sent to Chopin by default, until
+it does. With no machine connected at all it says _Connect a machine to this document to
+build_ and offers how to connect one.
 
 While a paired machine is starting the Planner, the state is `starting`. Its
 connector reports each launch of the backend that exits before staying up to

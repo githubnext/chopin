@@ -104,16 +104,16 @@ test("tells each state as one sentence, a failure's with its stop", () => {
 	);
 });
 
-test("turns the machine button's dot into a spinner, a warning or a muted grey, and leaves the rest", () => {
+test("turns the machine button's dot into a spinner, a warning, a muted grey or no dot, and leaves only a healthy one", () => {
 	let glyph = (planner: Session.PlannerAttachment, machine?: string) =>
 		plannerGlyph(plannerStatus(planner, machine));
 	expect(glyph({ state: "starting", login: "mona" }, "Build box")).toBe("starting");
 	expect(glyph(failing())).toBe("failing");
 	expect(glyph({ state: "disconnected", login: "mona" })).toBe("away");
 	expect(glyph({ state: "held", login: "mona", until: AT })).toBe("away");
-	// Healthy keeps the machine's own dot, and no Planner is not a state of the machine.
+	// No machine connected is no dot, never the machine's own green; only healthy keeps that.
+	expect(glyph({ state: "none" })).toBe("none");
 	expect(glyph({ state: "attached", login: "mona" })).toBeUndefined();
-	expect(glyph({ state: "none" })).toBeUndefined();
 	expect(plannerGlyph(undefined)).toBeUndefined();
 });
 

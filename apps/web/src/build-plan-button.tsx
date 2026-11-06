@@ -17,6 +17,7 @@ import {
 	buildPhase,
 	buildRefusalCopy,
 	buildTabReady,
+	CONNECT_MACHINE_TO_BUILD,
 	draftRefusalCopy,
 	firstBuildStep,
 	hasBuilt,
@@ -468,7 +469,7 @@ export function BuildPlanButton(
 	}
 	let connectionReason = ("blocked" in look ? look.blocked : undefined)
 		?? ("tip" in look ? look.tip : undefined);
-	if (canEdit && documentURL && connectionReason?.startsWith("Connect a Planner")) {
+	if (canEdit && documentURL && connectionReason?.startsWith(CONNECT_MACHINE_TO_BUILD)) {
 		return (
 			<>
 				<Suspense fallback={<span className="text-sm text-text-secondary">Connect Chopin</span>}>

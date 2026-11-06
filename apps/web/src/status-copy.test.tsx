@@ -1,13 +1,16 @@
 /**
  * The words people read about the Planner's state and the connection. They are plain: none of
- * Chopin's own terms (the Planner, attaching, holding, Decisions) and no mention of Chopin, only
- * what happens to the machine and to the person's work. Every state, glyph and place that says
- * it is walked here, so a new sentence cannot bring one back.
+ * Chopin's own terms (the Planner, attaching, detaching, holding, Decisions) and no `@chopin`,
+ * only what happens to the machine and to the person's work. Every state, glyph and place that
+ * says it is walked here, Build's reasons and refusals among them, so a new sentence cannot bring
+ * one back.
  */
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup as render } from "react-dom/server";
 
+import { buildLook, CONNECT_MACHINE_TO_BUILD, draftRefusalCopy } from "./build-model";
+import { BuildPlanButton } from "./build-plan-button";
 import { ChatComposer } from "./chat/composer";
 import {
 	plannerAnnouncement,
@@ -22,11 +25,15 @@ import { OFFLINE_MESSAGE, OfflineAnnouncement, OfflineNoticeBody } from "./offli
 import { offlineAnnouncement } from "@chopin/editor";
 
 import type { Session } from "@chopin/protocol";
+import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
 import type { MachineChoice } from "./machine-choice";
 
-/** What an internal concept looks like to a person: any of these in a status is a leak. */
-const INTERNAL = /planner|attach|\bheld\b|\bdecisions?\b|@chopin/i;
+/**
+ * What an internal concept looks like to a person: any of these in a status is a leak. `detach` is
+ * its own word (it contains `tach`, not `attach`), and `attach` takes every form of it.
+ */
+const INTERNAL = /planner|detach|attach|\bheld\b|\bdecisions?\b|@chopin/i;
 
 const AT = "2026-11-04T18:29:00.000Z";
 
@@ -43,6 +50,44 @@ const STATES: Session.PlannerAttachment[] = [
 
 /** The viewer's own machine, named, and someone else's, known only by its owner's login. */
 const MACHINES = ["Build box", undefined] as const;
+
+test("the leak check flags every banned term in any form, and none of the plain words", () => {
+	let leaks = [
+		"Planner",
+		"the planner is working",
+		"Open your Planner",
+		"attach",
+		"Attach again",
+		"attached",
+		"attaching",
+		"attachment",
+		"reattach",
+		"detach",
+		"detached",
+		"Detached from this document",
+		"detaching",
+		"held",
+		"Held until 10:31 AM",
+		"Decision",
+		"decisions",
+		"Open Decisions stay answerable",
+		"@chopin",
+		"Ask @Chopin",
+	];
+	for (let leak of leaks) expect(INTERNAL.test(leak), leak).toBe(true);
+	let plain = [
+		"Connecting to Build box",
+		"Can't connect to Build box",
+		"Build box is offline. Your work is kept.",
+		"Build box stepped away. Your work is kept until 10:31 AM.",
+		"No machine is connected.",
+		"Connect a machine to get a reply.",
+		"Reconnect the machine to build.",
+		"The shelled output was upheld",
+		"Chopin",
+	];
+	for (let words of plain) expect(INTERNAL.test(words), words).toBe(false);
+});
 
 function statuses(): PlannerStatus[] {
 	return STATES.flatMap(planner =>
@@ -141,7 +186,7 @@ test("every state's sentence, button name, menu note and live-region word is pla
 
 test("every glyph the button's dot takes says nothing, and none of it is an internal term", () => {
 	let glyphs = new Set<PlannerGlyph | undefined>(statuses().map(plannerGlyph));
-	expect([...glyphs].filter(Boolean).sort()).toEqual(["away", "failing", "starting"]);
+	expect([...glyphs].filter(Boolean).sort()).toEqual(["away", "failing", "none", "starting"]);
 	for (let glyph of glyphs) {
 		expectPlain(`the ${glyph} dot`, words(render(createElement(MachineGlyph, { planner: glyph }))));
 	}
@@ -197,4 +242,82 @@ test("the words for the states the user named are exactly theirs, with plain apo
 		/^Build box stepped away\. Your work is kept until \d{1,2}:\d{2}/,
 	);
 	for (let status of statuses()) expect(plannerSentence(status)).not.toContain("\u2019");
+});
+
+/** A document with no tasks yet, so what is left to say about Build plan is why it must wait. */
+const DRAFTING = {
+	revision: 1,
+	planRevision: 4,
+	localAgent: false,
+	blockers: [],
+	buildReady: true,
+	lifecycle: { execution: { state: "idle" }, history: [] },
+} as ImplementationSnapshot;
+
+test("every reason Build plan waits and every refusal Build shows is plain, machine-first words", () => {
+	let reasons: string[] = [];
+	for (let planner of [true, false]) {
+		for (let connected of [true, false]) {
+			for (let hasContent of [true, false]) {
+				for (let plannerDetached of [undefined, true]) {
+					for (let plannerDisconnected of [undefined, true]) {
+						let look = buildLook(DRAFTING, {
+							state: { stage: "idle" },
+							live: false,
+							canEdit: true,
+							connected,
+							planner,
+							plannerDetached,
+							plannerDisconnected,
+							hasContent,
+						});
+						if ("blocked" in look && look.blocked) reasons.push(look.blocked);
+					}
+				}
+			}
+		}
+	}
+	// The two reasons that used to name the Planner are among them, so this is not vacuous.
+	expect(reasons).toContain(CONNECT_MACHINE_TO_BUILD);
+	expect(reasons).toContain("Reconnect the machine to build");
+	expectPlain("Build plan's reasons", reasons);
+
+	let refusals = [
+		["@mona's machine is offline, so it can't reply now. Your work is kept.", undefined],
+		["anything", "planner-not-attached"],
+		["Connect a machine to get a reply. Choose one with the machine button.", undefined],
+		["accepted comments awaiting plan changes", undefined],
+		["implementation is already active", undefined],
+		["the queue is full", undefined],
+		["Planner is not running", undefined],
+		["write access is needed", undefined],
+		["this cannot be built", undefined],
+	] as const;
+	let shown = refusals.map(([message, code]) => draftRefusalCopy(message, code));
+	expect(shown.filter(Boolean)).toHaveLength(refusals.length);
+	expect(shown).toContain("Reconnect the machine to build.");
+	expect(shown).toContain(`${CONNECT_MACHINE_TO_BUILD}.`);
+	expectPlain("Build's refusals", shown.filter(Boolean) as string[]);
+});
+
+test("Build plan says it plainly and still opens how to connect a machine for that one reason", () => {
+	let plan = (blocked: string) =>
+		render(
+			createElement(BuildPlanButton, {
+				build: { look: { kind: "plan", blocked }, press: () => {} } as never,
+				canEdit: true,
+				documentURL: "http://localhost:8787/githubnext/chopin/cache-plan",
+				onHover: () => {},
+				onOpen: () => {},
+			}),
+		);
+	// Needing a machine offers to connect one, in place of a button that cannot be pressed.
+	let connect = plan(CONNECT_MACHINE_TO_BUILD);
+	expect(connect).toContain("Connect Chopin");
+	expect(connect).not.toContain('aria-label="Build plan"');
+	// Any other reason leaves the inert button with the reason in its tooltip and description.
+	let reconnect = plan("Reconnect the machine to build");
+	expect(reconnect).toContain('aria-label="Build plan"');
+	expect(decode(reconnect)).toContain('data-tooltip="Reconnect the machine to build"');
+	expectPlain("Build plan's tooltip", words(reconnect));
 });

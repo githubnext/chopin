@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CONNECT_MACHINE_TO_BUILD } from "../build-model";
 import { BuildPlanButton } from "../build-plan-button";
 import { AuditPlate } from "./frame";
 
@@ -47,7 +48,7 @@ export function BuildBlockerAudit() {
 				<BuildPlanButton
 					build={{
 						...build,
-						look: { kind: "plan", blocked: "Connect a Planner to this document to build" },
+						look: { kind: "plan", blocked: CONNECT_MACHINE_TO_BUILD },
 					}}
 					canEdit
 					documentURL="http://localhost:8787/githubnext/chopin/cache-plan"
