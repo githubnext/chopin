@@ -427,14 +427,17 @@ export function ProjectSidebar(
 	);
 	useEffect(() => {
 		let timer = window.setTimeout(() => {
-			void import("./dialog-prefetch").then(module =>
-				module.prefetchDialogs(
-					user.id,
-					projects.map(entry => entry.project),
-					catalogueMode === "archived",
-					projects,
+			// A warm-up: a chunk or a request that cannot be had, as while the server is away, is not an error.
+			void import("./dialog-prefetch")
+				.then(module =>
+					module.prefetchDialogs(
+						user.id,
+						projects.map(entry => entry.project),
+						catalogueMode === "archived",
+						projects,
+					)
 				)
-			);
+				.catch(() => {});
 		}, 1500);
 		return () => window.clearTimeout(timer);
 	}, [catalogueMode, projects, user.id]);

@@ -8,8 +8,10 @@ export function prefetchDialogs(
 	includeArchived: boolean,
 	source: unknown,
 ) {
-	void import("./add-project-dialog");
-	void import("./new-document-dialog");
-	void import("./delete-document-dialog");
-	if (projects) return warmRecentSearch(userId, projects, includeArchived, source);
+	return Promise.all([
+		import("./add-project-dialog"),
+		import("./new-document-dialog"),
+		import("./delete-document-dialog"),
+		projects && warmRecentSearch(userId, projects, includeArchived, source),
+	]);
 }
