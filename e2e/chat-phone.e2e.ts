@@ -49,7 +49,7 @@ test("a phone composer rests as one pill with a reference button, draft and send
 	expect(sendBox!.width).toBeCloseTo(36, 0);
 	expect(sendBox!.height).toBeCloseTo(36, 0);
 	// The status stays readable as one line above the pill.
-	let notice = chat.getByRole("status").filter({ hasText: "Chopin unavailable" });
+	let notice = chat.getByRole("status").filter({ hasText: "Replies are off on this server." });
 	await expect(notice).toBeVisible();
 	expect((await notice.boundingBox())!.height).toBeLessThanOrEqual(28);
 	// Disabled send is drawn solid rather than faded.

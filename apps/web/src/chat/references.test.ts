@@ -14,6 +14,8 @@ import {
 	prepareDraftSubmission,
 	reconcileReferenceDrafts,
 	referenceTrigger,
+	REPLIES_OFF,
+	repliesOffNotice,
 	restoreDraftSubmission,
 	reviseComposerDraft,
 	selectedReplacement,
@@ -196,6 +198,14 @@ describe("textarea replacement reconciliation", () => {
 			start: 3,
 			end: 4,
 		});
+	});
+});
+
+describe("the strip for a server whose agent is off", () => {
+	test("says so plainly while the page is online, and nothing while the page's offline notice is up", () => {
+		expect(repliesOffNotice(false)).toEqual({ tone: "info", text: REPLIES_OFF });
+		expect(REPLIES_OFF).toBe("Replies are off on this server.");
+		expect(repliesOffNotice(true)).toBeUndefined();
 	});
 });
 

@@ -212,7 +212,7 @@ test("without a Planner a manually addressed message gets a local notice", async
 	let page = await join("ana");
 	let chat = chatPane(page);
 	let input = chatInput(chat);
-	await expect(chat.getByText("Chopin unavailable", { exact: true })).toBeVisible();
+	await expect(chat.getByText("Replies are off on this server.", { exact: true })).toBeVisible();
 	await input.fill("@");
 	await expect(chat.getByRole("listbox", { name: "Mentions" })).toHaveCount(0);
 	await input.fill("@chopin are you there?");
@@ -221,9 +221,10 @@ test("without a Planner a manually addressed message gets a local notice", async
 	// sent message by what was sent rather than by the draft still on screen.
 	await expectChatValue(input, "");
 	await expect(chat.locator('[data-chat-raw="@chopin are you there?"]')).toBeVisible();
-	let notice = chat.getByText("Chopin is off on this server. Your message went to the room only.", {
-		exact: true,
-	});
+	let notice = chat.getByText(
+		"Replies are off on this server. Your message went to the people here only.",
+		{ exact: true },
+	);
 	await expect(notice).toBeVisible();
 	await page.reload();
 	await expect(chatInput(chat)).toBeVisible();

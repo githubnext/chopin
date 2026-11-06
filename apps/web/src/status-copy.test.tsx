@@ -12,6 +12,7 @@ import { renderToStaticMarkup as render } from "react-dom/server";
 import { buildLook, CONNECT_MACHINE_TO_BUILD, draftRefusalCopy } from "./build-model";
 import { BuildPlanButton } from "./build-plan-button";
 import { ChatComposer } from "./chat/composer";
+import { PLANNER_UNAVAILABLE_NOTICE, REPLIES_OFF, repliesOffNotice } from "./chat/references";
 import {
 	plannerAnnouncement,
 	plannerButtonLabel,
@@ -245,6 +246,22 @@ test("the words for the states the user named are exactly theirs, with plain apo
 		/^Build box stepped away\. Your work is kept until \d{1,2}:\d{2}/,
 	);
 	for (let status of statuses()) expect(plannerSentence(status)).not.toContain("\u2019");
+});
+
+test("a server whose agent is off says so in plain words, and says nothing of it while the page is offline", () => {
+	let strip = repliesOffNotice(false)!;
+	expect(strip.text).toBe(REPLIES_OFF);
+	expectPlain("the strip and the notice after a send", [strip.text, PLANNER_UNAVAILABLE_NOTICE]);
+	// And as the composer draws it, above the field.
+	let markup = render(createElement(ChatComposer, { ...COMPOSER, agent: false, notice: strip }));
+	let drawn = markup.slice(
+		markup.indexOf("composer-notice-slot"),
+		markup.indexOf("composer-surface"),
+	);
+	expect(drawn.length).toBeGreaterThan(0);
+	expectPlain("drawn", words(drawn));
+	// The page's offline notice is the one thing said about the connection.
+	expect(repliesOffNotice(true)).toBeUndefined();
 });
 
 /** A document with no tasks yet, so what is left to say about Build plan is why it must wait. */
