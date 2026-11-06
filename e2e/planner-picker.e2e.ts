@@ -612,10 +612,14 @@ for (let [shape, options] of SHAPES) {
 async function carried(page: Page) {
 	let sockets: Array<{ send: (data: string) => void; close: (options: object) => Promise<void> }> =
 		[];
+	let muted = false;
 	await page.routeWebSocket("**/ws?**", socket => {
 		let upstream = socket.connectToServer();
 		socket.onMessage(message => upstream.send(message));
-		upstream.onMessage(message => socket.send(message));
+		upstream.onMessage(message => {
+			if (muted && typeof message === "string" && message.includes('"session:planner"')) return;
+			socket.send(message);
+		});
 		socket.onClose((code, reason) => void upstream.close({ code, reason }));
 		upstream.onClose((code, reason) => void socket.close({ code, reason }));
 		sockets.push(socket);
@@ -626,6 +630,10 @@ async function carried(page: Page) {
 		/** The server restarting: the page's socket is closed with 1012 and it reconnects. */
 		restart: () => sockets.at(-1)!.close({ code: 1012, reason: "server restarting" }),
 		opened: () => sockets.length,
+		/** Keeps what the real server says of its Planner from the page, so the test says it all. */
+		mute: (on: boolean) => {
+			muted = on;
+		},
 	};
 }
 
@@ -736,6 +744,70 @@ for (let [shape, options] of SHAPES) {
 		await expectHealthy(button);
 		await expectPlannerAttached(page);
 		await link.detach();
+	});
+}
+
+for (let [shape, options] of SHAPES) {
+	test(`the Planner's status says nothing of a machine while the machine list describes another account's Planner than the socket does, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let owner = await open(browser, "casey", room, DESKTOP);
+		await machine(owner, "Build box", true, { service: true });
+		await share(owner, "Build box");
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		carriage.mute(true);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		await machine(page, "studio", true);
+		await favor(page, room, "studio");
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		let button = machineButton(page);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let theirs = list.machines.find(value => value.label === "Build box")!.id;
+
+		// The machine list was read before another account's Planner took the document over: it still
+		// describes casey's Build box being started, which the document runs on.
+		let reread = await reading(page, room, state => ({
+			...state,
+			choice: theirs,
+			planner: { state: "starting", login: "casey", machine: theirs },
+		}));
+		await reread.refresh();
+		await expect(button).toHaveAccessibleName("Runs on Build box");
+
+		// bob's Planner dropped, is being started, and cannot be: Build box is none of bob's, and
+		// nothing says it is, past the moment a machine being connected to waits.
+		let failure = { attempts: 3, reason: "exit 1", at: new Date().toISOString() };
+		for (
+			let planner of [
+				{ state: "disconnected", login: "bob" },
+				{ state: "starting", login: "bob" },
+				{ state: "starting", login: "bob", failure },
+			]
+		) {
+			carriage.say(planner);
+			await page.waitForTimeout(1_800);
+			await expect(button).toHaveAccessibleName("Runs on Build box");
+			await expect(announced(page)).toHaveText("");
+			await expect(strip(page)).toHaveCount(0);
+		}
+		expect(await heard(page)).toEqual([]);
+		await shoot(page, `planner-stale-list-${shape}`);
+
+		// The list catches up, and the status is the machine of the account the socket names.
+		reread.active.on = false;
+		await reread.refresh();
+		carriage.say({ state: "starting", login: "mona" });
+		await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+		await reread.end();
 	});
 }
 
