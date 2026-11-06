@@ -373,6 +373,43 @@ test("on a phone, the machine button's sheet starts the Planner on the machine c
 	await link.detach();
 });
 
+test("a machine that cannot reply leaves its button with no dot and says no machine is connected, never the machine's green", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	// desk is connected for the repository but has no Planner command, so nothing can reply.
+	await machine(page, "desk", false);
+	await page.reload();
+	await ready(page);
+	let menu = await runOn(page);
+	await menu.getByRole("menuitemradio", { name: /^desk/ }).click();
+	await expect(menu).toBeHidden();
+
+	let status = machineButton(page);
+	await expect(status).toHaveAccessibleName("Runs on desk. No machine is connected.");
+	await expect(status).toHaveAttribute("data-planner", "none");
+	// The same bare icon as a button with no machine: no dot, so no green beside the words.
+	await expect(status.locator(".machine-glyph-dot")).toHaveCount(0);
+	await expect(status.locator("[data-state]")).toHaveCount(0);
+	await expect(announced(page)).toHaveText(NONE);
+	await shoot(page, "planner-none-button-desktop");
+
+	// Its menu says so at the top, while each machine's own row still tells that machine's state.
+	menu = await runOn(page);
+	await expect(menu.getByRole("group", { name: "Connection", exact: true })).toHaveText(NONE);
+	await expect(menu.getByRole("menuitemradio", { name: /^desk/ })).toContainText("Connected");
+	await page.keyboard.press("Escape");
+
+	// On a phone the button in the top bar is the same bare icon.
+	let handset = await open(browser, "mona", room, PHONE);
+	await handset.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: "Chat", exact: true }).tap();
+	let phoneButton = handset.locator(".phone-top-bar").getByRole("button", { name: /^Runs on/ });
+	await expect(phoneButton).toHaveAccessibleName("Runs on desk. No machine is connected.");
+	await expect(phoneButton.locator(".machine-glyph-dot")).toHaveCount(0);
+	await shoot(handset, "planner-none-button-phone");
+});
+
 /** `handle` created the document, as if they had made it in Chopin. */
 async function createdBy(room: string, handle: string) {
 	let database = new SQL(serverDatabase);

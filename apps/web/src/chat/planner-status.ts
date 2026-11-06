@@ -67,10 +67,11 @@ export function plannerSentence(status: PlannerStatus): string {
 
 /**
  * What the machine button's status dot becomes: a spinner while the Planner starts, a warning
- * where it cannot, and a muted grey while it is away. A healthy Planner, or none at all, leaves
- * the machine's own dot as it is.
+ * where it cannot, and a muted grey while it is away. With no machine connected there is no dot
+ * at all, the bare icon of a button that has no machine; the machine's own green is never lent to
+ * it. Only a healthy Planner leaves the machine's own dot as it is.
  */
-export type PlannerGlyph = "starting" | "failing" | "away";
+export type PlannerGlyph = "starting" | "failing" | "away" | "none";
 
 export function plannerGlyph(status: PlannerStatus | undefined): PlannerGlyph | undefined {
 	if (!status) return undefined;
@@ -79,7 +80,7 @@ export function plannerGlyph(status: PlannerStatus | undefined): PlannerGlyph | 
 		: status.kind === "cant-start"
 		? "failing"
 		: status.kind === "none"
-		? undefined
+		? "none"
 		: "away";
 }
 

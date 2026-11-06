@@ -300,6 +300,17 @@ describe("design audit specimens", () => {
 		expect(chat).toContain('data-planner="failing"');
 		expect(chat).toContain('data-planner="away"');
 		expect(chat).not.toContain("Reconnect");
+		// The machine button's dots beside each state: only a healthy one keeps the machine's green,
+		// and no machine connected has no dot at all.
+		let cells = chat.split('class="design-audit-planner-presence"')[1]!.split(
+			'<div class="design-audit-planner-glyph">',
+		).slice(1);
+		expect(cells).toHaveLength(6);
+		expect(cells[0]).toContain('data-state="connected"');
+		for (let cell of cells.slice(1)) expect(cell).not.toContain('data-state="connected"');
+		let none = cells.at(-1)!;
+		expect(none).toContain("No machine is connected.");
+		expect(none).not.toContain("status-dot");
 		expect(chat).toContain('aria-label="Stop Chopin"');
 		expect(chat).toContain("Read-only access");
 		expect(chat).toContain("Document archived");

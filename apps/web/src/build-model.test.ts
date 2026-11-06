@@ -309,7 +309,7 @@ describe("first build", () => {
 			});
 	});
 
-	it("keeps Build plan inert while no Planner is attached to draft its tasks", () => {
+	it("keeps Build plan inert while no machine is connected to draft its tasks", () => {
 		let context = {
 			state: idle,
 			live: false,
@@ -320,14 +320,14 @@ describe("first build", () => {
 		};
 		expect(buildLook(fresh, { ...context, plannerDetached: true })).toEqual({
 			kind: "plan",
-			blocked: "Connect a Planner to this document to build",
+			blocked: "Connect a machine to this document to build",
 		});
 		expect(buildLook(fresh, context)).not.toMatchObject({
-			blocked: "Connect a Planner to this document to build",
+			blocked: "Connect a machine to this document to build",
 		});
 	});
 
-	it("says a disconnected Planner must reconnect to draft tasks, not that none is connected", () => {
+	it("says a disconnected machine must reconnect to draft tasks, not that none is connected", () => {
 		let context = {
 			state: idle,
 			live: false,
@@ -339,11 +339,11 @@ describe("first build", () => {
 		};
 		expect(buildLook(fresh, { ...context, plannerDisconnected: true })).toEqual({
 			kind: "plan",
-			blocked: "Reconnect the Planner to build",
+			blocked: "Reconnect the machine to build",
 		});
-		// A Planner that detached, or never attached, is still told to connect one.
+		// A machine that stepped away, or was never connected, is still told to connect one.
 		expect(buildLook(fresh, context)).toMatchObject({
-			blocked: "Connect a Planner to this document to build",
+			blocked: "Connect a machine to this document to build",
 		});
 	});
 
@@ -364,16 +364,16 @@ describe("first build", () => {
 			),
 		).toBe("build-box is offline");
 		expect(draftRefusalCopy("Connect a machine to get a reply. Connect an agent client to …"))
-			.toBe("Connect a Planner to this document to build.");
+			.toBe("Connect a machine to this document to build.");
 		expect(draftRefusalCopy("anything", "planner-not-attached"))
-			.toBe("Connect a Planner to this document to build.");
-		// Chopin says so when the Planner is attached but its connection dropped.
+			.toBe("Connect a machine to this document to build.");
+		// Chopin says so when the machine was connected but its connection dropped.
 		expect(
 			draftRefusalCopy(
 				"@mona's machine is offline, so it can't reply now. Your work is kept and picks up when it's back.",
 				"planner-not-attached",
 			),
-		).toBe("Reconnect the Planner to build.");
+		).toBe("Reconnect the machine to build.");
 	});
 
 	it("returns to the button when drafting or starting fails", () => {

@@ -31,8 +31,9 @@ export const ADD_MACHINE_PATH = "/machines?add";
  * A machine as an icon with its state as a dot on the icon's corner: the cloud icon for one the
  * background service runs, the laptop otherwise, the same two as Add machine's menu. The dot is
  * the Machines page's status dot. With no machine it is the laptop in tertiary ink, no dot.
- * While the document's Planner is not simply attached the dot is its: a thin petrol spinner as
- * it starts, a warning where it cannot, a muted grey while it is away.
+ * While the document's Planner is not simply attached the dot is its, never the machine's: a
+ * thin petrol spinner as it starts, a warning where it cannot, a muted grey while it is away, and
+ * with no machine connected no dot at all, the same bare icon as with no machine.
  */
 export function MachineGlyph(
 	{ machine, planner, size = 16 }: {
@@ -43,17 +44,20 @@ export function MachineGlyph(
 ) {
 	let Icon = machine?.service ? CloudIcon : MachineIcon;
 	let state: MachineState | undefined = machine && machineState(machine);
+	let bare = !machine || planner === "none";
 	return (
 		<span
 			aria-hidden="true"
 			className="machine-glyph"
-			data-automatic={machine ? undefined : ""}
+			data-automatic={bare ? "" : undefined}
 			style={{ "--machine-glyph-size": `${size}px` } as CSSProperties}
 		>
 			<Icon size={size} />
-			{(state || planner) && (
-				<span className="status-dot machine-glyph-dot" data-planner={planner} data-state={state} />
-			)}
+			{planner === "none"
+				? undefined
+				: planner
+				? <span className="status-dot machine-glyph-dot" data-planner={planner} />
+				: state && <span className="status-dot machine-glyph-dot" data-state={state} />}
 		</span>
 	);
 }

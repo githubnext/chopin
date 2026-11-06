@@ -125,10 +125,14 @@ test("offline looks the same everywhere: the machine button and Build plan dimme
 
 const AT = "2026-11-04T18:29:00.000Z";
 
-function button(planner: Parameters<typeof plannerStatus>[0], phone = false): string {
+function button(
+	planner: Parameters<typeof plannerStatus>[0],
+	phone = false,
+	machine: { service: boolean; connected: boolean } = { service: true, connected: true },
+): string {
 	return renderToStaticMarkup(
 		createElement(MachineButton, {
-			choice: choice(true, true),
+			choice: choice(machine.service, machine.connected),
 			phone,
 			planner: plannerStatus(planner, "build-box"),
 		}),
@@ -170,7 +174,7 @@ test("a Planner that cannot start is a warning dot, its reason the button's desc
 	);
 });
 
-test("a disconnected or detached Planner is a muted dot, a missing one changes nothing but the name", () => {
+test("a Planner that is disconnected or has stepped away is a muted dot", () => {
 	for (
 		let planner of [
 			{ state: "disconnected", login: "mona" },
@@ -181,13 +185,45 @@ test("a disconnected or detached Planner is a muted dot, a missing one changes n
 		expect(markup).toContain('data-planner="away"');
 		expect(markup).toContain('data-phone="true"');
 	}
+});
+
+test("with no machine connected the button is the bare icon with no dot, as with no machine at all", () => {
 	let none = button({ state: "none" });
-	expect(none).toContain(
-		'aria-label="Runs on build-box. No machine is connected."',
-	);
+	expect(none).toContain('aria-label="Runs on build-box. No machine is connected."');
 	expect(none).toContain('data-planner="none"');
-	// No Planner is not a state of the machine, so its dot is the machine's own.
-	expect(none).toMatch(/class="status-dot machine-glyph-dot" data-state="connected"/);
+	// Not the machine's own green: this document has nothing running on it, whatever the machine is.
+	expect(none).not.toContain("status-dot");
+	// The same quiet icon in tertiary ink as the button of a person who has no machine.
+	expect(none).toContain("data-automatic");
+	let bare = renderToStaticMarkup(createElement(MachineGlyph, {}));
+	expect(bare).toContain("data-automatic");
+	expect(bare).not.toContain("status-dot");
+});
+
+/** Every way the Planner can be unwell, which is every state but a healthy one. */
+const UNWELL = [
+	{ state: "none" },
+	{ state: "starting", login: "mona" },
+	{ state: "starting", login: "mona", failure: { attempts: 3, reason: "exit 127", at: AT } },
+	{ state: "disconnected", login: "mona" },
+	{ state: "held", login: "mona", until: AT },
+] as const;
+
+test("whatever is wrong with the Planner, the machine's connected green is never drawn", () => {
+	for (let service of [true, false]) {
+		for (let phone of [false, true]) {
+			// Whatever the machine's own state is, its dot is not the Planner's to borrow.
+			for (let connected of [true, false]) {
+				for (let planner of UNWELL) {
+					let markup = button(planner, phone, { service, connected });
+					let drawn = `${planner.state}${"failure" in planner ? " (failing)" : ""}`;
+					expect(markup, drawn).not.toContain('data-state="connected"');
+				}
+			}
+		}
+	}
+	// And a healthy Planner leaves the machine's own green exactly as it was.
+	expect(button({ state: "attached", login: "mona" })).toContain('data-state="connected"');
 });
 
 test("a glyph with a Planner state but no machine still shows the state", () => {
