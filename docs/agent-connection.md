@@ -242,7 +242,7 @@ time. While a client is attached, any other `attach` for that document is
 refused with `planner-attached`, and the `message` names the holder's GitHub login:
 
 ```text
-octocat is connected to this document. A document has one connection at a time.
+octocat is connected to this document. A document has one agent connected at a time.
 ```
 
 One exception serves a client that left a connection that died unnoticed. A client
@@ -268,7 +268,7 @@ the ownership; another account is refused with `planner-attached`, and the
 `message` says until when the holder keeps it:
 
 ```text
-octocat disconnected from this document and keeps it until 2026-10-10T19:42:00.000Z unless they connect again. A document has one connection at a time.
+octocat disconnected from this document and keeps it until 2026-10-10T19:42:00.000Z unless they connect again. A document has one agent connected at a time.
 ```
 
 When the grace period ends the ownership is released and any eligible account
@@ -286,7 +286,7 @@ Another account is refused with `planner-attached` and a `message` that says the
 holder's connection dropped and its work is kept until it reconnects:
 
 ```text
-octocat is connected to this document, and its connection dropped. Its work is kept until it reconnects. A document has one connection at a time.
+octocat is connected to this document, and its connection dropped. Its work is kept until it reconnects. A document has one agent connected at a time.
 ```
 
 A server restart releases every attachment and ownership at once; reattach after

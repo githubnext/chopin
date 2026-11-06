@@ -304,7 +304,7 @@ describe("Agent connection ownership", () => {
 			expect(await refused(server.url, channel.id, token)).toEqual({
 				code: "planner-attached",
 				message: "member is connected to this document. "
-					+ "A document has one connection at a time.",
+					+ "A document has one agent connected at a time.",
 				close: LINK_CLOSE.attached,
 			});
 		}
@@ -344,6 +344,9 @@ describe("Agent connection ownership", () => {
 		expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
 		expect(refusal.message).toStartWith(
 			"member disconnected from this document and keeps it until ",
+		);
+		expect(refusal.message).toEndWith(
+			" unless they connect again. A document has one agent connected at a time.",
 		);
 
 		let dropped = await rawLink(server.url);
@@ -682,6 +685,9 @@ describe("Agent connection ownership", () => {
 			expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
 			expect(refusal.message).toStartWith(
 				"member disconnected from this document and keeps it until ",
+			);
+			expect(refusal.message).toEndWith(
+				" unless they connect again. A document has one agent connected at a time.",
 			);
 			for (let deadline = Date.now() + 3_000; Date.now() < deadline;) {
 				if (!(await owner(storage, channel.id))?.ownerSessionId) break;

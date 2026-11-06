@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { hostInputRoom, laterTimers } from "../../testing/decisions";
+import { expectPlainStatus } from "../../testing/plain-words";
 import {
 	holdingProxy,
 	linkAuth,
@@ -241,7 +242,13 @@ describe("a resumable link that drops", () => {
 		let h = await held();
 		await h.drop();
 		let rival = await h.reattach(RIVAL_TOKEN);
-		expect(await rival.next("refused")).toMatchObject({ code: "planner-attached" });
+		let refusal = await rival.next("refused");
+		expect(refusal).toMatchObject({
+			code: "planner-attached",
+			message: "member is connected to this document, and its connection dropped. "
+				+ "Its work is kept until it reconnects. A document has one agent connected at a time.",
+		});
+		expectPlainStatus(String(refusal.message), "a refusal to a client");
 		expect(h.status()).toBe("open");
 		expect(h.runStatus()).toBe("running");
 
