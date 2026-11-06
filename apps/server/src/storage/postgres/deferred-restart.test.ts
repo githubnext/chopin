@@ -77,7 +77,14 @@ describe.skipIf(!url)("PostgreSQL saved Planner requests", () => {
 				)
 			),
 		).toEqual([0, 1, 2, 3]);
-		expect((await w.rows()).map(row => row.state)).toEqual(["ended", "ended", "ended", "ended"]);
+		// The turn that was running, as a row too, ended in the process that ran it.
+		expect((await w.rows()).map(row => row.state)).toEqual([
+			"ended",
+			"ended",
+			"ended",
+			"ended",
+			"ended",
+		]);
 		expect(memberEntry(restarted, "a message")?.deliveryState).toBe("delivered");
 		await Chat.recover(restarted);
 		await tick();
@@ -101,7 +108,9 @@ describe.skipIf(!url)("PostgreSQL saved Planner requests", () => {
 		let restarted = await w.restart();
 		await Chat.recover(restarted);
 		await tick();
-		expect((await w.rows())[0]).toMatchObject({ state: "interrupted" });
+		expect((await w.rows()).find(value => value.id === row!.id)).toMatchObject({
+			state: "interrupted",
+		});
 		expect(restarted.chat.entries.filter(entry => entry.id === `interrupted:${row!.id}`))
 			.toHaveLength(1);
 		expect(w.prompts).toHaveLength(1);

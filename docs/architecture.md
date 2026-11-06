@@ -151,8 +151,7 @@ the `chopin.agent.v1` subprotocol and carries a GitHub bearer, checked like
 needs push or administration access to its repository, rechecked before every
 session and turn and periodically while attached. Attaching makes the account's
 live browser login the document's Planner owner, one client per document; a
-document without one refuses `@chopin` and `invoke_planner` with
-`planner-not-attached`. The connection closes when that login ends or the document's
+document without one saves `@chopin` and `invoke_planner` until a client attaches. The connection closes when that login ends or the document's
 Planner is reset.
 Turns run on the client's model; Chopin's host
 tools, Decisions, and room writes still run in the server under the document's

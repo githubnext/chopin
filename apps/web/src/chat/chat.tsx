@@ -26,8 +26,23 @@ import {
 	usePopoverDismissal,
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
-import { WireLost } from "../wire";
+import { WireLost, WireRefusal } from "../wire";
 import { canWithdraw } from "./withdraw";
+import {
+	echoes,
+	keepOutbox,
+	keepRetractions,
+	nextToSend,
+	outboxReducer,
+	passing,
+	refusalText,
+	restoreOutbox,
+	restoreRetractions,
+	retractionFor,
+	retractionSettledBy,
+	retractionsReducer,
+	withoutRetracted,
+} from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
 import type { PlannerNotice } from "./planner-status";
 import { TypingReporter } from "./typing";
@@ -159,6 +174,11 @@ export type ChatProps = {
 	plannerStrip?: PlannerNotice;
 };
 
+/** How long a message the server had no room for waits before it is sent again. */
+const FULL_RETRY_MS = 5_000;
+/** How long before a delete the server refused for a passing reason is asked again. */
+const RETRACTION_RETRY_MS = 5_000;
+
 function draftKey(room: string, handle: string): string {
 	return chatDraftKey(room, isDemoHandle(handle) ? handle : undefined);
 }
@@ -241,6 +261,22 @@ export function Chat(
 	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
 	let { entries, turn } = transcript;
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
+	// What was sent to the machine and the server has not shown back yet: shown at once as the
+	// person's own, sent when the connection allows, and in order.
+	let [outbox, dispatchOutbox] = useReducer(
+		outboxReducer,
+		undefined,
+		() => restoreOutbox(room, handle),
+	);
+	// What the person took back that the server has not answered for: hidden at once, asked about
+	// again until it answers, and kept across a reload so that the message does not come back.
+	let [retractions, dispatchRetractions] = useReducer(
+		retractionsReducer,
+		undefined,
+		() => restoreRetractions(room, handle),
+	);
+	let sendingId = useRef<string | undefined>(undefined);
+	let [flushed, setFlushed] = useState(0);
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
 	let [runs, setRuns] = useState<Wire.Runs>();
@@ -289,7 +325,11 @@ export function Chat(
 	// A reload must not take an unsent message with it. Kept as it changes
 	// rather than on unload, which a browser does not promise to announce.
 	useEffect(() => keepDraft(room, handle, draft), [room, handle, draft]);
-	usePendingWork(!!draft.text.trim());
+	useEffect(() => keepOutbox(room, handle, outbox), [room, handle, outbox]);
+	useEffect(() => keepRetractions(room, handle, retractions), [room, handle, retractions]);
+	usePendingWork(
+		!!draft.text.trim() || outbox.some(item => !item.acknowledged) || retractions.length > 0,
+	);
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
@@ -301,18 +341,8 @@ export function Chat(
 	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
 	let transcriptReady = connected && synchronized.current === wire;
-	let composerReady = transcriptReady && !readonly && !archived;
-	let participationState = transcriptReady && participation?.room === room
-			&& participation.wire === wire
-		? participation.state
-		: undefined;
-	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
-	// A draft never waits on the connection; only sending does.
-	let draftable = !readonly && !archived;
 	// The document says when the connection is lost; Chat only holds back what it cannot send.
 	let connectionNotice = useConnectionNotice(!connected, wire?.restarting);
-	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
-		|| addressedOutsideReferences(draft.text, draft.references));
 	let quietRestart = useRef(false);
 	quietRestart.current = silentRestart(
 		quietRestart.current,
@@ -320,6 +350,24 @@ export function Chat(
 		transcriptReady,
 		connectionNotice !== "none",
 	);
+	let composerReady = transcriptReady && !readonly && !archived;
+	// What the composer and the empty transcript show. A restart is waited out in silence, and
+	// nothing is to change on the page for it: until the fresh transcript is here they read as
+	// they did, since the connection is the same Wire and what it last said is still true.
+	let composerShown = (transcriptReady || quietRestart.current) && !readonly && !archived;
+	let participationState = (transcriptReady || quietRestart.current) && participation?.room === room
+			&& participation.wire === wire
+		? participation.state
+		: undefined;
+	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
+	// A message to the machine is kept in the outbox, so it needs neither the connection nor the
+	// machine to be there when it is sent. Only a server that acknowledges sends can be asked to.
+	let outboxed = agent && sendAcknowledgements;
+	// A draft never waits on the connection; only sending does.
+	let draftable = !readonly && !archived;
+	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
+		|| addressedOutsideReferences(draft.text, draft.references));
+	let plannerBound = outboxed && effectiveMode;
 	let { working: workingTurn, suspended: suspendedWork } = progressOf(
 		transcript,
 		transcriptReady,
@@ -406,6 +454,10 @@ export function Chat(
 				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
 				dispatchTranscript({ kind: "history", entries: frame.entries, turn: frame.turn });
+				dispatchOutbox({
+					kind: "history",
+					ids: [...frame.entries.map(entry => entry.id), ...frame.queued.map(item => item.id)],
+				});
 				setQueue(frame.queued);
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
@@ -422,7 +474,12 @@ export function Chat(
 				}
 				seen.add(frame.entry.id);
 				dispatchTranscript({ kind: "message", entry: frame.entry });
+				dispatchOutbox({ kind: "seen", ids: [frame.entry.id] });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
+			}),
+			wire.on<Wire.Removed>("chat:removed", frame => {
+				dispatchTranscript({ kind: "removed", id: frame.id });
+				dispatchOutbox({ kind: "drop", id: frame.id });
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
 				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
@@ -440,7 +497,10 @@ export function Chat(
 				dispatchTranscript({ kind: "turn", turn: frame.turn });
 				setRuns(frame.runs);
 			}),
-			wire.on<Wire.Queue>("chat:queue", frame => setQueue(frame.waiting)),
+			wire.on<Wire.Queue>("chat:queue", frame => {
+				setQueue(frame.waiting);
+				dispatchOutbox({ kind: "seen", ids: frame.waiting.map(item => item.id) });
+			}),
 			wire.on<Wire.ParticipationState>("chat:participation", frame => {
 				if (!loaded || synchronized.current !== wire) return;
 				setParticipation({ room, wire, state: { enabled: frame.enabled, paused: frame.paused } });
@@ -524,6 +584,25 @@ export function Chat(
 			return;
 		}
 		if (!current.text.trim()) return;
+		if (outboxed) {
+			let queued = prepareDraftSubmission(current, undefined, {
+				planner: agent,
+				mode: effectiveMode,
+				referencesEnabled,
+				focus,
+			});
+			if (queued?.submission.to === "planner") {
+				// Never refused for the machine being away or the connection being down: it is in the
+				// Chat at once and goes out by itself.
+				dispatchOutbox({
+					kind: "add",
+					item: { payload: queued.submission, handle, ts: Math.floor(Date.now() / 1000) },
+				});
+				clearSubmittedDraft(current);
+				restoreComposerFocus();
+				return;
+			}
+		}
 		if (!composerReady || !wire?.connected) {
 			// Inside the grace period nothing says the connection is down, so
 			// the send waits for it rather than being refused.
@@ -578,6 +657,79 @@ export function Chat(
 			setSubmitting(false);
 			restoreComposerFocus();
 		});
+	};
+
+	// The outbox goes out one message at a time, oldest first, once this connection's transcript is
+	// here to say which of them the server already has. The request id makes a resend harmless.
+	useEffect(() => {
+		if (!wire || !transcriptReady || sendingId.current) return;
+		let next = nextToSend(outbox);
+		if (!next) return;
+		let id = next.payload.requestId;
+		sendingId.current = id;
+		dispatchOutbox({ kind: "attempt", id });
+		// Kept before it goes out, not after the next render: a reload in between must still know
+		// that the server may hold it.
+		keepOutbox(room, handle, outboxReducer(outbox, { kind: "attempt", id }));
+		void wire.ask<Wire.Sent>("chat:send", next.payload).then(
+			sent => dispatchOutbox({ kind: "acknowledge", id, entryId: sent?.id }),
+			error => {
+				// A lost connection leaves it for the next one; only a final refusal is final. A full
+				// queue or a passing trouble is not a refusal of the message: it goes out again once
+				// there may be room.
+				if (!(error instanceof WireRefusal)) return;
+				if (passing(error.code)) {
+					dispatchOutbox({ kind: "full", id });
+					setTimeout(() => dispatchOutbox({ kind: "room" }), FULL_RETRY_MS);
+				} else {
+					dispatchOutbox({ kind: "refuse", id, reason: refusalText(error.code, error.message) });
+				}
+			},
+		).finally(() => {
+			if (sendingId.current === id) sendingId.current = undefined;
+			setFlushed(count => count + 1);
+		});
+	}, [wire, transcriptReady, outbox, flushed, room, handle]);
+
+	// Messages taken back, which the server may hold or may still receive: it is told to drop each,
+	// once there is a connection to tell it on, and again after a reload until it has answered.
+	let asking = useRef(new Set<string>());
+	let [askAgain, setAskAgain] = useState(0);
+	useEffect(() => {
+		if (!wire || !transcriptReady) return;
+		for (let id of retractions) {
+			if (asking.current.has(id)) continue;
+			asking.current.add(id);
+			void wire.ask<Wire.Deleted>("chat:delete", { id }).then(
+				() => dispatchRetractions({ kind: "settled", id }),
+				error => {
+					// Only the server's last word ends it: the machine took the message meanwhile and it
+					// is the server's now, with its new mark. A lost connection is asked again on the
+					// next one; a refusal for a passing reason is asked again after a moment. Until then
+					// the message stays hidden and is never delivered.
+					if (!(error instanceof WireRefusal)) return;
+					if (retractionSettledBy(error)) dispatchRetractions({ kind: "settled", id });
+					else setTimeout(() => setAskAgain(count => count + 1), RETRACTION_RETRY_MS);
+				},
+			).finally(() => asking.current.delete(id));
+		}
+	}, [wire, transcriptReady, retractions, askAgain]);
+
+	let deleteMessage = (id: string) => {
+		let local = outbox.find(item => item.payload.requestId === id);
+		if (local) {
+			dispatchOutbox({ kind: "drop", id });
+			// One put on the wire may be held by the server, which has to be told.
+			let held = retractionFor(local);
+			if (held) dispatchRetractions({ kind: "take-back", id: held });
+			return;
+		}
+		// Gone from the Chat at once, and from everyone's when the server has done it.
+		dispatchRetractions({ kind: "take-back", id });
+	};
+	let retryMessage = (id: string) => {
+		if (outbox.some(item => item.payload.requestId === id)) dispatchOutbox({ kind: "again", id });
+		else void wire?.ask<Wire.Retried>("chat:retry", { id }).catch(() => {});
 	};
 
 	// Stop and Resume pressed during a blip are sent once it is over, or never.
@@ -700,7 +852,7 @@ export function Chat(
 	let transcriptView = (
 		<Transcript
 			active={active}
-			canEdit={composerReady}
+			canEdit={composerShown}
 			emptyHint={readonly || archived
 				? undefined
 				: {
@@ -717,12 +869,19 @@ export function Chat(
 			onRetryJob={onRetryJob}
 			conversationPlan={conversationPlan}
 			decisions={decisions}
-			empty={transcriptReady && entries.length === 0 && queue.length === 0 && !turn
+			empty={transcriptReady && entries.length === 0 && queue.length === 0 && outbox.length === 0
+					&& !turn
 				? emptyNotice
 				: undefined}
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
-			entries={withNoticesAfter(entries, unanswered)}
+			entries={[
+				...withNoticesAfter(withoutRetracted(entries, retractions), unanswered),
+				...echoes(outbox),
+			]}
+			onDelete={deleteMessage}
+			onRetry={retryMessage}
+			quietFailures={offline}
 			completedWork={transcript.completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}
@@ -797,7 +956,7 @@ export function Chat(
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled
 					? {
-						disabled: !composerReady || submitting,
+						disabled: !composerShown || submitting,
 						onMentionDocs: () => {
 							let current = draftRef.current;
 							let next = current.text
@@ -813,7 +972,7 @@ export function Chat(
 				sending={sending}
 				sendDisabled={!draftable || sending || !draft.text.trim()
 					|| blockedCommand
-					|| (connectionNotice !== "none" && !draftCommand(draft.text))}
+					|| (connectionNotice !== "none" && !draftCommand(draft.text) && !plannerBound)}
 				onSubmit={submit}
 				run={agent && (busy || counts.active > 0)
 					? {

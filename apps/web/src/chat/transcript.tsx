@@ -14,6 +14,8 @@ import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor";
 import { EmptyState } from "@chopin/visuals";
 
+import { deletable, deliveryOf, failureOf } from "./delivery";
+import { DeliveryMark, FailedLine, MessageMenu } from "./message-delivery";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -206,11 +208,14 @@ function DecisionSystemEntry(
 let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
 
 function MessageBody(
-	{ enter, handle, message, onWithdraw, ...markers }: {
+	{ enter, handle, message, onDelete, onRetry, onWithdraw, quietFailures, ...markers }: {
 		enter: boolean;
 		handle: string;
 		message: Message;
+		onDelete: (id: string) => void;
+		onRetry: (id: string) => void;
 		onWithdraw: (id: string) => void;
+		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
 	let toPlanner = message.to === "planner" && message.author.kind === "member";
@@ -221,6 +226,9 @@ function MessageBody(
 			.map(item => ({ ...item, start: item.start - lead, end: item.end - lead }))
 		: message.references;
 	if (!toPlanner && !displayText(text) && message.author.kind === "member") text = "Ask Chopin";
+	// Only the sender sees how far a message has got, and may take it back until it is delivered.
+	let own = message.author.kind === "member" && message.author.handle === handle;
+	let delivery = own ? deliveryOf(message) : undefined;
 
 	return (
 		<div
@@ -263,6 +271,9 @@ function MessageBody(
 						/>
 						{message.streaming && <span className="ml-0.5">▍</span>}
 					</div>
+					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
+					{delivery && deletable(message) && delivery !== "failed"
+						&& <MessageMenu onDelete={() => onDelete(message.id)} />}
 					{message.queued && message.author.kind === "member" && message.author.handle === handle
 						&& (
 							<button
@@ -277,6 +288,13 @@ function MessageBody(
 							</button>
 						)}
 				</div>
+			)}
+			{delivery === "failed" && !quietFailures && (
+				<FailedLine
+					onDelete={() => onDelete(message.id)}
+					onRetry={() => onRetry(message.id)}
+					reason={failureOf(message)}
+				/>
 			)}
 			{ANALYSIS && !message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
@@ -296,13 +314,26 @@ function MessageBody(
 }
 
 function MessageGroup(
-	{ enter, entering, group: item, handle, onWithdraw, ...markers }: {
+	{
+		enter,
+		entering,
+		group: item,
+		handle,
+		onDelete,
+		onRetry,
+		onWithdraw,
+		quietFailures,
+		...markers
+	}: {
 		/** The whole group entered; `entering` holds messages that joined it later. */
 		enter: boolean;
 		entering: ReadonlySet<string>;
 		group: Extract<ResearchTranscriptItem, { kind: "messages" }>;
 		handle: string;
+		onDelete: (id: string) => void;
+		onRetry: (id: string) => void;
 		onWithdraw: (id: string) => void;
+		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
 	let first = item.messages[0]!;
@@ -360,13 +391,18 @@ function MessageGroup(
 						handle={handle}
 						key={message.id}
 						message={message}
+						onDelete={onDelete}
+						onRetry={onRetry}
 						onWithdraw={onWithdraw}
+						quietFailures={quietFailures}
 					/>
 				))}
 			</div>
 		</div>
 	);
 }
+
+let noop = () => {};
 
 export function Transcript(
 	{
@@ -386,6 +422,9 @@ export function Transcript(
 		onAddExcerpt,
 		onOpenChild,
 		room,
+		onDelete = noop,
+		onRetry = noop,
+		quietFailures = false,
 		onRetryAnalysis,
 		onRetryJob,
 		onWithdraw,
@@ -417,6 +456,12 @@ export function Transcript(
 		handle: string;
 		/** False until the current connection's history has arrived. */
 		live?: boolean;
+		/** Take back a message that was not delivered. */
+		onDelete?: (id: string) => void;
+		/** Send a message that could not be sent again. */
+		onRetry?: (id: string) => void;
+		/** The page's offline notice shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
+		quietFailures?: boolean;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
 		suspendedWork?: CompletedWork;
@@ -714,6 +759,9 @@ export function Transcript(
 								group={item}
 								handle={handle}
 								key={key}
+								onDelete={onDelete}
+								onRetry={onRetry}
+								quietFailures={quietFailures}
 								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
 							/>

@@ -209,7 +209,7 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 /** Keeps a person's requests as rows, as `main.ts` does in hosted mode. */
 function withRows(room: Awaited<ReturnType<typeof remoteRoom>>) {
 	let { context, server, channel } = room;
-	context.deferred = { noticeDelayMs: 60_000 };
+	context.deferred = {};
 	context.plannerReady = () => server.attachments.confirmed(channel.id);
 	context.persist = (chat, deferred) => Plan.persistDeferred(context.plan, chat, deferred);
 }

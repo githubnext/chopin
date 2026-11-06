@@ -136,7 +136,7 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 			queued(chat, server, room);
 		}
 		signal?.addEventListener("abort", cancel, { once: true });
-		if (chat.busy) {
+		if (chat.busy || chat.starting) {
 			if (chat.waiting.length >= MAX_QUEUE) {
 				finishJob(turn, {
 					status: value.kind === "decision-followup" ? "deferred" : "skipped",

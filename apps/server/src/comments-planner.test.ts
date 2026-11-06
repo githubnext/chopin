@@ -825,7 +825,7 @@ describe("a comment sent to Chopin while its machine is away", () => {
 		// Rows belong to a stored document.
 		context.room = plan.id;
 		context.persist = (chat, deferred) => Service.persistDeferred(plan, chat, deferred);
-		context.deferred = { noticeDelayMs: 60_000 };
+		context.deferred = {};
 		context.plannerReady = async () => false;
 		context.plannerNotAttached = async () => "No machine is connected.";
 		return fixture;

@@ -100,10 +100,20 @@ test("Shift+Tab preserves the draft and sends in persistent Chopin mode after ac
 	await input.press("Enter");
 	await expect.poll(() => sent.length).toBe(1);
 	expect(sent[0]).toMatchObject({ text: "@chopin Outline export options", to: "planner" });
-	await expect(input).toHaveAttribute("contenteditable", "false");
-	await expectChatValue(input, "Outline export options");
-	await expect(toggle).toBeDisabled();
+	// The message is in the Chat at once, waiting to send, and the composer is empty and free for
+	// the next one, still in Chopin mode: nothing waits on the acknowledgement.
+	let outline = chat.locator("[data-chat-message-id]").filter({
+		hasText: "Outline export options",
+	});
+	await expect(outline).toHaveCount(1);
+	await expect(outline.getByRole("img", { name: "Waiting to send" })).toBeVisible();
+	await expect(input).toHaveAttribute("contenteditable", "true");
+	await expectChatValue(input, "");
+	await expect(toggle).toBeEnabled();
+	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	release!();
+	await expect(outline.getByRole("img", { name: "Waiting to send" })).toHaveCount(0);
+	await expect(outline).toHaveCount(1);
 	await expectChatValue(input, "");
 	await expect(toggle).toHaveAttribute("aria-pressed", "true");
 	await expect(input).toBeFocused();

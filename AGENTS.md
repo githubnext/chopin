@@ -154,8 +154,7 @@ collaborative state and external implementation runs are durable.
   the account's live browser login the document's Planner owner, one client per
   document; nothing else claims ownership. `@chopin` and `invoke_planner` on a
   document without one are saved as durable rows, shown as sent and delivered
-  when a Planner takes them (under `AUTH_MODE=local` they fail with
-  `planner-not-attached`). Signing out the
+  when a Planner takes them, also under `AUTH_MODE=local`. Signing out the
   owner's login, its expiry, or a Planner reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
@@ -235,6 +234,30 @@ The web composer uses `packages/protocol/address.ts` to translate `@chopin` into
 destination is authoritative on the server. Do not describe `@chopin` as a server
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.
+
+A message to the Planner leaves the composer at once. The browser shows it from
+its outbox (`apps/web/src/chat/delivery.ts`), marked as waiting to send, until
+the server's entry for the same request ID arrives; it then carries
+`Entry.deliveryState` (sent, delivered). Delivered means the prompt is on its way
+to the machine, after a session is open there; a request whose session cannot be
+opened stays sent and waits to be tried again. The outbox sends one message at a
+time, oldest first, once the current connection's transcript has arrived, and only
+to a server that acknowledges sends. A refused send or a `failed` entry says
+"Couldn't send" on the message with Try again and Delete, never in a strip above
+the composer, and not while the page's offline notice shows. A refusal with a passing reason is not a
+refusal of the message: a full queue behind a running turn (`planner-queue-full`, twenty requests; a
+machine that is away has no bound, and keeps every request until it is back, as a chat app keeps
+a message for someone offline) or a storage, room or authorization trouble that will pass
+(`temporarily-unavailable`). The browser keeps the message waiting to send and sends it
+again, in order and with the same request ID, once there may be room. Only a refusal with neither
+code is final.
+A message already put on the wire can still be deleted, whatever the server last answered it
+(an earlier attempt of one it turned down for a passing reason may have been kept): the server is
+told to drop it, and a late send cannot bring it back. One it kept, though the commit's answer
+was lost, is put back in the queue and the transcript, in its place, when the same request is sent
+again, when the queue next starts and when the document opens again, and is delivered once and in
+order; a person's request for a machine that is away is never turned away for how many are being
+saved at once, whether sent from Chat, by an MCP call or as a task draft.
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.

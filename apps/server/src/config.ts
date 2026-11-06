@@ -129,12 +129,6 @@ export type Handover = {
 	plannerWindowMs: number;
 	/** How long a standby process holds a request that needs the lease before it answers 503. */
 	holdMs: number;
-	/**
-	 * How long a queue of saved requests that cannot start waits before Chat says what it waits
-	 * for (`DEFERRED_NOTICE_DELAY_MS`). Longer than any hand-over's reconnect window, so a deploy
-	 * whose senders come back in the usual way says nothing.
-	 */
-	deferredNoticeMs: number;
 };
 
 const DEFAULT_PORT = 8787;
@@ -207,7 +201,6 @@ function handover(): Handover {
 		requestWaitMs: duration("HANDOVER_REQUEST_WAIT_MS", 1_000, 60_000),
 		plannerWindowMs: duration("HANDOVER_PLANNER_WINDOW_MS", 10_000, 600_000),
 		holdMs: duration("HANDOVER_HOLD_MS", 20_000, 120_000),
-		deferredNoticeMs: duration("DEFERRED_NOTICE_DELAY_MS", 30_000, 3_600_000),
 	};
 }
 

@@ -36,6 +36,7 @@ import { settledStages } from "@chopin/protocol/run-stages";
 
 import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
+import { ChatReferenceError } from "./references";
 import {
 	cancelledNotice,
 	type Deferred,
@@ -45,8 +46,6 @@ import {
 	mark,
 	move,
 	newTurn,
-	WAITING_NOTICE,
-	WAITING_NOTICE_REMOTE,
 } from "./deferred";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
@@ -58,7 +57,7 @@ import type { Job, JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
 import { isChannelId } from "../channels/id";
 import { holdsQuestion } from "../questions/records";
-import { broadcast, fail, reply, tell } from "../wire";
+import { broadcast, fail, PASSING, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
@@ -144,6 +143,8 @@ export type Waiting = Wire.Waiting & {
 	quiet?: boolean;
 	/** The row that keeps this request while it waits; see `./deferred`. */
 	deferred?: Deferred;
+	/** The session opened for this request before its row moved, which its turn then runs in. */
+	opened?: { session: PlannerSession; binding: ActiveOwnerBinding };
 };
 
 /** A request for implementation tasks, live while its turn is queued or running. */
@@ -251,10 +252,30 @@ export function holdStarts(held = true): void {
 	startsHeld = held;
 }
 
+/**
+ * What a Chat that has closed says to a request. A process that is stopping says nothing at all:
+ * the request was not taken, its browser keeps it and sends it again, with the same id, to the
+ * next process, and a refusal now would show a message that is about to be delivered as one that
+ * could not be sent.
+ */
+function refuseClosed(ws: Socket, rid: string): void {
+	if (!startsHeld) fail(ws, rid, "chat is closed", PASSING);
+}
+
 /** Whether a new request waits in the queue: a turn is running, or none may start. */
+/**
+ * Whether people's requests fill the queue behind a machine that is there. Chopin's own background
+ * jobs wait beside them and do not count, so one of them never makes a message that fits wait or
+ * fail. Nothing fills the queue of a machine that is `away`: the requests are saved and kept
+ * until it is back, and none is refused because it has been away long.
+ */
+function full(chat: Chat, away = false): boolean {
+	return !away && chat.waiting.filter(item => !item.job).length >= MAX_QUEUE;
+}
+
 function occupied(chat: Chat): boolean {
 	// Saved requests start in the order they were accepted, so a new one joins behind them.
-	return chat.busy || startsHeld || chat.waiting.some(item => item.deferred);
+	return chat.busy || !!chat.starting || startsHeld || chat.waiting.some(item => item.deferred);
 }
 
 /**
@@ -291,7 +312,7 @@ export function admission(
 	if (!config.agent) return "off";
 	if (thread && queuedFor(chat, thread, channel)) return "queued";
 	if (!occupied(chat) && !away) return "running";
-	return chat.waiting.length >= MAX_QUEUE ? "busy" : "queued";
+	return full(chat, away) ? "busy" : "queued";
 }
 
 /**
@@ -333,6 +354,12 @@ export type Chat = {
 	sending: Promise<void>;
 	/** Work admitted to the send FIFO, including the operation currently resolving. */
 	pendingSends: number;
+	/**
+	 * A turn is being taken from the queue and has not begun, which can take a commit. Until it has,
+	 * nothing else may start one: two turns would run at once, and the first to end would let a
+	 * third in.
+	 */
+	starting?: boolean;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
 	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
@@ -398,9 +425,27 @@ export type Chat = {
 	draft?: TaskDraft;
 	/** The running turn was cut off because the process is restarting. */
 	restarted?: boolean;
+	/**
+	 * The machine could not open a session for the request at the head of the queue, which stays
+	 * waiting. Nothing tries it again until something new says the machine may be there: a request
+	 * accepted, the machine back, a login restored.
+	 */
+	unopened?: boolean;
 	/** Says once what a queue that cannot start waits for. */
-	deferredNotice?: ReturnType<typeof setTimeout>;
+	/**
+	 * Requests whose sender took them back before the server had them, most recent last. A send
+	 * that arrives late, from a connection that was already lost, must not bring one back.
+	 */
+	retracted?: Set<string>;
+	/**
+	 * Messages whose save was answered as a passing trouble, though the commit may have gone through
+	 * and only its answer been lost. Their rows are looked up when the sender sends them again and
+	 * when the queue next starts, and put back in the queue and the transcript if they are there.
+	 */
+	unsure?: Set<string>;
 };
+
+const MAX_RETRACTED = 200;
 
 export function create(): Chat {
 	return {
@@ -644,6 +689,14 @@ async function replayRow(
 		fail(ws, msg.rid, "this message was deleted");
 		return true;
 	}
+	// Kept by a commit whose answer was lost: it is back in the queue before it is answered as kept.
+	if (context.chat.unsure?.has(requestId)) {
+		if (row.state === "waiting") {
+			await adopt(context, row);
+			void kick(context);
+		}
+		context.chat.unsure.delete(requestId);
+	}
 	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: requestId, queued: row.state === "waiting" });
 	return true;
 }
@@ -841,22 +894,36 @@ async function rebindRetained(context: Room, retained: Retained): Promise<boolea
  * the transcript exactly once. The destination, rather than its prose, decides
  * which lifecycle it takes.
  */
-export function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
-	if (context.chat.pendingSends >= MAX_PENDING_SENDS) {
-		fail(ws, msg.rid, "too many chat messages are waiting to be processed");
-		return Promise.resolve();
+export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
+	if (
+		context.chat.pendingSends >= MAX_PENDING_SENDS
+		&& !(msg.to === "planner" && await awayOrNot(context))
+	) {
+		fail(ws, msg.rid, "too many chat messages are waiting to be processed", PASSING);
+		return;
 	}
 	context.chat.pendingSends++;
 	let enqueue = () => {
-		let process = () => processSend(context, ws, msg);
+		// Nothing a send throws says its message is at fault: it is answered as a passing trouble, and
+		// the browser sends it again with the same request id.
+		let process = () =>
+			processSend(context, ws, msg).catch(err => {
+				console.error("[chat] a send failed before it was kept:", err);
+				fail(ws, msg.rid, "could not send message", PASSING);
+			});
 		let accepted = context.chat.sending.then(process, process);
 		let completed = accepted.finally(() => context.chat.pendingSends--);
 		context.chat.sending = completed.then(() => {}, () => {});
 		return completed;
 	};
 	// A message to the Planner waits for one that is starting before it joins the queue, so the
-	// room's messages never wait with it.
+	// room's messages never wait with it. With rows it waits for nothing: it is kept at once, and
+	// starts when the Planner arrives.
 	if (msg.to !== "planner" || !context.plannerStarting) return enqueue();
+	if (context.deferred) {
+		void context.plannerStarting().catch(() => {});
+		return enqueue();
+	}
 	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
@@ -887,7 +954,9 @@ export async function invoke(
 	| undefined
 > {
 	let { chat, server, room } = context;
-	if (chat.pendingSends >= MAX_PENDING_SENDS) return "planner-queue-full";
+	if (chat.pendingSends >= MAX_PENDING_SENDS && !await awayOrNot(context)) {
+		return "planner-queue-full";
+	}
 	chat.pendingSends++;
 	let post = async () => {
 		if (!context.config.agent || chat.closed || context.rootChannelId) {
@@ -912,7 +981,7 @@ export async function invoke(
 			}
 		}
 		if (chat.closed) return "planner-unavailable" as const;
-		if ((occupied(chat) || waitsAway) && chat.waiting.length >= MAX_QUEUE) {
+		if ((context.deferred || occupied(chat)) && full(chat, waitsAway)) {
 			return "planner-queue-full" as const;
 		}
 		if (notice !== undefined) {
@@ -925,14 +994,14 @@ export async function invoke(
 			});
 			return undefined;
 		}
-		let waits = occupied(chat) || waitsAway;
+		let waits = !!context.deferred || occupied(chat);
 		let entry: Wire.Entry = {
 			id: ulid(),
 			author: { kind: "member", handle: user.login },
 			text,
 			ts: now(),
 			...(context.deferred
-				? { deliveryState: waits ? "sent" as const : "delivered" as const }
+				? { deliveryState: "sent" as const }
 				: {}),
 		};
 		let turn = context.deferred && waits
@@ -1001,8 +1070,13 @@ export async function invoke(
 		chat.sending = completed.then(() => {}, () => {});
 		return completed;
 	};
-	// It waits for a Planner that is starting before it joins the queue, as `@chopin` does.
+	// It waits for a Planner that is starting before it joins the queue, as `@chopin` does, unless
+	// rows keep it meanwhile.
 	if (!context.plannerStarting) return enqueue();
+	if (context.deferred) {
+		void context.plannerStarting().catch(() => {});
+		return enqueue();
+	}
 	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
@@ -1033,7 +1107,10 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let request = requestFingerprint(msg, ws.data.principalId, ws.data.actor?.id);
 	if (replay(chat, ws, msg, requestId, request)) return;
 	if (destination === "planner" && await replayRow(context, ws, msg, requestId, request)) return;
-	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
+	if (destination === "planner" && chat.retracted?.has(requestId)) {
+		return fail(ws, msg.rid, "this message was deleted");
+	}
+	if (chat.closed) return refuseClosed(ws, msg.rid);
 	let focus: Focus | undefined;
 	let suppliedFocus = (msg as { focus?: unknown }).focus;
 	if (suppliedFocus !== undefined) {
@@ -1045,8 +1122,10 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			try {
 				child = await context.children?.resolve(suppliedFocus);
 			} catch (err) {
-				// Storage detail stays in the log; the member only learns the child is unavailable.
+				// Storage detail stays in the log; the member only learns the child is unavailable,
+				// for now: a child that did not resolve for storage's sake may resolve in a moment.
 				console.error("[chat] could not resolve the focused child document:", err);
+				return fail(ws, msg.rid, "the open child document is unavailable", PASSING);
 			}
 			if (!child) return fail(ws, msg.rid, "the open child document is unavailable");
 			focus = { channelId: child.id, title: child.title };
@@ -1071,13 +1150,19 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			let text = msg.text.trim();
 			projected = { text: destination === "planner" ? instruction(text) : text };
 		}
-	} catch {
-		return fail(ws, msg.rid, "invalid or unavailable chat reference");
+	} catch (err) {
+		// Only a reference the server found at fault is final. Anything else it threw, such as a
+		// storage error while it looked a target up, passes: the same message is sent again.
+		if (err instanceof ChatReferenceError) {
+			return fail(ws, msg.rid, "invalid or unavailable chat reference");
+		}
+		console.error("[chat] could not resolve a message's references:", err);
+		return fail(ws, msg.rid, "chat references are temporarily unavailable", PASSING);
 	}
 	let text = projected.text;
 	let references = projected.references;
 	if (!text) return fail(ws, msg.rid, "message text is empty");
-	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
+	if (chat.closed) return refuseClosed(ws, msg.rid);
 	let savedDelivery = delivery(destination, request, text, references);
 
 	if (destination === "room") {
@@ -1097,7 +1182,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			if (!context.commitRoomMessage) {
 				chat.entries = chat.entries.filter(value => value.id !== entry.id);
 			}
-			return fail(ws, msg.rid, "could not save message");
+			return fail(ws, msg.rid, "could not save message", PASSING);
 		}
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 		announce(server, room, entry);
@@ -1132,7 +1217,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		} catch {
 			let ids = new Set(entries.map(entry => entry.id));
 			chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
-			return fail(ws, msg.rid, "could not save message");
+			return fail(ws, msg.rid, "could not save message", PASSING);
 		}
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entries[0]!.id, queued: false });
 		for (let entry of entries) announce(server, room, entry);
@@ -1140,20 +1225,23 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		return;
 	}
 
-	// A person's request is accepted whether or not a Planner is there, and kept as a row until one
-	// starts it; without rows (local mode) it is refused when none is attached.
-	let waits = false;
+	// A person's request is accepted whether or not a Planner is there, and kept as a row until a
+	// session is open on the machine and a turn starts it, even when nothing is running, so a hard
+	// stop or a machine that cannot open one loses nothing. Without rows (local mode with a Planner
+	// on the same computer) it is refused when none is attached.
+	let awayNow = false;
 	if (context.deferred) {
-		waits = occupied(chat) || await away(context);
+		awayNow = await away(context);
 	} else {
 		let unattached = await context.plannerNotAttached?.();
 		if (unattached) return fail(ws, msg.rid, unattached, "planner-not-attached");
 	}
-	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
+	if (chat.closed) return refuseClosed(ws, msg.rid);
 
 	chat.initiative?.cancel();
-	if (context.deferred && waits) {
+	if (context.deferred) {
 		return deferMessage(context, ws, msg, {
+			away: awayNow,
 			requestId,
 			handle,
 			text,
@@ -1163,14 +1251,18 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		});
 	}
 	if (occupied(chat)) {
-		if (chat.waiting.length >= MAX_QUEUE) {
-			say(chat, server, room, {
-				id: ulid(),
-				author: { kind: "system" },
-				text: "The queue is full. Wait for the current turn to finish.",
-				ts: now(),
-			});
-			return fail(ws, msg.rid, "the reply queue is full");
+		if (full(chat)) {
+			// A tab that sends request ids keeps the message and sends it again once there is room,
+			// so only one that cannot is told in the Chat.
+			if (suppliedRequestId === undefined) {
+				say(chat, server, room, {
+					id: ulid(),
+					author: { kind: "system" },
+					text: "The queue is full. Wait for the current turn to finish.",
+					ts: now(),
+				});
+			}
+			return fail(ws, msg.rid, "the reply queue is full", "planner-queue-full");
 		}
 		let waiting: Waiting = {
 			id: requestId,
@@ -1195,7 +1287,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		ts: now(),
 		...(references?.length ? { references } : {}),
 		delivery: savedDelivery,
-		...(context.deferred ? { deliveryState: "delivered" as const } : {}),
+		// Sent until its prompt is on its way to the machine; the turn says when.
+		...(context.deferred ? { deliveryState: "sent" as const } : {}),
 	};
 	chat.busy = true;
 	chat.turn = begin(handle, chat.entries.length + 1);
@@ -1208,7 +1301,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		chat.busy = false;
 		chat.turn = undefined;
 		state(chat, server, room);
-		return fail(ws, msg.rid, "could not save message");
+		return fail(ws, msg.rid, "could not save message", PASSING);
 	}
 	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
 	if (chat.closed) return;
@@ -1240,6 +1333,15 @@ export async function away(context: Pick<Room, "plannerReady" | "deferred">): Pr
 }
 
 /**
+ * `away`, where a check that fails says the machine is there. Asked only of a request that finds
+ * too many being saved at once: a machine that is away keeps every one, however many, and only a
+ * request for a machine that is there is turned away.
+ */
+function awayOrNot(context: Pick<Room, "plannerReady" | "deferred">): Promise<boolean> {
+	return away(context).catch(() => false);
+}
+
+/**
  * Keep a message to the Planner that cannot start now: in the transcript at once, as sent, and as
  * a row in the commit that saves it, so the acknowledgement is never ahead of what survives.
  */
@@ -1248,6 +1350,7 @@ async function deferMessage(
 	ws: Socket,
 	msg: Request<Wire.Send>,
 	input: {
+		away: boolean;
 		requestId: string;
 		handle: string;
 		text: string;
@@ -1257,14 +1360,10 @@ async function deferMessage(
 	},
 ): Promise<void> {
 	let { chat, room, server } = context;
-	if (chat.waiting.length >= MAX_QUEUE) {
-		say(chat, server, room, {
-			id: ulid(),
-			author: { kind: "system" },
-			text: "The queue is full. Wait for the current turn to finish.",
-			ts: now(),
-		});
-		return fail(ws, msg.rid, "the queue is full");
+	// Not a message that cannot be delivered: its sender's browser keeps it and sends it again, with
+	// the same request id, once there is room, so nothing is said in the Chat each time.
+	if (full(chat, input.away)) {
+		return fail(ws, msg.rid, "the queue is full", "planner-queue-full");
 	}
 	let { requestId, handle, text, references, focus } = input;
 	let entry: MemberEntry = {
@@ -1295,7 +1394,8 @@ async function deferMessage(
 		outcomes = await context.persist(undefined, [insert(turn)]);
 	} catch {
 		chat.entries = chat.entries.filter(value => value !== entry);
-		return fail(ws, msg.rid, "could not save message");
+		(chat.unsure ??= new Set()).add(requestId);
+		return fail(ws, msg.rid, "could not save message", PASSING);
 	}
 	let outcome = outcomes?.[0];
 	if (outcome && !(outcome.action === "insert" && outcome.status === "inserted")) {
@@ -1406,7 +1506,7 @@ export function instruct(
 		}
 
 		if (occupied(chat)) {
-			if (chat.waiting.length >= MAX_QUEUE) {
+			if (full(chat)) {
 				say(chat, server, room, {
 					id: ulid(),
 					author: { kind: "system" },
@@ -1452,8 +1552,7 @@ async function instructDeferred(
 ): Promise<void> {
 	let { chat, config, room, server } = context;
 	let folded = about.thread ? queuedFor(chat, about.thread, about.threadChannel) : undefined;
-	let waits = !folded && config.agent && !chat.closed && chat.waiting.length < MAX_QUEUE
-		&& (occupied(chat) || await away(context));
+	let waits = !folded && config.agent && !chat.closed && !full(chat, await away(context));
 	if (!waits || !about.defer) {
 		await instructionNotice(context, said, about.comment, about.notice);
 		return proceed();
@@ -1541,7 +1640,7 @@ export type TaskDraftResult =
  * returns it, so collaborators opening Build together start one turn. It takes
  * the same place in line, and the same limits, as a Chat message.
  */
-export function draftTasks(
+export async function draftTasks(
 	context: Room,
 	handle: string,
 	planRevision: number,
@@ -1550,8 +1649,8 @@ export function draftTasks(
 	user = handle,
 ): Promise<TaskDraftResult> {
 	let { chat } = context;
-	if (chat.pendingSends >= MAX_PENDING_SENDS) {
-		return Promise.resolve({ ok: false, reason: "the reply queue is full" });
+	if (chat.pendingSends >= MAX_PENDING_SENDS && !await awayOrNot(context)) {
+		return { ok: false, reason: "the reply queue is full" };
 	}
 	chat.pendingSends++;
 	let post = () => postDraft(context, handle, planRevision, text, said, user);
@@ -1584,10 +1683,10 @@ async function postDraft(
 	let existing = liveDraft(chat);
 	if (existing) return { ok: true, draft: existing, state: existing.state, existing: true };
 	// The draft waits in the queue even when the Planner is idle, so it counts against it.
-	if (chat.waiting.length >= MAX_QUEUE) return { ok: false, reason: "the reply queue is full" };
+	if (full(chat, waitsAway)) return { ok: false, reason: "the reply queue is full" };
 	let draft: TaskDraft = { id: ulid(), planRevision, state: "queued" };
 	chat.draft = draft;
-	let turn = context.deferred && (occupied(chat) || waitsAway)
+	let turn = context.deferred
 		? newTurn({
 			documentId: room,
 			kind: "draft",
@@ -2501,7 +2600,7 @@ export async function jobReady(
 	}
 	if (
 		job?.kind === "decision-followup" && context.chat.busy
-		&& context.chat.waiting.length >= MAX_QUEUE
+		&& full(context.chat)
 	) return false;
 	if (await context.plannerNotAttached?.()) return false;
 	try {
@@ -2797,7 +2896,11 @@ async function run(
 	let heldOwner = chat.owner;
 	let heldReferences = held ? new Map(chat.referenceCache) : undefined;
 	try {
-		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
+		// A request kept as a row was handed to its machine in a session opened before its row moved.
+		let preopened = (about as Waiting | undefined)?.opened;
+		if (about) delete (about as Waiting).opened;
+		opened = preopened
+			?? await repositorySession(context, claimantSessionId, member?.entryId, references);
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error("Chopin's session changed before the turn started. Try again.");
@@ -2823,6 +2926,7 @@ async function run(
 			let focus = chat.focus;
 			if (focus) prompt = `${focusContext(focus)}\n\n${prompt}`;
 		}
+		if (member) markDelivered(context, member.entryId);
 		sendStarted = true;
 		if (!jobTurn) {
 			chat.toolFinished = (id, output, success) => {
@@ -3053,21 +3157,39 @@ async function drain(
 	context: Room,
 	ended?: { job: boolean; outcome: JobOutcome | undefined },
 ): Promise<void> {
-	let { chat, room, server } = context;
+	let { chat } = context;
 	if (chat.closed) return;
+	// Called with nothing running, another call is already starting the next turn.
+	if (!ended && chat.starting) return;
+	chat.starting = true;
+	try {
+		await startNext(context, ended);
+	} finally {
+		chat.starting = false;
+	}
+}
+
+async function startNext(
+	context: Room,
+	ended?: { job: boolean; outcome: JobOutcome | undefined },
+): Promise<void> {
+	let { chat, room, server } = context;
 	// Synchronous unless a request kept as a row has to pass the start rule, so a turn's end and
 	// the queue's next step stay in one tick as they always were.
 	let take = () => {
 		let head = chat.waiting[0];
-		return head?.deferred && context.deferred ? nextStartable(context) : pending(chat);
+		if (!head?.deferred || !context.deferred) return pending(chat);
+		// A request the machine could not open a session for waits until something new says it may.
+		return chat.unopened ? undefined : nextStartable(context);
 	};
 	let next = startsHeld ? undefined : take();
 	if (next instanceof Promise) next = await next;
 	while (next) {
 		if (next.job) chat.handoffJob = next.job;
-		let begun = true;
+		let begun: Begun = "started";
+		let turnContext = { ...context, invokedBy: next.invokedBy, draft: next.draft };
 		try {
-			if (next.deferred && context.deferred) begun = await beginTurn(context, next);
+			if (next.deferred && context.deferred) begun = await beginTurn(turnContext, next);
 			else await context.persist();
 		} catch (err) {
 			if (chat.handoffJob === next.job) chat.handoffJob = undefined;
@@ -3079,9 +3201,18 @@ async function drain(
 		if (chat.handoffJob === next.job) chat.handoffJob = undefined;
 		if (chat.closed) {
 			if (next.job) finishJob(next.job, { status: "failed", reason: "The document closed." });
+			if (next.opened) await discard(context, next.opened);
 			return;
 		}
-		if (!begun || next.job?.settled) {
+		if (begun === "unopened") {
+			// Still waiting, still marked sent: back at the head of the queue, as it was.
+			chat.unopened = true;
+			chat.waiting.unshift(next);
+			queued(chat, server, room);
+			next = undefined;
+			break;
+		}
+		if (begun === "gone" || next.job?.settled) {
 			next = take();
 			if (next instanceof Promise) next = await next;
 			continue;
@@ -3094,15 +3225,11 @@ async function drain(
 			context.memberMessagePersisted?.(entry, next.sessionId);
 		}
 		let turn = [
-			{ ...context, invokedBy: next.invokedBy, draft: next.draft },
+			turnContext,
 			next.handle,
 			next.text,
 			next,
-			next.job?.job.kind === "decision-followup"
-				? undefined
-				: next.invokedBy
-				? next.sessionId
-				: next.sessionId ?? context.claimantSessionId,
+			claimantOf(context, next),
 			false,
 			next.message && next.userId
 				? { entryId: next.id, userId: next.userId, ...(next.focus ? { focus: next.focus } : {}) }
@@ -3110,11 +3237,15 @@ async function drain(
 			next.references,
 			next.job,
 		] as const;
+		// The turn marks the Chat busy as it begins, which ends the wait to start.
+		chat.starting = false;
 		// Called with nothing running, the turn runs on its own, so what called is not held up by it.
 		if (ended) await run(...turn);
 		else startRun(...turn);
 		return;
 	}
+	// Nothing to start. What the end of a turn wakes may start its own now.
+	chat.starting = false;
 	// Called with nothing running, there is nothing to settle.
 	if (!ended) return;
 	chat.busy = false;
@@ -3226,31 +3357,6 @@ async function stillWrites(context: Room, item: Waiting): Promise<boolean> {
 	}
 }
 
-/** Says in Chat, once, what a queue that cannot start waits for. */
-function armNotice(context: Room): void {
-	let { chat, deferred } = context;
-	if (!deferred || chat.deferredNotice || chat.closed) return;
-	chat.deferredNotice = setTimeout(() => {
-		chat.deferredNotice = undefined;
-		void waitingNotice(context).catch(err =>
-			console.error("[chat] could not say what the queue waits for:", err)
-		);
-	}, deferred.noticeDelayMs);
-	chat.deferredNotice.unref?.();
-}
-
-async function waitingNotice(context: Room): Promise<void> {
-	let { chat } = context;
-	let oldest = chat.waiting.find(item => item.deferred);
-	if (!oldest?.deferred || chat.closed || chat.busy) return;
-	if ((await startGate(context)).ok) return;
-	await noticeOnce(
-		context,
-		`deferred-wait:${oldest.deferred.row}`,
-		context.plannerReady ? WAITING_NOTICE_REMOTE : WAITING_NOTICE,
-	);
-}
-
 /** Logs what a commit refused to do to a row; a refused move changes nothing. */
 function logRefused(outcomes: DeferredTurnOutcome[] | void): void {
 	for (let outcome of outcomes ?? []) {
@@ -3277,10 +3383,7 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 			continue;
 		}
 		let gate = await startGate(context);
-		if (!gate.ok) {
-			armNotice(context);
-			return undefined;
-		}
+		if (!gate.ok) return undefined;
 		if (chat.waiting[0] !== first) continue;
 		// A child that was deleted or archived while the request waited would answer in the
 		// wrong document, so the request ends instead.
@@ -3302,16 +3405,66 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 }
 
 /**
- * Saves that a queued turn is about to run: a request kept as a row moves from waiting to started
- * in the commit that shows its message as delivered. False when the row is no longer waiting,
- * because it was cancelled meanwhile, and the turn must not run.
+ * Shows a message as delivered once its prompt is on its way to the machine: a session is open
+ * there and nothing before the prompt can fail. A request kept as a row is marked in the commit
+ * that starts it; one that started at once is marked here.
  */
-async function beginTurn(context: Room, next: Waiting): Promise<boolean> {
+function markDelivered(context: Room, entryId: string): void {
+	let { chat, room, server } = context;
+	let entry = chat.entries.find(value => value.id === entryId);
+	if (!entry || entry.deliveryState !== "sent") return;
+	entry.deliveryState = "delivered";
+	announce(server, room, entry);
+}
+
+type Begun = "started" | "gone" | "unopened";
+
+/** The login whose Copilot entitlement runs a queued turn. */
+function claimantOf(context: Room, next: Waiting): string | undefined {
+	if (next.job?.job.kind === "decision-followup") return undefined;
+	return next.invokedBy ? next.sessionId : next.sessionId ?? context.claimantSessionId;
+}
+
+/** Lets go of a session opened for a turn that will not run in it. */
+async function discard(context: Room, opened: NonNullable<Waiting["opened"]>): Promise<void> {
+	let { chat } = context;
+	// A retained session lives on for its workflow runs; it was only borrowed.
+	if (chat.retained?.session === opened.session) return;
+	try {
+		await opened.session.destroy();
+	} catch (err) {
+		console.error("[chat] could not close a session no turn used:", err);
+	}
+	opened.binding.release();
+	if (chat.agent === opened.session) chat.agent = undefined;
+	chat.owner = undefined;
+}
+
+/**
+ * Saves that a queued turn is about to run. A request kept as a row is handed to the machine only
+ * once a session is open there: it moves from waiting to started in the commit that shows its
+ * message as delivered, never before. `unopened` says the machine could not open one, and the row
+ * is still waiting; `gone`, that the row is no longer waiting because it was cancelled meanwhile,
+ * and the turn must not run.
+ */
+async function beginTurn(context: Room, next: Waiting): Promise<Begun> {
 	let { chat, room, server } = context;
 	let held = next.deferred;
 	if (!held || !context.deferred) {
 		await context.persist();
-		return true;
+		return "started";
+	}
+	let opened: NonNullable<Waiting["opened"]>;
+	try {
+		opened = await repositorySession(
+			context,
+			claimantOf(context, next),
+			next.message && next.userId ? next.id : undefined,
+			next.references,
+		);
+	} catch (err) {
+		console.error("[chat] a saved request waits: no session could be opened for it:", err);
+		return "unopened";
 	}
 	let entry = next.message
 		? chat.entries.find(value => value.id === (held.entry ?? next.id))
@@ -3323,16 +3476,19 @@ async function beginTurn(context: Room, next: Waiting): Promise<boolean> {
 		outcomes = await context.persist(undefined, [move(held.row, "waiting", "started")]);
 	} catch (err) {
 		if (entry) entry.deliveryState = before;
+		await discard(context, opened);
 		throw err;
 	}
 	let outcome = outcomes?.[0];
 	if (outcome && outcome.action === "transition" && !outcome.changed) {
 		logRefused(outcomes);
 		if (entry && before !== undefined) entry.deliveryState = before;
-		return false;
+		await discard(context, opened);
+		return "gone";
 	}
 	if (entry) announce(server, room, entry);
-	return true;
+	next.opened = opened;
+	return "started";
 }
 
 /**
@@ -3343,8 +3499,17 @@ async function beginTurn(context: Room, next: Waiting): Promise<boolean> {
 export function kick(context: Room): Promise<void> {
 	let { chat } = context;
 	if (!context.deferred || chat.closed) return Promise.resolve();
+	// Whatever called says the machine may be there now, so the head of the queue is tried again.
+	chat.unopened = false;
 	let go = async () => {
-		if (chat.closed || chat.busy || startsHeld || chat.waiting.length === 0) return;
+		if (chat.closed) return;
+		// Before anything starts, so a message whose save was never answered is not passed over.
+		if (chat.unsure?.size) {
+			await adoptUnsure(context).catch(err =>
+				console.error("[chat] could not look for a message whose save was not answered:", err)
+			);
+		}
+		if (chat.busy || chat.starting || startsHeld || chat.waiting.length === 0) return;
 		await drain(context);
 	};
 	let accepted = chat.sending.then(go, go);
@@ -3378,7 +3543,7 @@ async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<
 		entry.deliveryState = "failed";
 		entry.deliveryFailure = FAILURE[why];
 	}
-	let changes = [move(held.row, "waiting", "cancelled")];
+	let changes = [move(held.row, "waiting", "cancelled", why === "spent" ? undefined : why)];
 	try {
 		if (!entry && why !== "spent") {
 			logRefused(
@@ -3422,7 +3587,21 @@ export async function cancelQueued(context: Room, why: "agent" | "unavailable"):
  * Withdraw a message the machine has not taken yet. Only its author may. It leaves the Chat for
  * everyone and is never delivered; its row is cancelled in the commit that removes it.
  */
-export async function remove(context: Room, ws: Socket, msg: Request<Wire.Delete>): Promise<void> {
+export function remove(context: Room, ws: Socket, msg: Request<Wire.Delete>): Promise<void> {
+	// After every send already admitted, so a delete never overtakes the message it takes back.
+	let process = () =>
+		removeNow(context, ws, msg).catch(err => {
+			// Unanswered, a delete would leave the page waiting on it. Without the code that ends
+			// it, it is asked again.
+			console.error("[chat] a message could not be deleted:", err);
+			fail(ws, msg.rid, "could not delete message");
+		});
+	let accepted = context.chat.sending.then(process, process);
+	context.chat.sending = accepted.then(() => {}, () => {});
+	return accepted;
+}
+
+async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): Promise<void> {
 	let { chat, room, server } = context;
 	let entry = chat.entries.find(value => value.id === msg.id);
 	let item = chat.waiting.find(value => value.id === msg.id && value.message && value.deferred);
@@ -3432,24 +3611,54 @@ export async function remove(context: Room, ws: Socket, msg: Request<Wire.Delete
 		if (row?.state === "cancelled" && row.handle === ws.data.handle) {
 			return reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
 		}
+		if (!row) {
+			// Nothing here: the send it takes back was lost, or is still on its way on a connection
+			// that is gone. It is remembered as taken back, so that it cannot arrive after this.
+			chat.retracted ??= new Set();
+			chat.retracted.add(msg.id);
+			if (chat.retracted.size > MAX_RETRACTED) {
+				chat.retracted.delete(chat.retracted.values().next().value!);
+			}
+			return reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
+		}
+		if (row.state === "waiting" && row.kind === "composer" && row.handle === ws.data.handle) {
+			// Kept by a send whose answer was a passing trouble (the commit went through and its
+			// acknowledgement did not): nothing of it was shown or queued here, so only the row is
+			// taken back, and the machine never gets it.
+			let queued = chat.waiting.find(value => value.deferred?.row === row.id);
+			chat.waiting = chat.waiting.filter(value => value !== queued);
+			try {
+				logRefused(await context.persist(undefined, [move(row.id, "waiting", "cancelled")]));
+			} catch {
+				if (queued) chat.waiting.push(queued);
+				return fail(ws, msg.rid, "could not delete message");
+			}
+			return reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
+		}
 	}
 	if (
 		entry?.author.kind !== "member" || entry.author.handle !== ws.data.handle
 		|| entry.deliveryState === "delivered" || entry.deliveryState === undefined
-	) return fail(ws, msg.rid, "this message cannot be deleted");
+	) return fail(ws, msg.rid, "this message cannot be deleted", "message-not-deletable");
 	let index = chat.entries.indexOf(entry);
 	let changes: DeferredTurnChange[] = [];
 	if (entry.deliveryState === "sent") {
 		// Out of the queue first, so a turn that ends now cannot start it.
+		// Being taken by the machine right now: if that fails it waits again, so this is not the last
+		// word, and the browser asks again until it is delivered or deleted.
 		if (!item?.deferred) return fail(ws, msg.rid, "this message is already on its way");
 		chat.waiting = chat.waiting.filter(value => value !== item);
 		changes.push(move(item.deferred.row, "waiting", "cancelled"));
 	}
 	chat.entries.splice(index, 1);
+	// A running turn's entries sit after the ones before it; taking one of those out moves it up.
+	let shifted = !!chat.turn && index < chat.turn.entryOffset;
+	if (shifted) chat.turn!.entryOffset--;
 	try {
 		logRefused(await context.persist(undefined, changes));
 	} catch {
 		chat.entries.splice(index, 0, entry);
+		if (shifted) chat.turn!.entryOffset++;
 		if (item) chat.waiting.push(item);
 		return fail(ws, msg.rid, "could not delete message");
 	}
@@ -3460,6 +3669,15 @@ export async function remove(context: Room, ws: Socket, msg: Request<Wire.Delete
 
 /** Send a message that could not be delivered again, as it was. Only its author may. */
 export async function retry(context: Room, ws: Socket, msg: Request<Wire.Retry>): Promise<void> {
+	try {
+		await retryNow(context, ws, msg);
+	} catch (err) {
+		console.error("[chat] a message could not be sent again:", err);
+		fail(ws, msg.rid, "could not send message again");
+	}
+}
+
+async function retryNow(context: Room, ws: Socket, msg: Request<Wire.Retry>): Promise<void> {
 	let { chat, room, server } = context;
 	let entry = chat.entries.find(value => value.id === msg.id);
 	let saved = entry ? (entry as MemberEntry).delivery : undefined;
@@ -3467,7 +3685,9 @@ export async function retry(context: Room, ws: Socket, msg: Request<Wire.Retry>)
 		!context.deferred || entry?.author.kind !== "member" || entry.author.handle !== ws.data.handle
 		|| entry.deliveryState !== "failed" || !saved
 	) return fail(ws, msg.rid, "this message cannot be sent again");
-	if (chat.waiting.length >= MAX_QUEUE) return fail(ws, msg.rid, "the queue is full");
+	if (full(chat, await away(context))) {
+		return fail(ws, msg.rid, "the queue is full", "planner-queue-full");
+	}
 	let turn = newTurn({
 		documentId: room,
 		kind: "composer",
@@ -3507,8 +3727,16 @@ export async function retry(context: Room, ws: Socket, msg: Request<Wire.Retry>)
 	void kick(context);
 }
 
-/** The waiting item a row stands for once a document opens again; undefined when nothing remains of it. */
-async function restoreWaiting(context: Room, row: DeferredTurn): Promise<Waiting | undefined> {
+/**
+ * The waiting item a row stands for once a document opens again; undefined when nothing remains of
+ * it. `behind` is the waiting rows accepted after it, which a message kept without its transcript
+ * entry is put back ahead of.
+ */
+async function restoreWaiting(
+	context: Room,
+	row: DeferredTurn,
+	behind: DeferredTurn[] = [],
+): Promise<Waiting | undefined> {
 	let { chat } = context;
 	let focus = row.focusChannelId
 		? { channelId: row.focusChannelId, title: row.focusTitle ?? "" }
@@ -3524,9 +3752,36 @@ async function restoreWaiting(context: Room, row: DeferredTurn): Promise<Waiting
 		case "invoke_planner": {
 			let saved = row.delivery as (Delivery & { entry?: string }) | undefined;
 			let entryId = saved?.entry ?? row.requestId;
-			let entry = chat.entries.find(value => value.id === entryId);
-			if (!entry) return undefined;
 			let references = row.references as unknown as Wire.Reference[];
+			let entry = chat.entries.find(value => value.id === entryId);
+			// A message first sent keeps its row and its transcript entry in one commit. Its entry is
+			// missing only when that commit's answer was lost and a later save wrote the transcript
+			// without it: the row is its sender's message still, and its entry is made again. One sent
+			// again by its sender (`entryId` is not its own request) has an entry or has none to make.
+			if (!entry && row.kind === "composer" && saved && entryId === row.requestId) {
+				let made: MemberEntry = {
+					id: row.requestId,
+					author: { kind: "member", handle: row.handle },
+					text: row.text,
+					ts: Math.floor(row.createdAt.getTime() / 1000),
+					...(references.length ? { references } : {}),
+					delivery: {
+						destination: saved.destination,
+						requestFingerprint: saved.requestFingerprint,
+						canonicalFingerprint: saved.canonicalFingerprint,
+					},
+					deliveryState: "sent",
+				};
+				entry = made;
+				let ahead = behind.flatMap(value =>
+					chat.entries.findIndex(item =>
+						item.id
+							=== ((value.delivery as { entry?: string } | undefined)?.entry ?? value.requestId)
+					)
+				).filter(index => index >= 0);
+				chat.entries.splice(ahead.length ? Math.min(...ahead) : chat.entries.length, 0, made);
+			}
+			if (!entry) return undefined;
 			return {
 				...base,
 				id: entry.id,
@@ -3574,29 +3829,80 @@ async function load(context: Room): Promise<void> {
 	let { chat, plan, room, server } = context;
 	let store = plan.persistence.storage.deferredTurns;
 	let waiting = await store.list(room, ["waiting"]);
-	for (let row of waiting) {
+	let known = new Set(chat.entries);
+	for (let [index, row] of waiting.entries()) {
 		if (chat.waiting.some(item => item.deferred?.row === row.id)) continue;
-		let item = await restoreWaiting(context, row);
+		let behind = waiting.slice(index + 1);
+		let item = await restoreWaiting(context, row, behind);
 		if (!item) {
 			logRefused(await context.persist(undefined, [move(row.id, "waiting", "cancelled")]));
 			continue;
 		}
-		chat.waiting.push(item);
+		enqueueRestored(chat, item, behind);
 		if (item.draft && chat.draft) drafting(server, room, chat.draft, "queued");
 	}
-	let changed = false;
+	let made = chat.entries.filter(entry => !known.has(entry));
+	let changed = made.length > 0;
 	for (let entry of chat.entries) {
 		if (entry.deliveryState !== "sent" || chat.waiting.some(item => item.id === entry.id)) continue;
 		let row = await store.get(room, entry.id);
 		let cancelled = row?.state === "cancelled"
 			|| (!row && !waiting.some(value => value.requestId === entry.id));
 		entry.deliveryState = cancelled ? "failed" : "delivered";
-		if (cancelled) entry.deliveryFailure = "machine-removed";
+		// The reason the row was cancelled for; none recorded says nothing rather than a wrong one.
+		if (row?.cancelReason) entry.deliveryFailure = FAILURE[row.cancelReason];
 		changed = true;
 		announce(server, room, entry);
 	}
 	if (changed) await context.persist();
+	for (let entry of made) announce(server, room, entry);
 	queued(chat, server, room);
+}
+
+/** Puts a restored request in the queue ahead of the ones accepted after it, and of background jobs. */
+function enqueueRestored(chat: Chat, item: Waiting, behind: DeferredTurn[]): void {
+	let later = new Set(behind.map(row => row.id));
+	let at = chat.waiting.findIndex(value => !value.deferred || later.has(value.deferred.row));
+	chat.waiting.splice(at < 0 ? chat.waiting.length : at, 0, item);
+}
+
+/**
+ * Puts back a message that its commit kept though the answer to it was lost: in the queue ahead of
+ * what was accepted after it, in the transcript where it was, and saved there, so a restart finds
+ * it too. Throws, leaving it for the next attempt, when it could not be saved.
+ */
+async function adopt(context: Room, row: DeferredTurn): Promise<void> {
+	let { chat, plan, room, server } = context;
+	if (chat.waiting.some(item => item.deferred?.row === row.id)) return;
+	let waiting = await plan.persistence.storage.deferredTurns.list(room, ["waiting"]);
+	let behind = waiting.slice(waiting.findIndex(value => value.id === row.id) + 1);
+	let known = new Set(chat.entries);
+	let item = await restoreWaiting(context, row, behind);
+	if (!item) return;
+	enqueueRestored(chat, item, behind);
+	let made = chat.entries.filter(entry => !known.has(entry));
+	try {
+		await context.persist();
+	} catch (error) {
+		chat.waiting = chat.waiting.filter(value => value !== item);
+		chat.entries = chat.entries.filter(entry => !made.includes(entry));
+		throw error;
+	}
+	for (let entry of made) {
+		announce(server, room, entry);
+		context.memberMessagePersisted?.(entry, row.claimantSessionId);
+	}
+	queued(chat, server, room);
+}
+
+/** Looks for the messages whose save was not answered among the rows, and puts back the ones kept. */
+async function adoptUnsure(context: Room): Promise<void> {
+	let { chat, plan, room } = context;
+	for (let id of chat.unsure ?? []) {
+		let row = await plan.persistence.storage.deferredTurns.get(room, id);
+		if (row?.state === "waiting") await adopt(context, row);
+		chat.unsure!.delete(id);
+	}
 }
 
 const recovered = new WeakSet<Chat>();
@@ -3938,6 +4244,12 @@ export async function resetAgent(
 
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
+	// What was admitted before this finishes first: a message that was being saved is saved and
+	// answered, not refused as closed. Whatever arrives once the Chat is closed is refused.
+	for (let admitted: Promise<void> | undefined; admitted !== chat.sending;) {
+		admitted = chat.sending;
+		await admitted;
+	}
 	chat.closed = true;
 	chat.initiative?.close();
 	chat.job = undefined;
@@ -3961,8 +4273,6 @@ export async function close(chat: Chat): Promise<void> {
 	chat.openingOwner = undefined;
 	clearTimeout(chat.lingering);
 	chat.lingering = undefined;
-	clearTimeout(chat.deferredNotice);
-	chat.deferredNotice = undefined;
 	await Promise.all([chat.sending, chat.running]);
 	await chat.retained?.release();
 }

@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { expectPlain } from "../testing/plain-words";
+import { ChatReferenceError } from "./references";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -213,7 +214,7 @@ describe("sending to a named destination", () => {
 		let replies: Sent[] = [];
 		context.references = {
 			resolve: async () => {
-				throw new Error("target moved");
+				throw new ChatReferenceError("target moved");
 			},
 		} as unknown as ReferenceService;
 		await Chat.send(
@@ -235,6 +236,47 @@ describe("sending to a named destination", () => {
 				message: "invalid or unavailable chat reference",
 			}),
 		]);
+		// The reference is at fault: final, so no code, and its browser says so on the message.
+		expect(replies[0]?.code).toBeUndefined();
+	});
+
+	it("answers a reference lookup that failed for storage's sake as a passing trouble, and takes the same request again", async () => {
+		let { chat, context } = room({ busy: true });
+		let looking = 0;
+		context.references = {
+			resolve: async (input: { text: string }) => {
+				if (looking++ === 0) throw new Error("storage unavailable");
+				return { text: input.text.trim() };
+			},
+		} as unknown as ReferenceService;
+		let requestId = crypto.randomUUID();
+		let frames: Sent[] = [];
+		let ask = (rid: string) =>
+			message(
+				"#release",
+				"planner",
+				[{
+					kind: "document",
+					channelId: crypto.randomUUID(),
+					start: 0,
+					end: 8,
+				}],
+				rid,
+				requestId,
+			);
+		await Chat.send(context, sender("ana", "U_ana", frames), ask("first"));
+		expect(frames).toEqual([
+			expect.objectContaining({
+				kind: "session:error",
+				rid: "first",
+				code: "temporarily-unavailable",
+			}),
+		]);
+		expect(chat.entries).toEqual([]);
+		expect(chat.waiting).toEqual([]);
+		await Chat.send(context, sender("ana", "U_ana", frames), ask("second"));
+		expect(frames.at(-1)).toMatchObject({ kind: "chat:send", rid: "second", queued: true });
+		expect(chat.waiting.filter(item => item.id === requestId)).toHaveLength(1);
 	});
 
 	it("removes the typing shortcut from a queued planner message", async () => {
@@ -405,7 +447,11 @@ describe("sending to a named destination", () => {
 			message("closed", "room"),
 		);
 		expect(closedReplies).toEqual([
-			expect.objectContaining({ kind: "session:error", message: "chat is closed" }),
+			expect.objectContaining({
+				kind: "session:error",
+				message: "chat is closed",
+				code: "temporarily-unavailable",
+			}),
 		]);
 
 		let full = room({ busy: true });
@@ -431,9 +477,58 @@ describe("sending to a named destination", () => {
 			message("not saved", "room"),
 		);
 		expect(failedReplies).toEqual([
-			expect.objectContaining({ kind: "session:error", message: "could not save message" }),
+			expect.objectContaining({
+				kind: "session:error",
+				message: "could not save message",
+				code: "temporarily-unavailable",
+			}),
 		]);
 		expect(failed.chat.entries).toEqual([]);
+	});
+
+	it("refuses a send for a passing reason with a code, takes the same request again once the trouble has passed, and says nothing final about a message that is at fault", async () => {
+		let { chat, context } = room({ busy: true });
+		let saves = 0;
+		context.persist = async () => {
+			if (saves++ === 0) throw new Error("storage unavailable");
+		};
+		let requestId = crypto.randomUUID();
+		let frames: Sent[] = [];
+		await Chat.send(
+			context,
+			sender("ana", "U_ana", frames),
+			message("hello", "room", undefined, "a", requestId),
+		);
+		await Chat.send(
+			context,
+			sender("ana", "U_ana", frames),
+			message("hello", "room", undefined, "b", requestId),
+		);
+		expect(frames[0]).toMatchObject({
+			kind: "session:error",
+			rid: "a",
+			code: "temporarily-unavailable",
+		});
+		expect(frames[1]).toMatchObject({ kind: "chat:send", rid: "b", id: requestId });
+		expect(chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
+
+		// A message that can never be sent is final: no code, so its browser says so on the message.
+		let final: Sent[] = [];
+		await Chat.send(context, sender("ana", "U_ana", final), message("", "room"));
+		await Chat.send(context, sender("ana", "U_ana", final), {
+			...message("hi", "room"),
+			requestId: "not-a-uuid",
+		});
+		await Chat.send(
+			context,
+			sender("ana", "U_ana", final),
+			message("again", "room", undefined, "c", requestId),
+		);
+		expect(final.map(frame => [frame.kind, frame.code])).toEqual([
+			["session:error", undefined],
+			["session:error", undefined],
+			["session:error", undefined],
+		]);
 	});
 
 	it("replays a lost room acknowledgement without resolving or persisting twice", async () => {
@@ -599,6 +694,7 @@ describe("sending to a named destination", () => {
 		expect(overflow[0]).toMatchObject({
 			kind: "session:error",
 			message: "too many chat messages are waiting to be processed",
+			code: "temporarily-unavailable",
 		});
 		expect(context.chat.pendingSends).toBe(20);
 		release.resolve();
@@ -849,6 +945,8 @@ describe("focus on a child document", () => {
 		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD));
 		expect(chat.waiting).toHaveLength(0);
 		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
+		// Not there is final: no code, so the message says it could not be sent.
+		expect(frames.at(-1)?.code).toBeUndefined();
 	});
 
 	it("answers a failed child lookup generically and queues nothing", async () => {
@@ -863,6 +961,8 @@ describe("focus on a child document", () => {
 		await Chat.send(context, sender("ana", "U_ana", frames), focused("planner", CHILD));
 		expect(chat.waiting).toHaveLength(0);
 		expect(frames.at(-1)?.message).toBe("the open child document is unavailable");
+		// A lookup that failed for storage's sake may succeed in a moment: the send is tried again.
+		expect(frames.at(-1)?.code).toBe("temporarily-unavailable");
 	});
 
 	it("refuses a malformed focus before resolving anything", async () => {
