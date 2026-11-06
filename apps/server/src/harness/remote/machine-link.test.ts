@@ -238,9 +238,9 @@ describe("a paired machine's Planner", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "access-revoked",
-			message: "The paired machine member-laptop that made member this document's Planner was "
-				+ "disconnected from Chopin or must be paired again, so the Planner was released. "
-				+ "Run `chopin pair` on it, then attach again.",
+			message: "The paired machine member-laptop that connected member to this document was "
+				+ "disconnected from Chopin or must be paired again, so the connection was released. "
+				+ "Run `chopin pair` on it, then connect again.",
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(channel.id)).toBe(false);

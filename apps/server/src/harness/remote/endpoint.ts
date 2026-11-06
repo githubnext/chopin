@@ -229,7 +229,7 @@ export function agentLink(
 			return {
 				ok: false,
 				code: "repository-forbidden",
-				message: "This Planner credential was issued for another document.",
+				message: "This credential was issued for another document.",
 			};
 		}
 		if (channel.archivedAt) {

@@ -18,7 +18,7 @@ export function attachedTarget(sessionId: string): RemoteTarget {
 		);
 	}
 	let link = attachedLink(planner.channelId);
-	if (!link) throw new Error("No Planner is attached to this document.");
+	if (!link) throw new Error("No machine is connected to this document.");
 	return { link, planner };
 }
 

@@ -266,7 +266,7 @@ class RemoteSession {
 		await within(
 			this.#started.promise,
 			this.#port.timeoutMs,
-			"The attached Planner did not start the session.",
+			"The machine did not start the session.",
 		);
 		this.planner.control = (action, runId) => this.#command(action, runId);
 		this.planner.rootOf = runId => this.#roots.get(runId) ?? runId;
@@ -278,7 +278,7 @@ class RemoteSession {
 			this.#acknowledged = true;
 			this.#started.resolve();
 		} else {this.#started.reject(
-				new Error(`The attached Planner refused the session: ${message.message}`),
+				new Error(`The machine refused the session: ${message.message}`),
 			);}
 	}
 
@@ -358,7 +358,7 @@ class RemoteSession {
 		if (turn) {
 			this.#finish(
 				turn,
-				turn.stopped ? undefined : new Error("The attached Planner disconnected during the turn."),
+				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
 			);
 		}
 		for (let owed of this.#unanswered) {
@@ -438,7 +438,7 @@ class RemoteSession {
 	/** Keeps a Stop for the client's return; a Resume cannot be promised, so it is refused. */
 	#hold(action: "stop" | "resume", run: string | undefined): void {
 		if (action !== "stop") {
-			throw new Error("The attached Planner is disconnected, so its runs cannot be resumed yet.");
+			throw new Error("The machine is disconnected, so its runs cannot be resumed yet.");
 		}
 		// Stopping every run covers each one, and a run already named is not named twice.
 		if (this.#held.some(held => held.run === undefined || held.run === run)) return;
@@ -490,7 +490,7 @@ class RemoteSession {
 		if (turn) {
 			this.#finish(
 				turn,
-				turn.stopped ? undefined : new Error("The attached Planner disconnected during the turn."),
+				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
 			);
 		}
 		this.#closed = true;
@@ -518,8 +518,8 @@ class RemoteSession {
 				: new Error(
 					message.message
 						?? (message.status === "aborted"
-							? "The attached Planner stopped the turn."
-							: "The attached Planner's turn failed."),
+							? "The machine stopped the turn."
+							: "The machine's turn failed."),
 				);
 			return this.#finish(turn, failure);
 		}
@@ -543,7 +543,7 @@ class RemoteSession {
 		if (clash.length) {
 			return this.#fail(
 				turn,
-				new ToolBoundaryError(`The attached Planner redefined Chopin's ${clash.join(", ")}.`),
+				new ToolBoundaryError(`The machine redefined Chopin's ${clash.join(", ")}.`),
 			);
 		}
 		turn.own = new Set(names);
@@ -592,7 +592,7 @@ class RemoteSession {
 
 	#part(turn: Turn, part: LinkPart): void {
 		let boundary = (name: string) =>
-			this.#fail(turn, new ToolBoundaryError(`Planner tool boundary failure: ${name}`));
+			this.#fail(turn, new ToolBoundaryError(`Chopin's tool boundary failure: ${name}`));
 		switch (part.type) {
 			case "tool-input-start":
 				if (turn.hostNames.has(part.toolName)) {
@@ -959,9 +959,9 @@ export class AgentLink {
 		if (this.#options.revalidate && !await this.#options.revalidate()) {
 			this.#refuse(
 				"access-revoked",
-				"The attached account can no longer act as this document's Planner.",
+				"The connected account can no longer act for this document.",
 			);
-			throw new Error("The attached Planner can no longer act for this document.");
+			throw new Error("The machine can no longer act for this document.");
 		}
 		if (this.#state !== "attached") throw new Error("The agent connection closed.");
 	}
@@ -1368,7 +1368,7 @@ export class AgentLink {
 				}
 				if (message.ok) control?.resolve();
 				else {control?.reject(
-						new ControlRefused(message.message ?? "The attached Planner refused."),
+						new ControlRefused(message.message ?? "The machine refused."),
 					);}
 				return;
 			}
@@ -1407,7 +1407,7 @@ export class AgentLink {
 			await within(
 				pending.promise,
 				this.#port.timeoutMs,
-				`The attached Planner did not answer ${action}.`,
+				`The machine did not answer ${action}.`,
 			);
 		} catch (error) {
 			if (error instanceof Unanswered) {

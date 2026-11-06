@@ -20,6 +20,7 @@ import { documentTools } from "../../agent/tools";
 import { readingOutput } from "../../agent/reading-output";
 import { fieldNotes, reading } from "../../document-reading.test-fixtures";
 import { openPlan } from "../../testing/plan";
+import { expectPlainStatus } from "../../testing/plain-words";
 import { createPlannerAgent, createResearchAgent } from "../agents";
 import { withModelOutput } from "../model-output";
 import { openWorkerSession } from "../../jobs/worker-session";
@@ -262,6 +263,7 @@ describe("Agent connection ownership", () => {
 		let raw = await rawLink(url, token);
 		raw.send({ type: "attach", version: AGENT_VERSION, document });
 		let refusal = await raw.next("refused");
+		expectPlainStatus(String(refusal.message), "a refusal to a client");
 		return { code: refusal.code, message: refusal.message, close: (await raw.closed).code };
 	}
 
@@ -301,8 +303,8 @@ describe("Agent connection ownership", () => {
 		for (let token of [RIVAL_TOKEN, MEMBER_TOKEN]) {
 			expect(await refused(server.url, channel.id, token)).toEqual({
 				code: "planner-attached",
-				message: "member is attached as this document's Planner. "
-					+ "A document has one Planner at a time.",
+				message: "member is connected to this document. "
+					+ "A document has one connection at a time.",
 				close: LINK_CLOSE.attached,
 			});
 		}
@@ -316,14 +318,14 @@ describe("Agent connection ownership", () => {
 		cleanups.push(server.stop);
 		expect(await refused(server.url, channel.id, VIEWER_TOKEN)).toEqual({
 			code: "repository-forbidden",
-			message: "Attaching as this document's Planner needs push or administration access to "
+			message: "Connecting to this document needs push or administration access to "
 				+ "octo-org/score.",
 			close: LINK_CLOSE.forbidden,
 		});
 		expect(await refused(server.url, channel.id, GUEST_TOKEN)).toEqual({
 			code: "sign-in-required",
-			message: "Sign in to Chopin at https://chopin.test in a browser as guest, then attach "
-				+ "again. The Planner's repository tools act with that sign-in.",
+			message: "Sign in to Chopin at https://chopin.test in a browser as guest, then connect "
+				+ "again. Repository tools act with that sign-in.",
 			close: LINK_CLOSE.unauthorized,
 		});
 		expect((await owner(storage, channel.id))?.ownerSessionId).toBeUndefined();
@@ -341,7 +343,7 @@ describe("Agent connection ownership", () => {
 		let refusal = await refused(server.url, channel.id, RIVAL_TOKEN);
 		expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
 		expect(refusal.message).toStartWith(
-			"member detached from this document's Planner and holds it until ",
+			"member disconnected from this document and keeps it until ",
 		);
 
 		let dropped = await rawLink(server.url);
@@ -410,9 +412,9 @@ describe("Agent connection ownership", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "sign-in-required",
-			message: "The Chopin browser sign-in that made member this document's Planner ended, so "
-				+ "the Planner was released. Sign in to Chopin at https://chopin.test in a browser as "
-				+ "member, then attach again.",
+			message: "The Chopin browser sign-in that connected member to this document ended, so "
+				+ "the connection was released. Sign in to Chopin at https://chopin.test in a browser as "
+				+ "member, then connect again.",
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -447,7 +449,7 @@ describe("Agent connection ownership", () => {
 		clock.skewMs = 31 * 24 * 60 * 60 * 1_000;
 		expect(await raw.next("refused")).toMatchObject({
 			code: "sign-in-required",
-			message: expect.stringContaining("The Chopin browser sign-in that made member"),
+			message: expect.stringContaining("The Chopin browser sign-in that connected member"),
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -503,8 +505,8 @@ describe("Agent connection ownership", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "access-revoked",
-			message: "A repository writer reset this document's Planner, so member is no longer "
-				+ "attached. Attach again to resume.",
+			message: "A repository writer reset this document's connection, so member is no longer "
+				+ "connected. Connect again to resume.",
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -520,7 +522,7 @@ describe("Agent connection ownership", () => {
 		resume();
 		expect(await raw.next("refused")).toMatchObject({
 			code: "sign-in-required",
-			message: expect.stringContaining("The Chopin browser sign-in that made member"),
+			message: expect.stringContaining("The Chopin browser sign-in that connected member"),
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unauthorized);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -558,8 +560,8 @@ describe("Agent connection ownership", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "sign-in-required",
-			message: "Sign in to Chopin at https://chopin.test in a browser as member, then attach "
-				+ "again. The Planner's repository tools act with that sign-in.",
+			message: "Sign in to Chopin at https://chopin.test in a browser as member, then connect "
+				+ "again. Repository tools act with that sign-in.",
 		});
 		expect(await raw.closed).toEqual({ code: LINK_CLOSE.unauthorized, reason: "sign-in-required" });
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -598,8 +600,8 @@ describe("Agent connection ownership", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "access-revoked",
-			message: "A repository writer reset this document's Planner, so member is no longer "
-				+ "attached. Attach again to resume.",
+			message: "A repository writer reset this document's connection, so member is no longer "
+				+ "connected. Connect again to resume.",
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -618,8 +620,8 @@ describe("Agent connection ownership", () => {
 		expect(await raw.next("refused")).toEqual({
 			type: "refused",
 			code: "access-revoked",
-			message: "This document's Planner ownership was released, so member is no longer "
-				+ "attached. Attach again to resume.",
+			message: "This document's connection was released, so member is no longer "
+				+ "connected. Connect again to resume.",
 		});
 		expect((await raw.closed).code).toBe(LINK_CLOSE.forbidden);
 		expect(server.attachments.attached(channel.id)).toBe(false);
@@ -679,7 +681,7 @@ describe("Agent connection ownership", () => {
 			let refusal = await refused(server.url, channel.id, RIVAL_TOKEN);
 			expect(refusal).toMatchObject({ code: "planner-attached", close: LINK_CLOSE.attached });
 			expect(refusal.message).toStartWith(
-				"member detached from this document's Planner and holds it until ",
+				"member disconnected from this document and keeps it until ",
 			);
 			for (let deadline = Date.now() + 3_000; Date.now() < deadline;) {
 				if (!(await owner(storage, channel.id))?.ownerSessionId) break;
@@ -1146,7 +1148,7 @@ describe("Agent connection protocol", () => {
 		expect(planner.activeTools).toEqual(["read_plan", "bash"]);
 		expect(reports).toEqual([["own-1", "the plan", "done"]]);
 		let undeclared = await streamTurn(adapterFor(server, planner), "undeclared");
-		expect(undeclared.errors.join("\n")).toContain("Planner tool boundary failure: bash");
+		expect(undeclared.errors.join("\n")).toContain("Chopin's tool boundary failure: bash");
 		let isolated = await streamTurn(
 			adapterFor(server, { channelId: channel.id, isolated: true }),
 			"declared",
@@ -1857,7 +1859,7 @@ describe("Agent connection questions", () => {
 	}
 
 	it("stops a host ask, withdraws its Decision and fails the turn when the link drops mid-tool", async () => {
-		let disconnected = ["Error: The attached Planner disconnected during the turn."];
+		let disconnected = ["Error: The machine disconnected during the turn."];
 		expect(await askingTurn("detach")).toEqual(disconnected);
 		expect(await askingTurn("violation")).toEqual(disconnected);
 	});
@@ -1934,6 +1936,6 @@ describe("Agent connection background workers", () => {
 			maxAiCredits: 1,
 			aborted: new Promise<never>(() => {}),
 			openSandbox: async () => sandboxSession,
-		})).rejects.toThrow("No Planner is attached to this document.");
+		})).rejects.toThrow("No machine is connected to this document.");
 	});
 });

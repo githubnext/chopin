@@ -87,7 +87,7 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				expect(await attachments.attach(f.request(f.rival), link())).toMatchObject({
 					ok: false,
 					code: "planner-attached",
-					message: expect.stringContaining("member is attached"),
+					message: expect.stringContaining("member is connected"),
 				});
 				if (granted.ok) granted.detach();
 				expect(attachments.attached(f.channelId)).toBe(false);
@@ -95,7 +95,7 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				expect(await attachments.attach(f.request(f.rival), link())).toMatchObject({
 					ok: false,
 					code: "planner-attached",
-					message: expect.stringContaining("member detached"),
+					message: expect.stringContaining("member disconnected"),
 				});
 				expect((await attachments.attach(f.request(f.member), link())).ok).toBe(true);
 				expect(attachments.attached(f.channelId)).toBe(true);
@@ -187,7 +187,7 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				expect(await attachments.verify(f.channelId, attached.link)).toBe(false);
 				expect(attached.refusals).toEqual([{
 					code: "sign-in-required",
-					message: expect.stringContaining("The Chopin browser sign-in that made member"),
+					message: expect.stringContaining("The Chopin browser sign-in that connected member"),
 				}]);
 				f.skew.ms = 0;
 				expect(await f.owner())
