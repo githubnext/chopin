@@ -552,8 +552,8 @@ _Can't connect to studio_, _studio is offline. Last seen 10:31 AM._ for a machin
 Your work is kept until 10:31 AM._ for a detached holder with its deadline, and _No machine is
 connected._ where none is attached, naming the machine when it is the viewer's own, or the
 one the document's button names, and otherwise only its owner's login (_@mona's machine_).
-_Connecting_ and _No machine is connected_ are said only once they have lasted the 1.5 s a lost connection waits before the page speaks of it, the last state staying until then, so a restart's passing states are never shown; every state clearing goes at once. It never names another machine of the list: while the person's machines are loading, or the
-list names a teammate's machine for a Planner their own account is starting, nothing is said
+_Connecting_ and _No machine is connected_ are said only once they have lasted the 1.5 s a lost connection waits before the page speaks of it, the last state staying until then, so a restart's passing states are never shown; every state clearing goes at once. It never names another machine of the list: while the person's machines are loading, while the
+list names a teammate's machine for a Planner their own account is starting, or while it describes another account's Planner than the page's connection does, nothing is said
 until it agrees. A `disconnected` Planner's work is
 kept with no deadline. Its live
 run cards carry `disconnected` beside the status they last reported: each reads

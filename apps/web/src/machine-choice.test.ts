@@ -311,6 +311,33 @@ test("gives the time a machine of the person's own, or the document's, was last 
 	expect(plannerLastSeen(undefined)).toBeUndefined();
 });
 
+test("names a machine only for the runner the socket describes: a poll of another account's Planner says nothing", () => {
+	let alice = { login: "alice", avatarUrl: "" };
+	let boxA = teammateMachine({ id: "M_a", label: "Box A", owner: alice });
+	let polled = state({
+		choice: "M_a",
+		machines: [machine(), boxA],
+		planner: { state: "starting", login: "alice", machine: "M_a" },
+	});
+	// The poll and the socket describe alice's Planner: the machine is named.
+	expect(plannerMachineName(polled, starting("alice"), "mona", true)).toBe("Box A");
+	// bob's Planner dropped after the poll was read: Box A is not his machine, nor said of him.
+	expect(plannerMachineName(polled, { state: "disconnected", login: "bob" }, "mona", true))
+		.toBeNull();
+	expect(plannerMachineName(polled, starting("bob"), "mona", true)).toBeNull();
+	let failing = { ...starting("bob"), failure: { attempts: 3, reason: "exit 1", at: "x" } };
+	expect(plannerMachineName(polled, failing, "mona", true)).toBeNull();
+	// A machine of the viewer's own is polled with no login, and is theirs: the socket must say
+	// their own account, whatever its case.
+	let own = state({ planner: { state: "starting", login: null, machine: "M_box" } });
+	expect(plannerMachineName(own, starting("Mona"), "mona", true)).toBe("build-box");
+	expect(plannerMachineName(own, starting("bob"), "mona", true)).toBeNull();
+	// Nothing is lent where nobody names a machine anyway.
+	expect(plannerMachineName(polled, { state: "held", login: "bob", until: "x" }, "mona", true))
+		.toBeUndefined();
+	expect(plannerMachineName(polled, { state: "none" }, "mona", true)).toBeUndefined();
+});
+
 test("waits for the list when it names a teammate's machine for the person's own Planner, and names a teammate's by its owner", () => {
 	let both = [machine(), teammateMachine()];
 	let listed = state({ machines: both });

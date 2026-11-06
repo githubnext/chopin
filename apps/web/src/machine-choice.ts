@@ -141,9 +141,11 @@ export function plannerLastSeen(state: MachineChoiceState | undefined): string |
 /**
  * What `plannerStatus` is told of the machine the Planner is on. A name, where `plannerRunsOn` has
  * one; undefined where the status says whose machine it is by login. `null` says nothing is said
- * yet: while the person's machines are loading, and while the list names a teammate's machine, not
- * the document's own, for a Planner the person's own account is the one starting. The two
- * disagree, and the list is what is out of date.
+ * yet: while the person's machines are loading, while the list names a teammate's machine, not
+ * the document's own, for a Planner the person's own account is the one starting, and while the
+ * list describes another account's Planner than the page's socket does (its login, or the
+ * viewer's own where the machine is theirs). The two disagree, and the list is what is out of
+ * date.
  */
 export function plannerMachineName(
 	state: MachineChoiceState | undefined,
@@ -153,7 +155,11 @@ export function plannerMachineName(
 ): string | null | undefined {
 	if (!state) return loading ? null : undefined;
 	let name = plannerRunsOn(state);
-	if (name !== undefined) return name;
+	if (name !== undefined) {
+		let login = planner && "login" in planner ? planner.login : undefined;
+		if ((state.planner?.login ?? viewer).toLowerCase() === login?.toLowerCase()) return name;
+		return planner?.state === "starting" || planner?.state === "disconnected" ? null : undefined;
+	}
 	if (planner?.state !== "starting" && planner?.state !== "disconnected") return undefined;
 	let theirs = state.machines.find(value => value.id === state.planner?.machine)?.teammate;
 	return theirs && planner.login.toLowerCase() === viewer.toLowerCase() ? null : undefined;
