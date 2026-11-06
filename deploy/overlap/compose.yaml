@@ -1,0 +1,78 @@
+# Two Chopin slots behind the reference proxy, to run a deploy that overlaps them locally:
+#
+#   bun scripts/overlap.ts compose up --image <image>
+#   bun scripts/overlap.ts compose deploy --image <image>
+#
+# See docs/zero-downtime-deploys.md. It is for a local run: the database is disposable, the
+# ports are published on the loopback interface so the script can ask each slot whether it is
+# ready, and the values are placeholders. A production file uses `expose` and its own environment.
+name: chopin-overlap
+
+x-chopin: &chopin
+  image: ${CHOPIN_IMAGE:?CHOPIN_IMAGE names the image to run}
+  environment:
+    # A slot started while the other holds the database waits for it instead of exiting.
+    HANDOVER: wait
+    # The proxy's health interval (250 ms) plus a margin.
+    HANDOVER_UNREADY_MS: "300"
+    STORAGE_DRIVER: postgres
+    DATABASE_URL: postgresql://chopin:chopin@db:5432/chopin?sslmode=disable
+    APP_ORIGIN: ${APP_ORIGIN:-http://127.0.0.1:8080}
+    SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-2222222222222222222222222222222222222222222222222222222222222222}
+    GITHUB_APP_SLUG: chopin-overlap
+    GITHUB_APP_CLIENT_ID: overlap
+    GITHUB_APP_CLIENT_SECRET: overlap
+    GITHUB_ALLOWED_USERS: ""
+    GITHUB_ALLOWED_ORGANIZATIONS: ""
+    JEV_API_KEY: overlap-run-only
+    AGENT: "off"
+    BACKGROUND_JOBS: "off"
+  depends_on:
+    db:
+      condition: service_healthy
+  volumes:
+    # Both slots keep the Planner's per-document directories and workflow journal here.
+    - chopin-state:/var/lib/chopin
+  restart: unless-stopped
+  # Longer than the turn wait, the unready window, the request wait and the commit of a cut.
+  stop_grace_period: 30s
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chopin
+      POSTGRES_USER: chopin
+      POSTGRES_PASSWORD: chopin
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chopin -d chopin"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    ports:
+      - "127.0.0.1:${OVERLAP_DB_PORT:-8083}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  chopin-a:
+    <<: *chopin
+    ports:
+      - "127.0.0.1:${OVERLAP_PORT_A:-8081}:8787"
+
+  chopin-b:
+    <<: *chopin
+    ports:
+      - "127.0.0.1:${OVERLAP_PORT_B:-8082}:8787"
+
+  # Starting the proxy starts neither slot, so a deploy can start the idle one by name.
+  caddy:
+    image: caddy:2.11-alpine
+    ports:
+      - "127.0.0.1:${OVERLAP_PORT:-8080}:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      CHOPIN_SITE: ":8080"
+
+volumes:
+  chopin-state:

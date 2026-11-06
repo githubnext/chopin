@@ -72,9 +72,12 @@ agent connection instead check their caller-supplied GitHub bearer token directl
 Every path applies the instance admission policy. Under `HARNESS=remote` the
 server calls no model provider; the attached client does.
 
-The application holds an exclusive database-wide writer lease. It refuses to
-start beside another active Chopin process and stops if it can no longer renew
-the lease. This is a single-writer design, not an application cluster.
+The application holds an exclusive database-wide writer lease and stops if it can
+no longer renew it. By default it refuses to start beside another active Chopin
+process. Started with `HANDOVER=wait`, a process instead waits in standby and takes
+the lease when the holder releases it, which is how a deploy overlaps two processes
+without a gap anyone sees; see [Deploys nobody can see](zero-downtime-deploys.md).
+Only the holder serves. This is a single-writer design, not an application cluster.
 
 ## Workspace packages
 

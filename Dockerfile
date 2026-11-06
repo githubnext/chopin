@@ -85,7 +85,9 @@ COPY --chown=bun:bun packages ./packages
 USER bun
 EXPOSE 8787
 
+# A process waiting in standby for the writer lease holds every other request, so the check asks
+# the liveness endpoint, which answers in standby too.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-	CMD ["bun", "-e", "let r=await fetch('http://127.0.0.1:8787/api/session');process.exit(r.ok?0:1)"]
+	CMD ["bun", "-e", "let r=await fetch('http://127.0.0.1:8787/api/health/live');process.exit(r.ok?0:1)"]
 
 CMD ["sh", "-c", "bun apps/server/src/storage/migrate.ts && exec bun apps/server/src/main.ts"]
