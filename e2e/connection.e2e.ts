@@ -494,6 +494,83 @@ test("a lost connection is the page's one notice: the composer's own strip is go
 	await expectOneNotice(page, wire, chatPane(page), "agent-off-desktop");
 });
 
+/**
+ * A /research the connection could not take is told by the page's one notice and nothing else:
+ * the composer's own "Reconnecting" line would be a second strip about the same connection, and
+ * is gone, not waiting, when the connection returns. The agent is on, so no other strip is there.
+ */
+async function expectResearchOffline(
+	page: Page,
+	wire: ReturnType<typeof route>,
+	chat: Locator,
+	shot: string,
+) {
+	let draft = chatInput(chat);
+	await expect(composerStrip(chat)).toHaveCount(0);
+
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	await fillChat(draft, "/research what changed upstream?");
+	await draft.press("Enter");
+	// The command stays in the draft for when the connection is back, and the page's notice is the
+	// only word about the connection, with no Retry of its own beside the composer.
+	await expectChatValue(draft, "/research what changed upstream?");
+	await expect(composerStrip(chat)).toHaveCount(0);
+	await expect(chat.getByText(/Reconnecting|try again in a moment/)).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
+	await expect(page.getByRole("alert")).toHaveCount(1);
+	await snap(page, `${shot}-offline`);
+
+	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(notice(page)).toHaveCount(0);
+	await expect(composerStrip(chat)).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
+}
+
+test("a /research pressed while offline adds no second connection strip, and nothing of it is left when the connection returns", async ({ join, page }) => {
+	await page.addInitScript(() => {
+		Math.random = () => 0.999;
+	});
+	await agentOn(page);
+	let wire = route(page);
+	await wire.ready;
+	await join("ana");
+	await expectResearchOffline(page, wire, chatPane(page), "research-offline-desktop");
+});
+
+test("on a phone, a /research pressed while offline adds no second connection strip either", async ({ baseURL, browser, room }) => {
+	test.setTimeout(90_000);
+	let wire: ReturnType<typeof route> | undefined;
+	let context = await browser.newContext({
+		baseURL,
+		deviceScaleFactor: 3,
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	try {
+		let page = await context.newPage();
+		await page.addInitScript(() => {
+			Math.random = () => 0.999;
+		});
+		await agentOn(page);
+		wire = route(page);
+		await wire.ready;
+		await authenticate(page, "ana", baseURL!);
+		await page.goto(roomPath(room));
+		await ready(page);
+		await tab(page, /^Chat/).tap();
+		await settled(page);
+		await expectResearchOffline(page, wire, chatPane(page), "research-offline-phone");
+		await expectNoHorizontalOverflow(page);
+	} finally {
+		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
+		await context.close();
+	}
+});
+
 test("on a phone, a lost connection is still the page's one notice, with nothing above the composer", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	let wire: ReturnType<typeof route> | undefined;

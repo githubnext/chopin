@@ -264,6 +264,10 @@ export function Chat(
 	let [sendError, setSendError] = useState<string>();
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
+	// A research request the connection could not take is told only while it is down.
+	useEffect(() => {
+		if (connected) setResearchBlock(block => (block === "disconnected" ? undefined : block));
+	}, [connected]);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
@@ -770,7 +774,7 @@ export function Chat(
 						text: sendError,
 						action: { label: "Retry", onClick: submit, disabled: !composerReady || submitting },
 					}
-					: researchBlock
+					: researchBlock && !(offline && researchBlock === "disconnected")
 					? {
 						tone: "info",
 						text: researchCopy[researchBlock],
