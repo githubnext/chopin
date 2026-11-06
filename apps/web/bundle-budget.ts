@@ -25,10 +25,11 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // A document's Machine, in the title menu every sidebar row shares, adds 500 B raw.
 // The sidebar's Machines menu, on Base UI Menu, adds about 50 B gzip on Linux; allow 200 B.
 // Reloading for a chunk a deploy removed, with the registry of unsaved work it asks, and the
-// reconnect that reads a server restart, add 1 KB raw; gzip stays inside its limit.
+// reconnect that reads a server restart, measure 258,947 B raw and 82,789 B gzip in the
+// container's Linux build; allow about 500 B raw and 200 B gzip above that.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 82_328,
-	raw: 259_000,
+	gzip: 83_000,
+	raw: 259_500,
 };
 
 export function enforceInitialJavaScript(
