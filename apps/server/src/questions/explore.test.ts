@@ -8,6 +8,7 @@ import { findings } from "./record-validation";
 import { member, opened, restart, seed } from "./text-response.test-fixtures";
 
 import * as Service from "../plan/service";
+import { expectPlain } from "../testing/plain-words";
 import type { ExploreDeps, ResearchSnapshot } from "./explore";
 
 const KEY = "0b7a8f8e-4a1c-4e8e-9d2f-1c3b5a7d9e01";
@@ -613,14 +614,21 @@ test("stop and page refuse while an implementation is active", async () => {
 		id: context.id,
 		finding: KEY,
 	}, deps().deps);
-	expect(ana.frames.at(-1)).toMatchObject({ ok: false });
+	expect(ana.frames.at(-1)).toMatchObject({
+		ok: false,
+		message: "An implementation is running; decisions cannot change",
+	});
 	await Explore.page(context.plan, context.server, context.channel.id, ana.ws, {
 		kind: "question:page",
 		ts: 0,
 		rid: "p",
 		id: context.id,
 	}, async () => "child");
-	expect(ana.frames.at(-1)).toMatchObject({ ok: false });
+	expect(ana.frames.at(-1)).toMatchObject({
+		ok: false,
+		message: "An implementation is running; decisions cannot change",
+	});
+	expectPlain(String((ana.frames.at(-1) as { message?: string }).message), "a refusal");
 	expect(Service.implementationActive(context.plan)).toBe(true);
 	expect(status(context)).toBe("running");
 });

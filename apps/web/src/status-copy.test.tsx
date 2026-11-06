@@ -24,17 +24,12 @@ import {
 import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
 import { OFFLINE_MESSAGE, OfflineAnnouncement, OfflineNoticeBody } from "./offline-notice";
 import { offlineAnnouncement } from "@chopin/editor";
+import { INTERNAL, INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
 import type { Session } from "@chopin/protocol";
 import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
 import type { MachineChoice } from "./machine-choice";
-
-/**
- * What an internal concept looks like to a person: any of these in a status is a leak. `detach` is
- * its own word (it contains `tach`, not `attach`), and `attach` takes every form of it.
- */
-const INTERNAL = /planner|detach|attach|\bheld\b|\bdecisions?\b|@chopin/i;
 
 const AT = "2026-11-04T18:29:00.000Z";
 
@@ -75,7 +70,18 @@ test("the leak check flags every banned term in any form, and none of the plain 
 		"@chopin",
 		"Ask @Chopin",
 	];
-	for (let leak of leaks) expect(INTERNAL.test(leak), leak).toBe(true);
+	for (let leak of leaks) expect(INTERNAL_IN_STATUS.test(leak), leak).toBe(true);
+	// Decision and Decisions are the product's own word: only text about a machine and its connection
+	// must not use them, so the pattern for everything else flags the other terms alone.
+	let product = [
+		"Decision",
+		"decisions",
+		"Open Decisions stay answerable",
+		"Waiting on 2 Decisions",
+	];
+	for (let leak of leaks) {
+		expect(INTERNAL.test(leak), leak).toBe(!product.includes(leak));
+	}
 	let plain = [
 		"Connecting to Build box",
 		"Can't connect to Build box",
@@ -87,7 +93,10 @@ test("the leak check flags every banned term in any form, and none of the plain 
 		"The shelled output was upheld",
 		"Chopin",
 	];
-	for (let words of plain) expect(INTERNAL.test(words), words).toBe(false);
+	for (let words of [...plain, ...product]) {
+		expect(INTERNAL.test(words), words).toBe(false);
+	}
+	for (let words of plain) expect(INTERNAL_IN_STATUS.test(words), words).toBe(false);
 });
 
 function statuses(): PlannerStatus[] {
@@ -137,9 +146,10 @@ function words(markup: string): string[] {
 	return [...attributes, ...text];
 }
 
+/** Text about a machine and its connection: none of Chopin's own terms, Decisions included. */
 function expectPlain(label: string, texts: readonly string[]): void {
 	for (let text of texts) {
-		expect(INTERNAL.test(text), `${label}: "${text}"`).toBe(false);
+		expect(INTERNAL_IN_STATUS.test(text), `${label}: "${text}"`).toBe(false);
 	}
 }
 
@@ -309,7 +319,9 @@ test("every reason Build plan waits and every refusal Build shows is plain, mach
 		["accepted comments awaiting plan changes", undefined],
 		["implementation is already active", undefined],
 		["the queue is full", undefined],
+		["the reply queue is full", undefined],
 		["Planner is not running", undefined],
+		["Chopin is not running", undefined],
 		["write access is needed", undefined],
 		["this cannot be built", undefined],
 	] as const;

@@ -1008,7 +1008,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 				text: "The queue is full. Wait for the current turn to finish.",
 				ts: now(),
 			});
-			return fail(ws, msg.rid, "the Planner queue is full");
+			return fail(ws, msg.rid, "the reply queue is full");
 		}
 		let waiting: Waiting = {
 			id: requestId,
@@ -1224,7 +1224,7 @@ export function draftTasks(
 ): Promise<TaskDraftResult> {
 	let { chat } = context;
 	if (chat.pendingSends >= MAX_PENDING_SENDS) {
-		return Promise.resolve({ ok: false, reason: "the Planner queue is full" });
+		return Promise.resolve({ ok: false, reason: "the reply queue is full" });
 	}
 	chat.pendingSends++;
 	let post = () => postDraft(context, handle, planRevision, text, said);
@@ -1242,7 +1242,7 @@ async function postDraft(
 	said: string,
 ): Promise<TaskDraftResult> {
 	let { chat, config, room, server } = context;
-	if (!config.agent) return { ok: false, reason: "the Planner is not running" };
+	if (!config.agent) return { ok: false, reason: "Chopin is not running" };
 	if (chat.closed) return { ok: false, reason: "chat is closed" };
 	// Under HARNESS=remote a draft queued with no Planner attached would never run.
 	let unattached = await context.plannerNotAttached?.();
@@ -1250,7 +1250,7 @@ async function postDraft(
 	let existing = liveDraft(chat);
 	if (existing) return { ok: true, draft: existing, state: existing.state, existing: true };
 	// The draft waits in the queue even when the Planner is idle, so it counts against it.
-	if (chat.waiting.length >= MAX_QUEUE) return { ok: false, reason: "the Planner queue is full" };
+	if (chat.waiting.length >= MAX_QUEUE) return { ok: false, reason: "the reply queue is full" };
 	let draft: TaskDraft = { id: ulid(), planRevision, state: "queued" };
 	chat.draft = draft;
 	let waiting: Waiting = {
@@ -1361,15 +1361,15 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			id: ulid(),
 			author: { kind: "system" },
 			text: paused
-				? `@${ws.data.handle} stopped the Planner and paused its workflows.`
+				? `@${ws.data.handle} stopped Chopin and paused its workflows.`
 				: outcome === "held"
-				? `@${ws.data.handle} asked to stop the Planner. Its connection is down, `
+				? `@${ws.data.handle} asked Chopin to stop. Its machine is disconnected, `
 					+ "so its workflows will pause when it reconnects."
 				: outcome === "unconfirmed"
-				? `@${ws.data.handle} asked the Planner to stop its workflows. It has not confirmed `
-					+ "yet, and if its connection is down they will pause when it reconnects."
+				? `@${ws.data.handle} asked Chopin to stop its workflows. It has not confirmed `
+					+ "yet, and if its machine is disconnected they will pause when it reconnects."
 				: outcome === "failed" && !turn
-				? `@${ws.data.handle} asked to stop the Planner, but its workflows could not be paused.`
+				? `@${ws.data.handle} asked Chopin to stop, but its workflows could not be paused.`
 				: `@${ws.data.handle} stopped the turn.`,
 			ts: now(),
 		});
@@ -1395,7 +1395,7 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: `@${ws.data.handle} stopped the Planner and withdrew its open question.`,
+				text: `@${ws.data.handle} stopped Chopin and withdrew its open question.`,
 				ts: now(),
 			});
 		}
@@ -1451,12 +1451,12 @@ export async function resume(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
 	let session = chat.retained?.session;
 	if (!session?.resumeRuns || !session.runs?.()?.paused.length) return;
-	let text = `@${ws.data.handle} resumed the Planner's workflows.`;
+	let text = `@${ws.data.handle} resumed Chopin's workflows.`;
 	try {
 		await session.resumeRuns();
 	} catch (err) {
 		console.error("[chat] resuming workflow runs failed:", err);
-		text = "The Planner's workflows could not be resumed.";
+		text = "Chopin's workflows could not be resumed.";
 	}
 	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
 }
@@ -1485,10 +1485,10 @@ export async function controlRun(
 		let outcome = await control(run.id);
 		if (outcome === "held") {
 			text = `@${ws.data.handle} asked to pause ${run.name}. `
-				+ "It will pause when the Planner reconnects.";
+				+ "It will pause when the machine reconnects.";
 		} else if (outcome === "unconfirmed") {
-			text = `@${ws.data.handle} asked to pause ${run.name}. The Planner has not confirmed `
-				+ "yet, and if its connection is down it will pause when it reconnects.";
+			text = `@${ws.data.handle} asked to pause ${run.name}. Chopin has not confirmed `
+				+ "yet, and if its machine is disconnected it will pause when it reconnects.";
 		}
 	} catch (err) {
 		console.error(`[chat] ${pausing ? "pausing" : "resuming"} workflow run failed:`, err);
@@ -1875,12 +1875,12 @@ function linkNotice(context: Room, session: PlannerSession): void {
 		id: ulid(),
 		author: { kind: "system" },
 		text: down
-			? "The Planner disconnected. Its workflows and open Decisions are kept, answers will "
+			? "The machine disconnected. Its workflows and open questions are kept, answers will "
 				+ "reach it when it reconnects, and nothing ends until it does unless someone presses Stop."
 				+ (session.keptStop?.()
 					? " A Stop it had not confirmed is kept and will be delivered when it reconnects."
 					: "")
-			: "The Planner reconnected and carries on.",
+			: "The machine reconnected and carries on.",
 		ts: now(),
 	});
 }
@@ -2207,7 +2207,7 @@ async function repositorySession(
 			|| binding.credentialRevision !== owner.access.revision
 			|| binding.repository.id !== repository.id
 			|| chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
-		) throw new PlannerOwnerUnavailableError("The Planner owner changed while opening. Try again.");
+		) throw new PlannerOwnerUnavailableError("Chopin's owner changed while opening. Try again.");
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -2242,9 +2242,9 @@ async function repositorySession(
 		});
 		if (!result.ok) {
 			if (binding.signal.aborted) {
-				throw new PlannerOwnerUnavailableError("Planner owner unavailable");
+				throw new PlannerOwnerUnavailableError("Chopin's owner is unavailable");
 			}
-			throw new Error(`Planner session unavailable (${result.error.kind})`);
+			throw new Error(`Chopin's session is unavailable (${result.error.kind})`);
 		}
 		opened = result.value;
 		if (
@@ -2252,7 +2252,7 @@ async function repositorySession(
 			|| binding.signal.aborted || !await binding.revalidate()
 		) {
 			throw new PlannerOwnerUnavailableError(
-				"The Planner session changed while opening. Try again.",
+				"Chopin's session changed while opening. Try again.",
 			);
 		}
 		chat.agent = opened;
@@ -2443,7 +2443,7 @@ async function run(
 		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
-			throw new Error("The Planner session changed before the turn started. Try again.");
+			throw new Error("Chopin's session changed before the turn started. Try again.");
 		}
 		chat.jobToolNames = jobTurn
 			? new Set(opened.session.activeTools ?? PLANNER_TOOL_NAMES)
@@ -2539,8 +2539,8 @@ async function run(
 				id: ulid(),
 				author: { kind: "system" },
 				text: opened?.session.suspended?.()
-					? "The Planner's connection dropped during this reply. Its workflows and open "
-						+ "Decisions are kept; ask again once it has reconnected."
+					? "The machine's connection dropped during this reply. Its workflows and open "
+						+ "questions are kept; ask again once it has reconnected."
 					: err instanceof Error
 					? err.message
 					: "The agent could not be reached.",
@@ -2582,7 +2582,7 @@ async function run(
 						say(chat, server, room, {
 							id: ulid(),
 							author: { kind: "system" },
-							text: "The Planner session could not close cleanly. Try again.",
+							text: "Chopin's session could not close cleanly. Try again.",
 							ts: now(),
 						});
 					} catch (noticeError) {
@@ -2892,7 +2892,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			return;
 		}
 		case "tool-approval-request":
-			chat.interruption = "Planner tool approval was denied.";
+			chat.interruption = "Chopin's tool approval was denied.";
 			chat.turnController?.abort();
 			return;
 		case "error":
@@ -2933,7 +2933,7 @@ function conclude(
 		: undefined;
 	let detail = name === "read_reference"
 		? success
-			? "Reference content was returned privately to the Planner."
+			? "Reference content was returned privately to Chopin."
 			: "The reference could not be read."
 		: failure
 		? textOutput(failure.message)
@@ -2991,7 +2991,7 @@ function permitted(context: Room, name: string): boolean {
 	let { chat } = context;
 	if ((chat.agent?.activeTools ?? PLANNER_TOOL_NAMES).includes(name)) return true;
 	console.error(`[chat] boundary failure: inactive tool ${name}`);
-	chat.interruption = `Planner tool boundary failure: ${name}`;
+	chat.interruption = `Chopin's tool boundary failure: ${name}`;
 	chat.turnController?.abort();
 	return false;
 }

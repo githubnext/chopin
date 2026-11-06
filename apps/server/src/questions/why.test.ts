@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import * as Service from "../plan/service";
+import { expectPlain } from "../testing/plain-words";
 import { decided, reopen } from "./card-reopen.test-fixtures";
 import { member } from "./text-response.test-fixtures";
 import { normalizeRecord } from "./records";
@@ -134,7 +135,11 @@ test("an empty edit clears the why, and only a settled decision has one", async 
 	expect(frames.at(-1)).toMatchObject({ ok: false });
 	context.plan.records.set(context.id, { ...record, status: "reopened" });
 	await Questions.setWhy(context.plan, context.server, "test", ws, ask(context.id, "Because."));
-	expect(frames.at(-1)).toMatchObject({ ok: false, message: "Only a settled decision has a why" });
+	expect(frames.at(-1)).toMatchObject({
+		ok: false,
+		message: "Only a settled decision has a why",
+	});
+	expectPlain(String((frames.at(-1) as { message?: string }).message), "a why's refusal");
 });
 
 test("a failed commit rolls the why back and announces nothing", async () => {

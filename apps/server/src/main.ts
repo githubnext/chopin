@@ -2492,7 +2492,7 @@ async function credentialsWillRotate(sessionId: string, revision: number): Promi
 			() => true,
 			sessionId,
 			revision,
-			"GitHub credentials refreshed, so the Planner session was restarted. Ask it to continue.",
+			"GitHub credentials refreshed, so Chopin's session was restarted. Ask it to continue.",
 		),
 		jobs,
 	]);
