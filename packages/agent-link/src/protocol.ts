@@ -36,7 +36,18 @@ export const AGENT_FEATURES = {
 	 * ends everything it held.
 	 */
 	resumableSessions: "resumable-sessions",
+	/**
+	 * Before the server closes a link with 1012 because it is restarting, it sends `restarting`
+	 * with `reconnectWithinMs`, the time a new process is expected to take over in. A client that
+	 * offers the feature connects again at once on that close, and retries a `resume` refused
+	 * with `retry` every 250 ms until `reconnectWithinMs` has passed, then returns to its own
+	 * backoff. Without the feature the server only closes with 1012.
+	 */
+	restartNotice: "restart-notice",
 } as const;
+
+/** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
+export const RESTART_RESUME_RETRY_MS = 250;
 
 /** The upgrade request header naming the features a client asks for, comma-separated. */
 export const AGENT_FEATURES_HEADER = "chopin-agent-features";
@@ -49,6 +60,8 @@ export const LINK_CLOSE = {
 	detached: 1000,
 	/** The client answered no protocol ping for the server's timeout. */
 	unresponsive: 1001,
+	/** The server is restarting; the client connects again at once. */
+	restarting: 1012,
 	malformed: 1008,
 	tooLarge: 1009,
 	failed: 1011,
@@ -378,6 +391,11 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		 * `resume`. Absent on every refusal that is a decision about this account or document.
 		 */
 		retry: z.literal(true).optional(),
+	}),
+	z.strictObject({
+		type: z.literal("restarting"),
+		/** The longest a new process is expected to take to take over, in milliseconds. */
+		reconnectWithinMs: z.number().int().nonnegative(),
 	}),
 	z.strictObject({
 		type: z.literal("error"),

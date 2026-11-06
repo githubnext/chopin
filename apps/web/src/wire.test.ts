@@ -76,10 +76,13 @@ function restartable(): {
 	deny: () => void;
 	drop: () => void;
 	restart: () => void;
+	announce: (reconnectWithinMs: number) => void;
 	probes: () => number;
+	urls: () => string[];
 } {
 	let denied = false;
 	let probes = 0;
+	let urls: string[] = [];
 	let sockets = new Set<ServerWebSocket<undefined>>();
 	let server = Bun.serve<undefined>({
 		port: 0,
@@ -90,6 +93,7 @@ function restartable(): {
 				return new Response(null, { status: denied ? 401 : 204 });
 			}
 			if (denied) return new Response("authentication required", { status: 401 });
+			urls.push(req.url);
 			return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
 		},
 		websocket: {
@@ -111,7 +115,12 @@ function restartable(): {
 		restart: () => {
 			for (let socket of sockets) socket.close(1012, "server restarting");
 		},
+		announce: reconnectWithinMs => {
+			let frame = JSON.stringify({ kind: "session:restarting", ts: 1, reconnectWithinMs });
+			for (let socket of sockets) socket.send(frame);
+		},
 		probes: () => probes,
+		urls: () => urls,
 		deny: () => {
 			denied = true;
 			for (let socket of sockets) socket.terminate();
@@ -452,6 +461,33 @@ describe("status", () => {
 			expect(error).toBeInstanceOf(WireLost);
 			expect((error as WireLost).restarting).toBe(false);
 			expect((error as WireLost).message).toBe("connection lost");
+		});
+
+		it("reads a drop that follows session:restarting as a restart, whatever its close code", async () => {
+			let service = restartable();
+			let wire = connect(service.port, []);
+			await until(() => wire.status === "connected", "connected");
+
+			// The first attempt waits a drawn jitter of up to a second, and a failed one up to a second
+			// more: together as long as this test waits for the connection to be back, so on a loaded
+			// machine it timed out. Drawn as 0.3, the jitter is 300 ms, long enough to see the restart
+			// and short enough to leave the wait to the machine.
+			let random = Math.random;
+			Math.random = () => 0.3;
+			try {
+				service.announce(30_000);
+				service.drop();
+				await until(() => wire.restarting, "marked as a restart");
+				await until(() => wire.status === "connected", "back");
+			} finally {
+				Math.random = random;
+			}
+			expect(wire.restarting).toBe(false);
+
+			// The announcement belongs to the socket that heard it: a later plain drop is not a restart.
+			service.drop();
+			await until(() => wire.status === "reconnecting", "reconnecting");
+			expect(wire.restarting).toBe(false);
 		});
 
 		it("is not a restart when the connection is merely dropped", async () => {
@@ -900,6 +936,33 @@ describe("status", () => {
  * session, in silence. The same shape as Lexical's update listeners, and just
  * as hard to notice: a broken sidecar would stop the transcript arriving.
  */
+describe("the build a socket names", () => {
+	it("is sent as a query parameter when the page has an entry script, and left out when it has none", async () => {
+		let page = globalThis.document;
+		try {
+			let service = restartable();
+			let wire = connect(service.port, []);
+			await until(() => wire.status === "connected", "connected");
+			expect(new URL(service.urls().at(-1)!).searchParams.has("build")).toBe(false);
+			wire.dispose();
+
+			globalThis.document = {
+				querySelector: () => ({ getAttribute: () => "/assets/index-AbCd1234.js" }),
+				addEventListener() {},
+				removeEventListener() {},
+			} as unknown as Document;
+			let again = connect(service.port, []);
+			await until(() => service.urls().length === 2, "second attempt");
+			expect(new URL(service.urls().at(-1)!).searchParams.get("build")).toBe(
+				"/assets/index-AbCd1234.js",
+			);
+			again.dispose();
+		} finally {
+			globalThis.document = page;
+		}
+	});
+});
+
 describe("fanning a frame out", () => {
 	/** Sends every frame straight back, so a real one reaches the listeners. */
 	function echo(): number {

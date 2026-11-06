@@ -1,5 +1,7 @@
 import { SERVICE_RESTART } from "@chopin/protocol/restart";
 
+import { tell } from "../wire";
+
 import type { ServerWebSocket } from "bun";
 
 type Listener = { stop(closeActiveConnections?: boolean): Promise<void> };
@@ -19,6 +21,17 @@ export class OpenSockets {
 
 	closed(ws: ServerWebSocket<unknown>): void {
 		this.#open.delete(ws);
+	}
+
+	/**
+	 * Tell every open socket that it is about to close because the server is restarting, and that a
+	 * new process is expected within `reconnectWithinMs`. A client that hears it treats whatever
+	 * close follows as a restart; an older one ignores the frame.
+	 */
+	announceRestart(reconnectWithinMs: number): void {
+		for (let ws of this.#open) {
+			tell(ws, { kind: "session:restarting", ts: 0, reconnectWithinMs });
+		}
 	}
 
 	/** Stop accepting connections, close every open socket with 1012, then drop what is left. */

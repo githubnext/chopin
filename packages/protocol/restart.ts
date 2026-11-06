@@ -30,3 +30,20 @@ export const REFUSAL_HEADER = "x-chopin-refusal";
  * within that time is not allowed to show.
  */
 export const RESTART_QUIET_MS = 5000;
+
+/** The query parameter of a socket's URL that names the build of the page that opens it. */
+export const BUILD_PARAM = "build";
+
+/**
+ * The entry script a page's HTML loads, which names its build: any file of the build that changes
+ * changes the entry's hash. Undefined when the HTML loads none.
+ */
+export function entryOf(html: string): string | undefined {
+	for (let [tag] of html.matchAll(/<script\b[^>]*>/g)) {
+		if (/\btype="module"/.test(tag)) {
+			let source = /\bsrc="([^"]+)"/.exec(tag);
+			if (source) return source[1];
+		}
+	}
+	return undefined;
+}

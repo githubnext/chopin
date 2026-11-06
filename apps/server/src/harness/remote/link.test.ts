@@ -950,6 +950,7 @@ describe("Agent connection protocol", () => {
 				["run-stage-deltas", ["run-stage-deltas"]],
 				["future-thing, run-stage-deltas", ["run-stage-deltas"]],
 				["future-thing", []],
+				["resumable-sessions, restart-notice", ["resumable-sessions", "restart-notice"]],
 			] as const
 		) {
 			let raw = await rawLink(server.url, undefined, header);

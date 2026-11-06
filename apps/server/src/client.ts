@@ -12,8 +12,10 @@
  * machinery that would have to relay an upgrade does not exist.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { entryOf } from "@chopin/protocol/restart";
 
 /** Hop-by-hop headers, which describe one connection and must not be forwarded. */
 const HOP_BY_HOP = new Set([
@@ -109,4 +111,16 @@ export async function serve(url: URL, dir: string): Promise<Response> {
 	return new Response(Bun.file(join(dir, "index.html")), {
 		headers: { "cache-control": "no-cache" },
 	});
+}
+
+/**
+ * The build of the client in `dir`: the entry script its page loads, which is also what a tab
+ * reports as its own. Undefined when there is no built client, as in development.
+ */
+export function clientBuild(dir: string): string | undefined {
+	try {
+		return entryOf(readFileSync(join(dir, "index.html"), "utf8"));
+	} catch {
+		return undefined;
+	}
 }

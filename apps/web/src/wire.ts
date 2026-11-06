@@ -10,10 +10,17 @@
  * same build work on localhost, over a LAN address, and through a tunnel.
  */
 
-import { REFUSAL_HEADER } from "@chopin/protocol/restart";
+import { BUILD_PARAM, REFUSAL_HEADER } from "@chopin/protocol/restart";
 
 import { activeActor } from "./active-actor";
-import { lossOf, quietLeft, refusalOf, restartDelay, restartRetryDelay } from "./wire-loss";
+import {
+	lossOf,
+	quietLeft,
+	refusalOf,
+	restartDelay,
+	restartRetryDelay,
+	runningBuild,
+} from "./wire-loss";
 
 import type { Session } from "@chopin/protocol";
 
@@ -112,6 +119,8 @@ function endpoint(options: WireOptions): string {
 		let actor = activeActor();
 		if (actor) url.searchParams.set("actor", actor.id);
 	}
+	let build = runningBuild(globalThis.document);
+	if (build) url.searchParams.set(BUILD_PARAM, build);
 	return url.href;
 }
 
@@ -151,6 +160,8 @@ export class Wire {
 	#everConnected = false;
 	/** Whether the current outage began with the server saying it is restarting. */
 	#restarting = false;
+	/** Whether the open socket was told by `session:restarting` that its close is a restart. */
+	#announced = false;
 	#disposed = false;
 	#terminal = false;
 	#connectionGeneration = 0;
@@ -256,6 +267,7 @@ export class Wire {
 
 		let socket = new WebSocket(endpoint(this.#options));
 		this.#socket = socket;
+		this.#announced = false;
 
 		let opened = false;
 		socket.addEventListener("open", () => {
@@ -284,7 +296,8 @@ export class Wire {
 			// A socket superseded by a reconnect must not drive status or retries.
 			if (this.#socket !== socket) return;
 			this.#socket = undefined;
-			let loss = lossOf(event.code);
+			let loss = lossOf(event.code, this.#announced);
+			this.#announced = false;
 			if (loss === "deleted") {
 				this.#deleted();
 				return;
@@ -443,6 +456,7 @@ export class Wire {
 			}
 		}
 		if (frame.kind === "session:deleted") this.#deleted();
+		if (frame.kind === "session:restarting") this.#announced = true;
 	}
 
 	#deleted(): void {

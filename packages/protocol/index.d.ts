@@ -48,6 +48,7 @@ export declare namespace Session {
 		| Channel
 		| Deleted
 		| Planner
+		| Restarting
 		| Failure
 		| Ping;
 
@@ -80,6 +81,12 @@ export declare namespace Session {
 		webResearch: boolean;
 		chatReferences: boolean;
 		chatSendAcks: boolean;
+		/**
+		 * The build of the client this server serves: the entry script its page names. A tab whose own
+		 * build, sent as the socket's `build` query parameter, differs knows a newer server answered.
+		 * Absent when the server serves no built client.
+		 */
+		build?: string;
 	};
 
 	/** Durable channel metadata changed while this room was open. */
@@ -143,6 +150,13 @@ export declare namespace Session {
 	 */
 	export type Planner = KIND<"session:planner"> & { planner: PlannerAttachment };
 
+	/**
+	 * The server is about to close this socket with 1012 because it is restarting, and a new process
+	 * is expected to take over within `reconnectWithinMs`. Sent just before the close, so a client
+	 * that sees the close as anything but 1012 still treats it as a restart. Older clients ignore it.
+	 */
+	export type Restarting = KIND<"session:restarting"> & { reconnectWithinMs: number };
+
 	/** Broadcast whenever the membership of the room changes. */
 	export type Presence = KIND<"session:presence"> & {
 		members: Member[];
@@ -178,6 +192,7 @@ export declare namespace Sidebar {
 		| Catalogue
 		| Watched
 		| Snapshot
+		| Session.Restarting
 		| Session.Failure
 		| Session.Ping;
 

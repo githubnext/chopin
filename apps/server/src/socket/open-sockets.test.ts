@@ -33,12 +33,16 @@ function serve(sockets: OpenSockets) {
 	return server;
 }
 
-async function connect(server: Server<undefined>): Promise<{ closed: Promise<CloseEvent> }> {
+async function connect(
+	server: Server<undefined>,
+): Promise<{ closed: Promise<CloseEvent>; frames: unknown[] }> {
 	let client = new WebSocket(`ws://127.0.0.1:${server.port}/`);
 	clients.push(client);
+	let frames: unknown[] = [];
+	client.addEventListener("message", event => frames.push(JSON.parse(String(event.data))));
 	let closed = new Promise<CloseEvent>(resolve => client.addEventListener("close", resolve));
 	await new Promise(resolve => client.addEventListener("open", resolve, { once: true }));
-	return { closed };
+	return { closed, frames };
 }
 
 test("every open socket is closed with 1012, where server.stop(true) alone says 1001", async () => {
@@ -71,4 +75,20 @@ test("a socket that closed on its own is forgotten, and the listener stops takin
 	await sockets.stopForRestart(server);
 	expect((await staying.closed).code).toBe(SERVICE_RESTART);
 	await expect(fetch(`http://127.0.0.1:${server.port}/`)).rejects.toThrow();
+});
+
+test("a restart is announced to every open socket, with when to come back, before it is closed", async () => {
+	let sockets = new OpenSockets();
+	let server = serve(sockets);
+	let open = await Promise.all([connect(server), connect(server)]);
+	sockets.announceRestart(10_000);
+	await sockets.stopForRestart(server);
+	for (let socket of open) {
+		expect((await socket.closed).code).toBe(SERVICE_RESTART);
+		expect(socket.frames).toHaveLength(1);
+		expect(socket.frames[0]).toMatchObject({
+			kind: "session:restarting",
+			reconnectWithinMs: 10_000,
+		});
+	}
 });

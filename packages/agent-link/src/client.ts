@@ -28,6 +28,9 @@ export const WIRE = {
 	runStageDeltas: "run-stage-deltas",
 	decisionOptionPreviews: "decision-option-previews",
 	resumableSessions: "resumable-sessions",
+	restartNotice: "restart-notice",
+	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
+	restartResumeRetryMs: 250,
 } as const;
 
 export class AgentRefused extends Error {
@@ -117,7 +120,17 @@ export type Resumption = {
 	readonly asks: ReadonlyMap<string, PendingAsk>;
 };
 
-export type LinkClosed = { code: number; reason: string };
+export type LinkClosed = {
+	code: number;
+	reason: string;
+	/**
+	 * Set when the server said, with `restarting` before it closed the link, that it is restarting
+	 * and a new process is expected within this many milliseconds. Connect again at once, and retry
+	 * a `resume` refused with `retry` every `WIRE.restartResumeRetryMs` until this time has passed,
+	 * then go back to the client's own backoff.
+	 */
+	reconnectWithinMs?: number;
+};
 
 export type InputOptions = {
 	workflowRunId?: string;
@@ -200,7 +213,7 @@ export function linkSocket(url: URL, token: string, resumable = false): WebSocke
 			[WIRE.featuresHeader]: [
 				WIRE.runStageDeltas,
 				WIRE.decisionOptionPreviews,
-				...(resumable ? [WIRE.resumableSessions] : []),
+				...(resumable ? [WIRE.resumableSessions, WIRE.restartNotice] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -295,6 +308,8 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 	let ready = false;
 	/** Whether this link ended by choice or by the server's decision, so there is nothing to resume. */
 	let ended = false;
+	/** What the server said, just before closing, about when it expects to be back. */
+	let restartWithin: number | undefined;
 	let route = { send: (message: ClientMessage) => send(message) };
 
 	function send(message: ClientMessage): boolean {
@@ -433,6 +448,9 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 					send({ type: "input-received", request: message.request });
 				}
 				return;
+			case "restarting":
+				restartWithin = message.reconnectWithinMs;
+				return;
 			case "stop":
 			case "resume":
 				try {
@@ -566,9 +584,12 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		});
 	});
 	let released = false;
-	function release(closed: LinkClosed): void {
+	function release(reported: LinkClosed): void {
 		if (released) return;
 		released = true;
+		let closed = restartWithin === undefined
+			? reported
+			: { ...reported, reconnectWithinMs: restartWithin };
 		for (let turn of turns.values()) {
 			settleCalls(turn, LINK_CLOSED);
 			turn.controller.abort();

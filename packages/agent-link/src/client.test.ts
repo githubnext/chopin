@@ -113,7 +113,7 @@ describe("Agent connection client", () => {
 		let server = fakeServer({ features: ["run-stage-deltas"] });
 		let client = await connect(server, { turn() {} });
 		expect(server.asked).toEqual([
-			"run-stage-deltas, decision-option-previews, resumable-sessions",
+			"run-stage-deltas, decision-option-previews, resumable-sessions, restart-notice",
 		]);
 		expect(client.features).toEqual(["run-stage-deltas"]);
 		let stages = Array.from({ length: 2_000 }, (_, index) => ({
@@ -246,6 +246,38 @@ describe("Agent connection client", () => {
 		stops.push(() => next.detach());
 		server.send({ type: "input-result", request: second.request, status: "answered", value: true });
 		expect(await kept).toMatchObject({ status: "answered", value: true });
+	});
+
+	it("offers restart-notice only as a resumable client, and says when the server expects to be back", async () => {
+		let server = fakeServer({ features: ["resumable-sessions", "restart-notice"] });
+		let attaching = connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+		});
+		await server.next("resume");
+		server.send({ type: "resumed", sessions: [] });
+		let client = await attaching;
+		server.send({ type: "restarting", reconnectWithinMs: 10_000 });
+		server.send({ type: "start", session: "s", mode: "planner" });
+		await server.next("started");
+		server.close();
+		expect(await client.closed).toMatchObject({ reconnectWithinMs: 10_000 });
+		expect(await client.resumption).toBeDefined();
+
+		let plain = fakeServer();
+		let opted = await connectAgent({
+			url: plain.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+			resumable: false,
+		});
+		stops.push(() => opted.detach());
+		expect(plain.asked).toEqual(["run-stage-deltas, decision-option-previews"]);
+		plain.close();
+		expect(await opted.closed).not.toHaveProperty("reconnectWithinMs");
 	});
 
 	/** A resumable client with a session `s` and one question asked, after its link dropped. */

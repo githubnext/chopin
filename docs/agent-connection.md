@@ -109,11 +109,12 @@ that validates `attached` strictly and never asks never sees the field. A server
 from before features ignores the header and answers without `features`; a
 client must then use none of them.
 
-| Feature                    | What it allows                                                                                                  |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `run-stage-deltas`         | [Delta run cards](#run-stage-deltas), with no stage count limit                                                 |
-| `decision-option-previews` | An option's [`preview`](#option-previews) as its own visual, and the `upload_plan_image` host tool              |
-| `resumable-sessions`       | [Resuming](#resuming-after-a-dropped-link) the sessions, runs and questions of a link that dropped unexpectedly |
+| Feature                    | What it allows                                                                                                                                                 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run-stage-deltas`         | [Delta run cards](#run-stage-deltas), with no stage count limit                                                                                                |
+| `decision-option-previews` | An option's [`preview`](#option-previews) as its own visual, and the `upload_plan_image` host tool                                                             |
+| `resumable-sessions`       | [Resuming](#resuming-after-a-dropped-link) the sessions, runs and questions of a link that dropped unexpectedly                                                |
+| `restart-notice`           | A [`restarting`](#server-to-client) message before the server closes the link with 1012, and the [client rule](#when-the-server-is-restarting) that follows it |
 
 ### Pings
 
@@ -411,6 +412,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "stop", "request": "", "session": "", "run?": "" }
 { "type": "resume", "request": "", "session": "", "run?": "" }
 { "type": "destroy", "session": "" }
+{ "type": "restarting", "reconnectWithinMs": 0 }
 { "type": "error", "code": "malformed-message", "message": "" }
 ```
 
@@ -450,6 +452,10 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   has since ended, only has the refusal logged for a `stop` sent again.
 - `destroy` ends the session; abandon its turn, its waiting host calls, and its
   questions.
+- `restarting`, with `restart-notice`, precedes a close with 1012 when the server is
+  restarting. `reconnectWithinMs` is how long, in milliseconds, a new process is expected to
+  take to take over; see [When the server is restarting](#when-the-server-is-restarting). A
+  client that did not offer the feature never receives it.
 - `error` precedes a close for a protocol violation (see [Closing](#closing)).
 
 ## Client to server
@@ -913,7 +919,7 @@ needs no feature check: an older Chopin shows the same text unformatted.
 | 1008       | `error` with `malformed-message` or `protocol` | Unparseable, invalid, or out-of-order message   |
 | 1009       | `error` with `message-too-large`               | A frame over 2 MiB                              |
 | 1011       | `refused` with `unavailable`                   | The server could not check the document         |
-| 1012       | nothing                                        | The server is restarting                        |
+| 1012       | `restarting`, with `restart-notice`            | The server is restarting                        |
 | 4401       | `refused`                                      | `sign-in-required`                              |
 | 4403       | `refused`                                      | `repository-forbidden` or `access-revoked`      |
 | 4404       | `refused`                                      | `document-unavailable` or `document-archived`   |
@@ -1029,6 +1035,30 @@ not apply to it.
   questions and show the runs as `stopped`, and a later `resume` finds nothing (a
   restart is described below). A person with write access can always end a disconnected
   Planner by resetting it.
+
+#### When the server is restarting
+
+A server that is restarting closes every link with 1012. A link that offered
+`resumable-sessions` keeps what it held, as for any close it did not choose: 1012 is not
+one of the closes that ends the link for good, and, unlike 1001, it says the server will be
+back. A client that also offers `restart-notice` is told how soon, with `restarting` just
+before the close, and follows this rule:
+
+- On a 1012 close, connect again at once. Do not wait out the backoff: a proxy in front of
+  Chopin holds the upgrade until the new process answers.
+- Send `resume` as usual. The new process may refuse it with `unavailable` and `retry`, for
+  instance before it has restored the owner's browser sign-in (see
+  [Ownership](#ownership)). Retry the same `resume` every 250 ms until `reconnectWithinMs`
+  has passed since the close, then go back to the client's own backoff.
+- Any other `refused`, and any `error`, is final, as for a resume at any other time.
+
+A client without the feature sees only the 1012 close and resumes on its own backoff. If
+that is longer than the server's hand-over window, the document shows its Planner as
+disconnected once the window ends, as it does for any dropped link. The package client
+offers the feature with `resumable-sessions` and reports `reconnectWithinMs` on the
+`LinkClosed` its `closed` promise settles with; it leaves connecting again to its caller, so
+the rule is for the backend to follow. The test client in `apps/server/src/testing/agent-link.ts`
+(`resumeAfterRestart`) implements it.
 
 #### After a server restart
 

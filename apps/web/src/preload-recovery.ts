@@ -10,6 +10,7 @@
  */
 
 import { hasPendingWork } from "@chopin/protocol/pending-work";
+import { entryOf } from "@chopin/protocol/restart";
 
 const RELOADED_AT = "chopin:preload-reloaded-at";
 
@@ -18,20 +19,6 @@ const RELOADED_AT = "chopin:preload-reloaded-at";
  * really broken cannot reload the page for ever.
  */
 export const RELOAD_GAP_MS = 10_000;
-
-/**
- * The entry script a page's HTML loads, which names its build: any file of the build that changes
- * changes the entry's hash. Undefined when the HTML loads none.
- */
-export function entryOf(html: string): string | undefined {
-	for (let [tag] of html.matchAll(/<script\b[^>]*>/g)) {
-		if (/\btype="module"/.test(tag)) {
-			let source = /\bsrc="([^"]+)"/.exec(tag);
-			if (source) return source[1];
-		}
-	}
-	return undefined;
-}
 
 /** Whether the server's page is of another build than the one running, both entries being known. */
 export function isNewerBuild(running: string | undefined, served: string | undefined): boolean {
