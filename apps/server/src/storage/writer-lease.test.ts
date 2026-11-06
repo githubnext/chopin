@@ -10,7 +10,12 @@ function lease(): Lease {
 }
 
 function leases(renew: LeaseStore["renew"]): LeaseStore {
-	return { acquire: async () => undefined, renew, release: async () => true };
+	return {
+		peek: async () => undefined,
+		acquire: async () => undefined,
+		renew,
+		release: async () => true,
+	};
 }
 
 describe("WriterLease", () => {

@@ -14,7 +14,7 @@ function bytes(length: number, fill = Math.floor(Math.random() * 256)): Uint8Arr
 	return value;
 }
 
-async function owner(storage: StorageAdapter) {
+export async function owner(storage: StorageAdapter) {
 	let userId = id("machine-owner");
 	await storage.users.put({
 		id: userId,
@@ -25,7 +25,7 @@ async function owner(storage: StorageAdapter) {
 	return userId;
 }
 
-function machine(userId: string, overrides: Partial<CreateMachine> = {}): CreateMachine {
+export function machine(userId: string, overrides: Partial<CreateMachine> = {}): CreateMachine {
 	let now = new Date("2026-01-02T03:04:05.000Z");
 	return {
 		id: id("machine"),
