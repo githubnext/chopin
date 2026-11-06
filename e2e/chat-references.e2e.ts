@@ -303,28 +303,62 @@ test("an empty picker leaves arrows and Enter to the editor", async ({ join, pag
 	await expectChatValue(draft, "");
 });
 
-test("a disconnect rejects a pending send without losing its draft", async ({ join, page, seed }) => {
-	await seed("# Pending chat send\n");
-	await page.emulateMedia({ reducedMotion: "reduce" });
+/** Answers each Chat send by closing the connection under it, or by refusing it as a server would. */
+async function answerSends(page: Page, answer: "close" | "refuse") {
+	let connections = { opened: 0 };
 	await page.routeWebSocket("**/ws?**", route => {
+		connections.opened++;
 		let server = route.connectToServer();
 		route.onMessage(message => {
 			if (typeof message === "string") {
-				let frame = JSON.parse(message) as { kind: string };
-				if (frame.kind === "chat:send") return void route.close();
+				let frame = JSON.parse(message) as { kind: string; rid: string };
+				if (frame.kind === "chat:send") {
+					if (answer === "close") return void route.close();
+					return void route.send(JSON.stringify({
+						kind: "session:error",
+						ts: 0,
+						rid: frame.rid,
+						message: "Unavailable",
+					}));
+				}
 			}
 			server.send(message);
 		});
 		server.onMessage(message => route.send(message));
 	});
+	return connections;
+}
+
+test("a disconnect rejects a pending send without losing its draft, and leaves no strip beside the composer", async ({ join, page, seed }) => {
+	await seed("# Pending chat send\n");
+	let connections = await answerSends(page, "close");
 
 	let chat = chatPane(await join("ana"));
 	let draft = chatInput(chat);
 	let value = "Keep this draft through disconnect";
 	await draft.fill(value);
+	let before = connections.opened;
+	await chat.getByRole("button", { name: "Send message" }).click();
+	// The connection comes back, and the page's own notice, not the composer, spoke for it.
+	await expect.poll(() => connections.opened).toBeGreaterThan(before);
+	await expect(chat.getByRole("alert")).toHaveCount(0);
+	await expect(chat.getByText(/Message not sent|Check the connection/)).toHaveCount(0);
+	await expectChatValue(draft, value);
+	await expect(draft).toBeFocused();
+});
+
+test("a refused send keeps its draft, and its strip does not animate when motion is reduced", async ({ join, page, seed }) => {
+	await seed("# Refused chat send\n");
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await answerSends(page, "refuse");
+
+	let chat = chatPane(await join("ana"));
+	let draft = chatInput(chat);
+	let value = "Keep this draft through a refusal";
+	await draft.fill(value);
 	await page.evaluate(() => {
 		let record = { starts: 0 };
-		Reflect.set(window, "__disconnectAlertTransitions", record);
+		Reflect.set(window, "__refusalAlertTransitions", record);
 		document.addEventListener("transitionstart", event => {
 			if (
 				event.target instanceof Element
@@ -334,7 +368,7 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 	});
 	await chat.getByRole("button", { name: "Send message" }).click();
 	let error = chat.getByRole("alert");
-	await expect(error).toContainText("Check the connection and try again");
+	await expect(error).toContainText("Message not sent: Unavailable");
 	await expect(error).toHaveCSS("transition-duration", "0s");
 	await error.evaluate(() =>
 		new Promise<void>(resolve =>
@@ -343,7 +377,7 @@ test("a disconnect rejects a pending send without losing its draft", async ({ jo
 	);
 	expect(
 		await page.evaluate(() =>
-			(Reflect.get(window, "__disconnectAlertTransitions") as { starts: number }).starts
+			(Reflect.get(window, "__refusalAlertTransitions") as { starts: number }).starts
 		),
 	).toBe(0);
 	await expectChatValue(draft, value);

@@ -19,7 +19,7 @@ import { authenticate, content, expect, ready, roomPath, status, test } from "./
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
 import type { Plan } from "../packages/protocol/index";
-import type { BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
+import type { Browser, BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 
 const OFFLINE = "You're offline. Your changes are kept and will sync when you reconnect.";
 
@@ -62,12 +62,38 @@ function composerStrip(chat: Locator) {
 	return chat.locator(".chat-composer").getByRole("status").filter({ hasText: /\S/ });
 }
 
-function route(page: Page | BrowserContext) {
+/** What a Chat send meets: it goes through, is cut off as a lost connection would be, or is refused. */
+type Send = "pass" | "cut" | "refuse";
+
+/**
+ * Proxies the document's socket. With `sends`, each Chat send is also answered as `state.send`
+ * says: a cut one closes the socket under it and keeps the connection away (`state.offline`), a
+ * refused one is answered as the server would answer it.
+ */
+function route(page: Page | BrowserContext, { sends = false } = {}) {
 	let sockets: WebSocketRoute[] = [];
-	let state = { offline: false };
+	let state = { offline: false, send: "pass" as Send };
 	let ready = page.routeWebSocket("**/ws?**", socket => {
 		if (state.offline) return socket.close();
-		socket.connectToServer();
+		let server = socket.connectToServer();
+		if (sends) {
+			socket.onMessage(message => {
+				let frame = typeof message === "string"
+					? JSON.parse(message) as { kind: string; rid: string }
+					: undefined;
+				if (frame?.kind !== "chat:send" || state.send === "pass") return void server.send(message);
+				if (state.send === "cut") {
+					state.offline = true;
+					return void socket.close();
+				}
+				socket.send(JSON.stringify({
+					kind: "session:error",
+					ts: Math.floor(Date.now() / 1000),
+					rid: frame.rid,
+					message: "Unavailable",
+				}));
+			});
+		}
 		sockets.push(socket);
 	});
 	return { sockets, state, ready };
@@ -569,6 +595,160 @@ test("on a phone, a /research pressed while offline adds no second connection st
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
 		await context.close();
 	}
+});
+
+/**
+ * A Chat send the connection cut off is told by the page's one notice and nothing else. The
+ * composer draws no strip for it, neither for the moments before the notice shows nor once it
+ * does, and none is left when the connection returns; the draft stays for the person to send again.
+ */
+async function expectCutSend(
+	page: Page,
+	wire: ReturnType<typeof route>,
+	chat: Locator,
+	shot: string,
+) {
+	let draft = chatInput(chat);
+	let failure = chat.getByText(/Message not sent|Check the connection/);
+	await fillChat(draft, "Cut off on its way");
+	wire.state.send = "cut";
+	await draft.press("Enter");
+
+	// Sampled from the cut until the notice has been up a while, so nothing can come and go unseen.
+	let until = Date.now() + 2500;
+	while (Date.now() < until) {
+		await expect(failure).toHaveCount(0);
+		await page.waitForTimeout(100);
+	}
+	await expect(notice(page)).toBeVisible();
+	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
+	await expectChatValue(draft, "Cut off on its way");
+	await snap(page, `${shot}-offline`);
+
+	wire.state.send = "pass";
+	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(notice(page)).toHaveCount(0);
+	await expect(page.getByRole("alert")).toHaveCount(0);
+	await expect(failure).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
+	await snap(page, `${shot}-online`);
+
+	await expectChatValue(draft, "Cut off on its way");
+	await draft.press("Enter");
+	await expectChatValue(draft, "");
+	await expect(chat.getByText("Cut off on its way", { exact: true })).toBeVisible();
+}
+
+/**
+ * A failure that is not the connection's stays as it was: the strip a server's refusal draws is
+ * told while the connection is up, while it is down and when it returns, and goes only when the
+ * person sends again.
+ */
+async function expectRefusalStays(
+	page: Page,
+	wire: ReturnType<typeof route>,
+	chat: Locator,
+	shot: string,
+) {
+	let draft = chatInput(chat);
+	let refusal = chat.getByRole("alert").filter({ hasText: "Message not sent: Unavailable" });
+	await fillChat(draft, "Refused by the server");
+	wire.state.send = "refuse";
+	await draft.press("Enter");
+	await expect(refusal).toBeVisible();
+	await expectChatValue(draft, "Refused by the server");
+	await snap(page, `${shot}-online`);
+
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	await expect(refusal).toBeVisible();
+	await snap(page, `${shot}-offline`);
+
+	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(notice(page)).toHaveCount(0);
+	await expect(refusal).toBeVisible();
+
+	wire.state.send = "pass";
+	await draft.press("Enter");
+	await expectChatValue(draft, "");
+	await expect(refusal).toHaveCount(0);
+	await expect(chat.getByText("Refused by the server", { exact: true })).toBeVisible();
+}
+
+/** A 390 px phone with Chat open, its routed sockets closed again when the body is done. */
+async function onPhoneChat(
+	{ baseURL, browser, room }: { baseURL: string | undefined; browser: Browser; room: string },
+	body: (page: Page, wire: ReturnType<typeof route>) => Promise<void>,
+) {
+	let wire: ReturnType<typeof route> | undefined;
+	let context = await browser.newContext({
+		baseURL,
+		deviceScaleFactor: 3,
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	try {
+		let page = await context.newPage();
+		await page.addInitScript(() => {
+			Math.random = () => 0.999;
+		});
+		await agentOn(page);
+		wire = route(page, { sends: true });
+		await wire.ready;
+		await authenticate(page, "ana", baseURL!);
+		await page.goto(roomPath(room));
+		await ready(page);
+		await tab(page, /^Chat/).tap();
+		await settled(page);
+		await body(page, wire);
+		await expectNoHorizontalOverflow(page);
+	} finally {
+		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
+		await context.close();
+	}
+}
+
+test("a send the connection cut off leaves no strip beside the page's offline notice, and none when the connection returns", async ({ join, page }) => {
+	await page.addInitScript(() => {
+		Math.random = () => 0.999;
+	});
+	await agentOn(page);
+	let wire = route(page, { sends: true });
+	await wire.ready;
+	await join("ana");
+	await expectCutSend(page, wire, chatPane(page), "cut-send-desktop");
+});
+
+test("on a phone, a send the connection cut off leaves no strip beside the page's offline notice either", async ({ baseURL, browser, room }) => {
+	test.setTimeout(90_000);
+	await onPhoneChat(
+		{ baseURL, browser, room },
+		(page, wire) => expectCutSend(page, wire, chatPane(page), "cut-send-phone"),
+	);
+});
+
+test("a server's refusal of a send stays as it was through a lost connection and its return", async ({ join, page }) => {
+	await page.addInitScript(() => {
+		Math.random = () => 0.999;
+	});
+	await agentOn(page);
+	let wire = route(page, { sends: true });
+	await wire.ready;
+	await join("ana");
+	await expectRefusalStays(page, wire, chatPane(page), "refused-send-desktop");
+});
+
+test("on a phone, a server's refusal of a send stays as it was through a lost connection and its return", async ({ baseURL, browser, room }) => {
+	test.setTimeout(90_000);
+	await onPhoneChat(
+		{ baseURL, browser, room },
+		(page, wire) => expectRefusalStays(page, wire, chatPane(page), "refused-send-phone"),
+	);
 });
 
 test("on a phone, a lost connection is still the page's one notice, with nothing above the composer", async ({ baseURL, browser, room }) => {

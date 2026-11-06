@@ -64,7 +64,6 @@ import {
 	acknowledgeDraft,
 	addressedOutsideReferences,
 	addressesPlanner,
-	boundedChatError,
 	insertReference,
 	MAX_REFERENCES,
 	PLANNER_UNAVAILABLE_NOTICE,
@@ -75,6 +74,8 @@ import {
 	repliesOffNotice,
 	restoreDraftSubmission,
 	reviseComposerDraft,
+	sendFailure,
+	shownSendFailure,
 	withNoticesAfter,
 } from "./references";
 import { runCounts, RunStack } from "./run-card";
@@ -97,7 +98,7 @@ import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
 import type { MentionCandidate } from "./mentions";
-import type { ComposerDraft, ReferenceTarget } from "./references";
+import type { ComposerDraft, ReferenceTarget, SendFailure } from "./references";
 import type { Wire as Socket } from "../wire";
 
 export type ChatProps = {
@@ -261,13 +262,16 @@ export function Chat(
 	// A send pressed during a blip, made once the connection is back.
 	let [held, setHeld] = useState(false);
 	let sending = submitting || held;
-	let [sendError, setSendError] = useState<string>();
+	let [sendError, setSendError] = useState<SendFailure>();
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
-	// A research request the connection could not take is told only while it is down.
+	// Neither a research request the connection could not take nor a send it cut off outlives it.
 	useEffect(() => {
-		if (connected) setResearchBlock(block => (block === "disconnected" ? undefined : block));
+		if (!connected) return;
+		setResearchBlock(block => (block === "disconnected" ? undefined : block));
+		setSendError(failure => failure?.lost ? undefined : failure);
 	}, [connected]);
+	let shownSend = shownSendFailure(sendError, connected);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
@@ -567,7 +571,7 @@ export function Chat(
 			// A restart cut the send off. The draft keeps its request id, so it is made again once
 			// the server is back, and the server answers one it already holds with that message.
 			if (error instanceof WireLost && error.restarting) setHeld(true);
-			else setSendError(boundedChatError(error));
+			else setSendError(sendFailure(error));
 		}).finally(() => {
 			if (submission.current !== token) return;
 			submission.current = undefined;
@@ -768,10 +772,10 @@ export function Chat(
 					disabled: !draftable || sending || !agent,
 					onToggle: toggleMode,
 				}}
-				notice={sendError
+				notice={shownSend
 					? {
 						tone: "error",
-						text: sendError,
+						text: shownSend.text,
 						action: { label: "Retry", onClick: submit, disabled: !composerReady || submitting },
 					}
 					: researchBlock && !(offline && researchBlock === "disconnected")

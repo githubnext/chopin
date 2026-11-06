@@ -424,15 +424,36 @@ export function acknowledgeDraft(current: ComposerDraft, submitted: ComposerDraf
 	return current === submitted ? { text: "", references: [] } : current;
 }
 
-export function boundedChatError(error: unknown): string {
+/** A send that failed as the composer tells it, and whether the connection is what failed it. */
+export type SendFailure = { text: string; lost: boolean };
+
+export function sendFailure(error: unknown): SendFailure {
 	let detail = error instanceof Error ? error.message.trim() : "";
-	if (detail && (error as { code?: unknown }).code === "planner-not-attached") return detail;
+	if (detail && (error as { code?: unknown }).code === "planner-not-attached") {
+		return { text: detail, lost: false };
+	}
 	if (!detail || /^(connection lost|disposed|not connected)$/i.test(detail)) {
-		return "Message not sent. Check the connection and try again.";
+		return { text: "Message not sent. Check the connection and try again.", lost: true };
 	}
 	let maximum = 120;
 	if (detail.length > maximum) detail = `${detail.slice(0, maximum - 3)}...`;
-	return `Message not sent: ${detail}`;
+	return { text: `Message not sent: ${detail}`, lost: false };
+}
+
+export function boundedChatError(error: unknown): string {
+	return sendFailure(error).text;
+}
+
+/**
+ * What the composer tells of a failed send. A send the connection cut off is the page's offline
+ * notice to tell, and a blip tells nothing, so while the connection is down it has no strip of its
+ * own; every other failure is shown as it always was.
+ */
+export function shownSendFailure(
+	failure: SendFailure | undefined,
+	connected: boolean,
+): SendFailure | undefined {
+	return failure?.lost && !connected ? undefined : failure;
 }
 
 function validPersistedRange(source: string, reference: Chat.Reference): boolean {
