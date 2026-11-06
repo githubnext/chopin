@@ -23,6 +23,11 @@ export type Transport = {
 	 * Absent means "assume it can", which is what a stub wants.
 	 */
 	readonly connected?: boolean;
+	/**
+	 * Whether the connection was lost because the server said it is restarting. What is shown
+	 * about such a loss waits longer; what acts on the connection reads `connected`.
+	 */
+	readonly restarting?: boolean;
 };
 
 /** Mirrors the client's connection states, for read-only and status chrome. */

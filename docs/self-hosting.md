@@ -581,6 +581,9 @@ The proxy must:
 - proxy WebSocket upgrades on `/ws`, and on `/api/v1/agent` under `HARNESS=remote`;
 - proxy `/mcp` and the `/api/v1/agent` upgrade without removing their
   `Authorization` header, nor the upgrade's `Sec-WebSocket-Protocol` header;
+- pass Chopin's response headers through unchanged, so a browser can tell Chopin's
+  refusal of a WebSocket handshake (`x-chopin-refusal: 1`) from the proxy's own
+  4xx while no upstream answers;
 - serve Chopin at `/`, not below a path prefix; and
 - redirect alternate hosts to the canonical origin before application traffic,
   except the paths a [moved deployment](#moving-to-a-new-origin) keeps serving.
@@ -734,6 +737,29 @@ Browser sessions and Planner ownership are cleared at startup.
 3. Start the new image against the same database; its entrypoint applies pending
    migrations before serving.
 4. Repeat the first-start checks after migrations or authentication changes.
+
+A stop signal makes Chopin close every WebSocket with code 1012 (service
+restart) before it exits, rather than the 1001 that stopping the listener
+sends. An open browser tab takes that as a restart: it reconnects after a
+random moment of up to a second and goes on retrying about once a second, says
+nothing about it for the first 5 seconds, and keeps its unacknowledged edits,
+drafts and answers to send once connected. In those 5 seconds the connection
+reports no outage, so the notice for a lost connection does not wait on a
+shorter count, and the attempts that fail meanwhile are not counted towards
+the backoff or towards offering Retry. A restart that lasts longer is then
+treated as any other lost connection, with the same moment of grace before
+the notice. A refusal Chopin makes of a handshake carries
+`x-chopin-refusal: 1`, and a tab stops retrying on a 4xx only when it does (a
+401 still asks for a sign-in). Without it the 4xx is a proxy's and the tab keeps
+retrying. This is the client half of Stage 1 of the zero-downtime upgrades
+design, invisible restarts on one server; it does not make the gap between the
+old process stopping and the new one listening any shorter. Two things differ
+from that design's current revision, which adds no restart jitter and keeps the
+existing 1.5 seconds of silence for a restart: the random moment before the first
+attempt is added so that tabs do not all return together, and the silence is 5
+seconds, because a restart that stops the old process before it starts the new
+one takes longer than 1.5 seconds. The design's 1.5 seconds assumes a second
+process already waiting to take over.
 
 Migration files are checksummed once applied. Never edit an applied migration.
 Because migrations are forward-only, returning to an older application image

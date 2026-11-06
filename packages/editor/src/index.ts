@@ -7,6 +7,7 @@ export type { CollaborationOptions } from "./collaboration";
 export {
 	CONNECTION_GRACE,
 	CONNECTION_STALL,
+	connectionGrace,
 	isOffline,
 	offersRetry,
 	offlineAnnouncement,

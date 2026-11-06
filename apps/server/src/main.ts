@@ -112,7 +112,7 @@ import {
 } from "./research/service";
 import { placeResearchReference as placeResearch } from "./research/placement";
 import * as Rooms from "./rooms";
-import { admit, admitSidebar } from "./socket/admission";
+import { admit, admitSidebar, refused } from "./socket/admission";
 import { refreshAuthorization } from "./socket/authorization";
 import {
 	recheckDecisionWatch,
@@ -123,6 +123,7 @@ import {
 	watchDecisions,
 	watchRequest,
 } from "./socket/decision-watch";
+import { OpenSockets } from "./socket/open-sockets";
 import { SessionSockets } from "./socket/session-sockets";
 import { StorageError } from "./storage/errors";
 import { createStorage } from "./storage/registry";
@@ -139,6 +140,7 @@ import {
 } from "./wire";
 
 import { AGENT_PATH, LINK_CLOSE } from "@chopin/agent-link";
+import { SERVICE_RESTART } from "@chopin/protocol/restart";
 
 import type { Server, ServerWebSocket } from "bun";
 import type { AgentSocketData } from "./harness/remote/endpoint";
@@ -205,6 +207,7 @@ let plannerAttachments: PlannerAttachments | undefined;
 let systemTurns = new SystemTurns();
 /** Browser sockets by login, so a login that ends closes them before another broadcast. */
 let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
+const openSockets = new OpenSockets();
 let jobRunner: JobRunner | undefined;
 let researchService: ResearchWorkspaceService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1785,9 +1788,7 @@ function listen(): Server<SocketData> {
 					deleting: channelId => deletingChannels.has(channelId),
 					readOnly: channelId => archivingChannels.has(channelId),
 				});
-				if ("status" in outcome) {
-					return new Response(outcome.reason, { status: outcome.status });
-				}
+				if ("status" in outcome) return refused(outcome);
 				return upgraded(req, self, outcome.data);
 			}
 			if (url.pathname === AGENT_PATH) {
@@ -1802,9 +1803,7 @@ function listen(): Server<SocketData> {
 			}
 			if (url.pathname === "/ws/sidebar") {
 				let outcome = await admitSidebar(req, hostedAuth);
-				if ("status" in outcome) {
-					return new Response(outcome.reason, { status: outcome.status });
-				}
+				if ("status" in outcome) return refused(outcome);
 				return upgraded(req, self, outcome.data);
 			}
 			let routed = await router.handle(req, url);
@@ -1819,6 +1818,7 @@ function listen(): Server<SocketData> {
 
 		websocket: {
 			open(ws: AnySocket) {
+				openSockets.opened(ws);
 				if (isAgentSocket(ws)) {
 					if (!plannerAttachments) return ws.close(LINK_CLOSE.failed, "unavailable");
 					openAgentSocket(ws, hostedAuth, {
@@ -1854,6 +1854,7 @@ function listen(): Server<SocketData> {
 			},
 
 			close(ws: AnySocket) {
+				openSockets.closed(ws);
 				if (isAgentSocket(ws)) {
 					ws.data.alive?.stop();
 					return ws.data.link?.disconnected();
@@ -1887,7 +1888,7 @@ function drain(): Promise<void> {
 		readiness.draining();
 		// Before the sockets close, so no link withdraws its questions on the way out.
 		plannerAttachments?.shutdown();
-		if (server) await attempt(() => server.stop(true));
+		if (server) await attempt(() => openSockets.stopForRestart(server));
 		if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
 		if (experimentTimer) clearInterval(experimentTimer);
 		if (recoveringResearch) await attempt(() => recoveringResearch!);
@@ -2145,7 +2146,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			channel = await storage.channels.get(channelId);
 		} catch {
 			for (let ws of room?.members.values() ?? []) {
-				ws.close(1012, "document state is temporarily unavailable");
+				ws.close(SERVICE_RESTART, "document state is temporarily unavailable");
 			}
 			throw err;
 		}
@@ -2156,7 +2157,7 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 					await plan(survivingRoom, server);
 				} catch {
 					for (let ws of survivingRoom.members.values()) {
-						ws.close(1012, "document reload required");
+						ws.close(SERVICE_RESTART, "document reload required");
 					}
 				}
 			}

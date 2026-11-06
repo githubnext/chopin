@@ -18,13 +18,14 @@ import {
 } from "react";
 
 import {
-	CONNECTION_GRACE,
+	connectionGrace,
 	isDemoHandle,
 	MAX_RESEARCH_BRIEF,
 	useConnectionNotice,
 	usePopoverDismissal,
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
+import { WireLost } from "../wire";
 import { canWithdraw } from "./withdraw";
 import type { DraftInputHandle } from "./draft-input";
 import type { PlannerNotice } from "./planner-status";
@@ -77,7 +78,12 @@ import {
 import { runCounts, RunStack } from "./run-card";
 import { runStages } from "../api";
 import { Transcript } from "./transcript";
-import { initialTranscript, transcriptReducer } from "./transcript-state";
+import {
+	initialTranscript,
+	progressOf,
+	silentRestart,
+	transcriptReducer,
+} from "./transcript-state";
 import type { TranscriptDecisions } from "./transcript";
 import type { CardLink } from "../conversation-plan/links";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -290,18 +296,21 @@ export function Chat(
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
 	// The document says when the connection is lost; Chat only holds back what it cannot send.
-	let connectionNotice = useConnectionNotice(!connected);
+	let connectionNotice = useConnectionNotice(!connected, wire?.restarting);
 	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
 		|| addressedOutsideReferences(draft.text, draft.references));
-	let workingTurn = transcriptReady ? turn : undefined;
-	let suspendedWork = !transcriptReady && turn && transcript.activeAnchorId
-		? {
-			turnId: turn.id,
-			entryOffset: turn.entryOffset,
-			endOffset: entries.length,
-			anchorId: transcript.activeAnchorId,
-		}
-		: undefined;
+	let quietRestart = useRef(false);
+	quietRestart.current = silentRestart(
+		quietRestart.current,
+		!!wire?.restarting,
+		transcriptReady,
+		connectionNotice !== "none",
+	);
+	let { working: workingTurn, suspended: suspendedWork } = progressOf(
+		transcript,
+		transcriptReady,
+		quietRestart.current,
+	);
 	let detected = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
 		: undefined;
@@ -545,7 +554,10 @@ export function Chat(
 		void wire.ask<Wire.Sent>("chat:send", payload).then(() => {
 			clearSubmittedDraft(submitted);
 		}, error => {
-			setSendError(boundedChatError(error));
+			// A restart cut the send off. The draft keeps its request id, so it is made again once
+			// the server is back, and the server answers one it already holds with that message.
+			if (error instanceof WireLost && error.restarting) setHeld(true);
+			else setSendError(boundedChatError(error));
 		}).finally(() => {
 			if (submission.current !== token) return;
 			submission.current = undefined;
@@ -571,7 +583,7 @@ export function Chat(
 	// Never held longer than the grace period, however the wait ends.
 	useEffect(() => {
 		if (!held) return;
-		let timer = setTimeout(() => setHeld(false), CONNECTION_GRACE);
+		let timer = setTimeout(() => setHeld(false), connectionGrace(wire?.restarting));
 		return () => clearTimeout(timer);
 	}, [held]);
 	useEffect(() => {

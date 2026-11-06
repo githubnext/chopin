@@ -1,3 +1,5 @@
+import { REFUSAL_HEADER } from "@chopin/protocol/restart";
+
 import { ownOrigin } from "../auth/config";
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
@@ -12,6 +14,17 @@ import type { SidebarSocketData, SocketData } from "../wire";
 export type Admission = { data: SocketData } | { status: number; reason: string };
 
 export type SidebarAdmission = { data: SidebarSocketData } | { status: number; reason: string };
+
+/**
+ * The HTTP answer to a socket handshake that admission refused, marked as Chopin's own so the
+ * client can tell it from a proxy's 4xx while Chopin is away.
+ */
+export function refused(outcome: { status: number; reason: string }): Response {
+	return new Response(outcome.reason, {
+		status: outcome.status,
+		headers: { [REFUSAL_HEADER]: "1" },
+	});
+}
 
 function probing(request: Request): boolean {
 	return request.headers.get("x-chopin-socket-probe") === "1"

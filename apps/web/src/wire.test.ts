@@ -7,9 +7,10 @@
  * typing, so it being wrong is worse than it being absent.
  */
 
+import { REFUSAL_HEADER, RESTART_QUIET_MS } from "@chopin/protocol/restart";
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { Wire } from "./wire";
+import { Wire, WireLost } from "./wire";
 
 import type { Server, ServerWebSocket } from "bun";
 import type { Status } from "./wire";
@@ -30,7 +31,7 @@ function endpoint(accept: boolean): number {
 		port: 0,
 		hostname: "127.0.0.1",
 		fetch(req, self) {
-			if (!accept) return new Response("nope", { status: 403 });
+			if (!accept) return new Response("nope", { status: 403, headers: { [REFUSAL_HEADER]: "1" } });
 			return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
 		},
 		websocket: { message() {} },
@@ -49,6 +50,17 @@ function unavailable(): number {
 	return server.port!;
 }
 
+/** What a proxy with no upstream answers: a 4xx that Chopin did not send. */
+function proxied(status: number): number {
+	let server = Bun.serve({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch: () => new Response("no such upstream", { status }),
+	});
+	servers.push(server);
+	return server.port!;
+}
+
 function unauthorized(): number {
 	let server = Bun.serve({
 		port: 0,
@@ -59,14 +71,22 @@ function unauthorized(): number {
 	return server.port!;
 }
 
-function restartable(): { port: number; deny: () => void; drop: () => void } {
+function restartable(): {
+	port: number;
+	deny: () => void;
+	drop: () => void;
+	restart: () => void;
+	probes: () => number;
+} {
 	let denied = false;
+	let probes = 0;
 	let sockets = new Set<ServerWebSocket<undefined>>();
 	let server = Bun.serve<undefined>({
 		port: 0,
 		hostname: "127.0.0.1",
 		fetch(req, self) {
 			if (req.headers.get("x-chopin-socket-probe") === "1") {
+				probes++;
 				return new Response(null, { status: denied ? 401 : 204 });
 			}
 			if (denied) return new Response("authentication required", { status: 401 });
@@ -88,6 +108,10 @@ function restartable(): { port: number; deny: () => void; drop: () => void } {
 		drop: () => {
 			for (let socket of sockets) socket.terminate();
 		},
+		restart: () => {
+			for (let socket of sockets) socket.close(1012, "server restarting");
+		},
+		probes: () => probes,
 		deny: () => {
 			denied = true;
 			for (let socket of sockets) socket.terminate();
@@ -139,8 +163,8 @@ function connect(
 	return wire;
 }
 
-async function until(check: () => boolean, label: string): Promise<void> {
-	for (let i = 0; i < 200; i++) {
+async function until(check: () => boolean, label: string, ms = 2_000): Promise<void> {
+	for (let i = 0; i < ms / 10; i++) {
 		if (check()) return;
 		await Bun.sleep(10);
 	}
@@ -181,6 +205,20 @@ describe("status", () => {
 
 		await until(() => wire.status === "denied", "denied");
 		expect(seen).toContain("denied");
+	});
+
+	it("retries a 4xx that did not come from Chopin, where it used to stop for good", async () => {
+		for (let status of [403, 404, 429]) {
+			let seen: Status[] = [];
+			let wire = connect(proxied(status), seen);
+			await until(() => wire.status === "reconnecting", `reconnecting after ${status}`);
+			await Bun.sleep(300);
+			expect(seen).not.toContain("denied");
+			// Between attempts it reads reconnecting and during one connecting, so which it is
+			// depends on where the retry's wait has got to; what matters is that it is still trying.
+			expect(["connecting", "reconnecting"]).toContain(wire.status);
+			wire.dispose();
+		}
 	});
 
 	it("retries a temporarily unavailable admission", async () => {
@@ -225,6 +263,207 @@ describe("status", () => {
 			"reconnected",
 		);
 		expect(wire.status).toBe("connected");
+	});
+
+	describe("a server that says it is restarting", () => {
+		it("is reconnected to within a second, without asking first whether the door is open", async () => {
+			let service = restartable();
+			let seen: Status[] = [];
+			let wire = connect(service.port, seen);
+			await until(() => wire.status === "connected", "connected");
+			expect(wire.restarting).toBe(false);
+
+			let random = Math.random;
+			Math.random = () => 0.5;
+			try {
+				let lost = Date.now();
+				service.restart();
+				await until(() => wire.restarting, "marked as a restart");
+				expect(wire.connected).toBe(false);
+				expect(wire.status).toBe("reconnecting");
+				await until(() => seen.filter(status => status === "connected").length === 2, "back");
+				let waited = Date.now() - lost;
+				expect(waited).toBeGreaterThanOrEqual(450);
+				expect(waited).toBeLessThan(1500);
+			} finally {
+				Math.random = random;
+			}
+			expect(wire.restarting).toBe(false);
+			expect(service.probes()).toBe(0);
+		});
+
+		it("spreads its first attempt over a second, so tabs do not return together", async () => {
+			let service = restartable();
+			let seen: Status[] = [];
+			let wire = connect(service.port, seen);
+			await until(() => wire.status === "connected", "connected");
+
+			let random = Math.random;
+			Math.random = () => 0.999;
+			try {
+				let lost = Date.now();
+				service.restart();
+				await until(() => seen.filter(status => status === "connected").length === 2, "back");
+				expect(Date.now() - lost).toBeGreaterThanOrEqual(950);
+			} finally {
+				Math.random = random;
+			}
+		});
+
+		it(
+			"keeps knocking about once a second while the restart is quiet, so a server that is back is found at once",
+			async () => {
+				let attempts: number[] = [];
+				let refusing = false;
+				let sockets = new Set<ServerWebSocket<undefined>>();
+				let server = Bun.serve<undefined>({
+					port: 0,
+					hostname: "127.0.0.1",
+					fetch(request, self) {
+						if (request.headers.get("x-chopin-socket-probe") === "1") {
+							return new Response("try again", { status: 503 });
+						}
+						attempts.push(Date.now());
+						if (refusing) return new Response("try again", { status: 503 });
+						return self.upgrade(request) ? undefined : new Response("no", { status: 400 });
+					},
+					websocket: {
+						open: socket => {
+							sockets.add(socket);
+						},
+						message() {},
+					},
+				});
+				servers.push(server);
+				let seen: Status[] = [];
+				let wire = connect(server.port!, seen);
+				await until(() => wire.status === "connected", "connected");
+				attempts.length = 0;
+
+				// The widest jitter, so that only the quiet knocking, not the ladder, can pass for it.
+				let random = Math.random;
+				Math.random = () => 0.999;
+				try {
+					refusing = true;
+					let lost = Date.now();
+					for (let socket of sockets) socket.close(1012, "server restarting");
+					await until(() => attempts.length >= 4, "four attempts in the quiet", 5_000);
+					expect(Date.now() - lost).toBeLessThan(4_500);
+					expect(wire.restarting).toBe(true);
+					expect(seen).not.toContain("denied");
+					// The ladder alone, from its second step, would be 1.5 s and then 3 s apart.
+					for (let index = 1; index < attempts.length; index++) {
+						expect(attempts[index]! - attempts[index - 1]!).toBeLessThan(1_300);
+					}
+
+					refusing = false;
+					let back = Date.now();
+					await until(
+						() => seen.filter(status => status === "connected").length === 2,
+						"back",
+						3_000,
+					);
+					expect(Date.now() - back).toBeLessThan(1_500);
+					expect(wire.restarting).toBe(false);
+				} finally {
+					Math.random = random;
+				}
+			},
+			15_000,
+		);
+
+		it("goes on the ordinary backoff, from where it was, once the quiet has passed", async () => {
+			// The ladder's steps are timed on the real clock, but the quiet period is read from
+			// `Date.now`, which is moved past it inside the third probe's answer, before the wire
+			// reads it. So where a knock happens to land against the five seconds never matters.
+			let attempts: number[] = [];
+			let sockets = new Set<ServerWebSocket<undefined>>();
+			let refusing = false;
+			let probes = 0;
+			let skew = 0;
+			let clock = Date.now;
+			let server = Bun.serve<undefined>({
+				port: 0,
+				hostname: "127.0.0.1",
+				fetch(request, self) {
+					if (request.headers.get("x-chopin-socket-probe") === "1") {
+						if (refusing && ++probes === 3) skew = RESTART_QUIET_MS + 1_000;
+						return new Response("try again", { status: 503 });
+					}
+					if (refusing) {
+						attempts.push(performance.now());
+						return new Response("try again", { status: 503 });
+					}
+					return self.upgrade(request) ? undefined : new Response("no", { status: 400 });
+				},
+				websocket: {
+					open: socket => {
+						sockets.add(socket);
+					},
+					message() {},
+				},
+			});
+			servers.push(server);
+			let wire = connect(server.port!, []);
+			await until(() => wire.status === "connected", "connected");
+
+			let random = Math.random;
+			Math.random = () => 0.999;
+			Date.now = () => clock() + skew;
+			try {
+				refusing = true;
+				for (let socket of sockets) socket.close(1012, "server restarting");
+				await until(() => attempts.length >= 5, "five attempts", 15_000);
+				// The first attempt and two knocks fall in the quiet. Then the ladder goes on from its
+				// second step: 1.5 s, and 3 s after that. Counting the knocks towards it would make the
+				// first wait 6 s, and starting it from the beginning would make it 0.75 s.
+				let gaps = [attempts[3]! - attempts[2]!, attempts[4]! - attempts[3]!];
+				expect(gaps[0]).toBeGreaterThan(1_300);
+				expect(gaps[0]).toBeLessThan(3_000);
+				expect(gaps[1]).toBeGreaterThan(2_700);
+				expect(gaps[1]).toBeLessThan(5_000);
+			} finally {
+				Date.now = clock;
+				Math.random = random;
+			}
+		}, 20_000);
+
+		it("tells a request that was in flight that a restart cut it off, so it can be made again quietly", async () => {
+			let service = restartable();
+			let wire = connect(service.port, []);
+			await until(() => wire.status === "connected", "connected");
+
+			let outcome = wire.ask("chat:send", { text: "hello" }).then(() => undefined, error => error);
+			service.restart();
+			let error = await outcome;
+			expect(error).toBeInstanceOf(WireLost);
+			expect((error as WireLost).restarting).toBe(true);
+			expect(wire.restarting).toBe(true);
+		});
+
+		it("does not call a request lost to a plain drop a restart", async () => {
+			let service = restartable();
+			let wire = connect(service.port, []);
+			await until(() => wire.status === "connected", "connected");
+
+			let outcome = wire.ask("chat:send", { text: "hello" }).then(() => undefined, error => error);
+			service.drop();
+			let error = await outcome;
+			expect(error).toBeInstanceOf(WireLost);
+			expect((error as WireLost).restarting).toBe(false);
+			expect((error as WireLost).message).toBe("connection lost");
+		});
+
+		it("is not a restart when the connection is merely dropped", async () => {
+			let service = restartable();
+			let seen: Status[] = [];
+			let wire = connect(service.port, seen);
+			await until(() => wire.status === "connected", "connected");
+			service.drop();
+			await until(() => wire.status === "reconnecting", "reconnecting");
+			expect(wire.restarting).toBe(false);
+			await until(() => wire.status === "connected", "back");
+		});
 	});
 
 	it("reconnects immediately without leaving a second backoff attempt", async () => {

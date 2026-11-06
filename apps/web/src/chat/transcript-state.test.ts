@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import { group } from "./model";
-import { initialTranscript, transcriptReducer } from "./transcript-state";
+import {
+	initialTranscript,
+	progressOf,
+	silentRestart,
+	transcriptReducer,
+} from "./transcript-state";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -117,5 +122,72 @@ describe("transcript work retention", () => {
 		expect(messages.find(message => message.id === "tool-b")?.tools).toMatchObject([{
 			id: "read-b",
 		}]);
+	});
+});
+
+describe("how a turn in progress is shown while its connection is lost", () => {
+	function working() {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("prompt", { kind: "member", handle: "ana" })],
+			turn,
+		});
+		return transcriptReducer(state, {
+			kind: "message",
+			entry: entry("prose", { kind: "agent" }, "I will inspect this."),
+		});
+	}
+
+	it("goes on showing a turn as working while its connection is current", () => {
+		let shown = progressOf(working(), true, false);
+		expect(shown.working?.id).toBe("turn-1");
+		expect(shown.suspended).toBeUndefined();
+	});
+
+	it("goes on showing it as working while a restart is waited out in silence, so a restart leaves no trace", () => {
+		let shown = progressOf(working(), false, true);
+		expect(shown.working?.id).toBe("turn-1");
+		expect(shown.suspended).toBeUndefined();
+	});
+
+	it("marks it disconnected as soon as a connection that was not a restart is gone", () => {
+		let shown = progressOf(working(), false, false);
+		expect(shown.working).toBeUndefined();
+		expect(shown.suspended).toEqual({
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 2,
+			anchorId: "prose",
+		});
+	});
+
+	it("has nothing to mark before the turn has written anything", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("prompt", { kind: "member", handle: "ana" })],
+			turn,
+		});
+		expect(progressOf(state, false, false)).toEqual({});
+		expect(progressOf(initialTranscript, false, false)).toEqual({});
+	});
+});
+
+describe("when a restart is waited out in silence", () => {
+	it("begins with a loss the server said was a restart, and with no other", () => {
+		expect(silentRestart(false, true, false, false)).toBe(true);
+		expect(silentRestart(false, false, false, false)).toBe(false);
+	});
+
+	it("lasts through the moment after the connection opens, until the transcript is current", () => {
+		// The connection is back, so it no longer says restarting, but the history has not come.
+		expect(silentRestart(true, false, false, false)).toBe(true);
+		expect(silentRestart(true, false, true, false)).toBe(false);
+	});
+
+	it("ends once the connection is spoken of, and does not begin again in that outage", () => {
+		expect(silentRestart(true, true, false, true)).toBe(false);
+		expect(silentRestart(false, true, false, true)).toBe(false);
+		// Back after a long outage: the next loss's marker is cleared, and nothing is silent.
+		expect(silentRestart(false, false, false, false)).toBe(false);
 	});
 });

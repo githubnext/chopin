@@ -913,6 +913,7 @@ needs no feature check: an older Chopin shows the same text unformatted.
 | 1008       | `error` with `malformed-message` or `protocol` | Unparseable, invalid, or out-of-order message   |
 | 1009       | `error` with `message-too-large`               | A frame over 2 MiB                              |
 | 1011       | `refused` with `unavailable`                   | The server could not check the document         |
+| 1012       | nothing                                        | The server is restarting                        |
 | 4401       | `refused`                                      | `sign-in-required`                              |
 | 4403       | `refused`                                      | `repository-forbidden` or `access-revoked`      |
 | 4404       | `refused`                                      | `document-unavailable` or `document-archived`   |
@@ -1032,8 +1033,8 @@ not apply to it.
 
 The server keeps sessions, holds and open requests in memory only, so a restart ends
 what a disconnected link kept, and a graceful one ends it exactly as a crash does. The
-server tells every link it is going down before it closes any socket, and no link
-withdraws a question on the way out, so the Decisions the Planner had asked stay open
+server tells every link it is going down before it closes any socket, closes each with 1012,
+and no link withdraws a question on the way out, so the Decisions the Planner had asked stay open
 and answerable in the document, as after a crash. A returning client's `resume` finds
 nothing: `resumed` lists no sessions, the client calls its `destroy` handler for each
 session it held and settles every question it still waited on as `cancelled`. The run
@@ -1163,7 +1164,7 @@ pull request (see
   to `CHOPIN_DOCUMENT`.
 - On HTTP 401 at the upgrade, or when the connection closes for any reason other than
   its own `detach`, a backend that did not offer `resumable-sessions` exits. Until the
-  credential's 15 minutes have passed it may instead reattach with it after 1001 or a
+  credential's 15 minutes have passed it may instead reattach with it after 1001, 1012 or a
   dropped socket; after that the credential is refused and it must exit. Chopin
   forgets a credential once it has expired.
 - A backend that offers `resumable-sessions` does not exit when its link drops
