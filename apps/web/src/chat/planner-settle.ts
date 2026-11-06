@@ -1,6 +1,7 @@
 import { CONNECTION_GRACE } from "@chopin/editor";
 import { useEffect, useRef, useState } from "react";
 
+import type { Session } from "@chopin/protocol";
 import type { PlannerStatus } from "./planner-status";
 
 /**
@@ -14,34 +15,58 @@ export function plannerGrace(status: PlannerStatus | undefined): number {
 }
 
 /**
+ * What the page knows of the Planner across its connection's losses. A server that has just started
+ * tells `none` to everyone who connects until a machine returns, however long that takes: not news
+ * of the machine, but the new server's placeholder. It is one only for a page that knew a state
+ * before the loss (`known`) and is still waiting for the new server's first word that is not
+ * `none` (`returning`). A page that knew nothing, or only `none`, takes the word as its own
+ * (`unknown`), and so does one that is told `none` after any other word: a machine removed while
+ * the page is connected is still said.
+ */
+export type PlannerView = "unknown" | "known" | "returning";
+
+/** The connection was lost. */
+export function plannerConnectionLost(view: PlannerView): PlannerView {
+	return view === "known" ? "returning" : view;
+}
+
+/** `word` was told: `returning` afterwards says it was a placeholder. */
+export function plannerWordHeard(view: PlannerView, word: Session.PlannerAttachment): PlannerView {
+	return word.state !== "none" ? "known" : view === "returning" ? view : "unknown";
+}
+
+/**
  * Whether `status` takes the place of `shown` now. A state that waits does not, unless it is more
  * of the one already shown, such as the machine's name arriving: the last state stays until the
- * new one has lasted its grace.
+ * new one has lasted its grace. A placeholder (`held`) never does: the last state stays until the
+ * machine's own word comes.
  */
 export function plannerShownAtOnce(
 	shown: PlannerStatus | undefined,
 	status: PlannerStatus | undefined,
+	held = false,
 ): boolean {
-	return plannerGrace(status) === 0 || shown?.kind === status?.kind;
+	return !held && (plannerGrace(status) === 0 || shown?.kind === status?.kind);
 }
 
 /** The status to say: the last known one, until a state that waits has lasted its grace. */
 export function useSettledPlannerStatus(
 	status: PlannerStatus | undefined,
+	held?: boolean,
 ): PlannerStatus | undefined {
 	let [shown, setShown] = useState<PlannerStatus | undefined>(() =>
 		plannerGrace(status) === 0 ? status : undefined
 	);
-	let atOnce = plannerShownAtOnce(shown, status);
+	let atOnce = plannerShownAtOnce(shown, status, held);
 	let latest = useRef(status);
 	latest.current = status;
 	useEffect(() => {
 		if (atOnce && shown !== status) setShown(status);
 	});
 	useEffect(() => {
-		if (atOnce) return;
+		if (atOnce || held) return;
 		let timer = setTimeout(() => setShown(latest.current), plannerGrace(status));
 		return () => clearTimeout(timer);
-	}, [atOnce, status?.kind]);
+	}, [atOnce, held, status?.kind]);
 	return atOnce ? status : shown;
 }

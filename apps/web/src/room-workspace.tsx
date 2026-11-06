@@ -66,7 +66,11 @@ import {
 } from "./machine-choice";
 import { plannerPlacement, plannerStatus } from "./chat/planner-status";
 import { PlannerAnnouncement } from "./chat/planner-announcement";
-import { useSettledPlannerStatus } from "./chat/planner-settle";
+import {
+	plannerConnectionLost,
+	plannerWordHeard,
+	useSettledPlannerStatus,
+} from "./chat/planner-settle";
 import { MachineButton } from "./machine-button";
 import { machines as machineStore, summarizeMachines, useLiveMachines } from "./machine-summary";
 import { useLiveBuild } from "./live-build";
@@ -76,6 +80,7 @@ import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
 import { ChildProvenance } from "./child-provenance";
 import { ChildTitleContext } from "./child-title";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
+import type { PlannerView } from "./chat/planner-settle";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { useDocumentEditing } from "./document-editing";
 import { advanceConversationAnnouncement } from "./conversation-plan/announcements";
@@ -584,6 +589,7 @@ export function RoomWorkspace(
 	let [plannerAttachment, setPlannerAttachment] = useState<{
 		wire?: Wire;
 		planner?: Session.PlannerAttachment;
+		placeholder?: boolean;
 	}>({});
 	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
@@ -732,7 +738,7 @@ export function RoomWorkspace(
 		() => plannerStatus(attachment, machineName, lastSeen),
 		[attachment, machineName, lastSeen],
 	);
-	let plannerNote = useSettledPlannerStatus(plannerNow);
+	let plannerNote = useSettledPlannerStatus(plannerNow, plannerAttachment.placeholder);
 	// The choice shows only while the person has a paired machine, live, or the document lists a
 	// teammate's shared one: it appears with their first and goes with their last.
 	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines, machineChoice.state);
@@ -1175,6 +1181,7 @@ export function RoomWorkspace(
 	useEffect(() => {
 		cardMeta.listen(undefined);
 		setOutage(undefined);
+		let plannerView: PlannerView = "unknown";
 		let socket = new Wire({
 			channelId: room,
 			onAuthenticationRequired: () => location.reload(),
@@ -1188,6 +1195,7 @@ export function RoomWorkspace(
 					conversationStore.reset();
 					cardMeta.listen(undefined);
 				}
+				if (next === "reconnecting") plannerView = plannerConnectionLost(plannerView);
 				setStatus(next);
 			},
 		});
@@ -1224,7 +1232,12 @@ export function RoomWorkspace(
 			}),
 			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
 			socket.on<Session.Planner>("session:planner", frame => {
-				setPlannerAttachment({ wire: socket, planner: frame.planner });
+				plannerView = plannerWordHeard(plannerView, frame.planner);
+				setPlannerAttachment({
+					wire: socket,
+					planner: frame.planner,
+					placeholder: plannerView === "returning",
+				});
 			}),
 			socket.on<ManagedAccess>("session:access", frame => {
 				latestCanEdit.current = frame.canEdit;
