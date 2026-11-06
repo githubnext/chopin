@@ -47,7 +47,7 @@ type CompactState = Partial<ComponentProps<typeof WorkspaceViewNavigation>>;
 // The compact workspace's destinations, in the states the live app gives them.
 let COMPACT_SPECIMENS: { label: string; state: CompactState }[] = [
 	{
-		label: "Chat current, Planner working with 2 unread",
+		label: "Chat current, Chopin working with 2 unread",
 		state: { chatActivity: { busy: true, unread: 2 }, chatVisible: true },
 	},
 	{ label: "Document current", state: { unanswered: 3 } },

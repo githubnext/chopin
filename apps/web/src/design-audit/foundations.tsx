@@ -161,7 +161,7 @@ export function Foundations() {
 								<span>{label}</span>
 								<code>{measurement}</code>
 							</div>
-							<strong>Several people and a Planner share one document.</strong>
+							<strong>Several people and Chopin share one document.</strong>
 						</div>
 					))}
 				</div>

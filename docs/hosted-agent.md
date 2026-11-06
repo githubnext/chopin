@@ -386,7 +386,7 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   runs for its account to [resume](agent-connection.md#resuming-after-a-dropped-link)
   however long it stays away: no timer, including `PLANNER_ATTACH_GRACE_MS`, ends
   them. While it is away Chat shows the runs with their last status, marked
-  disconnected rather than stopped, says once that the Planner disconnected and once
+  disconnected rather than stopped, says once that the machine disconnected and once
   that it came back, and the Decisions stay open and answerable, their answers kept
   for the client. A Stop pressed meanwhile, or sent and still unanswered when the link
   dropped, is held for the client's return (Chat says so) rather than lost; Stop on

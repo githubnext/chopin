@@ -134,7 +134,7 @@ let PRESENCE = [
 export function ConversationPlate() {
 	return (
 		<AuditPlate
-			description="Member, Planner, tool activity, queued work, composer, and error states."
+			description="Member, Chopin, tool activity, queued work, composer, and error states."
 			item="chat"
 			title="Conversation"
 		>
