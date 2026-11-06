@@ -158,6 +158,25 @@ export function ask(
 	});
 }
 
+/**
+ * Makes an asker's wait again for a question a process that has since restarted left open, which
+ * nobody waits on any more. The promise settles with the outcome `ask`'s would have, and an
+ * answer to the question now goes to that asker and starts no turn of its own. Absent when the
+ * question is no longer open.
+ */
+export function rejoin(questions: Questions, id: string): Promise<Ended> | undefined {
+	let entry = questions.open.get(id);
+	if (!entry) return undefined;
+	return new Promise<Ended>(resolve => {
+		let earlier = entry.settle;
+		entry.settle = ended => {
+			earlier?.(ended);
+			resolve(ended);
+		};
+		entry.awaited = true;
+	});
+}
+
 export function get(questions: Questions, id: string): Open | undefined {
 	return questions.open.get(id);
 }

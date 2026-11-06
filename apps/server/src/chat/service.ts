@@ -425,8 +425,15 @@ export function create(): Chat {
  * leaving it set would show a spinner nothing will ever stop. Runs still live
  * then have no session now, so they come back stopped.
  */
-export function restore(entries: Wire.Entry[], runs?: Wire.Run[], initiativePaused = false): Chat {
-	let restoredRuns = restoreRuns(runs);
+export function restore(
+	entries: Wire.Entry[],
+	runs?: Wire.Run[],
+	initiativePaused = false,
+	keepRuns?: "live" | "down",
+): Chat {
+	let restoredRuns = keepRuns && runs?.length
+		? runs.map(run => disconnected(run, keepRuns === "down"))
+		: restoreRuns(runs);
 	return {
 		initiativePaused,
 		...(restoredRuns ? { runs: restoredRuns } : {}),
@@ -1887,6 +1894,30 @@ const LIVE_STATUS = new Set<Wire.Run["status"]>(["running", "waiting", "paused"]
 function disconnected(run: Wire.Run, down: boolean): Wire.Run {
 	let { disconnected: _, ...rest } = run;
 	return down && LIVE_STATUS.has(run.status) ? { ...rest, disconnected: true } : rest;
+}
+
+/**
+ * What became of the workflow runs a hold rebuilt after a restart kept for its client, whose
+ * cards Chat restored live: the client did not come back in time and the cards say its Planner is
+ * disconnected (`down`), it came back and took them (`up`), or they ended with the hold. A live
+ * session of the room's own reports its runs itself, so none of this applies while one is open.
+ */
+export async function restoredRuns(
+	context: Pick<Room, "chat" | "room" | "server" | "persist">,
+	outcome: "down" | "up" | "ended",
+): Promise<void> {
+	let { chat, room, server } = context;
+	if (!chat.runs?.length || chat.retained || chat.closed) return;
+	let at = now();
+	let next = chat.runs.map(run =>
+		outcome === "ended"
+			? ENDED_RUN[run.status] ? run : stopped(run, at)
+			: disconnected(run, outcome === "down")
+	);
+	if (JSON.stringify(next) === JSON.stringify(chat.runs)) return;
+	await context.persist(() => ({ entries: chat.entries, runs: next }));
+	chat.runs = next;
+	state(chat, server, room);
 }
 
 /** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */

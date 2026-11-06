@@ -32,10 +32,13 @@ const MAX_PER_TURN = 20;
 /** A turn starts once nobody saved another answer for `quietMs`, or `longestMs` after the first. */
 export const ANSWER_WINDOW = { quietMs: 5_000, longestMs: 30_000 };
 
-/** Whether a saved answer is the Planner's to act on in a turn of its own. */
+/**
+ * Whether a saved answer is the Planner's to act on in a turn of its own: a Planner's decision
+ * nobody waits on. A host dialog counts too once its asker is gone, as after a restart, because
+ * `awaited` is not stored and nothing else would ever hand the Planner its answer.
+ */
 export function plannerToActOn(record: Record, entry: Pick<Open, "awaited">): boolean {
-	return record.origin === "planner" && !entry.awaited
-		&& !record.definition.questions.some(question => question.verbatim);
+	return record.origin === "planner" && !entry.awaited;
 }
 
 function data(value: string): string {
@@ -85,11 +88,13 @@ export function answerInstruction(
 			let saved = record.answers?.[question.id];
 			if (saved !== undefined) lines.push(`Answer saved by @${by} (data): ${data(saved)}`);
 			for (let option of question.options) {
-				if (record.choices?.includes(option.id) && option.description) {
-					lines.push(
-						`Chosen option ${data(option.label)} means (data): ${data(option.description)}`,
-					);
-				}
+				if (!record.choices?.includes(option.id)) continue;
+				// A host dialog's options carry no description: the label is all the answer there is.
+				lines.push(
+					option.description
+						? `Chosen option ${data(option.label)} means (data): ${data(option.description)}`
+						: `Chosen option (data): ${data(option.label)}`,
+				);
 			}
 		}
 		lines.push(
@@ -111,7 +116,9 @@ export function answerInstruction(
 			one ? "the answer needs" : "an answer needs"
 		} nothing more from you, say so briefly.`,
 	);
-	let question = plan.records.get(live[0]!.id)!.definition.questions[0]?.question ?? "a decision";
+	// A host dialog's question runs a title and its message together on separate lines.
+	let question = plan.records.get(live[0]!.id)!.definition.questions[0]?.question.split("\n")[0]
+		|| "a decision";
 	return {
 		handle: "chopin",
 		text: lines.join("\n"),

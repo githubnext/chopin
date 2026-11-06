@@ -47,23 +47,35 @@ export function laterTimers() {
 	};
 }
 
-/** A room whose Decisions answer Atomic HostInput requests, with a member to answer them. */
+/**
+ * A room whose Decisions answer Atomic HostInput requests, with a member to answer them. With
+ * `reopen`, the room is one a process that has since restarted opens again from what the first
+ * stored, on the same storage and lease, with `backend` in addition to what a room needs.
+ */
 export async function hostInputRoom(
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
+	reopen?: {
+		storage: MemoryStorage;
+		channelId: string;
+		lease: Awaited<ReturnType<MemoryStorage["leases"]["acquire"]>> & {};
+		backend?: Partial<Plan.Backend>;
+	},
 ) {
-	let storage = new MemoryStorage();
+	let storage = reopen?.storage ?? new MemoryStorage();
 	let now = new Date();
-	await storage.users.put({ id: "user", login: "reader", avatarUrl: "", now });
-	let channel = await storage.channels.create({
-		id: crypto.randomUUID(),
-		repositoryId: "R_test",
-		repositoryOwner: "org",
-		repositoryName: "repo",
-		title: "Questions",
-		createdBy: "user",
-		now,
-	});
-	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
+	let channel = reopen
+		? { id: reopen.channelId }
+		: (await storage.users.put({ id: "user", login: "reader", avatarUrl: "", now }),
+			await storage.channels.create({
+				id: crypto.randomUUID(),
+				repositoryId: "R_test",
+				repositoryOwner: "org",
+				repositoryName: "repo",
+				title: "Questions",
+				createdBy: "user",
+				now,
+			}));
+	let lease = reopen?.lease ?? (await storage.leases.acquire("writer", "test", 60_000))!;
 	let frames: any[] = [];
 	let server = {
 		publish(_topic: string, frame: string) {
@@ -71,6 +83,7 @@ export async function hostInputRoom(
 		},
 	} as unknown as Server<SocketData>;
 	let plan = await Plan.open(channel.id, {
+		...reopen?.backend,
 		storage,
 		lease: () => lease,
 		fatal: error => {
@@ -189,6 +202,8 @@ export async function hostInputRoom(
 		ws,
 		server,
 		room,
+		lease,
+		channelId: channel.id,
 		close: () => Plan.close(plan),
 	};
 }

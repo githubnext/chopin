@@ -949,11 +949,23 @@ export type Lease = {
  */
 export type LeasePeek = { lease: Lease; free: boolean };
 
+/**
+ * A question a remote Planner's client still waits on, as a restart keeps it: the kind of request
+ * and the decisions it asked, which is what its answer is built from in the process that takes over.
+ */
+export type PlannerAskedInput = {
+	request: string;
+	method: "questionnaire" | "confirm" | "select" | "input" | "editor";
+	decisions: string[];
+};
+
 /** What one session of a remote Planner's client keeps across a link that dropped. */
 export type PlannerHeldSession = {
 	id: string;
 	/** Request ids of the questions the client still waits on. */
 	waiting: string[];
+	/** What each of those whose decisions exist needs to be answered again after a restart. */
+	asked?: PlannerAskedInput[];
 	/** Answers the client has not acknowledged. */
 	owed: JsonValue[];
 	/** Stops pressed while the link was down, for the client to hear first. */
@@ -968,8 +980,12 @@ export type PlannerLinkHold = {
 	channelId: string;
 	userId: string;
 	login: string;
-	/** The login session that owns the document's Planner; the hold goes with it. */
-	ownerSessionId: string;
+	/**
+	 * The browser login session that owns the document's Planner; the hold goes with it. Absent
+	 * for a paired machine's hold, whose delegated login lasts only as long as one process: the
+	 * machine's next attach makes a new one, and the hold goes with the machine.
+	 */
+	ownerSessionId?: string;
 	/** The stored Planner owner's generation the hold was made under. */
 	generation: number;
 	/** The paired machine whose delegated login owns the document, by id and label. */

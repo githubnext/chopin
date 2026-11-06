@@ -22,6 +22,7 @@
 import { LINK_CLOSE } from "@chopin/agent-link";
 
 import { GitHubError } from "../../github/client";
+import { AgentLink, type RejoinHost } from "./link";
 import { attachLink } from "./registry";
 
 import type { Session } from "@chopin/protocol";
@@ -29,12 +30,12 @@ import type { Admission } from "../../auth/admission";
 import type { AuthConfig } from "../../auth/config";
 import type { AuthenticatedSession, Sessions } from "../../auth/session";
 import type { GitHub } from "../../github/client";
+import type { PlannerLinkHold, StoredPlannerLinkHold } from "../../storage/model";
 import type { StorageAdapter } from "../../storage/port";
-import type { AgentLink } from "./link";
 
 export type AttachmentAuth = {
 	config: Pick<AuthConfig, "origin">;
-	storage: Pick<StorageAdapter, "channels">;
+	storage: Pick<StorageAdapter, "channels"> & Partial<Pick<StorageAdapter, "machines">>;
 	github: Pick<GitHub, "repositoryAccess">;
 	admission: Pick<Admission, "allowed">;
 	sessions: Pick<Sessions, "forUser" | "resolve" | "use">;
@@ -62,7 +63,8 @@ export type AttachRefusal = {
 		| "sign-in-required"
 		| "repository-forbidden"
 		| "access-revoked"
-		| "document-archived";
+		| "document-archived"
+		| "unavailable";
 	message: string;
 };
 
@@ -78,11 +80,36 @@ export type AttachGrant = {
 	 * Present when the account's earlier link still counted as attached: the grant stands for
 	 * nothing until the client's first message, a resume naming a session that earlier link
 	 * holds, shows its connection is gone. Then the earlier link is closed as the unexpected
-	 * drop it is, its work parked, and `takeover` gives the grant that takes it.
+	 * drop it is, its work parked, and `takeover` gives the grant that takes it. It is present
+	 * too for a hold a restart rebuilt whose owner's browser has not come back yet: `names` is
+	 * undefined when the client's first message is not a resume.
 	 */
 	takeover?: (
-		names: Array<{ session: string; requests: string[] }>,
+		names: Array<{ session: string; requests: string[] }> | undefined,
 	) => Promise<AttachGrant | AttachRefusal>;
+};
+
+/**
+ * Where a hold is kept so the process that takes over can rebuild it. Absent under
+ * `AUTH_MODE=local`, which is never handed over: its holds stay in memory.
+ */
+export type HoldStore = {
+	put(hold: PlannerLinkHold): Promise<void>;
+	delete(channelId: string): Promise<void>;
+};
+
+/**
+ * What became of the workflow runs a rebuilt hold keeps, for the cards Chat stored: their client
+ * did not come back in time (`down`), came back and took them (`up`), or they ended with the hold.
+ */
+export type RestoredRuns = "down" | "up" | "ended";
+
+export type PlannerAttachmentOptions = {
+	store?: HoldStore;
+	/** Heard when a rebuilt hold's runs change as `RestoredRuns` says. */
+	restoredRuns?: (channelId: string, outcome: RestoredRuns) => void;
+	/** Heard when a hand-over window ends without the client back, with what was missing. */
+	missed?: (channelId: string, cause: "login" | "client") => void;
 };
 
 /** What a document's members are told about its Planner: only the holder's login and state. */
@@ -105,6 +132,13 @@ type Hold = {
 	forget?: () => void;
 	timer?: ReturnType<typeof setTimeout>;
 	releaseAt?: Date;
+	/** Rebuilt after a restart and not yet taken back by a link. */
+	restored?: boolean;
+	/** Until then a hold whose link a cut closed is shown as attached, as it is when it returns. */
+	handoverUntil?: Date;
+	handoverTimer?: ReturnType<typeof setTimeout>;
+	/** Whether storage holds a row for it that something must remove. */
+	persisted?: boolean;
 };
 
 type PendingAttach = {
@@ -157,6 +191,17 @@ export function forbiddenMessage(repository: string): string {
 	return `Connecting to this document needs push or administration access to ${repository}.`;
 }
 
+/** How often a resume that waits for the owner's browser sign-in looks for it. */
+const LOGIN_POLL_MS = 50;
+
+/**
+ * How long after the cut wrote a hold a process may still rebuild it with a window. A hand-over,
+ * from the write to the next process taking the lease, takes seconds and minutes at the very
+ * worst, and a process never rebuilds a hold for longer than a window; a row older than this was
+ * left by a cut that no process was started to follow, and its window is long past.
+ */
+const HOLD_STALE_MS = 60 * 60_000;
+
 export class PlannerAttachments {
 	#auth: AttachmentAuth;
 	#graceMs: number;
@@ -166,10 +211,22 @@ export class PlannerAttachments {
 	#endings = new Map<string, number>();
 	#queues = new Map<string, Promise<void>>();
 	#listeners = new Set<AttachmentListener>();
+	#options: PlannerAttachmentOptions;
+	/** Each document's pending row writes, in order, so a removal never overtakes a save. */
+	#rows = new Map<string, Promise<void>>();
+	/** The cut has taken the holds' state: nothing more is written, and nothing is announced. */
+	#frozen = false;
 
-	constructor(auth: AttachmentAuth, graceMs: number) {
+	constructor(auth: AttachmentAuth, graceMs: number, options: PlannerAttachmentOptions = {}) {
 		this.#auth = auth;
 		this.#graceMs = graceMs;
+		this.#options = options;
+	}
+
+	/** Whether a hold's link was closed by a cut and its window has not run out. */
+	#inWindow(hold: Hold): boolean {
+		return hold.link === undefined && hold.handoverUntil !== undefined
+			&& hold.handoverUntil > this.#auth.clock();
 	}
 
 	/** Whether a client is attached to the document now, not merely holding it through a grace period. */
@@ -257,8 +314,8 @@ export class PlannerAttachments {
 			userId: hold.userId,
 			login: hold.login,
 			...(hold.machineId !== undefined ? { machineId: hold.machineId } : {}),
-			attached: hold.link !== undefined,
-			disconnected: hold.link === undefined && hold.parked !== undefined,
+			attached: hold.link !== undefined || this.#inWindow(hold),
+			disconnected: hold.link === undefined && !this.#inWindow(hold) && hold.parked !== undefined,
 		};
 	}
 
@@ -272,7 +329,8 @@ export class PlannerAttachments {
 	stopMachine(channelId: string, machineId: string, message: string): Promise<void> {
 		return this.#serialized(channelId, async () => {
 			let hold = this.#holds.get(channelId);
-			if (!(hold?.link || hold?.parked) || hold.machineId !== machineId) return;
+			if (!hold || hold.machineId !== machineId) return;
+			if (!(hold.link || hold.parked || hold.restored)) return;
 			this.#invalidate(hold, { ok: false, code: "access-revoked", message });
 			await this.#release(hold);
 		});
@@ -285,7 +343,7 @@ export class PlannerAttachments {
 	status(channelId: string): PlannerAttachment {
 		let hold = this.#holds.get(channelId);
 		if (!hold) return { state: "none" };
-		if (hold.link) return { state: "attached", login: hold.login };
+		if (hold.link || this.#inWindow(hold)) return { state: "attached", login: hold.login };
 		if (!hold.releaseAt) {
 			return hold.parked
 				? { state: "disconnected", login: hold.login }
@@ -306,6 +364,49 @@ export class PlannerAttachments {
 	/** Makes `link` the document's Planner and its account the owner, or says why not. */
 	attach(request: AttachRequest, link: AgentLink): Promise<AttachGrant | AttachRefusal> {
 		return this.#serialized(request.channelId, () => this.#attach(request, link));
+	}
+
+	/**
+	 * A hold a restart rebuilt for a browser sign-in is taken back only once that sign-in is back,
+	 * which its browser's cookie restores. The returning client's first message, its `resume`, waits
+	 * for it through the hold's window: nothing is refused, the link stays as it is, the document
+	 * shows the machine attached, and the sessions are handed back the moment the sign-in is. A
+	 * resume still without it when the window is over, or after it, is refused with `unavailable`,
+	 * which the client retries, and the hold stays as it is.
+	 */
+	#awaitingLogin(request: AttachRequest, link: AgentLink, held: Hold): AttachGrant {
+		let unavailable = {
+			ok: false,
+			code: "unavailable",
+			message: "Chopin has not restored the sign-in this connection runs under yet.",
+		} as const;
+		return {
+			ok: true,
+			detach: () => {},
+			claim: () => undefined,
+			lapse: () => {},
+			// Waiting outside the document's queue, which the window's own end needs.
+			takeover: async names => {
+				if (names !== undefined) await this.#awaitLogin(held, link);
+				return this.#serialized(request.channelId, async () => {
+					if (!link.attached) return unavailable;
+					if (this.#holds.get(request.channelId) !== held || held.link) {
+						return this.#attach(request, link, true);
+					}
+					if (names === undefined) return this.#attach(request, link, true);
+					if (!await this.#auth.sessions.resolve(held.ownerSessionId)) return unavailable;
+					return this.#attach(request, link, true);
+				});
+			},
+		};
+	}
+
+	/** Until the owner's sign-in is back, the hold's window is over, or the link is gone. */
+	async #awaitLogin(hold: Hold, link: AgentLink): Promise<void> {
+		while (
+			link.attached && this.#holds.get(hold.channelId) === hold && !hold.link
+			&& this.#inWindow(hold) && !await this.#auth.sessions.resolve(hold.ownerSessionId)
+		) await new Promise(resolve => setTimeout(resolve, LOGIN_POLL_MS));
 	}
 
 	/** The browser login ended: every document it owns through an attachment is released. */
@@ -377,6 +478,179 @@ export class PlannerAttachments {
 		return false;
 	}
 
+	/** A machine was revoked or must be authorized again: the hold a restart rebuilt for it ends. */
+	async machineEnded(machineId: string): Promise<void> {
+		let ended = [...this.#holds.values()].filter(hold =>
+			hold.machineId === machineId && hold.link === undefined
+		);
+		for (let hold of ended) {
+			this.#invalidate(hold, machineEndedRefusal(hold.machine ?? "", hold.login));
+		}
+		await Promise.all(ended.map(hold => this.#release(hold)));
+	}
+
+	/**
+	 * Rebuilds the holds a process that has since restarted wrote at its cut: each as a suspended
+	 * hold whose client's `resume` takes it back. One whose document or paired machine is gone, or
+	 * whose stored owner is no longer the login it named, ends and its row with it. Until its
+	 * window runs out a hold a cut closed is shown as attached. Only this process is given that
+	 * window: its row is rewritten without it, so a process that starts after this one crashed
+	 * finds the hold of a link that had already dropped, disconnected.
+	 */
+	async restore(rows: StoredPlannerLinkHold[]): Promise<void> {
+		let now = this.#auth.clock();
+		for (let row of rows) {
+			let channel = await this.#auth.storage.channels.get(row.channelId);
+			let machines = this.#auth.storage.machines;
+			let machine = row.machineId !== undefined && machines
+				? await machines.get(row.machineId)
+				: undefined;
+			let agent = row.ownerSessionId !== undefined
+				? (await this.#auth.storage.channels.readAgent(row.channelId, now))?.agent
+				: undefined;
+			let stale = !channel || channel.archivedAt
+				|| (row.machineId !== undefined && machines && (!machine || machine.revokedAt))
+				|| (row.ownerSessionId !== undefined
+					&& (agent?.ownerSessionId !== row.ownerSessionId || agent.generation !== row.generation));
+			let hold: Hold = {
+				channelId: row.channelId,
+				userId: row.userId,
+				login: row.login,
+				ownerSessionId: row.ownerSessionId ?? "",
+				generation: row.generation,
+				...(row.machineId !== undefined ? { machineId: row.machineId } : {}),
+				...(row.machine !== undefined ? { machine: row.machine } : {}),
+				restored: true,
+				persisted: true,
+			};
+			if (stale) {
+				this.#forgetRow(hold);
+				continue;
+			}
+			if (row.sessions.length > 0) {
+				hold.parked = AgentLink.rebuilt(row.channelId, row.sessions, {
+					lapse: () => this.#lapsed(hold, hold.parked!),
+					ended: () => this.#runs(hold, "ended"),
+					resumed: () => this.#runs(hold, "up"),
+				});
+			}
+			let length = row.handoverUntil
+					&& this.#auth.clock().getTime() - row.suspendedAt.getTime() <= HOLD_STALE_MS
+				? row.handoverUntil.getTime() - row.suspendedAt.getTime()
+				: undefined;
+			// Before the hold is shown, so a crash from here on leaves a row with no window. A write
+			// that fails leaves the row as it was, and the window the client was told is still given.
+			if (length !== undefined && this.#options.store) {
+				try {
+					await this.#options.store.put({ ...row, handoverUntil: undefined });
+				} catch (error) {
+					console.error("[agent] keeping a remote Planner's link state failed:", error);
+				}
+			}
+			this.#holds.set(row.channelId, hold);
+			// The window is the length the cut gave, counted from here: the cut could not know when
+			// its lease would be released, and this is after it was, however long the steps between
+			// its write and its release took and however late this process took the lease. Only a
+			// row older than `HOLD_STALE_MS` is no window's: no process was started to take it back.
+			let taken = this.#auth.clock();
+			if (length !== undefined) {
+				hold.handoverUntil = new Date(taken.getTime() + length);
+				hold.handoverTimer = setTimeout(() => void this.#windowEnded(hold), length);
+				hold.handoverTimer.unref?.();
+			} else if (!hold.parked) {
+				// A window that ran out while no process was there, for a client with nothing to resume.
+				this.#startGrace(hold);
+			}
+		}
+	}
+
+	/**
+	 * The room of `channelId` is open: the questions a rebuilt hold's client left open are waited
+	 * on again, for it, through `host`.
+	 */
+	rejoinInputs(channelId: string, host: RejoinHost): void {
+		let hold = this.#holds.get(channelId);
+		hold?.parked?.rejoinInputs(host);
+		hold?.link?.rejoinInputs(host);
+	}
+
+	/**
+	 * Whether a hold a restart rebuilt still keeps sessions its client has not taken back, so the
+	 * workflow runs Chat stored for the document are live and not stopped when its Chat opens:
+	 * `live` through the hold's window, `down` once its client is known to be away.
+	 */
+	restoredWork(channelId: string): "live" | "down" | undefined {
+		let hold = this.#holds.get(channelId);
+		if (!hold?.restored || !hold.parked || hold.parked.snapshot().length === 0) return undefined;
+		return this.#inWindow(hold) ? "live" : "down";
+	}
+
+	/**
+	 * The cut: takes each hold's state for the next process, in the order a window needs, and stops
+	 * everything this one does with holds. A hold whose link is live gets a hand-over window, whose
+	 * length the next process counts from the moment it rebuilds the hold, which is after the
+	 * release; one that was already disconnected keeps its state, because the deploy did not cause
+	 * it, and one in its grace period keeps nothing.
+	 */
+	freeze(windowMs: number): PlannerLinkHold[] {
+		this.#frozen = true;
+		let now = this.#auth.clock();
+		let rows: PlannerLinkHold[] = [];
+		for (let hold of this.#holds.values()) {
+			let source = hold.link ?? hold.parked;
+			if (!source && !hold.restored) continue;
+			let sessions = source?.snapshot() ?? [];
+			let { ownerSessionId, machineId, machine } = hold;
+			let handoverUntil = hold.link
+				? new Date(now.getTime() + windowMs)
+				: hold.handoverUntil && hold.handoverUntil > now
+				? hold.handoverUntil
+				: undefined;
+			rows.push({
+				channelId: hold.channelId,
+				userId: hold.userId,
+				login: hold.login,
+				...(machineId === undefined ? { ownerSessionId } : { machineId, machine: machine! }),
+				generation: hold.generation,
+				sessions,
+				suspendedAt: now,
+				...(handoverUntil ? { handoverUntil } : {}),
+			});
+		}
+		this.close();
+		return rows;
+	}
+
+	/**
+	 * Writes what `freeze` took; a hold that cannot be written is missing from the next process. The
+	 * row says when it was written and how long the window is. The next process counts the window
+	 * from its own rebuild of the hold, so no step between this write and the release, however
+	 * slow, takes anything from it; the write time only tells a row from an old cut from this one.
+	 */
+	async persist(rows: PlannerLinkHold[]): Promise<void> {
+		let store = this.#options.store;
+		if (!store) return;
+		await Promise.all(this.#rows.values());
+		let written = this.#auth.clock();
+		await Promise.all(rows.map(async row => {
+			try {
+				await store.put(
+					row.handoverUntil
+						? {
+							...row,
+							suspendedAt: written,
+							handoverUntil: new Date(
+								written.getTime() + row.handoverUntil.getTime() - row.suspendedAt.getTime(),
+							),
+						}
+						: row,
+				);
+			} catch (error) {
+				console.error("[agent] keeping a remote Planner's link state failed:", error);
+			}
+		}));
+	}
+
 	/** The server is going down: no link withdraws a question it asked on its way out. */
 	shutdown(): void {
 		for (let hold of this.#holds.values()) {
@@ -387,16 +661,27 @@ export class PlannerAttachments {
 
 	/** Stops every grace timer. Ownership stays in storage, which startup clears. */
 	close(): void {
+		this.#frozen = true;
 		for (let hold of this.#holds.values()) {
 			clearTimeout(hold.timer);
+			clearTimeout(hold.handoverTimer);
 			hold.parked?.terminate();
 		}
 		this.#holds.clear();
 	}
 
-	async #attach(request: AttachRequest, link: AgentLink): Promise<AttachGrant | AttachRefusal> {
+	async #attach(
+		request: AttachRequest,
+		link: AgentLink,
+		restoring = false,
+	): Promise<AttachGrant | AttachRefusal> {
 		let { channelId, user } = request;
 		let held = this.#holds.get(channelId);
+		if (
+			!restoring && held?.restored && !held.link && held.userId === user.id
+			&& request.login === undefined && held.machine === undefined
+			&& !await this.#auth.sessions.resolve(held.ownerSessionId)
+		) return this.#awaitingLogin(request, link, held);
 		if (held && (held.link || held.userId !== user.id)) {
 			// The same account's client may be returning to a link whose connection died unnoticed:
 			// only its first message, a resume naming what that link holds, can say so.
@@ -420,7 +705,7 @@ export class PlannerAttachments {
 			login: user.login,
 			...(request.machine !== undefined ? { machine: request.machine } : {}),
 			held,
-			sessionIds: new Set(held ? [held.ownerSessionId] : []),
+			sessionIds: new Set(held?.ownerSessionId ? [held.ownerSessionId] : []),
 		};
 		this.#pending.set(channelId, pending);
 		try {
@@ -439,7 +724,7 @@ export class PlannerAttachments {
 		request: AttachRequest,
 		link: AgentLink,
 		earlier: AgentLink,
-		names: Array<{ session: string; requests: string[] }>,
+		names: Array<{ session: string; requests: string[] }> | undefined,
 		ending: number,
 	): Promise<AttachGrant | AttachRefusal> {
 		return this.#serialized(request.channelId, async () => {
@@ -447,7 +732,9 @@ export class PlannerAttachments {
 			if ((this.#endings.get(request.channelId) ?? 0) !== ending) return documentEndedRefusal();
 			let current = this.#holds.get(request.channelId);
 			if (current?.link) {
-				if (current.link !== earlier || !earlier.holds(names)) return attachedRefusal(current);
+				if (current.link !== earlier || !earlier.holds(names ?? [])) {
+					return attachedRefusal(current);
+				}
 				earlier.close(LINK_CLOSE.unresponsive, "superseded");
 			}
 			let attached = await this.#attach(request, link);
@@ -474,10 +761,14 @@ export class PlannerAttachments {
 		if (pending.invalidated) return pending.invalidated;
 		let now = this.#auth.clock();
 		let held = pending.held;
+		// A machine that comes back after a restart owns through a login its grant made again: that
+		// login takes over the hold the old one named.
+		let returning = held?.restored && request.login !== undefined
+			&& held.machineId !== undefined && held.machineId === request.machineId;
 		// A machine owns through its own login and a browser client through a sign-in; neither
 		// keeps a hold that rests on the other's.
 		if (
-			held
+			held && !returning
 			&& (request.login ? held.ownerSessionId !== request.login : held.machine !== undefined)
 		) {
 			if (this.#holds.get(channelId) === held) {
@@ -485,6 +776,22 @@ export class PlannerAttachments {
 				await this.#release(held);
 			}
 			held = undefined;
+		}
+		if (held && returning && this.#holds.get(channelId) === held) {
+			let claimed;
+			try {
+				claimed = await this.#claim(channelId, login.session.id, now);
+			} catch (error) {
+				if (pending.invalidated) return pending.invalidated;
+				throw error;
+			}
+			if (pending.invalidated) return pending.invalidated;
+			if (!claimed || this.#holds.get(channelId) !== held) {
+				throw new Error("The document's agent owner changed while connecting.");
+			}
+			held.ownerSessionId = login.session.id;
+			held.generation = claimed.generation;
+			return this.#bind(held, link);
 		}
 		if (held && this.#holds.get(channelId) === held) {
 			let stored = await this.#auth.storage.channels.readAgent(channelId, now);
@@ -593,8 +900,13 @@ export class PlannerAttachments {
 
 	#bind(hold: Hold, link: AgentLink): AttachGrant {
 		clearTimeout(hold.timer);
+		clearTimeout(hold.handoverTimer);
 		hold.timer = undefined;
+		hold.handoverTimer = undefined;
 		hold.releaseAt = undefined;
+		hold.handoverUntil = undefined;
+		hold.restored = false;
+		this.#forgetRow(hold);
 		hold.link = link;
 		hold.forget = attachLink(hold.channelId, link);
 		this.#changed(hold.channelId);
@@ -644,6 +956,7 @@ export class PlannerAttachments {
 			// document until its client returns or something explicit ends the hold.
 			if (hold.parked && hold.parked !== link) hold.parked.terminate();
 			hold.parked = link;
+			this.#saveRow(hold, link);
 		}
 		// A link that came back and dropped again before resuming leaves the earlier one's work
 		// waiting, still with no deadline.
@@ -670,6 +983,8 @@ export class PlannerAttachments {
 	}
 
 	async #release(hold: Hold): Promise<void> {
+		// A machine's rebuilt hold names no login, and the restart already cleared the owner it had.
+		if (!hold.ownerSessionId) return;
 		try {
 			await this.#auth.storage.channels.clearAgentOwner(
 				hold.channelId,
@@ -684,8 +999,11 @@ export class PlannerAttachments {
 
 	#drop(hold: Hold): void {
 		clearTimeout(hold.timer);
+		clearTimeout(hold.handoverTimer);
 		hold.timer = undefined;
+		hold.handoverTimer = undefined;
 		if (this.#holds.get(hold.channelId) !== hold) return;
+		this.#forgetRow(hold);
 		// Whatever a dropped link kept goes with the ownership it rested on.
 		hold.parked?.terminate();
 		hold.parked = undefined;
@@ -693,7 +1011,72 @@ export class PlannerAttachments {
 		this.#changed(hold.channelId);
 	}
 
+	/** The rebuilt hold's window ran out with its client not back: it is disconnected from now on. */
+	#windowEnded(hold: Hold): Promise<void> {
+		return this.#serialized(hold.channelId, async () => {
+			if (this.#holds.get(hold.channelId) !== hold || hold.link || !hold.handoverUntil) return;
+			hold.handoverUntil = undefined;
+			hold.handoverTimer = undefined;
+			// Its browser sign-in not back is the owner's tab; otherwise the client did not return.
+			let cause =
+				hold.machine === undefined && !await this.#auth.sessions.resolve(hold.ownerSessionId)
+					? "login" as const
+					: "client" as const;
+			if (this.#holds.get(hold.channelId) !== hold || hold.link) return;
+			console.warn(
+				`chopin: remote Planner miss: the hand-over window of ${hold.channelId} ran out with `
+					+ `${cause === "login" ? "its owner's sign-in not back" : "its client not back"}`,
+			);
+			if (hold.parked) this.#runs(hold, "down");
+			else this.#startGrace(hold);
+			this.#options.missed?.(hold.channelId, cause);
+			this.#changed(hold.channelId);
+		});
+	}
+
+	#runs(hold: Hold, outcome: RestoredRuns): void {
+		if (this.#frozen) return;
+		this.#options.restoredRuns?.(hold.channelId, outcome);
+	}
+
+	/** Keeps what a suspended link holds, for the process that takes over after a crash. */
+	#saveRow(hold: Hold, link: AgentLink): void {
+		let store = this.#options.store;
+		if (!store || this.#frozen) return;
+		let { ownerSessionId, machineId, machine } = hold;
+		let row: PlannerLinkHold = {
+			channelId: hold.channelId,
+			userId: hold.userId,
+			login: hold.login,
+			...(machineId === undefined ? { ownerSessionId } : { machineId, machine: machine! }),
+			generation: hold.generation,
+			sessions: link.snapshot(),
+			suspendedAt: this.#auth.clock(),
+		};
+		hold.persisted = true;
+		this.#writeRow(hold.channelId, () => store.put(row));
+	}
+
+	/** Removes the row of a hold that a live link backs again or that ended. */
+	#forgetRow(hold: Hold): void {
+		let store = this.#options.store;
+		if (!store || this.#frozen || !hold.persisted) return;
+		hold.persisted = false;
+		this.#writeRow(hold.channelId, () => store.delete(hold.channelId));
+	}
+
+	#writeRow(channelId: string, write: () => Promise<void>): void {
+		let next = (this.#rows.get(channelId) ?? Promise.resolve()).then(write).catch(error =>
+			console.error("[agent] keeping a remote Planner's link state failed:", error)
+		);
+		this.#rows.set(channelId, next);
+		void next.then(() => {
+			if (this.#rows.get(channelId) === next) this.#rows.delete(channelId);
+		});
+	}
+
 	#changed(channelId: string): void {
+		if (this.#frozen) return;
 		let planner = this.status(channelId);
 		for (let listener of this.#listeners) {
 			try {

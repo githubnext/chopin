@@ -169,9 +169,21 @@ collaborative state and external implementation runs are durable.
   another machine, archiving the document, or the same account attaching with a client that
   does not resume (a browser sign-in over a machine's parked work included) ends it; no other
   close keeps it.
-  A server restart, graceful or not, forgets the sessions (a client's `resume` finds
-  nothing) and leaves the Decisions open, and the cards come back stopped and stay so
-  until a session is started again; a graceful shutdown posts no Chat line about it. A same-account
+  A restart keeps what the cut writes to `planner_link_holds`: the sessions a client holds,
+  the questions it waits on (with the decisions each asked, which the next process waits on
+  again so a member's answer reaches the client's own request), the answers it is owed and the
+  Stops it has not heard. Until its window (`HANDOVER_PLANNER_WINDOW_MS`, counted from the
+  release of the lease: the next process starts it as it rebuilds the hold, so no step between
+  the write and the release, however slow, and no late takeover takes anything from it; only a
+  row the cut wrote more than an hour before is no window's) ends, a hold whose link the cut
+  closed is shown as attached. A `resume` inside the window is never refused: before the owner's
+  browser sign-in is back it waits for it, with the link kept and the machine shown attached, and
+  takes the sessions back the moment it is; one still without it once the window is over is
+  refused `unavailable` with `retry`. Only that process is given the window: it rewrites the
+  row without it before it shows the hold, so a process that starts after it crashed, inside the
+  window or after it, finds the hold disconnected. A crash keeps only
+  the hold of a link that had already dropped. Without a `resume` the hold turns disconnected
+  when the window ends. A graceful shutdown posts no Chat line about it. A same-account
   client that returns before the server noticed its old link died takes that link's work
   over with its first `resume`. A paired machine's Planner backend attaches with a document-scoped
   credential instead and owns through a cookie-less login carrying the machine's

@@ -14,7 +14,7 @@ import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link
 import type { AddressInfo, Socket } from "node:net";
 import type { ServerWebSocket } from "bun";
 import type { Repository, RepositoryPage } from "../github/client";
-import type { AttachmentAuth } from "../harness/remote/attachments";
+import type { AttachmentAuth, PlannerAttachmentOptions } from "../harness/remote/attachments";
 import type { AgentAuth, AgentSocketData } from "../harness/remote/endpoint";
 import type { AgentLink } from "../harness/remote/link";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
@@ -67,7 +67,14 @@ function scoreRepository(owner: string, name: string, push: boolean): Repository
  * account without access, the denied account fails admission, and every other
  * token is rejected by GitHub.
  */
-export async function linkAuth(channelId?: string) {
+/** What a hosted process keeps a browser login with: the encrypted credentials a restart restores. */
+export const LINK_PERSISTENCE = {
+	key: new Uint8Array(32).fill(5),
+	origin: "https://chopin.test",
+	clientId: "link-test",
+};
+
+export async function linkAuth(channelId?: string, options: { persistent?: boolean } = {}) {
 	let storage = new MemoryStorage();
 	let now = new Date();
 	for (let account of Object.values(ACCOUNTS)) {
@@ -76,6 +83,7 @@ export async function linkAuth(channelId?: string) {
 	let clock = { skewMs: 0 };
 	let revocations = new Set<(sessionId: string) => Promise<void>>();
 	let sessions = new Sessions(storage, false, () => new Date(Date.now() + clock.skewMs), {
+		...(options.persistent ? { persistence: LINK_PERSISTENCE } : {}),
 		onRevoked: async id => {
 			for (let revoked of revocations) await revoked(id);
 		},
@@ -214,10 +222,11 @@ export function linkServer(
 	graceMs = 2_000,
 	liveness?: { pingEveryMs: number; pongTimeoutMs: number; maxSilenceMs?: number },
 	planners?: MachinePlanners,
+	holds: { attachments?: PlannerAttachments; options?: PlannerAttachmentOptions } = {},
 ) {
 	let links: AgentLink[] = [];
 	let sockets = new Set<ServerWebSocket<AgentSocketData>>();
-	let attachments = new PlannerAttachments(auth, graceMs);
+	let attachments = holds.attachments ?? new PlannerAttachments(auth, graceMs, holds.options);
 	let server = Bun.serve<AgentSocketData>({
 		hostname: "127.0.0.1",
 		port: 0,

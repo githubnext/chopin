@@ -67,7 +67,9 @@ write-up. Child-focused Planner turns cannot create decisions in the root docume
 
 Saving a decision the Planner left open, whether captured with `open_decisions` or
 `open_decision` or asked with `ask` by a turn that has since ended, also hands the saved answer to
-a Planner turn, so the Planner acts on it: an answer that chose "start a new run" starts one.
+a Planner turn, so the Planner acts on it (a question a client asked as a dialog counts once nothing
+waits on it any more, as after a crash, or when its client never resumed after a restart and so
+cannot be given the answer; the turn names the option chosen): an answer that chose "start a new run" starts one.
 Answers saved to one document close together share one turn that lists each question, answer,
 chosen option and who saved it. The turn starts once nobody has saved another answer for five
 seconds, or 30 seconds after the first, and never while a Planner turn runs or waits in that

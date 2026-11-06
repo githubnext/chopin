@@ -79,6 +79,7 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 					sessions: [{
 						id: "session-1",
 						waiting: ["request-1", "request-2"],
+						asked: [{ request: "request-2", method: "questionnaire", decisions: ["d-1", "d-2"] }],
 						owed: [{ request: "request-1", answer: { choice: "a" } }],
 						stops: [{ run: "run-1" }, { run: null }],
 					}, { id: "session-2", waiting: [], owed: [], stops: [] }],
@@ -91,6 +92,7 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 				});
 				let found = (await storage.plannerHolds.get(channelId))!;
 				found.sessions[0]!.waiting.push("changed");
+				found.sessions[0]!.asked![0]!.decisions.push("changed");
 				found.suspendedAt.setTime(0);
 				expect(await storage.plannerHolds.get(channelId)).toEqual({
 					...first,
@@ -119,17 +121,15 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		test("names the paired machine whose login owns the document", async () => {
+		test("names the paired machine that holds the document, with no login of its own", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { userId, channelId, lease } = await userAndChannel(storage);
 				let sessionId = await login(storage, userId);
 				let paired = machine(userId, { label: "laptop" });
 				await storage.machines.create(paired);
-				let input = hold(channelId, userId, sessionId, {
-					machineId: paired.id,
-					machine: "laptop",
-				});
+				let { ownerSessionId: _, ...base } = hold(channelId, userId, sessionId);
+				let input: PlannerLinkHold = { ...base, machineId: paired.id, machine: "laptop" };
 				await storage.plannerHolds.put(lease, input);
 				expect(await storage.plannerHolds.get(channelId)).toEqual({
 					...input,
@@ -141,6 +141,35 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 						machineId: id("nobody"),
 					})),
 				).toBe("missing");
+				// Neither a machine with a login nor a browser hold with none is a hold.
+				expect(
+					await failure(storage.plannerHolds.put(lease, { ...input, ownerSessionId: sessionId })),
+				).toBe("conflict");
+				expect(
+					await failure(
+						storage.plannerHolds.put(lease, hold(channelId, userId, undefined as never)),
+					),
+				).toBe("conflict");
+				expect(await storage.plannerHolds.get(channelId)).toEqual({
+					...input,
+					fencing: lease.fencing,
+				});
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("outlasts a machine's login, which no restart keeps", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let paired = machine(userId, { label: "laptop" });
+				await storage.machines.create(paired);
+				let { ownerSessionId: _, ...base } = hold(channelId, userId, "");
+				let input: PlannerLinkHold = { ...base, machineId: paired.id, machine: "laptop" };
+				await storage.plannerHolds.put(lease, input);
+				await storage.sessions.reset(AT, lease, 30_000);
+				expect(await storage.plannerHolds.get(channelId)).toBeDefined();
 			} finally {
 				await storage.close();
 			}
