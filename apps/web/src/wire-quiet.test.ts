@@ -6,7 +6,7 @@
  * against the end of the period wherever its timers happened to fall.
  */
 
-import { RESTART_QUIET_MS, SERVICE_RESTART } from "@chopin/protocol/restart";
+import { REFUSAL_HEADER, RESTART_QUIET_MS, SERVICE_RESTART } from "@chopin/protocol/restart";
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 
 import { Wire } from "./wire";
@@ -185,6 +185,23 @@ describe("a restart's quiet period", () => {
 
 		expect(wire.restarting).toBe(false);
 		expect(outages).toEqual([{ failures: 0 }]);
+	});
+
+	it("ends at a refusal: no outage is raised afterwards, and the restart is over", async () => {
+		let { wire, outages } = await restarted();
+
+		globalThis.fetch = (() =>
+			Promise.resolve(
+				new Response("Not allowed", { status: 403, headers: { [REFUSAL_HEADER]: "1" } }),
+			)) as unknown as typeof fetch;
+		await advance(1_000);
+		latest().end(1006);
+		await settle();
+
+		expect(wire.status).toBe("denied");
+		expect(wire.restarting).toBe(false);
+		await advance(RESTART_QUIET_MS * 2);
+		expect(outages).toEqual([]);
 	});
 
 	it("is not raised for a wire that was disposed during it", async () => {

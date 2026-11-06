@@ -75,7 +75,8 @@ export type WireOptions = WireTarget & {
 	 * reconnect nor the network coming back resets the count: only a connection that opens does.
 	 * A loss the server announced as a restart (close code 1012) raises none for `RESTART_QUIET_MS`,
 	 * and the attempts that fail meanwhile are not counted: a restart that is over by then is never
-	 * reported, and one that is not is reported then, as any other loss.
+	 * reported, and one that is not is reported then, as any other loss. A refusal ends the quiet at
+	 * once and raises none: the server is not coming back for this connection.
 	 */
 	onOutage?: (outage: Outage | undefined) => void;
 	onAuthenticationRequired?: () => void;
@@ -199,7 +200,7 @@ export class Wire {
 	}
 
 	/**
-	 * Whether the connection was lost because the server is restarting, until it is back.
+	 * Whether the connection was lost because the server is restarting, until it is back or refuses it.
 	 *
 	 * A restart is expected to end on its own within moments, so what is shown about it may
 	 * wait longer than for any other loss. What has to act on the connection must not: read
@@ -379,6 +380,11 @@ export class Wire {
 		if (this.#disposed || this.#terminal || generation !== this.#connectionGeneration) return;
 		this.#probing = false;
 		if (refusal) {
+			// A refusal says the server is not about to return for this connection: the restart's
+			// quiet ends here, with no outage raised for it.
+			this.#restarting = false;
+			clearTimeout(this.#quietTimer);
+			this.#quietTimer = undefined;
 			if (refusal.authentication) this.#options.onAuthenticationRequired?.();
 			return this.#set("denied", refusal.reason);
 		}

@@ -24,7 +24,6 @@ import type { Page } from "@playwright/test";
 const PORT = 8796;
 const ORIGIN = `http://${HOST}:${PORT}`;
 const DATABASE = "chopin_restart_quiet";
-const PREFETCH = `Failed to fetch dynamically imported module: ${ORIGIN}/assets/dialog-prefetch-`;
 
 function databaseUrls() {
 	let cluster = new URL(
@@ -205,23 +204,11 @@ function probe(page: Page) {
 	return page.evaluate(() => (window as unknown as { probe: Probe }).probe);
 }
 
-/**
- * What the page throws, sorted. While no server answers, the sidebar's idle warm-up of its
- * dialogs (`dialog-prefetch`) asks for a chunk and fails, which only the console sees: it is
- * kept apart, with when it happened, and nothing else is allowed. Any other error, a different
- * chunk included, is unexpected.
- */
+/** Every error the page raises, as it fills. */
 function collectErrors(page: Page) {
-	let all: Array<{ at: number; message: string }> = [];
-	page.on("pageerror", error => all.push({ at: Date.now(), message: error.message }));
-	let prefetch = (message: string) =>
-		message.startsWith(PREFETCH) && /^[\w-]+\.js$/.test(message.slice(PREFETCH.length));
-	return {
-		get prefetch() {
-			return all.filter(error => prefetch(error.message)).map(error => error.at);
-		},
-		unexpected: () => all.filter(error => !prefetch(error.message)).map(error => error.message),
-	};
+	let errors: string[] = [];
+	page.on("pageerror", error => errors.push(error.message));
+	return errors;
 }
 
 /**
@@ -297,7 +284,6 @@ test("a restart under an open tab shows nothing, loses no edit and keeps the dra
 	await new Promise(resolve => setTimeout(resolve, 1_000));
 	let second = await server(database);
 	let outage = Date.now() - stopped;
-	let back = Date.now();
 	await typing;
 
 	expect(code, first.log.text).toBe(0);
@@ -313,13 +299,7 @@ test("a restart under an open tab shows nothing, loses no edit and keeps the dra
 	expect(seen.closes).toContain(1012);
 	expect(seen.closes).not.toContain(1001);
 	expect(seen.violations, seen.timeline.join("\n")).toEqual([]);
-	// Every error the page raised was the one idle prefetch, and only while no server answered.
-	expect(errors.unexpected()).toEqual([]);
-	expect(errors.prefetch.length).toBeLessThanOrEqual(1);
-	for (let at of errors.prefetch) {
-		expect(at).toBeGreaterThanOrEqual(stopped);
-		expect(at).toBeLessThanOrEqual(back);
-	}
+	expect(errors).toEqual([]);
 	expect(loads).toBe(1);
 	expect(await page.evaluate(() => (window as unknown as { tab?: string }).tab)).toBe("kept");
 	await expectChatValue(chatInput(chat), draft);
@@ -473,7 +453,7 @@ for (let reached of [true, false]) {
 		expect(seen.closes).toContain(1012);
 		expect(seen.closes).not.toContain(1001);
 		expect(seen.violations, seen.timeline.join("\n")).toEqual([]);
-		expect(errors.unexpected()).toEqual([]);
+		expect(errors).toEqual([]);
 		expect(loads).toBe(1);
 	});
 }
