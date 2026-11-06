@@ -333,7 +333,8 @@ Deferred Planner turns are fenced by the same lease. A change to one rides a
 `collaboration.commit` through `deferredTurns`, in the commit's transaction, so a request
 is durable no later than the entry that acknowledges it and is not kept when the commit
 is refused. Fencing tokens compare only within one lease, and every row is written
-under the writer lease.
+under the writer lease. The Chat service writes and reads these rows; see
+[Saved requests](hosted-agent.md#saved-requests).
 
 This lease is why the current deployment model cannot perform a rolling
 application replacement against one database. See

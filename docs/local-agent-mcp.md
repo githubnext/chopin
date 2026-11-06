@@ -114,7 +114,9 @@ to it and runs under its owner, whoever invoked it. Without one, including
 while a detached Planner's grace period runs, while a disconnected Planner's work is kept for it, and once the attached Planner's
 owner signs out of the browser, that sign-in expires, or its Planner is reset,
 the call is refused with
-`planner-not-attached` and a `message`, and nothing is posted or queued:
+`planner-not-attached` and a `message`, and nothing is posted or queued (under
+`AUTH_MODE=local`; in hosted mode the instruction is
+[saved](hosted-agent.md#saved-requests) and waits for a Planner):
 
 ```json
 {
@@ -190,7 +192,7 @@ restarts. Chopin logs each one it accepts or refuses.
 Refusals return an object with `code`, and `planner-not-attached` also a
 `message`:
 
-- `planner-not-attached`: under `HARNESS=remote`, no client is attached as the
+- `planner-not-attached`: under `HARNESS=remote` and `AUTH_MODE=local`, no client is attached as the
   document's Planner. `message` names the document URL and says to connect a
   Planner client to it over the agent connection from a session in a checkout of
   the repository, which attaches that session as the Planner.

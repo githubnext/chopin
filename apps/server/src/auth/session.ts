@@ -89,6 +89,8 @@ type SessionOptions = {
 	authorize?: (user: UserRecord, accessToken: string) => Promise<boolean>;
 	beforeRefresh?: (sessionId: string, revision: number) => Promise<void>;
 	onRevoked?: (sessionId: string) => Promise<void>;
+	/** A stored login came back in this process, because its browser sent its cookie. */
+	onRestored?: (sessionId: string) => void;
 	invalidate?: (accessToken: string) => void;
 	persist?: (sessionId: string, grant: GitHubTokenGrant, revision: number) => Promise<void>;
 	cookieSuffix?: string;
@@ -452,6 +454,7 @@ export class Sessions {
 			current = next;
 		}
 		this.#sessions.set(id, current);
+		this.#options.onRestored?.(id);
 		return current;
 	}
 

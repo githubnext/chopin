@@ -817,3 +817,54 @@ describe("a comment sent to Chopin inside a child document", () => {
 		expect(child.plan.threads.size).toBe(0);
 	});
 });
+
+describe("a comment sent to Chopin while its machine is away", () => {
+	let away = async () => {
+		let fixture = await opened({ busy: false });
+		let { context, plan } = fixture;
+		// Rows belong to a stored document.
+		context.room = plan.id;
+		context.persist = (chat, deferred) => Service.persistDeferred(plan, chat, deferred);
+		context.deferred = { noticeDelayMs: 60_000 };
+		context.plannerReady = async () => false;
+		context.plannerNotAttached = async () => "No machine is connected.";
+		return fixture;
+	};
+
+	it("is accepted and kept as a row, never refused, and the thread shows Chopin working on it", async () => {
+		let { context, plan, broadcasts } = await away();
+		let ana = member("ana");
+		let answered = await start(context, ana, "Rephrase this.");
+		expect(answered).toMatchObject({ ok: true, planner: "queued" });
+		let id = idOf(answered);
+		let [row] = await plan.persistence.storage.deferredTurns.list(plan.id, ["waiting"]);
+		expect(row).toMatchObject({ kind: "comment", threadId: id, state: "waiting", text: "" });
+		expect(Chat.workingFor(plan.chat, id)).toBe(true);
+		expect(working(broadcasts)).toContainEqual(expect.objectContaining({ id, working: true }));
+		expect(context.chat.entries.some(entry => entry.comment?.thread === id)).toBe(true);
+	});
+
+	it("is built again from the thread as it reads after a restart, with every note in it, and not at all once the thread is resolved", async () => {
+		let { context, plan } = await away();
+		let ana = member("ana");
+		let id = idOf(await start(context, ana, "Rephrase this."));
+		await reply(context, member("bob"), id, "Shorter, please.");
+		let restored = Comments.restore(context, id, "ana");
+		expect(restored?.text).toContain("Rephrase this.");
+		expect(restored?.text).toContain("Shorter, please.");
+		expect(restored).toMatchObject({ thread: id });
+		expect(restored?.spent?.()).toBe(false);
+
+		plan.threads.set(id, { ...plan.threads.get(id)!, status: "resolved" });
+		expect(Comments.restore(context, id, "ana")).toBeUndefined();
+		expect(Comments.restore(context, "no-such-thread", "ana")).toBeUndefined();
+	});
+
+	it("is refused as before when rows are off, which is local mode", async () => {
+		let { context } = await away();
+		context.deferred = undefined;
+		let ana = member("ana");
+		let answered = await start(context, ana, "Rephrase this.");
+		expect(answered).toMatchObject({ ok: false, code: "planner-not-attached" });
+	});
+});

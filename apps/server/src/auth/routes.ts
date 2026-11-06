@@ -36,6 +36,8 @@ type Dependencies = {
 	credentials?: LocalCredentials;
 	delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 	onSessionRevoked?: (sessionId: string) => Promise<void>;
+	/** A stored login came back in this process, because its browser sent its cookie. */
+	onSessionRestored?: (sessionId: string) => void;
 	onCredentialsWillRotate?: (sessionId: string, revision: number) => Promise<void>;
 };
 
@@ -199,6 +201,7 @@ export function registerAuthRoutes(
 			await local?.revoked(id);
 			await dependencies.onSessionRevoked?.(id);
 		},
+		onRestored: id => dependencies.onSessionRestored?.(id),
 		persist: config.local
 			? (id, grant, revision) => local!.persist(id, grant, revision)
 			: undefined,

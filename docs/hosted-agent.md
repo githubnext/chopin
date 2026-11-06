@@ -144,10 +144,12 @@ its Planner may send one, at most 10 an hour per document.
 Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
 `invoke_planner` call for a document without an attached Planner is refused with
 `planner-not-attached`, and with one it runs as a turn on that Planner under its
-owner. Other Planner requests, such as sending a comment to the Planner or a
+owner. (In hosted mode a person's request is no longer refused: it is
+[saved](#saved-requests) and starts once a Planner attaches. The refusal remains under
+`AUTH_MODE=local`.) Other Planner requests, such as sending a comment to the Planner or a
 Build draft, claim nothing either: with a client attached they run on it, and
-without one they fail as any request without a usable owner does, not with
-`planner-not-attached`. A research request claims no ownership either: its
+without one they are saved the same way, or, under `AUTH_MODE=local`, fail as any request
+without a usable owner does, not with `planner-not-attached`. A research request claims no ownership either: its
 workers run on the attached client as [isolated sessions](#remote-planner), and
 without one the request waits until a client attaches.
 
@@ -598,8 +600,9 @@ which it takes to mean no.
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period or
 disconnected with its work kept (the message says its machine is offline and that the work
-is kept and picks up when it is back), is refused with `planner-not-attached` before
-anything is posted or queued.
+is kept and picks up when it is back), is saved and waits for a Planner to attach, as
+[saved requests](#saved-requests) describe; under `AUTH_MODE=local` it is refused with
+`planner-not-attached` before anything is posted or queued.
 Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
 assigns that owner, it closes the connection, releases the ownership, and refuses the
@@ -840,6 +843,54 @@ Blocks starting on lines 1-120 (index type lines digest):
   `read_document` has the same shape with the document's `id`, `title` and `url`,
   and no blocks. Its `structuredContent` is the whole document as before,
   whatever slice the text carries.
+
+## Saved requests
+
+A request to the Planner that cannot start at once is kept, not dropped and not refused. It is
+acknowledged only after it is saved, as a row in `planner_deferred_turns`, in the same commit as
+the transcript entry that shows it. Five kinds are kept: a Chat message to the Planner, a member
+message from an MCP `invoke_planner` call, an automatic follow-up (`invoke_planner` with
+`as: "system"`), a comment note sent to Chopin in a document or in one of its children, and a task
+draft from Build. A request waits when a turn is running, when no turn may start because the
+process is stopping, when a saved request is already waiting ahead of it, and, under
+`HARNESS=remote`, whenever no Planner is attached, however long that lasts. The 20-request queue
+limit still refuses a request before anything is saved. Server-authored turns (answers to open
+decisions, relinking after a build, settling a prototyped passage) and background jobs are not
+kept this way and wait as before. Under `AUTH_MODE=local`, which is never handed over, nothing is
+kept: the queue stays in memory, and under `HARNESS=remote` a request with no Planner attached is
+refused with `planner-not-attached`.
+
+A row is `waiting`, `started`, `ended`, `interrupted` or `cancelled`. Only `waiting` can move to
+`started` or `cancelled`, and only `started` to `ended` or `interrupted`; any other move changes
+nothing and is logged. Every move is written in one commit with the entry or notice it explains
+and published after it commits.
+
+**When a request starts.** In the order they were accepted, once the process is ready, and only
+through a check that claims nothing until a login is known to be live. Under `HARNESS=remote` that
+is an attached Planner. Otherwise the document's owner must have a live login, or, with no owner,
+the login of someone whose request is waiting must be live, and it claims the document. A login is
+live again when its browser sends its cookie. The check is tried when the process is ready, when
+a login comes back, when a new request is accepted, when a Planner attaches and when a turn ends.
+A request whose sender can no longer write is cancelled as failed; one whose focused child
+document is gone is cancelled as failed; a comment whose thread was resolved is cancelled without
+a notice, because the resolution is what members see.
+
+**What a person sees.** A message appears in Chat at once, as theirs, with `deliveryState`: `sent`
+while the row waits, `delivered` once its turn starts, and `failed`, with `deliveryFailure`
+(`machine-removed`, `access-lost` or `document-unavailable`), when it can never be delivered as
+sent. An entry saved before this existed has no state and reads as delivered. `chat:delete` removes
+a message that has not been delivered, for everyone, and cancels its row in the same commit; one
+already taken, or someone else's, is refused, and deleting twice leaves it deleted. `chat:retry`
+sends a `failed` message again as it was. A message that is waiting is not listed in `chat:queue`,
+which lists only requests with no entry of their own. If a queue still cannot start
+`DEFERRED_NOTICE_DELAY_MS` (default 30 s) after it began to wait, Chat says once what it waits for.
+
+**Restarts.** When a document opens, rows `started` under an older fencing token are marked
+`interrupted`, each with one Chat notice, and are never run again, because their turn may already
+have changed the document. A turn cut off at `HANDOVER_TURN_WAIT_MS` ends its row the same way. The
+rows still `waiting` rejoin the queue, a comment's prompt is built again from its thread as it
+reads now, and a task draft is the document's live draft again, so a second press of Build returns
+it. A retried `chat:send` with a request ID the process no longer holds is answered from its row.
 
 ## Session lifecycle
 
