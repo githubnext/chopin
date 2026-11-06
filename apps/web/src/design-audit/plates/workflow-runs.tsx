@@ -58,7 +58,7 @@ const DONE_STAGES = RUN_STAGES.map(stage => ({
 export function WorkflowRunsPlate() {
 	return (
 		<AuditPlate
-			description="Planner-launched workflows: one live run, a concurrent stack ordered by who needs attention, ended runs kept until the next run starts, and the runs of a Planner whose connection dropped."
+			description="Workflows Chopin launched: one live run, a concurrent stack ordered by who needs attention, ended runs kept until the next run starts, and the runs of a machine whose connection dropped."
 			item="workflow-runs"
 			title="Workflow runs"
 		>
