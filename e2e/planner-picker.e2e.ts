@@ -663,7 +663,7 @@ test("on a phone, a Planner its machine keeps failing to start says why at the c
 	await expect(strip(page)).toHaveCount(0);
 	await shoot(page, "planner-starting-phone");
 	await expect(strip(teammate)).toHaveText("Connecting to @mona's machine");
-	await expectInsideViewport(strip(teammate));
+	await expect(() => expectInsideViewport(strip(teammate))).toPass();
 	await shoot(teammate, "planner-starting-teammate-phone");
 
 	await studio.reportFailure(refused(room, 2));
