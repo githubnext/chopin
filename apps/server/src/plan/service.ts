@@ -129,6 +129,16 @@ type Meter = {
 export type Backend = {
 	/** Product documents enforce a leading title; standalone domain rooms remain generic. */
 	documentTitles?: boolean;
+	/**
+	 * Whether a rebuilt remote Planner hold still keeps the document's workflow runs for its client,
+	 * so the cards Chat stored stay live when it opens, marked disconnected once its client is away.
+	 */
+	plannerKeepsRuns?: (channelId: string) => "live" | "down" | undefined;
+	/**
+	 * A document's room has opened: a rebuilt remote Planner hold waits again, for its client, for
+	 * the answers to the questions it left open there.
+	 */
+	rejoinPlannerQuestions?: (plan: Plan, server: Server<SocketData>) => void;
 	storage: StorageAdapter;
 	lease: () => Lease;
 	fatal: (error: unknown) => void;
@@ -1586,7 +1596,12 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
-		chat: Chat.restore(sidecar.transcript, sidecar.workflowRuns, sidecar.initiativePaused),
+		chat: Chat.restore(
+			sidecar.transcript,
+			sidecar.workflowRuns,
+			sidecar.initiativePaused,
+			backend.plannerKeepsRuns?.(id),
+		),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
 		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],
 		conversationPlanJobs: sidecar.conversationPlanJobs ?? [],
@@ -1673,6 +1688,7 @@ export async function open(
 	}
 
 	rememberImplementationLock(plan);
+	backend.rejoinPlannerQuestions?.(plan, server);
 	return plan;
 }
 

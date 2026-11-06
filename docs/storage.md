@@ -121,7 +121,7 @@ applied migration. The application schema contains:
 | `machine_favorites` | Each person's one favorite machine, their own or a teammate's shared one, which Automatic prefers; no row is none. Revoking the machine removes it; its owner no longer sharing it removes teammates' (not its owner's). |
 | `document_versions` | Activity history: one row per editing session with its author (absent for Chopin), the canonical MDX it left, revision, hash, and start and end times. |
 | `workflow_run_stages` | Every stage of each workflow run a document's Chat shows, keyed by document, run ID and stage ID, with its order, status, name, kind, parent stage IDs and start and end seconds. Bounded per stage, not per run. A run's rows go when Chat stops showing its card, or with the document. |
-| `planner_link_holds` | One row per document whose remote Planner link left work or a hand-over window for the next process: the owner's login session (the row goes with it), user, generation and optional paired machine, its held sessions (waiting request IDs, unacknowledged answers, held stops), when it was suspended, `handover_until`, and the fencing token it was written under. Deleted by everything that ends a hold, and with the document. Holds no secret. |
+| `planner_link_holds` | One row per document whose remote Planner link left work or a hand-over window for the next process: the owner's browser login session (the row goes with it) or the paired machine (and no login, which a restart cannot keep), user, generation, its held sessions (waiting request IDs, with the kind and decisions of each question so its answer can be given again, unacknowledged answers, held stops), when it was suspended, `handover_until` (the length of its hand-over window after the write, which the next process counts again from its own start and then rewrites the row without, so no process after it is given the window), and the fencing token it was written under. Written when a link drops with work kept and at the cut, removed while a live link backs the hold and by everything that ends one, and with the document. Holds no secret. |
 | `planner_credentials` | The SHA-256 digest, machine, document and expiry of each credential a paired machine handed to a Planner backend, written before the credential is handed out. Rows go when they expire, with the machine's end or withdrawal, and with the document. No token is stored. |
 | `planner_deferred_turns` | One row per acknowledged Planner request whose turn had not started (`composer`, `invoke_planner`, `invoke_system`, `comment` or `draft`): what its turn and a retried request need, its state (`waiting`, `started`, `ended`, `interrupted`, `cancelled`), the fencing token of its latest transition, when it was resolved and, for a request Chopin cancelled, why (`agent`, `access` or `unavailable`). A request ID is unique within a document, and a comment thread has at most one `waiting` row. Rows go with the document. |
 | `mcp_sessions` | MCP sessions: ID, user, client name and version, creation and last-seen times. Idle sessions are swept. |
@@ -284,7 +284,10 @@ the session that owns it, when that session has credentials and has not expired.
 is the persisted state of a remote Planner whose link was live when a process released
 the lease, and the next process rebuilds it, so clearing its owner would end the
 Planner it is meant to hand over. A session the reset deletes takes its holds with it
-and its documents' owners are cleared as before.
+and its documents' owners are cleared as before. A paired machine's hold names the
+machine, not a login: its delegated login is a metadata-only session the reset deletes, the
+document's owner is cleared with it, and the machine's backend claims the document again
+when it attaches.
 
 A child document has no Chat of its own. Next, still under the writer lease and
 before any room opens, `CollaborationStore.dropChildConversations` empties each

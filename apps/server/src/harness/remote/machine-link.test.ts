@@ -4,6 +4,7 @@ import { CONNECTOR_PROTOCOL_HEADER, CONNECTOR_VERSION_HEADER } from "@chopin/pro
 
 import { ActiveOwnerBindings } from "../../agent/active-owner";
 import { Machines } from "../../auth/machines";
+import { Sessions } from "../../auth/session";
 import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "../../experiments/routes";
 import { Router } from "../../http/router";
 import {
@@ -23,6 +24,7 @@ import { untilUnpaused } from "../atomic/full";
 import { createRemoteAdapter } from "./adapter";
 import { agentLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
+import { PlannerAttachments } from "./attachments";
 
 import type { RemotePlanner } from "./registry";
 
@@ -311,6 +313,132 @@ describe("a paired machine's Planner", () => {
 		cleanups.push(() => client.detach());
 		expect(next.attachments.attached(channel.id)).toBe(true);
 		expect(next.attachments.holder(channel.id)).toBe("member");
+	});
+
+	it("is shown as attached through its window by the process that takes over a cut, and its backend takes it back with its credential and no browser", async () => {
+		let { pair, credential, channel, machines, storage, auth, sessions: browserSessions } =
+			await machineServer();
+		let member = await pair("guest", "U_guest");
+		let { body } = await credential(member.token, channel.id);
+		let planners = (sessions: Sessions) =>
+			new MachinePlanners({
+				machines,
+				sessions,
+				storage,
+				github: auth.github,
+				config: auth.config,
+			});
+		let leaseA = (await storage.leases.acquire("chopin:writer", "first", 60_000))!;
+		let first = linkServer(auth, 2_000, undefined, 2_000, undefined, planners(browserSessions), {
+			options: {
+				store: {
+					put: hold => storage.plannerHolds.put(leaseA, hold),
+					delete: async id => void await storage.plannerHolds.delete(leaseA, id),
+				},
+			},
+		});
+		cleanups.push(first.stop);
+		let raw = await rawLink(first.url, body.token, "resumable-sessions, restart-notice");
+		raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
+		await raw.next("attached");
+		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+		let sessionId = crypto.randomUUID();
+		let opening = createRemoteAdapter(() => ({ link: first.links.at(-1)!, planner })).doStart({
+			sessionId,
+			sandboxSession: {
+				defaultWorkingDirectory: "/tmp",
+				async run() {
+					return { exitCode: 0, stdout: "", stderr: "" };
+				},
+				async destroy() {},
+			} as never,
+			sessionWorkDir: "/tmp",
+		});
+		raw.send({ type: "started", session: (await raw.next("start")).session });
+		cleanups.push(() => void opening.then(session => session.doDestroy()));
+		await opening;
+		raw.send({
+			type: "runs",
+			session: sessionId,
+			active: ["run"],
+			paused: [],
+			cards: [{
+				id: "run",
+				name: "plan",
+				status: "running",
+				started: 1,
+				updated: 1,
+				stages: [],
+				waiting: 0,
+			}],
+		});
+		for (let deadline = Date.now() + 2_000; !planner.runs && Date.now() < deadline;) {
+			await Bun.sleep(5);
+		}
+		let oldLogin =
+			(await storage.channels.readAgent(channel.id, new Date()))!.agent!.ownerSessionId;
+
+		// The cut: state kept, lease released, the links closed with 1012.
+		first.attachments.shutdown();
+		await first.attachments.persist(first.attachments.freeze(10_000));
+		for (let link of first.links) link.restart(10_000);
+		await storage.leases.release(leaseA);
+		let [row] = await storage.plannerHolds.list();
+		expect(row).toMatchObject({ machine: "guest-laptop", login: "guest" });
+		// A machine's delegated login lasts one process, so the row names the machine and no login.
+		expect(row!.ownerSessionId).toBeUndefined();
+
+		// The next process: nothing in memory, and the machine's login ended by the startup reset.
+		let leaseB = (await storage.leases.acquire("chopin:writer", "second", 60_000))!;
+		await storage.sessions.reset(new Date(), leaseB, 60_000);
+		expect((await storage.channels.readAgent(channel.id, new Date()))?.agent?.ownerSessionId)
+			.toBeUndefined();
+		let sessions = new Sessions(storage, false);
+		let restartedPlanners = planners(sessions);
+		let attachments = new PlannerAttachments({ ...auth, sessions } as never, 2_000, {
+			store: {
+				put: hold => storage.plannerHolds.put(leaseB, hold),
+				delete: async id => void await storage.plannerHolds.delete(leaseB, id),
+			},
+		});
+		await attachments.restore(await storage.plannerHolds.list());
+		expect(attachments.status(channel.id)).toEqual({ state: "attached", login: "guest" });
+		expect(attachments.attached(channel.id)).toBe(false);
+		let second = linkServer(
+			{ ...auth, sessions } as never,
+			2_000,
+			undefined,
+			2_000,
+			undefined,
+			restartedPlanners,
+			{
+				attachments,
+			},
+		);
+		cleanups.push(second.stop);
+
+		// Its backend reconnects with the credential it was issued, which the connector need not renew.
+		let backend = await rawLink(second.url, body.token, "resumable-sessions, restart-notice");
+		backend.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
+		await backend.next("attached");
+		backend.send({ type: "resume", sessions: [{ session: sessionId, requests: [] }] });
+		expect(await backend.next("resumed")).toEqual({
+			type: "resumed",
+			sessions: [{ session: sessionId, requests: [] }],
+		});
+		expect(attachments.attached(channel.id)).toBe(true);
+		let owner = (await storage.channels.readAgent(channel.id, new Date()))!.agent!.ownerSessionId;
+		expect(owner).toBeDefined();
+		expect(owner).not.toBe(oldLogin);
+		expect(await sessions.resolve(owner!)).toBeDefined();
+		for (
+			let deadline = Date.now() + 2_000;
+			(await storage.plannerHolds.get(channel.id)) && Date.now() < deadline;
+		) {
+			await Bun.sleep(5);
+		}
+		expect(await storage.plannerHolds.get(channel.id)).toBeUndefined();
+		backend.socket.close();
 	});
 
 	it("keeps no token, only the digest of a credential, and writes it before handing the credential out", async () => {

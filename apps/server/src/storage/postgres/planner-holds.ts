@@ -1,4 +1,4 @@
-import { corrupt } from "../errors";
+import { conflict, corrupt } from "../errors";
 
 import type { SQL, TransactionSQL } from "bun";
 import type { Lease, PlannerHeldSession, PlannerLinkHold, StoredPlannerLinkHold } from "../model";
@@ -10,7 +10,7 @@ type HoldRow = {
 	channelId: string;
 	userId: string;
 	login: string;
-	ownerSessionId: string;
+	ownerSessionId: string | null;
 	generation: string | number;
 	machineId: string | null;
 	machine: string | null;
@@ -36,7 +36,7 @@ function hold(row: HoldRow): StoredPlannerLinkHold {
 		channelId: row.channelId,
 		userId: row.userId,
 		login: row.login,
-		ownerSessionId: row.ownerSessionId,
+		...(row.ownerSessionId !== null ? { ownerSessionId: row.ownerSessionId } : {}),
 		generation: Number(row.generation),
 		...(row.machineId !== null && row.machine !== null
 			? { machineId: row.machineId, machine: row.machine }
@@ -54,7 +54,10 @@ export class PostgresPlannerLinkHoldStore implements PlannerLinkHoldStore {
 		private run: <T>(action: string, execute: () => Promise<T>) => Promise<T>,
 		private fence: (sql: TransactionSQL, lease: Lease) => Promise<void>,
 	) {}
-	put(lease: Lease, input: PlannerLinkHold) {
+	async put(lease: Lease, input: PlannerLinkHold) {
+		if ((input.ownerSessionId === undefined) !== (input.machineId !== undefined)) {
+			throw conflict("a Planner hold names a browser login or a paired machine, never both");
+		}
 		return this.run("save a Planner link hold", () =>
 			this.sql.begin(async sql => {
 				await this.fence(sql, lease);
@@ -63,7 +66,7 @@ export class PostgresPlannerLinkHoldStore implements PlannerLinkHoldStore {
 						channel_id, user_id, login, owner_session_id, generation, machine_id, machine_label,
 						sessions, suspended_at, handover_until, fencing
 					) VALUES (
-						${input.channelId}, ${input.userId}, ${input.login}, ${input.ownerSessionId},
+						${input.channelId}, ${input.userId}, ${input.login}, ${input.ownerSessionId ?? null},
 						${input.generation}, ${input.machineId ?? null}, ${input.machine ?? null},
 						${JSON.stringify(input.sessions)}::text::jsonb,
 						${input.suspendedAt}, ${input.handoverUntil ?? null}, ${lease.fencing}

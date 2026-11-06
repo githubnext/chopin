@@ -1,4 +1,4 @@
-import { missing } from "../errors";
+import { conflict, missing } from "../errors";
 
 import type { Lease, PlannerLinkHold, StoredPlannerLinkHold } from "../model";
 import type { PlannerLinkHoldStore } from "../port";
@@ -26,11 +26,14 @@ export class MemoryPlannerLinkHoldStore implements PlannerLinkHoldStore {
 	) {}
 	async put(lease: Lease, input: PlannerLinkHold) {
 		this.deps.assertLease(lease);
+		if ((input.ownerSessionId === undefined) !== (input.machineId !== undefined)) {
+			throw conflict("a Planner hold names a browser login or a paired machine, never both");
+		}
 		if (!this.deps.channelExists(input.channelId)) {
 			throw missing(`channel ${input.channelId} does not exist`);
 		}
 		if (!this.deps.userExists(input.userId)) throw missing(`user ${input.userId} does not exist`);
-		if (!this.deps.sessionExists(input.ownerSessionId)) {
+		if (input.ownerSessionId !== undefined && !this.deps.sessionExists(input.ownerSessionId)) {
 			throw missing(`session ${input.ownerSessionId} does not exist`);
 		}
 		if (input.machineId !== undefined && !this.deps.machineExists(input.machineId)) {
@@ -62,7 +65,9 @@ export class MemoryPlannerLinkHoldStore implements PlannerLinkHoldStore {
 	deleteSessions(ids: Iterable<string>) {
 		let ended = new Set(ids);
 		for (let [channelId, hold] of this.#holds) {
-			if (ended.has(hold.ownerSessionId)) this.#holds.delete(channelId);
+			if (hold.ownerSessionId !== undefined && ended.has(hold.ownerSessionId)) {
+				this.#holds.delete(channelId);
+			}
 		}
 	}
 }

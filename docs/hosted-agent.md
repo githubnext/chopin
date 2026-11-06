@@ -519,15 +519,47 @@ generation, so a newer owner is never released by an old timer. An attach, inclu
 reattach, binds only if no sign-out, expiry, or Planner reset of its ownership
 landed while it was checking, including the eligibility checks of the sign-in
 it is about to claim with; otherwise it is refused like an attached connection would
-be closed. Attachments live in the server process; startup already clears
-every owner reference, which releases every attachment, so a server restart ends
-what a disconnected link kept, and a graceful shutdown ends it as a crash does: the
-server tells every link it is going down first, so none withdraws a question on the way
-out, and posts no Chat line about the links or the runs. Its run cards come back stopped,
-as any live card does after a restart, since Chopin no longer tracks the workflows, and
-stay so, because the client's later `runs` for a session the server no longer has are ignored; its open Decisions stay open and answerable (nobody waits
-on them any more, so an answer starts a Planner turn once one is attached); and the
-client's `resume` finds nothing, so it settles its questions as cancelled.
+be closed. Attachments live in the server process, so a restart does not keep a link,
+but it does keep what its client holds: at the cut, and when a link drops with work
+kept, the server writes each hold to `planner_link_holds` (see
+[Storage](storage.md#postgresql-schema)): the sessions the client holds, the questions
+it waits on, the answers it has not acknowledged and the Stops it has not heard. The next
+process rebuilds each as a suspended hold, so a client that returns and sends `resume`
+takes its sessions back. Startup's reset keeps the owner of a document whose hold names a
+browser sign-in that has stored credentials; a paired machine's hold names the machine
+and no login, which a restart cannot keep: the machine's backend attaches again with its
+credential, which is stored by digest and so accepted at once, and its new login takes over
+the hold.
+
+**The hand-over window.** A hold whose link the cut closed is given `HANDOVER_PLANNER_WINDOW_MS`
+from the release of the lease, the time its client is told it has. The cut cannot know when the
+release will be, so it writes the window's length with the hold (`handover_until` is the write
+plus that length) and the next process, which can take the lease only after the release, counts
+the window again from the moment it rebuilds the hold: no step between the write and the release,
+however slow, and no late takeover takes anything from it, and a client that comes back at any
+moment of the window it was told finds the machine attached. A process that rebuilds a hold more
+than an hour after the cut wrote it finds no window: no deploy takes so long, and such a row was
+left by a cut no process followed. Only the process that rebuilds the hold is given the window:
+it rewrites the row without it before it shows the hold (a write that fails is logged, and the
+window is still given), so a process that starts after that one crashed, inside the window or
+after it, finds the hold of a link that had already dropped, disconnected. Until the window ends, `session:planner`, the owner's own views and
+Planner comments treat it as attached, with its login, so no member sees it disconnected or
+reconnecting; a request to it is saved as a row and starts when it resumes, and workflow
+runs Chat stored come back live, not stopped. A `resume` inside the window before the owner's
+browser sign-in is back (it comes back with the browser's cookie) is not refused: it waits, with
+the link kept and the machine shown attached, and the sessions are handed back the moment the
+sign-in is. One still without it when the window is over is refused with `unavailable` and
+`retry`, which a client retries; it is never `sign-in-required`, which would end the link. A
+`resume` inside the window ends it. When it ends with no resume the hold is disconnected,
+as a dropped link is today, announced, with run cards marked disconnected, and the miss is
+logged with its cause: the owner's sign-in or the client was not back. A hold that was already
+disconnected keeps its state and gets no window, and one in its grace period is not kept.
+A question a client waited on is not waited on again: nothing in the new process can
+answer it, so `resumed` does not list it, the client settles it as cancelled, and its
+Decision stays open and answerable; an answer starts a Planner turn once one is attached. An
+answer given while the link was down, which was owed, is delivered once as before.
+A graceful shutdown still tells every link it is going down first, so none withdraws a
+question on the way out, and posts no Chat line about the links or the runs. `AUTH_MODE=local` is never handed over, and keeps today's behaviour: holds stay in memory.
 
 **Who is attached.** Each room socket hears `session:planner` after
 `session:hello`, and the whole room hears it again whenever an attachment

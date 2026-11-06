@@ -247,6 +247,51 @@ test("the turn names the question, the saved answer and who saved it, as data", 
 	expect(instruction.about?.spent?.()).toBe(false);
 });
 
+test("a host dialog's answer given after a restart took its asker reaches the Planner once, naming what was chosen", async () => {
+	let context = await opened();
+	let created = Promise.withResolvers<void>();
+	void Questions.ask(
+		context.plan,
+		context.server,
+		context.plan.id,
+		Questions.identify({
+			questions: [{
+				header: "Confirm",
+				question: "Ship it?\n\nNow.",
+				multiple: false,
+				options: [{ label: "Yes", description: "" }, { label: "No", description: "" }],
+			}],
+		}, { verbatim: true }),
+		undefined,
+		created.resolve,
+	);
+	await created.promise;
+	let id = [...context.plan.records.keys()].at(-1)!;
+	// The process that asked it goes away, taking the promise its asker waited on.
+	await restart(context);
+	let turns = planner(context);
+	turns.planner.owner = true;
+	let answers = answerTurns({
+		store: context.storage.decisionAnswers,
+		start: turns.start,
+		window: WINDOW,
+	});
+	cleanups.push(() => answers.close());
+	expect(Store.get(context.plan.questions, id)?.awaited).toBeUndefined();
+
+	await context.save(id, { option: 0 }, "lee");
+	await answers.answered(context.plan.id, id, 1);
+	await answers.pending(context.plan.id);
+	await answers.pending(context.plan.id);
+
+	expect(turns.turns()).toHaveLength(1);
+	expect(turns.turns()[0]).toContain(JSON.stringify("Ship it?\n\nNow."));
+	expect(turns.turns()[0]).toContain(`Chosen option (data): ${JSON.stringify("Yes")}`);
+	expect(turns.turns()[0]).toContain("@lee");
+	// A person reads the first line of a dialog's question, not its title and message run together.
+	expect(turns.notices()).toEqual(['@lee answered "Ship it?"']);
+});
+
 test("a reopened decision's earlier answer is no longer handed over", async () => {
 	let context = await opened();
 	let id = await captured(context);

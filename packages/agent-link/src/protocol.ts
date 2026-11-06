@@ -41,7 +41,9 @@ export const AGENT_FEATURES = {
 	 * with `reconnectWithinMs`, the time a new process is expected to take over in. A client that
 	 * offers the feature connects again at once on that close, and retries a `resume` refused
 	 * with `retry` every 250 ms until `reconnectWithinMs` has passed, then returns to its own
-	 * backoff. Without the feature the server only closes with 1012.
+	 * backoff. A `resume` that comes inside that time before the server can decide is held and
+	 * answered when it can, not refused, so a `retry` refusal is one the server gives after it.
+	 * Without the feature the server only closes with 1012.
 	 */
 	restartNotice: "restart-notice",
 } as const;

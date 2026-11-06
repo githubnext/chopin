@@ -1030,13 +1030,12 @@ not apply to it.
 - **What still ends it for good.** Its own `detach`; any definitive `refused` (every
   one without `retry`) or protocol error; the owner's sign-out or its expiry; a Planner reset; revoking or unpairing
   the machine that attached it; the document's owner choosing another machine for it;
-  archiving or deleting the document; a Stop that withdraws its last question; the
+  archiving or deleting the document; a Stop that withdraws its last question; and the
   same account attaching with a client that does not resume, which includes a browser
   sign-in attaching over a paired machine's parked work, since that client cannot
-  resume it; and a server restart. Of these, all but a server restart withdraw the
-  questions and show the runs as `stopped`, and a later `resume` finds nothing (a
-  restart is described below). A person with write access can always end a disconnected
-  Planner by resetting it.
+  resume it. All of these withdraw the questions and show the runs as `stopped`, and a
+  later `resume` finds nothing. A server restart does not end it: see below. A person
+  with write access can always end a disconnected Planner by resetting it.
 
 #### When the server is restarting
 
@@ -1048,10 +1047,12 @@ before the close, and follows this rule:
 
 - On a 1012 close, connect again at once. Do not wait out the backoff: a proxy in front of
   Chopin holds the upgrade until the new process answers.
-- Send `resume` as usual. The new process may refuse it with `unavailable` and `retry`, for
-  instance before it has restored the owner's browser sign-in (see
-  [Ownership](#ownership)). Retry the same `resume` every 250 ms until `reconnectWithinMs`
-  has passed since the close, then go back to the client's own backoff.
+- Send `resume` as usual. The new process does not refuse it inside the window it announced:
+  before it has restored the owner's browser sign-in (see [Ownership](#ownership)) it holds the
+  `resume`, keeps the link, and answers when the sign-in is back. It may refuse it with
+  `unavailable` and `retry` once the window is over with the sign-in still not back, or when it
+  could not decide for another passing reason. Retry the same `resume` every 250 ms until
+  `reconnectWithinMs` has passed since the close, then go back to the client's own backoff.
 - Any other `refused`, and any `error`, is final, as for a resume at any other time.
 
 A client without the feature sees only the 1012 close and resumes on its own backoff. If
@@ -1064,17 +1065,71 @@ the rule is for the backend to follow. The test client in `apps/server/src/testi
 
 #### After a server restart
 
-The server keeps sessions, holds and open requests in memory only, so a restart ends
-what a disconnected link kept, and a graceful one ends it exactly as a crash does. The
-server tells every link it is going down before it closes any socket, closes each with 1012,
-and no link withdraws a question on the way out, so the Decisions the Planner had asked stay open
-and answerable in the document, as after a crash. A returning client's `resume` finds
-nothing: `resumed` lists no sessions, the client calls its `destroy` handler for each
-session it held and settles every question it still waited on as `cancelled`. The run
-cards Chat stored come back `stopped`: Chopin no longer tracks those workflows and has
-nothing newer than the last report. The client's `runs` for a session the server no
-longer has are ignored, so those cards stay `stopped`, even if the machine is still
-running the workflows, until the Planner starts a session again and reports its runs.
+The server keeps links, sessions and open requests in memory, and writes what a restart
+must carry over to storage: when a link drops with work kept, and for every live link at
+its cut, one `planner_link_holds` row per document with each session's waiting request
+ids, for each question the decisions it asked and the kind of request it was, the answers the
+client has not acknowledged and the Stops it has not heard. The
+server tells every link it is going down before it closes any socket, closes each with 1012
+(with `restarting`, whose `reconnectWithinMs` is the hold's window, for a client that offered
+`restart-notice`), and no link withdraws a question on the way out, so the Decisions the
+Planner had asked stay open and answerable in the document.
+
+The next process rebuilds each hold as a suspended one. Until its **hand-over window**
+(`HANDOVER_PLANNER_WINDOW_MS`, 10 seconds by default, counted from the release of the lease: the
+next process starts it as it rebuilds the hold, after the release) ends, the
+document's members see the Planner attached, the run cards Chat stored stay as they were, and
+a `@chopin` message, comment note or task draft is saved and started when the client resumes.
+A returning client attaches, and sends `resume` as usual:
+
+- **Before the owner's browser sign-in is back,** which a browser's cookie restores, the
+  `resume` waits inside the window: nothing is refused, the link stays attached, the document
+  shows the machine attached, and the sessions come back the moment the sign-in does. A
+  `resume` still without it when the window is over, or sent after it, is refused with
+  `unavailable` and `retry`, and the hold stays. A client that offered `restart-notice` retries
+  every 250 ms until `reconnectWithinMs` has passed, then on its own backoff; there is no
+  deadline for the hold itself. A paired machine's backend has no
+  such wait: its login is made again from the machine's own authorization, and the
+  credential it was issued is accepted at once, so no HTTP 401 follows a restart.
+- **After it,** the sessions the client names come back, as after any dropped link, and
+  `resumed` lists the requests the server holds. An answer given while the link was down,
+  or sent and never acknowledged, is one: it is delivered once after `resumed`. A question the
+  client still waited on is listed in `requests`, and the client keeps waiting on it. The new
+  process asks the members of the document the same question again when the document opens: it
+  is the Decision the old process created, still open in the document, and its answer goes to
+  the client's own request, as an `input-result` with the result the old process would have
+  sent, once. An answer given before the client is back waits and is sent after `resumed`; one
+  given after goes straight to it. No turn of its own follows, because the question is waited
+  on. A question a client resumes without, because it no longer waits on it, is withdrawn, as
+  `input-cancel` withdraws it. Each Stop held for the client is sent first. The client's
+  `runs` for a resumed session update nothing Chat shows until a Planner turn starts a session
+  of its own.
+- **An answer its client is never given.** When the client that asked does not come back to
+  resume (it attaches with nothing to resume, or resumes without the session), an answer a
+  member had given meanwhile cannot reach its request. It reaches the Planner once, as a turn of
+  its own that names the question, the option chosen and who chose it, started when the Planner
+  is attached (see [Decisions](decisions.md)). A question of a request that was not kept, one
+  asked while the old process was stopping or after a crash, is not waited on at all, and its
+  answer is handled the same way. Exactly one of the two delivers an answer. What is not
+  carried over is a workflow run's pause: an answer to a question a workflow run asked is sent
+  when it is given, without the wait that keeps a paused run stopped.
+- **A client that sends anything else first,** or resumes with nothing, holds nothing to
+  resume: the kept sessions end and the run cards stop.
+
+When the window ends with no `resume`, the hold is disconnected, as a dropped link is
+today: the document's members are told, its run cards say the Planner is disconnected, and the
+hand-over logs a miss naming the cause, the owner's sign-in or the client not back. It stays
+for the client's return and nothing times it out. A hold that was already disconnected when the
+cut came keeps its state and gets no window, and one in its grace period is not kept. An
+explicit end (sign-out, a reset, revoking the machine, archiving the document) removes
+the hold and its row. Under `AUTH_MODE=local`, which is never handed over, holds stay in
+memory and a restart ends them as before.
+
+After a crash, only the hold of a link that had already dropped is stored, with no window, so
+its client's `resume` finds it disconnected; the live link's work is lost as it always was. A
+crash of the process a cut handed over to leaves the same: it rewrote the row without the window
+when it rebuilt the hold, so the process after it finds the hold disconnected and keeps the
+sessions for the client's `resume`.
 Neither the link closing nor the shutdown posts a Chat line: no "disconnected" notice
 and no "was stopped after" line, since nobody stopped anything and Chopin merely restarted. An answer given to a Decision nobody
 waits on any more reaches the Planner as a turn of its own once a Planner is attached

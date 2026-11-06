@@ -106,6 +106,9 @@ import * as Questions from "./questions/service";
 import * as Explore from "./questions/explore";
 import { runningFindingRefs } from "./questions/service-findings";
 import { answerTurns } from "./questions/answer-turns";
+import { decisionGeneration } from "./questions/card-actions";
+import { rejoinInput } from "./harness/atomic/human-input";
+import type { RejoinHost } from "./harness/remote/link";
 import { deterministicChannelId } from "./channels/id";
 import type { Research as ResearchWire } from "@chopin/protocol";
 import { investigationFinding } from "./experiments/document";
@@ -155,7 +158,7 @@ import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch"
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { InvestigationPlacement } from "./plan/room";
-import type { ChannelRecord, DeferredTurn, Lease } from "./storage/model";
+import type { ChannelRecord, DeferredTurn, Lease, PlannerLinkHold } from "./storage/model";
 import type {
 	AuthorizationResult,
 	SidebarSocket,
@@ -276,6 +279,11 @@ let conversationRuntime = createConversationRuntime({
 	researchJobs: () => researchBriefJobs,
 });
 
+function heldLease(): Lease {
+	if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+	return writerLease.held;
+}
+
 function withDocumentLock<T>(channelId: string, action: () => Promise<T>): Promise<T> {
 	let previous = documentLocks.get(channelId) ?? Promise.resolve();
 	let operation = previous.then(action, action);
@@ -335,6 +343,9 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
 function documentBackend(): Service.Backend {
 	return {
 		documentTitles: true,
+		plannerKeepsRuns: id => plannerAttachments?.restoredWork(id),
+		rejoinPlannerQuestions: (plan, server) =>
+			plannerAttachments?.rejoinInputs(plan.id, plannerQuestions(plan, server)),
 		onChannelRenamed: announceChannel,
 		storage,
 		lease: () => {
@@ -440,6 +451,24 @@ function answerDecision(channelId: string, id: string, generation: number): void
 	void decisionAnswers.answered(channelId, id, generation).catch(err =>
 		console.error("chopin: could not keep a saved decision for the Planner -", err)
 	);
+}
+
+/**
+ * What a remote Planner's rebuilt hold needs from a document that has opened, to wait again for
+ * the answers to the questions its client left open before a restart: it asks them of the
+ * members again, and an answer its client can never be given becomes a turn of its own.
+ */
+function plannerQuestions(plan: Service.Plan, server: Server<SocketData>): RejoinHost {
+	return {
+		join: (asked, signal) => rejoinInput({ id: plan.id, plan, server }, asked, signal),
+		unsent: decisions => {
+			for (let id of decisions) {
+				let record = plan.records.get(id);
+				if (record?.status !== "answered" || record.origin !== "planner") continue;
+				answerDecision(plan.id, id, decisionGeneration(record));
+			}
+		},
+	};
 }
 
 function settlePendingSpikes(channelId: string): void {
@@ -1137,7 +1166,9 @@ async function plannerNotAttached(channelId: string, url: string, repository: st
  * Planner if none runs it, and the request waits a bounded time for it to attach.
  */
 async function plannerStarting(channelId: string): Promise<void> {
+	// A Planner a cut closed is shown as attached through its window and is on its way back.
 	if (!plannerAttachments || plannerAttachments.attached(channelId) || !experiments) return;
+	if (plannerAttachments.status(channelId).state === "attached") return;
 	await experiments.plannerUsed(channelId);
 	if (await experiments.plannerStarting(channelId)) {
 		await plannerAttachments.attachedWithin(channelId, PLANNER_START_MS);
@@ -2077,6 +2108,8 @@ let draining: Promise<void> | undefined;
  * because everything it still holds is being committed for the next process.
  */
 let cutting = false;
+/** What the cut took from each remote Planner hold, for the next process to rebuild. */
+let frozenHolds: PlannerLinkHold[] = [];
 /** Startup's session reset, which replaces the held writer lease with a re-fenced one. */
 let resettingLease: Promise<unknown> | undefined;
 /** Ends the wait for the writer lease, if this process is still in it. */
@@ -2191,13 +2224,16 @@ function drain(graceful: boolean): Promise<void> {
 				decisionAnswers.close();
 				let stoppingJobs = jobRunner?.shutdown();
 				ownerBindings?.revokeAll();
-				plannerAttachments?.close();
+				// After every room has closed, so what a link keeps is what its client still holds.
+				frozenHolds = plannerAttachments?.freeze(handover.plannerWindowMs) ?? [];
 				for (let result of await Promise.allSettled([stoppingJobs])) {
 					if (result.status === "rejected") record(result.reason);
 				}
 			},
 			// What a remote Planner's link holds is persisted here, ahead of the release.
-			persistLinkState: async () => {},
+			persistLinkState: async () => {
+				await plannerAttachments?.persist(frozenHolds);
+			},
 			release: async () => {
 				await attempt(() => writerLease.stop());
 				if (resettingLease) await attempt(() => resettingLease!);
@@ -2929,7 +2965,35 @@ experiments = registerExperimentRoutes(router, hostedAuth, {
 });
 ownerBindings = new ActiveOwnerBindings(hostedAuth);
 if (config.agent && config.harness === "remote") {
-	plannerAttachments = new PlannerAttachments(hostedAuth, config.plannerAttachGraceMs);
+	plannerAttachments = new PlannerAttachments(hostedAuth, config.plannerAttachGraceMs, {
+		// Under `AUTH_MODE=local`, which is never handed over, holds stay in memory.
+		...(config.auth.local ? {} : {
+			store: {
+				put: hold => storage.plannerHolds.put(heldLease(), hold),
+				delete: async channelId => {
+					await storage.plannerHolds.delete(heldLease(), channelId);
+				},
+			},
+		}),
+		restoredRuns: (channelId, outcome) => {
+			let room = Rooms.get(channelId);
+			let opened = room?.plan;
+			if (!room || !opened) return;
+			void Chat.restoredRuns({
+				chat: opened.chat,
+				room: channelId,
+				server,
+				persist: (chat, deferred) => Service.persistDeferred(opened, chat, deferred),
+			}, outcome).catch(err =>
+				console.error("chopin: could not update the workflow runs a restart kept -", err)
+			);
+		},
+	});
+	hostedAuth.machines.onEnded(machineId => {
+		void plannerAttachments?.machineEnded(machineId).catch(err =>
+			console.error("chopin: could not end a machine's Planner hold -", err)
+		);
+	});
 	plannerAttachments.onChange((channelId, planner) => {
 		// A machine chosen for the document may start its Planner, or stop waiting to.
 		experiments?.plannerChanged(channelId);
@@ -3360,6 +3424,20 @@ cleanSessions();
 sessionCleanup = setInterval(cleanSessions, SESSION_CLEANUP_MS);
 
 try {
+	// Before anything attaches or is served, so a client that returns finds its hold.
+	if (plannerAttachments && !config.auth.local) {
+		await timed("holds", async () => {
+			let rows = await storage.plannerHolds.list();
+			await plannerAttachments!.restore(rows);
+			// A document already open has had its chance to ask the rebuilt holds' questions again.
+			for (let row of rows) {
+				let opened = Rooms.get(row.channelId)?.plan;
+				if (opened) {
+					plannerAttachments!.rejoinInputs(row.channelId, plannerQuestions(opened, server));
+				}
+			}
+		});
+	}
 	await timed("experiments", () => experiments!.service.recover(true));
 	server = listening ??= listen();
 	experimentTimer = setInterval(() => {
