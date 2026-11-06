@@ -29,14 +29,29 @@ export function clockTime(iso: string): string {
 	return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+/** When a machine was last seen: the time of day today, with its date on any other day. */
+function seenAt(iso: string): string {
+	let at = new Date(iso);
+	return at.toDateString() === new Date().toDateString()
+		? clockTime(iso)
+		: at.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export const NO_MACHINE = "No machine is connected.";
 
+/**
+ * `machine` names the document's own machine where the Planner is on it; without one the status
+ * says whose machine it is by login. `null` says the machine a starting or disconnected Planner
+ * is on is not known yet, and nothing is said until it is.
+ */
 export function plannerStatus(
 	planner: Session.PlannerAttachment | undefined,
-	machine?: string,
+	machine?: string | null,
+	lastSeen?: string,
 ): PlannerStatus | undefined {
 	if (!planner || planner.state === "attached") return undefined;
 	if (planner.state === "none") return { kind: "none", text: NO_MACHINE };
+	if (machine === null && planner.state !== "held") return undefined;
 	let where = machine ?? `@${planner.login}'s machine`;
 	if (planner.state === "held") {
 		return {
@@ -45,7 +60,12 @@ export function plannerStatus(
 		};
 	}
 	if (planner.state === "disconnected") {
-		return { kind: "disconnected", text: `${where} is offline. Your work is kept.` };
+		return {
+			kind: "disconnected",
+			text: `${where} is offline. ${
+				lastSeen ? `Last seen ${seenAt(lastSeen)}.` : "Your work is kept."
+			}`,
+		};
 	}
 	let failure = planner.failure;
 	if (!failure) return { kind: "starting", text: `Connecting to ${where}` };

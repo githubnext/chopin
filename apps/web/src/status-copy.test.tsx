@@ -48,8 +48,8 @@ const STATES: Session.PlannerAttachment[] = [
 	{ state: "held", login: "mona", until: AT },
 ];
 
-/** The viewer's own machine, named, and someone else's, known only by its owner's login. */
-const MACHINES = ["Build box", undefined] as const;
+/** The viewer's own machine, named, someone else's, known only by its owner's login, and not known yet. */
+const MACHINES = ["Build box", undefined, null] as const;
 
 test("the leak check flags every banned term in any form, and none of the plain words", () => {
 	let leaks = [
@@ -91,7 +91,8 @@ test("the leak check flags every banned term in any form, and none of the plain 
 
 function statuses(): PlannerStatus[] {
 	return STATES.flatMap(planner =>
-		MACHINES.map(machine => plannerStatus(planner, machine)).filter(Boolean) as PlannerStatus[]
+		MACHINES.flatMap(machine => [undefined, AT].map(seen => plannerStatus(planner, machine, seen)))
+			.filter(Boolean) as PlannerStatus[]
 	);
 }
 
@@ -237,6 +238,8 @@ test("the words for the states the user named are exactly theirs, with plain apo
 	expect(say({ state: "disconnected", login: "mona" })).toBe(
 		"Build box is offline. Your work is kept.",
 	);
+	expect(plannerSentence(plannerStatus({ state: "disconnected", login: "mona" }, "Build box", AT)!))
+		.toMatch(/^Build box is offline\. Last seen .+\.$/);
 	expect(say({ state: "none" })).toBe("No machine is connected.");
 	expect(say({ state: "held", login: "mona", until: AT })).toMatch(
 		/^Build box stepped away\. Your work is kept until \d{1,2}:\d{2}/,
