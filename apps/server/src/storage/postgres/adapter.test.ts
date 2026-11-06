@@ -632,6 +632,39 @@ if (url) {
 		}
 	});
 
+	it("reads the writer lease while a takeover waits on its row, without queueing behind it", async () => {
+		let storage = new PostgresStorage(url);
+		let sql = new SQL(url);
+		let release = Promise.withResolvers<void>();
+		let blocker: Promise<void> | undefined;
+		try {
+			await storage.migrate();
+			let name = contractId("peeked-writer");
+			let held = (await storage.leases.acquire(name, "holder", 60_000))!;
+			let locked = Promise.withResolvers<void>();
+			blocker = sql.begin(async transaction => {
+				await transaction`SELECT name FROM storage_leases WHERE name = ${name} FOR UPDATE`;
+				locked.resolve();
+				await release.promise;
+			});
+			await locked.promise;
+			let takeover = storage.leases.acquire(name, "waiting", 60_000);
+			await lockWaiters(sql, 1);
+			expect(await within(storage.leases.peek(name), 1_000)).toMatchObject({
+				free: false,
+				lease: { owner: "holder", fencing: held.fencing },
+			});
+			release.resolve();
+			await blocker;
+			expect(await takeover).toBeUndefined();
+		} finally {
+			release.resolve();
+			await blocker;
+			await storage.close();
+			await sql.close();
+		}
+	});
+
 	it("replays concurrent idempotent enqueues across independent lease rows", async () => {
 		let storage = new PostgresStorage(url);
 		let suffix = crypto.randomUUID();
@@ -1015,6 +1048,10 @@ if (url) {
 				"026_workflow_run_stages",
 				"027_decision_answers",
 				"028_machine_sharing",
+				"029_planner_link_holds",
+				"030_planner_credentials",
+				"031_planner_deferred_turns",
+				"032_mcp_sessions",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

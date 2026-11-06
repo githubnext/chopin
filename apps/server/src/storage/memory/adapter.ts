@@ -10,6 +10,10 @@ import { MemoryRunStageStore } from "./run-stages";
 import { MemoryDecisionAnswerStore } from "./decision-answers";
 import { MemoryDocumentVersionStore } from "./versions";
 import { MemoryMachineStore } from "./machines";
+import { MemoryDeferredTurnStore } from "./deferred-turns";
+import { MemoryMcpSessionStore } from "./mcp-sessions";
+import { MemoryPlannerCredentialStore } from "./planner-credentials";
+import { MemoryPlannerLinkHoldStore } from "./planner-holds";
 import { MemoryResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -32,6 +36,7 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	LeasePeek,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
 	RecordNavigationVisit,
@@ -52,11 +57,15 @@ import type {
 	ChannelStore,
 	CollaborationStore,
 	DecisionAnswerStore,
+	DeferredTurnStore,
 	DocumentVersionStore,
 	ImageStore,
 	LeaseStore,
 	MachineStore,
+	McpSessionStore,
 	NavigationStore,
+	PlannerCredentialStore,
+	PlannerLinkHoldStore,
 	ResearchWorkspaceStore,
 	RunStageStore,
 	SessionStore,
@@ -176,10 +185,30 @@ export class MemoryStorage implements StorageAdapter {
 		user: id => this.#users.get(id),
 	});
 	readonly versions: DocumentVersionStore = this.#versions;
-	readonly machines: MachineStore = new MemoryMachineStore(
+	readonly #machines = new MemoryMachineStore(
 		id => this.#users.has(id),
 		id => this.#channels.has(id),
 	);
+	readonly machines: MachineStore = this.#machines;
+	readonly #plannerHolds = new MemoryPlannerLinkHoldStore({
+		channelExists: id => this.#channels.has(id),
+		userExists: id => this.#users.has(id),
+		sessionExists: id => this.#sessions.has(id),
+		machineExists: id => this.#machines.has(id),
+		assertLease: held => this.#assertLease(held),
+	});
+	readonly plannerHolds: PlannerLinkHoldStore = this.#plannerHolds;
+	readonly #plannerCredentials = new MemoryPlannerCredentialStore({
+		machineExists: id => this.#machines.has(id),
+		channelExists: id => this.#channels.has(id),
+	});
+	readonly plannerCredentials: PlannerCredentialStore = this.#plannerCredentials;
+	readonly mcpSessions: McpSessionStore = new MemoryMcpSessionStore();
+	readonly #deferredTurns = new MemoryDeferredTurnStore({
+		channelExists: id => this.#channels.has(id),
+		assertLease: held => this.#assertLease(held),
+	});
+	readonly deferredTurns: DeferredTurnStore = this.#deferredTurns;
 
 	readonly users: UserStore = {
 		put: input => {
@@ -219,7 +248,10 @@ export class MemoryStorage implements StorageAdapter {
 		},
 		delete: id => {
 			let deleted = this.#sessions.delete(id);
-			if (deleted) this.#expireOwners(new Set([id]), new Date());
+			if (deleted) {
+				this.#expireOwners(new Set([id]), new Date());
+				this.#plannerHolds.deleteSessions([id]);
+			}
 			return Promise.resolve(deleted);
 		},
 		deleteExpired: now => {
@@ -231,18 +263,31 @@ export class MemoryStorage implements StorageAdapter {
 				}
 			}
 			this.#expireOwners(expired, now);
+			this.#plannerHolds.deleteSessions(expired);
 			return Promise.resolve(expired.size);
 		},
 		reset: async (now, held, ttlMs) => {
 			this.#assertLease(held);
-			this.#expireOwners(new Set(this.#sessions.keys()), now);
+			// A document whose Planner hold names a login this reset keeps stays owned by it.
+			this.#expireOwners(
+				new Set(this.#sessions.keys()),
+				now,
+				(channelId, sessionId) => {
+					let kept = this.#sessions.get(sessionId);
+					return this.#plannerHolds.holds(channelId, sessionId)
+						&& kept?.credentials !== undefined && kept.expiresAt > now;
+				},
+			);
 			let deleted = 0;
+			let removed: string[] = [];
 			for (let [id, value] of this.#sessions) {
 				if (!value.credentials || value.expiresAt <= now) {
 					this.#sessions.delete(id);
+					removed.push(id);
 					deleted++;
 				}
 			}
+			this.#plannerHolds.deleteSessions(removed);
 			let renewed = await this.#renew(held, ttlMs);
 			if (!renewed) throw conflict(`storage lease ${held.name} is no longer held`);
 			return { deleted, lease: renewed };
@@ -401,6 +446,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly research: ResearchWorkspaceStore = this.#research;
 
 	readonly leases: LeaseStore = {
+		peek: name => this.#peek(name),
 		acquire: (name, owner, ttlMs) => this.#acquire(name, owner, ttlMs),
 		renew: (held, ttlMs) => this.#renew(held, ttlMs),
 		release: held => this.#release(held),
@@ -412,10 +458,17 @@ export class MemoryStorage implements StorageAdapter {
 
 	async close(): Promise<void> {}
 
-	#expireOwners(expired: Set<string>, now: Date): void {
+	#expireOwners(
+		expired: Set<string>,
+		now: Date,
+		keeps?: (channelId: string, sessionId: string) => boolean,
+	): void {
 		if (expired.size === 0) return;
 		for (let [id, state] of this.#agents) {
-			if (state.ownerSessionId && expired.has(state.ownerSessionId)) {
+			if (
+				state.ownerSessionId && expired.has(state.ownerSessionId)
+				&& !keeps?.(id, state.ownerSessionId)
+			) {
 				this.#agents.set(id, {
 					...state,
 					ownerSessionId: undefined,
@@ -599,6 +652,9 @@ export class MemoryStorage implements StorageAdapter {
 		this.#runStages.deleteChannel(id);
 		this.#decisionAnswers.deleteChannel(id);
 		this.#versions.deleteChannel(id);
+		this.#plannerHolds.deleteChannel(id);
+		this.#plannerCredentials.deleteChannel(id);
+		this.#deferredTurns.deleteChannel(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);
 		this.#updates.delete(id);
@@ -898,6 +954,7 @@ export class MemoryStorage implements StorageAdapter {
 				`channel ${input.channelId} is at revision ${found.revision}, expected ${input.expectedRevision}`,
 			);
 		}
+		for (let change of input.deferredTurns ?? []) this.#deferredTurns.check(change);
 		let existingEvents = this.#events.get(input.channelId) ?? [];
 		let eventIds = new Set(existingEvents.map(value => value.id));
 		for (let item of input.events) {
@@ -954,6 +1011,9 @@ export class MemoryStorage implements StorageAdapter {
 				: {}),
 		});
 		this.#sequences.set(input.channelId, sequence + 1);
+		let deferredTurns = input.deferredTurns?.length
+			? this.#deferredTurns.apply(input.lease, input.deferredTurns)
+			: undefined;
 		let result = {
 			revision,
 			sequence,
@@ -964,7 +1024,7 @@ export class MemoryStorage implements StorageAdapter {
 				: {}),
 		};
 		operations.set(input.operationId, result);
-		return Promise.resolve(result);
+		return Promise.resolve(deferredTurns ? { ...result, deferredTurns } : result);
 	}
 
 	#checkpoint(input: SaveCheckpoint): Promise<void> {
@@ -1045,6 +1105,13 @@ export class MemoryStorage implements StorageAdapter {
 		};
 		operations.set(input.operationId, result);
 		return Promise.resolve(result);
+	}
+
+	#peek(name: string): Promise<LeasePeek | undefined> {
+		let existing = this.#leases.get(name);
+		return Promise.resolve(
+			existing && { lease: lease(existing), free: existing.expiresAt <= new Date() },
+		);
 	}
 
 	#acquire(name: string, owner: string, ttlMs: number): Promise<Lease | undefined> {

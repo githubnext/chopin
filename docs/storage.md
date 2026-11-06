@@ -57,7 +57,14 @@ Every adapter must provide:
 - paired machines found by token hash, with revision-checked credential rotation,
   re-authorization and owner-only revocation that discards credentials;
 - revision-checked credential rotation that cannot recreate a deleted session;
-- startup removal of expired and metadata-only sessions and every Planner owner reference;
+- startup removal of expired and metadata-only sessions and every Planner owner
+  reference, except that of a document whose persisted Planner hold names a session the
+  reset keeps;
+- plain, lock-free reads of a lease (`leases.peek`), so a process waiting for the writer
+  lease never queues behind its holder;
+- Planner holds, Planner credential digests, MCP sessions and deferred Planner turns
+  that outlive a process; holds and deferred turns are written under the writer lease,
+  and a deferred turn changes only from the state the write expects;
 - startup clearing of child channel conversations, fenced by the writer lease
   and idempotent;
 - renewable leases whose fencing token protects commits, epoch replacements,
@@ -114,6 +121,10 @@ applied migration. The application schema contains:
 | `machine_favorites` | Each person's one favorite machine, their own or a teammate's shared one, which Automatic prefers; no row is none. Revoking the machine removes it; its owner no longer sharing it removes teammates' (not its owner's). |
 | `document_versions` | Activity history: one row per editing session with its author (absent for Chopin), the canonical MDX it left, revision, hash, and start and end times. |
 | `workflow_run_stages` | Every stage of each workflow run a document's Chat shows, keyed by document, run ID and stage ID, with its order, status, name, kind, parent stage IDs and start and end seconds. Bounded per stage, not per run. A run's rows go when Chat stops showing its card, or with the document. |
+| `planner_link_holds` | One row per document whose remote Planner link left work or a hand-over window for the next process: the owner's login session (the row goes with it), user, generation and optional paired machine, its held sessions (waiting request IDs, unacknowledged answers, held stops), when it was suspended, `handover_until`, and the fencing token it was written under. Deleted by everything that ends a hold, and with the document. Holds no secret. |
+| `planner_credentials` | The SHA-256 digest, machine, document and expiry of each credential a paired machine handed to a Planner backend, written before the credential is handed out. Rows go when they expire, with the machine's end or withdrawal, and with the document. No token is stored. |
+| `planner_deferred_turns` | One row per acknowledged Planner request whose turn had not started (`composer`, `invoke_planner`, `invoke_system`, `comment` or `draft`): what its turn and a retried request need, its state (`waiting`, `started`, `ended`, `interrupted`, `cancelled`), the fencing token of its latest transition, when it was resolved and, for a request Chopin cancelled, why (`agent`, `access` or `unavailable`). A request ID is unique within a document, and a comment thread has at most one `waiting` row. Rows go with the document. |
+| `mcp_sessions` | MCP sessions: ID, user, client name and version, creation and last-seen times. Idle sessions are swept. |
 | `decision_answers` | Saved answers to decisions the Planner left open, one row per document and decision: the saved generation, when it was saved, the Planner turn claimed to carry it and when that turn was delivered. A newer generation replaces the row and waits again; a delivered row stays marked so it never runs twice. Rows go with the document. |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
@@ -268,6 +279,13 @@ runtime does not advance the summary or cursor, and startup forces status to
 `unavailable`. A later owner creates a fresh Copilot SDK session from bounded
 transcript context and the current document.
 
+The reset keeps one owner reference: a document whose `planner_link_holds` row names
+the session that owns it, when that session has credentials and has not expired. A hold
+is the persisted state of a remote Planner whose link was live when a process released
+the lease, and the next process rebuilds it, so clearing its owner would end the
+Planner it is meant to hand over. A session the reset deletes takes its holds with it
+and its documents' owners are cleared as before.
+
 A child document has no Chat of its own. Next, still under the writer lease and
 before any room opens, `CollaborationStore.dropChildConversations` empties each
 child's transcript and removes its workflow runs, conversation analysis, card
@@ -305,6 +323,17 @@ row `FOR NO KEY UPDATE` before it checks the expiry, so a renewal that waited
 behind a takeover cannot extend a lease that expired meanwhile. Once the holder
 starts shutting down, a renewal still in flight neither re-arms the safety
 deadline nor schedules a retry.
+
+`leases.peek(name)` reads the lease row with a plain query. It takes no lock, so it
+neither waits for a holder's writes nor delays them, and reports whether the lease is
+free (released or expired) on the database's own clock. A process that waits for the
+lease polls it and calls `acquire` only once the lease is free.
+
+Deferred Planner turns are fenced by the same lease. A change to one rides a
+`collaboration.commit` through `deferredTurns`, in the commit's transaction, so a request
+is durable no later than the entry that acknowledges it and is not kept when the commit
+is refused. Fencing tokens compare only within one lease, and every row is written
+under the writer lease.
 
 This lease is why the current deployment model cannot perform a rolling
 application replacement against one database. See

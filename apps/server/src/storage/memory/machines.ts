@@ -38,6 +38,9 @@ export class MemoryMachineStore implements MachineStore {
 		this.#machines.set(input.id, stored);
 		this.#tokens.set(hex(input.tokenHash), input.id);
 	}
+	has(id: string): boolean {
+		return this.#machines.has(id);
+	}
 	async get(id: string) {
 		let found = this.#machines.get(id);
 		return found && copy(found);

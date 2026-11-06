@@ -14,6 +14,10 @@ import { PostgresRunStageStore } from "./run-stages";
 import { PostgresDecisionAnswerStore } from "./decision-answers";
 import { PostgresDocumentVersionStore } from "./versions";
 import { PostgresMachineStore } from "./machines";
+import { applyDeferredTurnChanges, PostgresDeferredTurnStore } from "./deferred-turns";
+import { PostgresMcpSessionStore } from "./mcp-sessions";
+import { PostgresPlannerCredentialStore } from "./planner-credentials";
+import { PostgresPlannerLinkHoldStore } from "./planner-holds";
 import { PostgresResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -36,6 +40,7 @@ import type {
 	CreateChannel,
 	JsonValue,
 	Lease,
+	LeasePeek,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
 	RenameChannel,
@@ -553,6 +558,24 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.plannerHolds = new PostgresPlannerLinkHoldStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
+		this.plannerCredentials = new PostgresPlannerCredentialStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
+		this.mcpSessions = new PostgresMcpSessionStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
+		this.deferredTurns = new PostgresDeferredTurnStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
 		this.jobs = new PostgresBackgroundJobStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -669,10 +692,20 @@ export class PostgresStorage implements StorageAdapter {
 			this.#run("reset login sessions and owners", () =>
 				this.#sql.begin(async transaction => {
 					await this.#assertLease(transaction, held);
+					// A document whose Planner hold names a login this reset keeps stays owned by it.
 					await transaction`
 					UPDATE agent_state
 					SET owner_session_id = NULL, status = 'unavailable', updated_at = ${now}
 					WHERE owner_session_id IS NOT NULL
+						AND NOT EXISTS (
+							SELECT 1
+							FROM planner_link_holds hold
+							JOIN web_sessions kept ON kept.id = hold.owner_session_id
+							WHERE hold.channel_id = agent_state.channel_id
+								AND hold.owner_session_id = agent_state.owner_session_id
+								AND kept.credential_ciphertext IS NOT NULL
+								AND kept.expires_at > ${now}
+						)
 				`;
 					let deleted = await transaction<{ id: string }[]>`
 					DELETE FROM web_sessions
@@ -701,6 +734,10 @@ export class PostgresStorage implements StorageAdapter {
 	readonly decisionAnswers: PostgresDecisionAnswerStore;
 	readonly versions: PostgresDocumentVersionStore;
 	readonly machines: PostgresMachineStore;
+	readonly plannerHolds: PostgresPlannerLinkHoldStore;
+	readonly plannerCredentials: PostgresPlannerCredentialStore;
+	readonly mcpSessions: PostgresMcpSessionStore;
+	readonly deferredTurns: PostgresDeferredTurnStore;
 
 	readonly channels: ChannelStore = {
 		create: input => this.#createChannel(input),
@@ -773,6 +810,7 @@ export class PostgresStorage implements StorageAdapter {
 	};
 
 	readonly leases: LeaseStore = {
+		peek: name => this.#peek(name),
 		acquire: (name, owner, ttlMs) => this.#acquire(name, owner, ttlMs),
 		renew: (held, ttlMs) => this.#renew(held, ttlMs),
 		release: held => this.#release(held),
@@ -1596,6 +1634,9 @@ export class PostgresStorage implements StorageAdapter {
 					WHERE channel_id = ${input.channelId}
 				`;
 				}
+				let deferredTurns = input.deferredTurns?.length
+					? await applyDeferredTurnChanges(transaction, input.lease, input.deferredTurns)
+					: undefined;
 				for (let [ordinal, item] of input.events.entries()) {
 					await transaction`
 					INSERT INTO channel_events (
@@ -1628,6 +1669,7 @@ export class PostgresStorage implements StorageAdapter {
 					revision,
 					sequence,
 					repeated: false,
+					...(deferredTurns ? { deferredTurns } : {}),
 					...(saved ? { channel: saved } : {}),
 					...(sidecar !== undefined ? { sidecar } : {}),
 				};
@@ -1825,6 +1867,19 @@ export class PostgresStorage implements StorageAdapter {
 					: undefined;
 				return { revision, sequence, repeated: false, ...(saved ? { channel: saved } : {}) };
 			}));
+	}
+
+	#peek(name: string): Promise<LeasePeek | undefined> {
+		return this.#run("read storage lease", async () => {
+			let [found] = await this.#sql<Array<LeaseRow & { free: boolean }>>`
+				SELECT ${this.#sql.unsafe(LEASE_COLUMNS)}, expires_at <= clock_timestamp() AS free
+				FROM storage_leases
+				WHERE name = ${name}
+			`;
+			if (!found) return undefined;
+			let { free, ...row } = found;
+			return { lease: lease(row), free };
+		});
 	}
 
 	#acquire(name: string, owner: string, ttlMs: number): Promise<Lease | undefined> {

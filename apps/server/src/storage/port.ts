@@ -32,17 +32,26 @@ import type {
 	CreateResearchWorkspaceResult,
 	CreateWebSession,
 	DecisionAnswer,
+	DeferredTurn,
+	DeferredTurnOutcome,
+	DeferredTurnState,
+	DeferredTurnTransition,
 	DocumentVersion,
 	EnqueueBackgroundJob,
 	FailBackgroundJob,
 	Lease,
+	LeasePeek,
 	LinkResearchTurnJob,
 	LinkResearchTurnJobResult,
 	MachineChoice,
 	MachineCredentials,
 	MachineFavorite,
 	MachineRepository,
+	McpSession,
+	NewDeferredTurn,
 	PauseBackgroundJob,
+	PlannerCredential,
+	PlannerLinkHold,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
 	PublishInitialResearchReport,
@@ -77,6 +86,7 @@ import type {
 	StoredDocumentVersion,
 	StoredImage,
 	StoredMachine,
+	StoredPlannerLinkHold,
 	StoredWebSession,
 	SummarizeDocumentVersion,
 	SupersedeBackgroundJob,
@@ -99,7 +109,10 @@ export interface SessionStore {
 	rotate(id: string, expectedRevision: number, credentials: SessionCredentials): Promise<boolean>;
 	delete(id: string): Promise<boolean>;
 	deleteExpired(now: Date): Promise<number>;
-	/** Release all Planner owners; retain only unexpired sessions with encrypted credentials. */
+	/**
+	 * Release all Planner owners; retain only unexpired sessions with encrypted credentials. A
+	 * document whose persisted Planner hold names a retained session keeps that owner.
+	 */
 	reset(
 		now: Date,
 		lease: Lease,
@@ -307,6 +320,11 @@ export interface CollaborationStore {
 }
 
 export interface LeaseStore {
+	/**
+	 * Reads a lease with a plain query: it takes no lock, so it never waits for the holder's writes
+	 * or delays them. Undefined when the lease was never taken.
+	 */
+	peek(name: string): Promise<LeasePeek | undefined>;
 	acquire(name: string, owner: string, ttlMs: number): Promise<Lease | undefined>;
 	renew(lease: Lease, ttlMs: number): Promise<Lease | undefined>;
 	release(lease: Lease): Promise<boolean>;
@@ -386,6 +404,77 @@ export interface ResearchWorkspaceStore {
 	findTurnByJob(channelId: string, jobId: string): Promise<ResearchTurn | undefined>;
 }
 
+/**
+ * Each document's remote Planner as its link left it, one row per document, so the process that
+ * takes over can rebuild it. Writes are fenced by the writer lease. A hold goes with its owner's
+ * login session and with its document; everything else that ends one deletes it.
+ */
+export interface PlannerLinkHoldStore {
+	/** Replaces the document's hold, recording the lease's fencing token. */
+	put(lease: Lease, hold: PlannerLinkHold): Promise<void>;
+	/** True only for the call that removed a hold. */
+	delete(lease: Lease, channelId: string): Promise<boolean>;
+	get(channelId: string): Promise<StoredPlannerLinkHold | undefined>;
+	/** Every hold, by document id. */
+	list(): Promise<StoredPlannerLinkHold[]>;
+}
+
+/**
+ * Credentials a paired machine hands to a Planner backend, by digest. A row is written before
+ * its credential is handed out, so a process that starts later accepts it while it lasts.
+ */
+export interface PlannerCredentialStore {
+	/** Throws a conflict for a digest already stored. */
+	put(credential: PlannerCredential): Promise<void>;
+	/** The credential for this digest while it has not expired at `now`. */
+	find(digest: Uint8Array, now: Date): Promise<PlannerCredential | undefined>;
+	delete(digest: Uint8Array): Promise<boolean>;
+	/** One machine's credentials, for one document or for every document; returns how many. */
+	deleteForMachine(machineId: string, channelId?: string): Promise<number>;
+	deleteExpired(now: Date): Promise<number>;
+}
+
+/** MCP sessions, which a restart no longer ends. Idle ones are swept. */
+export interface McpSessionStore {
+	/** Idempotent: an id already stored keeps its first record. */
+	create(session: McpSession): Promise<void>;
+	find(id: string): Promise<McpSession | undefined>;
+	/** Records activity; false for an unknown session. Never moves `lastSeenAt` back. */
+	touch(id: string, now: Date): Promise<boolean>;
+	/** Forgets sessions not seen since `before`; returns how many. */
+	deleteIdle(before: Date): Promise<number>;
+}
+
+/**
+ * Acknowledged Planner requests whose turn has not started, one row each. Every write is fenced
+ * by the writer lease and conditional on the row's state; a write that does not apply changes
+ * nothing and says why. The same changes can ride a `collaboration.commit`, which is how a row
+ * is made durable no later than the entry that acknowledges it.
+ */
+export interface DeferredTurnStore {
+	/**
+	 * Adds a `waiting` row. A request id the document already has returns that row, and a comment
+	 * thread that already has a waiting row returns it, writing nothing.
+	 */
+	insert(lease: Lease, turn: NewDeferredTurn): Promise<DeferredTurnOutcome>;
+	/**
+	 * Moves a row from the state it is expected to be in, recording the lease's fencing token and,
+	 * for a final state, `at`. A turn ends only under the lease it started under.
+	 */
+	transition(lease: Lease, change: DeferredTurnTransition): Promise<DeferredTurnOutcome>;
+	/**
+	 * Marks every `started` row written under an older fencing token interrupted, in a document or
+	 * in all, and returns them in the order they were accepted. Fencing tokens compare only within
+	 * one lease: the deployment's writer lease, which every row is written under.
+	 */
+	interruptStale(lease: Lease, at: Date, documentId?: string): Promise<DeferredTurn[]>;
+	get(documentId: string, requestId: string): Promise<DeferredTurn | undefined>;
+	/** A document's rows in the order they were accepted, optionally only in these states. */
+	list(documentId: string, states?: DeferredTurnState[]): Promise<DeferredTurn[]>;
+	/** Documents with a row in any of these states, by id. */
+	documents(states: DeferredTurnState[]): Promise<string[]>;
+}
+
 /** The complete durable boundary. No provider-specific primitive crosses it. */
 export interface StorageAdapter {
 	readonly experiments: ExperimentStore;
@@ -403,6 +492,10 @@ export interface StorageAdapter {
 	readonly decisionAnswers: DecisionAnswerStore;
 	readonly versions: DocumentVersionStore;
 	readonly machines: MachineStore;
+	readonly plannerHolds: PlannerLinkHoldStore;
+	readonly plannerCredentials: PlannerCredentialStore;
+	readonly mcpSessions: McpSessionStore;
+	readonly deferredTurns: DeferredTurnStore;
 
 	migrate(): Promise<void>;
 	health(): Promise<void>;
