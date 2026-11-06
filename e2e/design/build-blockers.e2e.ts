@@ -79,15 +79,15 @@ test("hover previews can be pinned by click without closing or stealing focus", 
 test("connection setup discloses a padded accordion and copies the exact document and command", async ({ page, context }) => {
 	await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 	let trigger = plate(page, "build-blockers").getByRole("button", {
-		name: "Connect Chopin",
+		name: "Connect a machine",
 		exact: true,
 	});
 	await trigger.click();
-	let popup = page.getByRole("dialog", { name: "Connect Chopin", exact: true });
+	let popup = page.getByRole("dialog", { name: "Connect a machine", exact: true });
 	await expect(popup).toBeVisible();
 	await expect(popup.getByRole("button", { name: /close/i })).toHaveCount(0);
 	await expect(popup.locator("details, summary")).toHaveCount(0);
-	let backend = popup.getByLabel("Planner command", { exact: true });
+	let backend = popup.getByLabel("Agent command", { exact: true });
 	await expect(backend).not.toBeVisible();
 	await popup.getByRole("button", { name: "Copy URL", exact: true }).click();
 	await expect(popup.getByRole("status")).toHaveText("URL copied");

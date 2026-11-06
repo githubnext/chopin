@@ -174,10 +174,10 @@ function Dash({ label }: { label: string }) {
 /** What sharing a machine with teammates does, as the switch's tooltip and the phone row say. */
 export const SHARE_DETAIL =
 	"Teammates see this machine in their list and can choose it for a document or make it their "
-	+ "default. That document's Planner, builds and runs then run here, as you, with your GitHub "
-	+ "account, in repositories you can push to; a Planner also runs here on Default machine when "
+	+ "default. That document's replies, builds and runs then happen here, as you, with your GitHub "
+	+ "account, in repositories you can push to; replies also happen here on Default machine when "
 	+ "its creator has no machine of their own. Rebuilds and prototypes Chopin starts by itself "
-	+ "stay yours. Turned off, a teammate's Planner or build finishes the work it is on first.";
+	+ "stay yours. Turned off, a teammate's reply or build finishes the work it is on first.";
 
 /**
  * Whether teammates' documents may plan on a machine: a switch, named for the machine, that
@@ -486,7 +486,7 @@ function MachineTable(
 										{own?.agent
 											? <span>{agentName(own.agent)}</span>
 											: <Dash label="Agent unknown" />}
-										{own?.planner && <span className="machines-secondary">Planner</span>}
+										{own?.planner && <span className="machines-secondary">Can reply</span>}
 									</span>
 								</TableCell>
 								<TableCell className="machines-share-column">
@@ -723,7 +723,7 @@ export function MachineDetail(
 		],
 		[
 			"Agent",
-			[agentName(own?.agent ?? null), own?.planner && "runs Planners"].filter(Boolean).join(", "),
+			[agentName(own?.agent ?? null), own?.planner && "can reply"].filter(Boolean).join(", "),
 		],
 		[
 			"Runs",
