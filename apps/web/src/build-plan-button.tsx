@@ -472,7 +472,7 @@ export function BuildPlanButton(
 	if (canEdit && documentURL && connectionReason?.startsWith(CONNECT_MACHINE_TO_BUILD)) {
 		return (
 			<>
-				<Suspense fallback={<span className="text-sm text-text-secondary">Connect Chopin</span>}>
+				<Suspense fallback={<span className="text-sm text-text-secondary">Connect a machine</span>}>
 					<BuildConnectionPopover documentURL={documentURL} kind="planner" phone={phone} />
 				</Suspense>
 				{live}

@@ -92,8 +92,8 @@ test("a machine that stopped being shared says how many teammate documents it is
 	expect(finishingWords({ finishing: 2 })).toBe("Finishing 2 teammate documents");
 });
 
-test("sharing a machine says teammates' Planners, builds and runs run on it, as its owner", () => {
-	for (let consent of ["Planner, builds and runs", "as you", "your GitHub account", "stay yours"]) {
+test("sharing a machine says teammates' replies, builds and runs happen on it, as its owner", () => {
+	for (let consent of ["replies, builds and runs", "as you", "your GitHub account", "stay yours"]) {
 		expect(SHARE_DETAIL).toContain(consent);
 	}
 	expect(SHARE_DETAIL).not.toContain("No one else's builds");

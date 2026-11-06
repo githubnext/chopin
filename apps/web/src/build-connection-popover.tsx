@@ -6,6 +6,14 @@ import { plannerConnectCommand } from "./build-connection";
 import { connectorCommand } from "./local-agent-note";
 import "./build-connection-popover.css";
 
+/** What the setup says when no machine can reply: the trigger, the field, and what to do first. */
+export const SETUP = {
+	label: "Connect a machine",
+	command: "Agent command",
+	placeholder: "Command that starts your agent",
+	lead: "Open your agent and connect this document.",
+} as const;
+
 export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 	documentURL: string;
 	kind: "planner" | "agent";
@@ -16,7 +24,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 	let [backend, setBackend] = useState("");
 	let [copied, setCopied] = useState("");
 	let planner = kind === "planner";
-	let label = planner ? "Connect Chopin" : "Connect agent";
+	let label = planner ? SETUP.label : "Connect agent";
 	let command = planner
 		? plannerConnectCommand(documentURL, backend)
 		: connectorCommand(new URL(documentURL).origin);
@@ -30,7 +38,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 		<>
 			{planner && (
 				<label className="build-connection-field" htmlFor={field}>
-					Planner command
+					{SETUP.command}
 					<input
 						autoComplete="off"
 						className="field"
@@ -39,7 +47,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 							setBackend(event.target.value);
 							setCopied("");
 						}}
-						placeholder="Command that starts your Planner"
+						placeholder={SETUP.placeholder}
 						spellCheck={false}
 						value={backend}
 					/>
@@ -84,7 +92,7 @@ export function BuildConnectionPopover({ documentURL, kind, outline, phone }: {
 					<Popover.Popup aria-label={label} className="build-connection-popover">
 						<p className="m-0">
 							{planner
-								? "Open your Planner and attach this document."
+								? SETUP.lead
 								: "Run this in a terminal, then approve the pairing page."}
 						</p>
 						{planner

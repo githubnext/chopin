@@ -11,6 +11,8 @@ import { renderToStaticMarkup as render } from "react-dom/server";
 
 import { buildLook, CONNECT_MACHINE_TO_BUILD, draftRefusalCopy } from "./build-model";
 import { BuildPlanButton } from "./build-plan-button";
+import { SETUP } from "./build-connection-popover";
+import { SHARE_DETAIL, YourMachines } from "./experiments/machine-list";
 import { ChatComposer } from "./chat/composer";
 import {
 	destinationCue,
@@ -407,6 +409,34 @@ test("what a message's analysis, its evidence and a failed background job say is
 	expectPlainWords("the background jobs", [...words(jobs), JOB_RETRY_FAILED]);
 });
 
+test("the setup Build plan offers and the Machines page speak of machines, replies and teammates' work, not of Planners", () => {
+	expectPlain("the setup", [...Object.values(SETUP), SHARE_DETAIL]);
+	expect(SETUP.label).toBe("Connect a machine");
+	let machine = {
+		id: "m1",
+		label: "build-box",
+		autoRun: false,
+		createdAt: 1,
+		lastSeenAt: 2,
+		connected: true,
+		reauthorize: false,
+		version: "0.1.5",
+		hostname: "build-box.local",
+		platform: { os: "linux", arch: "x64" },
+		agent: { name: "GitHub Copilot CLI", version: "1.0.97" },
+		service: true,
+		planner: true,
+		favorite: false,
+		shared: true,
+	};
+	let table = render(createElement(YourMachines, {
+		owner: { login: "ada" },
+		machines: { machines: [machine], teammates: [], error: "", recommended: null } as never,
+	}));
+	expect(table).toContain("Can reply");
+	expectPlain("the Machines table", words(table));
+});
+
 /** A document with no tasks yet, so what is left to say about Build plan is why it must wait. */
 const DRAFTING = {
 	revision: 1,
@@ -478,7 +508,7 @@ test("Build plan says it plainly and still opens how to connect a machine for th
 		);
 	// Needing a machine offers to connect one, in place of a button that cannot be pressed.
 	let connect = plan(CONNECT_MACHINE_TO_BUILD);
-	expect(connect).toContain("Connect Chopin");
+	expect(connect).toContain("Connect a machine");
 	expect(connect).not.toContain('aria-label="Build plan"');
 	// Any other reason leaves the inert button with the reason in its tooltip and description.
 	let reconnect = plan("Reconnect the machine to build");
