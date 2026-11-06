@@ -11,6 +11,7 @@
  * layout, and happy-dom returns zero for every measurement.
  */
 
+import { hasPendingWork } from "@chopin/protocol/pending-work";
 import { afterEach, describe, expect, it, jest } from "bun:test";
 import * as Y from "yjs";
 
@@ -431,6 +432,24 @@ describe("delivering local edits", () => {
 
 		jest.advanceTimersByTime(10_000);
 		expect(room.doc.getText("typed").toString()).toBe("xx");
+	});
+
+	it("holds the page from reloading while an edit is unacknowledged, and lets go once it is", async () => {
+		jest.useFakeTimers();
+		let room = server(index => index === 0);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		await provider.connect();
+		expect(provider.unsaved).toBe(false);
+
+		typing(doc, 1);
+		jest.advanceTimersByTime(100);
+		expect(provider.unsaved).toBe(true);
+		expect(hasPendingWork()).toBe(true);
+
+		// The resend is acknowledged.
+		jest.advanceTimersByTime(10_000);
+		expect(provider.unsaved).toBe(false);
 	});
 
 	it("leaves acknowledged edits alone", async () => {

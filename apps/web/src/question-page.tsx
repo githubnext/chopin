@@ -15,6 +15,7 @@ import {
 	personName,
 	QuestionnaireCard,
 	runningFindings,
+	usePendingWork,
 	useQuestionPageDraft,
 	waitingNames,
 	waitingOn,
@@ -421,6 +422,7 @@ function Take(
 	let [stance, setStance] = useState<Stance>();
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState<string>();
+	usePendingWork(text.trim() !== "" || busy);
 	let mine = take.ref.toLowerCase() === root.self?.toLowerCase();
 	let reply = async () => {
 		if (!root.wire || !text.trim()) return;

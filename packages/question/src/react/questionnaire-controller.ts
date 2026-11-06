@@ -1,3 +1,4 @@
+import { trackPendingWork } from "@chopin/protocol/pending-work";
 import { derive } from "../answer";
 import { crdt, setMark } from "../draft";
 import type { Model as DraftModel } from "../draft";
@@ -111,6 +112,12 @@ export class QuestionnaireController {
 			focus: undefined,
 			closed: false,
 		};
+		trackPendingWork(this);
+	}
+
+	/** Whether a draft edit or an answer has not reached the server, which a reload would lose. */
+	get unsaved(): boolean {
+		return this.#outbox.length > 0 || this.#snapshot.submitting;
 	}
 
 	getSnapshot = (): Snapshot => this.#snapshot;

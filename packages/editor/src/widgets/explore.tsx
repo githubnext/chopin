@@ -19,6 +19,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import type { ReactNode } from "react";
 
 import { Face } from "../face";
+import { usePendingWork } from "../pending-work";
 
 import type { Question } from "@chopin/protocol";
 import type { Transport } from "../transport";
@@ -194,6 +195,7 @@ export function ExploreMenu(
 	let [focus, setFocus] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState<string>();
+	usePendingWork(focus.trim() !== "" || busy);
 	let first = useRef<HTMLButtonElement>(null);
 	let details = useRef<Partial<Record<Section, HTMLTextAreaElement | null>>>({});
 	let peopleList = useRef<HTMLDivElement>(null);

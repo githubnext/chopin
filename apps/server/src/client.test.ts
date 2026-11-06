@@ -61,13 +61,42 @@ test("unfingerprinted public files are not cached as immutable", async () => {
 test("HTML and SPA fallbacks are revalidated", async () => {
 	let client = await createClient({ "index.html": "<!doctype html><main>app</main>" });
 	try {
-		for (let path of ["/index.html", "/rooms/room-123", "/assets/missing-AjK9nqi6.js"]) {
+		for (let path of ["/index.html", "/rooms/room-123", "/assets", "/assetsx/app.js"]) {
 			let response = await client.get(path);
 			expect(response.status).toBe(200);
 			expect(response.headers.get("cache-control")).toBe("no-cache");
 			expect(response.headers.get("content-type")).toContain("text/html");
 			expect(await response.text()).toContain("<main>app</main>");
 		}
+	} finally {
+		await client.close();
+	}
+});
+
+test("a missing file under /assets answers 404, where the app's HTML would fail as a script", async () => {
+	let client = await createClient({
+		"index.html": "<!doctype html><main>app</main>",
+		"assets/index-AjK9nqi6.js": "console.log('build');",
+	});
+	try {
+		for (
+			let path of [
+				"/assets/old-chunk-Zy8wXq1p.js",
+				"/assets/old-style-Zy8wXq1p.css",
+				"/assets/unhashed.js",
+				"/assets/nested/dir/chunk-Zy8wXq1p.js",
+				"/assets/",
+			]
+		) {
+			let response = await client.get(path);
+			expect([path, response.status]).toEqual([path, 404]);
+			expect(response.headers.get("content-type")).not.toContain("text/html");
+			expect(response.headers.get("cache-control")).toBe("no-store");
+			expect(await response.text()).not.toContain("<main>app</main>");
+		}
+		let present = await client.get("/assets/index-AjK9nqi6.js");
+		expect(present.status).toBe(200);
+		expect(present.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
 	} finally {
 		await client.close();
 	}

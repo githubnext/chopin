@@ -34,5 +34,6 @@ export type {
 } from "./question-view";
 export { cardRelation, NOT_LINKED, RelationNote } from "./relation-note";
 export { ResolvedActions } from "./resolved-actions";
+export { usePendingWork } from "./use-pending-work";
 export { forget, useQuestionnaire } from "./use-questionnaire";
 export type { QuestionnaireOptions, QuestionnaireState, Transport } from "./use-questionnaire";

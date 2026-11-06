@@ -22,6 +22,7 @@ import {
 	isDemoHandle,
 	MAX_RESEARCH_BRIEF,
 	useConnectionNotice,
+	usePendingWork,
 	usePopoverDismissal,
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
@@ -276,6 +277,7 @@ export function Chat(
 	// A reload must not take an unsent message with it. Kept as it changes
 	// rather than on unload, which a browser does not promise to announce.
 	useEffect(() => keepDraft(room, handle, draft), [room, handle, draft]);
+	usePendingWork(!!draft.text.trim());
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();

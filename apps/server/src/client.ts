@@ -32,6 +32,7 @@ const PRIVATE = new Set(["authorization", "cookie"]);
 
 /** Vite's default build names use an eight-character hash before the extension. */
 const FINGERPRINTED_ASSET_PATH = /^\/assets\/.+-[A-Za-z0-9_-]{8}\.[^/]+$/;
+const ASSETS_PATH = "/assets/";
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 function forwardable(headers: Headers): Headers {
@@ -76,7 +77,10 @@ export async function proxy(req: Request, url: URL, origin: string): Promise<Res
  * Serve the built client.
  *
  * Anything that is not a real file is the single-page app, so a room URL
- * survives a reload and a deep link opens the room it names.
+ * survives a reload and a deep link opens the room it names. Under `/assets/` it
+ * is a 404 instead: a page left open across a deploy asks for the chunks of the
+ * build it came from, and HTML answering for a script is an error that names
+ * nothing, where a 404 tells the page its build is gone.
  */
 export async function serve(url: URL, dir: string): Promise<Response> {
 	if (!existsSync(dir)) {
@@ -95,6 +99,12 @@ export async function serve(url: URL, dir: string): Promise<Response> {
 			headers.set("cache-control", "no-cache");
 		}
 		return new Response(file, { headers });
+	}
+	if (url.pathname.startsWith(ASSETS_PATH)) {
+		return new Response("not found", {
+			status: 404,
+			headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
+		});
 	}
 	return new Response(Bun.file(join(dir, "index.html")), {
 		headers: { "cache-control": "no-cache" },

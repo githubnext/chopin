@@ -1,3 +1,4 @@
+import { usePendingWork } from "@chopin/editor";
 import { useState, useSyncExternalStore } from "react";
 import { ExperimentView } from "@chopin/experiment/react";
 import type { PublishedInvestigation } from "@chopin/experiment/records";
@@ -19,6 +20,7 @@ export function EvidenceActions({ store, item, view, disabled }: {
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState("");
 	let [operation] = useState(() => new RequestIdentity());
+	usePendingWork(open && (conclusion.trim() !== "" || rationale.trim() !== ""));
 	async function act(action: () => Promise<unknown>) {
 		setBusy(true);
 		setError("");

@@ -1,5 +1,8 @@
+import { hasPendingWork } from "@chopin/protocol/pending-work";
 import { describe, expect, it } from "bun:test";
 import * as Y from "yjs";
+
+import { ResearchDraftStore } from "./research-draft";
 
 import type { Research } from "@chopin/protocol";
 
@@ -238,5 +241,43 @@ describe("research draft lifecycle", () => {
 		expect(store.get()).toBe(snapshot);
 		expect(store.get()?.created).toEqual(REQUEST);
 		expect(store.get()?.position).toBe(original);
+	});
+});
+
+describe("a research draft holds the page from reloading", () => {
+	it("holds nothing until something is typed, and lets go when it is cleared or dismissed", () => {
+		let store = new ResearchDraftStore("investigation");
+		store.open(ANCHOR, position("typed"));
+		expect(store.unsaved).toBe(false);
+
+		store.change("Which index is faster?");
+		expect(store.unsaved).toBe(true);
+		expect(hasPendingWork()).toBe(true);
+
+		store.change("   ");
+		expect(store.unsaved).toBe(false);
+		store.change("Which index is faster?");
+		expect(store.dismiss()).toBe(true);
+		expect(store.unsaved).toBe(false);
+	});
+
+	it("holds through the request and until its reference is placed, whatever was typed", async () => {
+		let store = new ResearchDraftStore();
+		store.open(ANCHOR, position("created"));
+		store.change(REQUEST.question);
+		let resolve!: (request: Research.RequestView) => void;
+		let running = store.start(() => new Promise<Research.RequestView>(done => resolve = done));
+		expect(store.unsaved).toBe(true);
+
+		resolve(REQUEST);
+		await running;
+		// Created, but with no place for its reference yet: leaving would leave it loose.
+		expect(store.get()?.created).toEqual(REQUEST);
+		expect(store.unsaved).toBe(true);
+
+		expect(store.place(position("placed"))).toBe(false);
+		store.attachPlacement(() => true);
+		expect(store.get()).toBeUndefined();
+		expect(store.unsaved).toBe(false);
 	});
 });

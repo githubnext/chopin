@@ -1,3 +1,4 @@
+import { trackPendingWork } from "@chopin/protocol/pending-work";
 import type { RelativePosition } from "yjs";
 import type { DOMRectLike } from "./toolbar/placement";
 
@@ -61,6 +62,16 @@ export class ResearchDraftStore {
 	/** `noun` names the work in messages: "research" or "investigation". */
 	constructor(noun = "research") {
 		this.#noun = noun;
+		trackPendingWork(this);
+	}
+
+	/**
+	 * Whether the draft holds something a reload would lose: a question typed and not yet started,
+	 * or a request in flight or created whose reference has not been placed in the document.
+	 */
+	get unsaved(): boolean {
+		let draft = this.#draft;
+		return !!draft && (draft.phase !== "editing" || draft.question.trim() !== "");
 	}
 
 	subscribe(listener: () => void): () => void {
