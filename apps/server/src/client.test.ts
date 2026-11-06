@@ -102,6 +102,34 @@ test("a missing file under /assets answers 404, where the app's HTML would fail 
 	}
 });
 
+test("serves the hashed files an image kept from earlier builds, below the current build's own and never as HTML", async () => {
+	let client = await createClient({
+		"index.html": "<!doctype html><main>app</main>",
+		"assets/index-AjK9nqi6.js": "current",
+	});
+	let kept = await createClient({
+		"assets/old-chunk-Zy8wXq1p.js": "kept chunk",
+		"assets/index-AjK9nqi6.js": "stale copy",
+		"assets/unhashed.js": "not fingerprinted",
+		"manifest.json": "{}",
+	});
+	let get = (path: string) =>
+		serve(new URL(path, "http://chopin.test"), client.directory, kept.directory);
+	try {
+		let old = await get("/assets/old-chunk-Zy8wXq1p.js");
+		expect([old.status, await old.text()]).toEqual([200, "kept chunk"]);
+		expect(old.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+		expect(await (await get("/assets/index-AjK9nqi6.js")).text()).toBe("current");
+		expect((await get("/assets/gone-Zy8wXq1p.js")).status).toBe(404);
+		expect((await get("/assets/unhashed.js")).status).toBe(404);
+		// What the image keeps beside the files is not part of the site.
+		expect(await (await get("/manifest.json")).text()).toContain("<main>app</main>");
+	} finally {
+		await client.close();
+		await kept.close();
+	}
+});
+
 test("a missing built client keeps its existing 404 response", async () => {
 	let directory = await mkdtemp(join(tmpdir(), "chopin-client-"));
 	try {

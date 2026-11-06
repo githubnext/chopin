@@ -294,6 +294,12 @@ document delta commits. Their change list identifies the MCP client without
 displaying a Planner cursor. Calls without initialization are attributed to
 `unknown`.
 
+The session ID `initialize` returns (the `Mcp-Session-Id` header) is stored with the
+user, client name and version, and when it was last used, so it keeps working across a
+server restart or a deploy. A session nobody used for 30 days is forgotten, and an ID the
+server does not know is treated as no session: `start_implementation` and the lifecycle
+tools answer `session-required` until the client initializes again.
+
 An answered decision stays linked to its text when the update leaves every
 block it is linked to unchanged. Any other answered decision, including one whose
 linked text changed or was removed, waits for a Planner turn to link it again

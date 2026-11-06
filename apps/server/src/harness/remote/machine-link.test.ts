@@ -289,6 +289,97 @@ describe("a paired machine's Planner", () => {
 		expect(await planners.redeem(body.token)).toBeUndefined();
 	});
 
+	it("accepts a credential in a process that starts after it was issued, with no wait for a renewal", async () => {
+		let { pair, credential, channel, machines, sessions, storage, auth } = await machineServer();
+		let member = await pair("member", "U_member");
+		let { body } = await credential(member.token, channel.id);
+		let restarted = new MachinePlanners({
+			machines,
+			sessions,
+			storage,
+			github: auth.github,
+			config: auth.config,
+		});
+		let next = linkServer(auth, 2_000, undefined, 2_000, undefined, restarted);
+		cleanups.push(next.stop);
+		// The new process holds nothing in memory: the credential is known only by its digest in storage.
+		expect(await restarted.redeem(body.token)).toMatchObject({
+			channelId: channel.id,
+			machine: { id: member.machine.id },
+		});
+		let client = await attach(next.url, channel.id, scriptedPlanner().handlers, body.token);
+		cleanups.push(() => client.detach());
+		expect(next.attachments.attached(channel.id)).toBe(true);
+		expect(next.attachments.holder(channel.id)).toBe("member");
+	});
+
+	it("keeps no token, only the digest of a credential, and writes it before handing the credential out", async () => {
+		let { pair, credential, channel, storage, planners } = await machineServer();
+		let member = await pair("member", "U_member");
+		let { body } = await credential(member.token, channel.id);
+		let digest = new Uint8Array(new Bun.CryptoHasher("sha256").update(body.token).digest());
+		expect(await storage.plannerCredentials.find(digest, new Date())).toMatchObject({
+			machineId: member.machine.id,
+			channelId: channel.id,
+		});
+		expect(await storage.plannerCredentials.find(new TextEncoder().encode(body.token), new Date()))
+			.toBeUndefined();
+
+		let put = storage.plannerCredentials.put.bind(storage.plannerCredentials);
+		storage.plannerCredentials.put = async () => {
+			throw new Error("the database is unavailable");
+		};
+		try {
+			await expect(planners.issue(member.machine, channel.id)).rejects.toThrow("unavailable");
+			let refused = await credential(member.token, channel.id);
+			expect(refused.status).toBe(503);
+			expect(refused.body.token).toBeUndefined();
+		} finally {
+			storage.plannerCredentials.put = put;
+		}
+	});
+
+	it("refuses, in a new process too, a credential that expired, was withdrawn, or whose machine ended", async () => {
+		let { pair, credential, channel, machines, sessions, storage, auth, planners, time } =
+			await machineServer();
+		let member = await pair("member", "U_member");
+		let other = await pair("member", "U_member");
+		let process = () =>
+			new MachinePlanners({
+				machines,
+				sessions,
+				storage,
+				github: auth.github,
+				config: auth.config,
+				clock: () => new Date(Date.now() + time.offsetMs),
+			});
+		let expired = (await credential(member.token, channel.id)).body.token;
+		let withdrawn = (await credential(member.token, channel.id)).body.token;
+		let revoked = (await credential(other.token, channel.id)).body.token;
+		let live = (await credential(member.token, channel.id)).body.token;
+
+		await planners.withdraw(member.machine.id, crypto.randomUUID());
+		expect(await process().redeem(withdrawn)).toMatchObject({ channelId: channel.id });
+		await planners.withdraw(member.machine.id, channel.id);
+		expect(await process().redeem(withdrawn)).toBeUndefined();
+		expect(await process().redeem(live)).toBeUndefined();
+		// A credential names the machine that was given it and no other.
+		expect(await process().redeem(revoked)).toMatchObject({ machine: { id: other.machine.id } });
+
+		await machines.revoke(other.machine.id, "U_member");
+		expect(await process().redeem(revoked)).toBeUndefined();
+		await Bun.sleep(20);
+		expect(
+			await storage.plannerCredentials.find(
+				new Uint8Array(new Bun.CryptoHasher("sha256").update(revoked).digest()),
+				new Date(),
+			),
+		).toBeUndefined();
+
+		time.offsetMs = 15 * 60_000 + 1;
+		expect(await process().redeem(expired)).toBeUndefined();
+	});
+
 	it("releases every document when a machine whose login expired, then reattached at once, is revoked", async () => {
 		let {
 			pair,

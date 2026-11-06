@@ -28,18 +28,15 @@ export type MachinePlannerAuth =
 	& Pick<HostedAuth, "config" | "machines" | "sessions" | "storage" | "github">
 	& { clock?: () => Date };
 
-type Issued = { machineId: string; channelId: string; expiresAt: number };
-
 /** What a redeemed credential lets a link do: be `machine`'s Planner for one document. */
 export type MachineGrant = { machine: StoredMachine; channelId: string };
 
-function digest(token: string): string {
-	return createHash("sha256").update(token).digest("base64url");
+function digest(token: string): Uint8Array {
+	return new Uint8Array(createHash("sha256").update(token).digest());
 }
 
 export class MachinePlanners {
 	#auth: MachinePlannerAuth;
-	#issued = new Map<string, Issued>();
 	/** The login each machine's links attach through now, while it is created or once it is. */
 	#logins = new Map<string, Promise<string>>();
 	/** Every login created for each machine that may still be live, all ended with the machine. */
@@ -54,20 +51,25 @@ export class MachinePlanners {
 		return (this.#auth.clock ?? (() => new Date()))().getTime();
 	}
 
-	/** Forgets every credential that can no longer open a link. */
-	#prune(now: number): void {
-		for (let [key, issued] of this.#issued) {
-			if (issued.expiresAt <= now) this.#issued.delete(key);
-		}
-	}
-
-	/** A credential for `machine` to attach as `channelId`'s Planner; only its hash is kept. */
-	issue(machine: StoredMachine, channelId: string): { token: string; expiresAt: number } {
+	/**
+	 * A credential for `machine` to attach as `channelId`'s Planner. Only its digest is kept, in
+	 * storage and written before the credential is handed out, so a process that starts after a
+	 * restart accepts it while it lasts.
+	 */
+	async issue(
+		machine: StoredMachine,
+		channelId: string,
+	): Promise<{ token: string; expiresAt: number }> {
 		let now = this.#now();
-		this.#prune(now);
+		await this.#auth.storage.plannerCredentials.deleteExpired(new Date(now));
 		let token = PREFIX + randomBytes(32).toString("base64url");
 		let expiresAt = now + PLANNER_CREDENTIAL_MS;
-		this.#issued.set(digest(token), { machineId: machine.id, channelId, expiresAt });
+		await this.#auth.storage.plannerCredentials.put({
+			digest: digest(token),
+			machineId: machine.id,
+			channelId,
+			expiresAt: new Date(expiresAt),
+		});
 		return { token, expiresAt };
 	}
 
@@ -75,12 +77,8 @@ export class MachinePlanners {
 	 * Forgets every credential `machineId` holds for `channelId`, so a backend Chopin stopped there
 	 * cannot attach again with one; the machine's next credential request is answered as usual.
 	 */
-	withdraw(machineId: string, channelId: string): void {
-		for (let [key, issued] of this.#issued) {
-			if (issued.machineId === machineId && issued.channelId === channelId) {
-				this.#issued.delete(key);
-			}
-		}
+	async withdraw(machineId: string, channelId: string): Promise<void> {
+		await this.#auth.storage.plannerCredentials.deleteForMachine(machineId, channelId);
 	}
 
 	/** Whether a bearer is shaped as a Planner credential rather than a GitHub token. */
@@ -93,8 +91,9 @@ export class MachinePlanners {
 	 * expires a credential may open links again, so a backend can reattach after a dropped socket.
 	 */
 	async redeem(token: string): Promise<MachineGrant | undefined> {
-		this.#prune(this.#now());
-		let issued = TOKEN.test(token) ? this.#issued.get(digest(token)) : undefined;
+		let issued = TOKEN.test(token)
+			? await this.#auth.storage.plannerCredentials.find(digest(token), new Date(this.#now()))
+			: undefined;
 		if (!issued) return undefined;
 		let machine = await this.current({ id: issued.machineId } as StoredMachine);
 		return { machine, channelId: issued.channelId };
@@ -163,11 +162,13 @@ export class MachinePlanners {
 
 	/** A revoked or unauthorized machine's credentials and every login it holds end now. */
 	async #ended(machineId: string): Promise<void> {
-		for (let [key, issued] of this.#issued) {
-			if (issued.machineId === machineId) this.#issued.delete(key);
-		}
 		let current = this.#logins.get(machineId);
 		this.#logins.delete(machineId);
+		try {
+			await this.#auth.storage.plannerCredentials.deleteForMachine(machineId);
+		} catch (error) {
+			console.error("[agent] withdrawing an ended machine's Planner credentials failed:", error);
+		}
 		await current?.catch(() => undefined);
 		let delegated = this.#delegated.get(machineId) ?? new Set<string>();
 		this.#delegated.delete(machineId);

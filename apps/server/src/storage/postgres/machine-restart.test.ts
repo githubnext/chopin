@@ -2,7 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { Machines } from "../../auth/machines";
 import { GitHubTokenError } from "../../github/client";
-import { contractId } from "../contract-support";
+import { MachinePlanners } from "../../harness/remote/machine-planners";
+import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
 
 let url = process.env.TEST_DATABASE_URL;
@@ -54,6 +55,50 @@ if (url) {
 				expect(await restarted.use(machine, async token => token)).toBe("ghu_after_restart");
 				expect(refreshed).toEqual(["ghr_before_restart"]);
 				expect((await second.machines.get(machine.id))?.credentials?.revision).toBe(2);
+			} finally {
+				await second.close();
+			}
+		});
+
+		it("keep a Planner credential for a new process, which accepts it at once until it expires", async () => {
+			let first = new PostgresStorage(url);
+			await first.migrate();
+			let { userId, channelId } = await userAndChannel(first);
+			let paired = await machines(first, []).pair({
+				userId,
+				label: "laptop",
+				repositories: [],
+				autoRun: false,
+				grant: {
+					accessToken: "ghu_long_lived",
+					accessExpiresIn: 28_800,
+					refreshToken: "ghr_long_lived",
+					refreshExpiresIn: 15_897_600,
+				},
+			});
+			let planners = (storage: PostgresStorage, clock?: () => Date) =>
+				new MachinePlanners({
+					machines: machines(storage, []),
+					storage,
+					clock,
+				} as never);
+			let withdrawn = await planners(first).issue(paired.machine, channelId);
+			let kept = await planners(first).issue(paired.machine, channelId);
+			await planners(first).withdraw(paired.machine.id, "another-document");
+			await first.close();
+
+			let second = new PostgresStorage(url);
+			try {
+				let restarted = planners(second);
+				expect(await restarted.redeem(kept.token)).toMatchObject({
+					channelId,
+					machine: { id: paired.machine.id },
+				});
+				await restarted.withdraw(paired.machine.id, channelId);
+				expect(await restarted.redeem(withdrawn.token)).toBeUndefined();
+				let again = await restarted.issue(paired.machine, channelId);
+				let later = planners(second, () => new Date(again.expiresAt + 1));
+				expect(await later.redeem(again.token)).toBeUndefined();
 			} finally {
 				await second.close();
 			}

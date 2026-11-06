@@ -1171,8 +1171,12 @@ document's repository (otherwise 403 `repository-forbidden`; 404 `not-found`
 for no such document, 409 `document-archived` for an archived one). The
 credential can open connections to that one document for **15 minutes**. A connection it
 opened does not depend on it afterwards: the server rechecks the machine as it
-rechecks any owner. Chopin keeps only its hash, in memory, so a server restart
-forgets it as it releases every attachment.
+rechecks any owner. Chopin keeps only its SHA-256 digest, in `planner_credentials`,
+written before the credential is handed out. A process that starts after a restart
+therefore accepts an unexpired credential at once, and a backend that reconnects with it
+is not refused with 401 while it waits for the machine's connector to renew it. The rows
+go when the credential expires, when the document's Planner is stopped on the machine,
+when the machine is unpaired or loses its GitHub authorization, and with the document.
 
 Attached this way, the document's Planner owner is a login of the machine's
 owner that no browser holds, whose GitHub token is the machine's own; Chopin's

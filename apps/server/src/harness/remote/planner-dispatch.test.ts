@@ -2263,6 +2263,33 @@ describe("choosing a teammate's shared machine for a document", () => {
 		expect((await choice("rival")).choice).toBeNull();
 	});
 
+	it("says why a Planner stopped to a machine that asks while its credentials are still being forgotten", async () => {
+		let { choose, machine, box, channel, planners, url } = await chosen();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("rival", box.id);
+		expect(await box.poll([])).toEqual({ kind: "planners", planners: [{ id: channel.id, url }] });
+
+		// Forgetting a credential waits on storage. The choice has taken effect by then, so the
+		// machine's next question already has to be answered with the reason.
+		let reached = Promise.withResolvers<void>();
+		let proceed = Promise.withResolvers<void>();
+		let withdraw = planners.withdraw.bind(planners);
+		planners.withdraw = async (machineId, channelId) => {
+			reached.resolve();
+			await proceed.promise;
+			return withdraw(machineId, channelId);
+		};
+		let picked = choose("member", laptop.id);
+		await reached.promise;
+		expect(await box.poll([channel.id], 500)).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: { [channel.id]: expect.stringContaining("member chose another machine") },
+		});
+		proceed.resolve();
+		await picked;
+	});
+
 	it("never asks it for an editor's choice while the creator chose another machine", async () => {
 		let { choose, choice, machine, box, channel, url } = await chosen();
 		let laptop = await machine("member", "U_member", "laptop");

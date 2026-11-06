@@ -35,6 +35,8 @@ const PRIVATE = new Set(["authorization", "cookie"]);
 /** Vite's default build names use an eight-character hash before the extension. */
 const FINGERPRINTED_ASSET_PATH = /^\/assets\/.+-[A-Za-z0-9_-]{8}\.[^/]+$/;
 const ASSETS_PATH = "/assets/";
+/** Where the image keeps the hashed files of the builds before this one, beside the built client. */
+const KEPT_ASSETS = "kept-assets";
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 function forwardable(headers: Headers): Headers {
@@ -82,9 +84,14 @@ export async function proxy(req: Request, url: URL, origin: string): Promise<Res
  * survives a reload and a deep link opens the room it names. Under `/assets/` it
  * is a 404 instead: a page left open across a deploy asks for the chunks of the
  * build it came from, and HTML answering for a script is an error that names
- * nothing, where a 404 tells the page its build is gone.
+ * nothing, where a 404 tells the page its build is gone. The last builds' hashed
+ * files that the image kept are served from `kept`, so such a page still finds its chunks.
  */
-export async function serve(url: URL, dir: string): Promise<Response> {
+export async function serve(
+	url: URL,
+	dir: string,
+	kept = join(dir, "..", KEPT_ASSETS),
+): Promise<Response> {
 	if (!existsSync(dir)) {
 		return new Response(
 			"chopin: no built client. Run `bun run dev` for development, or `bun run build` first.",
@@ -103,6 +110,13 @@ export async function serve(url: URL, dir: string): Promise<Response> {
 		return new Response(file, { headers });
 	}
 	if (url.pathname.startsWith(ASSETS_PATH)) {
+		// A file of a build the image kept from before: the same name always has the same content.
+		if (FINGERPRINTED_ASSET_PATH.test(url.pathname)) {
+			let previous = Bun.file(join(kept, url.pathname));
+			if (await previous.exists()) {
+				return new Response(previous, { headers: { "cache-control": IMMUTABLE_CACHE_CONTROL } });
+			}
+		}
 		return new Response("not found", {
 			status: 404,
 			headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },

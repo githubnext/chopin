@@ -38,4 +38,21 @@ describe("deployment compose", () => {
 			STORAGE_DRIVER: "postgres",
 		});
 	});
+
+	it("gives a stopping process time to hand over, and builds with the image that runs now", async () => {
+		let source = await Bun.file(new URL("../compose.yaml", import.meta.url)).text();
+		let compose = Bun.YAML.parse(source) as {
+			services?: {
+				app?: { stop_grace_period?: string; build?: { args?: Record<string, string> } };
+			};
+		};
+		// Longer than the turn wait, unready window, request wait and commit of a hand-over.
+		expect(compose.services?.app?.stop_grace_period).toBe("30s");
+		expect(compose.services?.app?.build?.args).toEqual({
+			PREVIOUS_IMAGE: "${PREVIOUS_IMAGE:-no-previous}",
+		});
+		let dockerfile = await Bun.file(new URL("../Dockerfile", import.meta.url)).text();
+		expect(dockerfile).toContain("ARG PREVIOUS_IMAGE=no-previous");
+		expect(dockerfile).toContain("AS no-previous");
+	});
 });
