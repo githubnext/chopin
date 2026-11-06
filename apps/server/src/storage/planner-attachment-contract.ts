@@ -87,7 +87,8 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				expect(await attachments.attach(f.request(f.rival), link())).toMatchObject({
 					ok: false,
 					code: "planner-attached",
-					message: expect.stringContaining("member is connected"),
+					message: "member is connected to this document. "
+						+ "A document has one agent connected at a time.",
 				});
 				if (granted.ok) granted.detach();
 				expect(attachments.attached(f.channelId)).toBe(false);
@@ -95,7 +96,9 @@ export function plannerAttachmentContract(name: string, factory: StorageFactory)
 				expect(await attachments.attach(f.request(f.rival), link())).toMatchObject({
 					ok: false,
 					code: "planner-attached",
-					message: expect.stringContaining("member disconnected"),
+					message: expect.stringMatching(
+						/^member disconnected from this document and keeps it until \S+ unless they connect again\. A document has one agent connected at a time\.$/,
+					),
 				});
 				expect((await attachments.attach(f.request(f.member), link())).ok).toBe(true);
 				expect(attachments.attached(f.channelId)).toBe(true);

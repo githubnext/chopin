@@ -512,7 +512,7 @@ export class PlannerAttachments {
 			}
 			throw error;
 		}
-		if (!claimed) throw new Error("The document's owner changed while connecting.");
+		if (!claimed) throw new Error("The document's agent owner changed while connecting.");
 		let hold: Hold = {
 			channelId,
 			userId: user.id,
@@ -735,12 +735,12 @@ function documentEndedRefusal(): AttachRefusal {
 
 function attachedRefusal(hold: Hold): AttachRefusal {
 	let message = hold.link
-		? `${hold.login} is connected to this document. A document has one connection at a time.`
+		? `${hold.login} is connected to this document. A document has one agent connected at a time.`
 		: !hold.releaseAt
 		? `${hold.login} is connected to this document, and its connection dropped. Its work is kept `
-			+ "until it reconnects. A document has one connection at a time."
+			+ "until it reconnects. A document has one agent connected at a time."
 		: `${hold.login} disconnected from this document and keeps it until `
-			+ `${hold.releaseAt.toISOString()} unless they connect again. A document has one connection at a time.`;
+			+ `${hold.releaseAt.toISOString()} unless they connect again. A document has one agent connected at a time.`;
 	return { ok: false, code: "planner-attached", message };
 }
 
