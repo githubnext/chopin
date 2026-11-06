@@ -424,6 +424,16 @@ so merge ranges from all mounted editors before replacing a registry entry.
   after `send()` loses edits on disconnect.
 - Rebuilds and reconnects must replay unacknowledged updates only when the epoch
   is still compatible.
+- Shutdown closes every socket with 1012 (`OpenSockets.stopForRestart()`) before
+  `server.stop(true)`, whose own 1001 reads as a loss. The browser takes 1012 as a
+  quiet restart and a probe's 4xx as a refusal only with `x-chopin-refusal: 1`
+  (or a 401); answer any new refusal of `/ws` or `/ws/sidebar` through
+  `refused()` so a proxy's 4xx cannot be mistaken for it. A request waiting when
+  the 1012 arrives rejects as `WireLost` with `restarting` set; only a caller whose
+  request carries its own identity, as `chat:send` does, may send it again quietly.
+  For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the document's one
+  offline notice stays away, and every other surface that speaks of a lost connection
+  waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both.
 - Room opening and closing share the document lifecycle lock. Opening waits for
   an active close; eviction forgets the room only after runtime shutdown and
   persistence complete. Preserve that ordering.

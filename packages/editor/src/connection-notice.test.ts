@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
+import { RESTART_QUIET_MS } from "@chopin/protocol/restart";
+
 import {
 	CONNECTION_GRACE,
 	CONNECTION_STALL,
+	connectionGrace,
 	connectionNotice,
 	isOffline,
 	offersRetry,
 	offlineAnnouncement,
+	RESTART_GRACE,
 	RETRY_AFTER_FAILURES,
 } from "./connection-notice";
 
@@ -21,6 +25,28 @@ describe("connectionNotice", () => {
 		expect(connectionNotice(CONNECTION_GRACE)).toBe("reconnecting");
 		expect(connectionNotice(CONNECTION_GRACE + CONNECTION_STALL - 1)).toBe("reconnecting");
 		expect(connectionNotice(CONNECTION_GRACE + CONNECTION_STALL)).toBe("offline");
+	});
+
+	test("stays silent longer when the server said it is restarting", () => {
+		expect(RESTART_GRACE).toBeGreaterThan(CONNECTION_GRACE);
+		// The quiet period, in which the connection reports no outage, and then the ordinary grace.
+		expect(RESTART_GRACE).toBe(RESTART_QUIET_MS + CONNECTION_GRACE);
+		expect(connectionNotice(CONNECTION_GRACE, true)).toBe("none");
+		expect(connectionNotice(RESTART_GRACE - 1, true)).toBe("none");
+		expect(connectionNotice(RESTART_GRACE, true)).toBe("reconnecting");
+		expect(connectionNotice(RESTART_GRACE + CONNECTION_STALL - 1, true)).toBe("reconnecting");
+		expect(connectionNotice(RESTART_GRACE + CONNECTION_STALL, true)).toBe("offline");
+	});
+
+	test("names the grace a send held through a blip may wait, the same as the silence", () => {
+		expect(connectionGrace()).toBe(CONNECTION_GRACE);
+		expect(connectionGrace(false)).toBe(CONNECTION_GRACE);
+		expect(connectionGrace(true)).toBe(RESTART_GRACE);
+	});
+
+	test("keeps its own grace for a loss the server did not announce", () => {
+		expect(connectionNotice(CONNECTION_GRACE, false)).toBe("reconnecting");
+		expect(connectionNotice(CONNECTION_GRACE)).toBe("reconnecting");
 	});
 });
 

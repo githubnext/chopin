@@ -10,7 +10,10 @@
  * same build work on localhost, over a LAN address, and through a tunnel.
  */
 
+import { REFUSAL_HEADER } from "@chopin/protocol/restart";
+
 import { activeActor } from "./active-actor";
+import { lossOf, quietLeft, refusalOf, restartDelay, restartRetryDelay } from "./wire-loss";
 
 import type { Session } from "@chopin/protocol";
 
@@ -35,6 +38,21 @@ export class WireRefusal extends Error {
 	}
 }
 
+/**
+ * A request that was waiting for its answer when its connection went. `restarting` says the server
+ * closed it because it is restarting, which ends within moments: a caller whose request can be made
+ * again safely may keep its work and do so, without saying anything.
+ */
+export class WireLost extends Error {
+	readonly restarting: boolean;
+
+	constructor(message: string, restarting = false) {
+		super(message);
+		this.name = "WireLost";
+		this.restarting = restarting;
+	}
+}
+
 type Frame = { kind: string; ts: number; rid?: string; sender?: string };
 
 type Listener = (frame: never) => void;
@@ -55,6 +73,9 @@ export type WireOptions = WireTarget & {
 	 * Told when an outage begins, each time an attempt in it fails, and, with `undefined`, when the
 	 * connection opens again. Automatic attempts and a person's both count, and neither a manual
 	 * reconnect nor the network coming back resets the count: only a connection that opens does.
+	 * A loss the server announced as a restart (close code 1012) raises none for `RESTART_QUIET_MS`,
+	 * and the attempts that fail meanwhile are not counted: a restart that is over by then is never
+	 * reported, and one that is not is reported then, as any other loss.
 	 */
 	onOutage?: (outage: Outage | undefined) => void;
 	onAuthenticationRequired?: () => void;
@@ -111,6 +132,10 @@ export class Wire {
 	#timer: ReturnType<typeof setTimeout> | undefined;
 	/** Whether the probe after a loss is still awaiting its answer. */
 	#probing = false;
+	/** Whether `onOutage` has been told of this outage, so that it is told when it ends. */
+	#outageTold = false;
+	/** Raises the outage of a restart that outlasts its quiet period. */
+	#quietTimer: ReturnType<typeof setTimeout> | undefined;
 	/**
 	 * Undefined until the first transition, so the first one always announces.
 	 *
@@ -123,6 +148,8 @@ export class Wire {
 	 */
 	#status: Status | undefined;
 	#everConnected = false;
+	/** Whether the current outage began with the server saying it is restarting. */
+	#restarting = false;
 	#disposed = false;
 	#terminal = false;
 	#connectionGeneration = 0;
@@ -169,6 +196,17 @@ export class Wire {
 
 	get status(): Status {
 		return this.#status ?? "connecting";
+	}
+
+	/**
+	 * Whether the connection was lost because the server is restarting, until it is back.
+	 *
+	 * A restart is expected to end on its own within moments, so what is shown about it may
+	 * wait longer than for any other loss. What has to act on the connection must not: read
+	 * `status` and `connected` for that.
+	 */
+	get restarting(): boolean {
+		return this.#restarting;
 	}
 
 	/**
@@ -222,11 +260,15 @@ export class Wire {
 		socket.addEventListener("open", () => {
 			if (this.#socket !== socket) return;
 			opened = true;
-			let recovered = this.#lostAt !== undefined;
+			let recovered = this.#outageTold;
+			this.#outageTold = false;
 			this.#everConnected = true;
 			this.#attempts = 0;
 			this.#failures = 0;
 			this.#lostAt = undefined;
+			this.#restarting = false;
+			clearTimeout(this.#quietTimer);
+			this.#quietTimer = undefined;
 			if (recovered) this.#options.onOutage?.(undefined);
 			this.#set("connected");
 		});
@@ -241,18 +283,67 @@ export class Wire {
 			// A socket superseded by a reconnect must not drive status or retries.
 			if (this.#socket !== socket) return;
 			this.#socket = undefined;
-			if (event.code === 4404) {
+			let loss = lossOf(event.code);
+			if (loss === "deleted") {
 				this.#deleted();
 				return;
 			}
 			this.#lostAt ??= Date.now();
-			if (!opened) this.#failures++;
-			this.#options.onOutage?.({ failures: this.#failures });
-			this.#abandon("connection lost");
+			// A restart is expected to end on its own within moments: until its quiet has passed, an
+			// attempt that fails is not counted and no outage is raised for it (`#quietLeft`).
+			if (loss === "restart") this.#restarting = true;
+			if (!opened && this.#quietLeft() <= 0) this.#failures++;
+			this.#raiseOutage();
+			this.#abandon("connection lost", loss === "restart");
 			// Said now, not once the probe has answered: until then nothing else says it is lost.
 			this.#set("reconnecting");
-			void this.#retry();
+			if (loss === "restart") this.#restart();
+			else void this.#retry();
 		});
+	}
+
+	#quietLeft(): number {
+		return quietLeft(this.#restarting, this.#lostAt, Date.now());
+	}
+
+	/**
+	 * Tell `onOutage` the connection is lost, with how many attempts have failed.
+	 *
+	 * Not while a restart is quiet: the server said it is coming back, and nothing is to show for
+	 * that yet, which is what the outage is for. If the restart outlasts its quiet period the
+	 * outage is raised then, whether or not an attempt has failed by that time, and goes on as
+	 * for any other loss.
+	 */
+	#raiseOutage(): void {
+		let quiet = this.#quietLeft();
+		if (quiet <= 0) {
+			this.#outageTold = true;
+			this.#options.onOutage?.({ failures: this.#failures });
+			return;
+		}
+		if (this.#quietTimer !== undefined) return;
+		this.#quietTimer = setTimeout(() => {
+			this.#quietTimer = undefined;
+			if (this.#lostAt === undefined || this.#disposed || this.#terminal) return;
+			this.#outageTold = true;
+			this.#options.onOutage?.({ failures: this.#failures });
+		}, quiet);
+	}
+
+	/**
+	 * Come back after the server said it is restarting.
+	 *
+	 * Not asked first whether the door is open: it is about to be shut, and the first attempt
+	 * is what finds out. It waits a jittered moment so that every tab of the server does not
+	 * return in the same instant. An attempt that fails is followed by another soon while the
+	 * restart is quiet, and after that the ordinary ladder goes on from where it was.
+	 */
+	#restart(): void {
+		this.#attempts++;
+		this.#timer = setTimeout(() => {
+			this.#timer = undefined;
+			this.#connect();
+		}, restartDelay(Math.random()));
 	}
 
 	/**
@@ -269,11 +360,9 @@ export class Wire {
 				headers: { "x-chopin-socket-probe": "1" },
 				signal: AbortSignal.timeout(PROBE_TIMEOUT),
 			});
-			if (response.status >= 400 && response.status < 500) {
-				return {
-					reason: await response.text(),
-					authentication: response.status === 401,
-				};
+			let refusal = refusalOf(response.status, response.headers.get(REFUSAL_HEADER) === "1");
+			if (refusal) {
+				return { reason: await response.text(), authentication: refusal === "authentication" };
 			}
 		} catch {
 			// Unreachable, or too slow to say, rather than refused; the retry loop is the right answer.
@@ -294,12 +383,17 @@ export class Wire {
 			return this.#set("denied", refusal.reason);
 		}
 
-		let delay = Math.min(BASE_DELAY * 2 ** this.#attempts, MAX_DELAY) * (0.5 + Math.random());
-		if (this.#lostAt !== undefined) {
+		// While a restart is quiet the next attempt is never far off, so that a server that is
+		// back is found at once, and those attempts do not count towards the backoff that follows.
+		let quiet = this.#quietLeft() > 0;
+		let delay = quiet
+			? restartRetryDelay(Math.random())
+			: Math.min(BASE_DELAY * 2 ** this.#attempts, MAX_DELAY) * (0.5 + Math.random());
+		if (!quiet && this.#lostAt !== undefined) {
 			let rescue = this.#lostAt + RESCUE_AT - Date.now();
 			if (rescue > 0) delay = Math.min(delay, rescue);
 		}
-		this.#attempts++;
+		if (!quiet) this.#attempts++;
 		this.#timer = setTimeout(() => {
 			this.#timer = undefined;
 			this.#connect();
@@ -351,6 +445,8 @@ export class Wire {
 		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
 		this.#timer = undefined;
+		clearTimeout(this.#quietTimer);
+		this.#quietTimer = undefined;
 		let socket = this.#socket;
 		this.#socket = undefined;
 		this.#abandon("document deleted");
@@ -360,8 +456,8 @@ export class Wire {
 	}
 
 	/** Reject everything still waiting; a reply cannot survive its connection. */
-	#abandon(reason: string): void {
-		for (let waiting of this.#pending.values()) waiting.reject(new Error(reason));
+	#abandon(reason: string, restarting = false): void {
+		for (let waiting of this.#pending.values()) waiting.reject(new WireLost(reason, restarting));
 		this.#pending.clear();
 	}
 
@@ -402,6 +498,8 @@ export class Wire {
 		this.#disposed = true;
 		this.#unlisten();
 		if (this.#timer) clearTimeout(this.#timer);
+		clearTimeout(this.#quietTimer);
+		this.#quietTimer = undefined;
 		this.#abandon("disposed");
 		this.#socket?.close();
 		this.#socket = undefined;

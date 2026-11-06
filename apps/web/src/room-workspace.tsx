@@ -563,7 +563,7 @@ export function RoomWorkspace(
 		return () => removeEventListener("title-edit", listen);
 	}, [room]);
 	// Controls dim only once a loss outlasts a blip; actions still read `status`.
-	let treatAsConnected = useConnectionNotice(status !== "connected") === "none";
+	let treatAsConnected = useConnectionNotice(status !== "connected", wire?.restarting) === "none";
 	// A lost connection is said once, at the top of the page: decided here, above wherever the
 	// notice is drawn, so a person switching between Chat and the document neither waits out the
 	// grace period again nor hears of it twice.
@@ -1682,7 +1682,11 @@ export function RoomWorkspace(
 			)}
 		</div>
 	);
-	let machinePicker = status === "connected" ? machineSlot : undefined;
+	// It goes with a lost connection, but not while a restart is quiet: the page says nothing then,
+	// and a button that came and went would be something.
+	let machinePicker = status === "connected" || (!!wire?.restarting && treatAsConnected)
+		? machineSlot
+		: undefined;
 	let titleProps: TitleProps = {
 		archivedAt: workspaceArchivedAt,
 		canManage: effectiveCanManage,

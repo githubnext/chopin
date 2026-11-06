@@ -383,8 +383,10 @@ export function PlanEditor(
 	}, [presence, connection]);
 
 	// Locking waits out a blip, and edits made meanwhile wait in the outbox.
-	let offline = useConnectionNotice(connection !== undefined && connection !== "connected")
-		!== "none";
+	let offline = useConnectionNotice(
+		connection !== undefined && connection !== "connected",
+		wire?.restarting,
+	) !== "none";
 	let blocked = offline || !!busy || !!readOnly || !state.synced;
 	let locked = blocked || editMode === "reading";
 
