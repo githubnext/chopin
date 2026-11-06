@@ -191,3 +191,30 @@ describe("when a restart is waited out in silence", () => {
 		expect(silentRestart(false, false, false, false)).toBe(false);
 	});
 });
+
+describe("a message removed before it was delivered", () => {
+	it("leaves the others where they were, and moves the turn and the finished work that count entries up", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [
+				entry("one", { kind: "member", handle: "ana" }, "one"),
+				entry("two", { kind: "member", handle: "ana" }, "two"),
+				entry("reply", { kind: "agent" }, "On it."),
+			],
+			turn: { ...turn, entryOffset: 2 },
+		});
+		expect(state.turn?.entryOffset).toBe(2);
+		state = transcriptReducer(state, { kind: "removed", id: "two" });
+		expect(state.entries.map(item => item.id)).toEqual(["one", "reply"]);
+		expect(state.turn?.entryOffset).toBe(1);
+		expect(state.activeAnchorId).toBe("reply");
+		// An entry after the turn's start does not move it, and one that is gone changes nothing.
+		let later = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("three", { kind: "member", handle: "ana" }, "three"),
+		});
+		later = transcriptReducer(later, { kind: "removed", id: "three" });
+		expect(later.turn?.entryOffset).toBe(1);
+		expect(transcriptReducer(later, { kind: "removed", id: "nothing" })).toBe(later);
+	});
+});

@@ -144,12 +144,11 @@ its Planner may send one, at most 10 an hour per document.
 Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
 `invoke_planner` call for a document without an attached Planner is refused with
 `planner-not-attached`, and with one it runs as a turn on that Planner under its
-owner. (In hosted mode a person's request is no longer refused: it is
-[saved](#saved-requests) and starts once a Planner attaches. The refusal remains under
-`AUTH_MODE=local`.) Other Planner requests, such as sending a comment to the Planner or a
-Build draft, claim nothing either: with a client attached they run on it, and
-without one they are saved the same way, or, under `AUTH_MODE=local`, fail as any request
-without a usable owner does, not with `planner-not-attached`. A research request claims no ownership either: its
+owner. (A person's request is no longer refused: it is [saved](#saved-requests) and
+starts once a Planner attaches, in hosted mode and under `AUTH_MODE=local` alike.) Other
+Planner requests, such as sending a comment to the Planner or a Build draft, claim nothing
+either: with a client attached they run on it, and without one they are saved the same way.
+A research request claims no ownership either: its
 workers run on the attached client as [isolated sessions](#remote-planner), and
 without one the request waits until a client attaches.
 
@@ -633,8 +632,7 @@ ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period or
 disconnected with its work kept (the message says its machine is offline and that the work
 is kept and picks up when it is back), is saved and waits for a Planner to attach, as
-[saved requests](#saved-requests) describe; under `AUTH_MODE=local` it is refused with
-`planner-not-attached` before anything is posted or queued.
+[saved requests](#saved-requests) describe.
 Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
 assigns that owner, it closes the connection, releases the ownership, and refuses the
@@ -883,14 +881,41 @@ acknowledged only after it is saved, as a row in `planner_deferred_turns`, in th
 the transcript entry that shows it. Five kinds are kept: a Chat message to the Planner, a member
 message from an MCP `invoke_planner` call, an automatic follow-up (`invoke_planner` with
 `as: "system"`), a comment note sent to Chopin in a document or in one of its children, and a task
-draft from Build. A request waits when a turn is running, when no turn may start because the
-process is stopping, when a saved request is already waiting ahead of it, and, under
-`HARNESS=remote`, whenever no Planner is attached, however long that lasts. The 20-request queue
-limit still refuses a request before anything is saved. Server-authored turns (answers to open
+draft from Build. Every one is saved first, even when nothing is running and a machine is there: a
+turn begins from its row, once a session is open on the machine, so a session that cannot be
+opened leaves the request waiting and a stop before the turn starts loses nothing. A request waits
+when a turn is running, when no turn may start because the process is stopping, when a saved
+request is already waiting ahead of it, and, under `HARNESS=remote`, whenever no Planner is
+attached, however long that lasts. Behind a running turn the queue holds
+20 requests; past that the server answers `planner-queue-full` before anything is saved, which is
+not a refusal of the message: the sender's browser keeps it and sends it again, in its turn and
+with the same request ID, every few seconds until there is room, and shows it as waiting to send
+meanwhile. A machine that is away has no such bound. As a chat app keeps a message for someone
+who is offline, every request a person sends it is saved, in order, and kept until the machine is
+back and takes it or the sender deletes it; none is refused or dropped for how many wait or how
+long the machine has been away, and nothing is said in Chat about it. Nor is one turned away for
+how many are being saved at the same moment, which is limited to 20 only for a machine that is
+there (past which a send is answered `temporarily-unavailable` and sent again, below): a Chat
+message, an MCP call and a task draft for a machine that is away are each saved, in the order they
+came, however many arrive together and however slowly Chopin finds out that the machine is away.
+What remains is a limit on a message's size. A send whose commit
+went through but whose answer was lost is answered `temporarily-unavailable` like any passing
+trouble, and its row is not forgotten: it is put back in the queue ahead of what was accepted
+after it, and in the transcript, when the sender sends the same request again, when the queue next
+starts and when the document opens again, so it is delivered once and in order whether or not its
+sender asks again, unless it was deleted, which stays deleted. A machine that comes
+back with a long backlog takes it one request at a time, in order; while twenty or more still
+wait, a new message is held by its sender's browser as for any busy machine. So is any other refusal of a send for a passing reason (the message could
+not be saved, the room is changing, authorization is briefly unavailable, too many sends are being
+handled, a reference or the open child could not be looked up for storage's sake, or anything the
+send itself threw): it carries `temporarily-unavailable`. Only a reference the server finds at
+fault (malformed, outside the repository, no longer there) is final. A refusal without either code says the message is at
+fault, and is the only one that marks it Couldn't send. Server-authored turns (answers to open
 decisions, relinking after a build, settling a prototyped passage) and background jobs are not
-kept this way and wait as before. Under `AUTH_MODE=local`, which is never handed over, nothing is
-kept: the queue stays in memory, and under `HARNESS=remote` a request with no Planner attached is
-refused with `planner-not-attached`.
+kept this way and wait as before. `AUTH_MODE=local` is never handed over. It keeps requests as
+rows only where the Planner runs on a machine that can be away (`HARNESS=remote`), so a message to
+it waits for the machine as anywhere else; with a Planner on the same computer nothing is away and
+the queue stays in memory.
 
 A row is `waiting`, `started`, `ended`, `interrupted` or `cancelled`. Only `waiting` can move to
 `started` or `cancelled`, and only `started` to `ended` or `interrupted`; any other move changes
@@ -905,17 +930,63 @@ live again when its browser sends its cookie. The check is tried when the proces
 a login comes back, when a new request is accepted, when a Planner attaches and when a turn ends.
 A request whose sender can no longer write is cancelled as failed; one whose focused child
 document is gone is cancelled as failed; a comment whose thread was resolved is cancelled without
-a notice, because the resolution is what members see.
+a notice, because the resolution is what members see. Only one turn is begun at a time: Chopin's
+own background jobs (such as keeping a title) wait beside saved requests, run after those ahead of
+them, and do not count against the 20 places a person's messages may fill.
 
 **What a person sees.** A message appears in Chat at once, as theirs, with `deliveryState`: `sent`
-while the row waits, `delivered` once its turn starts, and `failed`, with `deliveryFailure`
+while the row waits, `delivered` once its prompt is on its way to the machine, and `failed`, with `deliveryFailure`
 (`machine-removed`, `access-lost` or `document-unavailable`), when it can never be delivered as
-sent. An entry saved before this existed has no state and reads as delivered. `chat:delete` removes
+sent. The reason is kept on the cancelled row, so a document that was closed when its request was
+cancelled still says why when it opens again. An entry saved before this existed has no state and
+reads as delivered. `chat:delete` removes
 a message that has not been delivered, for everyone, and cancels its row in the same commit; one
-already taken, or someone else's, is refused, and deleting twice leaves it deleted. `chat:retry`
+already taken, or someone else's, is refused with the code `message-not-deletable`, and deleting twice
+leaves it deleted. That code is the server's last word; a delete refused for any other reason (storage
+busy, the message being taken by the machine at that moment) says nothing final. `chat:retry`
 sends a `failed` message again as it was. A message that is waiting is not listed in `chat:queue`,
-which lists only requests with no entry of their own. If a queue still cannot start
-`DEFERRED_NOTICE_DELAY_MS` (default 30 s) after it began to wait, Chat says once what it waits for.
+which lists only requests with no entry of their own. Chat says nothing about why a queue waits,
+however long it does: the message's own mark is the only sign, and the machine's state is shown on
+the machine button alone, as everywhere else. (The design asked for one Chat line after a delay,
+saying what the queue waits for; the rule that machine state is not said anywhere else replaces
+it, so there is no such line and no `DEFERRED_NOTICE_DELAY_MS`.)
+
+The sender's own message carries one quiet mark, in plain words and readable by a screen reader:
+**Waiting to send** (a clock) while only the browser has it, in an outbox that sends it by itself, in
+order and once, when the page's connection is back; **Sent** (one tick) once the server has it and
+the machine has not taken it, whether the machine is away, still starting, or between processes
+during a deploy; **Delivered** (two ticks) once the machine took it. A message not yet delivered
+has a menu with **Delete**, even one the browser has already put on the wire, whatever the server
+last answered it (an earlier attempt of a message it turned down for a passing reason may have
+been kept, its answer lost): the server is told to drop it as soon as there is a connection,
+cancels its saved row if it had one, and remembers that it was taken back so that a send still on
+its way from a lost connection cannot bring it back. A message
+taken back while the page is offline, or whose delete the server has not answered, leaves the Chat
+at once and stays gone across a reload: the browser keeps the ids in the tab's session storage, as
+it keeps the outbox, and asks again until the server answers, so the message is never delivered and
+never comes back. The outbox remembers which messages were put on the wire, across a reload too, so
+that a message whose answer was lost, taken back after the page was reloaded offline, is still told
+to the server; only a message that provably never left the page is just dropped. Only the server's
+last word (`message-not-deletable`) ends the asking, and shows the message again with its mark; a
+refusal for a passing reason keeps the message hidden and is asked again after a few seconds, as a
+lost connection is asked again on the next one. A message that can
+never be delivered as sent, or that the server turned down for good, says **Couldn't send** on
+itself, with the reason and **Try again** and **Delete**, and never in a strip above the composer. While the
+page's one offline notice shows, that line gives way to it and returns with the connection.
+A full queue is not that: the message stays marked as waiting to send. The outbox is used only
+with a server that acknowledges sends (`chatSendAcks`), and only for messages to the machine.
+
+**Delivered is true.** A request kept as a row is handed to its machine only once a session is
+open there: the row moves from `waiting` to `started`, and its message to `delivered`, in the
+commit that follows a successful open, immediately before the prompt is sent. If the machine
+cannot open a session, which is what a link that dropped as the request was starting does, the
+row stays `waiting` and the message stays **Sent**, at the head of the queue and in order. It is
+tried again when something says the machine may be there (a request accepted, the machine back, a
+login restored), once each time, never in a loop, and without a failure notice or any line in
+Chat. A message that starts at once is marked **Sent** until the same point and **Delivered** then. What is not
+claimed: the prompt is handed over, not confirmed read, and a connection that drops between the
+commit and the send ends the turn with its usual notice and is not run again, as any started
+turn.
 
 **Restarts.** When a document opens, rows `started` under an older fencing token are marked
 `interrupted`, each with one Chat notice, and are never run again, because their turn may already

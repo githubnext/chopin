@@ -1504,25 +1504,31 @@ test("a Planner its machine keeps failing to start says why on its machine butto
 	await expect(menu).toBeHidden();
 	await expect(button).toBeFocused();
 
-	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is told
-	// why, in the machine's own words, not to try in a moment.
+	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is never
+	// refused for it: it is in the Chat at once, marked Sent, and waits for the machine.
 	await studio.reportFailure(refused(room, 3));
 	await expect(button).toHaveAccessibleDescription(/Tried 3 times/);
 	await expect(seen.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
 	let input = chatInput(teammate);
 	await fillChat(input, "@chopin outline the plan");
 	await input.press("Enter");
-	await expect(teammate.getByText(/Can't connect to @mona's machine: unsafe-checkout/))
-		.toBeVisible({ timeout: 45_000 });
+	let outline = teammate.locator("[data-chat-message-id]").filter({ hasText: "outline the plan" });
+	await expect(outline).toHaveCount(1);
+	await expect(outline.getByRole("img", { name: "Sent" })).toBeVisible();
+	await expect(input).toHaveText("");
+	await expect(strip(teammate)).not.toHaveAttribute("data-error", "true");
 
 	// It attaches at last, and nothing about the failure is left, quietly: no word, no mark.
 	let link = await studio.backend(room);
 	await expectHealthy(button);
 	await expect(strip(page)).toHaveCount(0);
 	await expect(announced(page)).toHaveText("");
-	// The teammate's refused @chopin message keeps its own error notice; the warning is what goes.
+	// The warning goes, and the teammate's message, which waited for the machine, is delivered once
+	// it is there, with nothing about it said on the composer.
 	await expect(teammate.locator(".chat-composer .composer-notice[data-warning]")).toHaveCount(0);
-	await expect(strip(teammate)).toHaveAttribute("data-error", "true");
+	await expect(strip(teammate)).toHaveCount(0);
+	await expect(outline.getByRole("img", { name: "Delivered" })).toBeVisible();
+	await expect(outline).toHaveCount(1);
 	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
 	// A screen reader was told each state once, and not again as the count rose or it cleared.
 	let said = await heard(page);

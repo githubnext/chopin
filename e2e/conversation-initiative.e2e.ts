@@ -12,7 +12,12 @@ function pane(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
 }
 
-async function record(scope: Page | BrowserContext, loseFirstAcknowledgement = false) {
+async function record(
+	scope: Page | BrowserContext,
+	loseFirstAcknowledgement = false,
+	/** The connection is cut as the first send is made, before the server has read it. */
+	loseFirstRequest = false,
+) {
 	let seen: Seen[] = [];
 	let sent: Sent[] = [];
 	let connections = 0;
@@ -23,6 +28,12 @@ async function record(scope: Page | BrowserContext, loseFirstAcknowledgement = f
 			if (typeof message === "string") {
 				let frame = JSON.parse(message) as Chat.Incoming;
 				if (frame.kind.startsWith("chat:")) sent.push({ at: Date.now(), frame });
+				if (frame.kind === "chat:send" && loseFirstRequest) {
+					loseFirstRequest = false;
+					server.close();
+					route.close();
+					return;
+				}
 			}
 			server.send(message);
 		});
@@ -245,22 +256,25 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	).toHaveLength(0);
 });
 
-test("a mentioned request keeps its prepared destination after a lost acknowledgement and reload", async ({ join, page, seed }) => {
+test("a mentioned request keeps its prepared destination after a lost request and reload, and a lost acknowledgement leaves a room message to be sent again", async ({ join, page, seed }) => {
 	await seed("# Retried direct request\n\nCompare export formats for a small pilot.\n");
-	let frames = await record(page, true);
+	let frames = await record(page, false, true);
 	await join("ana");
 	let input = chatInput(pane(page));
 	let text = "@chopin Compare the document and latest pull request";
 	await input.fill(text);
 	await input.press("Enter");
-	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(2);
+	// The connection is cut before the server reads it: the message is in the Chat, waiting to
+	// send, and the composer is free, not holding it.
+	await expectChatValue(input, "");
+	await expect(pane(page).getByText(text.replace(/^@chopin\s*/, ""), { exact: true })).toHaveCount(
+		1,
+	);
 	await page.reload();
 	await ready(page);
-	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(3);
-	await expectChatValue(input, text);
-	await input.press("Enter");
+	// The browser's outbox kept it across the reload, and it goes out again by itself, as it was.
+	await expect.poll(() => frames.sends().length).toBe(2);
 	await expectChatValue(input, "");
-	expect(frames.sends()).toHaveLength(2);
 	let [first, retry] = frames.sends();
 	expect(first).toMatchObject({ text, to: "planner" });
 	expect(retry).toMatchObject({
@@ -277,13 +291,14 @@ test("a mentioned request keeps its prepared destination after a lost acknowledg
 	await page.waitForTimeout(1800);
 	expect(frames.starts().length).toBeLessThanOrEqual(1);
 	let next = "Compare the export options for an updated brief";
+	let before = frames.histories().length;
 	frames.loseNextAcknowledgement();
 	await input.fill(next);
 	await input.press("Enter");
-	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(4);
+	await expect.poll(() => frames.histories().length).toBeGreaterThan(before);
 	await page.reload();
 	await ready(page);
-	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(5);
+	await expect.poll(() => frames.histories().length).toBeGreaterThan(before + 1);
 	await expectChatValue(input, next);
 	await input.fill(`${next}, including Markdown`);
 	await input.press("Enter");
@@ -292,6 +307,57 @@ test("a mentioned request keeps its prepared destination after a lost acknowledg
 	let [interrupted, edited] = frames.sends().slice(2);
 	expect(edited).toMatchObject({ text: `${next}, including Markdown`, to: "room" });
 	expect(edited!.requestId).not.toBe(interrupted!.requestId);
+});
+
+test("a mentioned request whose acknowledgement is lost after the server took it is in the Chat once and answered once, across the reconnect and across a reload", async ({ join, page, seed }) => {
+	await seed("# Lost acknowledgement\n\nCompare export formats for a small pilot.\n");
+	let frames = await record(page, true);
+	await join("ana");
+	let input = chatInput(pane(page));
+	let text = "@chopin Compare the document and latest pull request";
+	let shown = text.replace(/^@chopin\s*/, "");
+	let histories = frames.histories().length;
+	await input.fill(text);
+	await input.press("Enter");
+	// The server has it and its acknowledgement went with the connection: the message is in the
+	// Chat, the composer is free, and when the page is back what it sent is not sent twice.
+	await expectChatValue(input, "");
+	await expect(pane(page).getByText(shown, { exact: true })).toHaveCount(1);
+	await expect.poll(() => frames.histories().length).toBeGreaterThan(histories);
+	await reply(page);
+	await expect(pane(page).getByText(shown, { exact: true })).toHaveCount(1);
+	// Answered once, and not again: the connection was cut as the acknowledgement was sent, so
+	// whether the page saw the turn begin depends on whether it was back by then, and is not what
+	// counts, as after a reload below.
+	let answers = pane(page).getByText(PULL_REQUESTS[0]!.title, { exact: false });
+	await expect(answers).toHaveCount(1);
+	await page.waitForTimeout(1800);
+	await expect(answers).toHaveCount(1);
+	let ids = new Set(frames.sends().map(item => item.requestId));
+	expect(ids.size).toBe(1);
+	expect(frames.histories().at(-1)!.entries.filter(entry => entry.text === shown)).toHaveLength(1);
+
+	// The same across a reload, taken as the acknowledgement is lost.
+	let next = "Compare the export options for an updated brief";
+	histories = frames.histories().length;
+	frames.loseNextAcknowledgement();
+	await input.fill(`@chopin ${next}`);
+	await input.press("Enter");
+	await expectChatValue(input, "");
+	await page.reload();
+	await ready(page);
+	await expect.poll(() => frames.histories().length).toBeGreaterThan(histories);
+	await expect(pane(page).getByText(next, { exact: true })).toHaveCount(1);
+	await expectChatValue(input, "");
+	// One more reply, and no third: the page was reloading when the second turn began, so what it
+	// saw of the turn starting is not what counts.
+	let replies = pane(page).getByText(PULL_REQUESTS[0]!.title, { exact: false });
+	await expect(replies).toHaveCount(2);
+	await page.waitForTimeout(1800);
+	await expect(replies).toHaveCount(2);
+	expect(frames.histories().at(-1)!.entries.filter(entry => entry.text === next)).toHaveLength(1);
+	let sentNext = frames.sends().filter(item => item.text.includes(next));
+	expect(new Set(sentNext.map(item => item.requestId)).size).toBe(1);
 });
 
 test("a Planner reply after a pending human message prevents a second automatic turn", async ({ join, page, seed }) => {

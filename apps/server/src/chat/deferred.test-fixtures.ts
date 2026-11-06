@@ -9,6 +9,7 @@ import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import * as Plan from "../plan/service";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { deferralWiring } from "./deferred";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -56,12 +57,15 @@ export const REPOSITORY = {
  */
 export async function world(
 	options: {
-		noticeDelayMs?: number;
 		away?: boolean;
+		/** A machine's Planner that is starting and does not arrive until this settles. */
+		starting?: Promise<void>;
 		/** A database to use in place of memory, and how to open it again for the next process. */
 		storage?: StorageAdapter;
 		reopen?: () => Promise<StorageAdapter>;
 		lease?: string;
+		/** The server's own configuration, as `main.ts` loads it, in place of a hosted one. */
+		config?: Config;
 	} = {},
 ) {
 	// Only a document whose Planner runs on a machine has one to be away; `away` says it does.
@@ -128,10 +132,19 @@ export async function world(
 	let prompts: string[] = [];
 	let gates: PromiseWithResolvers<void>[] = [];
 	let holding = false;
+	let failing = 0;
+	let opens = 0;
 	let planner = {
 		prompts,
 		hold(value = true) {
 			holding = value;
+		},
+		/** The machine's next `count` attempts to open a session fail, as a dropped link's do. */
+		failOpens(count: number) {
+			failing = count;
+		},
+		get opens() {
+			return opens;
 		},
 		release() {
 			gates.shift()?.resolve();
@@ -164,6 +177,8 @@ export async function world(
 	};
 
 	let attached = !options.away;
+	// While set, asking whether the machine is there waits, as a slow check of it does.
+	let asking: Promise<void> | undefined;
 	let owners: ActiveOwnerBindings;
 	let open = async () => {
 		let backend: Plan.Backend = {
@@ -182,14 +197,30 @@ export async function world(
 			server,
 			auth,
 			repository: REPOSITORY,
-			config: { agent: true } as Config,
+			config: options.config ?? ({ agent: true } as Config),
 			claimantSessionId: logins.ana.id,
 			decide: decideReplying({ input: { type: "noul", noul: 0 } }),
 			activeOwner: () => owners.resolve(channel.id),
 			persist: (chat, deferred) => Plan.persistDeferred(plan, chat, deferred),
-			...(remote ? { plannerReady: async () => attached } : {}),
-			deferred: { noticeDelayMs: options.noticeDelayMs ?? 60_000 },
-			openPlannerSession: async () => ({ ok: true, value: session as never }),
+			// What `main.ts` hands a document's Chat, from the same function, for the same configuration.
+			...deferralWiring(
+				options.config ?? { auth: {}, harness: "copilot-sdk" },
+				{
+					// No extra step unless the check is slow: the order of what is asked is part of the tests.
+					plannerReady: remote
+						? () => asking ? asking.then(() => attached) : Promise.resolve(attached)
+						: undefined,
+				},
+			),
+			...(options.starting ? { plannerStarting: () => options.starting! } : {}),
+			openPlannerSession: async () => {
+				opens++;
+				if (failing > 0) {
+					failing--;
+					return { ok: false, error: { kind: "unavailable" } } as never;
+				}
+				return { ok: true, value: session as never };
+			},
 		};
 		return context;
 	};
@@ -269,6 +300,15 @@ export async function world(
 		},
 		away: () => {
 			attached = false;
+		},
+		/** Makes the check of whether the machine is there wait; the returned function ends it. */
+		slowCheck: () => {
+			let gate = Promise.withResolvers<void>();
+			asking = gate.promise;
+			return () => {
+				asking = undefined;
+				gate.resolve();
+			};
 		},
 		/** The first process ends, and a second takes over with the same database. */
 		restart: async (alive = true) => {

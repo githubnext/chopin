@@ -41,6 +41,7 @@ import type { Instruction, ServerInstructionDeps } from "./chat/server-instructi
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import * as Initiative from "./chat/initiative";
+import { deferralWiring, keepsRequests } from "./chat/deferred";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
@@ -142,6 +143,7 @@ import {
 	broadcast,
 	broadcastRepository,
 	fail,
+	PASSING,
 	relay,
 	reply,
 	repositoryTopic,
@@ -700,14 +702,11 @@ function conversation(
 		plannerStarting: plannerAttachments ? () => plannerStarting(room.id) : undefined,
 		// A person's request that cannot start is kept as a row, except under `AUTH_MODE=local`,
 		// which is never handed over and keeps its queue in memory.
-		...(config.auth.local ? {} : {
+		...deferralWiring(config, {
 			plannerReady: plannerAttachments ? () => plannerAttachments!.confirmed(room.id) : undefined,
-			deferred: {
-				noticeDelayMs: config.handover.deferredNoticeMs,
-				restoreComment: row => restoreComment(context, row),
-				threadEnded: row =>
-					Comments.failed(server, row.threadChannelId ?? row.documentId, row.threadId!),
-			},
+			restoreComment: row => restoreComment(context, row),
+			threadEnded: row =>
+				Comments.failed(server, row.threadChannelId ?? row.documentId, row.threadId!),
 		}),
 		persist: (chat, deferred) => Service.persistDeferred(opened, chat, deferred),
 		...(room.parentChannelId
@@ -986,7 +985,7 @@ async function restoreComment(context: Chat.Room, row: DeferredTurn): Promise<un
  * waiting request's sender whose login is live.
  */
 async function startDeferred(channelId: string): Promise<void> {
-	if (!config.agent || config.auth.local) return;
+	if (!config.agent || !keepsRequests(config)) return;
 	if (deletingChannels.has(channelId) || archivingChannels.has(channelId)) return;
 	let channel = await storage.channels.get(channelId);
 	if (!channel || channel.parentChannelId || channel.archivedAt) return;
@@ -1236,12 +1235,12 @@ async function plannerWritable(
 ): Promise<boolean> {
 	let opened = await readyPlan(room);
 	if (!opened) {
-		fail(ws, rid, "document is unavailable");
+		fail(ws, rid, "document is unavailable", deletingChannels.has(room.id) ? undefined : PASSING);
 		return false;
 	}
 	let access = await refreshAccess(ws);
 	if (access === "unavailable") {
-		fail(ws, rid, "authorization is temporarily unavailable");
+		fail(ws, rid, "authorization is temporarily unavailable", PASSING);
 		return false;
 	}
 	if (access === "denied") {
@@ -1259,7 +1258,9 @@ async function plannerWritable(
 		|| ws.data.closed || ws.data.room !== room.id
 		|| room.members.get(ws.data.client) !== ws
 	) {
-		fail(ws, rid, "document is unavailable");
+		// An archived or deleted document is final; a room that is only being replaced is not.
+		let final = archivingChannels.has(room.id) || deletingChannels.has(room.id);
+		fail(ws, rid, "document is unavailable", final ? undefined : PASSING);
 		return false;
 	}
 	return true;
@@ -1281,7 +1282,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 	if (!VIEWER_ALLOWED.has(frame.kind)) {
 		let access = await refreshAccess(ws);
 		if (access === "unavailable") {
-			if (frame.rid) fail(ws, frame.rid, "authorization is temporarily unavailable");
+			if (frame.rid) fail(ws, frame.rid, "authorization is temporarily unavailable", PASSING);
 			return;
 		}
 		if (access === "denied") {
@@ -1377,7 +1378,13 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (!await plannerWritable(room, ws, frame.rid)) return;
 				await Chat.send(chat(room, ws), ws, frame);
 			} catch (error) {
-				fail(ws, frame.rid, error instanceof Error ? error.message : "cannot send message");
+				// Nothing it threw says the message is at fault: it is sent again.
+				fail(
+					ws,
+					frame.rid,
+					error instanceof Error ? error.message : "cannot send message",
+					PASSING,
+				);
 			}
 			return;
 
@@ -1726,7 +1733,7 @@ async function watchSidebarDecisions(
 	try {
 		authorize = await sidebarRepositoryReader(ws);
 	} catch {
-		return fail(ws, rid, "authorization is temporarily unavailable");
+		return fail(ws, rid, "authorization is temporarily unavailable", PASSING);
 	}
 	if (!authorize) {
 		fail(ws, rid, "authorization expired");
@@ -2862,7 +2869,7 @@ async function channelOwnerReset(channelId: string): Promise<void> {
  * it was archived. In an open document each says so in Chat; the rest are cancelled in storage.
  */
 async function cancelSaved(channelId: string, why: "agent" | "unavailable"): Promise<void> {
-	if (config.auth.local) return;
+	if (!keepsRequests(config)) return;
 	let channel = await storage.channels.get(channelId);
 	let room = Rooms.get(channelId);
 	if (channel && room?.plan && !room.plan.parentChannelId) {
@@ -2884,6 +2891,7 @@ async function cancelSaved(channelId: string, why: "agent" | "unavailable"): Pro
 			from: "waiting",
 			to: "cancelled",
 			at: new Date(),
+			reason: why,
 		});
 	}
 }

@@ -223,6 +223,10 @@
 		"ms": 3675,
 		"tests": 2
 	},
+	"message-delivery.e2e.ts": {
+		"ms": 31000,
+		"tests": 6
+	},
 	"navigation-focus-recovery.e2e.ts": {
 		"ms": 3234,
 		"tests": 2

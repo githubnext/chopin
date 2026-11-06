@@ -1,0 +1,79 @@
+/* A person's own message: one quiet mark at its end, a menu to take it back, and what failed says. */
+.chat-delivery {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	color: var(--color-text-quaternary);
+}
+
+/* The second tick of Delivered overlaps the first. */
+.chat-delivery[data-chat-delivery="delivered"] > :nth-child(2) {
+	margin-inline-start: -0.5rem;
+}
+
+.chat-message-menu-anchor {
+	display: inline-flex;
+	flex: none;
+	margin-block: -0.25rem;
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.chat-message-body:is(:hover, :focus-within) .chat-message-menu-anchor,
+.chat-message-menu-anchor[data-open] {
+	opacity: 1;
+}
+
+@media (hover: none) {
+	.chat-message-menu-anchor {
+		opacity: 1;
+	}
+}
+
+.chat-message-menu {
+	position: fixed;
+	z-index: 60;
+	display: flex;
+	min-width: 9rem;
+	flex-direction: column;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.chat-message-failed {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 0.25rem 0.5rem;
+	margin-top: 0.25rem;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+}
+
+.chat-message-failed-icon {
+	flex: none;
+	--color-icon: var(--color-danger-icon);
+}
+
+.chat-message-failed-text {
+	flex: 1 1 12rem;
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.chat-message-failed-title {
+	font-weight: 600;
+	color: var(--color-destructive-ink);
+}
+
+.chat-message-failed-actions {
+	display: flex;
+	flex: none;
+	gap: 0.25rem;
+	margin-block: -0.125rem;
+}

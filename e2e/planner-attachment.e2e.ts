@@ -249,9 +249,9 @@ test("with no machine button, the composer's top edge always says what is wrong 
 });
 
 /** Open a new comment on the document's first paragraph. */
-async function draft(page: Page) {
+async function draft(page: Page, paragraph = 0) {
 	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
-	await content(page).locator("p").first().selectText();
+	await content(page).locator("p").nth(paragraph).selectText();
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	return page.getByRole("dialog", { name: "New comment" });
 }
@@ -264,7 +264,11 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	registerTestDatabase(PORT, database);
 	let room = crypto.randomUUID();
 	await createChannel(PORT, room);
-	await seedChannel(PORT, room, "# Remote comments\nThe harp needs new strings.\n");
+	await seedChannel(
+		PORT,
+		room,
+		"# Remote comments\nThe harp needs new strings.\n\nThe bridge needs a new pin.\n",
+	);
 
 	await authenticate(page, HANDLE, ORIGIN);
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
@@ -275,15 +279,16 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
 	await expect(box).not.toBeChecked();
 
-	// Ticked anyway, the server refuses it, says how to attach one, and keeps the words.
+	// Ticked anyway, it is not refused for the machine being away: it is posted at once, the
+	// thread shows Chopin is on it, and it waits for the machine.
 	await box.check();
 	let field = card.getByRole("textbox", { name: "Comment" });
 	await field.fill("Can you shorten this?");
 	await card.getByRole("button", { name: "Post comment", exact: true }).click();
-	await expect(card.getByRole("alert")).toContainText("Connect a machine to get a reply.");
-	await expect(field).toHaveValue("Can you shorten this?");
-	await page.keyboard.press("Escape");
+	await expect(card.getByRole("alert")).toHaveCount(0);
 	await expect(card).toHaveCount(0);
+	await expect(page.getByText("Can you shorten this?").first()).toBeVisible();
+	await expect(page.getByText("Connect a machine to get a reply.")).toHaveCount(0);
 
 	let client = await connectAgent({
 		url: ORIGIN,
@@ -293,7 +298,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	});
 	try {
 		await expectPlannerAttached(page);
-		await expect((await draft(page)).getByRole("checkbox", { name: "Send to Chopin" }))
+		await expect((await draft(page, 1)).getByRole("checkbox", { name: "Send to Chopin" }))
 			.toBeChecked();
 	} finally {
 		await client.detach();

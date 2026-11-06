@@ -84,6 +84,12 @@ export function reply<T extends Outgoing>(ws: Sender, rid: string, frame: T): vo
 	ws.send(stamp(frame, { rid }));
 }
 
+/**
+ * The code of a refusal for a passing reason: the request is fine, and its client sends it again,
+ * with the same request id, in a moment. Every refusal of a send that is not final says it.
+ */
+export const PASSING: Session.Failure["code"] = "temporarily-unavailable";
+
 /** Refuse one request, on the socket that made it. */
 export function fail(
 	ws: Sender,

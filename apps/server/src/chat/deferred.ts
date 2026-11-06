@@ -9,6 +9,7 @@
 import { ulid } from "@chopin/dialect";
 
 import type {
+	DeferredCancelReason,
 	DeferredTurn,
 	DeferredTurnChange,
 	DeferredTurnKind,
@@ -30,15 +31,45 @@ export type Deferred = {
 	claimants: string[];
 };
 
-/** What a Room needs of hosted mode to defer requests. Absent under `AUTH_MODE=local`. */
+/**
+ * Whether a person's Planner requests are kept as rows. Hosted mode always keeps them. `AUTH_MODE=local`
+ * is never handed over and keeps its queue in memory, except where the Planner runs on a machine
+ * (`HARNESS=remote`): that machine can be away, and a message to it is saved and waits for it as
+ * anywhere else.
+ */
+export function keepsRequests(config: { auth: { local?: unknown }; harness: string }): boolean {
+	return !config.auth.local || config.harness === "remote";
+}
+
+/** What a Room needs to defer requests. Absent under `AUTH_MODE=local` unless a machine runs the Planner. */
 export type DeferredConfig = {
-	/** How long a queue that cannot start waits before it says what it waits for. */
-	noticeDelayMs: number;
 	/** Builds the queue item of a comment row, in the document that holds its thread. */
 	restoreComment?: (row: DeferredTurn) => Promise<unknown>;
 	/** Tells whoever watches a comment thread that its request did not run. */
 	threadEnded?: (row: DeferredTurn, reason: "failed") => void;
 };
+
+/**
+ * What the server hands a document's Chat to keep a person's Planner requests as rows: whether the
+ * machine is there, and the rest a row needs when it starts. Empty where requests are not kept,
+ * so the same call is made for every configuration and the configuration decides.
+ */
+export function deferralWiring(
+	config: { auth: { local?: unknown }; harness: string },
+	hooks: {
+		/** Whether the document's machine is attached; absent where nothing can be away. */
+		plannerReady?: () => Promise<boolean>;
+	} & Pick<DeferredConfig, "restoreComment" | "threadEnded">,
+): { plannerReady?: () => Promise<boolean>; deferred?: DeferredConfig } {
+	if (!keepsRequests(config)) return {};
+	return {
+		...(hooks.plannerReady ? { plannerReady: hooks.plannerReady } : {}),
+		deferred: {
+			...(hooks.restoreComment ? { restoreComment: hooks.restoreComment } : {}),
+			...(hooks.threadEnded ? { threadEnded: hooks.threadEnded } : {}),
+		},
+	};
+}
 
 export type DeliveryNotice = "interrupted" | "unavailable";
 
@@ -101,12 +132,15 @@ export const move = (
 	row: string,
 	from: DeferredTurnState,
 	to: DeferredTurnState,
-): DeferredTurnChange => ({ action: "transition", id: row, from, to, at: new Date() });
-
-export const WAITING_NOTICE_REMOTE =
-	"Waiting for this document's machine. What was sent is saved and will go through as soon as it is back.";
-export const WAITING_NOTICE =
-	"Waiting for someone to come back. What was sent is saved and will go through as soon as its sender, or anyone who can write to this document, writes to Chopin.";
+	reason?: DeferredCancelReason,
+): DeferredTurnChange => ({
+	action: "transition",
+	id: row,
+	from,
+	to,
+	at: new Date(),
+	...(reason ? { reason } : {}),
+});
 
 export function interruptedNotice(row: Pick<DeferredTurn, "kind" | "handle">): string {
 	return row.kind === "draft"

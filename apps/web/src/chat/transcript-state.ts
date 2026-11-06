@@ -14,6 +14,7 @@ export type TranscriptAction =
 	| { kind: "delta"; id: string; text: string }
 	| { kind: "tool"; entryId: string; activity: Chat.Activity }
 	| { kind: "turn"; turn?: Chat.Turn }
+	| { kind: "removed"; id: string }
 	| { kind: "responded" };
 
 /**
@@ -150,6 +151,25 @@ export function transcriptReducer(
 				completedWork: sameTurn
 					? state.completedWork
 					: finish(state, action.turn?.entryOffset ?? state.entries.length),
+			});
+		}
+		case "removed": {
+			let index = state.entries.findIndex(entry => entry.id === action.id);
+			if (index < 0) return state;
+			// Everything after it moves up one place, and the turn and the finished work that
+			// count entries from the start move with it.
+			let earlier = (offset: number) => index < offset ? offset - 1 : offset;
+			return withAnchor({
+				...state,
+				entries: state.entries.filter((_, at) => at !== index),
+				turn: state.turn
+					? { ...state.turn, entryOffset: earlier(state.turn.entryOffset) }
+					: undefined,
+				completedWork: state.completedWork.map(item => ({
+					...item,
+					entryOffset: earlier(item.entryOffset),
+					endOffset: index < item.endOffset ? item.endOffset - 1 : item.endOffset,
+				})),
 			});
 		}
 		case "responded":
