@@ -19,13 +19,22 @@ import {
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { chatInput, fillChat } from "./chat-input";
-import { address, expectHealthy, machineButton, NONE, strip } from "./planner-status";
+import {
+	announced,
+	expectHealthy,
+	expectSaidOnce,
+	heard,
+	listenForAnnouncements,
+	machineButton,
+	NONE,
+	strip,
+} from "./planner-status";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { RELEASE } from "./release";
 import { HOST, ROOT } from "./servers";
 
-import { expectNoHorizontalOverflow } from "./responsive";
+import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
 import type { Browser, Page } from "@playwright/test";
 
@@ -250,10 +259,18 @@ async function machine(
 	};
 }
 
-async function open(browser: Browser, handle: string, room: string, options: object) {
+async function open(
+	browser: Browser,
+	handle: string,
+	room: string,
+	options: object,
+	{ listen = false }: { listen?: boolean } = {},
+) {
 	let context = await browser.newContext(options);
 	let page = await context.newPage();
 	await authenticate(page, handle, ORIGIN);
+	// With `listen`, what the page's live region is told is recorded from its first load.
+	if (listen) await listenForAnnouncements(page);
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
 	return page;
@@ -455,43 +472,48 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	let link = await studio.backend(room);
 	await expectHealthy(machineButton(page));
 	await expect(page.getByText("outline the plan").first()).toBeVisible();
-	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
+	await expect(page.getByText(/Connect a machine to get a reply|No machine is connected/))
+		.toHaveCount(0);
 	await link.detach();
 });
+
+/** Why it refused, with no stop at its end: shown as it was reported, not tidied into a sentence. */
+const REASON =
+	"unsafe-checkout: ~/src/score's own git configuration sets a credential helper, which is not run in";
 
 /** What a connector reports when its backend refused its checkout for the `attempts`th time in a row. */
 function refused(document: string, attempts: number) {
 	return {
 		document,
-		failure: {
-			attempts,
-			how: "exit 1",
-			reason:
-				"unsafe-checkout: ~/src/score's own git configuration sets a credential helper, which a Planner will not run in",
-			at: Date.now(),
-		},
+		failure: { attempts, how: "exit 1", reason: REASON, at: Date.now() },
 	};
 }
 
-test("a Planner its machine keeps failing to start says why on its machine button, and warns everyone at the composer, until it attaches", async ({ browser }) => {
+test("a Planner its machine keeps failing to start says why on its machine button, warns at the composer, tells a person with no button everything there, and is announced once, until it attaches", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
-	let page = await open(browser, "mona", room, DESKTOP);
+	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
 	await createdBy(room, "mona");
 	let studio = await machine(page, "studio", true);
 	await page.reload();
 	await ready(page);
-	// A teammate who has the document open has no machine of their own, so no button; they hear of
-	// a failure at the composer, and not by name whose machine it is.
+	// A teammate who has the document open has no machine of their own, so no button; the composer's
+	// top edge is the only place they can read the Planner's state, and it says it, not by name
+	// whose machine it is.
 	let teammate = await open(browser, "hubot", room, DESKTOP);
 	let button = machineButton(page);
 	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
 	await expect(machineButton(teammate)).toHaveCount(0);
 	expect((await studio.poll([])).planners).toHaveLength(1);
-	// Starting is not a warning: the composer is left alone, and says it only when addressed.
+	// Starting, with the button: it carries the state, the composer is left alone, and a screen
+	// reader is told once. Without it: the strip says so, whatever is being typed, and says nothing
+	// of its own aloud.
 	await expect(strip(page)).toHaveCount(0);
-	await address(teammate);
-	await expect(strip(teammate)).toHaveText("Connecting to @mona’s machine");
+	// The first sentence may still name the owner's login if the machine list had not loaded yet; it
+	// is not said again once the machine's name arrives.
+	await expect(announced(page)).toHaveText(/^Connecting to (studio|@mona's machine)$/);
+	await expect(strip(teammate)).toHaveText("Connecting to @mona's machine");
+	await expect(strip(teammate)).not.toHaveAttribute("role");
 	await shoot(teammate, "planner-starting-teammate-desktop", teammate.locator(".chat-composer"));
 
 	// One launch that exited is a transient failure: still just starting.
@@ -501,33 +523,48 @@ test("a Planner its machine keeps failing to start says why on its machine butto
 
 	// The second in a row says why, to the machine's owner and to the teammate.
 	expect((await studio.reportFailure(refused(room, 2))).status).toBe(200);
-	await expect(button).toHaveAccessibleName("Runs on studio. Can’t connect to studio.");
+	await expect(button).toHaveAccessibleName("Runs on studio. Can't connect to studio.");
 	await expect(button).toHaveAttribute("data-planner", "failing");
 	await expect(button.locator(".machine-glyph-dot")).toHaveAttribute("data-planner", "failing");
 	await expect(button).toHaveAccessibleDescription(/unsafe-checkout: ~\/src\/score/);
 	await expect(button).toHaveAccessibleDescription(/Tried 2 times, last at .+\. Still trying\./);
-	// The composer's top edge warns, for anyone, whatever they are typing: the words and where to fix
-	// it. The reason is for a screen reader there, and in full on the machine button's menu.
+	// The composer's top edge warns, for anyone: the words and where to fix it. With the button the
+	// reason is for a screen reader there, and in full on the button's menu.
 	let warning = strip(page);
-	await expect(warning).toHaveText(/^Can’t connect to studio\./);
-	await expect(warning).toHaveAttribute("role", "alert");
+	await expect(warning).toHaveText(/^Can't connect to studio\./);
+	await expect(warning).not.toHaveAttribute("role");
 	await expect(warning.getByRole("link", { name: "How to fix" })).toHaveAttribute(
 		"href",
 		/docs\/chopin-cli\.md#cant-connect-to-a-machine$/,
 	);
-	await expect(warning).toContainText("unsafe-checkout: ~/src/score");
+	await expect(warning.locator(".sr-only .composer-notice-line")).toHaveText([
+		REASON,
+		/^Tried 2 times, last at .+\. Still trying\.$/,
+	]);
+	// Without it the reason is drawn, in full and as given, with what has been tried.
 	let seen = strip(teammate);
-	await expect(seen).toHaveAttribute("role", "alert");
-	await expect(seen).toContainText("Can’t connect to @mona’s machine.");
+	await expect(seen).not.toHaveAttribute("role");
+	await expect(seen).toContainText("Can't connect to @mona's machine.");
+	await expect(seen.locator(".sr-only")).toHaveCount(0);
+	await expect(seen.locator(".composer-notice-line")).toHaveText([
+		REASON,
+		/^Tried 2 times, last at .+\. Still trying\.$/,
+	]);
+	await expect(seen.locator(".composer-notice-line").first()).toBeVisible();
 	await expect(seen.getByRole("link", { name: "How to fix" })).toBeVisible();
+	// Each hears it once, from the one live region, and from no other element.
+	await expect(announced(page)).toHaveText("Can't connect to studio.");
+	await expectSaidOnce(page, "Can't connect to studio.");
+	await expect(announced(teammate)).toHaveText("Can't connect to @mona's machine.");
+	await expectSaidOnce(teammate, "Can't connect to @mona's machine.");
 	await shoot(page, "planner-failing-desktop");
 	await shoot(teammate, "planner-failing-teammate-desktop", teammate.locator(".chat-composer"));
 
 	// The machine button opens onto the whole story, above the machines, with the same link.
 	await button.click();
 	let menu = page.getByRole("menu", { name: "Runs on", exact: true });
-	let note = menu.getByRole("group", { name: "Planner", exact: true });
-	await expect(note).toContainText("Can’t connect to studio");
+	let note = menu.getByRole("group", { name: "Connection", exact: true });
+	await expect(note).toContainText("Can't connect to studio");
 	await expect(note).toContainText("unsafe-checkout: ~/src/score");
 	await expect(note).toContainText("Tried 2 times, last at");
 	await expect(note).toContainText("Still trying.");
@@ -537,26 +574,37 @@ test("a Planner its machine keeps failing to start says why on its machine butto
 	await expect(menu).toBeHidden();
 	await expect(button).toBeFocused();
 
-	// More failures update the count; @chopin sent meanwhile is told why, not to try in a moment.
+	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is told
+	// why, in the machine's own words, not to try in a moment.
 	await studio.reportFailure(refused(room, 3));
 	await expect(button).toHaveAccessibleDescription(/Tried 3 times/);
+	await expect(seen.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
 	let input = chatInput(teammate);
 	await fillChat(input, "@chopin outline the plan");
 	await input.press("Enter");
-	await expect(teammate.getByText(/Planner can't start on @mona's machine: unsafe-checkout/))
+	await expect(teammate.getByText(/Can't connect to @mona's machine: unsafe-checkout/))
 		.toBeVisible({ timeout: 45_000 });
 
 	// It attaches at last, and nothing about the failure is left, quietly: no word, no mark.
 	let link = await studio.backend(room);
 	await expectHealthy(button);
 	await expect(strip(page)).toHaveCount(0);
-	// The teammate's refused @chopin message keeps its own notice; the warning is what goes.
-	await expect(strip(teammate).filter({ hasText: "Can’t connect" })).toHaveCount(0);
+	await expect(announced(page)).toHaveText("");
+	// The teammate's refused @chopin message keeps its own error notice; the warning is what goes.
+	await expect(teammate.locator(".chat-composer .composer-notice[data-warning]")).toHaveCount(0);
+	await expect(strip(teammate)).toHaveAttribute("data-error", "true");
 	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
+	// A screen reader was told each state once, and not again as the count rose or it cleared.
+	let said = await heard(page);
+	let connecting = said.filter(text => text.startsWith("Connecting to "));
+	expect(connecting).toHaveLength(1);
+	expect(said.filter(text => text === "Can't connect to studio.")).toHaveLength(1);
+	expect(said.indexOf(connecting[0]!)).toBeLessThan(said.indexOf("Can't connect to studio."));
+	expect(said.at(-1)).toBe("Can't connect to studio.");
 	await link.detach();
 });
 
-test("on a phone, a Planner its machine keeps failing to start says why at the composer and on the machine button", async ({ browser }) => {
+test("on a phone, a Planner its machine keeps failing to start says why at the composer and on the machine button, and in full for a person with no button", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
@@ -566,22 +614,41 @@ test("on a phone, a Planner its machine keeps failing to start says why at the c
 	await ready(page);
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: "Chat", exact: true }).tap();
+	// A teammate with no machine, so no button, on a phone as well.
+	let teammate = await open(browser, "hubot", room, PHONE);
+	await teammate.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: "Chat", exact: true }).tap();
+	await expect(machineButton(teammate)).toHaveCount(0);
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let button = machineButton(page);
 	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
 	await expect(button).toBeInViewport();
+	await expect(strip(page)).toHaveCount(0);
 	await shoot(page, "planner-starting-phone");
+	await expect(strip(teammate)).toHaveText("Connecting to @mona's machine");
+	await expectInsideViewport(strip(teammate));
+	await shoot(teammate, "planner-starting-teammate-phone");
 
 	await studio.reportFailure(refused(room, 2));
 	await expect(button).toHaveAttribute("data-planner", "failing");
-	await expect(strip(page)).toContainText("Can’t connect to studio.");
+	await expect(strip(page)).toContainText("Can't connect to studio.");
 	await expect(strip(page)).toBeInViewport();
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "planner-failing-phone");
 
+	// Without the button the reason is drawn, as given, and fits the phone.
+	await expect(strip(teammate)).toContainText("Can't connect to @mona's machine.");
+	await expect(strip(teammate).locator(".composer-notice-line")).toHaveText([
+		REASON,
+		/^Tried 2 times, last at .+\. Still trying\.$/,
+	]);
+	await expectInsideViewport(strip(teammate));
+	await expectNoHorizontalOverflow(teammate);
+	await shoot(teammate, "planner-failing-teammate-phone");
+
 	// Tapping the button opens its sheet, which tells the whole story above the machines.
 	await button.tap();
-	let note = page.getByRole("group", { name: "Planner", exact: true });
+	let note = page.getByRole("group", { name: "Connection", exact: true });
 	await expect(note).toContainText("unsafe-checkout: ~/src/score");
 	await expect(note).toBeInViewport();
 	await expect(note.getByRole("menuitem", { name: "How to fix" })).toBeVisible();
@@ -598,10 +665,8 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await createdBy(room, "hubot");
 	await page.reload();
 	await ready(page);
-	// Nothing says so until a message is addressed to Chopin, the one time it matters.
+	// hubot has no machine, so no button: the composer's top edge says so, whatever is typed.
 	let status = strip(page);
-	await expect(status).toHaveCount(0);
-	await address(page);
 	await expect(status).toHaveText(NONE);
 
 	// mona shares studio from the Machines table; hubot's document asks it at once.
@@ -610,7 +675,9 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "true");
-	await expect(status).toHaveText("Connecting to @mona’s machine");
+	// Once the machine is listed for hubot he has its button, which then carries the state; the one
+	// live region says it either way, once.
+	await expect(announced(page)).toHaveText(/^Connecting to /);
 	expect(await studio.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
@@ -624,13 +691,13 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await fillChat(input, "@chopin outline the plan");
 	await input.press("Enter");
 	await expect(page.getByText("outline the plan").first()).toBeVisible();
-	await expect(page.getByText(/No Planner is attached/)).toHaveCount(0);
+	await expect(page.getByText(/Connect a machine to get a reply|No machine is connected/))
+		.toHaveCount(0);
 
 	// Sharing off: the Planner stops, and hubot's document has none again.
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
-	await address(page);
-	await expect(status).toHaveText(/^(No Planner is attached|@mona’s Planner detached)/);
+	await expect(status).toHaveText(/^(No machine is connected|@mona's machine stepped away)/);
 	await link.detach().catch(() => {});
 });
 
@@ -657,7 +724,6 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 			await replying.promise;
 		},
 	});
-	await address(page);
 	await expect(status).toHaveCount(0);
 
 	// hubot's reply is under way when mona stops sharing studio: it keeps its Planner meanwhile.
@@ -671,7 +737,6 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 		timeout: 15_000,
 	});
 	await expect(sharing).toHaveAccessibleDescription("Finishing 1 teammate document");
-	await address(page);
 	await expect(status).toHaveCount(0);
 	await shoot(owner, "machines-finishing");
 

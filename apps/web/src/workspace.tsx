@@ -9,6 +9,7 @@ import { usePhone } from "@chopin/editor/pointer";
 import {
 	CHAT_CHOICE_STORAGE_KEY,
 	initialWorkspaceState,
+	pageNoticePlace,
 	presentWorkspace,
 	storedDesktopChat,
 	transitionWorkspace,
@@ -151,7 +152,9 @@ export type WorkspaceProps = {
 	status?: ReactNode;
 	/**
 	 * A notice for the whole page, such as a lost connection, in flow at the top of the document's
-	 * content, or at the top of Chat where Chat is all that shows.
+	 * content. Where Chat and the document take turns it stands above both panes, as one element
+	 * that neither switching nor a phone's tabs remount, so it reads as top of Chat where Chat is
+	 * all that shows; a phone's floats just under its top bar (see `offline-notice.css`).
 	 */
 	notice?: ReactNode;
 	/** People present in the room, at the end of the document title bar. */
@@ -450,6 +453,7 @@ export function Workspace(
 				/>
 			)}
 
+			{pageNoticePlace(mode) === "above-panes" && notice}
 			<div
 				ref={frame}
 				className={`workspace-frame relative flex min-h-0 flex-1 ${
@@ -592,7 +596,7 @@ export function Workspace(
 									{status}
 								</div>
 							)}
-							{presentation.documentVisible && notice}
+							{pageNoticePlace(mode) === "document" && notice}
 							<div
 								className="workspace-document-swap content-swap-stack relative min-h-0 flex-1"
 								data-workspace-document-swap
@@ -685,7 +689,6 @@ export function Workspace(
 						<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
 							Chat
 						</h2>
-						{!presentation.documentVisible && notice}
 						<div className="workspace-chat-body relative min-h-0 flex-1">
 							{presentation.separatorVisible && (
 								<ResizeHandle

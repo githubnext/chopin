@@ -30,6 +30,12 @@ describe("isOffline", () => {
 		expect(isOffline("connecting", true)).toBe(true);
 	});
 
+	test("follows the outage the connection reports, not only its status", () => {
+		// A lost connection can read `connected` while the attempt to learn why is still awaited.
+		expect(isOffline("connected", true)).toBe(true);
+		expect(isOffline("connected", false)).toBe(false);
+	});
+
 	test("is not an outage while connected, or on a first connection that is only slow", () => {
 		expect(isOffline("connected", false)).toBe(false);
 		expect(isOffline("connecting", false)).toBe(false);

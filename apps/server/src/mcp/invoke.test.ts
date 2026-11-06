@@ -127,7 +127,7 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 });
 
 test("invoke_planner carries a refusal's message beside its code", async () => {
-	let message = "No Planner is attached to this document. Connect a Planner client to attach one.";
+	let message = "Connect a machine to get a reply. Connect an agent client to the document.";
 	let mcp = endpoint({
 		invoke: async () => ({ kind: "refused", code: "planner-not-attached", message }),
 	});

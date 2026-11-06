@@ -374,11 +374,9 @@ describe("the hosted MCP adapter", () => {
 			).toEqual({
 				kind: "refused",
 				code: "planner-not-attached",
-				message:
-					"No Planner is attached to this document. To attach one, connect a Planner client to "
+				message: "Connect a machine to get a reply. Connect an agent client to "
 					+ "https://chopin.test/documents/octo-org/score/release-readiness over the agent "
-					+ "connection from a session in a checkout of octo-org/score; that session becomes this "
-					+ "document's Planner.",
+					+ "connection from a session in a checkout of octo-org/score.",
 			});
 		} finally {
 			await Service.close(opened.plan);

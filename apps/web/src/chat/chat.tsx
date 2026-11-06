@@ -27,8 +27,7 @@ import {
 import { chatDraftKey } from "../demo-actor";
 import { canWithdraw } from "./withdraw";
 import type { DraftInputHandle } from "./draft-input";
-import { plannerNotice } from "./planner-status";
-import type { PlannerStatus } from "./planner-status";
+import type { PlannerNotice } from "./planner-status";
 import { TypingReporter } from "./typing";
 import { ChatComposer } from "./composer";
 
@@ -141,12 +140,12 @@ export type ChatProps = {
 	/** One calm line shown while the transcript has loaded and is still empty. */
 	emptyNotice?: string;
 	/**
-	 * What is not well with the document's remote Planner, when something is: its machine button
-	 * says so all the time, and the composer says so when it cannot start, or when a message is
-	 * addressed to Chopin that nothing can answer yet. Absent while it is attached, and under every
-	 * other harness.
+	 * The strip for the composer's top edge about the document's remote Planner, when its state
+	 * needs one: a machine that cannot be connected to, or, for a viewer with no machine button to
+	 * say it, any state that is not healthy (`plannerPlacement` decides). Absent while it is
+	 * attached, and under every other harness.
 	 */
-	planner?: PlannerStatus;
+	plannerStrip?: PlannerNotice;
 };
 
 function draftKey(room: string, handle: string): string {
@@ -216,7 +215,7 @@ export function Chat(
 		people = [],
 		notice,
 		emptyNotice,
-		planner,
+		plannerStrip,
 		onShowDecisions,
 		onResearch,
 		onShowResearch,
@@ -767,7 +766,7 @@ export function Chat(
 					? { tone: "info", text: "Research isn’t available in this document" }
 					: !agent
 					? { tone: "info", text: "Chopin unavailable" }
-					: plannerNotice(planner, effectiveMode)}
+					: plannerStrip}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled
 					? {

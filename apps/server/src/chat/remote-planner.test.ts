@@ -184,10 +184,8 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 		saves++;
 		await persist(chat);
 	};
-	let message =
-		"No Planner is attached to this document. To attach one, connect a Planner client to "
-		+ `${room.url} over the agent connection from a session in a checkout of octo-org/score; `
-		+ "that session becomes this document's Planner.";
+	let message = "Connect a machine to get a reply. Connect an agent client to "
+		+ `${room.url} over the agent connection from a session in a checkout of octo-org/score.`;
 
 	expect(await room.send("@chopin draft the plan")).toMatchObject({
 		kind: "session:error",
@@ -290,9 +288,8 @@ test("once the attached Planner's owner sign-in expires, @chopin is refused with
 	expect(await room.send("@chopin draft the plan")).toMatchObject({
 		kind: "session:error",
 		code: "planner-not-attached",
-		message: "No Planner is attached to this document. To attach one, connect a Planner client to "
-			+ `${room.url} over the agent connection from a session in a checkout of octo-org/score; `
-			+ "that session becomes this document's Planner.",
+		message: "Connect a machine to get a reply. Connect an agent client to "
+			+ `${room.url} over the agent connection from a session in a checkout of octo-org/score.`,
 	});
 	expect(context.chat.entries).toEqual([]);
 	expect(context.chat.waiting).toEqual([]);
@@ -677,7 +674,7 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 	}
 	// Nobody else can take the Planner while its account's client may return.
 	expect(await Chat.invoke(context, RIVAL, "Anything?")).toBe("planner-not-attached");
-	expect(await context.plannerNotAttached!()).toContain("is disconnected");
+	expect(await context.plannerNotAttached!()).toContain("machine is offline");
 
 	let client = await down.reconnect();
 	expect(context.plan.records.size).toBe(1);

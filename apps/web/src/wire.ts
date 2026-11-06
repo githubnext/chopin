@@ -75,6 +75,12 @@ const WAKE_GAP = 1000;
  * is shown rather than flashing a notice, and a lock, for a moment past it.
  */
 const RESCUE_AT = 1200;
+/**
+ * The longest the probe that asks why a connection was lost may take. A probe that never answers
+ * (a network that drops packets rather than refusing them) must not stall the retries, nor keep
+ * the page from saying it is offline.
+ */
+const PROBE_TIMEOUT = 4000;
 
 function endpoint(options: WireOptions): string {
 	let url = new URL("sidebar" in options ? "/ws/sidebar" : "/ws", location.href);
@@ -103,6 +109,8 @@ export class Wire {
 	/** When the current outage began, or undefined while connected. */
 	#lostAt: number | undefined;
 	#timer: ReturnType<typeof setTimeout> | undefined;
+	/** Whether the probe after a loss is still awaiting its answer. */
+	#probing = false;
 	/**
 	 * Undefined until the first transition, so the first one always announces.
 	 *
@@ -132,8 +140,8 @@ export class Wire {
 	 *
 	 * The timer alone can sit out most of its 15 s cap after the network has
 	 * already returned, with the page still saying it is offline. Only a wire
-	 * waiting on that timer is woken; an attempt already in flight is left to
-	 * finish.
+	 * waiting on that timer, or on the probe that precedes it, is woken; an
+	 * attempt already in flight is left to finish.
 	 *
 	 * Focus and visibility say only that the person is back, not the network,
 	 * and they can fire in bursts. So they never wake the wire sooner than
@@ -142,7 +150,8 @@ export class Wire {
 	 * into a fresh run of fast retries.
 	 */
 	#wake = (event: Event) => {
-		if (this.#disposed || this.#terminal || this.#timer === undefined) return;
+		if (this.#disposed || this.#terminal) return;
+		if (this.#timer === undefined && !this.#probing) return;
 		if (globalThis.document?.visibilityState === "hidden") return;
 		let online = event.type === "online";
 		if (!online && Date.now() - this.#attemptedAt < WAKE_GAP) return;
@@ -201,6 +210,8 @@ export class Wire {
 	#connect(): void {
 		if (this.#disposed || this.#terminal) return;
 		this.#connectionGeneration++;
+		// A new attempt supersedes any probe still awaiting its answer.
+		this.#probing = false;
 		this.#attemptedAt = Date.now();
 		this.#set(this.#everConnected ? "reconnecting" : "connecting");
 
@@ -238,6 +249,8 @@ export class Wire {
 			if (!opened) this.#failures++;
 			this.#options.onOutage?.({ failures: this.#failures });
 			this.#abandon("connection lost");
+			// Said now, not once the probe has answered: until then nothing else says it is lost.
+			this.#set("reconnecting");
 			void this.#retry();
 		});
 	}
@@ -254,6 +267,7 @@ export class Wire {
 		try {
 			let response = await fetch(endpoint(this.#options).replace(/^ws/, "http"), {
 				headers: { "x-chopin-socket-probe": "1" },
+				signal: AbortSignal.timeout(PROBE_TIMEOUT),
 			});
 			if (response.status >= 400 && response.status < 500) {
 				return {
@@ -262,7 +276,7 @@ export class Wire {
 				};
 			}
 		} catch {
-			// Unreachable rather than refused; the retry loop is the right answer.
+			// Unreachable, or too slow to say, rather than refused; the retry loop is the right answer.
 		}
 		return undefined;
 	}
@@ -271,8 +285,10 @@ export class Wire {
 		if (this.#disposed || this.#terminal) return;
 		let generation = this.#connectionGeneration;
 
+		this.#probing = true;
 		let refusal = await this.#refusal();
 		if (this.#disposed || this.#terminal || generation !== this.#connectionGeneration) return;
+		this.#probing = false;
 		if (refusal) {
 			if (refusal.authentication) this.#options.onAuthenticationRequired?.();
 			return this.#set("denied", refusal.reason);
@@ -284,7 +300,6 @@ export class Wire {
 			if (rescue > 0) delay = Math.min(delay, rescue);
 		}
 		this.#attempts++;
-		this.#set("reconnecting");
 		this.#timer = setTimeout(() => {
 			this.#timer = undefined;
 			this.#connect();

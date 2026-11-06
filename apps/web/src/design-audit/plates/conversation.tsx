@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { ChatComposer } from "../../chat/composer";
-import { plannerNotice, plannerStatus } from "../../chat/planner-status";
+import { plannerPlacement, plannerStatus } from "../../chat/planner-status";
 import { MachineGlyph, PlannerNote } from "../../machine-button";
 import { boundedChatError } from "../../chat/references";
 import { mentionCandidates } from "../../chat/mentions";
@@ -38,7 +38,7 @@ const FAILING: Session.PlannerAttachment = {
 	login: "mona",
 	failure: {
 		attempts: 3,
-		reason: "The checkout’s git config sets a credential helper",
+		reason: "The checkout's git config sets a credential helper",
 		at: "2026-11-04T18:29:00.000Z",
 	},
 };
@@ -96,11 +96,29 @@ export function ComposerSpecimen(
 	);
 }
 
+/**
+ * With no machine button to carry them, the composer's top edge tells each state, and draws the
+ * reason for a machine that cannot be connected to.
+ */
+let WITHOUT_BUTTON = [
+	{ label: "No machine button: connecting", planner: STARTING },
+	{ label: "No machine button: can't connect, reason drawn", planner: FAILING },
+	{
+		label: "No machine button: offline",
+		planner: { state: "disconnected", login: "mona" },
+	},
+	{
+		label: "No machine button: detached, held",
+		planner: { state: "held", login: "mona", until: "2026-11-04T18:31:00.000Z" },
+	},
+	{ label: "No machine button: no Planner", planner: { state: "none" } },
+] as const satisfies readonly { label: string; planner: Session.PlannerAttachment }[];
+
 /** The machine button's dot and the top of its menu, as the Planner's state changes them. */
 let PRESENCE = [
-	{ label: "Planner attached: the machine’s own dot", glyph: undefined, planner: undefined },
+	{ label: "Planner attached: the machine's own dot", glyph: undefined, planner: undefined },
 	{ label: "Connecting to the machine", glyph: "starting", planner: status(STARTING) },
-	{ label: "Can’t connect to the machine", glyph: "failing", planner: status(FAILING) },
+	{ label: "Can't connect to the machine", glyph: "failing", planner: status(FAILING) },
 	{
 		label: "Planner disconnected",
 		glyph: "away",
@@ -162,25 +180,16 @@ export function ConversationPlate() {
 					/>
 				</div>
 				<div>
-					<StateLabel>Can’t connect, on the composer’s edge</StateLabel>
-					<ComposerSpecimen notice={plannerNotice(status(FAILING), false)} />
+					<StateLabel>Can't connect, with the machine button</StateLabel>
+					<ComposerSpecimen notice={plannerPlacement(status(FAILING), true).strip} />
 				</div>
-				<div>
-					<StateLabel>Connecting, addressed to Chopin</StateLabel>
-					<ComposerSpecimen
-						chopin
-						notice={plannerNotice(status(STARTING), true)}
-						text="Review the spacing"
-					/>
-				</div>
-				<div>
-					<StateLabel>No Planner, addressed to Chopin</StateLabel>
-					<ComposerSpecimen
-						chopin
-						notice={plannerNotice(status({ state: "none" }), true)}
-						text="Review the spacing"
-					/>
-				</div>
+				{WITHOUT_BUTTON.map(({ label, planner }) => (
+					<div key={label}>
+						<StateLabel>{label}</StateLabel>
+						{/* Nobody here has the machine, so its owner's login is all that names it. */}
+						<ComposerSpecimen notice={plannerPlacement(plannerStatus(planner), false).strip} />
+					</div>
+				))}
 				<div>
 					<StateLabel>Chopin working</StateLabel>
 					<ComposerSpecimen run={{ action: "stop", disabled: false, onClick: () => {} }} />

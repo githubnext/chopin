@@ -23,7 +23,7 @@ import {
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
 import { hostInputRoom } from "../../testing/decisions";
-import { startingMessage } from "./attachments";
+import { disconnectedMessage, notAttachedMessage, startingMessage } from "./attachments";
 import { MachinePlanners } from "./machine-planners";
 
 import type { RepositoryPage } from "../../github/client";
@@ -538,7 +538,7 @@ describe("a Planner backend that keeps failing to start", () => {
 
 	it("is what an @chopin request is told while the Planner cannot start, instead of to try again in a moment", () => {
 		expect(startingMessage("mona")).toBe(
-			"This document's Planner is still starting on @mona's machine. Try again in a moment.",
+			"Still connecting to @mona's machine. Try again in a moment.",
 		);
 		expect(
 			startingMessage("mona", {
@@ -547,8 +547,32 @@ describe("a Planner backend that keeps failing to start", () => {
 				at: "2026-11-04T02:00:00.000Z",
 			}),
 		).toBe(
-			"This document's Planner can't start on @mona's machine: unsafe-checkout: refused "
+			"Can't connect to @mona's machine: unsafe-checkout: refused "
 				+ "(3 attempts in a row). It keeps trying; try again once that is fixed.",
+		);
+	});
+
+	it("refuses in plain words that name none of Chopin's own terms, only a machine and the person's work", () => {
+		let internal = /planner|attach|\bheld\b|\bdecisions?\b|@chopin/i;
+		let at = "2026-11-04T02:00:00.000Z";
+		let messages = [
+			notAttachedMessage(
+				"https://chopin.test/documents/octo-org/score/plan",
+				"octo-org/score",
+				true,
+			),
+			notAttachedMessage("https://chopin.test/documents/octo-org/score/plan", "octo-org/score"),
+			disconnectedMessage("mona"),
+			disconnectedMessage(undefined),
+			startingMessage("mona"),
+			// The reason is the machine's own words, kept as reported, so a neutral one is used here.
+			startingMessage("mona", { attempts: 3, reason: "exit 127", at }),
+		];
+		for (let message of messages) expect(internal.test(message), message).toBe(false);
+		expect(notAttachedMessage("u", "r", true)).toStartWith("Connect a machine to get a reply.");
+		expect(notAttachedMessage("u", "r")).toStartWith("Connect a machine to get a reply.");
+		expect(disconnectedMessage("mona")).toBe(
+			"@mona's machine is offline, so it can't reply now. Your work is kept and picks up when it's back.",
 		);
 	});
 

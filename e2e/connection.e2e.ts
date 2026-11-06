@@ -12,7 +12,7 @@ import { $importPlan } from "../packages/dialect/src/index";
 import * as PlanRoom from "../apps/server/src/plan/room";
 import * as Y from "../apps/server/node_modules/yjs";
 import { REGISTRY } from "../apps/server/src/testing/peer";
-import { chatInput, expectChatValue } from "./chat-input";
+import { chatInput, expectChatValue, fillChat } from "./chat-input";
 import { readSource } from "./database";
 import { inBetween, top, trace } from "./motion";
 import { authenticate, content, expect, ready, roomPath, status, test } from "./room";
@@ -21,7 +21,7 @@ import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import type { Plan } from "../packages/protocol/index";
 import type { BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 
-const OFFLINE = "You’re offline. Your changes are kept and will sync when you reconnect.";
+const OFFLINE = "You're offline. Your changes are kept and will sync when you reconnect.";
 
 /** Set to a directory to keep the screenshots a pull request shows. */
 const SHOTS = process.env.CHOPIN_SHOTS;
@@ -277,9 +277,15 @@ test("edits made during a blip are dropped, and said to be, when the document wa
 	ana.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await ready(page);
+	// The notice that said changes were kept is gone once reconnected, and what is left is the one
+	// alert that says the last edits were not: shown, in view, and not hidden behind the notice.
+	await expect(notice(page)).toHaveCount(0);
+	await expect(page.getByRole("alert")).toHaveCount(1);
 	await expect(page.getByRole("alert")).toContainText(
 		"Your last edits couldn't be saved because the document changed while you were offline.",
 	);
+	await expect(page.getByRole("alert")).toBeInViewport();
+	await snap(page, "lost-edits-after-offline-desktop");
 	await expect(content(page)).not.toContainText("STALE");
 
 	// Back in step: what Ana types now reaches Ben.
@@ -333,10 +339,10 @@ test("on a phone, Chat shows the same notice at its top, and Retry after repeate
 
 		wire.state.offline = true;
 		await wire.sockets.at(-1)!.close();
-		// Chat is all that shows, so the notice is at the top of Chat, and is the only one.
-		await expect(chat.locator("[data-offline-notice]")).toBeVisible();
+		// Chat is all that shows, so the one notice stands above it, and is the only one.
+		await expect(notice(page)).toBeVisible();
 		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
-		await expect(chat.getByRole("alert")).toHaveText(OFFLINE);
+		await expect(page.getByRole("alert")).toHaveText(OFFLINE);
 		// The composer keeps its size and its place: the notice takes the transcript's room.
 		expect(await chat.locator(".chat-composer").boundingBox()).toEqual(composer);
 		await expect(chat.getByRole("button", { name: /Reconnect|Reload|Retry/ })).toHaveCount(0);
@@ -357,4 +363,202 @@ test("on a phone, Chat shows the same notice at its top, and Retry after repeate
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
 		await context.close();
 	}
+});
+
+test("a lost connection says so even while the request that asks why it was lost never answers, and carries on when the network returns", async ({ join, page }) => {
+	// A network that drops packets rather than refusing them: the probe never comes back.
+	let probes = 0;
+	let hanging = false;
+	await page.route("**/ws?**", route => {
+		if (hanging && route.request().headers()["x-chopin-socket-probe"] === "1") {
+			probes++;
+			return;
+		}
+		return route.continue();
+	});
+	let wire = route(page);
+	await wire.ready;
+	await join("ana");
+
+	hanging = true;
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect.poll(() => probes).toBeGreaterThan(0);
+	// The probe is still unanswered, and the page says it is offline all the same.
+	await expect(notice(page)).toBeVisible();
+	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
+	await expect(content(page)).toHaveAttribute("contenteditable", "false");
+
+	// The network comes back while the probe is still out: the page does not wait on it.
+	hanging = false;
+	wire.state.offline = false;
+	let attempts = wire.sockets.length;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await ready(page);
+	await expect(notice(page)).toHaveCount(0);
+	expect(wire.sockets.length).toBeGreaterThan(attempts);
+});
+
+/** `below` begins at or under the bottom edge of `above`, so nothing of either lies over the other. */
+async function expectNotOver(above: Locator, below: Locator): Promise<void> {
+	let [top, bottom] = [await above.boundingBox(), await below.boundingBox()];
+	expect(top, "the notice has a box").not.toBeNull();
+	expect(bottom, "the content has a box").not.toBeNull();
+	expect(bottom!.y).toBeGreaterThanOrEqual(top!.y + top!.height - 0.5);
+}
+
+/** Nothing lies over the notice: what is at its centre is the notice itself, so its Retry can be pressed. */
+async function expectNotCovered(target: Locator): Promise<void> {
+	let covered = await target.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		let hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		return !hit || !element.contains(hit);
+	});
+	expect(covered, "something lies over the notice").toBe(false);
+}
+
+function tab(page: Page, name: RegExp) {
+	return page.getByRole("navigation", { name: "Workspace view" }).getByRole("button", { name });
+}
+
+async function settled(page: Page): Promise<void> {
+	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
+}
+
+test("on a phone, the notice takes its own room at the top of Document and of Chat, never over their first content, and stays one notice as the tabs switch", async ({ baseURL, browser, room, seed }) => {
+	test.setTimeout(120_000);
+	await seed(
+		"# A document with real content\n\nThe first paragraph is the first thing a reader meets.\n\n"
+			+ "The second paragraph follows it.\n",
+	);
+	let wire: ReturnType<typeof route> | undefined;
+	let context = await browser.newContext({
+		baseURL,
+		deviceScaleFactor: 3,
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	try {
+		let page = await context.newPage();
+		await page.addInitScript(() => {
+			Math.random = () => 0.999;
+		});
+		wire = route(page);
+		await wire.ready;
+		await authenticate(page, "ana", baseURL!);
+		await page.goto(roomPath(room));
+		await ready(page);
+
+		// Enough in Chat that its first message sits at the top once scrolled there.
+		await tab(page, /^Chat/).tap();
+		let chat = chatPane(page);
+		await settled(page);
+		let input = chatInput(chat);
+		for (let index = 1; index <= 8; index++) {
+			let text = `Message ${index}: ${
+				"the harp needs new strings and a careful tuning ".repeat(3)
+			}`;
+			await fillChat(input, text);
+			await input.press("Enter");
+			await expect(chat.getByText(text, { exact: true })).toBeVisible();
+		}
+		await tab(page, /^Document/).tap();
+		await settled(page);
+
+		wire.state.offline = true;
+		await wire.sockets.at(-1)!.close();
+		await expect(notice(page)).toBeVisible();
+		await settled(page);
+		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
+
+		// Document: the notice floats under the top bar and the first heading starts below it.
+		let bar = await page.locator(".phone-top-bar").boundingBox();
+		let alert = await notice(page).boundingBox();
+		expect(alert!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height - 1);
+		await expectNotOver(notice(page), content(page).locator("h1").first());
+		await expectNotOver(notice(page), content(page).getByText("The first paragraph"));
+		await expectInsideViewport(notice(page));
+		await expectNotCovered(notice(page));
+		await snap(page, "offline-phone-document");
+
+		// The one notice: marked, and watched for any alert that is added to the page from here on.
+		await notice(page).evaluate(element => {
+			element.setAttribute("data-same-notice", "");
+			let added = 0;
+			new MutationObserver(records => {
+				for (let record of records) {
+					for (let node of record.addedNodes) {
+						if (node instanceof Element && node.matches("[role=alert], [role=alert] *")) added++;
+					}
+				}
+			}).observe(document.body, { childList: true, subtree: true });
+			(window as unknown as { alertsAdded: () => number }).alertsAdded = () => added;
+		});
+
+		await tab(page, /^Chat/).tap();
+		await settled(page);
+		// The same element, not a fresh one that would wait out the grace period and be heard again.
+		await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
+		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
+		await chat.locator("[data-chat-scroll]").evaluate(element => {
+			element.scrollTop = 0;
+		});
+		await expectNotOver(notice(page), chat.getByText(/^Message 1:/));
+		await expectInsideViewport(notice(page));
+		await expectNotCovered(notice(page));
+		await snap(page, "offline-phone-chat");
+		await expect(page.locator("[data-offline-status]")).toHaveText("");
+
+		await tab(page, /^Document/).tap();
+		await settled(page);
+		await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
+		await expectNotOver(notice(page), content(page).locator("h1").first());
+		expect(
+			await page.evaluate(() => (window as unknown as { alertsAdded: () => number }).alertsAdded()),
+		).toBe(0);
+		await expect(page.locator("[data-offline-status]")).toHaveText("");
+
+		wire.state.offline = false;
+		await page.evaluate(() => dispatchEvent(new Event("online")));
+		await expect(notice(page)).toHaveCount(0);
+		// Nothing is left reserved at the top of the document once it has gone.
+		await settled(page);
+		await expect(page.locator("[data-offline-status]")).toHaveText("Reconnected");
+		let after = await content(page).locator("h1").first().boundingBox();
+		expect(after!.y).toBeGreaterThan(bar!.y + bar!.height);
+		expect(after!.y).toBeLessThan(alert!.y + alert!.height);
+	} finally {
+		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
+		await context.close();
+	}
+});
+
+test("in a compact window, one notice sits above Chat and the document and is not mounted again as they take turns", async ({ join, page }) => {
+	await page.setViewportSize({ width: 723, height: 900 });
+	let wire = route(page);
+	await wire.ready;
+	await join("ana");
+
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	await settled(page);
+	let frame = page.locator(".workspace-frame");
+	// In flow: above the panel that holds both panes, taking its own room.
+	await expectNotOver(notice(page), frame);
+	await notice(page).evaluate(element => element.setAttribute("data-same-notice", ""));
+
+	await tab(page, /^Chat/).click();
+	await settled(page);
+	await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
+	await expectNotOver(notice(page), chatPane(page));
+	await tab(page, /^Document/).click();
+	await settled(page);
+	await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
+	await expect(page.locator("[data-offline-status]")).toHaveText("");
+
+	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(notice(page)).toHaveCount(0);
 });

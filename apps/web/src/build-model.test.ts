@@ -363,14 +363,14 @@ describe("first build", () => {
 				"build-box is offline. Start chopin connect on it, or choose another machine.",
 			),
 		).toBe("build-box is offline");
-		expect(draftRefusalCopy("No Planner is attached to this document. To attach one, …"))
+		expect(draftRefusalCopy("Connect a machine to get a reply. Connect an agent client to …"))
 			.toBe("Connect a Planner to this document to build.");
 		expect(draftRefusalCopy("anything", "planner-not-attached"))
 			.toBe("Connect a Planner to this document to build.");
 		// Chopin says so when the Planner is attached but its connection dropped.
 		expect(
 			draftRefusalCopy(
-				"This document's Planner (@mona) is disconnected, so it cannot take a message now.",
+				"@mona's machine is offline, so it can't reply now. Your work is kept and picks up when it's back.",
 				"planner-not-attached",
 			),
 		).toBe("Reconnect the Planner to build.");

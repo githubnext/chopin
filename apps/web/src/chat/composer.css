@@ -131,6 +131,10 @@
 .chat-composer .composer-notice-icon {
 	--color-icon: var(--color-warning-icon);
 }
+/* The reason a machine gave and what has been tried, each on its own line under the words. */
+.chat-composer .composer-notice-line {
+	display: block;
+}
 .chat-composer .composer-notice-link {
 	color: var(--color-brand-ink);
 	text-decoration: underline;
