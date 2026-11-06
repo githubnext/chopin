@@ -1,4 +1,5 @@
 import * as Draft from "@chopin/draft";
+import { trackPendingWork } from "@chopin/protocol/pending-work";
 import type { ConversationPlan } from "@chopin/protocol";
 import type { Wire } from "../wire";
 
@@ -33,6 +34,12 @@ export class ResearchDraftController {
 			syncing: false,
 			closed: offer.status !== "offered",
 		};
+		trackPendingWork(this);
+	}
+
+	/** Whether an edit of the brief has not reached the server, which a reload would lose. */
+	get unsaved(): boolean {
+		return this.#outbox.length > 0;
 	}
 	get = () => this.#snapshot;
 	subscribe = (listener: () => void) => {

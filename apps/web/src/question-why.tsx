@@ -5,6 +5,8 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 
+import { usePendingWork } from "@chopin/editor";
+
 import type { Transport } from "@chopin/editor";
 import type { Question } from "@chopin/protocol";
 
@@ -25,6 +27,9 @@ export function QuestionWhy(
 	let field = useRef<HTMLDivElement>(null);
 	let saved = useRef(why ?? "");
 	let [error, setError] = useState<string>();
+	// What is typed and not yet saved, which a reload would lose.
+	let [dirty, setDirty] = useState(false);
+	usePendingWork(dirty);
 	let editable = canEdit && !!wire;
 
 	// Another writer's change, or Chopin's draft arriving, replaces the line unless it is being edited.
@@ -43,6 +48,7 @@ export function QuestionWhy(
 		if (!element) return;
 		let text = tidy(element.textContent ?? "");
 		element.textContent = text;
+		setDirty(false);
 		if (text === saved.current) return;
 		let previous = saved.current;
 		saved.current = text;
@@ -75,6 +81,7 @@ export function QuestionWhy(
 				onInput={event => {
 					// A emptied field can keep a stray line break, which would hide the placeholder.
 					if (!event.currentTarget.textContent) event.currentTarget.replaceChildren();
+					setDirty(tidy(event.currentTarget.textContent ?? "") !== saved.current);
 				}}
 				onKeyDown={event => {
 					if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -83,6 +90,7 @@ export function QuestionWhy(
 					}
 					if (event.key === "Escape") {
 						if (field.current) field.current.textContent = saved.current;
+						setDirty(false);
 						field.current?.blur();
 					}
 				}}

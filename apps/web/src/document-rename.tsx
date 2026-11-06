@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { boundDocumentTitle, normalizeDocumentTitle } from "@chopin/dialect";
+import { usePendingWork } from "@chopin/editor";
 
 import * as Api from "./api";
 import { heldTyping, holdTyping } from "./title-edit";
@@ -44,6 +45,7 @@ export function DocumentRename(
 	let [title, setTitle] = useState(channel.title);
 	let [error, setError] = useState<unknown>();
 	let [saving, setSaving] = useState(false);
+	usePendingWork(saving || normalizeDocumentTitle(title) !== channel.title);
 	// Enter and the blur it can cause arrive before React re-renders `saving`.
 	let busy = useRef(false);
 	let cancelled = useRef(false);

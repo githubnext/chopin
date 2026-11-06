@@ -13,6 +13,7 @@
 import { applyAwarenessUpdate, Awareness, encodeAwarenessUpdate } from "y-protocols/awareness";
 import * as Y from "yjs";
 
+import { trackPendingWork } from "@chopin/protocol/pending-work";
 import type { Plan } from "@chopin/protocol";
 import type { Provider } from "@lexical/yjs";
 import type { Transport } from "./transport";
@@ -154,6 +155,12 @@ export class PlanProvider implements Provider {
 		this.#wire = options.wire;
 		this.#doc = options.doc;
 		this.awareness = new Awareness(options.doc) as PlanProvider["awareness"];
+		trackPendingWork(this);
+	}
+
+	/** Whether an update has not been acknowledged yet, which a reload would lose. */
+	get unsaved(): boolean {
+		return this.#outbox.size > 0;
 	}
 
 	get epoch(): string | undefined {

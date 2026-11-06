@@ -21,6 +21,7 @@ import { CommentSheet, commentSheetHeading } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
+import { usePendingWork } from "./pending-work";
 import { COARSE_POINTER_QUERY, PRIMARY_COARSE_POINTER_QUERY, usePhone } from "./pointer";
 import {
 	handlesOpenComment,
@@ -441,6 +442,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	compactRef.current = compact;
 	let immediately = options.motionImmediately?.() ?? false;
 	let draft = canEdit ? state.draft : undefined;
+	usePendingWork(!!draft);
 	let measurePreview = useCallback((request: PreviewRequest, height: number) => {
 		if (height <= 0) {
 			setPreviewMeasurement(undefined);

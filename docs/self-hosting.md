@@ -761,6 +761,20 @@ seconds, because a restart that stops the old process before it starts the new
 one takes longer than 1.5 seconds. The design's 1.5 seconds assumes a second
 process already waiting to take over.
 
+A tab opened before an upgrade asks for the hashed `/assets/*` files of its own
+build, which the new image does not carry, since a build here has only its own
+files. Chopin answers a missing file under `/assets/` with 404 and never with the
+app's HTML. When a part of the page fails to load for that reason (Vite's
+`vite:preloadError`), the tab reloads to fetch the new build, but only while the
+server answers with a page of another build than the one running (it asks for the
+page and compares the entry script, so a failure with the server away, or with no
+upgrade behind it, is left to the page's own recovery) and it holds nothing the
+server has not taken: no unacknowledged edit, unsent message, answer or draft.
+Otherwise it leaves the failure as it was and a later one reloads it, and a reload
+that did not cure the failure is not repeated within ten seconds. Keeping the previous build's assets in the new image would let such a tab
+carry on without reloading, but it needs the previous image, which nothing in this
+repository's build has.
+
 Migration files are checksummed once applied. Never edit an applied migration.
 Because migrations are forward-only, returning to an older application image
 may require restoring the pre-upgrade database rather than merely changing the

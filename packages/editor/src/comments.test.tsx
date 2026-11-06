@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { composerKey, DraftCard, mention, stamp, ThreadCard } from "./comments";
+import { composerKey, composerUnsent, DraftCard, mention, stamp, ThreadCard } from "./comments";
 import { displayName } from "./display-name";
 
 import type { Comment } from "@chopin/protocol";
@@ -257,5 +257,21 @@ describe("mention", () => {
 	it("leaves other words alone", () => {
 		expect(mention("@chopinesque ", 13)).toBeUndefined();
 		expect(mention("mail@chopin ", 12)).toBeUndefined();
+	});
+});
+
+describe("composerUnsent", () => {
+	it("holds nothing for an empty field or one of spaces", () => {
+		expect(composerUnsent("", false)).toBe(false);
+		expect(composerUnsent("  \n ", false)).toBe(false);
+	});
+
+	it("holds words typed and not sent", () => {
+		expect(composerUnsent("Keep the rollout reversible.", false)).toBe(true);
+	});
+
+	it("holds a send that has left the field and has not been answered, which a refusal puts back", () => {
+		expect(composerUnsent("", true)).toBe(true);
+		expect(composerUnsent("Keep the rollout reversible.", true)).toBe(true);
 	});
 });

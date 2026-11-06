@@ -47,6 +47,7 @@ export { AgentFace, Face } from "./face";
 export type { FaceProps } from "./face";
 export { GitHubReferencesProvider } from "./github-references";
 export type { Refusal } from "./history";
+export { usePendingWork } from "./pending-work";
 export { isDemoHandle, personName, setFaceProfiles } from "./people";
 export type { FaceProfile } from "./people";
 export { PlanEditor } from "./plan-editor";

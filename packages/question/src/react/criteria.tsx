@@ -14,6 +14,7 @@ import { markKey } from "../draft";
 import { MAX_CRITERIA, MAX_CRITERION_LABEL } from "../limits";
 import { plainInlineText } from "./inline-segments";
 import { Key } from "./option-key";
+import { usePendingWork } from "./use-pending-work";
 
 import type { ComponentType, KeyboardEvent, ReactNode } from "react";
 import type { IconProps } from "@chopin/icons";
@@ -208,6 +209,8 @@ function useAdd(
 		? criteria.find(criterion => criterion.label.trim().toLowerCase() === label.toLowerCase())
 		: undefined;
 	let ready = !!label && !duplicate;
+	// Typed text is kept until the criterion is added, so a reload would lose it.
+	usePendingWork(!!label || pending);
 	let hint = duplicate ? `Already a criterion: ${duplicate.label}` : failure ?? "";
 	return {
 		text,
