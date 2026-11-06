@@ -154,7 +154,7 @@ export function startingMessage(login: string, failure?: Session.PlannerStartFai
 }
 
 export function forbiddenMessage(repository: string): string {
-	return `Attaching as this document's Planner needs push or administration access to ${repository}.`;
+	return `Connecting to this document needs push or administration access to ${repository}.`;
 }
 
 export class PlannerAttachments {
@@ -371,8 +371,8 @@ export class PlannerAttachments {
 		this.#invalidate(hold, {
 			ok: false,
 			code: "access-revoked",
-			message: `This document's Planner ownership was released, so ${hold.login} is no longer `
-				+ `attached. Attach again to resume.`,
+			message: `This document's connection was released, so ${hold.login} is no longer `
+				+ `connected. Connect again to resume.`,
 		});
 		return false;
 	}
@@ -512,7 +512,7 @@ export class PlannerAttachments {
 			}
 			throw error;
 		}
-		if (!claimed) throw new Error("The document's Planner owner changed while attaching.");
+		if (!claimed) throw new Error("The document's owner changed while connecting.");
 		let hold: Hold = {
 			channelId,
 			userId: user.id,
@@ -720,8 +720,8 @@ function resetRefusal(login: string): AttachRefusal {
 	return {
 		ok: false,
 		code: "access-revoked",
-		message: `A repository writer reset this document's Planner, so ${login} is no longer `
-			+ `attached. Attach again to resume.`,
+		message: `A repository writer reset this document's connection, so ${login} is no longer `
+			+ `connected. Connect again to resume.`,
 	};
 }
 
@@ -729,18 +729,18 @@ function documentEndedRefusal(): AttachRefusal {
 	return {
 		ok: false,
 		code: "document-archived",
-		message: "This document was archived or deleted, so its Planner was released.",
+		message: "This document was archived or deleted, so its connection was released.",
 	};
 }
 
 function attachedRefusal(hold: Hold): AttachRefusal {
 	let message = hold.link
-		? `${hold.login} is attached as this document's Planner. A document has one Planner at a time.`
+		? `${hold.login} is connected to this document. A document has one connection at a time.`
 		: !hold.releaseAt
-		? `${hold.login} is this document's Planner, and its connection dropped. Its work is kept `
-			+ "until it reconnects. A document has one Planner at a time."
-		: `${hold.login} detached from this document's Planner and holds it until `
-			+ `${hold.releaseAt.toISOString()} unless they reattach. A document has one Planner at a time.`;
+		? `${hold.login} is connected to this document, and its connection dropped. Its work is kept `
+			+ "until it reconnects. A document has one connection at a time."
+		: `${hold.login} disconnected from this document and keeps it until `
+			+ `${hold.releaseAt.toISOString()} unless they connect again. A document has one connection at a time.`;
 	return { ok: false, code: "planner-attached", message };
 }
 
@@ -748,8 +748,8 @@ function signInRefusal(origin: string, login: string): AttachRefusal {
 	return {
 		ok: false,
 		code: "sign-in-required",
-		message: `Sign in to Chopin at ${origin} in a browser as ${login}, then attach again. `
-			+ `The Planner's repository tools act with that sign-in.`,
+		message: `Sign in to Chopin at ${origin} in a browser as ${login}, then connect again. `
+			+ `Repository tools act with that sign-in.`,
 	};
 }
 
@@ -763,9 +763,9 @@ function machineEndedRefusal(machine: string, login: string): AttachRefusal {
 	return {
 		ok: false,
 		code: "access-revoked",
-		message: `The paired machine ${machine} that made ${login} this document's Planner was `
-			+ `disconnected from Chopin or must be paired again, so the Planner was released. `
-			+ "Run `chopin pair` on it, then attach again.",
+		message: `The paired machine ${machine} that connected ${login} to this document was `
+			+ `disconnected from Chopin or must be paired again, so the connection was released. `
+			+ "Run `chopin pair` on it, then connect again.",
 	};
 }
 
@@ -773,8 +773,8 @@ function signInEndedRefusal(origin: string, login: string): AttachRefusal {
 	return {
 		ok: false,
 		code: "sign-in-required",
-		message: `The Chopin browser sign-in that made ${login} this document's Planner ended, so the `
-			+ `Planner was released. Sign in to Chopin at ${origin} in a browser as ${login}, then `
-			+ `attach again.`,
+		message: `The Chopin browser sign-in that connected ${login} to this document ended, so the `
+			+ `connection was released. Sign in to Chopin at ${origin} in a browser as ${login}, then `
+			+ `connect again.`,
 	};
 }

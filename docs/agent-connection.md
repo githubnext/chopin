@@ -242,7 +242,7 @@ time. While a client is attached, any other `attach` for that document is
 refused with `planner-attached`, and the `message` names the holder's GitHub login:
 
 ```text
-octocat is attached as this document's Planner. A document has one Planner at a time.
+octocat is connected to this document. A document has one connection at a time.
 ```
 
 One exception serves a client that left a connection that died unnoticed. A client
@@ -268,7 +268,7 @@ the ownership; another account is refused with `planner-attached`, and the
 `message` says until when the holder keeps it:
 
 ```text
-octocat detached from this document's Planner and holds it until 2026-10-10T19:42:00.000Z unless they reattach. A document has one Planner at a time.
+octocat disconnected from this document and keeps it until 2026-10-10T19:42:00.000Z unless they connect again. A document has one connection at a time.
 ```
 
 When the grace period ends the ownership is released and any eligible account
@@ -286,7 +286,7 @@ Another account is refused with `planner-attached` and a `message` that says the
 holder's connection dropped and its work is kept until it reconnects:
 
 ```text
-octocat is this document's Planner, and its connection dropped. Its work is kept until it reconnects. A document has one Planner at a time.
+octocat is connected to this document, and its connection dropped. Its work is kept until it reconnects. A document has one connection at a time.
 ```
 
 A server restart releases every attachment and ownership at once; reattach after
@@ -325,9 +325,9 @@ instead of attaching; a fresh attach whose sign-in ends while the server checks
 it is refused with `sign-in-required` (4401). The `message` says what happened:
 
 ```text
-The Chopin browser sign-in that made octocat this document's Planner ended, so the Planner was released. Sign in to Chopin at https://chopin.example in a browser as octocat, then attach again.
-A repository writer reset this document's Planner, so octocat is no longer attached. Attach again to resume.
-This document's Planner ownership was released, so octocat is no longer attached. Attach again to resume.
+The Chopin browser sign-in that connected octocat to this document ended, so the connection was released. Sign in to Chopin at https://chopin.example in a browser as octocat, then connect again.
+A repository writer reset this document's connection, so octocat is no longer connected. Connect again to resume.
+This document's connection was released, so octocat is no longer connected. Connect again to resume.
 ```
 
 | Refusal code           | Close code | Meaning                                                                |
@@ -946,7 +946,7 @@ not apply to it.
   cards keep the status last reported, not `stopped`, marked `disconnected` for the
   people reading them, its Decisions stay open in the document and can be answered,
   and an answer given meanwhile is held. Other sessions end as they always did.
-  Chat says once that the Planner disconnected, and once that it came back.
+  Chat says once that the machine disconnected, and once that it came back.
   Nothing waits on the client in the meantime: `@chopin` and `invoke_planner` are
   refused as [without an attached Planner](#without-an-attached-planner), and no
   other account can attach. The document is not let go either: a Default machine's
@@ -963,14 +963,14 @@ not apply to it.
   treated the same way.
 - **Stop is held, not lost.** A Stop Planner, or one run's pause, that cannot
   reach the client is held for its return, and Chat says that the workflows will
-  pause when the Planner reconnects; the run cards keep their last reported status
+  pause when the machine reconnects; the run cards keep their last reported status
   until the client reports otherwise. That covers a Stop pressed while the link is
   down and one already sent whose `control-result` had not come when the link
   dropped. A `stop` the client did not answer within 10 seconds while the link was
-  still attached is kept too: Chat says the Planner has not confirmed it, never that
+  still attached is kept too: Chat says Chopin has not confirmed it, never that
   it stopped, and once the link is found dead (see [Pings](#pings)) says once that the
-  Stop is kept and will be delivered when the Planner reconnects. Chat says a Stop
-  stopped the Planner only when the client confirmed it, that it was asked to when
+  Stop is kept and will be delivered when the machine reconnects. Chat says a Stop
+  stopped Chopin only when the client confirmed it, that it was asked to when
   its connection is known to be down, and that it was not confirmed otherwise. After `resumed`, before anything else,
   the server sends the client one `stop` for every run (or one per run named),
   however many times it was pressed, and the client answers `control-result` as
