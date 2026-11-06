@@ -18,6 +18,7 @@ import * as Questions from "../questions/service";
 import { member } from "../questions/text-response.test-fixtures";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { configured, LOCAL } from "../testing/config";
+import { expectPlainStatusLines } from "../testing/plain-words";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -725,7 +726,10 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 		return () => holds--;
 	};
 	let ws = { data: { handle: "ana" } } as unknown as Socket;
-	let said = () => context.chat.entries.at(-1)?.text;
+	let said = () => {
+		expectPlainStatusLines(context.chat.entries);
+		return context.chat.entries.at(-1)?.text;
+	};
 	let runs = () => (events.findLast(event => event.kind === "chat:state")?.runs as
 		| Wire.Run[]
 		| undefined);
@@ -741,7 +745,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 
 	await Chat.abort(context, ws);
 	expect(planner.calls.at(-1)).toBe("pause");
-	expect(said()).toBe("@ana stopped the Planner and paused its workflows.");
+	expect(said()).toBe("@ana stopped Chopin and paused its workflows.");
 	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
 	await tick();
 	expect(runs()?.map(run => run.status)).toEqual(["paused"]);
@@ -749,7 +753,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 
 	await Chat.resume(context, ws);
 	expect(planner.calls.at(-1)).toBe("resume");
-	expect(said()).toBe("@ana resumed the Planner's workflows.");
+	expect(said()).toBe("@ana resumed Chopin's workflows.");
 	planner.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
 	await tick();
 	expect(runs()?.[0]).toMatchObject({
@@ -974,7 +978,7 @@ test("an explicit Stop, and the document closing, still end a Planner that waits
 		if (ending === "stop") {
 			await Chat.abort(context, { data: { handle: "ana" } } as unknown as Socket);
 			expect(context.chat.entries.at(-1)?.text).toBe(
-				"@ana stopped the Planner and withdrew its open question.",
+				"@ana stopped Chopin and withdrew its open question.",
 			);
 		} else await Chat.close(context.chat);
 		expect(withdrawn.signal.aborted).toBe(true);
@@ -1007,7 +1011,7 @@ test("an explicit Stop leaves a Planner whose workflows are paused and whose que
 
 	await Chat.resume(context, ws);
 	expect(planner.calls.at(-1)).toBe("resume");
-	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed the Planner's workflows.");
+	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed Chopin's workflows.");
 });
 
 test("a turn the Planner's dropped link ended keeps the session whose client may return, and lets it go for good once the link is given up", async () => {
@@ -1021,7 +1025,7 @@ test("a turn the Planner's dropped link ended keeps the session whose client may
 	let suspended = true;
 	Object.assign(planner.session, { suspended: () => suspended });
 	planner.session.stream = async () => {
-		throw new Error("The attached Planner disconnected during the turn.");
+		throw new Error("The machine disconnected during the turn.");
 	};
 	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
 	await Chat.invoke(context, user, "Run the workflow");
@@ -1029,7 +1033,7 @@ test("a turn the Planner's dropped link ended keeps the session whose client may
 	await tick();
 	let said = () => context.chat.entries.map(entry => entry.text);
 	expect(said()).toContain(
-		"The Planner's connection dropped during this reply. Its workflows and open Decisions are kept; ask again once it has reconnected.",
+		"The machine's connection dropped during this reply. Its workflows and open questions are kept; ask again once it has reconnected.",
 	);
 	expect(planner.calls).not.toContain("destroy");
 	expect(context.chat.retained).toBeDefined();
@@ -1114,7 +1118,7 @@ test("an explicit Stop during a reply ends the turn and pauses the workflows, an
 	expect(signal.aborted).toBe(true);
 	expect(planner.calls).toContain("pause");
 	let said = context.chat.entries.map(entry => entry.text);
-	expect(said).toContain("@ana stopped the Planner and paused its workflows.");
+	expect(said).toContain("@ana stopped Chopin and paused its workflows.");
 	expect(said.some(text => text.includes("could not"))).toBe(false);
 	expect(said).not.toContain("Which scope should the plan cover?");
 });
@@ -1144,7 +1148,7 @@ test("concurrent Stop requests pause a retained Planner's workflows only once", 
 	expect(callsBeforePauseSettled).toBe(1);
 	expect(
 		context.chat.entries.filter(entry =>
-			entry.text === "@ana stopped the Planner and paused its workflows."
+			entry.text === "@ana stopped Chopin and paused its workflows."
 		),
 	).toHaveLength(1);
 });
@@ -1156,7 +1160,7 @@ test("Stop ignores active progress and resets for resumed or new workflow runs",
 	let ws = { data: { handle: "ana" } } as unknown as Socket;
 	let notices = () =>
 		context.chat.entries.filter(entry =>
-			entry.text === "@ana stopped the Planner and paused its workflows."
+			entry.text === "@ana stopped Chopin and paused its workflows."
 		);
 
 	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
@@ -1211,8 +1215,8 @@ test("Stop can retry when pausing a retained Planner's workflows fails", async (
 	await Chat.abort(context, ws);
 	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
 	expect(context.chat.entries.map(entry => entry.text).slice(-2)).toEqual([
-		"@ana asked to stop the Planner, but its workflows could not be paused.",
-		"@ana stopped the Planner and paused its workflows.",
+		"@ana asked Chopin to stop, but its workflows could not be paused.",
+		"@ana stopped Chopin and paused its workflows.",
 	]);
 });
 

@@ -11,6 +11,7 @@
 import { describe, expect, it } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
+import { expectPlain } from "../testing/plain-words";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -414,8 +415,9 @@ describe("sending to a named destination", () => {
 		let fullReplies: Sent[] = [];
 		await Chat.send(full.context, sender("ana", "U_ana", fullReplies), message("full", "planner"));
 		expect(fullReplies).toEqual([
-			expect.objectContaining({ kind: "session:error", message: "the Planner queue is full" }),
+			expect.objectContaining({ kind: "session:error", message: "the reply queue is full" }),
 		]);
+		expectPlain(String((fullReplies[0] as { message?: string }).message), "a refused send");
 		expect(full.chat.waiting).toHaveLength(20);
 
 		let failed = room({ busy: true });

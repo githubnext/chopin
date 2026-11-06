@@ -12,6 +12,7 @@ import type { Plan } from "./plan/service";
 import type { Socket, SocketData } from "./wire";
 
 import { createQuestionServiceFixture } from "./question-service.test-fixtures";
+import { expectPlain } from "./testing/plain-words";
 let plans: Plan[];
 let fixture = createQuestionServiceFixture(() => plans, value => {
 	plans = value;
@@ -352,7 +353,11 @@ test("an option is refused for duplicates, bounds, settled questions and active 
 	await asked.created;
 	let id = [...plan.records.keys()][0]!;
 	let { ws, sent } = member();
-	let last = () => sent.at(-1) as { ok: boolean; reason?: string };
+	let last = () => {
+		let reply = sent.at(-1) as { ok: boolean; reason?: string; message?: string };
+		if (reply.message) expectPlain(reply.message, "an option's refusal");
+		return reply;
+	};
 
 	await adding(plan, server, ws, id, "choose THIS", "key-0000-0002");
 	expect(last()).toMatchObject({ ok: false, reason: "duplicate" });
@@ -364,7 +369,11 @@ test("an option is refused for duplicates, bounds, settled questions and active 
 
 	plan.execution = { id: "run-1" } as never;
 	await adding(plan, server, ws, id, "Blocked", "key-0000-0004");
-	expect(last()).toMatchObject({ ok: false, reason: "implementation" });
+	expect(last()).toMatchObject({
+		ok: false,
+		reason: "implementation",
+		message: "An implementation is running; decisions cannot change",
+	});
 	plan.execution = undefined;
 
 	for (let index = 0; index < Question.limits.MAX_SHARED_OPTIONS - 1; index++) {

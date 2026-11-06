@@ -7,6 +7,7 @@ import * as room from "./plan/room";
 import * as Service from "./plan/service";
 
 import { openPlan } from "./testing/plan";
+import { expectPlain } from "./testing/plain-words";
 
 import type { Plan } from "./plan/service";
 
@@ -87,12 +88,14 @@ test("a current-revision manual Save is refused before the deferred draft is cla
 		await Bun.sleep(20);
 		expect(completed).toBe(true);
 		expect(Store.get(plan.questions, id)?.claim).toBeUndefined();
-		expect(actor.frames.find(frame => frame.rid === "deferred-manual-save")).toMatchObject({
+		let paused = actor.frames.find(frame => frame.rid === "deferred-manual-save");
+		expect(paused).toMatchObject({
 			kind: "question:submit",
 			ok: false,
 			reason: "invalid",
-			message: expect.stringMatching(/paused pending verification/i),
+			message: "This decision is paused pending verification",
 		});
+		expectPlain(String((paused as { message?: string }).message), "a paused card's refusal");
 	} finally {
 		release.resolve();
 		await Promise.all([blocker, submitting]);
@@ -158,7 +161,7 @@ test("a deferral committed ahead of a claimed submit restores the selected draft
 		kind: "question:submit",
 		ok: false,
 		reason: "invalid",
-		message: expect.stringMatching(/paused pending verification/i),
+		message: "This decision is paused pending verification",
 	});
 	expect(plan.records.get(id)?.status).toBe("open");
 	expect(Store.get(plan.questions, id)?.claim).toBeUndefined();

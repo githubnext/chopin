@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import * as Question from "@chopin/question";
 
+import { expectPlain } from "../testing/plain-words";
 import * as Store from "./store";
 import { asked } from "./store.test-fixtures";
 
@@ -49,10 +50,13 @@ describe("Store.addOption", () => {
 			reason: "closed",
 		});
 		if (claim.ok) Store.commit(questions, claim.claim);
-		expect(Store.addOption(questions, "w", "b", "GitHub Apps")).toMatchObject({
+		let closed = Store.addOption(questions, "w", "b", "GitHub Apps");
+		expect(closed).toMatchObject({
 			ok: false,
 			reason: "closed",
+			message: "This decision is no longer open",
 		});
+		expectPlain(closed.ok ? "" : closed.message ?? "", "a closed question's refusal");
 
 		let full = asked();
 		for (let i = 1; i < 10; i++) {

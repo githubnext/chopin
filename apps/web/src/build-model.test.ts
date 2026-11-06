@@ -247,8 +247,13 @@ describe("refusals", () => {
 		expect(draftRefusalCopy("implementation is already active")).toBe(
 			"A build is already running.",
 		);
-		expect(draftRefusalCopy("the Planner queue is full"))
-			.toBe("Chopin is busy with other requests. Try again shortly.");
+		for (let queued of ["the reply queue is full", "the Planner queue is full"]) {
+			expect(draftRefusalCopy(queued))
+				.toBe("Chopin is busy with other requests. Try again shortly.");
+		}
+		for (let off of ["Chopin is not running", "the Planner is not running"]) {
+			expect(draftRefusalCopy(off)).toBe("Chopin isn’t running for this document.");
+		}
 		expect(draftRefusalCopy("not connected")).toBeUndefined();
 		expect(draftRefusalCopy("could not save the request")).toBeUndefined();
 	});

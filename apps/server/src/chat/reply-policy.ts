@@ -19,7 +19,7 @@ let inputQuestion: JevQuestion = {
 	},
 };
 
-const UNVERIFIED = "The Planner could not verify its Chat response. Try again.";
+const UNVERIFIED = "Chopin could not verify its Chat response. Try again.";
 
 /** A failure of the Chat reply check alone; the Planner session that produced the reply is sound. */
 export class PlannerReplyError extends Error {}
@@ -143,7 +143,7 @@ export async function publishPlannerReplies(options: {
 							if (retained.length < detail.length) toolsTruncated = true;
 						}
 						if (part.type === "error" || part.type === "abort") {
-							throw new Error("The Planner stream failed. Try again.");
+							throw new Error("Chopin's reply failed. Try again.");
 						}
 						publish(part);
 					}
@@ -182,6 +182,6 @@ export async function publishPlannerReplies(options: {
 		return;
 	}
 	throw new PlannerReplyError(
-		"The Planner could not move its questions into inline decisions. Try again.",
+		"Chopin could not move its questions into inline decisions. Try again.",
 	);
 }

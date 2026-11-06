@@ -675,7 +675,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(decision).toBeVisible();
 		let runs = chatPane(page).getByRole("region", { name: "Workflow runs" });
 		await expect(runs.getByRole("button", { name: /^plan-review, running, \d+m$/ })).toBeVisible();
-		await expect(chatPane(page).getByText("The Planner disconnected.")).toHaveCount(0);
+		await expect(chatPane(page).getByText("The machine disconnected.")).toHaveCount(0);
 		await snap(page, "link-drop-connected-desktop");
 
 		sockets[0]!.close(3000, "network failed");
@@ -698,7 +698,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(runs).not.toContainText("stopped");
 		await expect(
 			chatPane(page).getByText(
-				"The Planner disconnected. Its workflows and open Decisions are kept",
+				"The machine disconnected. Its workflows and open questions are kept",
 			),
 		)
 			.toBeVisible();
@@ -748,7 +748,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await page.getByRole("button", { name: "Stop Chopin", exact: true }).click();
 		await expect(
 			chatPane(page).getByText(
-				"asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+				"asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 			),
 		).toBeVisible();
 		await expect(away).toBeVisible();
@@ -774,7 +774,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(runs.getByRole("button", { name: /^plan-review, paused, \d+m$/ })).toBeVisible();
 		await expect(runs).not.toContainText("disconnected");
 		await expect(runs.locator("[data-run-disconnected-note]")).toHaveCount(0);
-		await expect(chatPane(page).getByText("The Planner reconnected and carries on.")).toBeVisible();
+		await expect(chatPane(page).getByText("The machine reconnected and carries on.")).toBeVisible();
 		await expect(runs.getByRole("button", { name: "Resume plan-review" })).toBeVisible();
 		// The answer given while it was away reached it.
 		expect(await asked).toMatchObject({ status: "answered", value: true });

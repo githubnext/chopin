@@ -9,6 +9,7 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { openPlan } from "../testing/plan";
 import { draftInstruction, draftRefusal } from "../tasks/draft";
 import { implementationGraphs } from "../tasks/plan-graphs";
+import { expectPlain } from "../testing/plain-words";
 import * as Chat from "./service";
 
 import type { Server } from "bun";
@@ -198,10 +199,9 @@ test("a task draft queued behind another turn stays out of the visible queue", a
 test("a task draft is refused without a Planner or when the notice cannot be saved", async () => {
 	let { context, prompts } = await setup();
 	context.config.agent = false;
-	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toEqual({
-		ok: false,
-		reason: "the Planner is not running",
-	});
+	let off = await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.");
+	expect(off).toEqual({ ok: false, reason: "Chopin is not running" });
+	expectPlain(off.ok ? "" : off.reason, "a task draft's refusal");
 	context.config.agent = true;
 	context.persist = async () => {
 		throw new Error("disk full");
@@ -242,10 +242,9 @@ test("a task draft is refused while no remote Planner is attached, and runs once
 test("a task draft takes the same limits as a Chat message, even with the Planner idle", async () => {
 	let { context, prompts } = await setup();
 	context.chat.pendingSends = 20;
-	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toEqual({
-		ok: false,
-		reason: "the Planner queue is full",
-	});
+	let full = await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.");
+	expect(full).toEqual({ ok: false, reason: "the reply queue is full" });
+	expectPlain(full.ok ? "" : full.reason, "a task draft's refusal");
 	context.chat.pendingSends = 0;
 	context.chat.waiting = Array.from({ length: 20 }, (_, index) => ({
 		id: `held-${index}`,
@@ -255,7 +254,7 @@ test("a task draft takes the same limits as a Chat message, even with the Planne
 	expect(context.chat.busy).toBe(false);
 	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toEqual({
 		ok: false,
-		reason: "the Planner queue is full",
+		reason: "the reply queue is full",
 	});
 	expect(context.chat.draft).toBeUndefined();
 	expect(context.chat.entries).toEqual([]);

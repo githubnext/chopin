@@ -393,7 +393,9 @@ export function draftRefusalCopy(message: string, code?: string): string | undef
 	if (/queue is full|too many/.test(message)) {
 		return "Chopin is busy with other requests. Try again shortly.";
 	}
-	if (/Planner is not running/.test(message)) return "Chopin isn’t running for this document.";
+	if (/(?:Planner|Chopin) is not running/.test(message)) {
+		return "Chopin isn’t running for this document.";
+	}
 	if (/write access|authorization expired/.test(message)) {
 		return "You need write access to this repository to build.";
 	}

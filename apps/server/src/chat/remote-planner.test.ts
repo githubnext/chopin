@@ -21,6 +21,7 @@ import {
 import { AgentRefused, connectAgent } from "@chopin/agent-link/client";
 import { GitHubError } from "../github/client";
 import { laterTimers } from "../testing/decisions";
+import { expectPlainStatusLines } from "../testing/plain-words";
 import * as Chat from "./service";
 import * as Question from "@chopin/question";
 import { answerTurns } from "../questions/answer-turns";
@@ -275,10 +276,10 @@ test("an attached Planner receives @chopin and invoke_planner turns as their own
 	await Chat.resume(context, room.ws);
 	expect(controls).toEqual([{ type: "stop", run: undefined }, { type: "resume", run: undefined }]);
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
-		"@rival stopped the Planner and paused its workflows.",
+		"@rival stopped Chopin and paused its workflows.",
 	);
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
-		"@rival resumed the Planner's workflows.",
+		"@rival resumed Chopin's workflows.",
 	);
 });
 
@@ -595,7 +596,10 @@ async function resumablePlanner(
 		},
 		/** The caller of the question stops waiting for it. */
 		withdraw: () => withdrawal.abort(),
-		said: () => context.chat.entries.map(entry => entry.text),
+		said: () => {
+			expectPlainStatusLines(context.chat.entries);
+			return context.chat.entries.map(entry => entry.text);
+		},
 		async drop() {
 			for (let socket of server.sockets) socket.close(1001, "network failed");
 			held = await first!.resumption;
@@ -654,7 +658,7 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 		"running",
 		true,
 	]]);
-	expect(down.said().filter(text => text.startsWith("The Planner disconnected."))).toHaveLength(1);
+	expect(down.said().filter(text => text.startsWith("The machine disconnected."))).toHaveLength(1);
 
 	// The owner's GitHub credential of eight hours is renewed meanwhile, and a day goes by: past
 	// the configured grace, the one-hour maximum and every other timer, nothing ends.
@@ -681,7 +685,7 @@ test("a dropped link's run card says disconnected, not stopped, and its open que
 	client.reportRuns(down.session(), { active: ["run-1"], paused: [], cards: [card("running")] });
 	await until(() => context.chat.runs?.[0]?.disconnected === undefined);
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
-	expect(down.said().filter(text => text === "The Planner reconnected and carries on."))
+	expect(down.said().filter(text => text === "The machine reconnected and carries on."))
 		.toHaveLength(1);
 	// The renewed credential serves the session when it is next used, and nothing was reopened.
 	expect(context.chat.retained).toBeDefined();
@@ -728,7 +732,7 @@ test("a dropped link's grace period only leases ownership: a Stop that ends a qu
 	// left to keep, the account's ownership is leased for the grace period as a detach's is.
 	await Chat.abort(context, down.ws);
 	await until(() => context.plan.records.get(id)?.status === "cancelled");
-	expect(down.said().at(-1)).toBe("@rival stopped the Planner and withdrew its open question.");
+	expect(down.said().at(-1)).toBe("@rival stopped Chopin and withdrew its open question.");
 	await until(() => server.attachments.status(down.channel.id).state === "held");
 	await clock.pass(GRACE_MS - 1);
 	expect(server.attachments.status(down.channel.id)).toMatchObject({ state: "held" });
@@ -792,7 +796,7 @@ test("a Stop pressed while the attached Planner's link is down says it is pendin
 	// Nothing has stopped: the run card stays as last reported, and the notice does not say otherwise.
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+		"@rival asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 	);
 
 	let client = await down.reconnect();
@@ -812,7 +816,7 @@ test("pausing one run while the attached Planner's link is down is held for its 
 	await Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked to pause plan-review. It will pause when the Planner reconnects.",
+		"@rival asked to pause plan-review. It will pause when the machine reconnects.",
 	);
 
 	await down.reconnect();
@@ -828,7 +832,7 @@ test("a Stop pressed while the attached Planner's link is down withdraws a quest
 	let id = [...context.plan.records.keys()][0]!;
 	expect(context.plan.records.get(id)?.status).toBe("open");
 	await Chat.abort(context, down.ws);
-	expect(said().at(-1)).toBe("@rival stopped the Planner and withdrew its open question.");
+	expect(said().at(-1)).toBe("@rival stopped Chopin and withdrew its open question.");
 	expect(context.plan.records.get(id)?.status).toBe("cancelled");
 	expect(context.chat.retained).toBeUndefined();
 
@@ -850,7 +854,7 @@ test("a Stop the client had not answered when its link dropped is held, says it 
 	// Nothing has stopped, and the notice does not say so.
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked to stop the Planner. Its connection is down, so its workflows will pause when it reconnects.",
+		"@rival asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 	);
 
 	down.answering();
@@ -874,7 +878,7 @@ test("pausing one run the client had not answered when its link dropped is held 
 	await pausing;
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked to pause plan-review. It will pause when the Planner reconnects.",
+		"@rival asked to pause plan-review. It will pause when the machine reconnects.",
 	);
 
 	down.answering();
@@ -1016,14 +1020,14 @@ test("a Stop pressed before the server notices the link died says it was not con
 	down.proxy!.hold();
 	await Chat.abort(context, down.ws);
 	expect(down.said().at(-1)).toBe(
-		"@rival asked the Planner to stop its workflows. It has not confirmed yet, and if its "
-			+ "connection is down they will pause when it reconnects.",
+		"@rival asked Chopin to stop its workflows. It has not confirmed yet, and if its "
+			+ "machine is disconnected they will pause when it reconnects.",
 	);
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	await down.proxy!.stop();
 	down.setHeld(await down.first().resumption);
 	await until(() => server.links.length === 0);
-	await until(() => down.said().some(text => text.startsWith("The Planner disconnected.")));
+	await until(() => down.said().some(text => text.startsWith("The machine disconnected.")));
 	expect(down.said().at(-1)).toContain(
 		"A Stop it had not confirmed is kept and will be delivered when it reconnects.",
 	);
@@ -1039,8 +1043,8 @@ test("a pause of one run the client did not confirm in time is reported as not c
 	down.proxy!.hold();
 	await Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
 	expect(down.said().at(-1)).toBe(
-		"@rival asked to pause plan-review. The Planner has not confirmed yet, and if its "
-			+ "connection is down it will pause when it reconnects.",
+		"@rival asked to pause plan-review. Chopin has not confirmed yet, and if its "
+			+ "machine is disconnected it will pause when it reconnects.",
 	);
 });
 
@@ -1065,7 +1069,7 @@ test("a Stop of every run that a Resume of another run partly undid is still rep
 	await down.drop();
 	await stopping;
 	expect(down.said().some(text => text === "@rival stopped the turn.")).toBe(false);
-	expect(down.said().some(text => text.startsWith("@rival asked to stop the Planner."))).toBe(true);
+	expect(down.said().some(text => text.startsWith("@rival asked Chopin to stop."))).toBe(true);
 	await down.reconnect();
 	await until(() => down.controls.includes("stop run-1"));
 });
@@ -1116,7 +1120,7 @@ test("a drop in the middle of a reply keeps the run and question, and Chat does 
 	]]);
 	expect(down.said().some(text => /try again/i.test(text))).toBe(false);
 	expect(down.said()).toContain(
-		"The Planner's connection dropped during this reply. Its workflows and open Decisions are kept; ask again once it has reconnected.",
+		"The machine's connection dropped during this reply. Its workflows and open questions are kept; ask again once it has reconnected.",
 	);
 });
 
@@ -1167,7 +1171,7 @@ test("a Stop the client confirms after the wait for it ended is not announced as
 	// The client paused and said so, after the server stopped waiting.
 	await Bun.sleep(600);
 	await down.drop();
-	await until(() => down.said().some(text => text.startsWith("The Planner disconnected.")));
+	await until(() => down.said().some(text => text.startsWith("The machine disconnected.")));
 	expect(down.said().some(text => text.includes("A Stop it had not confirmed is kept"))).toBe(
 		false,
 	);
