@@ -8,7 +8,7 @@
  * time the turn comes up.
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
 import { expectPlain } from "../testing/plain-words";
@@ -935,5 +935,42 @@ describe("a child document's own Chat", () => {
 		expect(chat.busy).toBe(false);
 		expect(chat.entries).toHaveLength(0);
 		expect(ended).toEqual(["skipped"]);
+	});
+});
+
+describe("a process that is stopping", () => {
+	afterEach(() => Chat.holdStarts(false));
+
+	it("starts no turn: a message to an idle Chat waits in the queue, as behind a running turn", async () => {
+		let { chat, context } = room();
+		let frames: Sent[] = [];
+		Chat.holdStarts();
+
+		await Chat.send(
+			context,
+			sender("ana", "U_ana", frames),
+			message("draft the migration", "planner"),
+		);
+
+		expect(chat.busy).toBe(false);
+		expect(chat.entries).toHaveLength(0);
+		expect(chat.waiting).toMatchObject([{ text: "draft the migration", userId: "U_ana" }]);
+		expect(frames).toMatchObject([{ kind: "chat:send", queued: true }]);
+		expect(Chat.admission(context)).toBe("queued");
+	});
+
+	it("cuts off the running turn with a notice only when one is running", () => {
+		let { chat } = room({ busy: true });
+		chat.turnController = new AbortController();
+
+		Chat.interrupt(chat, "A restart interrupted this reply.");
+
+		expect(chat.turnController.signal.aborted).toBe(true);
+		expect(chat.interruption).toBe("A restart interrupted this reply.");
+		let idle = room().chat;
+		idle.turnController = new AbortController();
+		Chat.interrupt(idle, "unused");
+		expect(idle.turnController.signal.aborted).toBe(false);
+		expect(idle.interruption).toBeUndefined();
 	});
 });

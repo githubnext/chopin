@@ -99,10 +99,36 @@ export type Config = {
 	 * a build and would make development quietly serve stale files.
 	 */
 	devClient: string | undefined;
+	/** The built web client's directory. Defaults to `apps/web/dist`. */
+	clientDir: string | undefined;
+	/** How this process takes over from, and hands over to, another on the same database. */
+	handover: Handover;
 	/** Durable service storage. */
 	storage: StorageConfig;
 	/** GitHub identity and short-lived OAuth attempt encryption. */
 	auth: AuthConfig;
+};
+
+/**
+ * What a restart does with a second process on the same database (`HANDOVER`, and the
+ * `HANDOVER_*` durations).
+ */
+export type Handover = {
+	/**
+	 * `HANDOVER=wait`: when another process holds the writer lease, start in standby and wait for
+	 * its release instead of exiting.
+	 */
+	wait: boolean;
+	/** How long a stopping process lets running Planner turns finish while it keeps serving. */
+	turnWaitMs: number;
+	/** How long readiness stays off while the process still serves, for a proxy's next check. */
+	unreadyMs: number;
+	/** How long the cut waits for requests already in flight before it closes them. */
+	requestWaitMs: number;
+	/** How long after the cut a remote Planner is expected to be back, and shown as attached. */
+	plannerWindowMs: number;
+	/** How long a standby process holds a request that needs the lease before it answers 503. */
+	holdMs: number;
 };
 
 const DEFAULT_PORT = 8787;
@@ -150,6 +176,32 @@ function port(): number {
 		throw new Error(`PORT must be a number between 1 and 65535, got ${JSON.stringify(raw)}`);
 	}
 	return value;
+}
+
+/** A duration setting that may be zero, in whole milliseconds up to `max`. */
+function duration(name: string, fallback: number, max: number): number {
+	let raw = process.env[name];
+	if (raw === undefined) return fallback;
+	let value = Number(raw);
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value > max) {
+		throw new Error(`${name} must be an integer between 0 and ${max} milliseconds`);
+	}
+	return value;
+}
+
+function handover(): Handover {
+	let mode = process.env.HANDOVER;
+	if (mode !== undefined && mode !== "" && mode !== "wait" && mode !== "off") {
+		throw new Error(`HANDOVER must be wait or off, got ${JSON.stringify(mode)}`);
+	}
+	return {
+		wait: mode === "wait",
+		turnWaitMs: duration("HANDOVER_TURN_WAIT_MS", 10_000, 600_000),
+		unreadyMs: duration("HANDOVER_UNREADY_MS", 300, 60_000),
+		requestWaitMs: duration("HANDOVER_REQUEST_WAIT_MS", 1_000, 60_000),
+		plannerWindowMs: duration("HANDOVER_PLANNER_WINDOW_MS", 10_000, 600_000),
+		holdMs: duration("HANDOVER_HOLD_MS", 20_000, 120_000),
+	};
 }
 
 /** A duration setting, in whole milliseconds from 1 second to `max`, 10 minutes by default. */
@@ -316,6 +368,8 @@ export function load(): Config {
 		liveSpikes,
 		liveSpikesRegexJudge,
 		devClient: process.env.DEV_CLIENT || undefined,
+		clientDir: process.env.CLIENT_DIR || undefined,
+		handover: handover(),
 		storage: storage(),
 		auth: loadAuth(serverPort, selection.host),
 	};

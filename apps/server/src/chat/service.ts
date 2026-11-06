@@ -214,6 +214,37 @@ async function report(about: Instruction | undefined, outcome: Ended): Promise<v
 }
 
 /**
+ * Set once the process is on its way out: no turn starts from then on, and a request that would
+ * have started one waits in the queue, as it does behind a running turn.
+ */
+let startsHeld = false;
+
+/** Stop starting turns. Pass `false` to start them again; only a test does. */
+export function holdStarts(held = true): void {
+	startsHeld = held;
+}
+
+/** Whether a new request waits in the queue: a turn is running, or none may start. */
+function occupied(chat: Chat): boolean {
+	return chat.busy || startsHeld;
+}
+
+/**
+ * Cuts off the turn running now because the process is restarting: says so in the Chat, then
+ * stops it. It is not run again, because it may already have changed the document.
+ */
+export function interrupt(chat: Chat, notice: string): void {
+	if (!chat.busy || !chat.turnController || chat.turnController.signal.aborted) return;
+	chat.interruption = notice;
+	chat.turnController.abort();
+}
+
+/** Resolves when the turn running now, and the ones it starts after it, have ended. */
+export async function settled(chat: Chat): Promise<void> {
+	await chat.running?.catch(() => {});
+}
+
+/**
  * Whether an instruction about `thread` would run now, wait, or be refused.
  *
  * Asked before anything is saved, so a full queue refuses a comment rather than
@@ -228,7 +259,7 @@ export function admission(
 	let { chat, config } = context;
 	if (!config.agent) return "off";
 	if (thread && queuedFor(chat, thread, channel)) return "queued";
-	if (!chat.busy) return "running";
+	if (!occupied(chat)) return "running";
 	return chat.waiting.length >= MAX_QUEUE ? "busy" : "queued";
 }
 
@@ -790,7 +821,7 @@ export async function invoke(
 			return "planner-owner-unavailable" as const;
 		}
 		if (chat.closed) return "planner-unavailable" as const;
-		if (chat.busy && chat.waiting.length >= MAX_QUEUE) return "planner-queue-full" as const;
+		if (occupied(chat) && chat.waiting.length >= MAX_QUEUE) return "planner-queue-full" as const;
 		if (notice !== undefined) {
 			if (verified) rememberCheckout(room, verified);
 			await instruct(context, user.login, text, notice, {
@@ -816,7 +847,7 @@ export async function invoke(
 		if (chat.closed) return "planner-unavailable" as const;
 		if (verified) rememberCheckout(room, verified);
 		announce(server, room, entry);
-		if (chat.busy) {
+		if (occupied(chat)) {
 			chat.waiting.push({
 				id: entry.id,
 				handle: user.login,
@@ -1000,7 +1031,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	if (chat.closed) return fail(ws, msg.rid, "chat is closed");
 
 	chat.initiative?.cancel();
-	if (chat.busy) {
+	if (occupied(chat)) {
 		if (chat.waiting.length >= MAX_QUEUE) {
 			say(chat, server, room, {
 				id: ulid(),
@@ -1133,7 +1164,7 @@ export function instruct(
 			return;
 		}
 
-		if (chat.busy) {
+		if (occupied(chat)) {
 			if (chat.waiting.length >= MAX_QUEUE) {
 				say(chat, server, room, {
 					id: ulid(),
@@ -1281,7 +1312,7 @@ async function postDraft(
 	});
 	// A turn that ended while the notice saved may already have started, or finished, this one.
 	if (!chat.waiting.includes(waiting)) return answer();
-	if (chat.busy) {
+	if (occupied(chat)) {
 		drafting(server, room, draft, "queued");
 		return answer();
 	}
@@ -2652,7 +2683,7 @@ async function run(
 	}
 
 	if (chat.closed) return;
-	let next = pending(chat);
+	let next = startsHeld ? undefined : pending(chat);
 	while (next) {
 		if (next.job) chat.handoffJob = next.job;
 		try {

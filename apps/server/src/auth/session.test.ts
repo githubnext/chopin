@@ -192,6 +192,28 @@ describe("hosted login sessions", () => {
 		});
 	});
 
+	it("asks GitHub for no refresh once told to stop, and still serves a login whose access token has not expired", async () => {
+		let storage = new MemoryStorage();
+		let now = new Date("2026-08-13T12:00:00.000Z");
+		await storage.users.put({ id: "U_test", login: "mona", avatarUrl: "", now });
+		let refreshes = 0;
+		let sessions = new Sessions(storage, false, () => now, {
+			refresh: async () => {
+				refreshes++;
+				return grant("ghu_second", "ghr_second");
+			},
+		});
+		// Inside the window before expiry in which a refresh would normally run.
+		let issued = await sessions.issue("U_test", {
+			...grant("ghu_first", "ghr_first"),
+			accessExpiresIn: 30,
+		});
+		sessions.stopRefreshing();
+		let authenticated = await sessions.authenticate(request(pair(issued.cookie)));
+		expect(refreshes).toBe(0);
+		expect(authenticated?.access).toMatchObject({ token: "ghu_first", revision: 1 });
+	});
+
 	it("does not resurrect a session logged out during refresh", async () => {
 		let storage = new MemoryStorage();
 		let now = new Date("2026-08-13T12:00:00.000Z");

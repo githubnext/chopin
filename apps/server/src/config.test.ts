@@ -146,6 +146,43 @@ describe("configuration", () => {
 		}
 	});
 
+	it("exits when another process holds the writer lease unless HANDOVER=wait, and times a hand-over by default as the design proposes", () => {
+		expect(configured({ BACKGROUND_JOBS: "off" }).handover).toEqual({
+			wait: false,
+			turnWaitMs: 10_000,
+			unreadyMs: 300,
+			requestWaitMs: 1_000,
+			plannerWindowMs: 10_000,
+			holdMs: 20_000,
+		});
+		expect(configured({ BACKGROUND_JOBS: "off", HANDOVER: "wait" }).handover.wait).toBe(true);
+		expect(configured({ BACKGROUND_JOBS: "off", HANDOVER: "off" }).handover.wait).toBe(false);
+		expect(
+			configured({
+				BACKGROUND_JOBS: "off",
+				HANDOVER_TURN_WAIT_MS: "0",
+				HANDOVER_UNREADY_MS: "550",
+				HANDOVER_REQUEST_WAIT_MS: "2000",
+				HANDOVER_PLANNER_WINDOW_MS: "15000",
+				HANDOVER_HOLD_MS: "5000",
+			}).handover,
+		).toMatchObject({
+			turnWaitMs: 0,
+			unreadyMs: 550,
+			requestWaitMs: 2_000,
+			plannerWindowMs: 15_000,
+			holdMs: 5_000,
+		});
+		expect(() => configured({ BACKGROUND_JOBS: "off", HANDOVER: "yes" }))
+			.toThrow("HANDOVER must be wait or off");
+		for (let name of ["TURN_WAIT", "UNREADY", "REQUEST_WAIT", "PLANNER_WINDOW", "HOLD"]) {
+			for (let value of ["-1", "1.5", "soon", "999999999"]) {
+				expect(() => configured({ BACKGROUND_JOBS: "off", [`HANDOVER_${name}_MS`]: value }))
+					.toThrow(`HANDOVER_${name}_MS must be an integer between 0 and`);
+			}
+		}
+	});
+
 	it("pings a remote agent connection every 15 seconds and drops it after 120 silent seconds unless configured", () => {
 		let remote = { HARNESS: "remote", BACKGROUND_JOBS: "off" };
 		expect(configured(remote)).toMatchObject({

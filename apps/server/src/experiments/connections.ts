@@ -141,6 +141,7 @@ export class Connections {
 	/** When each live connection opened, by id. */
 	#opened = new Map<string, number>();
 	#waiters = new Map<string, Set<() => void>>();
+	#released = false;
 	#builds = new Map<string, string>();
 	/** Documents whose builds wait behind a connection's current one, first queued first. */
 	#queued = new Map<string, string[]>();
@@ -660,6 +661,14 @@ export class Connections {
 			for (let resolve of this.#waiters.get(key) ?? []) resolve();
 		}
 	}
+	/**
+	 * The server is about to stop listening: every connector waiting for work is woken to its
+	 * ordinary empty answer, and none waits again. It asks again, and reaches the next process.
+	 */
+	stopWaiting() {
+		this.#released = true;
+		for (let waiters of this.#waiters.values()) for (let resolve of waiters) resolve();
+	}
 	/** Wake the connectors that wait on what this connection serves. */
 	wakeConnection(connection: Connection) {
 		if (connection.anyRepository) this.wake(ANY);
@@ -667,6 +676,7 @@ export class Connections {
 	}
 	/** Wait, at most 20 seconds, for work this connection may take. */
 	wait(connection: Connection, signal: AbortSignal) {
+		if (this.#released) return Promise.resolve();
 		let keys = connection.anyRepository
 			? [ANY]
 			: connection.checkouts.map(checkout => checkout.repositoryId);
