@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { Readiness, registerHealthRoutes } from "./health";
 import { Router } from "./router";
 
-function service(holdsLease = () => true) {
-	let readiness = new Readiness(holdsLease);
+function service(holdsLease = () => true, options: { standby?: boolean } = {}) {
+	let readiness = new Readiness(holdsLease, options);
 	let router = new Router();
 	registerHealthRoutes(router, readiness);
 	let get = async (path: string, method = "GET") => {
@@ -77,4 +77,36 @@ test("a probe may ask with HEAD and gets the status without a body", async () =>
 	readiness.started();
 	expect(await get("/api/health/ready", "HEAD")).toMatchObject({ status: 200, body: "" });
 	expect(await get("/api/health/live", "HEAD")).toMatchObject({ status: 200, body: "" });
+});
+
+test("a process waiting for the writer lease is live as standby and never ready, until it holds the lease", async () => {
+	let held = false;
+	let { readiness, live, ready } = service(() => held, { standby: true });
+	expect(await live()).toMatchObject({ status: 200, body: "standby" });
+	expect(await ready()).toMatchObject({ status: 503, body: "standby" });
+	held = true;
+	readiness.acquired();
+	expect(await live()).toMatchObject({ status: 200, body: "live" });
+	expect(await ready()).toMatchObject({ status: 503, body: "starting" });
+	readiness.started();
+	expect(await ready()).toMatchObject({ status: 200, body: "ready" });
+});
+
+test("a standby never answers ready even when startup says it has finished", async () => {
+	let { readiness, ready } = service(() => true, { standby: true });
+	readiness.started();
+	expect(await ready()).toMatchObject({ status: 503, body: "standby" });
+});
+
+test("it counts the readiness checks it refuses once a drain has begun, and no others", async () => {
+	let { readiness, ready, live, get } = service();
+	readiness.started();
+	await ready();
+	await live();
+	expect(readiness.refusedWhileDraining).toBe(0);
+	readiness.draining();
+	await live();
+	await get("/api/health/ready", "HEAD");
+	await ready();
+	expect(readiness.refusedWhileDraining).toBe(2);
 });

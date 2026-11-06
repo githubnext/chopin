@@ -92,3 +92,47 @@ test("a restart is announced to every open socket, with when to come back, befor
 		});
 	}
 });
+
+test("an agent link is told through its own protocol, and is sent no browser frame", async () => {
+	let sockets = new OpenSockets();
+	let restarts: number[] = [];
+	let server = Bun.serve<{ agent: boolean }>({
+		port: 0,
+		hostname: "127.0.0.1",
+		fetch(request, self) {
+			let agent = new URL(request.url).searchParams.has("agent");
+			if (self.upgrade(request, { data: { agent } })) return undefined;
+			return new Response("plain");
+		},
+		websocket: {
+			open(ws) {
+				sockets.opened(ws);
+			},
+			close(ws) {
+				sockets.closed(ws);
+			},
+			message() {},
+		},
+	});
+	let connectTo = async (query: string) => {
+		let client = new WebSocket(`ws://127.0.0.1:${server.port}/${query}`);
+		clients.push(client);
+		let frames: unknown[] = [];
+		client.addEventListener("message", event => frames.push(JSON.parse(String(event.data))));
+		let closed = new Promise<CloseEvent>(resolve => client.addEventListener("close", resolve));
+		await new Promise(resolve => client.addEventListener("open", resolve, { once: true }));
+		return { closed, frames };
+	};
+	let browser = await connectTo("");
+	let agent = await connectTo("?agent");
+	sockets.announceRestart(
+		10_000,
+		ws => (ws.data as { agent: boolean }).agent ? { restart: ms => restarts.push(ms) } : undefined,
+	);
+	await sockets.stopForRestart(server);
+	expect((await agent.closed).code).toBe(SERVICE_RESTART);
+	expect((await browser.closed).code).toBe(SERVICE_RESTART);
+	expect(restarts).toEqual([10_000]);
+	expect(agent.frames).toEqual([]);
+	expect(browser.frames).toMatchObject([{ kind: "session:restarting", reconnectWithinMs: 10_000 }]);
+});

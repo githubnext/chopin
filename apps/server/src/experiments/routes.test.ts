@@ -1928,3 +1928,22 @@ test("a favorite that cannot be read refuses the work rather than guess", async 
 	expect((await (await restarted.request(path, undefined, restarted.alice.cookie)).json()).favorite)
 		.toBe(desk.machine);
 });
+
+test("stopping the waits wakes every connector that waits for work, and none waits again", async () => {
+	let connections = new Connections(() => 0);
+	let machine = { id: "machine", owner: "alice", login: "alice", autoRun: false };
+	let { connection } = connections.open(machine, "Laptop", [
+		{ repository: "org/repo", repositoryId: "repo", commit: "a".repeat(40) },
+	]);
+	let controller = new AbortController();
+	let waiting = connections.wait(connection, controller.signal);
+	let ended = false;
+	void waiting.then(() => ended = true);
+	await Bun.sleep(5);
+	expect(ended).toBe(false);
+	connections.stopWaiting();
+	await waiting;
+	let started = Date.now();
+	await connections.wait(connection, controller.signal);
+	expect(Date.now() - started).toBeLessThan(100);
+});

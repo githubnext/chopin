@@ -1,5 +1,7 @@
 import { SQL } from "bun";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import * as Service from "../../plan/service";
@@ -12,6 +14,13 @@ import type { Server } from "bun";
 
 let database = process.env.TEST_DATABASE_URL;
 let running: Subprocess[] = [];
+// A server is ready only when it has a built client to serve; these tests have no build.
+let client = mkdtempSync(join(tmpdir(), "chopin-client-"));
+writeFileSync(join(client, "index.html"), "<!doctype html><title>Chopin</title>");
+mkdirSync(join(client, "assets"));
+writeFileSync(join(client, "assets", "app-abcd1234.js"), "export {};");
+
+afterAll(() => rmSync(client, { recursive: true, force: true }));
 
 afterEach(async () => {
 	for (let child of running) child.kill();
@@ -31,12 +40,15 @@ function spawn(
 			AGENT: "off",
 			JEV_API_KEY: "synthetic-test-key",
 			APP_ORIGIN: `http://127.0.0.1:${port}`,
+			CLIENT_DIR: client,
 			DATABASE_URL: database!,
 			GITHUB_APP_SLUG: "chopin-test",
 			GITHUB_APP_CLIENT_ID: "client-id",
 			GITHUB_APP_CLIENT_SECRET: "client-secret",
 			GITHUB_ALLOWED_USERS: "",
 			GITHUB_ALLOWED_ORGANIZATIONS: "",
+			// No proxy checks these servers, so a stop has no window to wait out.
+			HANDOVER_UNREADY_MS: "0",
 			PORT: String(port),
 			SESSION_ENCRYPTION_KEY: "22".repeat(32),
 			SERVER_HOST: "127.0.0.1",
@@ -244,6 +256,12 @@ if (database) {
 				let child = spawn(port, "ignore", {}, "pipe");
 				await started(child);
 				await ready(port);
+				// Recovery runs once the server is ready, so a proxy never waits for it.
+				for (let attempt = 0; attempt < 400; attempt++) {
+					let current = await storage.research.get(channelId, workspaceId);
+					if (current?.workspace.inlineReference === "placed") break;
+					await Bun.sleep(25);
+				}
 				expect((await storage.research.get(channelId, workspaceId))?.workspace.inlineReference)
 					.toBe("placed");
 				expect(await countCards()).toBe(1);

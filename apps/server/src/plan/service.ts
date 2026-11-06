@@ -213,6 +213,8 @@ type Persistence = Backend & {
 	committedSource: string;
 	committedDocument: Uint8Array;
 	committedSidecar: JsonValue;
+	/** The revision and sequence this process last wrote a checkpoint for. */
+	checkpointed?: { revision: number; sequence: number };
 	closing: boolean;
 	/** The member whose batch is committing, for derived work that follows their edit. */
 	editor?: string;
@@ -1217,8 +1219,16 @@ export function tellRepositoryUnanswered(
 	});
 }
 
+/** A checkpoint of what is committed, unless this process already wrote one of exactly that. */
+async function checkpointIfStale(plan: Plan): Promise<void> {
+	let { checkpointed, revision, sequence } = plan.persistence;
+	if (checkpointed?.revision === revision && checkpointed.sequence === sequence) return;
+	await checkpointHosted(plan);
+}
+
 async function checkpointHosted(plan: Plan): Promise<void> {
 	let durable = plan.persistence;
+	let written = { revision: durable.revision, sequence: durable.sequence };
 	try {
 		await durable.storage.collaboration.checkpoint({
 			channelId: durable.channelId,
@@ -1234,6 +1244,7 @@ async function checkpointHosted(plan: Plan): Promise<void> {
 			sidecar: durable.committedSidecar,
 			createdAt: new Date(),
 		});
+		durable.checkpointed = written;
 		plan.document.checkpoint = new Uint8Array(durable.committedDocument);
 	} catch (err) {
 		durable.fatal(err);
@@ -1324,6 +1335,18 @@ export async function drain(plan: Plan): Promise<void> {
 	plan.timer = undefined;
 	let pending = () => commit(plan);
 	plan.flushing = plan.flushing.then(pending, pending);
+	await plan.flushing;
+}
+
+/**
+ * Commit what is admitted and checkpoint it, while the document stays open and in use. A
+ * restart does this for every document before it stops serving, so what is left to write when
+ * the last of them closes is little.
+ */
+export async function settle(plan: Plan): Promise<void> {
+	await drain(plan);
+	let checkpoint = () => checkpointIfStale(plan);
+	plan.flushing = plan.flushing.then(checkpoint, checkpoint);
 	await plan.flushing;
 }
 
@@ -2412,7 +2435,7 @@ export async function close(plan: Plan): Promise<void> {
 	await Chat.close(plan.chat);
 	await plan.flushing;
 	await commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan), true);
-	await checkpointHosted(plan);
+	await checkpointIfStale(plan);
 	Questions.shutdown(plan.questions);
 	presence.destroy(plan.presence);
 	plan.document.doc.destroy();
