@@ -32,6 +32,18 @@ test("says what is happening and where while a Planner starts, naming the viewer
 	});
 });
 
+test("says nothing while the machine is not known, rather than a name that may be another machine's", () => {
+	expect(plannerStatus({ state: "starting", login: "mona" }, null)).toBeUndefined();
+	expect(plannerStatus({ state: "disconnected", login: "mona" }, null)).toBeUndefined();
+	expect(plannerStatus(failing(), null)).toBeUndefined();
+	// What the Planner's own state says, and needs no machine's name, is still said.
+	expect(plannerStatus({ state: "none" }, null)).toEqual({ kind: "none", text: NO_MACHINE });
+	expect(plannerStatus({ state: "held", login: "mona", until: AT }, null)).toMatchObject({
+		kind: "held",
+		text: expect.stringMatching(/^@mona's machine stepped away\./),
+	});
+});
+
 test("names whose machine it is when it is not the viewer's, never the machine itself", () => {
 	expect(plannerStatus({ state: "starting", login: "mona" })).toEqual({
 		kind: "starting",
@@ -65,6 +77,29 @@ test("keeps the reason exactly as the machine reported it: no trimming, no stop 
 	) {
 		expect(plannerStatus(failing(2, reason))).toMatchObject({ kind: "cant-start", reason });
 	}
+});
+
+test("says when an offline machine was last seen, as a contact's last seen is said", () => {
+	let seen = new Date(Date.now() - 60_000).toISOString();
+	expect(plannerStatus({ state: "disconnected", login: "mona" }, "Build box", seen)).toEqual({
+		kind: "disconnected",
+		text: `Build box is offline. Last seen ${clockTime(seen)}.`,
+	});
+	// Another day is said with its date, so a machine away since last week is not read as this morning.
+	let before = new Date(Date.now() - 3 * 86_400_000).toISOString();
+	let text = plannerStatus({ state: "disconnected", login: "mona" }, "Build box", before);
+	expect(text).toMatchObject({
+		kind: "disconnected",
+		text: expect.stringMatching(/^Build box is offline\. Last seen .+\d.*\.$/),
+	});
+	expect((text as { text: string }).text).not.toBe(
+		`Build box is offline. Last seen ${clockTime(before)}.`,
+	);
+	// Without a time, the work is still said to be kept.
+	expect(plannerStatus({ state: "disconnected", login: "mona" }, "Build box")).toEqual({
+		kind: "disconnected",
+		text: "Build box is offline. Your work is kept.",
+	});
 });
 
 test("says a disconnected machine is offline and the work is kept, naming it when it is the viewer's", () => {

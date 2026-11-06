@@ -59,12 +59,14 @@ import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import {
 	offlineChoice,
-	plannerRunsOn,
+	plannerLastSeen,
+	plannerMachineName,
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
 import { plannerPlacement, plannerStatus } from "./chat/planner-status";
 import { PlannerAnnouncement } from "./chat/planner-announcement";
+import { useSettledPlannerStatus } from "./chat/planner-settle";
 import { MachineButton } from "./machine-button";
 import { machines as machineStore, summarizeMachines, useLiveMachines } from "./machine-summary";
 import { useLiveBuild } from "./live-build";
@@ -716,17 +718,20 @@ export function RoomWorkspace(
 		&& plannerAttachment.planner.state !== "attached";
 	let plannerDisconnected = plannerDetached && plannerAttachment.planner?.state === "disconnected";
 	// The machine button beside Build plan chooses where work runs; Build plan says when it is offline.
-	let machineChoice = useMachineChoice(
-		room,
-		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
-	);
+	let machinesEnabled = profile.implementation && !!effectiveCanEdit
+		&& !(archivedAt ?? metadata.archivedAt);
+	let machineChoice = useMachineChoice(room, machinesEnabled);
 	// What is not well with the Planner. Where it is told, the machine button, the composer's top
-	// edge, or both, is decided once for every place that tells it (`plannerPlacement`).
+	// edge, or both, is decided once for every place that tells it (`plannerPlacement`). Which
+	// machine it is on is said only once the person's machines are in: null says nothing until then.
 	let attachment = plannerAttachment.wire === wire ? plannerAttachment.planner : undefined;
-	let plannerNote = useMemo(
-		() => plannerStatus(attachment, plannerRunsOn(machineChoice.state)),
-		[attachment, machineChoice.state],
+	let machineName = plannerMachineName(machineChoice.state, attachment, handle, machinesEnabled);
+	let lastSeen = plannerLastSeen(machineChoice.state);
+	let plannerNow = useMemo(
+		() => plannerStatus(attachment, machineName, lastSeen),
+		[attachment, machineName, lastSeen],
 	);
+	let plannerNote = useSettledPlannerStatus(plannerNow);
 	// The choice shows only while the person has a paired machine, live, or the document lists a
 	// teammate's shared one: it appears with their first and goes with their last.
 	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines, machineChoice.state);
