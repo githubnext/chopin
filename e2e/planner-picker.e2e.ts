@@ -610,7 +610,8 @@ for (let [shape, options] of SHAPES) {
  * the server does, on top of what the real server says. Installed before the page opens.
  */
 async function carried(page: Page) {
-	let sockets: Array<{ send: (data: string) => void }> = [];
+	let sockets: Array<{ send: (data: string) => void; close: (options: object) => Promise<void> }> =
+		[];
 	await page.routeWebSocket("**/ws?**", socket => {
 		let upstream = socket.connectToServer();
 		socket.onMessage(message => upstream.send(message));
@@ -619,8 +620,13 @@ async function carried(page: Page) {
 		upstream.onClose((code, reason) => void socket.close({ code, reason }));
 		sockets.push(socket);
 	});
-	return (planner: object) =>
-		sockets.at(-1)!.send(JSON.stringify({ kind: "session:planner", ts: 0, planner }));
+	return {
+		say: (planner: object) =>
+			sockets.at(-1)!.send(JSON.stringify({ kind: "session:planner", ts: 0, planner })),
+		/** The server restarting: the page's socket is closed with 1012 and it reconnects. */
+		restart: () => sockets.at(-1)!.close({ code: 1012, reason: "server restarting" }),
+		opened: () => sockets.length,
+	};
 }
 
 for (let [shape, options] of SHAPES) {
@@ -631,7 +637,7 @@ for (let [shape, options] of SHAPES) {
 		let page = await context.newPage();
 		await authenticate(page, "mona", ORIGIN);
 		await listenForAnnouncements(page);
-		let say = await carried(page);
+		let { say } = await carried(page);
 		await page.goto(`${ORIGIN}${roomPath(room)}`);
 		await ready(page);
 		await createdBy(room, "mona");
@@ -678,13 +684,69 @@ for (let [shape, options] of SHAPES) {
 }
 
 for (let [shape, options] of SHAPES) {
+	test(`through a reconnect the page keeps the last known machine state and says nothing of a restart's passing states, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(120_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		let studio = await machine(page, "studio", true);
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		expect((await studio.poll([])).planners).toHaveLength(1);
+		let link = await studio.backend(room);
+		let button = machineButton(page);
+		await expectHealthy(button);
+		await expectPlannerAttached(page);
+
+		// The server restarts: the page's connection is closed as a restart closes it, and it comes
+		// back. The new server's first word is that there is no machine, then that one is being
+		// connected to, then that the Planner is back, as the first seconds of a deploy go.
+		let sample = { names: [] as string[], offline: 0 };
+		let watch = setInterval(() => {
+			void page.evaluate(() => ({
+				name: document.querySelector('[aria-label^="Runs on"]')?.getAttribute("aria-label"),
+				offline: !!document.querySelector("[data-offline-notice]"),
+			})).then(now => {
+				if (now.name) sample.names.push(now.name);
+				if (now.offline) sample.offline++;
+			}).catch(() => {});
+		}, 50);
+		await carriage.restart();
+		await expect.poll(() => carriage.opened(), { timeout: 15_000 }).toBe(2);
+		await page.waitForTimeout(300);
+		carriage.say({ state: "none" });
+		await page.waitForTimeout(400);
+		carriage.say({ state: "starting", login: "mona" });
+		await page.waitForTimeout(500);
+		carriage.say({ state: "attached", login: "mona" });
+		await page.waitForTimeout(700);
+		clearInterval(watch);
+		// The last known state, a Planner that is attached and so says nothing, stood throughout.
+		expect(sample.names.length).toBeGreaterThan(10);
+		expect(sample.names.filter(name => /Connecting|No machine|offline/.test(name))).toEqual([]);
+		expect(sample.offline).toBe(0);
+		expect(await heard(page)).toEqual([]);
+		await expectHealthy(button);
+		await expectPlannerAttached(page);
+		await link.detach();
+	});
+}
+
+for (let [shape, options] of SHAPES) {
 	test(`a machine that is offline says when it was last seen, on a ${shape}`, async ({ browser }) => {
 		test.setTimeout(120_000);
 		let room = await remoteServer();
 		let context = await browser.newContext(options);
 		let page = await context.newPage();
 		await authenticate(page, "mona", ORIGIN);
-		let say = await carried(page);
+		let { say } = await carried(page);
 		await page.goto(`${ORIGIN}${roomPath(room)}`);
 		await ready(page);
 		await createdBy(room, "mona");
@@ -746,7 +808,7 @@ function refused(document: string, attempts: number) {
 	};
 }
 
-test("a Planner its machine keeps failing to start says why on its machine button, warns at the composer, tells a person with no button everything there, and is announced once, until it attaches", async ({ browser }) => {
+test("a Planner its machine keeps failing to start says why on its machine button alone, tells a person with no button everything at the composer, and is announced once, until it attaches", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
@@ -785,19 +847,9 @@ test("a Planner its machine keeps failing to start says why on its machine butto
 	await expect(button.locator(".machine-glyph-dot")).toHaveAttribute("data-planner", "failing");
 	await expect(button).toHaveAccessibleDescription(/unsafe-checkout: ~\/src\/score/);
 	await expect(button).toHaveAccessibleDescription(/Tried 2 times, last at .+\. Still trying\./);
-	// The composer's top edge warns, for anyone: the words and where to fix it. With the button the
-	// reason is for a screen reader there, and in full on the button's menu.
-	let warning = strip(page);
-	await expect(warning).toHaveText(/^Can't connect to studio\./);
-	await expect(warning).not.toHaveAttribute("role");
-	await expect(warning.getByRole("link", { name: "How to fix" })).toHaveAttribute(
-		"href",
-		/docs\/chopin-cli\.md#cant-connect-to-a-machine$/,
-	);
-	await expect(warning.locator(".sr-only .composer-notice-line")).toHaveText([
-		REASON,
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
+	// With the button the state is told there and nowhere else: the composer's top edge is left
+	// alone, and the reason and where to fix it are on the button's menu, in full.
+	await expect(strip(page)).toHaveCount(0);
 	// Without it the reason is drawn, in full and as given, with what has been tried.
 	let seen = strip(teammate);
 	await expect(seen).not.toHaveAttribute("role");
@@ -861,7 +913,7 @@ test("a Planner its machine keeps failing to start says why on its machine butto
 	await link.detach();
 });
 
-test("on a phone, a Planner its machine keeps failing to start says why at the composer and on the machine button, and in full for a person with no button", async ({ browser }) => {
+test("on a phone, a Planner its machine keeps failing to start says why on its machine button alone, and in full at the composer for a person with no button", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
@@ -888,8 +940,7 @@ test("on a phone, a Planner its machine keeps failing to start says why at the c
 
 	await studio.reportFailure(refused(room, 2));
 	await expect(button).toHaveAttribute("data-planner", "failing");
-	await expect(strip(page)).toContainText("Can't connect to studio.");
-	await expect(strip(page)).toBeInViewport();
+	await expect(strip(page)).toHaveCount(0);
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "planner-failing-phone");
 

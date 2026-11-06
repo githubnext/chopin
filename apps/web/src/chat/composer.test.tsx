@@ -95,7 +95,7 @@ test("puts nothing beneath the composer, whatever the Planner is doing", () => {
 	expect(render()).not.toContain("composer-planner");
 });
 
-test("a warning is an alert on the composer's top edge: the words, a link, and what a screen reader adds", () => {
+test("a warning is an alert on the composer's top edge: the words, its lines, and a link", () => {
 	let markup = render({
 		notice: {
 			tone: "warning",
@@ -109,8 +109,8 @@ test("a warning is an alert on the composer's top edge: the words, a link, and w
 	expect(markup).toContain("Can't connect to Build box.");
 	// Each line stays its own, so nothing is joined to the reason or ended for it.
 	expect(markup).toContain(
-		'<span class="sr-only"><span class="composer-notice-line">The reason</span>'
-			+ '<span class="composer-notice-line">Tried 3 times, last at 6:29 PM. Still trying.</span></span>',
+		'<span class="composer-notice-line">The reason</span>'
+			+ '<span class="composer-notice-line">Tried 3 times, last at 6:29 PM. Still trying.</span>',
 	);
 	expect(markup).toContain(
 		'<a class="composer-notice-link" href="https://example.test/fix" rel="noreferrer" target="_blank">How to fix</a>',
@@ -132,7 +132,6 @@ test("a strip whose lines are shown draws each exactly as supplied, on a line of
 			tone: "warning",
 			text: "Can't connect to @mona's machine.",
 			detail: [reason, "Tried 3 times, last at 6:29 PM. Still trying."],
-			showDetail: true,
 			link: { label: "How to fix", href: "https://example.test/fix" },
 		},
 	});

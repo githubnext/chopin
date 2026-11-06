@@ -381,7 +381,7 @@
 				1
 			]
 		],
-		"sourceHash": "121c27bb62c1ccbc0ff6f878c9a13dd240f54c067ab369940b7b0dc29f9ebb28"
+		"sourceHash": "15f197fd510d2907f0cc3a5262f33db257028c470474fbfb23cf76a519dadd43"
 	},
 	{
 		"file": "apps/web/src/offline-notice.tsx",

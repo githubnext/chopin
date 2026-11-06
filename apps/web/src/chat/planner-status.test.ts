@@ -173,26 +173,13 @@ const PROBLEMS = [
 	{ state: "none" },
 ] as const satisfies readonly Session.PlannerAttachment[];
 
-test("with the machine button, the button carries every state and the composer is left alone but for a machine that cannot be connected to", () => {
+test("with the machine button, the button carries every state, a machine that cannot be connected to included, and the composer is left alone", () => {
 	for (let planner of PROBLEMS) {
 		let status = plannerStatus(planner, "Build box")!;
 		let placed = plannerPlacement(status, true);
 		expect(placed.button).toBe(status);
-		if (status.kind !== "cant-start") expect(placed.strip).toBeUndefined();
+		expect(placed.strip).toBeUndefined();
 	}
-	let status = plannerStatus(failing(), "Build box")!;
-	// Its reason is on the button's menu, so the strip hands it to a screen reader only.
-	expect(plannerPlacement(status, true).strip).toEqual({
-		tone: "warning",
-		text: "Can't connect to Build box.",
-		detail: [
-			"The checkout's git config sets a credential helper",
-			`Tried 3 times, last at ${clockTime(AT)}. Still trying.`,
-		],
-		showDetail: false,
-		link: { label: "How to fix", href: PLANNER_HOW_TO_FIX },
-		silent: true,
-	});
 });
 
 test("without the machine button, the composer's strip is the only carrier, and it carries every state", () => {
@@ -211,7 +198,6 @@ test("without the machine button, a machine that cannot be connected to has its 
 	expect(plannerPlacement(status, false).strip).toMatchObject({
 		text: "Can't connect to @mona's machine.",
 		detail: [reason, `Tried 4 times, last at ${clockTime(AT)}. Still trying.`],
-		showDetail: true,
 		link: { label: "How to fix", href: PLANNER_HOW_TO_FIX },
 	});
 });

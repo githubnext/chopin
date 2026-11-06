@@ -29,12 +29,8 @@ export type ComposerNotice = {
 	 */
 	tone: "error" | "info" | "warning";
 	text: string;
-	/**
-	 * More than the words say, one line each, exactly as supplied: drawn beneath them when
-	 * `showDetail` is set, otherwise only for a screen reader.
-	 */
+	/** More than the words say, one line each, exactly as supplied: drawn beneath them. */
 	detail?: readonly string[];
-	showDetail?: boolean;
 	/** A link in the strip, in the accent, for where to go about it. */
 	link?: { label: string; href: string };
 	action?: { label: string; onClick: () => void; disabled?: boolean };
@@ -132,7 +128,7 @@ export function ChatComposer(
 				: <InfoIcon className="icon-first-line" size={16} />}
 			<span>
 				{shown.text}
-				{detail && (shown.showDetail ? detail : <span className="sr-only">{detail}</span>)}
+				{detail}
 				{shown.link && (
 					<>
 						{" "}
