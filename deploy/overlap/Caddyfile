@@ -1,0 +1,25 @@
+# The reference proxy for a deploy that overlaps two Chopin processes (see docs/zero-downtime-deploys.md).
+#
+# The site block is for a local run over plain HTTP: with only a port, Caddy issues no certificate.
+# Put the `reverse_proxy` block inside your own site block to serve a real origin. The three
+# placeholders take the values after the colon when the environment does not set them, so the same
+# file serves the compose project here (the slots' service names) and a run on the host's ports.
+{
+	admin off
+}
+
+{$CHOPIN_SITE::8080} {
+	reverse_proxy {$CHOPIN_SLOT_A:chopin-a:8787} {$CHOPIN_SLOT_B:chopin-b:8787} {
+		# Only the process that holds the writer lease is ready, so at most one is chosen.
+		lb_policy first
+		# A request that finds no ready upstream, or a refused dial, waits for one this long and
+		# is tried again every lb_try_interval, whatever its method.
+		lb_try_duration 5s
+		lb_try_interval 100ms
+		# Check readiness actively. The server's HANDOVER_UNREADY_MS is this interval plus a margin.
+		health_uri /api/health/ready
+		health_interval 250ms
+		health_timeout 1s
+		health_status 200
+	}
+}

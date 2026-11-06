@@ -15,16 +15,21 @@ that origin.
 - The application, API, MCP endpoint, and WebSocket share one origin and one
   internal port.
 - One active Chopin process may write to a database. Horizontal application
-  scaling and zero-downtime rolling deployment are not supported.
+  scaling is not supported. A second process can start beside the holder and take
+  over when it stops, which is how a deploy can be invisible; see
+  [Deploys nobody can see](zero-downtime-deploys.md).
 - PostgreSQL 17 is the version used by the repository and browser tests. Other
   versions are not covered by the project test suite.
 - Database migrations are forward-only. There is no automated schema rollback.
-- Restarting the application signs every browser out and releases hosted agent
-  ownership. Documents, transcripts, decisions, background jobs and artifacts,
-  research request staging, child documents, and implementation state remain.
-  In local mode (see below), the returning browser can restore the same login
-  without repeating device-flow sign-in; it still gets a new session and does
-  not reclaim Planner ownership.
+- Restarting the application releases hosted agent ownership, except for a remote
+  Planner that was connected when the process stopped, which keeps its place for
+  a short window (see [Deploys nobody can see](zero-downtime-deploys.md#a-remote-planner-and-its-machine)).
+  Documents, transcripts, decisions, background jobs and artifacts, research
+  request staging, child documents, implementation state and Planner requests
+  that had not started remain. A hosted browser's login is restored when its
+  cookie reaches the new process. In local mode (see below), the returning
+  browser can restore the same login without repeating device-flow sign-in; it
+  still gets a new session and does not reclaim Planner ownership.
 
 ## Choose the access policy first
 
@@ -719,9 +724,10 @@ After the first deployment:
 9. Connect a local coding agent and call `list_documents` if MCP is part of the
    deployment's intended surface.
 
-The image health check calls `/api/session`. It confirms HTTP liveness but does
-not prove that a browser bundle is present, a new database transaction can
-complete, GitHub is reachable, or the Planner can start.
+The image health check calls `/api/health/live`. It confirms HTTP liveness, and
+passes for a process waiting in standby too, but does not prove that a browser
+bundle is present, a new database transaction can complete, GitHub is reachable,
+or the Planner can start; readiness (below) covers the first two.
 
 Two unauthenticated endpoints answer with a status word and nothing else, for a
 proxy or platform that routes on them:
@@ -741,8 +747,8 @@ proxy or platform that routes on them:
 Send new connections only to a ready process. Readiness does not check that
 GitHub is reachable or that a model answers. Both endpoints answer `HEAD` the
 same way.
-They are the first step of Stage 1 of the zero-downtime upgrades design,
-invisible restarts on one server.
+A proxy that routes on them, and the deploy that overlaps two processes, are described
+in [Deploys nobody can see](zero-downtime-deploys.md).
 
 ## Operations
 
@@ -765,6 +771,13 @@ Browser sessions and Planner ownership are cleared at startup.
    migrations before serving.
 4. Repeat the first-start checks after migrations or authentication changes.
 
+This stops the old process before it starts the new one, so there is a gap in which nothing
+listens, and a tab shows its notice if the gap outlasts its quiet period (below). To make a
+deploy invisible instead, start the new process beside the old one with `HANDOVER=wait`
+and stop the old one once the new one is waiting, behind a proxy that holds requests for
+that moment: see [Deploys nobody can see](zero-downtime-deploys.md). Migrations must then be
+expand-only.
+
 A stop signal makes Chopin close every WebSocket with code 1012 (service
 restart) before it exits, rather than the 1001 that stopping the listener
 sends. An open browser tab takes that as a restart: it reconnects after a
@@ -778,19 +791,16 @@ treated as any other lost connection, with the same moment of grace before
 the notice. A refusal Chopin makes of a handshake carries
 `x-chopin-refusal: 1`, and a tab stops retrying on a 4xx only when it does (a
 401 still asks for a sign-in). Without it the 4xx is a proxy's and the tab keeps
-retrying. This is the client half of Stage 1 of the zero-downtime upgrades
-design, invisible restarts on one server; it does not make the gap between the
-old process stopping and the new one listening any shorter. Two things differ
-from that design's current revision, which adds no restart jitter and keeps the
-existing 1.5 seconds of silence for a restart: the random moment before the first
-attempt is added so that tabs do not all return together, and the silence is 5
-seconds, because a restart that stops the old process before it starts the new
-one takes longer than 1.5 seconds. The design's 1.5 seconds assumes a second
-process already waiting to take over.
+retrying. This is the client half of a restart that stops the old process before it
+starts the new one, and it does not make the gap between them any shorter. It
+adds a random moment before the first attempt so that tabs do not all return
+together, and keeps a restart quiet for 5 seconds rather than 1.5, because that
+kind of restart takes longer than 1.5 seconds. A deploy that overlaps two
+processes behind a proxy that holds requests ends well inside 1.5 seconds; see
+[Deploys nobody can see](zero-downtime-deploys.md).
 
 A tab opened before an upgrade asks for the hashed `/assets/*` files of its own
-build, which the new image does not carry, since a build here has only its own
-files. Chopin answers a missing file under `/assets/` with 404 and never with the
+build, which the new image carries only if it was built with `PREVIOUS_IMAGE`. Chopin answers a missing file under `/assets/` with 404 and never with the
 app's HTML. When a part of the page fails to load for that reason (Vite's
 `vite:preloadError`), the tab reloads to fetch the new build, but only while the
 server answers with a page of another build than the one running (it asks for the
@@ -798,9 +808,9 @@ page and compares the entry script, so a failure with the server away, or with n
 upgrade behind it, is left to the page's own recovery) and it holds nothing the
 server has not taken: no unacknowledged edit, unsent message, answer or draft.
 Otherwise it leaves the failure as it was and a later one reloads it, and a reload
-that did not cure the failure is not repeated within ten seconds. Keeping the previous build's assets in the new image would let such a tab
-carry on without reloading, but it needs the previous image, which nothing in this
-repository's build has.
+that did not cure the failure is not repeated within ten seconds. A build given the
+image that runs now (`PREVIOUS_IMAGE`, above) keeps the previous builds' files, so
+such a tab usually carries on without reloading.
 
 Migration files are checksummed once applied. Never edit an applied migration.
 Because migrations are forward-only, returning to an older application image
@@ -839,10 +849,12 @@ Chopin's Origin checks.
 ### Writer lease
 
 The database holds one renewable `chopin:writer` lease. A second application
-process refuses startup. If the active process loses the lease, it drains and
-stops; fencing prevents an expired process from committing collaboration state.
-Allow the previous lease to expire before treating a failed host as safely
-replaced.
+process refuses startup, unless it was started with `HANDOVER=wait`, which makes it
+wait in standby until the holder releases the lease (see
+[Deploys nobody can see](zero-downtime-deploys.md)). If the active process loses the
+lease, it drains and stops; fencing prevents an expired process from committing
+collaboration state. Allow the previous lease to expire (30 seconds after its last
+renewal) before treating a failed host as safely replaced.
 
 ## Troubleshooting
 
@@ -859,7 +871,9 @@ Members read access, the organization approved it, and the user has active
 membership. GitHub outages and rate limits fail closed for new checks.
 
 **A second process refuses startup.** Another holder owns the database writer
-lease. Do not run two application instances against one database.
+lease. Do not run two application instances against one database. To start a
+process beside the holder on purpose, set `HANDOVER=wait`; it waits in standby and
+serves nothing until the holder stops.
 
 **The process refuses startup with an unknown-harness or auth-mode error.**
 `HARNESS` names an adapter that is not in Chopin's harness map, or

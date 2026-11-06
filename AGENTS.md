@@ -19,6 +19,7 @@ The most useful technical references are:
 - [Background jobs and workers](docs/background-jobs.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
 - [Self-hosting](docs/self-hosting.md)
+- [Deploys nobody can see](docs/zero-downtime-deploys.md)
 
 ## Commands
 
@@ -112,10 +113,15 @@ MDAST object identity preserves existing Lexical nodes, selections, and undo
 history.
 
 PostgreSQL is the only runtime storage adapter. One renewable `chopin:writer`
-lease permits one application process per database. Hosted browser sessions use
-encrypted credentials in PostgreSQL and restore on presentation of the browser
-cookie. Startup clears Planner ownership and metadata-only local sessions;
-collaborative state and external implementation runs are durable.
+lease permits one application process per database. A second process started with
+`HANDOVER=wait` waits beside the holder in standby, reading the lease without a lock,
+and takes it when the holder's cut releases it; only the holder serves.
+[Deploys nobody can see](docs/zero-downtime-deploys.md) gives the order and the proxy
+it needs. Hosted browser sessions use encrypted credentials in PostgreSQL and restore
+on presentation of the browser cookie. Startup clears Planner ownership, except a
+remote Planner's persisted hand-over hold, and metadata-only local sessions;
+collaborative state, saved Planner requests and external implementation runs are
+durable.
 
 ## Authority and security
 
@@ -471,6 +477,18 @@ so merge ranges from all mounted editors before replacing a registry entry.
   For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the document's one
   offline notice stays away, and every other surface that speaks of a lost connection
   waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both.
+- The cut has a fixed order (`apps/server/src/handover/cut.ts`, held by its test): readiness
+  off for the whole unready window while everything is still served, then the listener stops,
+  in-flight requests finish, edits stop and commit, link state is persisted, the lease is
+  released, and only then do clients hear `session:restarting` and lose their sockets. A
+  process answers nothing after it releases the lease, and refuses nothing it was routed.
+  Before SIGTERM's cut it keeps serving and starts no new Planner turn. Do not move a step
+  across the release or the listener stop, and do not make readiness depend on a query.
+  `Chat.close` waits for every send already admitted before it marks the Chat closed, so a
+  message being saved at the cut is saved and answered; a `chat:send` that reaches a closed Chat
+  of a stopping process (`holdStarts`) is answered with nothing, never "chat is closed", because
+  its browser sends it again to the next process and must not show it as one that could not be
+  sent.
 - Room opening and closing share the document lifecycle lock. Opening waits for
   an active close; eviction forgets the room only after runtime shutdown and
   persistence complete. Preserve that ordering.
@@ -533,6 +551,10 @@ so merge ranges from all mounted editors before replacing a registry entry.
 - Coolify preview variables that must remain late-bound use direct `${NAME}`
   references. A `${NAME:-default}` can be resolved from production before the
   preview environment is attached.
+- The deploy that overlaps two processes needs a proxy that checks `/api/health/ready`
+  actively and holds requests; `deploy/overlap` is a local reference, not a production
+  file. A stopped Compose slot's name does not resolve, so a deploy script waits for the
+  proxy to see the new slot before it stops the old one (`scripts/overlap.ts` does).
 - The Docker image expects internal port 8787. Changing `PORT` alone breaks its
   health check and routing assumptions.
 - Bun wrapper processes can outlive a failed child. The development and E2E

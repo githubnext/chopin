@@ -306,7 +306,8 @@ identity, progress, and history remain durable across application restart.
 ## Writer lease
 
 One database-wide `chopin:writer` lease permits one active application process.
-A second process refuses startup. The holder renews the lease every 10 seconds
+A second process refuses startup, unless it was started with `HANDOVER=wait`: it then
+waits for the holder's release. The holder renews the lease every 10 seconds
 on its own connection, outside the shared pool. A renewal attempt that takes
 more than about five seconds fails and is retried until the safety deadline,
 25 seconds after the last successful renewal was sent. A renewal that gets no
@@ -339,9 +340,10 @@ is refused. Fencing tokens compare only within one lease, and every row is writt
 under the writer lease. The Chat service writes and reads these rows; see
 [Saved requests](hosted-agent.md#saved-requests).
 
-This lease is why the current deployment model cannot perform a rolling
-application replacement against one database. See
-[Self-hosting](self-hosting.md) for upgrade and backup guidance.
+This lease is why only one process serves at a time, and the hand-over between two is
+the holder's release followed by the waiting process's acquisition; see
+[Deploys nobody can see](zero-downtime-deploys.md). Several processes serving at once
+is not supported. See [Self-hosting](self-hosting.md) for upgrade and backup guidance.
 
 ## Migrations
 
