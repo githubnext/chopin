@@ -613,11 +613,15 @@ async function carried(page: Page) {
 	let sockets: Array<{ send: (data: string) => void; close: (options: object) => Promise<void> }> =
 		[];
 	let muted = false;
+	let hellos = 0;
 	await page.routeWebSocket("**/ws?**", socket => {
 		let upstream = socket.connectToServer();
 		socket.onMessage(message => upstream.send(message));
 		upstream.onMessage(message => {
-			if (muted && typeof message === "string" && message.includes('"session:planner"')) return;
+			if (typeof message === "string") {
+				if (muted && message.includes('"session:planner"')) return;
+				if (message.includes('"session:hello"')) hellos++;
+			}
 			socket.send(message);
 		});
 		socket.onClose((code, reason) => void upstream.close({ code, reason }));
@@ -627,9 +631,16 @@ async function carried(page: Page) {
 	return {
 		say: (planner: object) =>
 			sockets.at(-1)!.send(JSON.stringify({ kind: "session:planner", ts: 0, planner })),
-		/** The server restarting: the page's socket is closed with 1012 and it reconnects. */
-		restart: () => sockets.at(-1)!.close({ code: 1012, reason: "server restarting" }),
-		opened: () => sockets.length,
+		/**
+		 * The server restarting: the page's socket is closed with 1012, and this waits until the page
+		 * has reconnected and been greeted, so that what is said next reaches the new connection.
+		 * (`sockets` also holds every earlier load of the page, so its length says nothing.)
+		 */
+		restart: async () => {
+			let before = hellos;
+			await sockets.at(-1)!.close({ code: 1012, reason: "server restarting" });
+			await expect.poll(() => hellos, { timeout: 15_000 }).toBeGreaterThan(before);
+		},
 		/** Keeps what the real server says of its Planner from the page, so the test says it all. */
 		mute: (on: boolean) => {
 			muted = on;
@@ -726,9 +737,8 @@ for (let [shape, options] of SHAPES) {
 				if (now.offline) sample.offline++;
 			}).catch(() => {});
 		}, 50);
+		carriage.mute(true);
 		await carriage.restart();
-		await expect.poll(() => carriage.opened(), { timeout: 15_000 }).toBe(2);
-		await page.waitForTimeout(300);
 		carriage.say({ state: "none" });
 		await page.waitForTimeout(400);
 		carriage.say({ state: "starting", login: "mona" });
@@ -743,6 +753,75 @@ for (let [shape, options] of SHAPES) {
 		expect(await heard(page)).toEqual([]);
 		await expectHealthy(button);
 		await expectPlannerAttached(page);
+		await link.detach();
+	});
+}
+
+for (let [shape, options] of SHAPES) {
+	test(`through a restart that keeps the machine away for seconds, the page keeps its last known machine state and never says no machine is connected, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(120_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		let studio = await machine(page, "studio", true);
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		expect((await studio.poll([])).planners).toHaveLength(1);
+		let link = await studio.backend(room);
+		let button = machineButton(page);
+		await expectHealthy(button);
+		await expectPlannerAttached(page);
+
+		// The server restarts, and the machine takes six seconds to come back to the new one, which
+		// says there is no machine to everyone who connects until it does.
+		carriage.mute(true);
+		let sample = { names: [] as string[], said: [] as string[], strips: 0, offline: 0 };
+		let watch = setInterval(() => {
+			void page.evaluate(() => ({
+				name: document.querySelector('[aria-label^="Runs on"]')?.getAttribute("aria-label"),
+				said: document.querySelector("[data-planner-status]")?.textContent ?? "",
+				strip: document.querySelectorAll(".chat-composer .composer-notice").length,
+				offline: !!document.querySelector("[data-offline-notice]"),
+			})).then(now => {
+				if (now.name) sample.names.push(now.name);
+				sample.said.push(now.said);
+				sample.strips += now.strip;
+				if (now.offline) sample.offline++;
+			}).catch(() => {});
+		}, 50);
+		await carriage.restart();
+		carriage.say({ state: "none" });
+		await page.waitForTimeout(6_000);
+		clearInterval(watch);
+		// Nothing changed on the page, past the moment a state waits for and long after it.
+		expect(sample.names.length).toBeGreaterThan(80);
+		expect(sample.names.filter(name => /Connecting|No machine|offline/.test(name))).toEqual([]);
+		expect(sample.said.filter(Boolean)).toEqual([]);
+		expect(sample.strips).toBe(0);
+		expect(sample.offline).toBe(0);
+		expect(await heard(page)).toEqual([]);
+		await expectHealthy(button);
+		await shoot(page, `planner-slow-return-${shape}`);
+
+		// The machine's own word comes: a machine being connected to is said once it lasts, then
+		// the Planner is back and the words go.
+		carriage.say({ state: "starting", login: "mona" });
+		await expect(button).toHaveAccessibleName(/^Runs on [^.]+\. Connecting to /);
+		carriage.say({ state: "attached", login: "mona" });
+		await expectHealthy(button);
+		await expectPlannerAttached(page);
+
+		// A machine removed while the page stays connected is still said.
+		carriage.say({ state: "none" });
+		await expect(announced(page)).toHaveText(NONE);
+		await expect(button).toHaveAccessibleName(/^Runs on [^.]+\. No machine is connected\.$/);
 		await link.detach();
 	});
 }
