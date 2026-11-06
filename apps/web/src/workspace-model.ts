@@ -117,6 +117,16 @@ export function transitionWorkspace(state: WorkspaceState, event: WorkspaceEvent
 	return { ...state, desktopChatOpen: event.open };
 }
 
+/**
+ * Where a notice for the whole page, such as a lost connection, is drawn. Where Chat and the
+ * document take turns it stands above both panes, so one element serves whichever shows and
+ * switching between them never mounts it again: a fresh one would announce itself a second time.
+ * The split workspace shows both at once and draws it at the top of the document sheet.
+ */
+export function pageNoticePlace(mode: WorkspaceMode): "above-panes" | "document" {
+	return mode === "split" ? "document" : "above-panes";
+}
+
 export function presentWorkspace(
 	state: WorkspaceState,
 	mode: WorkspaceMode,

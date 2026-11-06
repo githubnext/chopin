@@ -66,7 +66,7 @@ export function MachineGlyph(
 export function PlannerNote({ status }: { status: PlannerStatus }) {
 	return (
 		<>
-			<div aria-label="Planner" className="machine-planner" data-kind={status.kind} role="group">
+			<div aria-label="Connection" className="machine-planner" data-kind={status.kind} role="group">
 				{status.kind === "cant-start"
 					? (
 						<>
@@ -313,7 +313,10 @@ export function MachineButton(
 				<MachineGlyph machine={shown} planner={glyph} />
 			</button>
 			{planner?.kind === "cant-start" && (
-				<span className="sr-only" id={detailId}>{`${planner.reason} ${planner.detail}`}</span>
+				<div className="sr-only" id={detailId}>
+					<p>{planner.reason}</p>
+					<p>{planner.detail}</p>
+				</div>
 			)}
 			{choice.error && <span className="sr-only" role="alert">{choice.error}</span>}
 			{!phone && mounted && createPortal(

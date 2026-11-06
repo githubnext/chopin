@@ -435,8 +435,8 @@ have, how the last one ended and the last line it printed to stderr that says
 why (a closing "Exiting with code 1" notice does not count), with tokens and
 `--env` values masked, your home directory shown as `~` and the line cut at 300
 characters. From the second launch in a row, the document's machine button turns
-its dot to a warning and the composer's top edge says **Can’t connect to studio**
-with a **How to fix** link (see [Can’t connect to a machine](#cant-connect-to-a-machine)),
+its dot to a warning and the composer's top edge says **Can't connect to studio**
+with a **How to fix** link (see [Can't connect to a machine](#cant-connect-to-a-machine)),
 while the connector keeps retrying. Once the Planner attaches, or a launch stays up, it
 goes. A Chopin from before this does not know the report; the connector asks it
 once and carries on.
@@ -500,21 +500,24 @@ machine button's dot is a thin spinner and its name says **Connecting to
 studio** (the machine's name), and an `@chopin` message sent meanwhile waits for
 it. Once it has attached the button says nothing more about it.
 
-### Can’t connect to a machine
+### Can't connect to a machine
 
 Chopin asked a machine to run a document's Planner, and the Planner's backend
 exited before it stayed up, more than once in a row. Everyone in the document
 sees it in two places:
 
 - The machine button, left of **Build plan**, has a warning dot. Its menu opens
-  onto **Can’t connect to studio**, the last line the backend wrote to stderr that
+  onto **Can't connect to studio**, the last line the backend wrote to stderr that
   says why, and how often and when it was tried, such as _Tried 3 times, last at
   6:29 PM. Still trying._
-- The composer's top edge says **Can’t connect to studio** with a **How to fix**
-  link to this section, whatever is being typed. A screen reader hears the same,
-  with the reason, once as it appears. A teammate who has no machine of their own,
-  and so no button, reads **@mona’s machine** there, since only the owner's login
-  is ever named, never the machine.
+- The composer's top edge says **Can't connect to studio** with a **How to fix**
+  link to this section, whatever is being typed. A person who has no machine
+  button, such as a teammate with no machine of their own, reads here what the
+  button's menu would say: the reason exactly as the machine reported it, and how
+  often and when it was tried, under **Can't connect to @mona's machine**, since
+  only the owner's login is ever named, never the machine. A screen reader hears
+  **Can't connect to studio** once, as it appears, from a live region of the page
+  that does not depend on either.
 
 Chopin keeps retrying, and the connector backs off between launches, so nothing
 needs pressing once the cause is fixed: the next launch attaches, the warning

@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "115502c708cd330add8f1ab027dc66b08ebfe38d1d6d8b4439f3da611510d5e1"
+		"sourceHash": "2cbc38e53c5c5098f7aa3798539815c6ee2f2fb415fa19f468ba12d07598b5d4"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -325,7 +325,7 @@
 				1
 			]
 		],
-		"sourceHash": "cada28fddb110122ed1881bd3f0024ee6a3da4cfee3a355787bd3220a82e1b18"
+		"sourceHash": "f061294100aad08d4bb53940aed3fb096159dd0a1fd083adea53a1c4b19823be"
 	},
 	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
@@ -381,7 +381,7 @@
 				1
 			]
 		],
-		"sourceHash": "d6189d40b93c185edaa655a3292dbd628d265bad02489551ee35eb11ed8889f2"
+		"sourceHash": "121c27bb62c1ccbc0ff6f878c9a13dd240f54c067ab369940b7b0dc29f9ebb28"
 	},
 	{
 		"file": "apps/web/src/offline-notice.tsx",
@@ -409,6 +409,6 @@
 				1
 			]
 		],
-		"sourceHash": "965ad1ea7767af169a8ad43b65504b5e7fa07f003455eb24b5f6ed4f37ecedfe"
+		"sourceHash": "3004db266aef1f1130ad40829ecb044b26997499b29498276eb3f31156810c44"
 	}
 ]

@@ -22,15 +22,17 @@ export function connectionNotice(elapsed: number | undefined): ConnectionNotice 
 }
 
 /**
- * Whether a document is cut off from the server: the connection is being re-established
- * after a loss. A first connection that is merely slow is loading, not an outage, and a
- * refusal or a deleted document is not one the connection can recover from.
+ * Whether a document is cut off from the server. The outage the connection reports is the
+ * authority, not its status: a lost connection can still read `connected` for as long as the
+ * attempt to learn why it was lost has not answered, and the notice must not wait on that. A
+ * first connection that is merely slow is loading, not an outage (none is reported), and a
+ * refusal, a deleted document or one that was closed is not one the connection can recover from.
  */
 export function isOffline(
 	connection: "connecting" | "connected" | "reconnecting" | "denied" | "deleted" | "closed",
 	outage: boolean,
 ): boolean {
-	return outage && (connection === "connecting" || connection === "reconnecting");
+	return outage && connection !== "denied" && connection !== "deleted" && connection !== "closed";
 }
 
 /**

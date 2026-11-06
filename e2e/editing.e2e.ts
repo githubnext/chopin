@@ -244,7 +244,7 @@ test("a lost connection is said once, at the top of the document, with Retry onl
 
 	// Past the grace period the notice is an alert, which a screen reader hears as it appears.
 	await expect(notice.getByRole("alert")).toHaveText(
-		"You’re offline. Your changes are kept and will sync when you reconnect.",
+		"You're offline. Your changes are kept and will sync when you reconnect.",
 	);
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
 	// Nothing else says it: the header stays quiet and Chat keeps its draft editable.

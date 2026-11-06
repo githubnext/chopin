@@ -462,6 +462,109 @@ describe("status", () => {
 			}
 		});
 
+		/**
+		 * A server whose probe, the request that asks why a connection was lost, can be made to
+		 * hang for good, as a network that drops packets does, while its sockets still open.
+		 */
+		function mute(): {
+			port: number;
+			hang: (on: boolean) => void;
+			drop: () => void;
+			probes: () => number;
+		} {
+			let hanging = false;
+			let probes = 0;
+			let sockets = new Set<ServerWebSocket<undefined>>();
+			let server = Bun.serve<undefined>({
+				port: 0,
+				hostname: "127.0.0.1",
+				fetch(request, self) {
+					if (request.headers.get("x-chopin-socket-probe") === "1") {
+						probes++;
+						return hanging ? new Promise<Response>(() => {}) : new Response(null, { status: 204 });
+					}
+					return self.upgrade(request) ? undefined : new Response("no", { status: 400 });
+				},
+				websocket: {
+					open: socket => {
+						sockets.add(socket);
+					},
+					close: socket => {
+						sockets.delete(socket);
+					},
+					message() {},
+				},
+			});
+			servers.push(server);
+			return {
+				port: server.port!,
+				hang: on => {
+					hanging = on;
+				},
+				drop: () => {
+					for (let socket of sockets) socket.terminate();
+				},
+				probes: () => probes,
+			};
+		}
+
+		it("is an outage the moment a connection is lost, even while the probe that asks why never answers", async () => {
+			let service = mute();
+			let { wire, outages } = watched(service.port);
+			await until(() => wire.status === "connected", "connected");
+
+			service.hang(true);
+			service.drop();
+			await until(() => service.probes() > 0, "the probe");
+			// The probe is still out, and the page is already told: the outage, and a status that is
+			// no longer `connected`, so a notice need not wait on the probe.
+			expect(outages.at(-1)).toEqual({ failures: 0 });
+			expect(wire.status).toBe("reconnecting");
+			expect(wire.connected).toBe(false);
+		});
+
+		it("is not stalled by a probe that never answers: it gives up on it and keeps trying", async () => {
+			let timeout = AbortSignal.timeout;
+			let random = Math.random;
+			AbortSignal.timeout = () => timeout.call(AbortSignal, 120);
+			Math.random = () => 0;
+			try {
+				let service = mute();
+				let { wire, outages } = watched(service.port);
+				await until(() => wire.status === "connected", "connected");
+
+				service.hang(true);
+				service.drop();
+				await until(() => service.probes() > 0, "the first probe");
+				// Later probes answer; only the first hangs, and without a bound nothing would
+				// ever follow it.
+				service.hang(false);
+				await until(
+					() => wire.status === "connected" && outages.at(-1) === undefined,
+					"reconnected past the hung probe",
+				);
+			} finally {
+				AbortSignal.timeout = timeout;
+				Math.random = random;
+			}
+		});
+
+		it("is woken by the network coming back while a probe is still out", async () => {
+			let service = mute();
+			let { wire } = watched(service.port);
+			await until(() => wire.status === "connected", "connected");
+
+			service.hang(true);
+			service.drop();
+			await until(() => service.probes() > 0, "the probe");
+			service.hang(false);
+			let woken = Date.now();
+			dispatchEvent(new Event("online"));
+			await until(() => wire.status === "connected", "woken reconnect");
+			// Well before the probe's own bound would have let the retry begin.
+			expect(Date.now() - woken).toBeLessThan(1000);
+		});
+
 		it("is not an outage when the first connection is merely slow", async () => {
 			let service = flaky();
 			let { wire, outages } = watched(service.port);

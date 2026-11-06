@@ -4,6 +4,7 @@ import {
 	CHAT_CHOICE_STORAGE_KEY,
 	initialDocumentView,
 	initialWorkspaceState,
+	pageNoticePlace,
 	presentWorkspace,
 	storedDesktopChat,
 	transitionWorkspace,
@@ -151,6 +152,17 @@ describe("adaptive workspace", () => {
 		expect(presentWorkspace({ ...hidden, chatOpen: true }, "split", "plan").documentExpanded)
 			.toBe(false);
 	});
+});
+
+it("draws a page notice in one place whichever of Chat and the document shows, so switching never mounts it again", () => {
+	// Compact and phone layouts show one pane at a time; the notice is above both, not in either.
+	for (let chatOpen of [true, false]) {
+		let state: WorkspaceState = { chatOpen, desktopChatOpen: undefined };
+		expect(presentWorkspace(state, "compact", "plan").documentVisible).toBe(!chatOpen);
+	}
+	expect(pageNoticePlace("compact")).toBe("above-panes");
+	// Split shows both at once, so the document sheet carries it.
+	expect(pageNoticePlace("split")).toBe("document");
 });
 
 it("opens Chat by default and accepts only an explicit saved choice", () => {

@@ -1,5 +1,5 @@
 /**
- * The Chat composer's markup: notice, field, footer and Planner status.
+ * The Chat composer's markup: notice, field and footer.
  *
  * Presentational only. `Chat` owns the draft, pickers, key routing and the wire, and
  * passes what to show; the design audit renders the same component in each live state.
@@ -29,11 +29,17 @@ export type ComposerNotice = {
 	 */
 	tone: "error" | "info" | "warning";
 	text: string;
-	/** For a screen reader only: what the strip's words do not draw. */
-	detail?: string;
+	/**
+	 * More than the words say, one line each, exactly as supplied: drawn beneath them when
+	 * `showDetail` is set, otherwise only for a screen reader.
+	 */
+	detail?: readonly string[];
+	showDetail?: boolean;
 	/** A link in the strip, in the accent, for where to go about it. */
 	link?: { label: string; href: string };
 	action?: { label: string; onClick: () => void; disabled?: boolean };
+	/** Another live region announces what this strip says, so it is drawn with no live role. */
+	silent?: boolean;
 };
 
 export type ChatComposerProps = {
@@ -57,8 +63,6 @@ export type ChatComposerProps = {
 	run?: { action: "stop" | "resume"; disabled: boolean; onClick: () => void };
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
-	/** The remote Planner's status, beneath the composer. */
-	attachment?: ReactNode;
 	input: Omit<
 		DraftInputProps,
 		| "role"
@@ -89,7 +93,6 @@ export function ChatComposer(
 		onSubmit,
 		run,
 		pickers,
-		attachment,
 		input,
 	}: ChatComposerProps,
 ) {
@@ -109,11 +112,15 @@ export function ChatComposer(
 	let warning = shown?.tone === "warning";
 	let alerting = shown?.tone === "error" || warning;
 	let closing = strip.phase === "closing";
+	// Each line as supplied, on a line of its own, so nothing is joined to it or ended for it.
+	let detail = shown?.detail?.map((line, index) => (
+		<span className="composer-notice-line" key={index}>{line}</span>
+	));
 	let stripBody = shown && (
 		<div
 			className={shown.tone === "error" ? "composer-notice motion-feedback" : "composer-notice"}
 			data-motion-feedback={shown.tone === "error" ? "alert" : undefined}
-			role={alerting ? "alert" : "status"}
+			role={shown.silent ? undefined : alerting ? "alert" : "status"}
 			data-error={shown.tone === "error" || undefined}
 			data-warning={warning || undefined}
 			id={cueId}
@@ -125,7 +132,7 @@ export function ChatComposer(
 				: <InfoIcon className="icon-first-line" size={16} />}
 			<span>
 				{shown.text}
-				{shown.detail && <span className="sr-only">{` ${shown.detail}`}</span>}
+				{detail && (shown.showDetail ? detail : <span className="sr-only">{detail}</span>)}
 				{shown.link && (
 					<>
 						{" "}
@@ -314,7 +321,6 @@ export function ChatComposer(
 						</>
 					)}
 			</div>
-			{attachment}
 		</div>
 	);
 }

@@ -54,7 +54,7 @@ import {
 } from "@chopin/editor";
 
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
-import { OfflineNotice } from "./offline-notice";
+import { OfflineAnnouncement, OfflineNotice, useOfflineNotice } from "./offline-notice";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import {
@@ -63,7 +63,8 @@ import {
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
-import { plannerStatus } from "./chat/planner-status";
+import { plannerPlacement, plannerStatus } from "./chat/planner-status";
+import { PlannerAnnouncement } from "./chat/planner-announcement";
 import { MachineButton } from "./machine-button";
 import { machines as machineStore, summarizeMachines, useLiveMachines } from "./machine-summary";
 import { useLiveBuild } from "./live-build";
@@ -563,6 +564,10 @@ export function RoomWorkspace(
 	}, [room]);
 	// Controls dim only once a loss outlasts a blip; actions still read `status`.
 	let treatAsConnected = useConnectionNotice(status !== "connected") === "none";
+	// A lost connection is said once, at the top of the page: decided here, above wherever the
+	// notice is drawn, so a person switching between Chat and the document neither waits out the
+	// grace period again nor hears of it twice.
+	let offline = useOfflineNotice(isOffline(status, !!outage), outage?.failures ?? 0);
 	// The last loss of unsent edits this person has dismissed.
 	let [lostSeen, setLostSeen] = useState(0);
 	let [members, setMembers] = useState<Session.Member[]>([]);
@@ -715,8 +720,8 @@ export function RoomWorkspace(
 		room,
 		profile.implementation && !!effectiveCanEdit && !(archivedAt ?? metadata.archivedAt),
 	);
-	// What is not well with the Planner, told in the machine button and, where it cannot connect, at
-	// the composer. A healthy one is nothing to tell.
+	// What is not well with the Planner. Where it is told, the machine button, the composer's top
+	// edge, or both, is decided once for every place that tells it (`plannerPlacement`).
 	let attachment = plannerAttachment.wire === wire ? plannerAttachment.planner : undefined;
 	let plannerNote = useMemo(
 		() => plannerStatus(attachment, plannerRunsOn(machineChoice.state)),
@@ -1252,6 +1257,23 @@ export function RoomWorkspace(
 
 	let workspaceArchivedAt = archivedAt ?? metadata.archivedAt;
 	let workspaceCanEdit = effectiveCanEdit && !workspaceArchivedAt;
+	// The machine button is drawn in the title bar beside Build plan, and in a phone's top bar
+	// unless an open child has taken that bar over; only a person with a machine choice has one.
+	// A lost connection hides the button without changing where the Planner's state is told:
+	// the offline notice speaks for the connection meanwhile.
+	let machineSlot = ownsMachine && machineChoice.state && workspaceCanEdit
+		? machineChoice
+		: undefined;
+	let titleBuildShown = profile.implementation
+		&& (presentation.type !== "parent-with-child" || phone);
+	let hasMachineButton = !!machineSlot
+		&& (phone
+			? !(presentation.type === "parent-with-child" && planVisible)
+			: titleBuildShown);
+	let plannerWhere = useMemo(
+		() => plannerPlacement(plannerNote, hasMachineButton),
+		[plannerNote, hasMachineButton],
+	);
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,
 		room,
@@ -1536,11 +1558,7 @@ export function RoomWorkspace(
 
 	// A connection that outlasts a blip is said once, at the top of the document's content.
 	let offlineNotice = (
-		<OfflineNotice
-			failures={outage?.failures ?? 0}
-			lost={isOffline(status, !!outage)}
-			onRetry={() => wire?.reconnect()}
-		/>
+		<OfflineNotice onRetry={() => wire?.reconnect()} open={offline.open} retry={offline.retry} />
 	);
 	let statusNotices = (
 		<>
@@ -1664,10 +1682,7 @@ export function RoomWorkspace(
 			)}
 		</div>
 	);
-	let machinePicker = ownsMachine && machineChoice.state && workspaceCanEdit
-			&& status === "connected"
-		? machineChoice
-		: undefined;
+	let machinePicker = status === "connected" ? machineSlot : undefined;
 	let titleProps: TitleProps = {
 		archivedAt: workspaceArchivedAt,
 		canManage: effectiveCanManage,
@@ -1713,6 +1728,7 @@ export function RoomWorkspace(
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
+				<OfflineAnnouncement spoken={offline.spoken} />
 				{childTitle?.slot && (childTitle.phone
 					? createPortal(
 						<PhoneHeaderContent
@@ -1819,7 +1835,7 @@ export function RoomWorkspace(
 		: undefined;
 	// Build plan or the build capsule sits beside the people here; a child open beside its parent
 	// has no build of its own. A phone shows this room's bar only off Document, so it keeps it.
-	let buildSlot = profile.implementation && (presentation.type !== "parent-with-child" || phone)
+	let buildSlot = titleBuildShown
 		&& (
 			<BuildPlanButton
 				blockers={namedBuildBlockers}
@@ -1842,7 +1858,9 @@ export function RoomWorkspace(
 	// phone's is in its top bar instead.
 	let titleBuild = buildSlot && (
 		<>
-			{!phone && machinePicker && <MachineButton choice={machinePicker} planner={plannerNote} />}
+			{!phone && machinePicker && (
+				<MachineButton choice={machinePicker} planner={plannerWhere.button} />
+			)}
 			{buildSlot}
 		</>
 	);
@@ -1859,6 +1877,8 @@ export function RoomWorkspace(
 					<p aria-live="polite" className="sr-only" role="status">
 						<span key={announcement.sequence}>{announcement.text}</span>
 					</p>
+					<OfflineAnnouncement spoken={offline.spoken} />
+					{profile.chat && <PlannerAnnouncement status={plannerNote} />}
 					<Workspace
 						available={available}
 						buildEnabled={build.tabReady}
@@ -1931,7 +1951,7 @@ export function RoomWorkspace(
 								repository={repository}
 								room={room}
 								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
-								planner={plannerNote}
+								plannerStrip={plannerWhere.strip}
 								wire={wire}
 							/>
 						}
@@ -1956,7 +1976,7 @@ export function RoomWorkspace(
 										editingDocument={!childOpen && !!barEdit?.editing}
 										label={metadata.title}
 										machine={machinePicker}
-										planner={plannerNote}
+										planner={plannerWhere.button}
 										members={members}
 										onAction={action => onDocumentAction(room, action)}
 										onComments={() => {

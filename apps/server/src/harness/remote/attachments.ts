@@ -116,40 +116,41 @@ type PendingAttach = {
 };
 
 /**
- * What `@chopin` and `invoke_planner` say when no Planner is attached to the document: with
- * `machines`, when Chopin runs Planners on people's machines, how to get one there.
+ * What `@chopin` and `invoke_planner` say when no Planner is attached to the document, in plain
+ * words that name none of Chopin's own terms: a machine is needed. With `machines`, when Chopin
+ * runs Planners on people's machines, how to get one there; otherwise how to connect a client.
  */
 export function notAttachedMessage(url: string, repository: string, machines = false): string {
 	if (machines) {
-		return "No Planner is attached to this document. Connect a machine that can run Planners "
-			+ "(start `chopin connect` with `--planner-command`), or choose one with the machine "
-			+ "button in Chat.";
+		return "Connect a machine to get a reply. Choose one with the machine button, "
+			+ "or run `chopin connect` on a machine that can reply.";
 	}
-	return `No Planner is attached to this document. To attach one, connect a Planner client to `
-		+ `${url} over the agent connection from a session in a checkout of ${repository}; `
-		+ `that session becomes this document's Planner.`;
+	return `Connect a machine to get a reply. Connect an agent client to ${url} over the agent `
+		+ `connection from a session in a checkout of ${repository}.`;
 }
 
 /**
  * What `@chopin` and `invoke_planner` say while the document's Planner is disconnected: it has
- * not stopped, its work and open Decisions are kept, and it carries on when it reconnects.
+ * not stopped, the work is kept, and it carries on when the machine is back. It names only its
+ * owner's login, never the machine.
  */
 export function disconnectedMessage(login: string | undefined): string {
-	return `This document's Planner${login ? ` (@${login})` : ""} is disconnected, so it cannot take `
-		+ "a message now. Its workflows and open Decisions are kept and answers still reach it, "
-		+ "and it carries on when it reconnects.";
+	return `${login ? `@${login}'s machine` : "The machine"} is offline, so it can't reply now. `
+		+ "Your work is kept and picks up when it's back.";
 }
 
 /**
  * What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready:
- * wait a moment, or, once its backend has failed to start more than once, why it cannot.
+ * still connecting to it, wait a moment, or, once its backend has failed to start more than once,
+ * that it can't connect and why, as the machine reported it. It speaks of the machine, as the
+ * document's machine button does, and names only its owner's login, never the machine.
  */
 export function startingMessage(login: string, failure?: Session.PlannerStartFailure): string {
 	if (failure) {
-		return `This document's Planner can't start on @${login}'s machine: ${failure.reason} `
+		return `Can't connect to @${login}'s machine: ${failure.reason} `
 			+ `(${failure.attempts} attempts in a row). It keeps trying; try again once that is fixed.`;
 	}
-	return `This document's Planner is still starting on @${login}'s machine. Try again in a moment.`;
+	return `Still connecting to @${login}'s machine. Try again in a moment.`;
 }
 
 export function forbiddenMessage(repository: string): string {

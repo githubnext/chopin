@@ -375,8 +375,8 @@ export function startedBy(snapshot: Snapshot | undefined, userId: string): strin
  * not, which reads as Chopin failing to draft.
  */
 export function draftRefusalCopy(message: string, code?: string): string | undefined {
-	if (/Planner.* is disconnected/.test(message)) return "Reconnect the Planner to build.";
-	if (code === "planner-not-attached" || /No Planner is attached/.test(message)) {
+	if (/ is offline, so it can't reply now/.test(message)) return "Reconnect the Planner to build.";
+	if (code === "planner-not-attached" || /Connect a machine to get a reply/.test(message)) {
 		return "Connect a Planner to this document to build.";
 	}
 	if (/accepted comments/.test(message)) {

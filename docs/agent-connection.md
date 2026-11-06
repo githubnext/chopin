@@ -354,7 +354,8 @@ On a server running `HARNESS=remote`, an `@chopin` message in the browser and
 an MCP `invoke_planner` call for a document with no attached client are refused
 with the code `planner-not-attached`, and nothing is posted or queued. A
 document whose Planner is within its grace period, or disconnected with its work kept
-(the message then says so, and that it carries on when it reconnects), counts as
+(the message then says the machine is offline, that the work is kept and that it picks
+up when the machine is back), counts as
 unattached, and so
 does one whose attached connection the request finds stale: its owner's browser
 sign-in has ended or the stored ownership no longer names it. The request closes
@@ -364,7 +365,7 @@ When a paired machine is starting the document's Planner, the request first
 waits up to 30 seconds for it to attach, and is refused only if it has not:
 
 ```text
-This document's Planner is still starting on @<login>'s machine. Try again in a moment.
+Still connecting to @<login>'s machine. Try again in a moment.
 ```
 
 Once the machine's backend has exited before attaching more than once in a row,
@@ -372,20 +373,27 @@ the refusal says why, from what its connector reported (see
 [Hosted agent](hosted-agent.md#remote-planner)), and still only names the login:
 
 ```text
-This document's Planner can't start on @<login>'s machine: <reason> (3 attempts in a row). It keeps trying; try again once that is fixed.
+Can't connect to @<login>'s machine: <reason> (3 attempts in a row). It keeps trying; try again once that is fixed.
 ```
 
-If no machine is starting one, the message says how to get one. Where Chopin
-runs Planners on paired machines:
+If no machine is starting one, the message says how to get one, in plain words:
+a machine is needed. Where Chopin runs Planners on paired machines:
 
 ```text
-No Planner is attached to this document. Connect a machine that can run Planners (start `chopin connect` with `--planner-command`), or choose one with the machine button in Chat.
+Connect a machine to get a reply. Choose one with the machine button, or run `chopin connect` on a machine that can reply.
 ```
 
 Elsewhere it names the document URL:
 
 ```text
-No Planner is attached to this document. To attach one, connect a Planner client to <document URL> over the agent connection from a session in a checkout of <owner/name>; that session becomes this document's Planner.
+Connect a machine to get a reply. Connect an agent client to <document URL> over the agent connection from a session in a checkout of <owner/name>.
+```
+
+A document whose Planner is disconnected is refused with the machine named by its
+owner's login, never by its own name:
+
+```text
+@<login>'s machine is offline, so it can't reply now. Your work is kept and picks up when it's back.
 ```
 
 [Local agent MCP](local-agent-mcp.md#hand-an-instruction-to-the-planner) shows

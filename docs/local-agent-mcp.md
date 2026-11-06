@@ -119,7 +119,7 @@ the call is refused with
 ```json
 {
 	"code": "planner-not-attached",
-	"message": "No Planner is attached to this document. To attach one, connect a Planner client to https://chopin.example/documents/octo-org/score/release-readiness over the agent connection from a session in a checkout of octo-org/score; that session becomes this document's Planner."
+	"message": "Connect a machine to get a reply. Connect an agent client to https://chopin.example/documents/octo-org/score/release-readiness over the agent connection from a session in a checkout of octo-org/score."
 }
 ```
 

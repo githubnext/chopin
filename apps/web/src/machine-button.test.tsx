@@ -1,12 +1,17 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderToStaticMarkupRaw } from "react-dom/server";
 
 import { BuildPlanButton } from "./build-plan-button";
 import { PLANNER_HOW_TO_FIX, plannerStatus } from "./chat/planner-status";
 import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
 
 import type { MachineChoice } from "./machine-choice";
+
+/** Markup with the apostrophe React escapes in text written back, so copy reads as typed. */
+function renderToStaticMarkup(element: Parameters<typeof renderToStaticMarkupRaw>[0]): string {
+	return renderToStaticMarkupRaw(element).replaceAll("&#x27;", "'");
+}
 
 function choice(service: boolean, connected: boolean): MachineChoice {
 	return {
@@ -150,16 +155,17 @@ test("a Planner that cannot start is a warning dot, its reason the button's desc
 	let markup = button({
 		state: "starting",
 		login: "mona",
-		failure: { attempts: 3, reason: "The checkout’s git config sets a credential helper", at: AT },
+		failure: { attempts: 3, reason: "The checkout's git config sets a credential helper", at: AT },
 	});
 	expect(markup).toContain(
-		'aria-label="Runs on build-box. Can’t connect to build-box."',
+		'aria-label="Runs on build-box. Can\'t connect to build-box."',
 	);
 	expect(markup).toContain('data-planner="failing"');
 	let described = /aria-describedby="([^"]+)"/.exec(markup)![1];
+	// The reason as given, and what has been tried, each a block of its own for a screen reader.
 	expect(markup).toMatch(
 		new RegExp(
-			`<span class="sr-only" id="${described}">The checkout’s git config sets a credential helper. Tried 3 times, last at [^<]+. Still trying.</span>`,
+			`<div class="sr-only" id="${described}"><p>The checkout's git config sets a credential helper</p><p>Tried 3 times, last at [^<]+. Still trying.</p></div>`,
 		),
 	);
 });
@@ -177,7 +183,7 @@ test("a disconnected or detached Planner is a muted dot, a missing one changes n
 	}
 	let none = button({ state: "none" });
 	expect(none).toContain(
-		'aria-label="Runs on build-box. No Planner is attached. @chopin needs one to reply."',
+		'aria-label="Runs on build-box. No machine is connected."',
 	);
 	expect(none).toContain('data-planner="none"');
 	// No Planner is not a state of the machine, so its dot is the machine's own.
@@ -193,13 +199,13 @@ test("the top of the menu says why a Planner cannot start, in full, with where t
 	let status = plannerStatus({
 		state: "starting",
 		login: "mona",
-		failure: { attempts: 3, reason: "The checkout’s git config sets a credential helper", at: AT },
+		failure: { attempts: 3, reason: "The checkout's git config sets a credential helper", at: AT },
 	}, "Build box")!;
 	let markup = renderToStaticMarkup(createElement(PlannerNote, { status }));
 	expect(markup).toContain('role="group"');
-	expect(markup).toContain('aria-label="Planner"');
-	expect(markup).toContain("Can’t connect to Build box</p>");
-	expect(markup).toContain("<p>The checkout’s git config sets a credential helper.</p>");
+	expect(markup).toContain('aria-label="Connection"');
+	expect(markup).toContain("Can't connect to Build box</p>");
+	expect(markup).toContain("<p>The checkout's git config sets a credential helper</p>");
 	expect(markup).toMatch(
 		/<p class="machine-planner-detail">Tried 3 times, last at [^<]+\. Still trying\.<\/p>/,
 	);
@@ -220,10 +226,25 @@ test("the top of the menu tells every other state as one sentence, with no link"
 		"<p>Connecting to Build box</p>",
 	);
 	expect(say({ state: "disconnected", login: "mona" })).toContain(
-		"<p>Build box is offline. Its work is kept and picks up when it’s back.</p>",
+		"<p>Build box is offline. Your work is kept.</p>",
 	);
 	expect(say({ state: "none" })).toContain(
-		"<p>No Planner is attached. @chopin needs one to reply.</p>",
+		"<p>No machine is connected.</p>",
 	);
 	expect(say({ state: "none" })).not.toContain("<a");
+});
+
+test("the menu and the button's description keep a reason exactly as the machine gave it", () => {
+	let reason = "  path ends in a slash /  ";
+	let planner = {
+		state: "starting",
+		login: "mona",
+		failure: { attempts: 2, reason, at: AT },
+	} as const;
+	let note = renderToStaticMarkup(
+		createElement(PlannerNote, { status: plannerStatus(planner, "Build box")! }),
+	);
+	// Not trimmed, and no stop added to a path that ends in a slash.
+	expect(note).toContain(`<p>${reason}</p>`);
+	expect(button(planner)).toContain(`<p>${reason}</p>`);
 });

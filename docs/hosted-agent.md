@@ -535,13 +535,22 @@ state, never a machine, checkout, or token. A healthy, attached Planner shows
 nothing. Otherwise the document's machine button carries it (a thin spinner while
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
 while the Planner is away) with its words in the button's name and at the top of its
-menu, and the composer's top edge warns when the machine cannot be connected to, and
-says the rest only while a message is addressed to Chopin. Other harnesses never
-send it, and Chat then shows nothing.
+menu, and the composer's top edge warns when the machine cannot be connected to. A
+person with no machine button (no machine paired or shared, a title bar that does not
+show one, a phone whose top bar an open child has taken) has nowhere else to see the
+state, so for them the composer's top edge says every state, and, for a machine that
+cannot be connected to, draws the reason exactly as the machine reported it. One
+decision, `plannerPlacement`, chooses this for the button, its menu and the strip, so
+they cannot disagree. A screen reader hears each problem state once as it begins, from
+a live region of the page, and nothing when it clears. Other harnesses never send it,
+and Chat then shows nothing.
 
-For a `disconnected` Planner the words name the machine when it is the viewer's own,
-else the login, and say its work is kept and picks up when it is back, with no
-deadline. Its live
+These words are plain and name none of Chopin's own terms: _Connecting to studio_,
+_Can't connect to studio_, _studio is offline. Your work is kept._, _studio stepped away.
+Your work is kept until 10:31 AM._ for a detached holder with its deadline, and _No machine is
+connected._ where none is attached, naming the machine when it is the viewer's own and
+otherwise only its owner's login (_@mona's machine_). A `disconnected` Planner's work is
+kept with no deadline. Its live
 run cards carry `disconnected` beside the status they last reported: each reads
 **disconnected**, not running or stopped, with a still ring instead of the pulse and
 its clock held at the last report; an open card says what it last reported and what
@@ -568,8 +577,8 @@ which it takes to mean no.
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period or
-disconnected with its work kept (the message says the Planner is disconnected and
-carries on when it reconnects), is refused with `planner-not-attached` before
+disconnected with its work kept (the message says its machine is offline and that the work
+is kept and picks up when it is back), is refused with `planner-not-attached` before
 anything is posted or queued.
 Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
