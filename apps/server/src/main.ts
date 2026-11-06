@@ -65,6 +65,7 @@ import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
 import { registerConnectorScript } from "./http/connector-script";
+import { Readiness, registerHealthRoutes } from "./http/health";
 import { registerMachinesPath } from "./http/machines-path";
 import { Router } from "./http/router";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
@@ -192,6 +193,7 @@ const writerLease = new WriterLease(storage.leases, {
 	safetyMs: LEASE_SAFETY_MS,
 	retryMs: LEASE_RETRY_MS,
 }, () => signal());
+const readiness = new Readiness(() => writerLease.held !== undefined);
 let experiments: ExperimentRuntime | undefined;
 let implementations: ReturnType<typeof registerImplementationRoutes> | undefined;
 let experimentTimer: ReturnType<typeof setInterval> | undefined;
@@ -1882,6 +1884,7 @@ function drain(): Promise<void> {
 				record(err);
 			}
 		};
+		readiness.draining();
 		// Before the sockets close, so no link withdraws its questions on the way out.
 		plannerAttachments?.shutdown();
 		if (server) await attempt(() => server.stop(true));
@@ -2892,6 +2895,7 @@ registerConnectorScript(router, {
 	source: join(import.meta.dir, "../../connector/src/main.ts"),
 });
 registerMachinesPath(router);
+registerHealthRoutes(router, readiness);
 
 try {
 	await storage.health();
@@ -2957,6 +2961,7 @@ try {
 	scheduleResearchRecovery(recovery.deferred);
 	await researchService.recoverTerminalPlannerInline();
 	jobRunner.start();
+	readiness.started();
 } catch (err) {
 	if (listening) await listening.stop(true).catch(() => {});
 	if (researchRecoveryTimer) clearTimeout(researchRecoveryTimer);
