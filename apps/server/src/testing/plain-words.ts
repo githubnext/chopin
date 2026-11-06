@@ -21,7 +21,7 @@ export function expectPlainLines(entries: readonly Line[]): void {
 	}
 }
 
-/** The Chat lines about a machine and its connection (stopping, resuming, dropping, returning). */
+/** The Chat lines about a machine and its connection (stopping and resuming its work). */
 export function expectPlainStatusLines(entries: readonly Line[]): void {
 	for (let entry of entries) {
 		if (entry.author.kind === "system") {
