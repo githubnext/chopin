@@ -206,6 +206,52 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 	expect(context.chat.entries.map(entry => entry.text)).toEqual(["Just talking"]);
 });
 
+/** Keeps a person's requests as rows, as `main.ts` does in hosted mode. */
+function withRows(room: Awaited<ReturnType<typeof remoteRoom>>) {
+	let { context, server, channel } = room;
+	context.deferred = { noticeDelayMs: 60_000 };
+	context.plannerReady = () => server.attachments.confirmed(channel.id);
+	context.persist = (chat, deferred) => Plan.persistDeferred(context.plan, chat, deferred);
+}
+
+test("with rows, a message sent while no Planner is attached is saved as sent, never refused, and the client that attaches afterwards receives it once, as the owner, in order", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	withRows(room);
+	let first = await room.send("@chopin draft the plan");
+	let second = await room.send("@chopin and then this");
+	expect(first).toMatchObject({ kind: "chat:send", queued: true });
+	expect(second).toMatchObject({ kind: "chat:send", queued: true });
+	expect(context.chat.entries.map(entry => entry.deliveryState)).toEqual(["sent", "sent"]);
+	expect(await room.owner()).toBeUndefined();
+	expect(await room.storage.deferredTurns.list(room.channel.id, ["waiting"])).toHaveLength(2);
+
+	let script = scriptedPlanner();
+	let member = await attach(room.server.url, room.channel.id, script.handlers);
+	cleanups.push(() => member.detach());
+	// What `main.ts` does when a Planner attaches.
+	await Chat.kick(context);
+	await context.chat.running;
+	expect(script.turns.map(turn => turn.prompt)).toEqual([
+		expect.stringContaining("draft the plan"),
+		expect.stringContaining("and then this"),
+	]);
+	expect(await room.owner()).toBe(room.logins.get("member"));
+	expect(
+		context.chat.entries.filter(entry => entry.author.kind === "member").map(entry =>
+			entry.deliveryState
+		),
+	).toEqual(["delivered", "delivered"]);
+	expect((await room.storage.deferredTurns.list(room.channel.id)).map(row => row.state)).toEqual([
+		"ended",
+		"ended",
+	]);
+	// Another attach finds nothing left to send.
+	await Chat.kick(context);
+	await Bun.sleep(20);
+	expect(script.turns).toHaveLength(2);
+});
+
 test("other harnesses keep claiming ownership for the sender as before", async () => {
 	let room = await remoteRoom();
 	let { context } = room;

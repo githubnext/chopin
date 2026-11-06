@@ -44,6 +44,7 @@ import * as Initiative from "./chat/initiative";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
+import { resolveChild } from "./chat/children";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
 import { ReferenceService } from "./chat/references";
 import { createConversationRuntime } from "./conversation-plan/runtime";
@@ -154,7 +155,7 @@ import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch"
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { InvestigationPlacement } from "./plan/room";
-import type { ChannelRecord, Lease } from "./storage/model";
+import type { ChannelRecord, DeferredTurn, Lease } from "./storage/model";
 import type {
 	AuthorizationResult,
 	SidebarSocket,
@@ -623,7 +624,7 @@ function conversation(
 	repository: Chat.Room["repository"],
 ): Chat.Room {
 	let opened = room.plan!;
-	return conversationRuntime.bind({
+	let context: Chat.Room = conversationRuntime.bind({
 		chat: opened.chat,
 		plan: opened,
 		server,
@@ -668,7 +669,18 @@ function conversation(
 			}
 			: undefined,
 		plannerStarting: plannerAttachments ? () => plannerStarting(room.id) : undefined,
-		persist: chat => Service.persist(opened, chat),
+		// A person's request that cannot start is kept as a row, except under `AUTH_MODE=local`,
+		// which is never handed over and keeps its queue in memory.
+		...(config.auth.local ? {} : {
+			plannerReady: plannerAttachments ? () => plannerAttachments!.confirmed(room.id) : undefined,
+			deferred: {
+				noticeDelayMs: config.handover.deferredNoticeMs,
+				restoreComment: row => restoreComment(context, row),
+				threadEnded: row =>
+					Comments.failed(server, row.threadChannelId ?? row.documentId, row.threadId!),
+			},
+		}),
+		persist: (chat, deferred) => Service.persistDeferred(opened, chat, deferred),
 		...(room.parentChannelId
 			? {
 				rootChannelId: room.parentChannelId,
@@ -886,6 +898,146 @@ function conversation(
 			}
 			: undefined,
 	});
+	return context;
+}
+
+/**
+ * The queue item of a comment sent to Chopin that a restart left waiting, built again from its
+ * thread. A thread in a child is read through that child, which stays open until the turn ends.
+ */
+async function restoreComment(context: Chat.Room, row: DeferredTurn): Promise<unknown> {
+	if (!row.threadId) return undefined;
+	if (!row.threadChannelId) return Comments.restore(context, row.threadId, row.handle);
+	let child = await resolveChild(
+		storage.channels,
+		context.room,
+		context.repository.id,
+		row.threadChannelId,
+	);
+	if (!child) return undefined;
+	let held = Rooms.hold(child.id);
+	let release = () => {
+		held.release();
+		evict(held.room);
+	};
+	try {
+		await plan(held.room, server);
+		let restored = Comments.restore(
+			conversation(held.room, undefined, context.repository),
+			row.threadId,
+			row.handle,
+		);
+		if (!restored) {
+			release();
+			return undefined;
+		}
+		let ended = restored.ended;
+		restored.ended = async outcome => {
+			try {
+				await ended?.(outcome);
+			} finally {
+				release();
+			}
+		};
+		return {
+			...restored,
+			threadChannel: child.id,
+			focus: { channelId: child.id, title: child.title },
+		};
+	} catch (err) {
+		release();
+		throw err;
+	}
+}
+
+/**
+ * Saved Planner requests of a document, started if they may start: the document is opened and held
+ * while a turn runs, and what a restart cut off is marked. Who may start them is Chat's start
+ * rule; this only needs a repository to open the document under, from the owner or from a
+ * waiting request's sender whose login is live.
+ */
+async function startDeferred(channelId: string): Promise<void> {
+	if (!config.agent || config.auth.local) return;
+	if (deletingChannels.has(channelId) || archivingChannels.has(channelId)) return;
+	let channel = await storage.channels.get(channelId);
+	if (!channel || channel.parentChannelId || channel.archivedAt) return;
+	let repository: Chat.Room["repository"] | undefined;
+	let binding = await ownerBindings?.resolve(channelId);
+	if (binding) {
+		repository = binding.repository;
+		binding.release();
+	} else {
+		let rows = await storage.deferredTurns.list(channelId, ["waiting", "started"]);
+		let claimants = new Set(
+			rows.flatMap(row => [row.claimantSessionId, row.ownerSessionIdAtAccept]).filter(
+				(id): id is string => !!id,
+			),
+		);
+		for (let id of claimants) {
+			let session = await hostedAuth.sessions.resolve(id);
+			if (!session) continue;
+			let checked = await hostedAuth.sessions.use(
+				session,
+				token =>
+					hostedAuth.github.repositoryAccess(
+						token,
+						channel.repositoryOwner,
+						channel.repositoryName,
+					),
+			);
+			if (checked.value?.id === channel.repositoryId) {
+				repository = checked.value;
+				break;
+			}
+		}
+	}
+	if (!repository) return;
+	let found = repository;
+	await withDocumentTransition(channelId, async () => {
+		await Rooms.get(channelId)?.closing;
+		let held = Rooms.hold(channelId);
+		let release = () => {
+			held.release();
+			evict(held.room);
+		};
+		let running = false;
+		try {
+			await plan(held.room, server);
+			let context = conversation(held.room, undefined, found);
+			await Chat.recover(context);
+			if (context.chat.running) {
+				running = true;
+				void context.chat.running.finally(release).catch(() => {});
+			}
+		} finally {
+			if (!running) release();
+		}
+	});
+}
+
+let startingDeferred: Promise<void> | undefined;
+let startAgain = false;
+
+/** Tries every document with saved requests; calls that overlap run one more pass, not many. */
+function startAllDeferred(): Promise<void> {
+	if (startingDeferred) {
+		startAgain = true;
+		return startingDeferred;
+	}
+	let pass = (async () => {
+		do {
+			startAgain = false;
+			for (let id of await storage.deferredTurns.documents(["waiting", "started"])) {
+				await startDeferred(id).catch(err =>
+					console.error("chopin: could not start a document's saved requests -", err)
+				);
+			}
+		} while (startAgain);
+	})().finally(() => {
+		startingDeferred = undefined;
+	});
+	startingDeferred = pass;
+	return pass;
 }
 
 /**
@@ -1119,6 +1271,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "plan:open": {
 			try {
 				let opened = await plan(room, server);
+				if (!room.parentChannelId) {
+					// What a restart left, before the history is sent: notices and the queue.
+					await Chat.recover(chat(room, ws)).catch(err =>
+						console.error("chopin: could not restore saved requests -", err)
+					);
+				}
 				let currentChannel = await storage.channels.get(room.id);
 				if (currentChannel) applyChannelAccess(ws, currentChannel, ws.data.canManage);
 				implementations?.track(room.id);
@@ -1226,6 +1384,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					opened.revision,
 					text,
 					said,
+					ws.data.principalId,
 				);
 				if (!result.ok) {
 					fail(ws, frame.rid, result.reason, result.code);
@@ -1250,6 +1409,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "chat:pause-run":
 		case "chat:resume-run":
 		case "chat:unqueue":
+		case "chat:delete":
+		case "chat:retry":
 			if (!room.plan) return;
 			if (room.plan.parentChannelId) {
 				if (frame.rid) fail(ws, frame.rid, "this document's Chat is on its root document");
@@ -1258,6 +1419,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (frame.kind === "chat:abort") await Chat.abort(chat(room, ws), ws);
 			else if (frame.kind === "chat:resume") await Chat.resume(chat(room, ws), ws);
 			else if (frame.kind === "chat:unqueue") Chat.unqueue(chat(room, ws), ws, frame);
+			else if (frame.kind === "chat:delete") await Chat.remove(chat(room, ws), ws, frame);
+			else if (frame.kind === "chat:retry") await Chat.retry(chat(room, ws), ws, frame);
 			else await Chat.controlRun(chat(room, ws), ws, frame);
 			return;
 
@@ -2183,6 +2346,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 		});
 		// An archived document keeps no Planner, not even one whose connection dropped.
 		await plannerAttachments?.documentEnded(channelId);
+		await cancelSaved(channelId, "unavailable");
 		announceChannel(result.channel);
 		void Service.announceCatalogueUnanswered(server, storage, result.channel);
 		return result;
@@ -2654,6 +2818,38 @@ async function channelOwnerReset(channelId: string): Promise<void> {
 	ownerBindings?.revokeChannel(channelId);
 	plannerAttachments?.ownerReset(channelId);
 	await Promise.all([resetOpenAgents(room => room.id === channelId), jobs]);
+	await cancelSaved(channelId, "agent");
+}
+
+/**
+ * Ends a document's saved Planner requests without running them, because its agent was reset or
+ * it was archived. In an open document each says so in Chat; the rest are cancelled in storage.
+ */
+async function cancelSaved(channelId: string, why: "agent" | "unavailable"): Promise<void> {
+	if (config.auth.local) return;
+	let channel = await storage.channels.get(channelId);
+	let room = Rooms.get(channelId);
+	if (channel && room?.plan && !room.plan.parentChannelId) {
+		await Chat.cancelQueued(
+			conversation(room, undefined, {
+				id: channel.repositoryId,
+				owner: channel.repositoryOwner,
+				name: channel.repositoryName,
+				defaultBranch: "",
+			}),
+			why,
+		).catch(err => console.error("chopin: could not cancel saved requests -", err));
+	}
+	let lease = writerLease.held;
+	if (!lease) return;
+	for (let row of await storage.deferredTurns.list(channelId, ["waiting"])) {
+		await storage.deferredTurns.transition(lease, {
+			id: row.id,
+			from: "waiting",
+			to: "cancelled",
+			at: new Date(),
+		});
+	}
 }
 
 let hostedAuth = registerAuthRoutes(router, {
@@ -2663,6 +2859,14 @@ let hostedAuth = registerAuthRoutes(router, {
 	liveBuild: !!config.liveBuild,
 	setupAgents: config.setupAgents,
 	onSessionRevoked: sessionRevoked,
+	// A login that is live again may be the one a saved request was waiting for.
+	onSessionRestored: () => {
+		if (server && !cutting) {
+			void startAllDeferred().catch(err =>
+				console.error("chopin: could not start saved requests after a sign-in returned -", err)
+			);
+		}
+	},
 	onCredentialsWillRotate: credentialsWillRotate,
 });
 // A paired machine's Planner backend attaches with a credential from the connector routes.
@@ -2732,6 +2936,9 @@ if (config.agent && config.harness === "remote") {
 		announcePlanner(channelId);
 		// Settlements that waited for a Planner can run now.
 		if (planner.state === "attached") {
+			void startDeferred(channelId).catch(err =>
+				console.error("chopin: could not start saved requests after a Planner attached -", err)
+			);
 			void ownerAvailable(channelId).catch(err =>
 				console.error("chopin: could not wake work after a Planner attached -", err)
 			);
@@ -3170,6 +3377,10 @@ try {
 		console.error(`chopin: ${index} does not exist, so this process stays not ready`);
 	} else {
 		readiness.started();
+		// Saved requests start only after route-ready, off the readiness path.
+		void startAllDeferred().catch(err =>
+			console.error("chopin: could not start saved requests -", err)
+		);
 		let held = requests.release();
 		console.log(
 			`chopin: ready ${

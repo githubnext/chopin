@@ -69,6 +69,26 @@ describe("encrypted hosted sessions", () => {
 		});
 	});
 
+	it("says a login is live again once its browser's cookie restores it, and not for a wrong proof or one already live", async () => {
+		let { storage, issued, request, clock } = await fixture();
+		let restored: string[] = [];
+		let restarted = new Sessions(storage, true, clock, {
+			persistence,
+			onRestored: id => restored.push(id),
+		});
+		let wrong = new Request(request, {
+			headers: {
+				cookie: `${restarted.cookieName}=${issued.id}.${Buffer.alloc(32, 8).toString("base64url")}`,
+			},
+		});
+		expect(await restarted.authenticate(wrong)).toBeUndefined();
+		expect(restored).toEqual([]);
+		expect(await restarted.authenticate(request)).toBeDefined();
+		expect(restored).toEqual([issued.id]);
+		expect(await restarted.authenticate(request)).toBeDefined();
+		expect(restored).toEqual([issued.id]);
+	});
+
 	it("rejects another key, deployment or GitHub App", async () => {
 		let { storage, request, clock } = await fixture();
 		for (

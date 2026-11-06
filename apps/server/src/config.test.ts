@@ -154,6 +154,7 @@ describe("configuration", () => {
 			requestWaitMs: 1_000,
 			plannerWindowMs: 10_000,
 			holdMs: 20_000,
+			deferredNoticeMs: 30_000,
 		});
 		expect(configured({ BACKGROUND_JOBS: "off", HANDOVER: "wait" }).handover.wait).toBe(true);
 		expect(configured({ BACKGROUND_JOBS: "off", HANDOVER: "off" }).handover.wait).toBe(false);
@@ -173,6 +174,10 @@ describe("configuration", () => {
 			plannerWindowMs: 15_000,
 			holdMs: 5_000,
 		});
+		expect(configured({ BACKGROUND_JOBS: "off", DEFERRED_NOTICE_DELAY_MS: "5000" }).handover)
+			.toMatchObject({ deferredNoticeMs: 5_000 });
+		expect(() => configured({ BACKGROUND_JOBS: "off", DEFERRED_NOTICE_DELAY_MS: "soon" }))
+			.toThrow("DEFERRED_NOTICE_DELAY_MS must be an integer");
 		expect(() => configured({ BACKGROUND_JOBS: "off", HANDOVER: "yes" }))
 			.toThrow("HANDOVER must be wait or off");
 		for (let name of ["TURN_WAIT", "UNREADY", "REQUEST_WAIT", "PLANNER_WINDOW", "HOLD"]) {

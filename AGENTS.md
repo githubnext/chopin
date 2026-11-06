@@ -153,7 +153,9 @@ collaborative state and external implementation runs are durable.
   client sees what a turn sees and steers its document writes. Attaching makes
   the account's live browser login the document's Planner owner, one client per
   document; nothing else claims ownership. `@chopin` and `invoke_planner` on a
-  document without one fail with `planner-not-attached`. Signing out the
+  document without one are saved as durable rows, shown as sent and delivered
+  when a Planner takes them (under `AUTH_MODE=local` they fail with
+  `planner-not-attached`). Signing out the
   owner's login, its expiry, or a Planner reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold

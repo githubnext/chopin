@@ -35,7 +35,7 @@ export function createRootChat(deps: RootChatDeps): Chat.RootChat {
 		async admission(thread) {
 			let { context, release } = await opened();
 			try {
-				return Chat.admission(context, thread, deps.childId);
+				return Chat.admission(context, thread, deps.childId, await Chat.away(context));
 			} finally {
 				release();
 			}

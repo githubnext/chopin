@@ -18,6 +18,8 @@ export declare namespace Chat {
 		| Request<PauseRun>
 		| Request<ResumeRun>
 		| Request<Unqueue>
+		| Request<Delete>
+		| Request<Retry>
 		| Request<SetParticipation>
 		| Request<Typing>;
 
@@ -29,6 +31,9 @@ export declare namespace Chat {
 		| State
 		| Queue
 		| Sent
+		| Deleted
+		| Retried
+		| Removed
 		| ParticipationState;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
@@ -135,7 +140,25 @@ export declare namespace Chat {
 		references?: Reference[];
 		/** Present as `planner` on a member message sent to the Planner; the mention is stripped from `text`. */
 		to?: "planner";
+		/**
+		 * How far a member message to the Planner has got: `sent` is saved on the server and not
+		 * yet taken by the machine, `delivered` is taken by it, and `failed` can never be
+		 * delivered as sent, for `deliveryFailure`. Absent on any other entry and on one saved
+		 * before this existed, which reads as delivered.
+		 */
+		deliveryState?: DeliveryState;
+		/** Why a `failed` message could not be delivered. */
+		deliveryFailure?: DeliveryFailure;
 	};
+
+	export type DeliveryState = "sent" | "delivered" | "failed";
+
+	/**
+	 * Why a message can never be delivered as it was sent: the machine was removed from the
+	 * document, the sender can no longer write to it, or the document or the child it was sent
+	 * from is gone.
+	 */
+	export type DeliveryFailure = "machine-removed" | "access-lost" | "document-unavailable";
 
 	/** Transient Planner turn state. */
 	export type Turn = {
@@ -282,4 +305,26 @@ export declare namespace Chat {
 
 	/** Withdraw a queued message. Only its author may. */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };
+
+	/**
+	 * Delete a message the machine has not taken yet. Only its author may, and one that was
+	 * taken, or is already gone, is refused. The message leaves the Chat for everyone and is never
+	 * delivered.
+	 */
+	export type Delete = KIND<"chat:delete"> & { id: string };
+
+	/** The message is deleted. */
+	export type Deleted = KIND<"chat:delete"> & { id: string };
+
+	/** A message was deleted before it was delivered; sent to everyone with the Chat open. */
+	export type Removed = KIND<"chat:removed"> & { id: string };
+
+	/**
+	 * Send a `failed` message again, as it was. Only its author may. It is `sent` again, and
+	 * waits and is delivered like any other.
+	 */
+	export type Retry = KIND<"chat:retry"> & { id: string };
+
+	/** The message is waiting again. */
+	export type Retried = KIND<"chat:retry"> & { id: string };
 }

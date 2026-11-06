@@ -68,6 +68,8 @@ import type { Brief, CreationOrigin } from "../mcp";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../storage/model";
 import type {
 	ChannelRecord,
+	DeferredTurnChange,
+	DeferredTurnOutcome,
 	InitialChannel,
 	JsonValue,
 	Lease,
@@ -999,14 +1001,16 @@ async function commitHosted(
 	allowArchived = false,
 	researchProjections: ResearchProjectionChange[] = [],
 	notifyDocumentPersisted = true,
-): Promise<void> {
+	deferredTurns: DeferredTurnChange[] = [],
+): Promise<DeferredTurnOutcome[] | undefined> {
 	let durable = plan.persistence;
 	if (
 		!update && captured.sidecarText === durable.lastSidecar
 		&& (captured.title === undefined || captured.title === durable.committedTitle)
+		&& deferredTurns.length === 0
 	) {
 		scheduleCheckpoint(plan);
-		return;
+		return undefined;
 	}
 	try {
 		let previousSource = durable.committedSource;
@@ -1026,6 +1030,7 @@ async function commitHosted(
 			now: new Date(),
 			...(researchProjections.length > 0 ? { researchProjections } : {}),
 			...(allowArchived ? { allowArchived: true } : {}),
+			...(deferredTurns.length > 0 ? { deferredTurns } : {}),
 		});
 		if (!result.repeated) {
 			durable.revision = result.revision;
@@ -1086,6 +1091,7 @@ async function commitHosted(
 			}
 		}
 		scheduleCheckpoint(plan);
+		return result.deferredTurns;
 	} catch (err) {
 		if (!(err instanceof ResearchProjectionConflict)) durable.fatal(err);
 		throw err;
@@ -1304,8 +1310,34 @@ async function replaceHosted(plan: Plan, operationId: string, captured: Captured
 export function persist(plan: Plan, chat?: () => ChatView): Promise<void> {
 	let commit = () =>
 		commitHosted(plan, undefined, `state:${crypto.randomUUID()}`, capture(plan, chat?.()));
-	let pending = plan.flushing.then(commit, commit);
+	// Not mapped to void: a second step here would move every save a tick later.
+	let pending = plan.flushing.then(commit, commit) as Promise<unknown> as Promise<void>;
 	plan.flushing = pending;
+	return pending;
+}
+
+/**
+ * `persist`, with changes to the deferred Planner requests written in the same transaction, and
+ * what each did. A request is durable no later than the entry that acknowledges it.
+ */
+export function persistDeferred(
+	plan: Plan,
+	chat?: () => ChatView,
+	deferredTurns?: DeferredTurnChange[],
+): Promise<DeferredTurnOutcome[]> {
+	let commit = () =>
+		commitHosted(
+			plan,
+			undefined,
+			`state:${crypto.randomUUID()}`,
+			capture(plan, chat?.()),
+			false,
+			[],
+			true,
+			deferredTurns,
+		).then(outcomes => outcomes ?? []);
+	let pending = plan.flushing.then(commit, commit);
+	plan.flushing = pending.then(() => {});
 	return pending;
 }
 
@@ -1363,7 +1395,7 @@ export function persistExclusive(plan: Plan, allowArchived = false): Promise<voi
 		`state:${crypto.randomUUID()}`,
 		capture(plan),
 		allowArchived,
-	);
+	).then(() => {});
 }
 
 type RestoredHosted = {
