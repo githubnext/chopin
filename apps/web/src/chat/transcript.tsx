@@ -739,9 +739,8 @@ export function Transcript(
 										: "Talk it through with your collaborators."}
 									{emptyHint.planner && !emptyHint.automatic && (
 										<>
-											{" "}Mention{" "}
-											<strong className="font-medium text-text-secondary">@chopin</strong>{" "}
-											to ask the Planner
+											{" "}Use <strong className="font-medium text-text-secondary">@</strong>{" "}
+											to ask Chopin
 											{emptyHint.references ? ", or " : "."}
 										</>
 									)}

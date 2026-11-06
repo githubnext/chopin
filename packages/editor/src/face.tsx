@@ -118,11 +118,11 @@ function Portrait(
 export function AgentFace({ ring, size = 20 }: { ring?: boolean; size?: number }) {
 	return (
 		<span
-			aria-label="Planner"
+			aria-label="Chopin"
 			className={`block shrink-0 rounded-full bg-brand ${ring ? "ring-2 ring-page" : ""}`}
 			role="img"
 			style={{ width: size, height: size }}
-			title="Planner"
+			title="Chopin"
 		/>
 	);
 }

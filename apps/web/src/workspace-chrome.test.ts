@@ -44,10 +44,10 @@ test("compact navigation describes Build while it cannot open", () => {
 test("compact navigation counts unanswered decisions and Chat activity", () => {
 	let markup = navigation({ chatActivity: { busy: true, unread: 2 }, unanswered: 3 });
 	expect(markup).toContain('aria-label="Decisions, 3 unanswered"');
-	expect(markup).toContain('aria-label="Chat, Planner working, 2 unread"');
+	expect(markup).toContain('aria-label="Chat, Chopin working, 2 unread"');
 	expect(markup).toContain("data-plan-decision-count");
 	expect(destinationLabel("plan", 0, { busy: false, unread: 0 }, "writing"))
-		.toBe("Document, Planner writing");
+		.toBe("Document, Chopin writing");
 });
 
 test("the title bar keeps its container, slots and the views bar beneath it", () => {

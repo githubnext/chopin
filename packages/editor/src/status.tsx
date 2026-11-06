@@ -68,7 +68,7 @@ export function describeStatus(input: StatusInput): StatusDescription {
 		};
 	}
 	if (!input.synced) return { level: "quiet", label: "Loading" };
-	if (input.busy) return { level: "quiet", label: "Planner is working" };
+	if (input.busy) return { level: "quiet", label: "Chopin is working" };
 	return { level: "hidden", label: "Ready" };
 }
 

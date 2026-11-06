@@ -839,7 +839,7 @@ function Callout(
 }
 
 const EXPIRED_NOTE =
-	"Nobody answered this question, so the Planner used its best judgement for this decision.";
+	"Nobody answered this question, so Chopin used its best judgement for this decision.";
 
 /**
  * Host input an earlier Chopin closed unanswered; questions no longer expire.

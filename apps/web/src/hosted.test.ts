@@ -466,7 +466,7 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain('data-document-expanded="true"');
 		expect(toolbar).toContain("Room title");
 		expect(markup.match(/<div[^>]*document-title-slot[^>]*>/)?.[0]).not.toContain("inert");
-		expect(toolbar).toContain('aria-label="Show chat, Planner working"');
+		expect(toolbar).toContain('aria-label="Show chat, Chopin working"');
 		expect(toolbar).toContain(">Chat</span>");
 		expect(toolbar).not.toContain("Expand document");
 		expect(toolbar.indexOf("Show chat")).toBeLessThan(toolbar.indexOf("Document controls"));

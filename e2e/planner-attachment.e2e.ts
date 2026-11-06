@@ -693,7 +693,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(away).toBeVisible();
 		await expect(away).toContainText("disconnected");
 		await expect(runs.locator("[data-run-disconnected-note]")).toHaveText(
-			"Last reported running. It carries on when the Planner reconnects.",
+			"Last reported running. It carries on when the machine reconnects.",
 		);
 		await expect(runs).not.toContainText("stopped");
 		await expect(
@@ -756,7 +756,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(runs).not.toContainText("paused");
 		// Pause is offered, said as pending, and Resume is not.
 		await expect(
-			runs.getByRole("button", { name: "Pause plan-review when the Planner reconnects" }),
+			runs.getByRole("button", { name: "Pause plan-review when the machine reconnects" }),
 		)
 			.toBeVisible();
 		expect(controls).toEqual([]);

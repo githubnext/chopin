@@ -59,7 +59,7 @@ test("settled events keep state identity", () => {
 });
 
 test("labels name the activity for assistive technology", () => {
-	expect(documentActivityLabel("writing")).toBe("Document, Planner writing");
+	expect(documentActivityLabel("writing")).toBe("Document, Chopin writing");
 	expect(documentActivityLabel("unseen")).toBe("Document, new changes");
 	expect(documentActivityLabel(undefined)).toBe("Document");
 });

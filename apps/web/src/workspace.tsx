@@ -190,7 +190,7 @@ export function SurfaceToggle(
 	},
 ) {
 	let status = activity.busy
-		? "Planner working"
+		? "Chopin working"
 		: activity.unread > 0
 		? `${activity.unread} unread`
 		: undefined;

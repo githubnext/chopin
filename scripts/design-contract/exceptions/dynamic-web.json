@@ -276,7 +276,7 @@
 				1
 			]
 		],
-		"sourceHash": "2cbc38e53c5c5098f7aa3798539815c6ee2f2fb415fa19f468ba12d07598b5d4"
+		"sourceHash": "0d052d72de63390cf74f74a5e709e392c02b0efee8d03afed343375044f78bf2"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -311,7 +311,7 @@
 				1
 			]
 		],
-		"sourceHash": "25d5641ba4757668917be319cb5452999354e3f730264d3b1ec8cde48f3c3f44"
+		"sourceHash": "ef95f80b0d05b634dfbc54c1cf26cf950bbae85a1052b2980054499a8065e351"
 	},
 	{
 		"file": "apps/web/src/machine-button.tsx",

@@ -83,6 +83,7 @@ import type { ConversationAnnouncementSummary } from "./conversation-plan/announ
 import { evidenceRows, hasEvidence } from "./conversation-plan/evidence";
 import { EvidencePopover } from "./conversation-plan/evidence-popover";
 import { threadForCard } from "./conversation-plan/links";
+import { JOB_RETRY_FAILED } from "./conversation-plan/planner-job-diagnostics";
 import type { CardLink } from "./conversation-plan/links";
 import type { ExcerptCorrectionAction } from "./conversation-plan/analysis-overview";
 import { ConversationPlanStore, useConversationPlan } from "./conversation-plan/store";
@@ -1059,7 +1060,7 @@ export function RoomWorkspace(
 			);
 			if (!result.queued) throw new Error("job is no longer retryable");
 		} catch {
-			throw new Error("The Planner job could not be retried. Try again when connected.");
+			throw new Error(JOB_RETRY_FAILED);
 		}
 	};
 	let showCard = (link: CardLink) => {

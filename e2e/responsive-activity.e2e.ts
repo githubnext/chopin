@@ -73,7 +73,7 @@ test("busy history exposes working state without creating false unread activity"
 	page = await join("ana");
 	let chat = page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ });
-	await expect(chat).toHaveAccessibleName("Chat, Planner working");
+	await expect(chat).toHaveAccessibleName("Chat, Chopin working");
 	await expectNoHorizontalOverflow(page);
 	socket.send({ kind: "chat:state", ts: 0, busy: false });
 	socket.send({
@@ -88,7 +88,7 @@ test("busy history exposes working state without creating false unread activity"
 			entryOffset: 0,
 		},
 	});
-	await expect(chat).toHaveAccessibleName("Chat, Planner working");
+	await expect(chat).toHaveAccessibleName("Chat, Chopin working");
 });
 
 test("a closed desktop Chat toggle exposes initial planner activity", async ({ join, page, seed }) => {
@@ -97,7 +97,7 @@ test("a closed desktop Chat toggle exposes initial planner activity", async ({ j
 	await page.addInitScript(() => localStorage.setItem("chopin:pane:chat:choice", "false"));
 	await interceptBusyHistory(page);
 	page = await join("ana");
-	let toggle = page.getByRole("button", { name: "Show chat, Planner working" });
+	let toggle = page.getByRole("button", { name: "Show chat, Chopin working" });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toHaveAttribute("aria-expanded", "false");
 	await expect(toggle.locator('span[aria-hidden="true"]')).toHaveCount(1);

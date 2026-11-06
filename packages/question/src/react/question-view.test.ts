@@ -264,7 +264,7 @@ test("an expired card keeps its question and says nobody answered, with no time 
 		}));
 	let expired = render("expired");
 	expect(expired).toContain(
-		"Nobody answered this question, so the Planner used its best judgement for this decision.",
+		"Nobody answered this question, so Chopin used its best judgement for this decision.",
 	);
 	expect(expired).not.toMatch(/minute|within|expire/i);
 	expect(expired).toContain("Ship the migration?");

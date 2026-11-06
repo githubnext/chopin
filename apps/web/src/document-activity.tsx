@@ -65,7 +65,7 @@ export function documentActivity(
 }
 
 export function documentActivityLabel(activity: DocumentActivity): string {
-	if (activity === "writing") return "Document, Planner writing";
+	if (activity === "writing") return "Document, Chopin writing";
 	if (activity === "unseen") return "Document, new changes";
 	return "Document";
 }

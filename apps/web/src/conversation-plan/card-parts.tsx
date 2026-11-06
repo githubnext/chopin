@@ -17,7 +17,7 @@ export function Sources({ itemId, onSource, sources }: {
 					key={`${source.messageId}-${source.start}-${index}`}
 					onClick={() => onSource({ itemId, source })}
 					title={`${
-						source.author.kind === "member" ? source.author.handle : "Planner"
+						source.author.kind === "member" ? source.author.handle : "Chopin"
 					}: “${source.quote}”`}
 					type="button"
 				>

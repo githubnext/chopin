@@ -189,7 +189,7 @@ test("a simultaneous failure wins over card growth and the card update is not re
 	expect(errors).toEqual([]);
 });
 
-test("Planner jobs and ordinary chat delivery do not announce conversation changes", async ({ page }) => {
+test("Background jobs and ordinary chat delivery do not announce conversation changes", async ({ page }) => {
 	let errors = await load(page);
 	await receive(page, state(1));
 	await observe(page);
