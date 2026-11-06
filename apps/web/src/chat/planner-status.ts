@@ -128,8 +128,6 @@ export type PlannerNotice = {
 	text: string;
 	/** The reason as the machine reported it, then what has been tried, one line each. */
 	detail?: readonly string[];
-	/** Whether those lines are drawn, or are only for a screen reader. */
-	showDetail?: boolean;
 	link?: { label: string; href: string };
 	/** The room's one live region announces the state, so the strip says nothing of its own. */
 	silent: true;
@@ -147,35 +145,34 @@ export type PlannerPlacement = {
  * The one decision about where a state is told, so the button, its menu and the strip cannot
  * disagree.
  *
- * With the machine button, the button carries every state and the composer is left alone but for
- * the one a person can act on: a machine that cannot be connected to, warned with where to fix it
- * (its reason is on the button's menu, so only a screen reader is given it here). Without the
- * button (no machine paired or shared, a title bar that does not show one, a phone whose top bar
- * an open child has taken) the strip is the only place left to see the state, so it carries all
- * of them, and the reason for a machine that cannot be connected to is drawn, in full, beneath
- * its sentence.
+ * Machine state lives in one place, as a contact's does in a chat: the machine button. With it, the
+ * button carries every state, a machine that cannot be connected to included (its reason and where
+ * to fix it are on the button's menu), and the composer is left alone. Without the button (no
+ * machine paired or shared, a title bar that does not show one, a phone whose top bar an open child
+ * has taken) the strip is the only place left to see the state, so for that person alone it
+ * carries all of them, and the reason for a machine that cannot be connected to is drawn, in full,
+ * beneath its sentence.
  */
 export function plannerPlacement(
 	status: PlannerStatus | undefined,
 	hasButton: boolean,
 ): PlannerPlacement {
 	if (!status) return { button: undefined, strip: undefined };
-	let button = hasButton ? status : undefined;
+	if (hasButton) return { button: status, strip: undefined };
 	if (status.kind === "cant-start") {
 		return {
-			button,
+			button: undefined,
 			strip: {
 				tone: "warning",
 				text: plannerSentence(status),
 				detail: [status.reason, status.detail],
-				showDetail: !hasButton,
 				link: { label: "How to fix", href: PLANNER_HOW_TO_FIX },
 				silent: true,
 			},
 		};
 	}
 	return {
-		button,
-		strip: hasButton ? undefined : { tone: "info", text: plannerSentence(status), silent: true },
+		button: undefined,
+		strip: { tone: "info", text: plannerSentence(status), silent: true },
 	};
 }

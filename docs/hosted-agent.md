@@ -536,7 +536,8 @@ nothing. Otherwise the document's machine button carries it (a thin spinner whil
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
 while the Planner is away, and no dot at all where no machine is connected, the same
 bare icon as a button with no machine, never the machine's own green) with its words in
-the button's name and at the top of its menu, and the composer's top edge warns when the machine cannot be connected to. A
+the button's name and at the top of its menu, and nowhere else: the composer's top edge is left alone,
+as a chat's header, not its text field, carries a contact's state. A
 person with no machine button (no machine paired or shared, a title bar that does not
 show one, a phone whose top bar an open child has taken) has nowhere else to see the
 state, so for them the composer's top edge says every state, and, for a machine that

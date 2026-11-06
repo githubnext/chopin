@@ -279,11 +279,13 @@ describe("design audit specimens", () => {
 		expect(chat).toContain('class="workspace-root');
 		expect(chat).toContain('class="composer-surface field"');
 		expect(chat).toContain('class="composer-notice motion-feedback"');
-		// The Planner's states: a warning on the composer's edge, and the machine button's dot and note.
+		// The Planner's states: the machine button's dot and note, and a warning on the composer's edge
+		// for a person with no button.
 		// The strips announce nothing themselves: the page's one live region does.
 		expect(chat).toMatch(/class="composer-notice" data-warning="true"/);
 		expect(chat).not.toMatch(/class="composer-notice" role="(alert|status)" data-warning/);
-		expect(chat).toContain("Can't connect to Build box.");
+		expect(chat).toContain("Can't connect to @mona's machine.");
+		expect(chat).toContain("Can't connect to Build box");
 		expect(chat).toContain("How to fix");
 		// With no machine button the strip carries each state, and draws the reason as given.
 		expect(chat).toContain(

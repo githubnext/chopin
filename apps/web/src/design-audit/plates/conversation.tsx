@@ -178,10 +178,6 @@ export function ConversationPlate() {
 						text="Can we tighten the header?"
 					/>
 				</div>
-				<div>
-					<StateLabel>Can't connect, with the machine button</StateLabel>
-					<ComposerSpecimen notice={plannerPlacement(status(FAILING), true).strip} />
-				</div>
 				{WITHOUT_BUTTON.map(({ label, planner }) => (
 					<div key={label}>
 						<StateLabel>{label}</StateLabel>
