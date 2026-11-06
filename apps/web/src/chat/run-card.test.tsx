@@ -358,13 +358,13 @@ test("a disconnected run says what it last reported and what happens when the Pl
 		createElement(RunStack, { runs: [away(run("drafting", "running", 100))] }),
 	);
 	expect(open).toContain(
-		'data-run-disconnected-note="">Last reported running. It carries on when the Planner reconnects.<',
+		'data-run-disconnected-note="">Last reported running. It carries on when the machine reconnects.<',
 	);
 	expect(disconnectedNote(run("asking", "waiting", 100, 1))).toBe(
-		"Last reported waiting on Decisions. Answers reach it when the Planner reconnects.",
+		"Last reported waiting for people. Answers reach it when the machine reconnects.",
 	);
 	expect(disconnectedNote(run("held", "paused", 100))).toBe(
-		"Last reported paused. Resume it once the Planner reconnects.",
+		"Last reported paused. Resume it once the machine reconnects.",
 	);
 	// A connected run says nothing of the kind.
 	expect(
@@ -382,7 +382,7 @@ test("a disconnected run still offers Pause, said as pending, and never a Resume
 			run("elsewhere", "paused", 100),
 		],
 	}));
-	expect(markup).toContain('aria-label="Pause drafting when the Planner reconnects"');
+	expect(markup).toContain('aria-label="Pause drafting when the machine reconnects"');
 	expect(markup).not.toContain('aria-label="Resume held"');
 	expect(markup).toContain('aria-label="Resume elsewhere"');
 });

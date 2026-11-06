@@ -83,7 +83,7 @@ test("an expired card is listed with the resolved cards and says nobody answered
 	expect(history).toContain('data-plan-sidecar-questionnaire="expired"');
 	expect(history).toContain("Ship the migration?");
 	expect(history).toContain(
-		"Nobody answered this question, so the Planner used its best judgement for this decision.",
+		"Nobody answered this question, so Chopin used its best judgement for this decision.",
 	);
 	expect(history).not.toContain("minutes");
 	for (let control of ["Save answer", "<textarea", 'type="radio"']) {

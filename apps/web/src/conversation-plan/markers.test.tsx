@@ -105,7 +105,7 @@ test("a job keeps the diagnostics marker visible after analysis is pruned", () =
 	let html = markup(pruned, [job()]);
 	let unrelated = markup(pruned, [job("failed", "message-2")]);
 
-	expect(html).toContain('aria-label="Analysis for message: Planner jobs"');
+	expect(html).toContain('aria-label="Analysis for message: Background jobs"');
 	expect(unrelated).toBe("");
 });
 
@@ -117,22 +117,22 @@ test("jobs-only diagnostics do not claim that message analysis was unlinked", ()
 		onRetryJob: async () => {},
 	}));
 
-	expect(html).toContain("Planner jobs");
+	expect(html).toContain("Background jobs");
 	expect(html).toContain("refine done");
-	expect(html).toContain('aria-label="Close Planner jobs"');
+	expect(html).toContain('aria-label="Close background jobs"');
 	expect(html).not.toContain("Unlinked");
 	expect(html).not.toContain("not recorded");
 	expect(html).not.toContain("No card change was accepted");
 });
 
-test("failed Planner jobs show their reason, output and retry control", () => {
+test("failed Background jobs show their reason, output and retry control", () => {
 	let html = renderToStaticMarkup(createElement(PlannerJobDiagnostics, {
 		canEdit: true,
 		jobs: [job()],
 		onRetryJob: async () => {},
 	}));
 
-	expect(html).toContain('aria-label="Planner jobs"');
+	expect(html).toContain('aria-label="Background jobs"');
 	expect(html).toContain("refine failed — The card could not be refined.");
 	expect(html).toContain("Updated title: Auth strategy.");
 	expect(html).toContain('type="button"');

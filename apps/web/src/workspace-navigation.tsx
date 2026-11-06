@@ -22,9 +22,9 @@ export function destinationLabel(
 		return `Decisions, ${unanswered} unanswered`;
 	}
 	if (destination === "chat" && activity.busy && activity.unread > 0) {
-		return `Chat, Planner working, ${activity.unread} unread`;
+		return `Chat, Chopin working, ${activity.unread} unread`;
 	}
-	if (destination === "chat" && activity.busy) return "Chat, Planner working";
+	if (destination === "chat" && activity.busy) return "Chat, Chopin working";
 	if (destination === "chat" && activity.unread > 0) {
 		return `Chat, ${activity.unread} unread`;
 	}

@@ -50,7 +50,7 @@ test("each row shows its label, stances, sourced evidence and Planner rationale"
 	expect(markup).toContain("ring-2 ring-destructive");
 	expect(markup).toContain("People already have GitHub accounts.");
 	expect(markup).toContain('aria-label="Show “People already have GitHub accounts.” in chat"');
-	expect(markup).toContain("Planner suggested");
+	expect(markup).toContain("Chopin suggested");
 	expect(markup).toContain("Why Chopin suggested this: Enterprise customers expect SAML.");
 	expect(markup).not.toMatch(/<(input|select|textarea)\b/);
 });

@@ -62,7 +62,7 @@ export function MessageMarkers(
 	let jobsOnly = !analysis && !research && !researchPending && links.length === 0
 		&& jobs.length > 0;
 	let status = analysis?.status
-		?? (links.length > 0 ? "applied" : jobsOnly ? "Planner jobs" : "unlinked");
+		?? (links.length > 0 ? "applied" : jobsOnly ? "Background jobs" : "unlinked");
 	let hasDiagnostics = !!analysis || !!research || researchPending || links.length > 0
 		|| jobs.length > 0;
 	let visible = pinned && hasDiagnostics;
@@ -233,7 +233,7 @@ export function MessageMarkers(
 					data-analysis-trigger
 					onClick={() => visible ? closeAnalysis() : openAnalysis()}
 					ref={trigger}
-					title={jobsOnly ? "Inspect Planner jobs" : "Inspect message analysis"}
+					title={jobsOnly ? "Inspect background jobs" : "Inspect message analysis"}
 					type="button"
 				>
 					<CodeIcon aria-hidden="true" size={16} />
@@ -241,7 +241,7 @@ export function MessageMarkers(
 			)}
 			{visible && createPortal(
 				<div
-					aria-label={jobsOnly ? "Planner jobs" : "Message analysis"}
+					aria-label={jobsOnly ? "Background jobs" : "Message analysis"}
 					className="motion-popover is-open fixed z-50 flex flex-col overflow-x-hidden overflow-y-auto rounded-lg bg-page p-3 text-sm text-text-secondary ring-hairline shadow-overlay"
 					data-analysis-message={messageId}
 					data-analysis-popover

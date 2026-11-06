@@ -275,7 +275,7 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 		name: "Evidence for Should we run a limited pilot?",
 		exact: true,
 	});
-	await expect(panel).toContainText("Planner suggested");
+	await expect(panel).toContainText("Chopin suggested");
 	await expect(panel).toContainText(
 		"Why Chopin suggested this: It keeps the pilot small and concrete.",
 	);

@@ -2,6 +2,9 @@ import { useState } from "react";
 
 import type { ConversationPlan } from "@chopin/protocol";
 
+export const JOB_RETRY_FAILED =
+	"The background job could not be retried. Try again when connected.";
+
 export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 	canEdit: boolean;
 	jobs: ConversationPlan.Job[];
@@ -16,7 +19,7 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 		try {
 			await onRetryJob(jobId);
 		} catch {
-			setError("The Planner job could not be retried. Try again when connected.");
+			setError(JOB_RETRY_FAILED);
 		} finally {
 			setRetrying(undefined);
 		}
@@ -25,8 +28,8 @@ export function PlannerJobDiagnostics({ canEdit, jobs, onRetryJob }: {
 	if (jobs.length === 0) return null;
 
 	return (
-		<div className="mt-2 hairline-t pt-2" aria-label="Planner jobs" role="group">
-			<strong>Planner jobs</strong>
+		<div className="mt-2 hairline-t pt-2" aria-label="Background jobs" role="group">
+			<strong>Background jobs</strong>
 			{jobs.map(job => (
 				<div className="mt-1" key={job.id}>
 					<p className="m-0">
@@ -66,7 +69,7 @@ export function JobsOnlyDiagnostics({ canEdit, jobs, onClose, onRetryJob }: {
 		<>
 			<div className="flex items-center justify-end gap-2">
 				<button
-					aria-label="Close Planner jobs"
+					aria-label="Close background jobs"
 					className="btn btn-sm btn-ghost"
 					onClick={onClose}
 					type="button"

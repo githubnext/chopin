@@ -43,14 +43,19 @@ export function runStatusLabel(run: Wire.Run): string {
 	return run.disconnected ? "disconnected" : STATUS[run.status];
 }
 
-/** What a disconnected run's card says it last reported, and what happens once the Planner is back. */
+/**
+ * What a disconnected run's card says it last reported, and what happens once its machine is back.
+ * It is text about the machine's connection, so a run waiting on Decisions says it waits for people.
+ */
 export function disconnectedNote(run: Wire.Run): string {
-	let then = `Last reported ${STATUS[run.status]}. `;
+	let then = `Last reported ${
+		run.status === "waiting" ? "waiting for people" : STATUS[run.status]
+	}. `;
 	return run.status === "paused"
-		? `${then}Resume it once the Planner reconnects.`
+		? `${then}Resume it once the machine reconnects.`
 		: run.status === "waiting"
-		? `${then}Answers reach it when the Planner reconnects.`
-		: `${then}It carries on when the Planner reconnects.`;
+		? `${then}Answers reach it when the machine reconnects.`
+		: `${then}It carries on when the machine reconnects.`;
 }
 
 /**
@@ -296,7 +301,7 @@ function RunRow(
 	// A Pause is held for the Planner's return, and the control says so.
 	let control = kind === "pause" && onPause
 		? {
-			label: away ? `Pause ${title} when the Planner reconnects` : `Pause ${title}`,
+			label: away ? `Pause ${title} when the machine reconnects` : `Pause ${title}`,
 			icon: plannerStop,
 			act: () => onPause(run.id),
 			kind,

@@ -12,7 +12,21 @@ import { renderToStaticMarkup as render } from "react-dom/server";
 import { buildLook, CONNECT_MACHINE_TO_BUILD, draftRefusalCopy } from "./build-model";
 import { BuildPlanButton } from "./build-plan-button";
 import { ChatComposer } from "./chat/composer";
-import { PLANNER_UNAVAILABLE_NOTICE, REPLIES_OFF, repliesOffNotice } from "./chat/references";
+import {
+	destinationCue,
+	PLANNER_UNAVAILABLE_NOTICE,
+	REPLIES_OFF,
+	repliesOffNotice,
+} from "./chat/references";
+import { disconnectedNote, RunStack, runStatusLabel } from "./chat/run-card";
+import { Transcript } from "./chat/transcript";
+import { destinationLabel } from "./workspace-navigation";
+import { documentActivityLabel } from "./document-activity";
+import { EvidencePopover } from "./conversation-plan/evidence-popover";
+import {
+	JOB_RETRY_FAILED,
+	PlannerJobDiagnostics,
+} from "./conversation-plan/planner-job-diagnostics";
 import {
 	plannerAnnouncement,
 	plannerButtonLabel,
@@ -23,10 +37,10 @@ import {
 } from "./chat/planner-status";
 import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
 import { OFFLINE_MESSAGE, OfflineAnnouncement, OfflineNoticeBody } from "./offline-notice";
-import { offlineAnnouncement } from "@chopin/editor";
+import { AgentFace, offlineAnnouncement, PlanStatus } from "@chopin/editor";
 import { INTERNAL, INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
-import type { Session } from "@chopin/protocol";
+import type { Chat, ConversationPlan, Session } from "@chopin/protocol";
 import type { ImplementationSnapshot } from "@chopin/protocol/implementation";
 import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
 import type { MachineChoice } from "./machine-choice";
@@ -153,6 +167,13 @@ function expectPlain(label: string, texts: readonly string[]): void {
 	}
 }
 
+/** Any other words a person reads: none of the Planner, attaching, holding or `@chopin`. */
+function expectPlainWords(label: string, texts: readonly string[]): void {
+	for (let text of texts) {
+		expect(INTERNAL.test(text), `${label}: "${text}"`).toBe(false);
+	}
+}
+
 const COMPOSER = {
 	agent: true,
 	draftable: true,
@@ -272,6 +293,118 @@ test("a server whose agent is off says so in plain words, and says nothing of it
 	expectPlain("drawn", words(drawn));
 	// The page's offline notice is the one thing said about the connection.
 	expect(repliesOffNotice(true)).toBeUndefined();
+});
+
+test("the busy labels, the agent's face and the composer's picker hints are plain", () => {
+	let activities = [{ unread: 0, busy: false }, { unread: 3, busy: false }, {
+		unread: 0,
+		busy: true,
+	}, { unread: 3, busy: true }];
+	for (let destination of ["chat", "plan", "build"] as const) {
+		for (let activity of activities) {
+			for (let writing of [undefined, "writing", "unseen"] as const) {
+				expectPlainWords(
+					`the ${destination} tab`,
+					[destinationLabel(destination, 2, activity, writing)],
+				);
+			}
+		}
+	}
+	expectPlainWords(
+		"the document tab",
+		["writing", "unseen", undefined].map(state => documentActivityLabel(state as never)),
+	);
+	let working = render(createElement(PlanStatus, { busy: true, synced: true }));
+	expect(working).toContain("Chopin is working");
+	expectPlainWords("the document's status", words(working));
+	expectPlainWords("the agent's face", words(render(createElement(AgentFace, {}))));
+	for (let text of ["", "should we ask about auth first?", "@chopin draft the auth section"]) {
+		let cue = destinationCue(text, [], true);
+		if (cue) expectPlainWords("a picker hint", [cue.text]);
+	}
+	expect(destinationCue("should we ask about auth first?", [], true)?.text)
+		.toBe("Sent to people here. Type @ to ask Chopin");
+	let empty = render(createElement(Transcript, {
+		active: true,
+		emptyHint: { planner: true, references: true },
+		entries: [],
+		handle: "ana",
+		onWithdraw: () => {},
+		queued: [],
+	}));
+	expect(empty).toContain("to ask Chopin");
+	expectPlainWords("the empty Chat", words(empty));
+});
+
+test("a workflow run's status, notes and controls are plain, connected or away", () => {
+	let statuses = [
+		"running",
+		"waiting",
+		"paused",
+		"finished",
+		"blocked",
+		"failed",
+		"stopped",
+	] as const;
+	let run = (status: (typeof statuses)[number], away?: true): Chat.Run => ({
+		id: `run-${status}`,
+		name: `a-${status}-run`,
+		status,
+		started: 1,
+		updated: 2,
+		waiting: status === "waiting" ? 2 : 0,
+		stages: [],
+		...(away ? { disconnected: true } : {}),
+	} as Chat.Run);
+	for (let status of statuses) {
+		for (let away of [undefined, true] as const) {
+			let item = run(status, away);
+			expectPlainWords(`a ${status} run's label`, [runStatusLabel(item)]);
+			expectPlain(`a ${status} run's note about its machine`, [disconnectedNote(item)]);
+			let markup = render(createElement(RunStack, {
+				onPause: () => {},
+				onResume: () => {},
+				onShowDecisions: () => {},
+				runs: [item],
+			}));
+			expectPlainWords(`a ${status} run card`, words(markup));
+		}
+	}
+	let away = render(createElement(RunStack, { onPause: () => {}, runs: [run("running", true)] }));
+	expect(decode(away)).toContain("Pause a-running-run when the machine reconnects");
+	expect(decode(away)).toContain("It carries on when the machine reconnects.");
+	let asking = render(
+		createElement(RunStack, { onShowDecisions: () => {}, runs: [run("waiting")] }),
+	);
+	expect(asking).toContain("Waiting on 2 Decisions");
+});
+
+test("what a message's analysis, its evidence and a failed background job say is plain", () => {
+	let rows = [{
+		optionId: "sso",
+		label: "Enterprise SSO",
+		origin: "planner",
+		supporters: [],
+		opposers: [],
+		items: [],
+		rationale: "Enterprise customers expect SAML.",
+		source: {
+			author: { kind: "agent" },
+			quote: "Enterprise customers expect SAML.",
+			messageId: "m",
+			start: 0,
+			end: 1,
+		},
+	}];
+	let evidence = render(createElement(EvidencePopover, { rows, onSource: () => {} } as never));
+	expect(evidence).toContain("Chopin suggested");
+	expectPlainWords("the evidence", words(evidence));
+	let jobs = render(createElement(PlannerJobDiagnostics, {
+		canEdit: true,
+		jobs: [{ id: "j", kind: "refine", status: "failed", reason: "x" }] as ConversationPlan.Job[],
+		onRetryJob: async () => {},
+	}));
+	expectPlainWords("the background jobs", [...words(jobs), JOB_RETRY_FAILED]);
 });
 
 /** A document with no tasks yet, so what is left to say about Build plan is why it must wait. */

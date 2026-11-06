@@ -29,7 +29,7 @@ test("the restore control shows a Chat label and reports Planner activity", () =
 	let busy = render(true, { busy: true, unread: 0 });
 	let unread = render(true, { busy: false, unread: 2 });
 
-	expect(busy).toContain('aria-label="Show chat, Planner working"');
+	expect(busy).toContain('aria-label="Show chat, Chopin working"');
 	expect(busy).toContain('aria-expanded="false"');
 	expect(busy).toContain(">Chat</span>");
 	expect(busy).not.toContain('data-motion-feedback="count"');

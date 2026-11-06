@@ -121,7 +121,7 @@ test("failed job retries serialize both controls and recover after a rejected ac
 		window.analysisHostFixture.hold("job", false);
 		window.analysisHostFixture.settle("job", false);
 	});
-	await expect(panel.getByRole("alert")).toContainText("The Planner job could not be retried.");
+	await expect(panel.getByRole("alert")).toContainText("The background job could not be retried.");
 	await panel.getByRole("button", { name: "Retry heading job", exact: true }).click();
 	await expect.poll(() => page.evaluate(() => window.analysisHostFixture.jobs.length)).toBe(2);
 	expect(await page.evaluate(() => window.analysisHostFixture.jobs)).toEqual([

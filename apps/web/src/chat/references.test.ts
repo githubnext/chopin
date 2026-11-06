@@ -213,11 +213,11 @@ describe("composer destination cue", () => {
 	test("says a message without @chopin stays in the room, and one with it goes to the Planner", () => {
 		expect(destinationCue("should we ask about auth first?", [], true)).toEqual({
 			to: "room",
-			text: "Room only. Add @chopin to ask the Planner",
+			text: "Sent to people here. Type @ to ask Chopin",
 		});
 		expect(destinationCue("@chopin draft the auth section", [], true)).toEqual({
 			to: "planner",
-			text: "Sends to the Planner, which will reply",
+			text: "Sends to Chopin, which will reply",
 		});
 	});
 

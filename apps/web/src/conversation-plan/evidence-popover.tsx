@@ -54,7 +54,7 @@ export function EvidencePopover({ rows, onSource }: {
 					<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
 						{row.origin === "planner" && (
 							<span className="shrink-0 rounded-full bg-inset px-1.5 text-sm text-text-tertiary">
-								Planner suggested
+								Chopin suggested
 							</span>
 						)}
 						<People handles={row.supporters} label="Supported by" />
@@ -70,7 +70,7 @@ export function EvidencePopover({ rows, onSource }: {
 							<span className="shrink-0 text-text-tertiary">
 								{row.source.author.kind === "member"
 									? `@${row.source.author.handle}`
-									: "Planner"}
+									: "Chopin"}
 							</span>
 							<q className="min-w-0 flex-1 text-text-primary [overflow-wrap:anywhere]">
 								{row.source.quote}
