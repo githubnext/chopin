@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
 ARG BUN_VERSION=1.4.4
+# The image that runs now, so this build keeps the hashed files of the builds before it and a
+# tab left open across a deploy still finds its chunks. Without one, only this build's are served.
+ARG PREVIOUS_IMAGE=no-previous
 
 FROM oven/bun:${BUN_VERSION} AS manifests
 WORKDIR /app
@@ -31,6 +34,20 @@ COPY packages ./packages
 COPY tsconfig.json ./tsconfig.json
 RUN bun run build
 
+FROM oven/bun:${BUN_VERSION} AS no-previous
+RUN mkdir -p /app/apps/web/dist/assets /app/apps/web/kept-assets/assets
+
+FROM ${PREVIOUS_IMAGE} AS previous
+
+FROM oven/bun:${BUN_VERSION} AS kept-assets
+WORKDIR /keep
+COPY scripts/keep-assets.ts ./
+COPY --from=previous /app/apps/web/dist/assets/ ./previous/
+# An image built before this step kept nothing, so a missing directory is not an error.
+COPY --from=previous /app/apps/web/kept-assets*/ ./kept/
+COPY --from=build /app/apps/web/dist/assets/ ./current/
+RUN bun keep-assets.ts --previous previous --kept kept --current current --out out
+
 FROM manifests AS production-dependencies
 RUN bun install --frozen-lockfile --production --filter '*'
 
@@ -59,6 +76,7 @@ COPY --from=production-dependencies --chown=bun:bun /app/packages/question/node_
 COPY --chown=bun:bun package.json bun.lock ./
 COPY --chown=bun:bun apps/server ./apps/server
 COPY --from=build --chown=bun:bun /app/apps/web/dist ./apps/web/dist
+COPY --from=kept-assets --chown=bun:bun /keep/out ./apps/web/kept-assets
 COPY --from=build --chown=bun:bun /app/apps/connector/dist ./apps/connector/dist
 COPY --chown=bun:bun apps/connector/package.json ./apps/connector/package.json
 COPY --chown=bun:bun apps/web/package.json ./apps/web/package.json

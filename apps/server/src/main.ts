@@ -94,6 +94,7 @@ import { createVisualAdmission } from "./agent/visual-admission";
 import { locksEditing, requestBuild } from "./tasks/builds";
 import { pendingLinks, relinkInstruction } from "./tasks/relink";
 import { BuildReadiness } from "./tasks/readiness";
+import { MCP_SESSION_IDLE_MS } from "./mcp/hosted";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import * as Edit from "./plan/edit";
@@ -2089,6 +2090,12 @@ function cleanSessions(): void {
 	if (cleaningSessions) return;
 	cleaningSessions = hostedAuth.sessions.cleanupExpired().then(() => {}, err => {
 		console.error("chopin: could not delete expired login sessions -", err);
+	}).then(async () => {
+		let now = hostedAuth.clock();
+		await storage.mcpSessions.deleteIdle(new Date(now.getTime() - MCP_SESSION_IDLE_MS));
+		await storage.plannerCredentials.deleteExpired(now);
+	}).catch(err => {
+		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
 	}).finally(() => {
 		cleaningSessions = undefined;
 	});

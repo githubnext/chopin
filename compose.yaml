@@ -2,6 +2,9 @@ services:
   app:
     build:
       context: .
+      args:
+        # The image running now, set by whoever deploys, so the build keeps its hashed files.
+        PREVIOUS_IMAGE: ${PREVIOUS_IMAGE:-no-previous}
     environment:
       # Coolify resolves default-bearing values from production before attaching
       # the preview env file, so preview-overridable values stay late-bound.
@@ -32,7 +35,7 @@ services:
     expose:
       - "8787"
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 30s
 
   db:
     image: postgres:17-alpine

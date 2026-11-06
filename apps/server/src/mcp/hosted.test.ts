@@ -185,6 +185,23 @@ function request(authorization?: string | Headers): Request {
 	return new Request("https://chopin.test/mcp", { headers });
 }
 
+function call(mcp: (request: Request) => Promise<Response>, body: unknown, session?: string) {
+	return mcp(
+		new Request("https://chopin.test/mcp", {
+			method: "POST",
+			headers: {
+				authorization: "Bearer allowed",
+				...(session ? { "mcp-session-id": session } : {}),
+			},
+			body: JSON.stringify(body),
+		}),
+	);
+}
+
+async function code(response: Response): Promise<string> {
+	return (await response.json()).result.structuredContent.code;
+}
+
 async function plan(context: ReturnType<typeof setup>) {
 	await context.storage.users.put({
 		id: "U_allowed",
@@ -2040,5 +2057,61 @@ describe("the hosted MCP adapter", () => {
 			Rooms.forget(live);
 			await Service.close(opened.plan);
 		}
+	});
+	it("keeps an MCP session across a restart, records its use, and answers an unknown one as before", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let start = {
+			jsonrpc: "2.0",
+			id: 2,
+			method: "tools/call",
+			params: {
+				name: "start_implementation",
+				arguments: {
+					id: crypto.randomUUID(),
+					planRevision: 1,
+					graphVersion: 1,
+					graphRevision: 1,
+					repository: "octo-org/score",
+					branch: "feature",
+					commit: "0123456789abcdef0123456789abcdef01234567",
+				},
+			},
+		};
+		let lease = (await context.storage.leases.acquire("writer", "mcp-test", 60_000))!;
+		let persistence = { lease: () => lease };
+		let first = handler(hosted(context.auth, persistence));
+		let initialized = await call(first, {
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: { clientInfo: { name: "Codex", version: "1.2.3" } },
+		});
+		let session = initialized.headers.get("mcp-session-id")!;
+		expect(await context.storage.mcpSessions.find(session)).toMatchObject({
+			userId: "U_allowed",
+			clientName: "Codex",
+			clientVersion: "1.2.3",
+		});
+
+		// A new process over the same database knows the session the old one issued.
+		let restarted = handler(hosted(context.auth, persistence));
+		expect(await code(await call(restarted, start, session))).not.toBe("session-required");
+		expect(await code(await call(restarted, start, crypto.randomUUID()))).toBe("session-required");
+		expect(await code(await call(restarted, start))).toBe("session-required");
+		expect(await code(await call(restarted, start, "x".repeat(500)))).toBe("session-required");
+
+		// Use is recorded at most once a minute.
+		let created = (await context.storage.mcpSessions.find(session))!.lastSeenAt;
+		context.now.setTime(context.now.getTime() + 30_000);
+		await call(restarted, start, session);
+		expect((await context.storage.mcpSessions.find(session))!.lastSeenAt).toEqual(created);
+		context.now.setTime(context.now.getTime() + 60_000);
+		await call(restarted, start, session);
+		expect((await context.storage.mcpSessions.find(session))!.lastSeenAt).toEqual(context.now);
+
+		// An idle one is forgotten, and its id is unknown again.
+		await context.storage.mcpSessions.deleteIdle(new Date(context.now.getTime() + 1));
+		expect(await code(await call(restarted, start, session))).toBe("session-required");
 	});
 });

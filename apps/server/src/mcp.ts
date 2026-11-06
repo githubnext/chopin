@@ -192,6 +192,16 @@ export type UploadImage<Caller> = {
 	>;
 };
 
+/**
+ * Where MCP sessions live when they must outlast the process. Without it a handler keeps them in
+ * memory, and a restart makes an agent's session id unknown.
+ */
+export type McpSessions<Caller> = {
+	create(caller: Caller, id: string, client: { name: string; version: string }): Promise<void>;
+	/** The client an id was issued to, or undefined for an id nobody was issued. */
+	find(id: string): Promise<{ name: string; version: string } | undefined>;
+};
+
 export type McpOptions<Caller> = {
 	/** The host owns authentication; MCP only receives its result. */
 	caller(request: Request): Promise<Caller | undefined> | Caller | undefined;
@@ -204,6 +214,7 @@ export type McpOptions<Caller> = {
 	invoke?: InvokePlanner<Caller>;
 	upload?: UploadImage<Caller>;
 	implementations?: Implementations<Caller>;
+	sessions?: McpSessions<Caller>;
 };
 
 type Tool = {
@@ -998,6 +1009,7 @@ export function handler<Caller>(
 		caller: Caller,
 		client: { name: string; version: string; session: string },
 		created: { session?: string },
+		registered: boolean,
 	): Promise<Reply | undefined> {
 		let call = record(value) as Call | undefined;
 		if (!call || call.jsonrpc !== "2.0" || typeof call.method !== "string") {
@@ -1013,7 +1025,9 @@ export function handler<Caller>(
 		switch (call.method) {
 			case "initialize": {
 				let session = crypto.randomUUID();
-				sessions.set(session, clientInfo(call.params));
+				if (options.sessions) {
+					await options.sessions.create(caller, session, clientInfo(call.params));
+				} else sessions.set(session, clientInfo(call.params));
 				created.session = session;
 				return respond({
 					protocolVersion: "2025-03-26",
@@ -1280,7 +1294,7 @@ export function handler<Caller>(
 							? undefined
 							: error(call.id, -32602, "start_implementation requires current revisions");
 					}
-					if (!client.session || !sessions.has(client.session)) {
+					if (!registered) {
 						return respond(text({ code: "session-required" }, true));
 					}
 					if (!options.implementations) {
@@ -1308,7 +1322,7 @@ export function handler<Caller>(
 							? undefined
 							: error(call.id, -32602, `${tool.name} requires its documented arguments`);
 					}
-					if (!client.session || !sessions.has(client.session)) {
+					if (!registered) {
 						return respond(text({ code: "session-required" }, true));
 					}
 					let report = options.implementations?.reportLifecycle;
@@ -1350,7 +1364,10 @@ export function handler<Caller>(
 		}
 
 		let session = request.headers.get("mcp-session-id") ?? "";
-		let client = { ...(sessions.get(session) ?? { name: "unknown", version: "unknown" }), session };
+		let known = session
+			? options.sessions ? await options.sessions.find(session) : sessions.get(session)
+			: undefined;
+		let client = { ...(known ?? { name: "unknown", version: "unknown" }), session };
 		let created: { session?: string } = {};
 		let body: unknown;
 		try {
@@ -1360,7 +1377,7 @@ export function handler<Caller>(
 		} catch {
 			return Response.json(error(null, -32700, "parse error"));
 		}
-		let result = await dispatch(body, caller, client, created);
+		let result = await dispatch(body, caller, client, created, known !== undefined);
 		return result
 			? Response.json(result, {
 				headers: created.session ? { "mcp-session-id": created.session } : undefined,

@@ -544,6 +544,19 @@ Build an image from a reviewed commit:
 docker build --tag chopin:local .
 ```
 
+A page left open across a deploy still asks for the files of the build it loaded. The
+image keeps the hashed files of the last two builds before it, for 30 days at most, in
+`apps/web/kept-assets`, and the server answers for them from there; a file it does not
+have is a 404, never the page. To keep them, give the build the image that runs now:
+
+```bash
+docker build --build-arg PREVIOUS_IMAGE="$(docker inspect --format '{{.Image}}' chopin)"   --tag chopin:next .
+```
+
+With `docker compose`, set `PREVIOUS_IMAGE` in the environment of the build. Without it
+the build keeps nothing and only its own files are served. The first build after this
+step lands keeps only the image before it, which kept nothing itself.
+
 Create an environment file such as `/etc/chopin/chopin.env`:
 
 ```dotenv
