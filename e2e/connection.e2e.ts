@@ -45,6 +45,23 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
 }
 
+/**
+ * The server these specs run against has its agent off, which the composer would tell in a strip
+ * above it. A test that measures the composer across an outage turns the agent on instead, so the
+ * strip cannot hide a connection strip's size.
+ */
+async function agentOn(page: Page): Promise<void> {
+	await page.route("**/api/session", async route => {
+		let response = await route.fetch();
+		await route.fulfill({ response, json: { ...await response.json(), agent: true } });
+	});
+}
+
+/** What the composer says above its field: its strip, and nothing else. */
+function composerStrip(chat: Locator) {
+	return chat.locator(".chat-composer").getByRole("status").filter({ hasText: /\S/ });
+}
+
 function route(page: Page | BrowserContext) {
 	let sockets: WebSocketRoute[] = [];
 	let state = { offline: false };
@@ -81,6 +98,7 @@ test("a blip that recovers inside the grace period shows nothing", async ({ join
 });
 
 test("a long outage says so once, at the top of the document, keeps the draft, and goes when it returns", async ({ join, page }) => {
+	await agentOn(page);
 	// The widest jitter, so a scheduled retry cannot pass for the online event.
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
@@ -320,6 +338,7 @@ test("on a phone, Chat shows the same notice at its top, and Retry after repeate
 	});
 	try {
 		let page = await context.newPage();
+		await agentOn(page);
 		await page.addInitScript(() => {
 			Math.random = () => 0.999;
 		});
@@ -424,6 +443,86 @@ function tab(page: Page, name: RegExp) {
 async function settled(page: Page): Promise<void> {
 	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
 }
+
+/** What the composer says online, on a server whose agent is off. */
+const REPLIES_OFF = "Replies are off on this server.";
+
+/**
+ * A lost connection is one notice, the page's. The composer's own strip tells a state that is not
+ * the connection (here, that the server's agent is off), so it says nothing while the notice is
+ * up, comes back by itself when the connection does, and nothing else about the connection or
+ * about availability is drawn anywhere in Chat.
+ */
+async function expectOneNotice(
+	page: Page,
+	wire: ReturnType<typeof route>,
+	chat: Locator,
+	shot: string,
+) {
+	await expect(composerStrip(chat)).toHaveText(REPLIES_OFF);
+	await snap(page, `${shot}-online`);
+
+	wire.state.offline = true;
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
+	await expect(composerStrip(chat)).toHaveCount(0);
+	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(chat.getByRole("alert")).toHaveCount(0);
+	await expect(
+		chat.getByText(
+			/unavailable|Chopin is off|off on this server|offline|Reconnecting|Connecting|Connection lost/i,
+		),
+	)
+		.toHaveCount(0);
+	await expect(chat.getByRole("button", { name: /Reconnect|Reload|Retry/ })).toHaveCount(0);
+	await snap(page, `${shot}-offline`);
+
+	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(notice(page)).toHaveCount(0);
+	await expect(composerStrip(chat)).toHaveText(REPLIES_OFF);
+}
+
+test("a lost connection is the page's one notice: the composer's own strip is gone while it shows, and back when it clears", async ({ join, page }) => {
+	await page.addInitScript(() => {
+		Math.random = () => 0.999;
+	});
+	let wire = route(page);
+	await wire.ready;
+	await join("ana");
+	await expectOneNotice(page, wire, chatPane(page), "agent-off-desktop");
+});
+
+test("on a phone, a lost connection is still the page's one notice, with nothing above the composer", async ({ baseURL, browser, room }) => {
+	test.setTimeout(90_000);
+	let wire: ReturnType<typeof route> | undefined;
+	let context = await browser.newContext({
+		baseURL,
+		deviceScaleFactor: 3,
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	try {
+		let page = await context.newPage();
+		await page.addInitScript(() => {
+			Math.random = () => 0.999;
+		});
+		wire = route(page);
+		await wire.ready;
+		await authenticate(page, "ana", baseURL!);
+		await page.goto(roomPath(room));
+		await ready(page);
+		await tab(page, /^Chat/).tap();
+		await settled(page);
+		await expectOneNotice(page, wire, chatPane(page), "agent-off-phone");
+		await expectNoHorizontalOverflow(page);
+	} finally {
+		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
+		await context.close();
+	}
+});
 
 test("on a phone, the notice takes its own room at the top of Document and of Chat, never over their first content, and stays one notice as the tabs switch", async ({ baseURL, browser, room, seed }) => {
 	test.setTimeout(120_000);

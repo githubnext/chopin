@@ -1902,6 +1902,7 @@ export function RoomWorkspace(
 							<Chat
 								active={chatActive}
 								agent={agent}
+								offline={offline.open}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}
 								connected={status === "connected"}

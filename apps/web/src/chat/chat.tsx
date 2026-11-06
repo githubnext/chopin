@@ -72,6 +72,7 @@ import {
 	reconcileReferenceDrafts,
 	referenceTrigger,
 	referenceTriggerKey,
+	repliesOffNotice,
 	restoreDraftSubmission,
 	reviseComposerDraft,
 	withNoticesAfter,
@@ -117,6 +118,8 @@ export type ChatProps = {
 	people?: readonly string[];
 	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
+	/** The page is showing its offline notice, which is the one thing said about the connection. */
+	offline?: boolean;
 	active?: boolean;
 	/** `history` marks the transcript arriving, after which `busy` is known rather than assumed. */
 	onActivity?: (event: { type: "message" | "working"; busy: boolean; history?: true }) => void;
@@ -203,6 +206,7 @@ export function Chat(
 	{
 		active = true,
 		agent = true,
+		offline = false,
 		focus,
 		onOpenChild,
 		readonly = false,
@@ -779,7 +783,7 @@ export function Chat(
 					: blockedCommand
 					? { tone: "info", text: "Research isn’t available in this document" }
 					: !agent
-					? { tone: "info", text: "Chopin unavailable" }
+					? repliesOffNotice(offline)
 					: plannerStrip}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled

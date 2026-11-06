@@ -373,8 +373,20 @@ export function chatSendPayload(
 	};
 }
 
+/** What a server whose agent is off says to a person, in the composer's strip and after a send. */
+export const REPLIES_OFF = "Replies are off on this server.";
+
 export const PLANNER_UNAVAILABLE_NOTICE =
-	"Chopin is off on this server. Your message went to the room only.";
+	`${REPLIES_OFF} Your message went to the people here only.`;
+
+/**
+ * The composer's strip for a server whose agent is off. A lost connection is the page's one
+ * notice, so while that shows the composer says nothing of availability, and the strip returns by
+ * itself with the connection.
+ */
+export function repliesOffNotice(offline: boolean): { tone: "info"; text: string } | undefined {
+	return offline ? undefined : { tone: "info", text: REPLIES_OFF };
+}
 
 /** Whether a payload names the Planner, even though it was routed to the room. */
 export function addressesPlanner(payload: ChatSendPayload): boolean {
