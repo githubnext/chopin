@@ -109,23 +109,27 @@ export function offlineChoice(state: MachineChoiceState | undefined): string | u
 
 /**
  * The name the Planner's status gives the machine it is starting on, or was running on when it
- * dropped: the document's own machine, the one its button names, or another machine of the
- * person's own. Never a teammate's the document is not set to run on, which is named by its
- * owner's login instead, nor one that is not in the person's list at all.
+ * dropped: the document's own machine, the one its button names (the person's choice, else the one
+ * Automatic uses now), and no other. Not another machine of the person's own, which a list read
+ * before the choice changed may still describe; not a teammate's the document is not set to run
+ * on, which is named by its owner's login instead; nor one that is not in the person's list at all.
  */
 export function plannerRunsOn(state: MachineChoiceState | undefined): string | undefined {
 	return plannerMachine(state)?.label;
 }
 
-function plannerMachine(state: MachineChoiceState | undefined): ChoosableMachine | undefined {
+/** The machine the list says the Planner is starting on or dropped from, whose ever it is. */
+function plannerRunner(state: MachineChoiceState | undefined): ChoosableMachine | undefined {
 	let planner = state?.planner;
 	if (!planner?.machine || (planner.state !== "starting" && planner.state !== "disconnected")) {
 		return undefined;
 	}
-	let machine = state?.machines.find(value => value.id === planner.machine);
-	return machine && (!machine.teammate || shownMachine(state)?.id === machine.id)
-		? machine
-		: undefined;
+	return state?.machines.find(value => value.id === planner.machine);
+}
+
+function plannerMachine(state: MachineChoiceState | undefined): ChoosableMachine | undefined {
+	let machine = plannerRunner(state);
+	return machine && shownMachine(state)?.id === machine.id ? machine : undefined;
 }
 
 /**
@@ -141,11 +145,11 @@ export function plannerLastSeen(state: MachineChoiceState | undefined): string |
 /**
  * What `plannerStatus` is told of the machine the Planner is on. A name, where `plannerRunsOn` has
  * one; undefined where the status says whose machine it is by login. `null` says nothing is said
- * yet: while the person's machines are loading, while the list names a teammate's machine, not
- * the document's own, for a Planner the person's own account is the one starting, and while the
- * list describes another account's Planner than the page's socket does (its login, or the
- * viewer's own where the machine is theirs). The two disagree, and the list is what is out of
- * date.
+ * yet: while the person's machines are loading, while the list names a machine the document does
+ * not run on (a teammate's, or another of the person's own) for a Planner the person's own account
+ * is the one starting or dropping, and while the list describes another account's Planner than the
+ * page's socket does (its login, or the viewer's own where the machine is theirs). In each the two
+ * disagree, and the list, read earlier than the socket's word, is what is out of date.
  */
 export function plannerMachineName(
 	state: MachineChoiceState | undefined,
@@ -161,8 +165,9 @@ export function plannerMachineName(
 		return planner?.state === "starting" || planner?.state === "disconnected" ? null : undefined;
 	}
 	if (planner?.state !== "starting" && planner?.state !== "disconnected") return undefined;
-	let theirs = state.machines.find(value => value.id === state.planner?.machine)?.teammate;
-	return theirs && planner.login.toLowerCase() === viewer.toLowerCase() ? null : undefined;
+	return plannerRunner(state) && planner.login.toLowerCase() === viewer.toLowerCase()
+		? null
+		: undefined;
 }
 
 const STATE_WORDS: Record<MachineState, string> = {

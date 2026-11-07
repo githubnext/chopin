@@ -554,10 +554,12 @@ and Chat then shows nothing.
 These words are plain and name none of Chopin's own terms: _Connecting to studio_,
 _Can't connect to studio_, _studio is offline. Last seen 10:31 AM._ for a machine that is away (_Your work is kept._ where no time is known), _studio stepped away.
 Your work is kept until 10:31 AM._ for a detached holder with its deadline, and _No machine is
-connected._ where none is attached, naming the machine when it is the viewer's own, or the
-one the document's button names, and otherwise only its owner's login (_@mona's machine_).
+connected._ where none is attached, naming the machine only when it is the one the
+document's button names (the person's choice, else the one Default machine uses now), and
+otherwise only its owner's login (_@mona's machine_).
 _Connecting_ and _No machine is connected_ are said only once they have lasted the 1.5 s a lost connection waits before the page speaks of it, the last state staying until then, so a restart's passing states are never shown; every state clearing goes at once. Through a lost connection the page keeps the last state it knew, however long the machine takes to return: a server that has just started tells `none` to everyone who connects until a machine returns, so the first `none` after the connection comes back is its placeholder, not news of the machine, and nothing is said until another state arrives. A `none` told after any other state, a machine removed while the page is connected, is still said, and so is the first state of a page that has known nothing else. It never names another machine of the list: while the person's machines are loading, while the
-list names a teammate's machine for a Planner their own account is starting, or while it describes another account's Planner than the page's connection does, nothing is said
+list names a machine the document does not run on, a teammate's or another of the person's own,
+for a Planner their own account is starting or has lost, or while it describes another account's Planner than the page's connection does, nothing is said
 until it agrees. A `disconnected` Planner's work is
 kept with no deadline. Its live
 run cards carry `disconnected` beside the status they last reported: each reads

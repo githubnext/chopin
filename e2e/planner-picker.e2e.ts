@@ -903,6 +903,78 @@ for (let [shape, options] of SHAPES) {
 }
 
 for (let [shape, options] of SHAPES) {
+	test(`the Planner's status names only the machine the document runs on, and says nothing while the machine list still describes another of the person's own machines, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		carriage.mute(true);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		await machine(page, "Box A", true);
+		await machine(page, "Box B", true);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let id = (label: string) => list.machines.find(value => value.label === label)!.id;
+		let chosen = await page.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+			data: { machine: id("Box B") },
+			headers: { origin: ORIGIN },
+		});
+		expect(chosen.status()).toBe(200);
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		let button = machineButton(page);
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+
+		// The document was set to run on Box B after the machine list was read, and that list still
+		// says its Planner is on Box A, the person's own as well.
+		let reread = await reading(page, room, state => ({
+			...state,
+			choice: id("Box B"),
+			planner: { state: "starting", login: null, machine: id("Box A") },
+		}));
+		await reread.refresh();
+
+		// Box A is not the document's machine: past the moment a machine being connected to waits,
+		// nothing is named, said, announced or drawn, whichever way the Planner of the person's own
+		// account is told to be.
+		let failure = { attempts: 3, reason: "exit 1", at: new Date().toISOString() };
+		for (
+			let planner of [
+				{ state: "starting", login: "mona" },
+				{ state: "disconnected", login: "mona" },
+				{ state: "starting", login: "mona", failure },
+			]
+		) {
+			carriage.say(planner);
+			await page.waitForTimeout(1_800);
+			await expect(button).toHaveAccessibleName("Runs on Box B");
+			await expect(announced(page)).toHaveText("");
+			await expect(strip(page)).toHaveCount(0);
+		}
+		expect(await heard(page)).toEqual([]);
+		await shoot(page, `planner-stale-own-machine-${shape}`);
+
+		// The list catches up, and the document's own machine is named.
+		reread.active.on = false;
+		await reread.refresh();
+		carriage.say({ state: "starting", login: "mona" });
+		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
+		carriage.say({ state: "disconnected", login: "mona" });
+		await expect(button).toHaveAccessibleName(
+			"Runs on Box B. Box B is offline. Your work is kept.",
+		);
+		// The list read for the last word is still on its way: let it be answered before the server goes.
+		await page.unrouteAll({ behavior: "wait" });
+	});
+}
+
+for (let [shape, options] of SHAPES) {
 	test(`a machine that is offline says when it was last seen, on a ${shape}`, async ({ browser }) => {
 		test.setTimeout(120_000);
 		let room = await remoteServer();
