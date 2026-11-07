@@ -320,6 +320,18 @@ export class PlannerAttachments {
 	}
 
 	/**
+	 * Whether a Planner backend of paired machine `machineId` is attached now, or was a moment ago,
+	 * when a deploy cut its link and it is expected back within its window: the machine is running
+	 * even if its connector has yet to speak to this process.
+	 */
+	machineBacked(machineId: string): boolean {
+		for (let hold of this.#holds.values()) {
+			if (hold.machineId === machineId && (hold.link || this.#inWindow(hold))) return true;
+		}
+		return false;
+	}
+
+	/**
 	 * The Planner backend of paired machine `machineId` stops being the document's Planner, as its
 	 * owner chose another machine or it disconnected: an attached link is refused with `message`
 	 * and closed, and the ownership released without a grace period, ending what a disconnected

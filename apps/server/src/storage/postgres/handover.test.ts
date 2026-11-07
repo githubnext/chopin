@@ -176,14 +176,17 @@ if (database) {
 					async () => (await health(9164, "live"))?.[1] === "standby",
 				);
 
+				let first = await lease();
 				holder.child.kill("SIGTERM");
-				let released = await until(
-					"the release",
-					async () => (await lease())?.free && performance.now(),
-				);
+				// The lease is free for only as long as the waiting process takes to notice, which a busy
+				// machine can make shorter than one look: a new owner is the release seen late.
+				let released = await until("the release", async () => {
+					let current = await lease();
+					return current && (current.free || current.owner !== first!.owner) && performance.now();
+				});
 				let took = await until("a new owner", async () => {
 					let current = await lease();
-					return current && !current.free && performance.now();
+					return current && !current.free && current.owner !== first!.owner && performance.now();
 				});
 				let ready = await until(
 					"ready",

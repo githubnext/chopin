@@ -476,7 +476,10 @@ so merge ranges from all mounted editors before replacing a registry entry.
   request carries its own identity, as `chat:send` does, may send it again quietly.
   For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the document's one
   offline notice stays away, and every other surface that speaks of a lost connection
-  waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both.
+  waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both. What the
+  page draws holds through that quiet too (`readsConnected` for Build plan and the editors'
+  controls, `quietRestart` for Chat's hint and composer): a control that comes and goes with the
+  connection must not change for a restart, and `e2e/handover.e2e.ts` samples them.
 - The cut has a fixed order (`apps/server/src/handover/cut.ts`, held by its test): readiness
   off for the whole unready window while everything is still served, then the listener stops,
   in-flight requests finish, edits stop and commit, link state is persisted, the lease is

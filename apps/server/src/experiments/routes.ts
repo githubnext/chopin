@@ -1781,7 +1781,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					finishing: finishing.get(machine.id)?.documents.size ?? 0,
 					createdAt: machine.createdAt.getTime(),
 					lastSeenAt: machine.lastSeenAt.getTime(),
-					connected: connections.machine(machine.id).length > 0,
+					connected: connections.machine(machine.id).length > 0 || backed(machine.id),
 					version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
 					...described(connections.machine(machine.id)),
 					reauthorize: !!machine.reauthorizeAt,
@@ -1791,7 +1791,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					repositories,
 					// Only the viewer's own favorite, never its owner's.
 					favorite: machine.id === favorite,
-					connected: connections.machine(machine.id).length > 0,
+					connected: connections.machine(machine.id).length > 0 || backed(machine.id),
 				}))),
 			],
 		});
@@ -1922,6 +1922,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await disconnectMachine(params.id);
 		return json({ revoked: true });
 	});
+	/** Whether a Planner backend of the machine is attached, or was cut by a deploy and is expected back. */
+	function backed(machineId: string): boolean {
+		return !!options.attachments?.()?.machineBacked(machineId);
+	}
 	/**
 	 * The caller's own machines, whatever repositories they have checkouts of, and the machines
 	 * teammates share that serve the document's repository while their owners can push to it (for
@@ -1959,6 +1963,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			}
 		}
 		automatic ??= live[0];
+		// With no connection of its own yet in this process (a deploy just replaced the last), a
+		// machine whose backend holds the document's Planner is still the machine it runs on.
+		let carried = options.attachments?.()?.holding(documentId);
+		let automaticId = automatic?.machineId
+			?? (carried?.attached && carried.userId === userId ? carried.machineId : undefined);
 		let label = (id: string) =>
 			serving.find(machine => machine.id === id)?.label
 				?? teammates.find(({ machine }) => machine.id === id)?.machine.label ?? null;
@@ -1974,12 +1983,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			/** The caller's favorite machine, theirs or a teammate's, which Automatic prefers where it serves the repository. */
 			favorite: favorite ?? null,
 			planner: plannerState(userId, channel, serving),
-			automatic: automatic
-				? {
-					id: automatic.machineId,
-					label: label(automatic.machineId),
-					favorite: automatic.machineId === favorite,
-				}
+			automatic: automaticId
+				? { id: automaticId, label: label(automaticId), favorite: automaticId === favorite }
 				: null,
 			machines: [
 				...serving.map(machine => {
@@ -1988,7 +1993,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						id: machine.id,
 						label: machine.label,
 						teammate: false,
-						connected: live.some(value => serves(value, repositoryId)),
+						connected: live.some(value => serves(value, repositoryId)) || backed(machine.id),
 						reauthorize: !!machine.reauthorizeAt,
 						createdAt: machine.createdAt.getTime(),
 						lastSeenAt: machine.lastSeenAt.getTime(),
@@ -2004,7 +2009,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				}),
 				...await Promise.all(teammates.map(async ({ machine }) => ({
 					...await teammateFacts(machine),
-					connected: connections.machine(machine.id).some(value => serves(value, repositoryId)),
+					connected: connections.machine(machine.id).some(value => serves(value, repositoryId))
+						|| backed(machine.id),
 					runsPlanners: capable(machine.id),
 				}))),
 			],
