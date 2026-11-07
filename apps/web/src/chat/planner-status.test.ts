@@ -276,8 +276,8 @@ test("a state is not said again when it is entered again after only a gap in whi
 			[failing(4), "Build box"],
 		]).heard,
 	).toEqual(["Can't connect to Build box."]);
-	// The same state entered again through a gap, the document having moved to another machine.
-	expect(spoken([[starting, "Box B"], [starting, null], [starting, "Box C"]]).heard).toEqual([
+	// The same state entered again through a gap, once the machine is named again.
+	expect(spoken([[starting, "Box B"], [starting, null], [starting, "Box B"]]).heard).toEqual([
 		"Connecting to Box B",
 	]);
 	// A different state is said once it is named, however long the gap before it was.

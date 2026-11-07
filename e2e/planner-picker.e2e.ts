@@ -1053,6 +1053,121 @@ for (let [shape, options] of SHAPES) {
 	});
 }
 
+/** One reading of what the page says of the machine: the button's name, its state, the strip and the live region. */
+type Sample = { at: number; name: string; planner: string; strip: string; said: string };
+
+/** Reads what the page says every 50 ms, in the page, until the returned function is called. */
+async function sampling(page: Page): Promise<() => Promise<Sample[]>> {
+	await page.evaluate(() => {
+		let samples: Sample[] = [];
+		let start = performance.now();
+		let read = () => {
+			let button = document.querySelector('button[aria-label^="Runs on"]');
+			samples.push({
+				at: Math.round(performance.now() - start),
+				name: button?.getAttribute("aria-label") ?? "",
+				planner: button?.getAttribute("data-planner") ?? "",
+				strip: document.querySelector(".chat-composer .composer-notice")?.textContent ?? "",
+				said: document.querySelector("[data-planner-status]")?.textContent ?? "",
+			});
+		};
+		read();
+		let timer = setInterval(read, 50);
+		(window as unknown as { sampled: { samples: Sample[]; timer: number } }).sampled = {
+			samples,
+			timer: timer as unknown as number,
+		};
+	});
+	return () =>
+		page.evaluate(() => {
+			let { samples, timer } = (window as unknown as {
+				sampled: { samples: Sample[]; timer: number };
+			}).sampled;
+			clearInterval(timer);
+			return samples;
+		});
+}
+
+for (let [shape, options] of SHAPES) {
+	test(`a state that waits for its grace after the gap draws nothing meanwhile, never what was shown before the gap or a machine the current state no longer supports, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		carriage.mute(true);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		await machine(page, "Box B", true);
+		await machine(page, "Box C", true);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let choose = async (label: string) => {
+			let chosen = await page.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+				data: { machine: list.machines.find(value => value.label === label)!.id },
+				headers: { origin: ORIGIN },
+			});
+			expect(chosen.status()).toBe(200);
+		};
+		await choose("Box B");
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		let button = machineButton(page);
+		let reread = await reading(page, room, state => state);
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+
+		// Box B drops its Planner, and the button says so.
+		carriage.say({ state: "disconnected", login: "mona" });
+		await expect(button).toHaveAccessibleName(
+			"Runs on Box B. Box B is offline. Your work is kept.",
+		);
+
+		// The document is then set to run on Box C, and its Planner is starting. The read of the list
+		// is slow: until it answers, the status says nothing, not what it said of Box B.
+		let release = reread.hold();
+		await choose("Box C");
+		carriage.say({ state: "starting", login: "mona" });
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expect(button).not.toHaveAttribute("data-planner");
+		await page.waitForTimeout(1_800);
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expect(strip(page)).toHaveCount(0);
+
+		// It answers, naming Box C. A machine being connected to waits out its grace, and for that
+		// time nothing of Box B, which Box C's state no longer supports, is read, in the button's name,
+		// on its dot, in the strip or by a screen reader.
+		let stop = await sampling(page);
+		release();
+		await expect(button).toHaveAccessibleName("Runs on Box C. Connecting to Box C");
+		await page.waitForTimeout(1_000);
+		let samples = await stop();
+		expect(samples.at(-1)!.at - samples[0]!.at).toBeGreaterThanOrEqual(2_000);
+		let named = samples.findIndex(sample => sample.name.includes("Box C"));
+		let connecting = samples.findIndex(sample => sample.name.includes("Connecting"));
+		expect(named).toBeGreaterThanOrEqual(0);
+		expect(connecting).toBeGreaterThan(named);
+		expect(samples.slice(named).filter(sample => JSON.stringify(sample).includes("Box B")))
+			.toEqual([]);
+		for (let sample of samples.slice(named, connecting)) {
+			expect(sample).toMatchObject({ name: "Runs on Box C", planner: "", strip: "", said: "" });
+		}
+		expect(samples[connecting]!.at - samples[named]!.at).toBeGreaterThanOrEqual(1_200);
+		expect(samples.slice(connecting).map(sample => sample.name)).toEqual(
+			samples.slice(connecting).map(() => "Runs on Box C. Connecting to Box C"),
+		);
+		expect(await heard(page)).toEqual([
+			"Box B is offline. Your work is kept.",
+			"Connecting to Box C",
+		]);
+		await shoot(page, `planner-settled-after-move-${shape}`);
+		await page.unrouteAll({ behavior: "wait" });
+	});
+}
+
 for (let [shape, options] of SHAPES) {
 	test(`a machine that is offline says when it was last seen, on a ${shape}`, async ({ browser }) => {
 		test.setTimeout(120_000);
