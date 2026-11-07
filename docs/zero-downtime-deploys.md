@@ -248,7 +248,13 @@ it too, provided it follows the rules below.
   lost connection, and what was sent meanwhile waits.
 - A paired machine's backend keeps working: the credential the server issued it is stored by
   digest, so the new process accepts an unexpired one at once and the backend sees no HTTP 401.
-  Older connectors need no change.
+  Older connectors need no change. The machine's connection itself is kept in memory, so its
+  connector opens a new one as soon as the new process says it does not know it. Until then a
+  machine whose backend holds a Planner, or is expected back within its window, is listed as
+  connected and is the document's machine, and a document whose Planner such a machine held is
+  still asked of it: each restored hold counts as the document being in use, since which documents
+  are in use is not kept. Without that the connector's first poll would be told to run no
+  Planners and would stop the backend.
 
 A message to the document's machine is never refused because it is away. It appears in Chat at
 once, is saved on the server, and is delivered by itself, in order and exactly once, when the
@@ -292,7 +298,96 @@ It exits 1 when any request was not answered 2xx, no request was answered after 
 gap passes `--max-gap-ms` (1.5 s, the browser's grace) or the old process did not exit 0.
 `--warm-ms` (1.5 s) is the wait for the proxy to find the new slot before the old one is
 stopped. The script's `startProxy` runs the same reference proxy for a test that starts the two
-processes itself, such as the browser test of a hand-over under an open tab.
+processes itself.
+
+### The browser test of a hand-over
+
+`e2e/handover.e2e.ts` starts the two processes itself, with a proxy in front, and hands the writer
+lease from one to the other under open tabs, with a paired machine's Planner backend (and, in two
+cases, a Planner attached under its owner's own sign-in) attached through the proxy. It is part of
+`bun run e2e`, on ports 8801 to 8803 and a database of its own in the fourth database's cluster.
+Its cases:
+
+- A person types without stopping, with an unsent message in the composer, while the old process
+  is stopped. The page is sampled every 25 ms: it says nothing of the connection or the machine
+  (no notice of any kind), the machine's button never leaves its connected state, the page is not
+  reloaded, every word typed arrives once and in order, the unsent message is kept, an agent's
+  MCP session still works in the new process and an asset of a build that is gone is a 404. The
+  same sample holds every case below to what the page offers, part by part, as it was when the
+  hand-over began: Build plan, what Chat says before anyone has spoken, what the composer lets a
+  person do, and the document's lock. A tab that comes back from a restart in silence draws
+  what it drew before (`readsConnected` in `apps/web/src/wire-loss.ts`, and Chat's held
+  participation), so Build plan does not go for the moment the socket is being opened again.
+- A comment being written, with its words and its offer to send it to Chopin (made while a
+  Planner runs for the document), is still open with both after the hand-over, and a comment
+  started after it is offered the same.
+- A message sent to the Planner with a turn running, one sent while the old process waits for the
+  turn, a comment sent to Chopin, one typed before the cut and sent after it, and one the page had
+  not yet sent, are each answered once and in the order they were accepted, and a teammate's tab
+  and a tab opened afterwards see each reply once.
+- A message sent from an open child keeps the child it was about, and the turn can read it in the
+  new process.
+- A message sent while the machine's Planner is away through the whole cut shows as sent, never as
+  failed, and is delivered once, with one reply, when it is back.
+- A Planner attached under its owner's sign-in, with a question left open, resumes within its
+  window, with the owner's tab in front, with it really in the background, and with it frozen
+  for a moment. The client resumes with its question still waiting, and the answer a member
+  gives the card reaches that question, once, whether it is given before or after the client is
+  back; no turn of its own follows it. A further case answers the question while the old process
+  still waits for the turn that asked it: the turn receives the answer and no second turn
+  follows. Another leaves the client away and has the same account attach again with nothing to
+  resume after the answer was given: the answer is handed to it once, as a turn.
+
+  Playwright makes every page it drives look focused and in front, which also keeps the page's
+  timers at full speed, so a tab it launched cannot be put in the background whatever is in
+  front of it. `e2e/background-browser.ts` therefore starts a headless Chromium itself and
+  drives it over the DevTools protocol with Playwright's overrides off (`noDefaults`). A tab
+  behind another there reads `hidden`, and a 25 ms timer in it fires about once a second (the test
+  checks both before it begins), and `Page.setWebLifecycleState` freezes a tab as the browser
+  does one it has left alone. It needs no display. What the owner's login did (a Planner's
+  client resumes once the owner's browser has sent its cookie to the new process, retried
+  every 250 ms):
+
+  | Owner's tab                               | Planner resumed after the release          | Window |
+  | ----------------------------------------- | ------------------------------------------ | ------ |
+  | in front                                  | 407 to 582 ms                              | 10 s   |
+  | in the background, timers at one a second | 736 to 929 ms                              | 10 s   |
+  | frozen for 3 s after the release          | 3.1 to 3.3 s, 98 to 263 ms after it thawed | 10 s   |
+
+  A background tab costs a few hundred milliseconds, so the design's assumption that the login is
+  back by about 1.5 s holds for it. A frozen tab sends nothing, so its login, and with it the
+  client's `resume`, waits for the tab to run again: a tab the browser keeps frozen for longer than
+  the window is the design's bounded exception (open question 3 (h)): members then see the
+  Planner away, as for a client that does not resume, and the hand-over logs a remote-Planner
+  miss whose cause is the login. Nothing is shown to a teammate through any of the three, and
+  the Planner is taken back with its question. A frozen tab learns that its sockets are gone when
+  it runs again: the browser ends the sockets of a page it freezes (they close with 1006, no word
+  from the server, deploy or none). A hidden page's timers run once a second and a frozen
+  page's not at all, so its reconnect and the grace of the one notice fell due in the same tick
+  and it said it was offline, locked, for the moment before the socket opened. The grace is now
+  counted only while the page can be looked at (`countGrace` in `packages/editor`): a hidden or
+  frozen tab says nothing of being offline, however long its connection takes to come back, and
+  counts the grace whole from when it is shown, thawed or restored while the loss lasts. The test
+  holds the frozen tab to what it holds every tab to, except that what it offers reads as it is
+  until its sockets are open again (Build plan is gone meanwhile); a second test freezes a hidden
+  tab with its connection away for longer than the grace and expects neither the notice nor the
+  lock, then shows it while it is still away and expects the notice. Chromium's intensive throttling of a tab hidden for more than five minutes was not
+  measured: it takes that long to begin.
+
+The gap is measured from the old process's release of the lease, which the test sees by reading
+the lease row, to the first request the proxy answers, by asking the proxy every 15 ms from four
+clients. The test fails above the design's 750 ms budget (the browser's grace is 1.5 s, and it
+prints both beside the measured gap). In 88 hand-overs on a developer machine (eight runs of the
+file in a row, none failing) the first answer came 131 to 390 ms after the release (median 238 ms),
+and in 22 behind the reference Caddy (two runs), 117 to 361 ms. Not one of the 332 to 1,134
+requests per hand-over was answered anything but 2xx.
+
+The proxy is `e2e/holding-proxy.ts`, which does what the reference Caddyfile does (checks
+`/api/health/ready` every 250 ms, holds a request for up to 5 s while no upstream is ready,
+retries a refused connection every 100 ms and keeps a WebSocket until a side closes it), because
+CI cannot be assumed to have Caddy or a container to run it in; `e2e/holding-proxy.test.ts` holds
+it to that. `CHOPIN_E2E_PROXY=caddy bun run e2e e2e/handover.e2e.ts` runs the reference proxy
+instead, in a container on the host's network (Linux, with the `caddy:2.11-alpine` image).
 
 ## What is not done
 

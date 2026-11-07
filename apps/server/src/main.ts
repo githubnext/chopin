@@ -3444,6 +3444,9 @@ try {
 					plannerAttachments!.rejoinInputs(row.channelId, plannerQuestions(opened, server));
 				}
 			}
+			// Which documents are in use lived in the process that has gone, and a machine is asked to
+			// run only the Planners of documents in use: one told it runs none stops its backend.
+			for (let row of rows) if (row.machineId) await experiments!.plannerUsed(row.channelId);
 		});
 	}
 	await timed("experiments", () => experiments!.service.recover(true));
