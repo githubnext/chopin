@@ -94,3 +94,24 @@ export async function expectHealthy(button: Locator): Promise<void> {
 	await expect(button).toHaveAccessibleName(/^Runs on [^.]+$/);
 	await expect(button).not.toHaveAttribute("data-planner");
 }
+
+/** What a person reads or hears of a machine and its connection, in any form it takes. */
+export const MACHINE_WORDS =
+	/is offline|Connecting|Your work is kept|No machine|stepped away|Last seen|disconnected|Last reported|when the machine reconnects|It carries on|Answers reach it/;
+
+/**
+ * The page says none of it while its offline notice shows: not in what it draws, nor in what a
+ * screen reader reads or has been told: no text, label, title or tooltip, and no live region.
+ */
+export async function expectNoMachineWords(page: Page): Promise<void> {
+	await expect(announced(page)).toHaveText("");
+	await expect(page.locator("body")).not.toContainText(MACHINE_WORDS);
+	let live = await page.locator('[aria-live], [role="status"], [role="alert"]').allTextContents();
+	expect(live.filter(text => MACHINE_WORDS.test(text))).toEqual([]);
+	let described = await page.evaluate(() =>
+		[...document.querySelectorAll("[aria-label], [title], [data-tooltip]")].flatMap(element =>
+			["aria-label", "title", "data-tooltip"].map(name => element.getAttribute(name) ?? "")
+		)
+	);
+	expect(described.filter(text => MACHINE_WORDS.test(text))).toEqual([]);
+}

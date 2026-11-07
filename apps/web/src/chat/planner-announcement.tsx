@@ -10,19 +10,25 @@ import type { PlannerStatus } from "./planner-status";
  * strip draw the same state without announcing it themselves, so it is never said twice, and it
  * does not depend on any of them being on the page. A status that is only withheld until the
  * machine is named (`withheld`) is a gap the state carries on through, not a clearing, so the same
- * state entered again after it is not said again.
+ * state entered again after it is not said again. While the page's offline notice shows
+ * (`offline`) the region is empty and says nothing new, since that notice is the one thing said
+ * about the connection; what it last said is remembered, so it is not said again on return.
  */
 export function PlannerAnnouncement(
-	{ status, withheld }: { status: PlannerStatus | undefined; withheld: boolean },
+	{ status, withheld, offline }: {
+		status: PlannerStatus | undefined;
+		withheld: boolean;
+		offline: boolean;
+	},
 ) {
 	let previous = useRef<PlannerStatus["kind"] | undefined>(undefined);
 	let [spoken, setSpoken] = useState("");
 	useEffect(() => {
-		let speech = plannerSpeech(previous.current, status, withheld);
+		let speech = plannerSpeech(previous.current, status, withheld, offline);
 		if (!speech) return;
 		setSpoken(speech.said);
 		previous.current = speech.kind;
-	}, [status, withheld]);
+	}, [status, withheld, offline]);
 	return (
 		<span
 			aria-atomic="true"

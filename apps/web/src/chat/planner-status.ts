@@ -143,13 +143,19 @@ export function plannerAnnouncement(
  * remembers the state last said, so the same state entered again once the machine is named is
  * not said twice, as a word that repeats it with one more attempt is while the list of machines
  * is read again.
+ *
+ * While the page's offline notice shows (`offline`) the region is empty and says nothing new,
+ * whatever the status does meanwhile: the notice is the one thing said about the connection. It
+ * remembers the state last said, as in a gap, so a state that carried on through the loss is not
+ * said again when the connection returns, and a different one is said once.
  */
 export function plannerSpeech(
 	previous: PlannerStatus["kind"] | undefined,
 	status: PlannerStatus | undefined,
 	withheld: boolean,
+	offline = false,
 ): { kind: PlannerStatus["kind"] | undefined; said: string } | undefined {
-	if (withheld && !status) return previous ? { kind: previous, said: "" } : undefined;
+	if (offline || (withheld && !status)) return previous ? { kind: previous, said: "" } : undefined;
 	let kind = status?.kind;
 	return kind === previous ? undefined : { kind, said: plannerAnnouncement(previous, status) };
 }

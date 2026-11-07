@@ -239,20 +239,24 @@ test("a word whose machine is not known yet is withheld, not over: only a starti
 	}
 });
 
-/** What a live region is told, in order, and what it holds at the end, as `steps` follow one another. */
+/**
+ * What a live region is told, in order, and what it holds at the end, as `steps` follow one
+ * another, each with whether the page's offline notice shows then.
+ */
 function spoken(
 	steps: ReadonlyArray<
-		[planner: Session.PlannerAttachment | undefined, machine: string | null]
+		[planner: Session.PlannerAttachment | undefined, machine: string | null, offline?: boolean]
 	>,
 ): { heard: string[]; text: string } {
 	let heard: string[] = [];
 	let text = "";
 	let previous: Parameters<typeof plannerSpeech>[0];
-	for (let [planner, machine] of steps) {
+	for (let [planner, machine, offline = false] of steps) {
 		let speech = plannerSpeech(
 			previous,
 			plannerStatus(planner, machine),
 			plannerWithheld(planner, machine),
+			offline,
 		);
 		if (!speech) continue;
 		previous = speech.kind;
@@ -302,6 +306,65 @@ test("a live region holds nothing while a status is withheld, and says nothing m
 		heard: ["Connecting to Box B"],
 		text: "",
 	});
+});
+
+test("while the page's offline notice shows, a live region is empty and says nothing new, whatever the status does", () => {
+	let starting = { state: "starting", login: "mona" } as const;
+	let dropped = { state: "disconnected", login: "mona" } as const;
+	// What it had said is cleared from it at once, and it stays empty for as long as the notice does.
+	expect(spoken([[dropped, "Box B"], [dropped, "Box B", true]])).toEqual({
+		heard: ["Box B is offline. Your work is kept."],
+		text: "",
+	});
+	// A state released from the wait for a newer read, whose grace ends beside the notice, is not said.
+	expect(plannerSpeech("disconnected", plannerStatus(starting, "Box C"), false, true)).toEqual({
+		kind: "disconnected",
+		said: "",
+	});
+	expect(
+		spoken([[dropped, "Box B"], [dropped, null, true], [starting, "Box C", true], [
+			starting,
+			"Box C",
+			true,
+		]]),
+	).toEqual({ heard: ["Box B is offline. Your work is kept."], text: "" });
+	// With nothing said and nothing held, it has nothing to remember or to clear.
+	expect(plannerSpeech(undefined, plannerStatus(starting, "Box C"), false, true)).toBeUndefined();
+	expect(plannerSpeech(undefined, undefined, false, true)).toBeUndefined();
+});
+
+test("a state that carried on through the loss is not said again when the connection returns, and a different one is said once", () => {
+	let starting = { state: "starting", login: "mona" } as const;
+	let dropped = { state: "disconnected", login: "mona" } as const;
+	let attached = { state: "attached", login: "mona" } as const;
+	expect(spoken([[dropped, "Box B"], [dropped, "Box B", true], [dropped, "Box B"]])).toEqual({
+		heard: ["Box B is offline. Your work is kept."],
+		text: "",
+	});
+	// Another machine's name for the same state is still the state carrying on.
+	expect(spoken([[dropped, "Box B"], [dropped, "Box C", true], [dropped, "Box C"]]).heard).toEqual([
+		"Box B is offline. Your work is kept.",
+	]);
+	// The state it returns to is another, and is said once, however long the loss lasted.
+	expect(
+		spoken([[dropped, "Box B"], [starting, "Box C", true], [starting, "Box C", true], [
+			starting,
+			"Box C",
+		], [starting, "Box C"]]),
+	).toEqual({
+		heard: ["Box B is offline. Your work is kept.", "Connecting to Box C"],
+		text: "Connecting to Box C",
+	});
+	// Healthy again by the time the connection returns: nothing is said, and the state it had
+	// said is forgotten, so it is said again if it recurs.
+	expect(spoken([[dropped, "Box B"], [attached, null, true], [attached, null]])).toEqual({
+		heard: ["Box B is offline. Your work is kept."],
+		text: "",
+	});
+	expect(
+		spoken([[dropped, "Box B"], [attached, null, true], [attached, null], [dropped, "Box B"]])
+			.heard,
+	).toEqual(["Box B is offline. Your work is kept.", "Box B is offline. Your work is kept."]);
 });
 
 test("a state is said again when it is entered again after the Planner was healthy or gone", () => {
