@@ -271,7 +271,7 @@ export function Chat(
 		setResearchBlock(block => (block === "disconnected" ? undefined : block));
 		setSendError(failure => failure?.lost ? undefined : failure);
 	}, [connected]);
-	let shownSend = shownSendFailure(sendError, connected);
+	let shownSend = shownSendFailure(sendError, connected, offline);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
