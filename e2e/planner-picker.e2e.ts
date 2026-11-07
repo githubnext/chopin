@@ -522,16 +522,27 @@ async function reading(
 	change: (state: Record<string, unknown>) => Record<string, unknown>,
 ) {
 	let active = { on: true, served: 0 };
+	let held: Promise<void> | undefined;
 	let url = `${ORIGIN}/api/documents/${room}/machine`;
 	await page.route(url, async route => {
 		if (route.request().method() !== "GET") return route.fallback();
 		let response = await route.fetch();
 		let state = await response.json() as Record<string, unknown>;
 		active.served++;
+		await held;
 		await route.fulfill({ response, json: active.on ? change(state) : state });
 	});
 	return {
 		active,
+		/** Reads started from now on are answered only when the returned function is called. */
+		hold: () => {
+			let gate = Promise.withResolvers<void>();
+			held = gate.promise;
+			return () => {
+				held = undefined;
+				gate.resolve();
+			};
+		},
 		/** Stops answering, so a read after the server has gone is the page's own. */
 		end: () => page.unroute(url),
 		/** Asks again, as the page does when it is focused, and waits until that has been drawn. */
@@ -970,6 +981,68 @@ for (let [shape, options] of SHAPES) {
 			"Runs on Box B. Box B is offline. Your work is kept.",
 		);
 		// The list read for the last word is still on its way: let it be answered before the server goes.
+		await page.unrouteAll({ behavior: "wait" });
+	});
+}
+
+for (let [shape, options] of SHAPES) {
+	test(`the Planner's status names no machine from a list read before the socket's word, says what it said until a list read after it has answered, and then names the document's own, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await authenticate(page, "mona", ORIGIN);
+		await listenForAnnouncements(page);
+		let carriage = await carried(page);
+		carriage.mute(true);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await createdBy(room, "mona");
+		await machine(page, "Box B", true);
+		await machine(page, "Box C", true);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let choose = async (label: string) => {
+			let chosen = await page.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+				data: { machine: list.machines.find(value => value.label === label)!.id },
+				headers: { origin: ORIGIN },
+			});
+			expect(chosen.status()).toBe(200);
+		};
+		await choose("Box B");
+		await page.reload();
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		let button = machineButton(page);
+		let reread = await reading(page, room, state => state);
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+
+		// A list read after the word says Box B, and Box B is named.
+		carriage.say({ state: "starting", login: "mona" });
+		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
+
+		// The document is then set to run on Box C, and the next read of the list is slow. The list the
+		// page holds was read before the next word and still agrees with itself on Box B, which the
+		// Planner may have left: Box B is not named for that word. What was said stays as it was, with
+		// nothing cleared and said again, until a read that began after the word has answered.
+		let release = reread.hold();
+		await choose("Box C");
+		carriage.say({ state: "disconnected", login: "mona" });
+		await page.waitForTimeout(1_800);
+		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
+		await expect(strip(page)).toHaveCount(0);
+		expect(await heard(page)).toEqual(["Connecting to Box B"]);
+		await shoot(page, `planner-slow-list-${shape}`);
+
+		// It answers, and the document's own machine is named.
+		release();
+		await expect(button).toHaveAccessibleName(
+			"Runs on Box C. Box C is offline. Your work is kept.",
+		);
+		expect(await heard(page)).toEqual([
+			"Connecting to Box B",
+			"Box C is offline. Your work is kept.",
+		]);
 		await page.unrouteAll({ behavior: "wait" });
 	});
 }

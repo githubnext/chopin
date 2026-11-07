@@ -34,6 +34,7 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 				planner: false,
 			}],
 		},
+		read: 1,
 		saving: false,
 		choose: async () => {},
 		refresh: () => {},

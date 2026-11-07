@@ -58,11 +58,13 @@ import { OfflineAnnouncement, OfflineNotice, useOfflineNotice } from "./offline-
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import {
+	nextReading,
 	offlineChoice,
 	plannerLastSeen,
 	plannerMachineName,
 	showsMachineChoice,
 	useMachineChoice,
+	waitsForList,
 } from "./machine-choice";
 import { plannerPlacement, plannerStatus } from "./chat/planner-status";
 import { PlannerAnnouncement } from "./chat/planner-announcement";
@@ -590,6 +592,8 @@ export function RoomWorkspace(
 		wire?: Wire;
 		planner?: Session.PlannerAttachment;
 		placeholder?: boolean;
+		/** Where the word arrived in the order of `nextReading`. */
+		heard?: number;
 	}>({});
 	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
@@ -730,15 +734,27 @@ export function RoomWorkspace(
 	let machineChoice = useMachineChoice(room, machinesEnabled);
 	// What is not well with the Planner. Where it is told, the machine button, the composer's top
 	// edge, or both, is decided once for every place that tells it (`plannerPlacement`). Which
-	// machine it is on is said only once the person's machines are in: null says nothing until then.
+	// machine it is on is said only once the person's machines are in, and read after the socket's
+	// last word: null says nothing until then.
 	let attachment = plannerAttachment.wire === wire ? plannerAttachment.planner : undefined;
-	let machineName = plannerMachineName(machineChoice.state, attachment, handle, machinesEnabled);
+	let listCurrent = machineChoice.read
+		> (plannerAttachment.wire === wire ? plannerAttachment.heard ?? 0 : 0);
+	let machineName = plannerMachineName(
+		machineChoice.state,
+		attachment,
+		handle,
+		machinesEnabled,
+		listCurrent,
+	);
 	let lastSeen = plannerLastSeen(machineChoice.state);
 	let plannerNow = useMemo(
 		() => plannerStatus(attachment, machineName, lastSeen),
 		[attachment, machineName, lastSeen],
 	);
-	let plannerNote = useSettledPlannerStatus(plannerNow, plannerAttachment.placeholder);
+	let plannerNote = useSettledPlannerStatus(
+		plannerNow,
+		plannerAttachment.placeholder || waitsForList(machineChoice.state, attachment, listCurrent),
+	);
 	// The choice shows only while the person has a paired machine, live, or the document lists a
 	// teammate's shared one: it appears with their first and goes with their last.
 	let ownsMachine = showsMachineChoice(useLiveMachines(true).machines, machineChoice.state);
@@ -1237,6 +1253,7 @@ export function RoomWorkspace(
 					wire: socket,
 					planner: frame.planner,
 					placeholder: plannerView === "returning",
+					heard: nextReading(),
 				});
 			}),
 			socket.on<ManagedAccess>("session:access", frame => {
