@@ -364,13 +364,22 @@ test("a workflow run's status, notes and controls are plain, connected or away",
 			let item = run(status, away);
 			expectPlainWords(`a ${status} run's label`, [runStatusLabel(item)]);
 			expectPlain(`a ${status} run's note about its machine`, [disconnectedNote(item)]);
-			let markup = render(createElement(RunStack, {
-				onPause: () => {},
-				onResume: () => {},
-				onShowDecisions: () => {},
-				runs: [item],
-			}));
-			expectPlainWords(`a ${status} run card`, words(markup));
+			for (let offline of [false, true]) {
+				let markup = render(createElement(RunStack, {
+					offline,
+					onPause: () => {},
+					onResume: () => {},
+					onShowDecisions: () => {},
+					runs: [item],
+				}));
+				expectPlainWords(`a ${status} run card`, words(markup));
+				// While the page's offline notice shows, nothing on a card is about the machine.
+				if (offline) {
+					expect(decode(markup), `a ${status} run card offline`).not.toMatch(
+						/disconnected|machine|reconnect|Last reported/i,
+					);
+				}
+			}
 		}
 	}
 	let away = render(createElement(RunStack, { onPause: () => {}, runs: [run("running", true)] }));

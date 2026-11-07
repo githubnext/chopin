@@ -37,10 +37,11 @@ const STAGE: Record<Wire.RunStage["status"], string> = {
 
 /**
  * What a run card's status reads. A disconnected Planner's live runs keep the status they last
- * reported, but say the Planner is away: nothing is running now, and nothing has ended.
+ * reported, but say the Planner is away: nothing is running now, and nothing has ended. While the
+ * page's offline notice shows, the card says nothing of the machine and reads as last reported.
  */
-export function runStatusLabel(run: Wire.Run): string {
-	return run.disconnected ? "disconnected" : STATUS[run.status];
+export function runStatusLabel(run: Wire.Run, offline = false): string {
+	return run.disconnected && !offline ? "disconnected" : STATUS[run.status];
 }
 
 /**
@@ -228,18 +229,20 @@ function RunPulse() {
 }
 
 /** A hollow ring for work that is pending, paused, or was stopped. */
-function RunRing({ away }: { away?: boolean }) {
+function RunRing({ told }: { told?: boolean }) {
 	return (
 		<span
 			aria-hidden="true"
 			className="run-ring"
-			{...(away ? { "data-run-disconnected": "" } : {})}
+			{...(told ? { "data-run-disconnected": "" } : {})}
 		/>
 	);
 }
 
-function RunGlyph({ away, status }: { away: boolean; status: Wire.Run["status"] }) {
-	if (away && status !== "waiting") return <RunRing away />;
+function RunGlyph(
+	{ away, told, status }: { away: boolean; told: boolean; status: Wire.Run["status"] },
+) {
+	if (away && status !== "waiting") return <RunRing told={told} />;
 	if (status === "running") return <RunPulse />;
 	if (status === "waiting") {
 		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
@@ -253,8 +256,10 @@ function RunGlyph({ away, status }: { away: boolean; status: Wire.Run["status"] 
 	return <RunRing />;
 }
 
-function StageGlyph({ away, status }: { away: boolean; status: Wire.RunStage["status"] }) {
-	if (status === "running") return away ? <RunRing away /> : <RunPulse />;
+function StageGlyph(
+	{ away, told, status }: { away: boolean; told: boolean; status: Wire.RunStage["status"] },
+) {
+	if (status === "running") return away ? <RunRing told={told} /> : <RunPulse />;
 	if (status === "completed") {
 		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
 	}
@@ -273,18 +278,25 @@ type RunControls = {
 	onShowDecisions?: () => void;
 	onPause?: (runId: string) => void;
 	onResume?: (runId: string) => void;
+	/** The page's offline notice is showing, the one thing said about the connection. */
+	offline?: boolean;
 };
 
 function RunRow(
-	{ run, tag, open, onToggle, loadStages, onShowDecisions, onPause, onResume }: RunControls & {
-		run: Wire.Run;
-		/** Tells apart runs of the same workflow. */
-		tag?: string;
-		open: boolean;
-		onToggle: () => void;
-	},
+	{ run, tag, open, onToggle, loadStages, onShowDecisions, onPause, onResume, offline }:
+		& RunControls
+		& {
+			run: Wire.Run;
+			/** Tells apart runs of the same workflow. */
+			tag?: string;
+			open: boolean;
+			onToggle: () => void;
+		},
 ) {
 	let away = !!run.disconnected;
+	// The machine's state is told only while the page can hear it: through a lost connection the
+	// last frame is all there is, and the offline notice is the one thing said about the connection.
+	let told = away && !offline;
 	// A disconnected run's clock stays at its last report, as a paused run's does.
 	let live = (run.status === "running" || run.status === "waiting") && !away;
 	let now = useNow(live);
@@ -301,7 +313,7 @@ function RunRow(
 	// A Pause is held for the Planner's return, and the control says so.
 	let control = kind === "pause" && onPause
 		? {
-			label: away ? `Pause ${title} when the machine reconnects` : `Pause ${title}`,
+			label: told ? `Pause ${title} when the machine reconnects` : `Pause ${title}`,
 			icon: plannerStop,
 			act: () => onPause(run.id),
 			kind,
@@ -317,25 +329,25 @@ function RunRow(
 					aria-controls={stagesId}
 					aria-expanded={open}
 					aria-label={`${title}, ${
-						away ? `disconnected, was ${STATUS[run.status]}` : STATUS[run.status]
+						told ? `disconnected, was ${STATUS[run.status]}` : STATUS[run.status]
 					}, ${elapsed(end - run.started)}`}
 					className="run-toggle"
 					data-run-toggle=""
 					onClick={onToggle}
 					type="button"
 				>
-					<RunGlyph away={away} status={run.status} />
+					<RunGlyph away={away} told={told} status={run.status} />
 					<span className="min-w-0 truncate font-mono text-text-secondary">{run.name}</span>
 					{tag && (
 						<span className="shrink-0 font-mono text-text-quaternary tabular-nums">{tag}</span>
 					)}
 					<span
-						aria-live="polite"
+						aria-live={away && offline ? "off" : "polite"}
 						className={`shrink-0 ${
 							run.status === "waiting" && !away ? "text-warning-ink" : "text-text-tertiary"
 						}`}
 					>
-						{runStatusLabel(run)}
+						{runStatusLabel(run, offline)}
 					</span>
 					<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
 						{elapsed(end - run.started)}
@@ -361,7 +373,7 @@ function RunRow(
 			</div>
 			{open && (
 				<div className="pb-1 pl-[22px]" id={stagesId}>
-					{away && (
+					{told && (
 						<p className="pb-1 text-text-tertiary" data-run-disconnected-note="">
 							{disconnectedNote(run)}
 						</p>
@@ -417,7 +429,7 @@ function RunRow(
 								data-run-stage={stage.status}
 								key={stage.id}
 							>
-								<StageGlyph away={away} status={stage.status} />
+								<StageGlyph away={away} told={told} status={stage.status} />
 								{stage.kind === "tool" && (
 									<WrenchIcon
 										aria-hidden="true"
@@ -461,7 +473,7 @@ function RunRow(
 }
 
 export function RunStack(
-	{ runs, loadStages, onShowDecisions, onPause, onResume }: RunControls & {
+	{ runs, loadStages, onShowDecisions, onPause, onResume, offline }: RunControls & {
 		runs: readonly Wire.Run[];
 	},
 ) {
@@ -487,6 +499,7 @@ export function RunStack(
 						<RunRow
 							key={run.id}
 							loadStages={loadStages}
+							offline={offline}
 							onPause={onPause}
 							onResume={onResume}
 							onShowDecisions={onShowDecisions}
