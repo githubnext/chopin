@@ -931,11 +931,26 @@ export function digest(source: string): string {
 	return `sha256:${createHash("sha256").update(source).digest("hex")}`;
 }
 
-/** Canonical hash of each top-level block, in order. */
+/** What `digests` found for each state of an editor, which no longer changes once committed. */
+const digested = new WeakMap<object, string[]>();
+
+/**
+ * Canonical hash of each top-level block, in order.
+ *
+ * Every thread's passage and every decision's anchors are brought forward by hashing the whole
+ * document, and a commit does that for each of them, so the cost of a commit grew with the number
+ * of open threads. A committed editor state never changes, so what was found for it is kept for
+ * as long as it is the current one.
+ */
 export function digests(target: Document): string[] {
-	return parse(project(target)).children.map(node =>
+	let state = target.editor.getEditorState();
+	let known = digested.get(state);
+	if (known) return [...known];
+	let found = parse(project(target)).children.map(node =>
 		digest(serialize({ type: "root", children: [node] }))
 	);
+	digested.set(state, found);
+	return [...found];
 }
 
 function bodyBlocks(target: Document) {
