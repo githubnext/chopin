@@ -40,6 +40,17 @@ function seenAt(iso: string): string {
 export const NO_MACHINE = "No machine is connected.";
 
 /**
+ * Whether the status of `planner` is only withheld: it is starting or has dropped, and `machine`
+ * is `null`, so which machine is not known yet and nothing is said until it is.
+ */
+export function plannerWithheld(
+	planner: Session.PlannerAttachment | undefined,
+	machine: string | null | undefined,
+): boolean {
+	return machine === null && (planner?.state === "starting" || planner?.state === "disconnected");
+}
+
+/**
  * `machine` names the document's own machine where the Planner is on it; without one the status
  * says whose machine it is by login. `null` says the machine a starting or disconnected Planner
  * is on is not known yet, and nothing is said until it is.
@@ -51,7 +62,7 @@ export function plannerStatus(
 ): PlannerStatus | undefined {
 	if (!planner || planner.state === "attached") return undefined;
 	if (planner.state === "none") return { kind: "none", text: NO_MACHINE };
-	if (machine === null && planner.state !== "held") return undefined;
+	if (plannerWithheld(planner, machine)) return undefined;
 	let where = machine ?? `@${planner.login}'s machine`;
 	if (planner.state === "held") {
 		return {
@@ -120,6 +131,27 @@ export function plannerAnnouncement(
 	next: PlannerStatus | undefined,
 ): string {
 	return next && next.kind !== previous ? plannerSentence(next) : "";
+}
+
+/**
+ * What a live region does as the status changes, or nothing (undefined): the sentence of a problem
+ * state it has just entered, or silence as a state clears (`said` is empty), and the state it has
+ * now said, which is what the next change is compared with.
+ *
+ * A status that is only withheld (`withheld`: the Planner's word is of a state whose machine is
+ * not known yet) is a gap, not a clearing: the region falls silent, holding nothing stale, but
+ * remembers the state last said, so the same state entered again once the machine is named is
+ * not said twice, as a word that repeats it with one more attempt is while the list of machines
+ * is read again.
+ */
+export function plannerSpeech(
+	previous: PlannerStatus["kind"] | undefined,
+	status: PlannerStatus | undefined,
+	withheld: boolean,
+): { kind: PlannerStatus["kind"] | undefined; said: string } | undefined {
+	if (withheld && !status) return previous ? { kind: previous, said: "" } : undefined;
+	let kind = status?.kind;
+	return kind === previous ? undefined : { kind, said: plannerAnnouncement(previous, status) };
 }
 
 /** What the strip on the composer's top edge says. */

@@ -11,8 +11,10 @@ import {
 	presence,
 	shownMachine,
 	showsMachineChoice,
-	waitsForList,
 } from "./machine-choice";
+
+import { plannerShownAtOnce } from "./chat/planner-settle";
+import { plannerStatus, plannerWithheld } from "./chat/planner-status";
 
 import type { ChoosableMachine, MachineChoiceState } from "./machine-choice";
 import type { Machine, TeammateMachine } from "./machine-summary";
@@ -492,21 +494,38 @@ test("says nothing of a machine while the list was read before the socket's word
 	expect(told(undefined, starting("mona"), "mona", true, false)).toBeNull();
 });
 
-test("holds the status it shows, not clears it, while a word that needs the list waits for a newer read", () => {
+test("a word that waits for a newer read of the list says nothing, never what the status said of an older word, and is drawn at once", () => {
 	let listed = state({
 		choice: "M_box",
 		planner: { state: "starting", login: null, machine: "M_box" },
 	});
-	// Only a word that is starting or has dropped needs the list, and only while the list is older.
-	for (let word of [starting("mona"), { state: "disconnected" as const, login: "mona" }]) {
-		expect(waitsForList(listed, word, false)).toBe(true);
-		expect(waitsForList(listed, word, true)).toBe(false);
+	let failure = { attempts: 3, reason: "exit 1", at: new Date(NOW).toISOString() };
+	// What the status said of the word before, from a list that named Box B.
+	let before = plannerStatus(starting("mona"), "Box B");
+	expect(before).toBeDefined();
+	for (
+		let word of [
+			starting("mona"),
+			{ state: "disconnected" as const, login: "mona" },
+			{ ...starting("mona"), failure },
+		]
+	) {
+		let name = told(listed, word, "mona", true, false);
+		expect(name).toBeNull();
+		expect(plannerWithheld(word, name)).toBe(true);
+		let status = plannerStatus(word, name);
+		// Nothing, not the earlier status, and not held for the list: it is drawn as nothing at once.
+		expect(status).toBeUndefined();
+		expect(plannerShownAtOnce(before, status)).toBe(true);
+		// A read that began after the word names it, and the word is no longer withheld.
+		let named = told(listed, word, "mona", true, true);
+		expect(named).toBe("build-box");
+		expect(plannerWithheld(word, named)).toBe(false);
+		expect(plannerStatus(word, named)).toBeDefined();
 	}
-	// What names no machine, and says a state clearing, goes at once.
+	// What names no machine, and says a state clearing, goes at once and is not withheld.
 	for (let word of [{ state: "attached" as const, login: "mona" }, { state: "none" as const }]) {
-		expect(waitsForList(listed, word, false)).toBe(false);
+		let name = told(listed, word, "mona", true, false);
+		expect(plannerWithheld(word, name)).toBe(false);
 	}
-	// With no list to be older, a state is told by login as it always was.
-	expect(waitsForList(undefined, starting("mona"), false)).toBe(false);
-	expect(waitsForList(listed, undefined, false)).toBe(false);
 });

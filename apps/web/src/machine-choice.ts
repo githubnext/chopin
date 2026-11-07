@@ -174,22 +174,6 @@ export function plannerMachineName(
 		: undefined;
 }
 
-/**
- * Whether the status must wait for a newer read of the machine list: the socket's word is of a
- * Planner being started or dropped, which only the list can name, and the list was read before it
- * came (`current` is false). The status then keeps what it showed, which was said of the previous
- * word with a list read after it, until that read answers, so it neither names a machine from the
- * older list nor clears and says the same again a moment later.
- */
-export function waitsForList(
-	state: MachineChoiceState | undefined,
-	planner: Session.PlannerAttachment | undefined,
-	current: boolean,
-): boolean {
-	return !!state && !current
-		&& (planner?.state === "starting" || planner?.state === "disconnected");
-}
-
 const STATE_WORDS: Record<MachineState, string> = {
 	connected: "Connected",
 	offline: "Offline",
