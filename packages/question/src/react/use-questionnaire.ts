@@ -81,9 +81,17 @@ export function useQuestionnaire(options: QuestionnaireOptions): QuestionnaireSt
 		controller.getSnapshot,
 	);
 
+	// Every card of one questionnaire configures the one controller, and each builds its definition
+	// afresh on every render. Keyed on the definition itself, two cards that disagree about
+	// `connected` (the Chat's decision and the document's, which read the loss at the moments their
+	// own grace periods end) would each undo the other's setting on every render, without end. The
+	// controller takes a definition only while it has none, so whether there is one is all it needs.
+	let definitionNow = useRef(options.definition);
+	definitionNow.current = options.definition;
+	let defined = !!options.definition;
 	useEffect(() => {
-		controller.configure(options.definition, options.connected);
-	}, [controller, options.connected, options.definition]);
+		controller.configure(definitionNow.current, options.connected);
+	}, [controller, options.connected, defined]);
 
 	return {
 		definition: snapshot.definition,
