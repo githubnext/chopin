@@ -14,7 +14,8 @@
  */
 
 import * as Questions from "../questions/store";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import * as crypto from "node:crypto";
 import { $getNodeByKey, $getRoot, $isElementNode, $isParagraphNode } from "lexical";
 
 import * as edit from "./edit";
@@ -235,6 +236,52 @@ describe("a passage as the plan changes", () => {
 		let drifted = room.rebasePassage(subject.document, { ...passage, drifted: true });
 		// It is kept, on the current epoch, and still says what it marked.
 		expect(drifted.quote).toBe(QUOTE);
+	});
+});
+
+describe("what keeping every passage in place costs", () => {
+	/** Each hash is of one block, so this counts the blocks hashed, not the documents. */
+	function hashed(work: () => void): number {
+		let spy = spyOn(crypto, "createHash");
+		try {
+			work();
+			return spy.mock.calls.length;
+		} finally {
+			spy.mockRestore();
+		}
+	}
+
+	it("hashes the document once for all of its passages, not once for each", async () => {
+		let reference = await plan();
+		retype(reference.document, 1, "60 seconds", "60 whole seconds");
+		let once = hashed(() => room.digests(reference.document));
+
+		let subject = await plan();
+		let passages = Array.from({ length: 12 }, () => mark(subject.document, [1], QUOTE));
+		retype(subject.document, 1, "60 seconds", "60 whole seconds");
+
+		let counted = hashed(() => {
+			for (let passage of passages) room.rebasePassage(subject.document, passage);
+		});
+
+		expect(once).toBeGreaterThan(0);
+		expect(counted).toBe(once);
+	});
+
+	it("hashes again once the document has changed, and never serves a stale hash", async () => {
+		let subject = await plan();
+		let before = room.digests(subject.document);
+		expect(room.digests(subject.document)).toEqual(before);
+
+		retype(subject.document, 1, "60 seconds", "60 whole seconds");
+		let after = room.digests(subject.document);
+
+		expect(after).not.toEqual(before);
+		expect(after[1]).not.toBe(before[1]);
+		expect(after[2]).toBe(before[2]);
+		// What a caller does with the list does not reach the next caller.
+		after.fill("sha256:x");
+		expect(room.digests(subject.document)[1]).not.toBe("sha256:x");
 	});
 });
 
