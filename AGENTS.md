@@ -558,6 +558,9 @@ so merge ranges from all mounted editors before replacing a registry entry.
   actively and holds requests; `deploy/overlap` is a local reference, not a production
   file. A stopped Compose slot's name does not resolve, so a deploy script waits for the
   proxy to see the new slot before it stops the old one (`scripts/overlap.ts` does).
+  `scripts/deploy-under-load.ts` is the many-client version, run by hand or from the
+  `deploy under load` workflow and never as part of `bun test`; strict invisibility is switched
+  on only after it passes on the built image.
 - The Docker image expects internal port 8787. Changing `PORT` alone breaks its
   health check and routing assumptions.
 - Bun wrapper processes can outlive a failed child. The development and E2E

@@ -1,0 +1,29 @@
+# What `bun scripts/deploy-under-load.ts --mode compose` adds to compose.yaml, to put the built image
+# under load: the fake GitHub of the browser tests in place of GitHub's network (the e2e directory,
+# read only), and a Planner that attaches over the agent link, as a person's machine does. The
+# values come from the script's environment. It is for a local run, as compose.yaml is.
+name: chopin-overlap
+
+x-load: &load
+  command:
+    - sh
+    - -c
+    - bun apps/server/src/storage/migrate.ts && exec bun --preload ./e2e/github.ts --preload ./e2e/jev.ts apps/server/src/main.ts
+  environment:
+    AGENT: ${LOAD_AGENT:-on}
+    JEV_API_KEY: ${LOAD_JEV_API_KEY:-e2e-jev-only}
+    HARNESS: ${LOAD_HARNESS:-remote}
+    DECISIONS_MODEL: ${LOAD_DECISIONS_MODEL:-typesafe/jev-latest}
+    WEB_RESEARCH: "off"
+    CONVERSATION_PLAN: "off"
+    GITHUB_ALLOWED_ORGANIZATIONS: ${LOAD_GITHUB_ALLOWED_ORGANIZATIONS:-githubnext}
+    SESSION_ENCRYPTION_KEY: ${LOAD_SESSION_ENCRYPTION_KEY:-3333333333333333333333333333333333333333333333333333333333333333}
+    HANDOVER_UNREADY_MS: ${LOAD_HANDOVER_UNREADY_MS:-300}
+    HANDOVER_PLANNER_WINDOW_MS: ${LOAD_HANDOVER_PLANNER_WINDOW_MS:-10000}
+    HANDOVER_TURN_WAIT_MS: ${LOAD_HANDOVER_TURN_WAIT_MS:-10000}
+  volumes:
+    - ../../e2e:/app/e2e:ro
+
+services:
+  chopin-a: *load
+  chopin-b: *load

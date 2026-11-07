@@ -1,0 +1,92 @@
+# The deploy-under-load test of docs/zero-downtime-deploys.md, run by hand. It takes minutes and is
+# not one of the required checks: many clients edit documents, talk to a Planner, call MCP and
+# run a build while Chopin is deployed again and again behind the reference proxy. The report
+# (JSON) is kept with the run. There is no schedule: nothing here needs a secret, and a run is
+# for whoever is about to switch strict invisibility on in a hosted deployment.
+name: deploy under load
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Two processes on the runner, or the image this checkout builds in the two-slot compose project
+        type: choice
+        options: [processes, image]
+        default: processes
+      documents:
+        description: Documents under load
+        default: "10"
+      editors:
+        description: Clients typing, at least the documents
+        default: "30"
+      hand-overs:
+        description: Deploys to run
+        default: "5"
+
+permissions:
+  contents: read
+
+env:
+  # Matches ci.yml: the version this is developed against.
+  BUN_VERSION: 1.4.4
+
+jobs:
+  load:
+    name: deploy under load (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17-alpine
+        env:
+          POSTGRES_DB: chopin
+          POSTGRES_USER: chopin
+          POSTGRES_PASSWORD: chopin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chopin -d chopin"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build the client
+        if: ${{ inputs.mode == 'processes' }}
+        run: bun run build
+
+      - name: Build the image
+        if: ${{ inputs.mode == 'image' }}
+        run: docker build --tag chopin-load:ci .
+
+      - name: Deploy under load
+        env:
+          MODE: ${{ inputs.mode }}
+          DOCUMENTS: ${{ inputs.documents }}
+          EDITORS: ${{ inputs.editors }}
+          HAND_OVERS: ${{ inputs.hand-overs }}
+        run: |
+          if [ "$MODE" = image ]; then
+            target=(--mode compose --image chopin-load:ci)
+          else
+            target=(--database 'postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable')
+          fi
+          bun scripts/deploy-under-load.ts "${target[@]}" \
+            --documents "$DOCUMENTS" --editors "$EDITORS" --hand-overs "$HAND_OVERS" \
+            --type-ms 1000 --report .scratch/deploy-under-load.json
+
+      - name: Save the report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-under-load-report
+          path: .scratch/deploy-under-load.json
+          if-no-files-found: error
+          retention-days: 30

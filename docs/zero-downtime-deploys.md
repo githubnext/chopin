@@ -389,6 +389,151 @@ CI cannot be assumed to have Caddy or a container to run it in; `e2e/holding-pro
 it to that. `CHOPIN_E2E_PROXY=caddy bun run e2e e2e/handover.e2e.ts` runs the reference proxy
 instead, in a container on the host's network (Linux, with the `caddy:2.11-alpine` image).
 
+## Deploy under load
+
+`scripts/deploy-under-load.ts` is the design's deploy-under-load test: many clients do what
+people, agents and machines do while Chopin is deployed over and over behind the reference proxy.
+It takes minutes, so it is run by hand, or from the `deploy under load` workflow
+(`.github/workflows/deploy-under-load.yml`, started with "Run workflow", with no schedule), and
+is not part of `bun test` or of the required checks. It is what the design asks to pass on the
+built image before strict invisibility is switched on in a hosted deployment.
+
+```bash
+# Two processes on this host, with the reference Caddy in a container on the host's network
+# (Linux). The database is a disposable cluster; the run creates a database in it and drops it.
+bun run build
+bun scripts/deploy-under-load.ts --database 'postgresql://chopin:chopin@127.0.0.1:5432/chopin' \
+  --documents 20 --editors 60 --hand-overs 10 --type-ms 1000
+
+# The built image in the two-slot Compose project: what a deploy runs.
+docker build --tag chopin:load .
+bun scripts/deploy-under-load.ts --mode compose --image chopin:load \
+  --documents 20 --editors 60 --hand-overs 10 --type-ms 1000
+```
+
+It prints a summary, writes a JSON report (`.scratch/deploy-under-load.json`, or `--report`) and
+exits 1 when a gate fails. `--proxy holding` uses the stand-in proxy of the browser test where
+there is no Docker, `--skip-build` leaves out the build, `--restart-jitter-ms` changes how long a
+client waits before its first attempt after a restart it was told of (a tab's own is 1 s). It uses
+ports 8810 to 8813.
+
+**What runs.** Two real Chopin processes over one database, `HANDOVER=wait`, started and stopped
+as a deploy does: either two processes on the host or the image in the Compose project of
+[`deploy/overlap`](../deploy/overlap) (`compose.load.yaml` adds the fake GitHub of the browser
+tests, the only thing that is faked besides the model that checks a reply). Through the proxy:
+
+- **Editors.** Each is a signed-in socket with the editor and document a browser has (a headless
+  Lexical editor bound to a Yjs document), typing a word into a paragraph of its own every
+  `--type-ms`, keeping every update the server has not acknowledged and sending it again when it
+  is back. It comes back after a loss on a tab's own ladder (`apps/web/src/wire-loss.ts`: the
+  jittered first attempt after a restart it was told of, the probe before each later one, the
+  rescue point at 1.2 s), so its gap means what a tab's does.
+- **The owner's Planner.** A machine paired with a key, polling for the Planners Chopin asks for,
+  and a backend attached for each document that answers each message once and resumes its session
+  after a restart as [Agent connection](agent-connection.md) asks of one.
+- **Planner requests of every kind.** Steadily, and before and during every deploy: a turn is
+  running at the signal and a message waits behind it, and while the old process waits for that
+  turn it is given one of each kind (a Chat message, an `invoke_planner` call, a system
+  `invoke_planner` call, a comment note, a task draft), all saved as rows and started by the new
+  process.
+- **MCP.** Sessions that read documents every 200 ms and make the `invoke_planner` calls above.
+- **A build.** The real connector (`apps/connector`) paired with a key, running the fake
+  implementer of its own tests, which stops at its first task until the deploys are over, so a
+  build is running through all of them.
+- **The proxy's own view.** Four clients ask the proxy for a page, the session and a logout every
+  15 ms, which is what the gap from the release to the first served request is measured by.
+
+**What it records, and the gates.** For each deploy, from the moment the old process hears
+SIGTERM: when readiness goes off, the listener stops, the lease is released and taken, the new
+process answers ready and the proxy serves again, the cut's phases and the readiness checks it
+refused as the old process logs them, how long the new process took to be ready, the old and new
+process's processor use where they are processes on this host, and, for the clients, each one's
+time from its socket closing to its document being open again, split into the wait before its
+first attempt, the upgrade and the open. Over the run: every non-2xx answer the proxy gave, the
+edits (every word typed against the stored document), the Planner requests and what became of
+each, the MCP and API calls, each Planner's resume time against its window and any miss, the
+database's peak connections, and how late the driver's own timers ran. A gate fails the run:
+
+| Gate                                                                                                                       | Why                                       |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Every old process exits 0                                                                                                  | It finished its cut inside its grace      |
+| The first request is served within 750 ms of the release (`--max-gap-ms`)                                                  | The design's budget                       |
+| No request through the proxy was not answered 2xx, apart from a request the cut closed at the in-flight bound (see below)  | The deploy is not seen by a request       |
+| No client without its document longer than a tab waits before saying so: 5 s for a restart it was told of, 1.5 s otherwise | No notice                                 |
+| No client's document was replaced under it                                                                                 | No `replaced` reset                       |
+| Every word typed is in the stored document exactly once and in order                                                       | No edit lost or doubled                   |
+| Every Planner request was acknowledged, reached the Planner exactly once, and none is left waiting                         | No request lost, doubled or left spinning |
+| Every MCP and other API call was answered                                                                                  | The agents' sessions survive              |
+| No Planner was withdrawn from its machine, and none missed its window                                                      | The remote Planner is never shown away    |
+| A build that ran across the deploys finished Built: stopped, with no error, every task completed, a pull request for each  | Machines' work survives                   |
+
+A failure counts as the request the cut closed only if it is the same method and path as one the
+old process logged closing, is not a GET (the proxy tries a GET again on the new process), was
+answered 502 or not at all, and ended while the old process was cutting. Each closed request
+explains one failure: a second failure, or any other, fails the run, however many requests the cut
+closed. A build counts as finished only when Chopin reports it stopped without an error, every
+task completed and one pull request delivered for each; any other stopped run fails the gate.
+
+The design's stricter 1.5 s grace is reported, not gated: the number of reconnects that took
+longer, per deploy, is in the summary. The tab on this branch says nothing about a restart it
+was told of for five seconds (`RESTART_QUIET_MS`), and a deploy of the shape measured here keeps
+every client inside that.
+
+**What it measured on this checkout** (a 256-core host, Bun 1.4.4, PostgreSQL 17 in Docker,
+Caddy 2.11). The first two rows ran the image this checkout builds, the third its processes.
+Every gate passed in each.
+
+| Run                                                              | Deploys | First answer after the release | Not answered 2xx | Words lost or doubled |
+| ---------------------------------------------------------------- | ------- | ------------------------------ | ---------------- | --------------------- |
+| Image, 20 documents, 60 clients, a word a second, 4 MCP sessions | 10      | 183 to 288 ms                  | 0 of 15,136      | 0 of 6,638            |
+| Image, 3 documents, 6 clients, with a build                      | 3       | 227 to 592 ms                  | 0 of 4,201       | 0 of 794              |
+| Processes, 20 documents, 60 clients, reference Caddy             | 10      | 146 to 354 ms                  | 0 of 13,218      | 0 of 6,038            |
+
+In the first row 282 Planner requests (114 Chat messages, 54 comment notes, 54 and 30
+`invoke_planner` calls, 30 task drafts) were each started exactly once, 1,850 MCP calls were
+answered, the build finished Built, and the slowest Planner client of each deploy resumed 522 to
+895 ms after the release, inside its 10 s window. The old process's cut took 41 ms to commit, 21
+to 24 ms to persist link state and 1 ms to release, after a 300 ms unready window in which the
+proxy's checks were refused 63 times, and the new process was ready 22 to 44 ms after taking the
+lease. The driver's own timers were late by at most 16 ms.
+
+**What it found.**
+
+- **The HTTP side is clean.** Across every run the proxy answered every request it was asked
+  during a deploy, and the first answer came within the 750 ms budget.
+- **A reconnect surge is the margin that is left.** With 60 clients on 20 documents, about one
+  client in ten took longer than the design's 1.5 s to have its document open again (58 of 600
+  in the image run, the longest 2.8 s), and none longer than the tab's 5 s. A client's time is
+  the sum of three things, each given as its 50th percentile, 95th percentile and greatest in ms
+  across the ten deploys: the wait before its first attempt (376 to 604, 928 to 993, up to
+  999: the restart's jitter), the upgrade (126 to 231, 302 to 415, 329 to 523: the proxy holding
+  it until the new process is ready, then the login restored from the database) and opening the
+  document on a process that has not opened it (163 to 294, 504 to 1,921, 1,170 to 2,563: a cold
+  process opening 20 documents for 60 sockets at once, on one thread). Removing the jitter does
+  not remove the surge, it moves it: in three deploys of 60 clients on 20 documents, with no
+  jitter 6 of 180 took longer than 1.5 s, with 250 ms 4 and with the tab's own 1 s, 10 and 11 in
+  two runs. Twenty clients on 20 documents (0 of 60) and six on three stayed inside 1.5 s, and 60
+  clients on 5 documents did not (4 of 180). The design asked for the upgrade to be measured at
+  this moment, and this is that measurement: strict invisibility inside 1.5 s holds at the sizes
+  the design's own targets covered, and is not shown for sixty clients. That is the limit to
+  state when switching it on, and the number to improve; opening documents before the cut would
+  be the way, and is not part of this stage.
+- **A commit cost more with every open comment thread.** The load found it by growing: at the
+  same offered load the old process used 73% of a core before the first deploy and 108% before
+  the tenth, and an edit took 19 ms to be acknowledged and then 166 to 228 ms. A profile put it in
+  `Comments.rebase`: each commit hashed the whole document once for every open thread. The hash of
+  a committed state is now kept for that state (`digests` in `apps/server/src/plan/room.ts`),
+  which about halves the growth: 84 to 102% of a core before the last deploys and edits in 78 to
+  105 ms. Some growth with the number of threads is still left, and deploying does not cause it.
+- **A saturated process cannot hand over.** At 60 clients typing four words a second on 20
+  documents (240 updates a second) the one process stayed at 100% of a core, never answered a
+  readiness check after SIGTERM and was killed at its 30 s grace, so the run failed its gates.
+  The size to run is the documented one, a word a second from each of 60 clients.
+
+**Reading a result.** The driver is one process, so its own timers must not be late: the summary
+says by how much they were (14 to 21 ms here). The processor use of the old process says whether
+a run measured the deploy or a server with no room left; above about 90% it is the latter.
+
 ## What is not done
 
 These are in the design and are not part of this stage:
@@ -399,5 +544,6 @@ These are in the design and are not part of this stage:
 - **Several processes (Stage 3):** more than one process serving at once, document-level ownership
   and routing.
 - **Connected machines (Stage 4):** updating a machine's connector when idle and resuming runs.
-- **A deploy-under-load test** with many clients and every kind of work through the proxy, run
-  nightly or by hand, and switching strict invisibility on in a hosted deployment after it passes.
+- **Running the deploy-under-load test on a schedule**, and switching strict invisibility on in a
+  hosted deployment after it passes on the image that deployment ships. The test is built (see
+  [Deploy under load](#deploy-under-load)) and run by hand or from a workflow dispatch.

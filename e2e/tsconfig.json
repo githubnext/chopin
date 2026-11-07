@@ -3,7 +3,8 @@
 		"../tsconfig.json"
 	],
 	"include": [
-		"."
+		".",
+		"../scripts/deploy-under-load.ts"
 	],
 	"compilerOptions": {
 		"target": "esnext",

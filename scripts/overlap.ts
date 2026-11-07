@@ -172,7 +172,7 @@ export type Slots = {
 	log(slot: Slot): Promise<string>;
 };
 
-async function until<T>(
+export async function until<T>(
 	what: string,
 	read: () => Promise<T | undefined | false>,
 	ms = 60_000,
@@ -235,7 +235,7 @@ export async function handOver(
 	}
 }
 
-async function text(url: string): Promise<[number, string] | undefined> {
+export async function text(url: string): Promise<[number, string] | undefined> {
 	try {
 		let response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
 		return [response.status, (await response.text()).trim()];
@@ -256,9 +256,13 @@ function accepts(port: number): Promise<boolean> {
 	});
 }
 
-type Run = { code: number | null; out: string };
+export type Run = { code: number | null; out: string };
 
-function run(command: string, args: string[], env: Record<string, string> = {}): Promise<Run> {
+export function run(
+	command: string,
+	args: string[],
+	env: Record<string, string> = {},
+): Promise<Run> {
 	return new Promise(resolve => {
 		let child = spawn(command, args, {
 			cwd: ROOT,
@@ -343,9 +347,9 @@ export function parseArguments(argv: string[], env: Record<string, string | unde
 }
 
 /** The slots' host ports: the ones after the proxy's (the compose project's database takes the next). */
-const slotPorts = (port: number): Record<Slot, number> => ({ a: port + 1, b: port + 2 });
+export const slotPorts = (port: number): Record<Slot, number> => ({ a: port + 1, b: port + 2 });
 
-function composeSlots(options: Options): {
+export function composeSlots(options: Options, extraFiles: string[] = []): {
 	slots: Slots;
 	database: string;
 	command: (...args: string[]) => Promise<Run>;
@@ -361,7 +365,15 @@ function composeSlots(options: Options): {
 		APP_ORIGIN: `http://127.0.0.1:${options.port}`,
 	};
 	let command = (...args: string[]) =>
-		run("docker", ["compose", "-p", "chopin-overlap", "-f", COMPOSE_FILE, ...args], env);
+		run("docker", [
+			"compose",
+			"-p",
+			"chopin-overlap",
+			"-f",
+			COMPOSE_FILE,
+			...extraFiles.flatMap(file => ["-f", file]),
+			...args,
+		], env);
 	let ready = async (slot: Slot) =>
 		(await text(`http://127.0.0.1:${ports[slot]}/api/health/ready`))?.[0] === 200;
 	return {
