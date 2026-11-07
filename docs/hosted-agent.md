@@ -566,7 +566,10 @@ run cards carry `disconnected` beside the status they last reported: each reads
 **disconnected**, not running or stopped, with a still ring instead of the pulse and
 its clock held at the last report; an open card says what it last reported and what
 happens when the Planner returns. A card offers Pause, named as waiting for the Planner
-to reconnect, because Chopin holds it, and no Resume, which it cannot hold. Decisions
+to reconnect, because Chopin holds it, and no Resume, which it cannot hold. While the
+page's offline notice shows, the cards say nothing of the machine: no **disconnected**, no
+note, and a plain Pause, with the status as last reported, a still neutral ring and the
+clock held; the words come back with the connection, as the state then is. Decisions
 stay where they were and stay answerable. **Build plan** says to reconnect the machine
 (_Reconnect the machine to build_), and a new comment is not sent to Chopin by default, until
 it does. With no machine connected at all it says _Connect a machine to this document to

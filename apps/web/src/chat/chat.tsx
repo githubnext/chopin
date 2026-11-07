@@ -753,6 +753,7 @@ export function Chat(
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
 					<RunStack
 						loadStages={loadStages}
+						offline={offline}
 						onPause={runId =>
 							wire?.send("chat:pause-run", { runId })}
 						onResume={runId =>

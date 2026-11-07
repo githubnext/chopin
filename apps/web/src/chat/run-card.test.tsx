@@ -10,6 +10,7 @@ import {
 	orderRuns,
 	runCounts,
 	RunStack,
+	runStatusLabel,
 	stageWindow,
 	visibleRuns,
 } from "./run-card";
@@ -385,6 +386,49 @@ test("a disconnected run still offers Pause, said as pending, and never a Resume
 	expect(markup).toContain('aria-label="Pause drafting when the machine reconnects"');
 	expect(markup).not.toContain('aria-label="Resume held"');
 	expect(markup).toContain('aria-label="Resume elsewhere"');
+});
+
+test("while the page's offline notice shows, a disconnected run's card says nothing of its machine and keeps its identity and controls", () => {
+	let tell = (item: Wire.Run, offline: boolean) =>
+		renderToStaticMarkup(createElement(RunStack, {
+			offline,
+			onPause: () => {},
+			onResume: () => {},
+			onShowDecisions: () => {},
+			runs: [item],
+		}));
+	let running = away({ ...run("drafting", "running", 100), updated: 400 });
+	let quiet = tell(running, true);
+	// What the machine did is not drawn: no status word, label, note, or the warning mark.
+	expect(quiet).not.toMatch(/disconnected|reconnect|Last reported|It carries on/);
+	expect(quiet).not.toContain("data-run-disconnected");
+	// The card is still the run: what it last reported, its clock at that report, and Pause.
+	// The change of word is not announced: nothing about the machine is said as the connection goes.
+	expect(quiet).toMatch(/aria-live="off" class="[^"]*">running</);
+	expect(quiet).toContain('aria-label="drafting, running, 5m"');
+	expect(quiet).toContain('aria-label="Pause drafting"');
+	expect(quiet).toContain('data-run-status="running"');
+	expect(quiet).toContain(">5m<");
+	expect(quiet).not.toContain("data-run-pulse");
+	// The words come back by themselves with the connection.
+	let online = tell(running, false);
+	expect(online).toContain('aria-label="drafting, disconnected, was running, 5m"');
+	expect(online).toContain('aria-label="Pause drafting when the machine reconnects"');
+	expect(online).toContain("It carries on when the machine reconnects.");
+	// A run that was waiting for people keeps its way to them, and a paused one offers no Resume.
+	let asking = tell(away(run("asking", "waiting", 100, 2)), true);
+	expect(asking).not.toMatch(/disconnected|reconnect|Answers reach it/);
+	expect(asking).toContain("Waiting on 2 Decisions");
+	let held = tell(away(run("held", "paused", 100)), true);
+	expect(held).not.toMatch(/disconnected|reconnect|Resume it once/);
+	expect(held).not.toContain('aria-label="Resume held"');
+	expect(held).toMatch(/aria-live="off" class="[^"]*">paused</);
+	// A run whose machine is there reads, and is announced, the same either way.
+	expect(tell(run("elsewhere", "running", 100), true)).toBe(
+		tell(run("elsewhere", "running", 100), false),
+	);
+	expect(runStatusLabel(running, true)).toBe("running");
+	expect(runStatusLabel(running)).toBe("disconnected");
 });
 
 test("a disconnected run waiting on Decisions keeps its way to them and its place first", () => {
