@@ -548,8 +548,12 @@ notice is the one thing said about the connection, so the strip says nothing and
 by itself with the state then known. One
 decision, `plannerPlacement`, chooses this for the button, its menu and the strip, so
 they cannot disagree. A screen reader hears each problem state once as it begins, from
-a live region of the page, and nothing when it clears. Other harnesses never send it,
-and Chat then shows nothing.
+a live region of the page, and nothing when it clears. While the page's offline notice
+shows, that live region is empty and says nothing new, whatever the state does meanwhile,
+so the notice is the only thing a screen reader hears of the connection; the region
+remembers what it last said, so a state that carried on through the loss is not said
+again when the connection returns, and a different one is said once. Other harnesses
+never send it, and Chat then shows nothing.
 
 These words are plain and name none of Chopin's own terms: _Connecting to studio_,
 _Can't connect to studio_, _studio is offline. Last seen 10:31 AM._ for a machine that is away (_Your work is kept._ where no time is known), _studio stepped away.

@@ -15,6 +15,7 @@ import { height, inBetween } from "./motion";
 import {
 	address,
 	announced,
+	expectNoMachineWords,
 	expectNoPlanner,
 	expectPlannerAttached,
 	expectSaidOnce,
@@ -833,6 +834,7 @@ for (
 		let page = await context.newPage();
 		await authenticate(page, HANDLE, ORIGIN);
 		let wire = await losable(page);
+		await listenForAnnouncements(page);
 		await page.goto(`${ORIGIN}${roomPath(room)}`);
 		await ready(page);
 		if (shape === "phone") {
@@ -896,6 +898,12 @@ for (
 				"Last reported running. It carries on when the machine reconnects.",
 			);
 			await expect(strip(page)).toHaveText(`@${HANDLE}'s machine is offline. Your work is kept.`);
+			// A screen reader was told once, by the page's one live region.
+			await expect(announced(page)).toHaveText(
+				`@${HANDLE}'s machine is offline. Your work is kept.`,
+			);
+			let said = await heard(page);
+			expect(said).toEqual([`@${HANDLE}'s machine is offline. Your work is kept.`]);
 
 			// Then the page's own connection is lost. Its notice is the one thing said: the card is
 			// still the run, as last reported, with its controls, and says nothing of the machine
@@ -910,14 +918,9 @@ for (
 			await expect(runs.locator("[data-run-disconnected-note], [data-run-disconnected]"))
 				.toHaveCount(0);
 			await expect(strip(page)).toHaveCount(0);
-			await expect(page.locator("body")).not.toContainText(
-				/disconnected|when the machine reconnects|Last reported|It carries on|Answers reach it|stepped away|Last seen/,
-			);
+			await expectNoMachineWords(page);
+			expect(await heard(page)).toEqual(said);
 			await expect(chatPane(page)).not.toContainText(/machine/i);
-			await expect(page.locator('[aria-label*="disconnected" i], [aria-label*="reconnects" i]'))
-				.toHaveCount(0);
-			await expect(page.locator('[title*="disconnected" i], [title*="reconnects" i]'))
-				.toHaveCount(0);
 			await expectNoHorizontalOverflow(page);
 			await snap(page, `run-card-offline-${shape}`);
 
@@ -935,6 +938,10 @@ for (
 				runs.getByRole("button", { name: "Pause plan-review when the machine reconnects" }),
 			).toBeVisible();
 			await expect(strip(page)).toHaveText(`@${HANDLE}'s machine is offline. Your work is kept.`);
+			// The state carried on through the loss, so it is not said again.
+			await page.waitForTimeout(500);
+			await expect(announced(page)).toHaveText("");
+			expect(await heard(page)).toEqual(said);
 			await expectNoHorizontalOverflow(page);
 			await snap(page, `run-card-online-${shape}`);
 
@@ -950,6 +957,8 @@ for (
 			await expect(runs.getByRole("button", { name: /^plan-review, running, \d+m$/ }))
 				.toBeVisible();
 			await expect(note).toHaveCount(0);
+			await expect(announced(page)).toHaveText("");
+			expect(await heard(page)).toEqual(said);
 		} finally {
 			globalThis.WebSocket = Native;
 			await context.close();

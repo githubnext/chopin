@@ -1920,7 +1920,11 @@ export function RoomWorkspace(
 					</p>
 					<OfflineAnnouncement spoken={offline.spoken} />
 					{profile.chat && (
-						<PlannerAnnouncement status={plannerNote} withheld={plannerWithheldNow} />
+						<PlannerAnnouncement
+							offline={offline.open}
+							status={plannerNote}
+							withheld={plannerWithheldNow}
+						/>
 					)}
 					<Workspace
 						available={available}
