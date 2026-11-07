@@ -1290,8 +1290,8 @@ export function RoomWorkspace(
 			? !(presentation.type === "parent-with-child" && planVisible)
 			: titleBuildShown);
 	let plannerWhere = useMemo(
-		() => plannerPlacement(plannerNote, hasMachineButton),
-		[plannerNote, hasMachineButton],
+		() => plannerPlacement(plannerNote, hasMachineButton, offline.open),
+		[plannerNote, hasMachineButton, offline.open],
 	);
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,

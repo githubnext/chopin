@@ -152,13 +152,21 @@ export type PlannerPlacement = {
  * has taken) the strip is the only place left to see the state, so for that person alone it
  * carries all of them, and the reason for a machine that cannot be connected to is drawn, in full,
  * beneath its sentence.
+ *
+ * While the page's offline notice shows, that notice is the one thing said about the connection and
+ * the page cannot hear the machine anyway, so the strip says nothing, as the composer's other
+ * strip about availability says nothing then. It returns by itself, with whatever state is then
+ * known, as the notice goes. The button, which is in the title bar and not beside the notice, is
+ * unaffected.
  */
 export function plannerPlacement(
 	status: PlannerStatus | undefined,
 	hasButton: boolean,
+	offline = false,
 ): PlannerPlacement {
 	if (!status) return { button: undefined, strip: undefined };
 	if (hasButton) return { button: status, strip: undefined };
+	if (offline) return { button: undefined, strip: undefined };
 	if (status.kind === "cant-start") {
 		return {
 			button: undefined,

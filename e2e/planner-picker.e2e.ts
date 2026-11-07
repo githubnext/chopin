@@ -613,8 +613,10 @@ async function carried(page: Page) {
 	let sockets: Array<{ send: (data: string) => void; close: (options: object) => Promise<void> }> =
 		[];
 	let muted = false;
+	let away = false;
 	let hellos = 0;
 	await page.routeWebSocket("**/ws?**", socket => {
+		if (away) return void socket.close();
 		let upstream = socket.connectToServer();
 		socket.onMessage(message => upstream.send(message));
 		upstream.onMessage(message => {
@@ -644,6 +646,16 @@ async function carried(page: Page) {
 		/** Keeps what the real server says of its Planner from the page, so the test says it all. */
 		mute: (on: boolean) => {
 			muted = on;
+		},
+		/** The connection is lost and every reconnect is refused, until `back`. */
+		lose: async () => {
+			away = true;
+			await sockets.at(-1)!.close({});
+		},
+		/** Reconnects are answered again; the page is told it is online, as the browser would. */
+		back: async () => {
+			away = false;
+			await page.evaluate(() => dispatchEvent(new Event("online")));
 		},
 	};
 }
@@ -944,6 +956,61 @@ for (let [shape, options] of SHAPES) {
 		await expect(announced(page)).toHaveText("");
 		await reread.end();
 		await studio.disconnect();
+	});
+}
+
+for (let [shape, options] of SHAPES) {
+	test(`a person with no machine button reads no machine state above the composer beside the page's offline notice, and reads it again when the connection returns, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let context = await browser.newContext(options);
+		let page = await context.newPage();
+		await page.addInitScript(() => {
+			Math.random = () => 0.999;
+		});
+		await authenticate(page, "hubot", ORIGIN);
+		let carriage = await carried(page);
+		carriage.mute(true);
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await chatTab(page, shape === "phone");
+		await expect(machineButton(page)).toHaveCount(0);
+		let notice = page.locator("[data-offline-notice]");
+		let failure = { attempts: 3, reason: "exit 1", at: new Date().toISOString() };
+
+		// Each state the composer's strip tells a person with no button, lost and recovered: the page
+		// cannot hear the machine while it is offline, and its one notice speaks for the connection.
+		let states = [
+			["connecting", { state: "starting", login: "mona" }, "Connecting to @mona's machine"],
+			[
+				"failing",
+				{ state: "starting", login: "mona", failure },
+				"Can't connect to @mona's machine.",
+			],
+			[
+				"away",
+				{ state: "disconnected", login: "mona" },
+				"@mona's machine is offline. Your work is kept.",
+			],
+		] as const;
+		for (let [name, planner, text] of states) {
+			carriage.say(planner);
+			await expect(strip(page)).toContainText(text);
+
+			await carriage.lose();
+			await expect(notice).toBeVisible();
+			await expect(page.getByRole("alert")).toHaveCount(1);
+			await expect(strip(page)).toHaveCount(0);
+			await expect(page.locator(".chat-composer").getByText(text)).toHaveCount(0);
+			await shoot(page, `no-button-${name}-offline-${shape}`);
+
+			await carriage.back();
+			await expect(notice).toHaveCount(0);
+			await expect(page.getByRole("alert")).toHaveCount(0);
+			await expect(strip(page)).toContainText(text);
+			await shoot(page, `no-button-${name}-online-${shape}`);
+		}
+		await expectNoHorizontalOverflow(page);
 	});
 }
 
