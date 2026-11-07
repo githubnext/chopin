@@ -497,16 +497,30 @@ describe("acknowledged composer drafts", () => {
 		}
 	});
 
-	test("tells a send the connection cut off only while the connection is up, and any other failure always", () => {
+	test("tells a send the connection cut off only while the connection is up, and no failure at all while the page's offline notice shows", () => {
 		let cut = sendFailure(new WireLost("connection lost"));
 		let refused = sendFailure(new WireRefusal("Unavailable"));
+		let machine = sendFailure(
+			new WireRefusal(
+				"Still connecting to @mona's machine. Try again in a moment.",
+				"planner-not-attached",
+			),
+		);
 		// The page's offline notice speaks for a lost connection, so a blip and an outage alike
-		// leave nothing beside the composer.
-		expect(shownSendFailure(cut, false)).toBeUndefined();
-		expect(shownSendFailure(cut, true)).toBe(cut);
-		expect(shownSendFailure(refused, false)).toBe(refused);
-		expect(shownSendFailure(refused, true)).toBe(refused);
-		expect(shownSendFailure(undefined, false)).toBeUndefined();
+		// leave nothing about the connection beside the composer.
+		expect(shownSendFailure(cut, false, false)).toBeUndefined();
+		expect(shownSendFailure(cut, false, true)).toBeUndefined();
+		expect(shownSendFailure(cut, true, false)).toBe(cut);
+		// Nor does a refusal sit beside that notice: two alerts would say two things were wrong.
+		// It is told before the notice shows and as soon as the connection is back, as it was.
+		for (let failure of [refused, machine]) {
+			expect(shownSendFailure(failure, true, false)).toBe(failure);
+			expect(shownSendFailure(failure, false, false)).toBe(failure);
+			expect(shownSendFailure(failure, false, true)).toBeUndefined();
+			expect(shownSendFailure(failure, true, true)).toBeUndefined();
+		}
+		expect(shownSendFailure(undefined, false, false)).toBeUndefined();
+		expect(shownSendFailure(undefined, true, true)).toBeUndefined();
 	});
 
 	test("shows the instructions for a missing machine whole, however long", () => {

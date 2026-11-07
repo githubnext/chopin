@@ -642,11 +642,11 @@ async function expectCutSend(
 }
 
 /**
- * A failure that is not the connection's stays as it was: the strip a server's refusal draws is
- * told while the connection is up, while it is down and when it returns, and goes only when the
- * person sends again.
+ * A server's refusal of a send is told by its strip while the connection is up. While the page's
+ * offline notice shows it gives way, so that notice is the only alert, and the same strip, with the
+ * same words, is back when the connection returns; it goes only when the person sends again.
  */
-async function expectRefusalStays(
+async function expectRefusalGivesWay(
 	page: Page,
 	wire: ReturnType<typeof route>,
 	chat: Locator,
@@ -658,19 +658,26 @@ async function expectRefusalStays(
 	wire.state.send = "refuse";
 	await draft.press("Enter");
 	await expect(refusal).toBeVisible();
+	await expect(page.getByRole("alert")).toHaveCount(1);
 	await expectChatValue(draft, "Refused by the server");
 	await snap(page, `${shot}-online`);
 
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
 	await expect(notice(page)).toBeVisible();
-	await expect(refusal).toBeVisible();
+	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(refusal).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
+	await expectChatValue(draft, "Refused by the server");
 	await snap(page, `${shot}-offline`);
 
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await expect(notice(page)).toHaveCount(0);
 	await expect(refusal).toBeVisible();
+	await expect(refusal).toHaveText(/^Message not sent: Unavailable\s*Retry$/);
+	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expectChatValue(draft, "Refused by the server");
 
 	wire.state.send = "pass";
 	await draft.press("Enter");
@@ -732,7 +739,7 @@ test("on a phone, a send the connection cut off leaves no strip beside the page'
 	);
 });
 
-test("a server's refusal of a send stays as it was through a lost connection and its return", async ({ join, page }) => {
+test("a server's refusal of a send gives way to the page's offline notice and is back, unchanged, when the connection returns", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -740,14 +747,14 @@ test("a server's refusal of a send stays as it was through a lost connection and
 	let wire = route(page, { sends: true });
 	await wire.ready;
 	await join("ana");
-	await expectRefusalStays(page, wire, chatPane(page), "refused-send-desktop");
+	await expectRefusalGivesWay(page, wire, chatPane(page), "refused-send-desktop");
 });
 
-test("on a phone, a server's refusal of a send stays as it was through a lost connection and its return", async ({ baseURL, browser, room }) => {
+test("on a phone, a server's refusal of a send gives way to the page's offline notice and is back, unchanged, when the connection returns", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	await onPhoneChat(
 		{ baseURL, browser, room },
-		(page, wire) => expectRefusalStays(page, wire, chatPane(page), "refused-send-phone"),
+		(page, wire) => expectRefusalGivesWay(page, wire, chatPane(page), "refused-send-phone"),
 	);
 });
 
