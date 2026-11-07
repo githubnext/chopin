@@ -9,7 +9,9 @@ import {
 	plannerGlyph,
 	plannerPlacement,
 	plannerSentence,
+	plannerSpeech,
 	plannerStatus,
+	plannerWithheld,
 } from "./planner-status";
 
 import type { Session } from "@chopin/protocol";
@@ -211,6 +213,111 @@ test("while the page's offline notice shows, the composer's strip says nothing o
 		expect(plannerPlacement(status, false, false)).toEqual(plannerPlacement(status, false));
 		expect(plannerPlacement(status, false, false).strip).toBeDefined();
 	}
+});
+
+test("a word whose machine is not known yet is withheld, not over: only a starting or dropped Planner waits for a name", () => {
+	for (
+		let planner of [{ state: "starting", login: "mona" }, failing(), {
+			state: "disconnected",
+			login: "mona",
+		}] as const
+	) {
+		expect(plannerWithheld(planner, null)).toBe(true);
+		expect(plannerWithheld(planner, "Build box")).toBe(false);
+		expect(plannerWithheld(planner, undefined)).toBe(false);
+	}
+	// What needs no machine's name, and a healthy Planner, are never waiting for one.
+	for (
+		let planner of [
+			{ state: "attached", login: "mona" },
+			{ state: "none" },
+			{ state: "held", login: "mona", until: AT },
+			undefined,
+		] as const
+	) {
+		expect(plannerWithheld(planner, null)).toBe(false);
+	}
+});
+
+/** What a live region is told, in order, and what it holds at the end, as `steps` follow one another. */
+function spoken(
+	steps: ReadonlyArray<
+		[planner: Session.PlannerAttachment | undefined, machine: string | null]
+	>,
+): { heard: string[]; text: string } {
+	let heard: string[] = [];
+	let text = "";
+	let previous: Parameters<typeof plannerSpeech>[0];
+	for (let [planner, machine] of steps) {
+		let speech = plannerSpeech(
+			previous,
+			plannerStatus(planner, machine),
+			plannerWithheld(planner, machine),
+		);
+		if (!speech) continue;
+		previous = speech.kind;
+		text = speech.said;
+		if (text) heard.push(text);
+	}
+	return { heard, text };
+}
+
+test("a state is not said again when it is entered again after only a gap in which its status was withheld", () => {
+	let starting = { state: "starting", login: "mona" } as const;
+	let dropped = { state: "disconnected", login: "mona" } as const;
+	// A word that repeats the state with one more attempt, told while the machine list is read again.
+	expect(
+		spoken([
+			[failing(1), "Build box"],
+			[failing(2), "Build box"],
+			[failing(2), null],
+			[failing(3), "Build box"],
+			[failing(3), null],
+			[failing(4), "Build box"],
+		]).heard,
+	).toEqual(["Can't connect to Build box."]);
+	// The same state entered again through a gap, the document having moved to another machine.
+	expect(spoken([[starting, "Box B"], [starting, null], [starting, "Box C"]]).heard).toEqual([
+		"Connecting to Box B",
+	]);
+	// A different state is said once it is named, however long the gap before it was.
+	expect(spoken([[starting, "Box B"], [dropped, null], [dropped, null], [dropped, "Box C"]]))
+		.toEqual({
+			heard: ["Connecting to Box B", "Box C is offline. Your work is kept."],
+			text: "Box C is offline. Your work is kept.",
+		});
+	// A first state is not said at all until a machine is named for it.
+	expect(spoken([[starting, null], [starting, null]])).toEqual({ heard: [], text: "" });
+	expect(spoken([[starting, null], [starting, null], [starting, "Box B"]]).heard).toEqual([
+		"Connecting to Box B",
+	]);
+});
+
+test("a live region holds nothing while a status is withheld, and says nothing more for the state it already said", () => {
+	let starting = { state: "starting", login: "mona" } as const;
+	// Nothing stale is left in the region through the gap, nor put back after it.
+	expect(spoken([[starting, "Box B"]]).text).toBe("Connecting to Box B");
+	expect(spoken([[starting, "Box B"], [starting, null]]).text).toBe("");
+	expect(spoken([[starting, "Box B"], [starting, null], [starting, "Box B"]])).toEqual({
+		heard: ["Connecting to Box B"],
+		text: "",
+	});
+});
+
+test("a state is said again when it is entered again after the Planner was healthy or gone", () => {
+	let starting = { state: "starting", login: "mona" } as const;
+	let attached = { state: "attached", login: "mona" } as const;
+	expect(spoken([[starting, "Box B"], [attached, null], [starting, null], [starting, "Box B"]]))
+		.toEqual({
+			heard: ["Connecting to Box B", "Connecting to Box B"],
+			text: "Connecting to Box B",
+		});
+	expect(spoken([[starting, "Box B"], [{ state: "none" }, null], [starting, "Box B"]]).heard)
+		.toEqual(["Connecting to Box B", "No machine is connected.", "Connecting to Box B"]);
+	expect(spoken([[starting, "Box B"], [undefined, null], [starting, "Box B"]]).heard).toEqual([
+		"Connecting to Box B",
+		"Connecting to Box B",
+	]);
 });
 
 test("a healthy Planner has nothing to place, with or without the button", () => {

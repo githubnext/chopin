@@ -49,10 +49,29 @@ export function plannerShownAtOnce(
 	return !held && (plannerGrace(status) === 0 || shown?.kind === status?.kind);
 }
 
-/** The status to say: the last known one, until a state that waits has lasted its grace. */
+/**
+ * What is drawn: nothing while `withheld` (the machine is not known yet, so the status says
+ * nothing), else the new state if it shows at once, else the last one shown.
+ */
+export function plannerDrawn(
+	shown: PlannerStatus | undefined,
+	status: PlannerStatus | undefined,
+	held = false,
+	withheld = false,
+): PlannerStatus | undefined {
+	return withheld ? undefined : plannerShownAtOnce(shown, status, held) ? status : shown;
+}
+
+/**
+ * The status to say: the last known one, until a state that waits has lasted its grace. While
+ * `withheld` it says nothing, but what it had shown is remembered, so the same state returning once
+ * the machine is named is not made to wait out its grace again: a gap in what is said is not the
+ * state ending.
+ */
 export function useSettledPlannerStatus(
 	status: PlannerStatus | undefined,
 	held?: boolean,
+	withheld?: boolean,
 ): PlannerStatus | undefined {
 	let [shown, setShown] = useState<PlannerStatus | undefined>(() =>
 		plannerGrace(status) === 0 ? status : undefined
@@ -61,12 +80,12 @@ export function useSettledPlannerStatus(
 	let latest = useRef(status);
 	latest.current = status;
 	useEffect(() => {
-		if (atOnce && shown !== status) setShown(status);
+		if (atOnce && !withheld && shown !== status) setShown(status);
 	});
 	useEffect(() => {
-		if (atOnce || held) return;
+		if (atOnce || held || withheld) return;
 		let timer = setTimeout(() => setShown(latest.current), plannerGrace(status));
 		return () => clearTimeout(timer);
-	}, [atOnce, held, status?.kind]);
-	return atOnce ? status : shown;
+	}, [atOnce, held, withheld, status?.kind]);
+	return plannerDrawn(shown, status, held, withheld);
 }

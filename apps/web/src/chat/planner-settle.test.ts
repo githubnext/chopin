@@ -3,6 +3,7 @@ import { CONNECTION_GRACE } from "@chopin/editor";
 
 import {
 	plannerConnectionLost,
+	plannerDrawn,
 	plannerGrace,
 	plannerShownAtOnce,
 	plannerWordHeard,
@@ -59,6 +60,23 @@ test("a placeholder changes nothing shown: not at once, and not for whichever st
 	// Told as a live word, the same none settles as it always did.
 	expect(plannerShownAtOnce(NONE, NONE, false)).toBe(true);
 	expect(plannerShownAtOnce(undefined, NONE, false)).toBe(false);
+});
+
+test("a status that is withheld draws nothing, whatever was shown, and the state it was does not wait out its grace again", () => {
+	// Nothing is drawn of a word whose machine is not known yet, not what an older word said.
+	for (let shown of [undefined, STARTING, NONE, OFFLINE, AWAY, FAILING]) {
+		expect(plannerDrawn(shown, undefined, false, true)).toBeUndefined();
+	}
+	// Otherwise the last state stays until a state that waits has lasted its grace, as before.
+	expect(plannerDrawn(OFFLINE, STARTING)).toBe(OFFLINE);
+	expect(plannerDrawn(OFFLINE, FAILING)).toBe(FAILING);
+	expect(plannerDrawn(STARTING, status({ state: "starting", login: "casey" }))).toEqual(
+		status({ state: "starting", login: "casey" }),
+	);
+	// What was shown before the gap is remembered, so the same state returning is drawn at once; a
+	// status forgotten in the gap would be drawn only after the grace again.
+	expect(plannerShownAtOnce(STARTING, STARTING)).toBe(true);
+	expect(plannerShownAtOnce(undefined, STARTING)).toBe(false);
 });
 
 const HERE: Session.PlannerAttachment = { state: "attached", login: "mona" };

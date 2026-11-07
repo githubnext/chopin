@@ -608,8 +608,9 @@ for (let [shape, options] of SHAPES) {
 		reread.active.on = false;
 		await reread.refresh();
 		await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
-		await expect(announced(page)).toHaveText("Connecting to studio");
-		expect(await heard(page)).not.toContainEqual(expect.stringContaining("Build box"));
+		// It was said once, before the gap, and is not said again as the same state returns.
+		await expect(announced(page)).toHaveText("");
+		expect(await heard(page)).toEqual(["Connecting to studio"]);
 		await shoot(page, `planner-names-own-machine-${shape}`);
 		await reread.end();
 		await (await studio.backend(room)).detach();
@@ -986,7 +987,7 @@ for (let [shape, options] of SHAPES) {
 }
 
 for (let [shape, options] of SHAPES) {
-	test(`the Planner's status names no machine from a list read before the socket's word, says what it said until a list read after it has answered, and then names the document's own, on a ${shape}`, async ({ browser }) => {
+	test(`the Planner's status names no machine from a list read before the socket's word, says nothing until a list read after it has answered, and then names the document's own, on a ${shape}`, async ({ browser }) => {
 		test.setTimeout(150_000);
 		let room = await remoteServer();
 		let context = await browser.newContext(options);
@@ -1021,17 +1022,22 @@ for (let [shape, options] of SHAPES) {
 		carriage.say({ state: "starting", login: "mona" });
 		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
 
-		// The document is then set to run on Box C, and the next read of the list is slow. The list the
-		// page holds was read before the next word and still agrees with itself on Box B, which the
-		// Planner may have left: Box B is not named for that word. What was said stays as it was, with
-		// nothing cleared and said again, until a read that began after the word has answered.
+		// The document is then set to run on Box C, and the next read of the list is slow, or never
+		// answers. The list the page holds was read before the next word and still agrees with itself
+		// on Box B, which the Planner may have left: Box B is not named for that word, and neither is
+		// what was said of the word before, which was Box B's. The status says nothing, for as long as
+		// the read takes, and nothing is announced.
 		let release = reread.hold();
 		await choose("Box C");
 		carriage.say({ state: "disconnected", login: "mona" });
+		await expect(button).toHaveAccessibleName("Runs on Box B");
 		await page.waitForTimeout(1_800);
-		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
+		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expect(button).not.toHaveAttribute("data-planner");
 		await expect(strip(page)).toHaveCount(0);
 		expect(await heard(page)).toEqual(["Connecting to Box B"]);
+		await page.waitForTimeout(3_000);
+		await expect(button).toHaveAccessibleName("Runs on Box B");
 		await shoot(page, `planner-slow-list-${shape}`);
 
 		// It answers, and the document's own machine is named.
@@ -1099,7 +1105,7 @@ for (let [shape, options] of SHAPES) {
 		say({ state: "attached", login: "mona" });
 		await expect(button).toHaveAccessibleName(/^Runs on studio$/);
 		await expect(announced(page)).toHaveText("");
-		await reread.end();
+		await page.unrouteAll({ behavior: "wait" });
 		await studio.disconnect();
 	});
 }

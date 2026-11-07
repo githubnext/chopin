@@ -64,9 +64,8 @@ import {
 	plannerMachineName,
 	showsMachineChoice,
 	useMachineChoice,
-	waitsForList,
 } from "./machine-choice";
-import { plannerPlacement, plannerStatus } from "./chat/planner-status";
+import { plannerPlacement, plannerStatus, plannerWithheld } from "./chat/planner-status";
 import { PlannerAnnouncement } from "./chat/planner-announcement";
 import {
 	plannerConnectionLost,
@@ -751,9 +750,11 @@ export function RoomWorkspace(
 		() => plannerStatus(attachment, machineName, lastSeen),
 		[attachment, machineName, lastSeen],
 	);
+	let plannerWithheldNow = plannerWithheld(attachment, machineName);
 	let plannerNote = useSettledPlannerStatus(
 		plannerNow,
-		plannerAttachment.placeholder || waitsForList(machineChoice.state, attachment, listCurrent),
+		plannerAttachment.placeholder,
+		plannerWithheldNow,
 	);
 	// The choice shows only while the person has a paired machine, live, or the document lists a
 	// teammate's shared one: it appears with their first and goes with their last.
@@ -1918,7 +1919,9 @@ export function RoomWorkspace(
 						<span key={announcement.sequence}>{announcement.text}</span>
 					</p>
 					<OfflineAnnouncement spoken={offline.spoken} />
-					{profile.chat && <PlannerAnnouncement status={plannerNote} />}
+					{profile.chat && (
+						<PlannerAnnouncement status={plannerNote} withheld={plannerWithheldNow} />
+					)}
 					<Workspace
 						available={available}
 						buildEnabled={build.tabReady}
