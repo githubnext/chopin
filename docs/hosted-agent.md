@@ -542,7 +542,10 @@ as a chat's header, not its text field, carries a contact's state. A
 person with no machine button (no machine paired or shared, a title bar that does not
 show one, a phone whose top bar an open child has taken) has nowhere else to see the
 state, so for them the composer's top edge says every state, and, for a machine that
-cannot be connected to, draws the reason exactly as the machine reported it. One
+cannot be connected to, draws the reason exactly as the machine reported it, except
+while the page's offline notice shows: the page cannot hear the machine then, and the
+notice is the one thing said about the connection, so the strip says nothing and returns
+by itself with the state then known. One
 decision, `plannerPlacement`, chooses this for the button, its menu and the strip, so
 they cannot disagree. A screen reader hears each problem state once as it begins, from
 a live region of the page, and nothing when it clears. Other harnesses never send it,

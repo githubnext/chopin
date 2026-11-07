@@ -202,6 +202,17 @@ test("without the machine button, a machine that cannot be connected to has its 
 	});
 });
 
+test("while the page's offline notice shows, the composer's strip says nothing of a machine, and the machine button keeps its state", () => {
+	for (let planner of PROBLEMS) {
+		let status = plannerStatus(planner, "Build box")!;
+		expect(plannerPlacement(status, false, true)).toEqual({ button: undefined, strip: undefined });
+		expect(plannerPlacement(status, true, true)).toEqual({ button: status, strip: undefined });
+		// The strip is back, whole, as the notice goes.
+		expect(plannerPlacement(status, false, false)).toEqual(plannerPlacement(status, false));
+		expect(plannerPlacement(status, false, false).strip).toBeDefined();
+	}
+});
+
 test("a healthy Planner has nothing to place, with or without the button", () => {
 	for (let hasButton of [true, false]) {
 		expect(plannerPlacement(undefined, hasButton)).toEqual({
