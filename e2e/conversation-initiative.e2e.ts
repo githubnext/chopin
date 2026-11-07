@@ -166,7 +166,9 @@ test("losing a send acknowledgement and retrying after reconnect never duplicate
 	await chatInput(pane(page)).fill(text);
 	await chatInput(pane(page)).press("Enter");
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(2);
-	await pane(page).getByRole("button", { name: "Retry", exact: true }).click();
+	await expectChatValue(chatInput(pane(page)), text);
+	await expect(pane(page).getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
+	await chatInput(pane(page)).press("Enter");
 	await expectChatValue(chatInput(pane(page)), "");
 	expect(frames.sends()).toHaveLength(2);
 	expect(frames.sends()[1]!.requestId).toBe(frames.sends()[0]!.requestId);
