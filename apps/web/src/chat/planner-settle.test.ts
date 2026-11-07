@@ -5,12 +5,14 @@ import {
 	plannerConnectionLost,
 	plannerDrawn,
 	plannerGrace,
+	plannerRemembered,
 	plannerShownAtOnce,
 	plannerWordHeard,
 } from "./planner-settle";
 import { plannerStatus } from "./planner-status";
 
 import type { Session } from "@chopin/protocol";
+import type { PlannerMemory } from "./planner-settle";
 import type { PlannerStatus } from "./planner-status";
 
 const AT = "2026-11-04T18:29:00.000Z";
@@ -28,6 +30,15 @@ const FAILING = status({
 	login: "mona",
 	failure: { attempts: 2, reason: "exit 1", at: AT },
 });
+
+function named(planner: Session.PlannerAttachment, machine: string): PlannerStatus {
+	return plannerStatus(planner, machine)!;
+}
+
+const STARTING_B = named({ state: "starting", login: "mona" }, "Box B");
+const STARTING_C = named({ state: "starting", login: "mona" }, "Box C");
+const OFFLINE_B = named({ state: "disconnected", login: "mona" }, "Box B");
+const OFFLINE_C = named({ state: "disconnected", login: "mona" }, "Box C");
 
 test("only a machine being connected to, or none yet, waits out the grace period before it is said", () => {
 	expect(plannerGrace(STARTING)).toBe(CONNECTION_GRACE);
@@ -62,21 +73,147 @@ test("a placeholder changes nothing shown: not at once, and not for whichever st
 	expect(plannerShownAtOnce(undefined, NONE, false)).toBe(false);
 });
 
-test("a status that is withheld draws nothing, whatever was shown, and the state it was does not wait out its grace again", () => {
-	// Nothing is drawn of a word whose machine is not known yet, not what an older word said.
+test("a status that is withheld draws nothing, whatever was shown", () => {
 	for (let shown of [undefined, STARTING, NONE, OFFLINE, AWAY, FAILING]) {
-		expect(plannerDrawn(shown, undefined, false, true)).toBeUndefined();
+		for (let gapped of [false, true]) {
+			expect(plannerDrawn(shown, undefined, false, true, gapped)).toBeUndefined();
+		}
 	}
-	// Otherwise the last state stays until a state that waits has lasted its grace, as before.
+});
+
+test("with no gap, the last state stays until a state that waits has lasted its grace, and more of the same state is drawn as it comes", () => {
+	expect(plannerDrawn(OFFLINE, NONE)).toBe(OFFLINE);
 	expect(plannerDrawn(OFFLINE, STARTING)).toBe(OFFLINE);
 	expect(plannerDrawn(OFFLINE, FAILING)).toBe(FAILING);
 	expect(plannerDrawn(STARTING, status({ state: "starting", login: "casey" }))).toEqual(
 		status({ state: "starting", login: "casey" }),
 	);
-	// What was shown before the gap is remembered, so the same state returning is drawn at once; a
-	// status forgotten in the gap would be drawn only after the grace again.
-	expect(plannerShownAtOnce(STARTING, STARTING)).toBe(true);
-	expect(plannerShownAtOnce(undefined, STARTING)).toBe(false);
+});
+
+test("after a gap, what was shown before it is never drawn in place of a different state: a state that waits draws nothing until its grace has passed", () => {
+	// disconnected to starting, as the document moves to another machine
+	expect(plannerDrawn(OFFLINE_B, STARTING_C, false, false, true)).toBeUndefined();
+	// away to none
+	expect(plannerDrawn(AWAY, NONE, false, false, true)).toBeUndefined();
+	// starting to starting on another machine: the same kind, but not the same state
+	expect(plannerShownAtOnce(STARTING_B, STARTING_C, false, true)).toBe(false);
+	expect(plannerDrawn(STARTING_B, STARTING_C, false, false, true)).toBeUndefined();
+	// what a person can act on, and every state clearing, is drawn at once, as it always was
+	expect(plannerDrawn(STARTING_B, OFFLINE_C, false, false, true)).toBe(OFFLINE_C);
+	expect(plannerDrawn(OFFLINE_B, FAILING, false, false, true)).toBe(FAILING);
+	expect(plannerDrawn(OFFLINE_B, undefined, false, false, true)).toBeUndefined();
+	// a placeholder still waits for the machine's own word
+	expect(plannerShownAtOnce(NONE, NONE, true, true)).toBe(false);
+});
+
+test("after a gap, only the same state returning skips its grace", () => {
+	expect(
+		plannerShownAtOnce(
+			STARTING_B,
+			named({ state: "starting", login: "mona" }, "Box B"),
+			false,
+			true,
+		),
+	)
+		.toBe(true);
+	expect(plannerShownAtOnce(NONE, NONE, false, true)).toBe(true);
+	// There was nothing to remember: the grace is waited out as for any first state.
+	expect(plannerShownAtOnce(undefined, STARTING_B, false, true)).toBe(false);
+	expect(plannerShownAtOnce(OFFLINE_B, STARTING_B, false, true)).toBe(false);
+});
+
+/**
+ * The hook's wiring in miniature: each render draws from what is remembered, then the effects
+ * remember, and a grace that waits may lapse. What is drawn must not differ between the two.
+ */
+function settling(first?: PlannerStatus) {
+	let memory: PlannerMemory = {
+		shown: first && plannerGrace(first) === 0 ? first : undefined,
+		gapped: false,
+	};
+	let draw = (status: PlannerStatus | undefined, held: boolean, withheld: boolean) =>
+		plannerDrawn(memory.shown, status, held, withheld, memory.gapped);
+	return {
+		render(status: PlannerStatus | undefined, { held = false, withheld = false } = {}) {
+			let before = draw(status, held, withheld);
+			memory = plannerRemembered(memory, status, held, withheld);
+			expect(draw(status, held, withheld)).toBe(before);
+			return before;
+		},
+		lapse(status: PlannerStatus | undefined) {
+			memory = plannerRemembered(memory, status, false, false, true);
+			return draw(status, false, false);
+		},
+	};
+}
+
+test("a state of another kind arriving after the gap is drawn by its own rules, never the one shown before the gap", () => {
+	// disconnected to starting: the old state is not redrawn, and the new one shows once it has lasted
+	let moved = settling();
+	expect(moved.render(OFFLINE_B)).toBe(OFFLINE_B);
+	expect(moved.render(undefined, { withheld: true })).toBeUndefined();
+	expect(moved.render(undefined, { withheld: true })).toBeUndefined();
+	expect(moved.render(STARTING_C)).toBeUndefined();
+	expect(moved.render(STARTING_C)).toBeUndefined();
+	expect(moved.lapse(STARTING_C)).toBe(STARTING_C);
+	expect(moved.render(STARTING_C)).toBe(STARTING_C);
+
+	// away to none
+	let removed = settling();
+	expect(removed.render(AWAY)).toBe(AWAY);
+	expect(removed.render(undefined, { withheld: true })).toBeUndefined();
+	expect(removed.render(NONE)).toBeUndefined();
+	expect(removed.lapse(NONE)).toBe(NONE);
+
+	// starting to disconnected: what a person can act on is drawn at once
+	let dropped = settling();
+	expect(dropped.render(STARTING_B)).toBeUndefined();
+	expect(dropped.lapse(STARTING_B)).toBe(STARTING_B);
+	expect(dropped.render(undefined, { withheld: true })).toBeUndefined();
+	expect(dropped.render(OFFLINE_C)).toBe(OFFLINE_C);
+	expect(dropped.render(OFFLINE_C)).toBe(OFFLINE_C);
+
+	// starting to starting on another machine
+	let rehomed = settling();
+	rehomed.render(STARTING_B);
+	rehomed.lapse(STARTING_B);
+	expect(rehomed.render(undefined, { withheld: true })).toBeUndefined();
+	expect(rehomed.render(STARTING_C)).toBeUndefined();
+	expect(rehomed.lapse(STARTING_C)).toBe(STARTING_C);
+});
+
+test("the same state returning after the gap is drawn at once, however long the gap, and does not wait out its grace again", () => {
+	let again = settling();
+	again.render(STARTING_B);
+	again.lapse(STARTING_B);
+	expect(again.render(undefined, { withheld: true })).toBeUndefined();
+	expect(again.render(undefined, { withheld: true })).toBeUndefined();
+	expect(again.render(STARTING_B)).toBe(STARTING_B);
+	// It is shown now, as if there had been no gap: what comes next is judged against it.
+	expect(again.render(OFFLINE_B)).toBe(OFFLINE_B);
+	expect(again.render(NONE)).toBe(OFFLINE_B);
+	expect(again.lapse(NONE)).toBe(NONE);
+});
+
+test("what was remembered through a gap does not outlive the next state drawn", () => {
+	let later = settling();
+	later.render(STARTING_B);
+	later.lapse(STARTING_B);
+	later.render(undefined, { withheld: true });
+	expect(later.render(OFFLINE_B)).toBe(OFFLINE_B);
+	// Gone: a second gap starts from what is shown now, and the first state is no longer returning.
+	later.render(undefined, { withheld: true });
+	expect(later.render(STARTING_B)).toBeUndefined();
+	expect(later.lapse(STARTING_B)).toBe(STARTING_B);
+});
+
+test("with no gap, a reconnect's placeholder and the grace of a state that waits leave the last state as they always did", () => {
+	let restart = settling();
+	expect(restart.render(OFFLINE)).toBe(OFFLINE);
+	expect(restart.render(NONE, { held: true })).toBe(OFFLINE);
+	expect(restart.render(NONE, { held: true })).toBe(OFFLINE);
+	expect(restart.render(NONE)).toBe(OFFLINE);
+	expect(restart.lapse(NONE)).toBe(NONE);
 });
 
 const HERE: Session.PlannerAttachment = { state: "attached", login: "mona" };
