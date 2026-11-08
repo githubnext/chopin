@@ -7,6 +7,7 @@ import { checkAgent } from "./acp";
 import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import { redacted } from "./connection";
 import { VERSION } from "./version";
+import { windowsArgument } from "./windows-argument";
 import { connectors, processStart } from "./workspace";
 
 /**
@@ -255,22 +256,6 @@ export function launchdPlist(program: ServiceProgram, home: string, path: string
 	].join("\n");
 }
 
-/** One argument of a Windows command line, quoted the way a program's C runtime splits it back. */
-export function windowsArgument(value: string) {
-	if (value !== "" && !/[\s"]/.test(value)) return value;
-	let quoted = '"';
-	let backslashes = 0;
-	for (let character of value) {
-		if (character === "\\") {
-			backslashes++;
-			continue;
-		}
-		quoted += "\\".repeat(character === '"' ? backslashes * 2 + 1 : backslashes) + character;
-		backslashes = 0;
-	}
-	return `${quoted}${"\\".repeat(backslashes * 2)}"`;
-}
-
 /** A PowerShell single-quoted string; every character PowerShell reads as a single quote doubles. */
 export function powershellLiteral(value: string) {
 	return `'${value.replace(/['\u2018\u2019\u201a\u201b]/g, quote => quote + quote)}'`;
@@ -362,6 +347,8 @@ export type ServiceManager = "systemd" | "launchd" | "task-scheduler";
 export class ServiceError extends Error {
 	override name = "ServiceError";
 }
+
+export { windowsArgument };
 
 export const LINGER_COMMAND = 'sudo loginctl enable-linger "$(id -un)"';
 
