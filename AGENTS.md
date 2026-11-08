@@ -234,8 +234,11 @@ durable.
   agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
   MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
   worktree, its git directory (hooks read-only), the agent's state and a private temporary
-  directory; the rest of the disk reads except credentials, other runs and the machine
-  token; egress goes only through a loopback allow-list proxy. Credentials in the agent's
+  directory; the rest of the disk reads except credentials, and the connector's state
+  directory is left out of the read grants, so an agent sees there only its own worktree and
+  the folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a
+  denial win over a grant inside it, so a denial can't give an agent its own paths back);
+  egress goes only through a loopback allow-list proxy. Credentials in the agent's
   environment are not hidden. A machine with no working sandbox runs agents unsandboxed and
   says so, unless its owner chose `--require-sandbox`. Do not start an agent process outside
   the seam. See [Sandbox](docs/chopin-cli.md#sandbox).
