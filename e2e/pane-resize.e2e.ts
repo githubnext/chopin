@@ -34,6 +34,45 @@ function transcript(): Chat.Entry[] {
 	}));
 }
 
+/**
+ * The Projects list holds every document the other tests of a run made, and each row reads the
+ * reduced-motion preference as it renders, so a count of those reads says what the room does only
+ * when the list is the same length whenever the test runs. It lists the document the test made.
+ */
+async function ownCatalogue(page: Page, room: string) {
+	let slug = `test-${room.slice(0, 8)}`;
+	await page.route("**/api/repositories/octo-org/score/channels*", route =>
+		route.fulfill({
+			json: {
+				canEdit: true,
+				channels: [{
+					createdAt: "2026-08-19T12:00:00.000Z",
+					createdBy: "U_ana",
+					descriptionRevision: 0,
+					id: room,
+					repositoryId: "R_score",
+					repositoryName: "score",
+					repositoryOwner: "octo-org",
+					revision: 0,
+					slug,
+					title: `Test ${room.slice(0, 8)}`,
+					updatedAt: "2026-08-19T12:00:00.000Z",
+				}],
+				repository: {
+					defaultBranch: "main",
+					fullName: "octo-org/score",
+					id: "R_score",
+					name: "score",
+					owner: "octo-org",
+					ownerAvatarUrl: "https://example.invalid/octo-org.png",
+					permissions: { admin: false, pull: true, push: true },
+					private: true,
+					url: "https://github.com/octo-org/score",
+				},
+			},
+		}));
+}
+
 /** Count what a drag must not do, from before the page's own scripts run. */
 async function watch(page: Page) {
 	await page.addInitScript(() => {
@@ -167,12 +206,13 @@ test("a Projects sidebar resize follows the pointer without asking the page what
 	expect((await box(sidebar)).width).toBeCloseTo(before + 60, 0);
 });
 
-test("a Projects sidebar resize renders the workspace on each step, not the room and its Chat", async ({ join, page, seed }) => {
+test("a Projects sidebar resize renders the workspace on each step, not the room and its Chat", async ({ join, page, room, seed }) => {
 	let messages = [0, 1, 2, 3].flatMap(round =>
 		transcript().map(entry => ({ ...entry, id: `${round}-${entry.id}` }))
 	);
 	await seed("# Resize\n", { transcript: messages });
 	await watch(page);
+	await ownCatalogue(page, room);
 	await join("ana");
 	let handle = page.getByRole("separator", { name: "Resize Projects sidebar" });
 	let rail = page.getByRole("complementary", { name: "Chat", exact: true });
