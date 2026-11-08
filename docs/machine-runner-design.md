@@ -31,9 +31,9 @@ considered and are not built. Auto-update, the one-command installer,
 blueprints, snapshots and the desktop are not part of it.
 
 What was built: one `Sandbox` seam in the connector that every agent and Planner
-process goes through; one MXC policy (writes only to the run's worktree, its git
-directory, without the files git reads to decide which programs to run, and the
-agent's own state; reads of the rest of the disk except
+process goes through; one MXC policy (writes only to the run's worktree, the places
+in its git directory where commits and refs go and its own worktree's entry there,
+and the agent's own state; reads of the rest of the disk except
 credentials, other runs' files and the machine token; egress denied outright
 with a loopback allow-list proxy as the only way out, because no MXC engine
 filters by name); a probe that launches a command that does nothing in the same

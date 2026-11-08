@@ -233,31 +233,41 @@ durable.
 - **Agents on a machine run in its process sandbox.** The connector starts the ACP
   agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
   MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
-  worktree, its git directory, the agent's state and a private temporary directory, and what
-  the owner adds. Git on the host runs what a repository's configuration names, so the git
-  directory is never written whole where that can be avoided: a run in a linked worktree
-  writes only `objects`, `refs`, `logs`, `worktrees` and `lfs` of the repository's, so its
-  `config`, `hooks`, `info`, submodules and top-level files, and any new file there such as a
-  `commondir`, are out of its reach; a Planner, in the person's own checkout, writes it whole
-  but for `config`, `config.worktree`, `hooks` and `info`. A linked worktree's `commondir`
-  and `config.worktree` and its worktree's `.git` file are read-only to both, and only the
-  launch's working directory says which repository it is. Every git command the connector
-  runs on the host goes through `apps/connector/src/git-host.ts`, which sets aside the
-  repository's hooks, fsmonitor and ssh command, and removes any `commondir` in a checkout's
-  own git directory when a launch starts and ends and before a run begins. That is the stated
-  limit: a Planner can still make one in the checkout it works in, which can't be held back
-  because it doesn't exist, and the person's own git there reads it until the Planner ends.
-  `git push -u`, `git branch -u` and a branch started from a remote one still run but can't
-  record their upstream, and deleting a ref fails in a linked worktree. See
-  [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox). The rest of
-  the disk reads except credentials, and the connector's state
-  directory is left out of the read grants, so an agent sees there only its own worktree and
-  the folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a
-  denial win over a grant inside it, so a denial can't give an agent its own paths back);
-  egress goes only through a loopback allow-list proxy. Credentials in the agent's
-  environment are not hidden. A machine with no working sandbox runs agents unsandboxed and
-  says so, unless its owner chose `--require-sandbox`. Do not start an agent process outside
-  the seam. See [Sandbox](docs/chopin-cli.md#sandbox).
+  worktree or the Planner's checkout, the agent's state, a private temporary directory and what
+  the owner adds. Git on the host runs what a repository's configuration names, and finds that
+  configuration through files (a worktree's `.git`, a `commondir`) that name another directory, and
+  a sandbox can only hold back paths that exist. So the policy is an allow-list: the repository's
+  git directory is read-only whole, which also stops its entries being renamed or made again, with
+  only `objects`, `refs`, `logs` and `lfs` written in it, and, for a linked worktree (a run's, or
+  a Planner's own), that worktree's one entry in `worktrees/` with `commondir`, `gitdir` and
+  `config.worktree` read-only inside it. Its `config`, `hooks`, `info`, `HEAD`, `index`,
+  `packed-refs`, submodules, `worktrees` and every other worktree's entry, the person's included,
+  are read-only, and no file can be added at its top level. A Planner's own worktree is made by
+  the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
+  `git worktree add` would need `worktrees/` written; an unsandboxed backend makes it itself. The
+  limit, said plainly: in the sandbox `git add`, `commit` and `checkout` fail in a Planner's
+  checkout (its index and `HEAD` are at the top level) and work in a worktree; `git worktree
+  add/remove`, `git config` without `-c`, `git remote add`, `branch -D`, `tag -d` and `gc` fail
+  everywhere; `push -u` can't record an upstream (see [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox)). Every git command the connector runs on the host
+  goes through `apps/connector/src/git-host.ts`, which is told where the repository is
+  (`GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, recorded by `repositoryAt` the first time the
+  connector sees a working tree and never read from the files an agent can write), reads a copy of
+  the person's configuration of the settings a fetch and a checkout need (`GIT_CONFIG_NOSYSTEM`,
+  `GIT_CONFIG_GLOBAL`), and replaces what a repository may set for hooks, the file-system monitor, the
+  ssh command, attributes, `ext::` remotes, credential helpers and the local transport (allowed
+  only where the person's `origin` was local when first seen). Not guaranteed: what an agent writes
+  in its own worktree and its own entry (an unfinished rebase's `exec` lines, a repository it
+  `git init`s) is the agent's, and git run there by a person runs what is there; a repository's
+  own configuration is still read by the connector's git (filters, proxies), which the policy keeps
+  an agent from writing. `removePlantedRedirects` remains as a cheap detector of a `commondir` an
+  earlier release's agent left, and is not the defense. The rest of the disk reads except credentials, and the connector's state
+  directory is left out of the read grants, so an agent sees there only its own worktree and the
+  folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a denial
+  win over a grant inside it, so a denial can't give an agent its own paths back); egress goes only
+  through a loopback allow-list proxy. Credentials in the agent's environment are not hidden. A
+  machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
+  `--require-sandbox`. Do not start an agent process outside the seam. See
+  [Sandbox](docs/chopin-cli.md#sandbox).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 
