@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import type { Host } from "./sandbox-probe";
 import {
-	connectorDenied,
 	createSandbox,
 	inspectSandbox,
 	launchPolicy,
@@ -18,7 +17,14 @@ import {
 } from "./sandbox";
 
 let scratch = realpathSync(mkdtempSync(join(tmpdir(), "chopin-sandbox-test-")));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+/** Under a root the sandbox reads on Linux and macOS, as a home or a state directory is; /tmp is not one. */
+let readableScratch = existsSync("/var/tmp")
+	? realpathSync(mkdtempSync("/var/tmp/chopin-sandbox-test-"))
+	: scratch;
+afterAll(() => {
+	rmSync(scratch, { recursive: true, force: true });
+	rmSync(readableScratch, { recursive: true, force: true });
+});
 
 /** A machine with nothing a sandbox needs, so every probe says why not. */
 function bare(): Host {
@@ -124,57 +130,8 @@ test("a chopin with no executor, such as the downloaded script, reports it rathe
 	});
 });
 
-test("an agent can't see another run's files or the machine token, only its own", () => {
-	let base = join(scratch, "state");
-	let tree: Record<string, string[]> = {
-		[base]: ["machine.json", "machine.json.lock", "config.json", "runs", "planners", "repos"],
-		[join(base, "runs")]: [
-			"mine",
-			"mine.json",
-			"mine.github-token",
-			"mine-worktrees",
-			"other",
-			"other.json",
-		],
-		[join(base, "planners")]: ["octo", "someone"],
-		[join(base, "planners", "octo")]: ["score", "other-repo"],
-		[join(base, "planners", "octo", "score")]: [
-			"doc1",
-			"doc1.planner-token",
-			"doc2",
-			"doc2.github-token",
-		],
-	};
-	let list = (path: string) => tree[path] ?? [];
-	let own = [join(base, "runs", "mine")];
-	expect(connectorDenied(base, own, list)).toEqual([
-		join(base, "machine.json"),
-		join(base, "machine.json.lock"),
-		join(base, "runs", "other"),
-		join(base, "runs", "other.json"),
-		join(base, "planners", "octo"),
-		join(base, "planners", "someone"),
-	]);
-	// A Planner keeps the folder of its own document and denies its siblings by name.
-	let planner = [join(base, "planners", "octo", "score", "doc1")];
-	expect(connectorDenied(base, planner, list)).toEqual([
-		join(base, "machine.json"),
-		join(base, "machine.json.lock"),
-		join(base, "runs", "mine"),
-		join(base, "runs", "mine.json"),
-		join(base, "runs", "mine.github-token"),
-		join(base, "runs", "mine-worktrees"),
-		join(base, "runs", "other"),
-		join(base, "runs", "other.json"),
-		join(base, "planners", "octo", "score", "doc2"),
-		join(base, "planners", "octo", "score", "doc2.github-token"),
-		join(base, "planners", "octo", "other-repo"),
-		join(base, "planners", "someone"),
-	]);
-});
-
 test("a launch may write its worktree, its repository's git directory, its agent's state and a private temporary directory", () => {
-	let root = join(scratch, "launch");
+	let root = join(readableScratch, "launch");
 	let base = join(root, "state");
 	let checkout = join(root, "checkout");
 	let git = (...args: string[]) =>
@@ -197,8 +154,14 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	mkdirSync(join(base, "runs", "mine-worktrees"), { recursive: true });
 	mkdirSync(join(base, "runs", "other"), { recursive: true });
 	writeFileSync(join(base, "machine.json"), "{}");
+	mkdirSync(join(root, "notes"));
 	let worktree = join(base, "runs", "mine");
+	let tokens = `${worktree}.tokens`;
+	mkdirSync(tokens);
+	writeFileSync(join(tokens, "github"), "ghu_mine\n");
 	git("-C", checkout, "worktree", "add", "--detach", worktree);
+	// A Planner's worktree isn't there yet: the sandbox makes the folder it is made in.
+	let planned = join(base, "planners", "octo", "score", "D_1");
 	let temporary = join(root, "tmp");
 	mkdirSync(temporary);
 	let policy = launchPolicy(
@@ -209,8 +172,8 @@ test("a launch may write its worktree, its repository's git directory, its agent
 			cwd: worktree,
 			env: { PATH: process.env.PATH, HOME: join(root, "home"), KEEP: "yes" },
 			stdin: "pipe",
-			writable: [join(base, "runs", "mine-worktrees")],
-			own: [worktree],
+			writable: [join(base, "runs", "mine-worktrees"), planned],
+			own: [worktree, tokens],
 		},
 		{
 			directory: base,
@@ -222,16 +185,23 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	);
 	expect(policy.writable).toContain(worktree);
 	expect(policy.writable).toContain(join(base, "runs", "mine-worktrees"));
+	expect(policy.writable).toContain(planned);
+	expect(existsSync(planned)).toBe(true);
 	expect(policy.writable).toContain(join(checkout, ".git"));
 	expect(policy.writable).toContain(temporary);
 	expect(policy.writable).toContain(join(root, "home", ".atomic"));
 	// A directory that isn't there is not granted: MXC would refuse the request.
 	expect(policy.writable).not.toContain(join(root, "extra-missing"));
 	expect(policy.readonlyInside).toEqual([join(checkout, ".git", "hooks")]);
-	expect(policy.denied).toContain(join(base, "machine.json"));
-	expect(policy.denied).toContain(join(base, "runs", "other"));
-	expect(policy.denied).not.toContain(worktree);
 	expect(policy.readable).toContain("/usr");
+	// What is around the state directory is read, and what is in it only by name: the launch's
+	// tokens, as a folder, and nothing about any other run, the machine token or what comes later.
+	expect(policy.readable).toContain(join(root, "notes"));
+	expect(policy.readable.filter(path => path.startsWith(`${base}/`))).toEqual([tokens]);
+	for (let path of policy.readable) {
+		expect(base === path || base.startsWith(`${path}/`)).toBe(false);
+	}
+	expect(policy.denied.filter(path => path.startsWith(`${base}/`))).toEqual([]);
 	expect(policy.readable).not.toContain("/tmp");
 	expect(policy.readable).not.toContain("/dev");
 	// Credentials are not hidden from the agent's own environment, and it gets a private TMPDIR.
@@ -239,6 +209,37 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.env.TMPDIR).toBe(temporary);
 	expect(policy.env.NODE_USE_ENV_PROXY).toBe("1");
 	expect(policy.proxy).toBe("http://127.0.0.1:4000");
+});
+
+test("a checkout beside the state directory is written and not also granted to read, which MXC would take as read-only", () => {
+	let root = join(readableScratch, "beside");
+	let base = join(root, "state");
+	let checkout = join(root, "score");
+	mkdirSync(checkout, { recursive: true });
+	mkdirSync(base);
+	let policy = launchPolicy(
+		"bubblewrap",
+		{ ...systemHost(), platform: "linux" },
+		{ command: ["pdd-kit", "planner"], cwd: checkout, env: {}, stdin: "ignore" },
+		{ directory: base, home: join(root, "home") },
+		"http://127.0.0.1:4000",
+		join(root, "tmp"),
+	);
+	expect(policy.writable).toContain(checkout);
+	expect(policy.readable).not.toContain(checkout);
+	// The agent's state directory, a child of the home the grants walk through, is the same.
+	let home = join(root, "home");
+	let again = launchPolicy(
+		"bubblewrap",
+		{ ...systemHost(), platform: "linux" },
+		{ command: ["atomic-acp"], cwd: checkout, env: {}, stdin: "ignore" },
+		{ directory: join(home, ".local", "state", "chopin"), home },
+		"http://127.0.0.1:4000",
+		join(root, "tmp"),
+	);
+	expect(again.writable).toContain(join(home, ".atomic"));
+	expect(again.readable).not.toContain(join(home, ".atomic"));
+	expect(again.readable).not.toContain(join(home, ".local", "state", "chopin"));
 });
 
 test("the chopin binary carries MXC's executor, and a source checkout finds the one in the SDK package", async () => {

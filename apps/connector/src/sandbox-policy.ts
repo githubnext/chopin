@@ -314,3 +314,57 @@ export function readableRoots(names: readonly string[]): string[] {
 	let skipped = new Set(["dev", "proc", "sys", "run", "tmp", "boot", "lost+found"]);
 	return names.filter(name => !skipped.has(name)).map(name => `/${name}`);
 }
+
+/** What `readGrantsAround` asks of the disk. */
+export type Disk = {
+	/** The names in a directory; none where it can't be listed. */
+	list(directory: string): string[];
+	/** The real path of a directory or file this user can read at `path`; undefined for anything else. */
+	resolve(path: string): string | undefined;
+};
+
+/**
+ * The read grants for `roots` that leave `hidden`, the connector's state directory, out. Seatbelt
+ * lets a denial win over every grant, so no denial of a directory can leave a launch its own paths
+ * inside it, and a denial of what is there when the launch starts doesn't cover what is made in
+ * the directory later: another run, a Planner, a token file. So nothing in `roots` is granted as a
+ * whole where it holds `hidden`. Each directory from the root down to it is listed instead, and
+ * everything in it but the way to `hidden` is granted by its real path; what a launch may use in
+ * `hidden` is granted to it by name. What is made in `hidden` later is in no grant, on any system.
+ * A link that leads into `hidden`, or to a directory holding it, is left out.
+ */
+export function readGrantsAround(
+	roots: readonly string[],
+	hidden: string,
+	disk: Disk,
+	platform: NodeJS.Platform = process.platform,
+): string[] {
+	let path = platform === "win32" ? win32 : posix;
+	// Windows and macOS file systems usually ignore case, so a path written another way is the same.
+	let fold = (value: string) =>
+		platform === "win32" || platform === "darwin" ? value.toLowerCase() : value;
+	let within = (inner: string, outer: string) => {
+		let prefix = fold(outer.endsWith(path.sep) ? outer : outer + path.sep);
+		return fold(inner) === fold(outer) || fold(inner).startsWith(prefix);
+	};
+	let grants = new Set<string>();
+	let around = (directory: string) => {
+		let toward = path.relative(directory, hidden).split(path.sep)[0]!;
+		for (let name of disk.list(directory)) {
+			let child = path.join(directory, name);
+			if (fold(name) === fold(toward)) {
+				if (fold(child) !== fold(hidden)) around(child);
+				continue;
+			}
+			let real = disk.resolve(child);
+			if (real && !within(real, hidden) && !within(hidden, real)) grants.add(real);
+		}
+	};
+	for (let root of roots) {
+		let real = disk.resolve(root) ?? root;
+		if (within(real, hidden)) continue;
+		if (within(hidden, real)) around(real);
+		else grants.add(root);
+	}
+	return [...grants];
+}
