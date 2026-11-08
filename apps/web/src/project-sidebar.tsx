@@ -4,6 +4,7 @@ import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { addressOfHref, documentIntent, DWELL_MS } from "./document-intent";
 import { IconButton } from "./icon-button";
 import { MachinesEntry } from "./machines-entry";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
@@ -25,7 +26,7 @@ import type { AccountMenuState } from "./account-menu";
 import type { DocumentAction } from "./document-actions-menu";
 import type { ProjectDocuments } from "./document-actions";
 import type { DocumentCreationPhase } from "./use-document-creation";
-import type { ReactNode, Ref } from "react";
+import type { FocusEvent, PointerEvent, ReactNode, Ref } from "react";
 
 export function NavigationIcon(
 	{ alt = "", className, src }: { alt?: string; className?: string; src: string },
@@ -136,6 +137,52 @@ function DocumentRow(
 
 function noop() {}
 
+/**
+ * Starts reading a document when the reader shows signs of opening it: a pointer resting on its
+ * row, or the keyboard focus resting there, for a moment (a sweep across the list or down it
+ * starts nothing), or a press on it, which comes before the click does. Set on the list, so one
+ * set of handlers serves every row.
+ */
+function useRowIntent() {
+	let timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+	let cancel = () => clearTimeout(timer.current);
+	useEffect(() => cancel, []);
+	// The row of the document that is open is not one the reader is about to open.
+	let rowOf = (target: EventTarget) => {
+		let link = target instanceof Element ? target.closest(".project-sidebar-document-link") : null;
+		return link?.getAttribute("aria-current")
+			? undefined
+			: addressOfHref(link?.getAttribute("href"));
+	};
+	let rest = (target: EventTarget) => {
+		cancel();
+		let address = rowOf(target);
+		if (address) timer.current = setTimeout(() => documentIntent.start(address), DWELL_MS);
+	};
+	return {
+		onBlur: cancel,
+		// The click is the opening the read was for, whatever is still waiting.
+		onClick: cancel,
+		// Pressing a row focuses it too, but that is the press's business, above; a read that began
+		// after the click had used the first would be a second one.
+		onFocus: (event: FocusEvent) => {
+			if (event.target instanceof Element && event.target.matches(":focus-visible")) {
+				rest(event.target);
+			}
+		},
+		onPointerDown: (event: PointerEvent) => {
+			cancel();
+			let address = rowOf(event.target);
+			if (address) documentIntent.start(address);
+		},
+		onPointerLeave: cancel,
+		// A touch or a pen has no resting place before a press, which is the intent.
+		onPointerOver: (event: PointerEvent) => {
+			if (event.pointerType === "mouse") rest(event.target);
+		},
+	};
+}
+
 export function ProjectSidebarProject(
 	{
 		archiveMode,
@@ -198,6 +245,7 @@ export function ProjectSidebarProject(
 	let contentId = useId();
 	let collapseMotion = motionContract("collapse");
 	let list = useRef<HTMLUListElement>(null);
+	let intent = useRowIntent();
 	let documentAction = (channel: Api.Channel, action: DocumentAction) => {
 		let target = action === "archive" ? archiveFocusTarget(list.current, channel.id) : undefined;
 		onDocumentAction(channel, action);
@@ -220,12 +268,19 @@ export function ProjectSidebarProject(
 				<p className="project-sidebar-status" role="status">Loading documents…</p>
 			)}
 			{(groups.length > 0 || presence.rows.length > 0) && (
-				<ul className="project-sidebar-documents" ref={list}>
+				<ul
+					className="project-sidebar-documents"
+					onBlur={intent.onBlur}
+					onClick={intent.onClick}
+					onFocus={intent.onFocus}
+					onPointerDown={intent.onPointerDown}
+					onPointerLeave={intent.onPointerLeave}
+					onPointerOver={intent.onPointerOver}
+					ref={list}
+				>
 					{presence.rows.map(({ enter, exiting, group: { children, parent: channel } }) => {
 						let parentCurrent = currentDocumentId === channel.id;
-						let childCurrent = children.some(child =>
-							child.id === currentDocumentId
-						);
+						let childCurrent = children.some(child => child.id === currentDocumentId);
 						let parentHref = documentPath(
 							channel.repositoryOwner,
 							channel.repositoryName,
