@@ -644,6 +644,39 @@ test("paused roots are paused, roots whose run ended are neither, and every othe
 	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
 });
 
+test("a stage that Atomic holds waiting between turns is shown as still running", async () => {
+	let { foldLifecycle, runCards } = await import("./full");
+	let cards = new Map();
+	let event = (target: object, at: number) =>
+		({
+			type: "workflow_lifecycle",
+			eventId: `e${at}`,
+			cursor: { epoch: "e", revision: at },
+			runId: "run-1",
+			rootRunId: "run-1",
+			ownerSessionId: "session",
+			occurredAt: at * 1000,
+			observedAt: at * 1000,
+			delivery: "live",
+			target,
+		}) as never;
+	foldLifecycle(
+		cards,
+		event({ kind: "run", runId: "run-1", status: "running" }, 100),
+		"plan-review",
+	);
+	foldLifecycle(
+		cards,
+		event(
+			{ kind: "stage", runId: "run-1", stageId: "a", stageName: "draft-1", status: "waiting" },
+			101,
+		),
+	);
+	expect(runCards(cards, { active: ["run-1"], paused: [] })[0]!.stages).toEqual([
+		{ id: "run-1:a", name: "draft-1", status: "running", started: 101 },
+	]);
+});
+
 test("run cards fold lifecycle events into ordered stages, Decisions waits, and paused or finished status", async () => {
 	let { foldLifecycle, runCards } = await import("./full");
 	let cards = new Map();
