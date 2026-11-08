@@ -218,6 +218,7 @@ async function connector(baseURL: string, command: string[], env: Record<string,
 		join(ROOT, "apps/connector/src/main.ts"),
 		"connect",
 		root,
+		"--no-sandbox",
 		"--",
 		...command,
 	], {

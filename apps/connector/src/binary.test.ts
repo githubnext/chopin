@@ -175,6 +175,7 @@ test.skipIf(!binary)(
 			binary!,
 			"connect",
 			root,
+			"--no-sandbox",
 			"--",
 			process.execPath,
 			join(import.meta.dir, "testing/fake-agent.ts"),

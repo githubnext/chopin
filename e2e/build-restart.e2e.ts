@@ -162,6 +162,7 @@ async function connector(env: Record<string, string>) {
 		join(ROOT, "apps/connector/src/main.ts"),
 		"connect",
 		root,
+		"--no-sandbox",
 		"--",
 		"bun",
 		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),

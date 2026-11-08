@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 import type { Readable } from "node:stream";
 import type { PlannerAssignment } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
@@ -17,6 +18,7 @@ import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
 import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
 import type { Checkouts } from "./checkouts";
+import { type Sandbox, spawnIn } from "./sandbox";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -91,6 +93,8 @@ export async function servePlanners(options: {
 	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
+	/** Where each backend starts: the machine's process sandbox, else plainly. */
+	sandbox?: Sandbox;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
 }
@@ -125,6 +129,7 @@ export function dispatchedPlanners(options: {
 	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
+	sandbox?: Sandbox;
 }) {
 	type Backend = {
 		url: string;
@@ -241,6 +246,7 @@ async function servePlanner(options: {
 	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
+	sandbox?: Sandbox;
 	/**
 	 * For a dispatched Planner: once the backend exits by itself, whether Chopin still asks for it,
 	 * so it starts again. Without it, a backend that exits is always started again.
@@ -511,6 +517,7 @@ async function launch(
 		cwd: string;
 		signal: AbortSignal;
 		env?: Record<string, string>;
+		sandbox?: Sandbox;
 	},
 	token: string,
 	worktree: string,
@@ -518,32 +525,40 @@ async function launch(
 	repository?: string,
 	tokens?: PlannerTokenFile,
 ): Promise<{ how: string; stderr?: string; reason?: string }> {
-	let child = spawn(options.command[0]!, options.command.slice(1), {
-		cwd: options.cwd,
-		env: {
-			...process.env,
-			...options.env,
-			// Its own git, and its agent's, reach GitHub with this token over https, whatever
-			// the person's Git configuration says about GitHub URLs or SSH.
-			...(github && repository ? gitCredentials(github.file, repository) : {}),
-			CHOPIN_URL: options.url,
-			CHOPIN_DOCUMENT: options.document,
-			CHOPIN_PLANNER_TOKEN: token,
-			...(tokens ? { CHOPIN_PLANNER_TOKEN_FILE: tokens.file } : {}),
-			CHOPIN_CHECKOUT: options.cwd,
-			CHOPIN_WORKTREE: worktree,
-			...(github
-				? {
-					CHOPIN_GITHUB_TOKEN: github.token,
-					CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
-					CHOPIN_GITHUB_TOKEN_FILE: github.file,
-				}
-				: {}),
-		},
-		stdio: ["ignore", "pipe", "pipe"],
-		// Its own process group, so Ctrl-C reaches it only through the connector stopping it.
-		detached: process.platform !== "win32",
-	});
+	let child;
+	try {
+		child = spawnIn(options.sandbox, {
+			command: options.command,
+			cwd: options.cwd,
+			env: {
+				...process.env,
+				...options.env,
+				// Its own git, and its agent's, reach GitHub with this token over https, whatever
+				// the person's Git configuration says about GitHub URLs or SSH.
+				...(github && repository ? gitCredentials(github.file, repository) : {}),
+				CHOPIN_URL: options.url,
+				CHOPIN_DOCUMENT: options.document,
+				CHOPIN_PLANNER_TOKEN: token,
+				...(tokens ? { CHOPIN_PLANNER_TOKEN_FILE: tokens.file } : {}),
+				CHOPIN_CHECKOUT: options.cwd,
+				CHOPIN_WORKTREE: worktree,
+				...(github
+					? {
+						CHOPIN_GITHUB_TOKEN: github.token,
+						CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
+						CHOPIN_GITHUB_TOKEN_FILE: github.file,
+					}
+					: {}),
+			},
+			stdin: "ignore",
+			// The backend makes its own worktree beside its siblings', so it may write the folder
+			// that holds them; what it must not see of theirs is denied by name.
+			writable: [dirname(worktree)],
+			own: [worktree],
+		});
+	} catch (error) {
+		return { how: error instanceof Error ? error.message : String(error) };
+	}
 	// Read as each line is passed on, so a GitHub token renewed meanwhile is masked too.
 	let secrets = () => [
 		token,
