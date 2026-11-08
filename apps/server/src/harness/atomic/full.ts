@@ -6,6 +6,7 @@ import type {
 	WorkflowActivitySubscription,
 	WorkflowLifecycleEvent,
 	WorkflowRootActivity,
+	WorkflowStageStatus,
 	WorkflowToolNodeStatus,
 } from "@bastani/atomic";
 import type { Chat as Wire } from "@chopin/protocol";
@@ -162,6 +163,18 @@ const TOOL_STEP: Record<WorkflowToolNodeStatus, Wire.RunStage["status"]> = {
 	cancelled: "skipped",
 };
 
+const STAGE_STEP: Record<WorkflowStageStatus, Wire.RunStage["status"]> = {
+	pending: "pending",
+	running: "running",
+	awaiting_input: "awaiting_input",
+	paused: "paused",
+	blocked: "blocked",
+	waiting: "running",
+	completed: "completed",
+	failed: "failed",
+	skipped: "skipped",
+};
+
 /** Records one stage or tool step, in the order the run first reached it. */
 function foldStep(
 	card: Card,
@@ -218,7 +231,13 @@ export function foldLifecycle(
 			card.ended = seconds;
 		} else delete card.ended;
 	} else if (target.kind === "stage") {
-		foldStep(card, `${target.runId}:${target.stageId}`, target.stageName, target.status, seconds);
+		foldStep(
+			card,
+			`${target.runId}:${target.stageId}`,
+			target.stageName,
+			STAGE_STEP[target.status],
+			seconds,
+		);
 	} else if (target.kind === "tool") {
 		foldStep(
 			card,
