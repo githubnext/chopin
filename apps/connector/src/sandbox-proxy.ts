@@ -47,9 +47,10 @@ async function resolveAll(host: string) {
 }
 
 /**
- * Start the allow-list proxy on loopback: HTTP CONNECT tunnels and plain HTTP requests to the
- * hosts in `hosts`, and a 403 for anything else. It sees names and ports only, never what a tunnel
- * carries. A host that isn't a local one is refused when its name leads to a private address.
+ * Start the allow-list proxy on loopback: HTTP CONNECT tunnels and plain HTTP requests (a
+ * WebSocket upgrade among them) to the hosts in `hosts`, and a 403 for anything else. It sees
+ * names and ports only, never what a tunnel carries. A host that isn't a local one is refused when
+ * its name leads to a private address.
  */
 export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 	let resolve = options.resolve ?? resolveAll;
@@ -132,7 +133,8 @@ export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 				} catch {
 					return void client.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n");
 				}
-				if (url.protocol !== "http:") {
+				// A WebSocket's ws:// URL is the same request as an http:// one; wss:// needs CONNECT.
+				if (url.protocol !== "http:" && url.protocol !== "ws:") {
 					return void client.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n");
 				}
 				host = url.hostname;
@@ -140,11 +142,16 @@ export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 				let kept = headers.filter(header =>
 					!/^(proxy-connection|connection|proxy-authorization):/i.test(header)
 				);
+				// A request for an upgrade keeps the two headers it is made of; the connection it opens
+				// carries the upgraded protocol both ways. Any other request is one and done, so the
+				// next is checked against the list too.
+				let upgrading = kept.some(header => /^upgrade:\s*\S/i.test(header))
+					&& headers.some(header => /^connection:.*\bupgrade\b/i.test(header));
 				forward = Buffer.concat([
 					Buffer.from(
 						`${method} ${url.pathname}${url.search} HTTP/1.1\r\n${
 							kept.join("\r\n")
-						}\r\nconnection: close\r\n\r\n`,
+						}\r\nconnection: ${upgrading ? "Upgrade" : "close"}\r\n\r\n`,
 						"latin1",
 					),
 					rest,
