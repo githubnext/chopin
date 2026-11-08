@@ -50,7 +50,9 @@ test(
 			.toBeVisible();
 		let status = questionPage(ana).locator("[data-question-page-status]");
 		await expect(status.getByText("Waiting for", { exact: true })).toBeVisible();
-		await expect(status.getByText("ben", { exact: true })).toBeVisible();
+		// Not an exact match: until GitHub's photograph of ben arrives, or for good if it never does,
+		// his face holds his initial inside the same element, so that element reads "bben".
+		await expect(status).toContainText("ben");
 		let bar = ana.locator("[data-question-page-actions]");
 		await expect(bar.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
 		await expect(questionPage(ana).getByRole("heading", { name: "Takes" })).toBeVisible();
@@ -111,8 +113,7 @@ const LAYOUTS = [
 
 for (let [name, options] of LAYOUTS) {
 	test(`on ${name} a decision's page keeps Copy link and Discard decision`, async ({ join, seed }) => {
-		let fresh = crypto.randomUUID().replaceAll("-", "").slice(0, 4).toUpperCase();
-		let decision = writtenSeed(QUESTION, undefined, `01K0N4TR8K7JGM4R1J7PW4${fresh}`);
+		let decision = writtenSeed(QUESTION);
 		await seed(decision.source, decision.state);
 		let page = await join("ana", options);
 		await decisions(page);
