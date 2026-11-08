@@ -646,6 +646,16 @@ export async function connect(
 				),
 			);
 		},
+		planted(files) {
+			output.say(
+				output.style.dim(
+					`  Removed ${files.join(", ")}: an agent made ${
+						files.length === 1 ? "it" : "them"
+					} in a checkout's git directory, where only a linked worktree has one, `
+						+ "and it would have sent git there to configuration the agent wrote.",
+				),
+			);
+		},
 	});
 	let report = sandbox.report;
 	// Said once for each repository, and kept for chopin status, when the GitHub App can't push there.

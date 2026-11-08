@@ -224,7 +224,7 @@ export type Policy = {
 	readable: readonly string[];
 	/** Where it may write: its worktree or checkout, its state, its private temporary directory. */
 	writable: readonly string[];
-	/** Inside a writable directory, read-only: a repository's hooks. */
+	/** Inside a writable directory, read-only: what git reads to decide which programs to run. */
 	readonlyInside?: readonly string[];
 	/** Credentials and other runs' files, which it may not even read. */
 	denied: readonly string[];

@@ -26,7 +26,14 @@ function policy(platform: NodeJS.Platform, engine: Policy["engine"]): Policy {
 		env: { PATH: "/usr/bin", TOKEN: "t=1", GONE: undefined },
 		readable: ["/usr", "/home"],
 		writable: ["/work/run", "/work/run-worktrees"],
-		readonlyInside: ["/work/.git/hooks"],
+		// What git reads to decide which programs to run, held back inside the git directory a run writes.
+		readonlyInside: [
+			"/work/.git/hooks",
+			"/work/.git/info",
+			"/work/.git/config",
+			"/work/.git/worktrees/run/commondir",
+			"/work/run/.git",
+		],
 		denied: ["/home/me/.ssh"],
 		proxy: "http://127.0.0.1:4000",
 	};
@@ -181,7 +188,15 @@ test("the MXC request has one shape on every system: egress denied, the proxy th
 				timeout: 0,
 			},
 			filesystem: {
-				readonlyPaths: ["/usr", "/home", "/work/.git/hooks"],
+				readonlyPaths: [
+					"/usr",
+					"/home",
+					"/work/.git/hooks",
+					"/work/.git/info",
+					"/work/.git/config",
+					"/work/.git/worktrees/run/commondir",
+					"/work/run/.git",
+				],
 				readwritePaths: ["/work/run", "/work/run-worktrees"],
 				deniedPaths: ["/home/me/.ssh"],
 			},
@@ -191,6 +206,29 @@ test("the MXC request has one shape on every system: egress denied, the proxy th
 			},
 			runtimeConfig: { networkProxy: "http://127.0.0.1:4000" },
 		});
+	}
+});
+
+test("what git reads to run programs is read-only inside the directories a run writes, in the same request on every system", () => {
+	let requests = (["linux", "darwin", "win32"] as const).map(platform =>
+		mxcRequest(policy(platform, platform === "win32" ? "processcontainer" : "bubblewrap"))
+	);
+	for (let request of requests) {
+		expect(request.filesystem.readwritePaths).toEqual(["/work/run", "/work/run-worktrees"]);
+		expect(request.filesystem.readonlyPaths).toEqual(requests[0]!.filesystem.readonlyPaths);
+		for (
+			let path of [
+				"/work/.git/config",
+				"/work/.git/hooks",
+				"/work/.git/info",
+				"/work/.git/worktrees/run/commondir",
+				"/work/run/.git",
+			]
+		) {
+			expect(request.filesystem.readonlyPaths).toContain(path);
+			// Held back from the write grant of the directory around them, never granted on their own.
+			expect(request.filesystem.readwritePaths).not.toContain(path);
+		}
 	}
 });
 
