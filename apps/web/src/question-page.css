@@ -287,18 +287,24 @@
 /*
  * The page's question is the record's, shown above; the child's own title stays in the document
  * for its name and crumb but is not shown twice.
+ *
+ * Each of these rules asks the preface, not the whole editor, whether it holds the page. The
+ * preface and the editor are siblings in the document's scroller, so `~` reaches the editor from
+ * it. Asked of `.plan`, `:has()` has to search every element of the document again after each
+ * change made anywhere in it, which cost a 12,000-element document a third of every layout.
  */
-.plan:has(.plan-preface [data-question-page]) .plan-content > h1:first-child {
+.plan-preface:has([data-question-page]) ~ .mdxeditor .plan-content > h1:first-child {
 	display: none;
 }
 
 /* With the title hidden, the Notes heading is the only head: sit the body just below it. */
-.plan:has(.plan-preface [data-question-page]) .plan-content {
+.plan-preface:has([data-question-page]) ~ .mdxeditor .plan-content {
 	padding-block-start: 0;
 }
 
 /* An empty Notes area says where to write; the caret stays at the start of the line. */
-.plan:has(.plan-preface [data-question-page])
+.plan-preface:has([data-question-page])
+	~ .mdxeditor
 	.plan-content[contenteditable="true"]
 	> h1:first-child
 	+ p:has(> br:only-child)::before {
@@ -323,6 +329,6 @@
 }
 
 /* The editor's own empty-document hint would draw over "Add a note"; show one. */
-.plan:has(.plan-preface [data-question-page]) .plan-body-placeholder {
+.plan-preface:has([data-question-page]) ~ .mdxeditor .plan-body-placeholder {
 	display: none;
 }

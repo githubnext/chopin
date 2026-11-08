@@ -106,6 +106,32 @@ test(
 	},
 );
 
+test(
+	"a decision's page shows the record's question once: the document's own title and empty-document hint stay out of it",
+	async ({ join, seed }) => {
+		let decision = writtenSeed(QUESTION);
+		await seed(decision.source, decision.state);
+		let ana = await join("ana");
+		await decisions(ana);
+		await card(ana).getByRole("button", { name: "Expand decision" }).click();
+		await expect(questionPage(ana).getByRole("heading", { level: 1, name: QUESTION }))
+			.toBeVisible();
+		// The scroller that holds the page is the page document's, not its parent's.
+		let scroller = ana.locator("[data-plan-scroll]").filter({ has: questionPage(ana) });
+		let own = scroller.locator(".plan-content > h1:first-child");
+		await expect(own).toHaveCount(1);
+		await expect(own).toHaveCSS("display", "none");
+		await expect(scroller.locator(".plan-content").first()).toHaveCSS("padding-block-start", "0px");
+		// The Notes area of an empty page says where to write, and the editor's own hint is gone.
+		await expect.poll(() =>
+			scroller.locator(".plan-content > h1:first-child + p").first().evaluate(paragraph =>
+				getComputedStyle(paragraph, "::before").content
+			)
+		).toBe('"Add a note"');
+		await expect(scroller.locator(".plan-body-placeholder")).toHaveCSS("display", "none");
+	},
+);
+
 const LAYOUTS = [
 	["a phone", { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } }],
 	["a compact layout", { viewport: { width: 640, height: 900 } }],
