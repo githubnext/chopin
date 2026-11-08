@@ -88,6 +88,96 @@ test("a plain HTTP request to a listed host is forwarded, and one to another is 
 	expect(nonsense).toContain("400 Bad Request");
 });
 
+/** A masked client frame, as RFC 6455 has a client send one: a text message of under 126 bytes. */
+function textFrame(text: string) {
+	let payload = Buffer.from(text);
+	let mask = [1, 2, 3, 4];
+	let masked = Buffer.alloc(payload.length);
+	for (let index = 0; index < payload.length; index++) {
+		masked[index] = payload[index]! ^ mask[index % 4]!;
+	}
+	return Buffer.concat([Buffer.from([0x81, 0x80 | payload.length, ...mask]), masked]);
+}
+
+/** Send `head` to the proxy, then a frame once it has said 101, and collect what comes back. */
+function upgrade(proxy: Proxy, head: string, frame?: Buffer): Promise<Buffer> {
+	return new Promise(done => {
+		let socket = connect(proxy.port, "127.0.0.1");
+		let said = Buffer.alloc(0);
+		let sent = false;
+		socket.on("connect", () => socket.write(head));
+		socket.on("data", (chunk: Buffer) => {
+			said = Buffer.concat([said, chunk]);
+			if (frame && !sent && said.includes("\r\n\r\n") && said.includes(" 101 ")) {
+				sent = true;
+				socket.write(frame);
+			}
+			// A frame the server sent back is a short one that follows the head.
+			let end = said.indexOf("\r\n\r\n");
+			if (end >= 0 && said.length > end + 4 + 2 && said.includes(" 101 ")) socket.end();
+		});
+		socket.on("close", () => done(said));
+		setTimeout(() => socket.destroy(), 3000);
+	});
+}
+
+test("a WebSocket upgrade sent as a plain request, without CONNECT, reaches a listed server and its frames pass both ways", async () => {
+	// What the server was sent as headers: it takes an upgrade only from a request that asks for one.
+	let asked: Array<{ connection: string | null; upgrade: string | null }> = [];
+	let echo = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request, server) {
+			asked.push({
+				connection: request.headers.get("connection"),
+				upgrade: request.headers.get("upgrade"),
+			});
+			return server.upgrade(request) ? undefined : new Response("not a socket", { status: 426 });
+		},
+		websocket: {
+			message(socket, message) {
+				socket.send(`echo:${message}`);
+			},
+		},
+	});
+	let port = echo.port!;
+	try {
+		let proxy = await startProxy({ hosts: [`127.0.0.1:${port}`] });
+		proxies.push(proxy);
+		let key = Buffer.from("0123456789abcdef").toString("base64");
+		let head = (scheme: string) =>
+			`GET ${scheme}://127.0.0.1:${port}/socket?a=1 HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\n`
+			+ `upgrade: websocket\r\nconnection: keep-alive, Upgrade\r\nproxy-connection: keep-alive\r\n`
+			+ `sec-websocket-key: ${key}\r\nsec-websocket-version: 13\r\n\r\n`;
+		for (let scheme of ["http", "ws"]) {
+			let said = await upgrade(proxy, head(scheme), textFrame("hello"));
+			let text = said.toString("latin1");
+			expect(text, `${scheme} upgrade`).toStartWith("HTTP/1.1 101 ");
+			expect(text.toLowerCase()).toContain("upgrade: websocket");
+			let accept = new Bun.CryptoHasher("sha1")
+				.update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest("base64");
+			expect(text).toContain(accept);
+			// The server's reply is an unmasked frame: text, 10 bytes, "echo:hello".
+			expect(said.subarray(said.indexOf("\r\n\r\n") + 4).toString("latin1")).toBe(
+				"\x81\x0aecho:hello",
+			);
+			// The proxy sent on the two headers an upgrade is made of, not the client's own keep-alive.
+			expect(asked.at(-1)).toEqual({ connection: "Upgrade", upgrade: "websocket" });
+		}
+		// A request that isn't an upgrade is still sent on once and closed.
+		let plain = await ask(
+			proxy,
+			`GET http://127.0.0.1:${port}/socket HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\nconnection: keep-alive\r\n\r\n`,
+		);
+		expect(plain).toContain("426");
+		// The allow list holds for an upgrade as for any request.
+		let off = await upgrade(proxy, head("http").replaceAll(`${port}`, `${port + 1}`));
+		expect(off.toString("latin1")).toContain("403 Forbidden");
+	} finally {
+		echo.stop(true);
+	}
+});
+
 test("a listed name that leads to a private address is refused, unless the entry is a local one", async () => {
 	let port = listener("inside");
 	let proxy = await startProxy({
