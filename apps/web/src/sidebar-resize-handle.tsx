@@ -1,11 +1,25 @@
-import { useRef } from "react";
-
+import { usePaneDrag } from "./resizable-pane";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "./project-sidebar-chrome";
 
 export function SidebarResizeHandle(
-	{ onResize, width }: { onResize: (delta: number) => void; width: number },
+	{ onCommit, onResize, onShow, width }: {
+		/** The width a drag ended on, once. */
+		onCommit: (width: number) => void;
+		/** A keyboard step. */
+		onResize: (delta: number) => void;
+		/** The width under the pointer, written straight to the page once per frame while dragging. */
+		onShow: (width: number) => void;
+		width: number;
+	},
 ) {
-	let origin = useRef(0);
+	let drag = usePaneDrag({
+		commit: onCommit,
+		max: SIDEBAR_MAX,
+		min: SIDEBAR_MIN,
+		show: onShow,
+		side: "right",
+		width,
+	});
 	return (
 		<div
 			aria-label="Resize Projects sidebar"
@@ -23,16 +37,9 @@ export function SidebarResizeHandle(
 				else return;
 				event.preventDefault();
 			}}
-			onPointerDown={event => {
-				origin.current = event.clientX;
-				event.currentTarget.setPointerCapture(event.pointerId);
-			}}
-			onPointerMove={event => {
-				if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-				let delta = event.clientX - origin.current;
-				origin.current = event.clientX;
-				onResize(delta);
-			}}
+			onLostPointerCapture={drag.onLostPointerCapture}
+			onPointerDown={drag.onPointerDown}
+			onPointerMove={drag.onPointerMove}
 			role="separator"
 			tabIndex={0}
 		/>
