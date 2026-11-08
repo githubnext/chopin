@@ -612,7 +612,7 @@ export function RoomWorkspace(
 	let repositoryRef = useRef(repository);
 	repositoryRef.current = repository;
 	let user = useMemo(() => ({ name: personName(handle), color: cursor(handle).color }), [handle]);
-	let { available, frame, mode, phone } = useWorkspaceLayout();
+	let { frame, mode, phone, space } = useWorkspaceLayout();
 	let workspaceIds = useWorkspaceIds();
 	let profile = workspaceProfile(presentation);
 	let [implementation, setImplementation] = useState<Plan.ImplementationStatus>({
@@ -1930,7 +1930,7 @@ export function RoomWorkspace(
 						/>
 					)}
 					<Workspace
-						available={available}
+						space={space}
 						buildEnabled={build.tabReady}
 						buildGlyph={<BuildGlyph blockers={namedBuildBlockers} look={build.look} />}
 						buildHot={buildHover === "capsule"}
