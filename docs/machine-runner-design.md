@@ -17,6 +17,42 @@ The eight maintainer decisions that shape this design are recorded in [Maintaine
 
 Every `path:line` citation was read in this checkout (base `adb17d09`). **(inferred)** marks a conclusion drawn from code or documentation that was not run. Results from the Microsandbox spike are marked **(spike)**, and results of a Landlock experiment run for this document are marked **(experiment)**; both ran on Ubuntu 24.04 and are described in [Proven, inferred and untested](#proven-inferred-and-untested). Unknowns are collected in [Open questions](#open-questions).
 
+## Decision: the process sandbox goes first, through MXC, and replaces the microVM plan for now
+
+The maintainer chose to do what Codex CLI and Claude Code do: run each agent on
+the person's machine inside the operating system's own process sandbox, with no
+microVM, separate filesystem or image, and no new infrastructure. The sandbox is
+MXC (`@microsoft/mxc-sdk`, 1.0.0 request contract, telemetry never opted in) on
+every system: Seatbelt on macOS, bubblewrap on Linux and ProcessContainer on
+Windows 11 24H2 and later. It is built, and it replaces Stage 3's Microsandbox
+microVM and Stage 4's srt and Landlock tiers for now; decisions 3 and 5 below,
+and the Microsandbox, srt and Landlock reviews, stay as the record of what was
+considered and are not built. Auto-update, the one-command installer,
+blueprints, snapshots and the desktop are not part of it.
+
+What was built: one `Sandbox` seam in the connector that every agent and Planner
+process goes through; one MXC policy (writes only to the run's worktree, its git
+directory and the agent's own state; reads of the rest of the disk except
+credentials, other runs' files and the machine token; egress denied outright
+with a loopback allow-list proxy as the only way out, because no MXC engine
+filters by name); a probe that launches a command that does nothing in the same
+shape and labels the machine on `chopin status` and the Machines page,
+`Sandboxed (macOS Seatbelt / Linux bubblewrap / Windows ProcessContainer)` or
+`Not sandboxed: <reason and the one fix>`; and `--require-sandbox`, off by
+default, to refuse runs where there is none. The credentials the agent has are
+not hidden, as in Codex and Claude Code; the sandbox holds no placeholder for a
+GitHub token. Where no sandbox works, runs go on unsandboxed, labeled. See
+[Sandbox](chopin-cli.md#sandbox).
+
+On Ubuntu 24.04 and later the fix is one `sudo` that installs `slirp4netns` and
+adds an AppArmor profile permitting `userns` for the two programs MXC makes its
+namespaces with, instead of lifting the restriction for every program. Of the
+earlier plan this makes Landlock unnecessary. MXC's Node SDK could not be used
+to start processes, because it makes their streams with `net.Socket({ fd })`,
+which Bun does not implement, so the connector runs the executor the SDK package
+ships, which takes the same request JSON on all three systems. Linux was run for
+real; macOS and Windows were not run on real hardware.
+
 ## Today
 
 ### Install and pairing

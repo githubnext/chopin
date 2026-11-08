@@ -91,8 +91,14 @@ The connector refuses paths outside that worktree, including symlinks. The agent
 returned hosted paths as Markdown images in the submitted report. The run-scoped server tool
 is `upload_investigation_image`; the connector handles reading and encoding the local file.
 
-Local execution uses the agent's ordinary OS permissions, skills and configured
-services. A worktree organizes edits; it is not a sandbox. Standard ACP permission
+Local execution uses the agent's skills and configured services. Where the machine has
+one, the connector starts the agent in the operating system's process sandbox (macOS
+Seatbelt, Linux bubblewrap or Windows ProcessContainer, through MXC): it writes only
+its worktree and its own state, can't read your SSH, cloud and GitHub credentials, and
+reaches only an allow-list of hosts. `chopin status` says whether this machine has one,
+and [Sandbox](chopin-cli.md#sandbox) describes it. Without one the agent has your
+account's ordinary permissions, and a worktree organizes edits; it is not a sandbox.
+Standard ACP permission
 requests appear in the connector terminal with the tool kind and the command,
 paths or input involved, and are declined when no interactive terminal is
 available. Choosing an "always allow" option skips later prompts for that tool

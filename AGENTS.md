@@ -230,6 +230,15 @@ durable.
   teammates' choices and favorites of the machine and hands a document to Default machine only where the machine ran its Planner,
   had been asked to, was placing it, or someone uses the document; any other just loses
   the choice.
+- **Agents on a machine run in its process sandbox.** The connector starts the ACP
+  agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
+  MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
+  worktree, its git directory (hooks read-only), the agent's state and a private temporary
+  directory; the rest of the disk reads except credentials, other runs and the machine
+  token; egress goes only through a loopback allow-list proxy. Credentials in the agent's
+  environment are not hidden. A machine with no working sandbox runs agents unsandboxed and
+  says so, unless its owner chose `--require-sandbox`. Do not start an agent process outside
+  the seam. See [Sandbox](docs/chopin-cli.md#sandbox).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 
