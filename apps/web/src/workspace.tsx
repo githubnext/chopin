@@ -1,6 +1,7 @@
 /** Three panes on one ground, with the document as the only raised surface. */
 
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, ChevronIcon, ExpandIcon, MessageIcon } from "@chopin/icons";
@@ -269,7 +270,7 @@ export function Workspace(
 	}: WorkspaceProps,
 ) {
 	let profile = workspaceProfile(workspacePresentation);
-	let [preferredWidth, resizePreferred] = usePaneWidth({
+	let [preferredWidth, resizePreferred, setPreferred] = usePaneWidth({
 		active: mode === "split",
 		...CHAT_PANE,
 		storageKey: profile.persistPaneSize ? CHAT_PANE.storageKey : undefined,
@@ -280,6 +281,15 @@ export function Workspace(
 		resizePreferred(next - preferredWidth);
 	};
 	let root = useRef<HTMLDivElement>(null);
+	let chatPanel = useRef<HTMLElement>(null);
+	let chatBody = useRef<HTMLDivElement>(null);
+	// Split Chat's width is `--chat-width` on the pane (`.is-open`) and on its body, in theme.css.
+	let showChatWidth = (width: number | undefined) => {
+		for (let element of [chatPanel.current, chatBody.current]) {
+			if (width === undefined) element?.style.removeProperty("width");
+			else element?.style.setProperty("width", `${width}px`);
+		}
+	};
 	let presentation = presentWorkspace(state, mode, view);
 	let nested = workspacePresentation.type === "parent-with-child"
 		? workspacePresentation
@@ -684,18 +694,26 @@ export function Workspace(
 							}
 						}}
 						onTransitionEnd={chatTrack.onTransitionEnd}
+						ref={chatPanel}
 						style={mode === "split" ? undefined : { width: "100%" }}
 					>
 						<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
 							Chat
 						</h2>
-						<div className="workspace-chat-body relative min-h-0 flex-1">
+						<div className="workspace-chat-body relative min-h-0 flex-1" ref={chatBody}>
 							{presentation.separatorVisible && (
 								<ResizeHandle
 									label="Resize chat"
 									max={maximum}
 									min={CHAT_PANE.min}
+									// The width is in state before the pane stops carrying it itself, so the two never differ.
+									onCommit={width => flushSync(() => setPreferred(width))}
+									onRelease={() => showChatWidth(undefined)}
 									onResize={resizeChat}
+									// A drag sets the widths the variable gives, on the two elements that take it, and
+									// renders nothing until it ends. Moving the variable itself would restyle every
+									// element under it on each step: the whole page on the root, the Chat on the pane.
+									onShow={showChatWidth}
 									side="right"
 									width={chatWidth}
 								/>

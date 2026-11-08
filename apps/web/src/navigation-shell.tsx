@@ -215,7 +215,11 @@ function useSidebarWidth() {
 	});
 
 	useEffect(() => localStorage.setItem(SIDEBAR_STORAGE_KEY, String(width)), [width]);
-	return [width, (delta: number) => setWidth(current => clamp(current + delta))] as const;
+	return [
+		width,
+		(delta: number) => setWidth(current => clamp(current + delta)),
+		(value: number) => setWidth(clamp(value)),
+	] as const;
 }
 
 export function NavigationShell(
@@ -283,7 +287,8 @@ export function NavigationShell(
 	let [focusProjectId, setFocusProjectId] = useState<string>();
 	let [notice, showNotice] = useState<NoticeOptions>();
 	let [reveal, setReveal] = useState<{ id: string; nonce: number }>();
-	let [width, resize] = useSidebarWidth();
+	let [width, resize, setSidebarWidth] = useSidebarWidth();
+	let sidebarFrame = useRef<HTMLDivElement>(null);
 	let mode = useNavigationMode();
 	let phone = usePhone();
 	// Phones navigate from a bottom sheet; it stays mounted once loaded so it can animate out.
@@ -1039,11 +1044,22 @@ export function NavigationShell(
 							aria-hidden={sidebarPresence.phase === "closing" ? "true" : undefined}
 							className={`project-sidebar-frame ${sidebarMotion.className} ${sidebarPresence.className}`}
 							inert={sidebarPresence.phase === "closing"}
+							ref={sidebarFrame}
 							style={{ "--project-sidebar-width": `${width}px` } as CSSProperties}
 						>
 							<div className="project-sidebar-motion-content">{sidebar}</div>
 							<SidebarFeatureBoundary>
-								<SidebarResizeHandle onResize={resize} width={width} />
+								<SidebarResizeHandle
+									onCommit={setSidebarWidth}
+									onResize={resize}
+									// A drag moves the sidebar through its CSS variable and renders nothing until it ends.
+									onShow={value =>
+										sidebarFrame.current?.style.setProperty(
+											"--project-sidebar-width",
+											`${value}px`,
+										)}
+									width={width}
+								/>
 							</SidebarFeatureBoundary>
 						</div>
 					)}

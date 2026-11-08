@@ -1,16 +1,18 @@
 /**
- * What a pane resize drag asks of the page.
+ * Dragging a pane's edge moves it through the page, not through React, and saves its width once.
  *
  * What a person sees is the existing tests' business (the edge follows the pointer, the keyboard
- * steps, a taken-away drag puts the bar down). These pin the questions the page must not ask on
- * every step of a drag.
+ * steps, a taken-away drag puts the bar down). These pin how it is done: nothing is stored while
+ * the pointer is down, the stored width is the one the drag ended on, and the layout questions
+ * that used to be asked on every step are not asked at all.
  */
 
 import { expect, test } from "./room";
 
+import type { Chat } from "../packages/protocol/index";
 import type { Locator, Page } from "@playwright/test";
 
-type Watch = { documentAnimations: number; chatEffects: number };
+type Watch = { writes: string[]; documentAnimations: number; chatEffects: number };
 
 declare global {
 	interface Window {
@@ -18,11 +20,25 @@ declare global {
 	}
 }
 
+function transcript(): Chat.Entry[] {
+	return Array.from({ length: 40 }, (_, index) => ({
+		id: `message-${index}`,
+		author: { kind: "member" as const, handle: index % 2 ? "ana" : "ben" },
+		text: `Message ${index} about the rollout plan and what it still needs.`,
+		ts: 1_700_000_000 + index,
+	}));
+}
+
 /** Count what a drag must not do, from before the page's own scripts run. */
 async function watch(page: Page) {
 	await page.addInitScript(() => {
-		let log: Watch = { documentAnimations: 0, chatEffects: 0 };
+		let log: Watch = { writes: [], documentAnimations: 0, chatEffects: 0 };
 		window.__paneWatch = log;
+		let setItem = Storage.prototype.setItem;
+		Storage.prototype.setItem = function(key: string, value: string) {
+			if (key.startsWith("chopin:pane:")) log.writes.push(`${key}=${value}`);
+			return setItem.call(this, key, value);
+		};
 		// The page-wide scan for running animations, once asked on every layout change.
 		let getAnimations = Document.prototype.getAnimations;
 		Document.prototype.getAnimations = function() {
@@ -46,12 +62,78 @@ function box(target: Locator) {
 	return target.evaluate(element => element.getBoundingClientRect().toJSON() as DOMRect);
 }
 
-test("a Projects sidebar resize follows the pointer without asking the page what is animating or measuring the Chat again", async ({ join, page }) => {
+/** Two frames, so that anything the last pointer move scheduled for the next frame has happened. */
+function settle(page: Page) {
+	return page.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+}
+
+test("a Chat resize follows the pointer, and saves its width once, when the drag ends", async ({ join, page, seed }) => {
+	await seed("# Resize\n", { transcript: transcript() });
+	await watch(page);
+	await join("ana");
+	let rail = page.getByRole("complementary", { name: "Chat", exact: true });
+	let handle = page.getByRole("separator", { name: "Resize chat" });
+	await expect(rail.getByText("Message 39 about the rollout plan")).toBeVisible();
+	await settle(page);
+	let before = (await box(rail)).width;
+	let opening = await watched(page);
+	let start = await box(handle);
+	let x = start.x + start.width / 2;
+	let y = start.y + start.height / 2;
+
+	await handle.hover();
+	await page.mouse.down();
+	await page.mouse.move(x + 40, y, { steps: 10 });
+	await settle(page);
+
+	// The pane and the handle follow the pointer while it is down...
+	expect((await box(rail)).width).toBeCloseTo(before + 40, 0);
+	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 40));
+	// ...and nothing has been stored, and no layout question has been asked of the Chat, for it.
+	let moving = await watched(page);
+	expect(moving.writes).toEqual(opening.writes);
+	expect(moving.chatEffects).toBe(opening.chatEffects);
+	expect(moving.documentAnimations).toBe(opening.documentAnimations);
+
+	await page.mouse.up();
+	await expect.poll(async () => (await watched(page)).writes)
+		.toEqual([...opening.writes, `chopin:pane:chat=${before + 40}`]);
+	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 40));
+	expect((await box(rail)).width).toBeCloseTo(before + 40, 0);
+});
+
+test("a Chat resize that the browser takes away still saves the width it reached", async ({ join, page }) => {
+	await watch(page);
+	await join("ana");
+	let rail = page.getByRole("complementary", { name: "Chat", exact: true });
+	let handle = page.getByRole("separator", { name: "Resize chat" });
+	let before = (await box(rail)).width;
+	let opening = await watched(page);
+	let start = await box(handle);
+
+	await handle.hover();
+	await page.mouse.down();
+	await page.mouse.move(start.x + start.width / 2 + 40, start.y + start.height / 2, { steps: 4 });
+	await handle.evaluate(element => (element as HTMLElement).releasePointerCapture(1));
+	await page.mouse.up();
+
+	await expect(handle).not.toHaveAttribute("data-dragging");
+	await expect.poll(async () => (await watched(page)).writes)
+		.toEqual([...opening.writes, `chopin:pane:chat=${before + 40}`]);
+	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 40));
+});
+
+test("a Projects sidebar resize follows the pointer without asking the page what is animating, and saves its width once", async ({ join, page }) => {
 	await watch(page);
 	await join("ana");
 	let handle = page.getByRole("separator", { name: "Resize Projects sidebar" });
 	let sidebar = page.locator(".project-sidebar-frame");
 	await expect(handle).toBeVisible();
+	await settle(page);
 	let before = (await box(sidebar)).width;
 	let opening = await watched(page);
 	let start = await box(handle);
@@ -59,14 +141,17 @@ test("a Projects sidebar resize follows the pointer without asking the page what
 	await page.mouse.move(start.x + start.width / 2, start.y + 80);
 	await page.mouse.down();
 	await page.mouse.move(start.x + start.width / 2 + 60, start.y + 80, { steps: 10 });
+	await settle(page);
 
-	await expect.poll(async () => (await box(sidebar)).width).toBeCloseTo(before + 60, 0);
-	// The workspace re-measures when the space beside the sidebar changes, and asks only about the
-	// sidebar's own track while it does. Chat renders with it, and its offer cards have no reason to
-	// be looked for again.
+	expect((await box(sidebar)).width).toBeCloseTo(before + 60, 0);
+	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 60));
 	let moving = await watched(page);
+	expect(moving.writes).toEqual(opening.writes);
 	expect(moving.documentAnimations).toBe(opening.documentAnimations);
-	expect(moving.chatEffects).toBe(opening.chatEffects);
 
 	await page.mouse.up();
+	await expect.poll(async () => (await watched(page)).writes)
+		.toEqual([...opening.writes, `chopin:pane:projects=${before + 60}`]);
+	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 60));
+	expect((await box(sidebar)).width).toBeCloseTo(before + 60, 0);
 });
