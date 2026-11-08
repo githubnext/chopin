@@ -1187,8 +1187,10 @@ Each launch gets the connector's environment, your `--env` values, and these:
 | `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) that always holds the current token.                                |
 
 `CHOPIN_WORKTREE` stays the same across launches. The connector makes its
-parent folders but never creates or removes the worktree itself. The command
-does, for example:
+parent folders but never removes the worktree itself, and creates it only for
+a backend that runs in the [sandbox](chopin-cli.md#sandbox), as an empty folder,
+because a sandbox can only be given a path that exists, and gives it nothing
+beside it. The command makes the worktree, for example:
 
 ```sh
 git -C "$CHOPIN_CHECKOUT" worktree add "$CHOPIN_WORKTREE" -b <branch>

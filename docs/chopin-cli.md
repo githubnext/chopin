@@ -693,12 +693,12 @@ instead.
 
 ### What an agent can and can't do
 
-|             | In the sandbox                                                                                                                                                                                                                                                                                                                |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Writes      | Only the run's worktree (and the extra worktrees a build adds), the repository's git directory with its `hooks` read-only, the agent's own state (`~/.atomic`, `~/.copilot` or `~/.pdd-kit` for the built-in agents), a private temporary directory, and what you add with `--sandbox-write`. Nothing else.                   |
-| Reads       | The rest of the disk, except `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, `.netrc`, `.git-credentials`, browser profiles, the connector's machine token and every other run's and Planner's files. A denied directory reads as empty, a denied file as unreadable. |
-| Network     | Only through a proxy on your machine that allows the hosts below and refuses the rest. A direct connection fails, IPv6 is blocked, and the proxy resolves names.                                                                                                                                                              |
-| Environment | Everything it has today, including `GH_TOKEN` and `--env` values. `TMPDIR` points at the private directory, `PATH` names each directory by its real path, and `NODE_USE_ENV_PROXY=1` makes Node's own `fetch` use the proxy; the proxy variables come from MXC.                                                               |
+|             | In the sandbox                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writes      | Only the run's worktree (and the extra worktrees a build adds), the repository's git directory with its `hooks` read-only, the agent's own state (`~/.atomic`, `~/.copilot` or `~/.pdd-kit` for the built-in agents), a private temporary directory, and what you add with `--sandbox-write`. Nothing else.                                                                                                                                                                                  |
+| Reads       | The rest of the disk, except `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, `.netrc`, `.git-credentials` and browser profiles, which read as empty or unreadable, and the connector's state directory (`--base-dir`), of which it sees only its own worktree and the folder of its own tokens. The machine token and every other run's and Planner's files, tokens included, are out of its sight, those made after it started too. |
+| Network     | Only through a proxy on your machine that allows the hosts below and refuses the rest. A direct connection fails, IPv6 is blocked, and the proxy resolves names.                                                                                                                                                                                                                                                                                                                             |
+| Environment | Everything it has today, including `GH_TOKEN` and `--env` values. `TMPDIR` points at the private directory, `PATH` names each directory by its real path, and `NODE_USE_ENV_PROXY=1` makes Node's own `fetch` use the proxy; the proxy variables come from MXC.                                                                                                                                                                                                                              |
 
 Hosts an agent may reach:
 
@@ -776,10 +776,28 @@ bubblewrap is for. To undo it, `sudo apparmor_parser -R
 
 The sandbox was run for real on Linux (Ubuntu 24.04, x64) only. macOS and
 Windows have the same policy, tests and executors, and were not run on a real Mac
-or Windows PC.
+or Windows PC. On Windows a ProcessContainer refuses a directory it wasn't given,
+the parents of the state directory included, so a tool that looks for a file in
+each parent of its working directory may meet an error where Linux and macOS show
+nothing.
 
 ### Things to know
 
+- **The state directory is not denied; it is left out.** Seatbelt lets a denial win
+  over a grant inside it, so no one rule could hide the directory from an agent and
+  still give it its own worktree. The sandbox reads each directory from `/` down to
+  the state directory instead and grants everything in it but the way there,
+  then grants the agent only its own worktree and token folder inside it. So what is
+  made in the state directory after an agent starts, which is every later run and
+  Planner, is never in its sight. The price is that a file or folder made directly
+  in one of those directories (your home, say) after a Planner backend started isn't
+  visible to it until it starts again. On Linux those directories are built in the
+  sandbox's memory, so a write directly in one succeeds and is gone when the agent
+  exits; nothing reaches the disk.
+- **A Planner's worktree** is a folder the connector makes, empty, where
+  `CHOPIN_WORKTREE` says, because a sandbox can only be given a path that exists.
+  `git worktree add` takes it. The backend can write that folder and nothing beside
+  it.
 - **Files in `/tmp` are not visible.** Each sandbox has a private `/tmp`; keep
   checkouts and agents elsewhere.
 - **Other agents' state.** Built-in agents' state directories are writable; for
