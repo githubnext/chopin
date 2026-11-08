@@ -86,6 +86,16 @@ export function tokenFolder(worktree: string) {
 	return `${worktree}.tokens`;
 }
 
+/**
+ * The token files an earlier release kept beside a worktree, before tokens had a folder of their
+ * own: `<worktree>.github-token` and, for a Planner, `<worktree>.planner-token`. A run's was named
+ * for its attempt, which is its worktree's name. This release never writes them, and a machine
+ * upgraded from that one has them until their run is removed.
+ */
+function legacyTokenFiles(worktree: string) {
+	return [`${worktree}.github-token`, `${worktree}.planner-token`];
+}
+
 /** A path segment made only of characters safe in any file system, never `.` or `..`. */
 export function segment(value: string) {
 	let safe = value.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -732,6 +742,7 @@ export async function pruneRuns(
 		await rm(path, { recursive: true, force: true });
 		if (repository) await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
 		await rm(tokenFolder(path), { recursive: true, force: true });
+		for (let file of legacyTokenFiles(path)) await rm(file, { force: true });
 		await rm(join(folder, `${entry.attempt}.json`), { force: true });
 		removed.push(entry.attempt);
 	}
