@@ -29,6 +29,8 @@ export let test = base.extend<DesignOptions>({
 		if (visualReview) {
 			// Late diagram/math/code rendering above the last plate changes its scroll position.
 			// Wait for those real renderers, not an arbitrary delay or a clipped screenshot.
+			// A Mermaid block is drawn once it is within a screen of the reader, so bring its plate there.
+			await plate(page, "diagram").scrollIntoViewIfNeeded();
 			await expect(page.locator('[data-audit-item="diagram"] .plan-diagram svg')).toBeVisible();
 			await expect(page.locator('[data-audit-item="diagram"] [data-plan-error]')).toBeVisible();
 			await expect(page.locator('[data-audit-item="formula"] .katex')).toHaveCount(2);
