@@ -29,6 +29,7 @@ import {
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
+	parseSandboxReport,
 } from "@chopin/protocol/connector";
 import type { Session } from "@chopin/protocol";
 import type { PlannerAssignment, PlannerControl } from "@chopin/protocol/connector";
@@ -124,6 +125,7 @@ function aboutMachine(request: Request): About {
 		name: header(CONNECTOR_AGENT_HEADER),
 		version: header(CONNECTOR_AGENT_VERSION_HEADER),
 	});
+	let sandbox = parseSandboxReport(header);
 	return {
 		...(hostname && /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/.test(hostname) ? { hostname } : {}),
 		...(os && arch && !extra && OSES.has(os) && ARCHES.has(arch) ? { platform: { os, arch } } : {}),
@@ -131,6 +133,7 @@ function aboutMachine(request: Request): About {
 		planner: header(CONNECTOR_PLANNER_HEADER) === "1",
 		plannerCommand: header(CONNECTOR_PLANNER_COMMAND_HEADER) === "1",
 		...(agent.success ? { agent: agent.data } : {}),
+		...(sandbox ? { sandbox } : {}),
 	};
 }
 const label = z.string().trim().min(1).max(100);
@@ -330,6 +333,7 @@ function described(live: Connection[]) {
 		agent: live.map(value => value.about?.agent).findLast(Boolean) ?? null,
 		service: live.some(value => value.about?.service),
 		planner: live.some(value => value.about?.planner),
+		sandbox: about.sandbox ?? null,
 	};
 }
 

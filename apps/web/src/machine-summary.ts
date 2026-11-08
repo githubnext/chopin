@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
+import type { SandboxReport } from "@chopin/protocol/connector";
 
 /** One of the signed-in person's paired machines, as `GET /api/connector/machines` lists it. */
 export type Machine = {
@@ -16,6 +17,8 @@ export type Machine = {
 	hostname: string | null;
 	platform: { os: string; arch: string } | null;
 	agent: { name: string; version?: string } | null;
+	/** Whether its agents run in the system's process sandbox; null when it said nothing. */
+	sandbox: SandboxReport | null;
 	/** The background service runs it. */
 	service: boolean;
 	/** It runs Planners for documents too. */

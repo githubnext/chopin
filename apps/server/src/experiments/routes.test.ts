@@ -9,6 +9,9 @@ import {
 	CONNECTOR_HOST_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SANDBOX_FIX_HEADER,
+	CONNECTOR_SANDBOX_HEADER,
+	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
@@ -891,6 +894,46 @@ test("a connection tells the owner its machine's host, platform and agent", asyn
 	// Nobody else sees any of it.
 	expect(await listed(bob.cookie)).toEqual([]);
 	expect(config).toBeDefined();
+});
+
+test("a connection tells the owner whether its agents run in the system's sandbox, and why not", async () => {
+	let { alice, router, request, pair } = await setup();
+	let paired = await pair(alice.cookie);
+	let listed = async () =>
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines;
+	let connect = async (extra: Record<string, string>) => {
+		let opened = new Request("https://chopin.test/api/connector/connections", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				authorization: `Bearer ${paired.machineToken}`,
+				...CURRENT,
+				...extra,
+			},
+			body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
+		});
+		await router.handle(opened, new URL(opened.url));
+		return (await listed())[0].sandbox;
+	};
+	// A connector from before the sandbox says nothing, and is shown as saying nothing.
+	expect(await connect({})).toBeNull();
+	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "bubblewrap" })).toEqual({
+		engine: "bubblewrap",
+	});
+	expect(
+		await connect({
+			[CONNECTOR_SANDBOX_HEADER]: "none",
+			[CONNECTOR_SANDBOX_REASON_HEADER]: "slirp4netns isn't installed.",
+			[CONNECTOR_SANDBOX_FIX_HEADER]: "sudo apt-get install -y slirp4netns",
+		}),
+	).toEqual({
+		engine: "none",
+		reason: "slirp4netns isn't installed.",
+		fix: "sudo apt-get install -y slirp4netns",
+	});
+	// An engine this server doesn't know, or a refusal with no reason, is dropped.
+	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "firecracker" })).toBeNull();
+	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "none" })).toBeNull();
 });
 
 test("an owner renames a paired machine, which chopin status then reads", async () => {

@@ -27,6 +27,7 @@ const base: Machine = {
 	hostname: null,
 	platform: null,
 	agent: null,
+	sandbox: null,
 	service: false,
 	planner: false,
 	favorite: false,
