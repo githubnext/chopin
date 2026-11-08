@@ -154,7 +154,7 @@ test(
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[0],
-					CHOPIN_PLANNER_TOKEN_FILE: `${worktree}.planner-token`,
+					CHOPIN_PLANNER_TOKEN_FILE: join(`${worktree}.tokens`, "planner"),
 					CHOPIN_CHECKOUT: checkoutRoot,
 					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
@@ -163,7 +163,7 @@ test(
 					CHOPIN_URL: origin,
 					CHOPIN_DOCUMENT: document,
 					CHOPIN_PLANNER_TOKEN: issued[1],
-					CHOPIN_PLANNER_TOKEN_FILE: `${worktree}.planner-token`,
+					CHOPIN_PLANNER_TOKEN_FILE: join(`${worktree}.tokens`, "planner"),
 					CHOPIN_CHECKOUT: checkoutRoot,
 					CHOPIN_WORKTREE: worktree,
 					SOME_FLAG: "1",
@@ -181,7 +181,7 @@ test(
 			]);
 
 			// The running backend can read its current credential, privately, whenever its link needs one.
-			let tokenFile = `${worktree}.planner-token`;
+			let tokenFile = join(`${worktree}.tokens`, "planner");
 			expect(((await stat(tokenFile)).mode & 0o777).toString(8)).toBe("600");
 			expect((await readFile(tokenFile, "utf8")).trim()).toBe(issued[1]);
 
@@ -1743,7 +1743,7 @@ test.skipIf(process.platform === "win32")(
 		try {
 			await until(async () => (await entries(log)).some(entry => entry.token), 10_000);
 			let [first] = await entries(log);
-			let file = join(directory, "planners", "octo-org", "score", "D_1.github-token");
+			let file = join(directory, "planners", "octo-org", "score", "D_1.tokens", "github");
 			expect(first).toMatchObject({
 				token: tokens[0],
 				expiresAt: new Date(expiries[0]!).toISOString(),

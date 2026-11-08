@@ -3,11 +3,13 @@ import {
 	agentStateDirectories,
 	allowedHosts,
 	commandLine,
+	type Disk,
 	isLocalEntry,
 	matchingEntry,
 	mxcRequest,
 	type Policy,
 	readableRoots,
+	readGrantsAround,
 	sandboxPath,
 	secretPaths,
 	validHostEntry,
@@ -224,4 +226,113 @@ test("of the root's directories the sandbox gets the ones it doesn't supply itse
 		readableRoots(["bin", "dev", "etc", "home", "proc", "run", "sys", "tmp", "usr", "var", "opt"]),
 	)
 		.toEqual(["/bin", "/etc", "/home", "/usr", "/var", "/opt"]);
+});
+
+/** A disk that is a table of directories, with the paths a user can't read and the links it has. */
+function disk(
+	tree: Record<string, string[]>,
+	unreadable: string[] = [],
+	links: Record<string, string> = {},
+): Disk {
+	return {
+		list: directory => tree[directory] ?? [],
+		resolve: path => unreadable.includes(path) ? undefined : links[path] ?? path,
+	};
+}
+
+test("the read grants leave the state directory out by listing what is around it, so nothing made inside it later is granted", () => {
+	let hidden = "/home/me/.local/state/chopin/connector";
+	let tree: Record<string, string[]> = {
+		"/home": ["me", "you"],
+		"/home/me": [".bashrc", ".local", ".ssh", "projects"],
+		"/home/me/.local": ["bin", "state"],
+		"/home/me/.local/state": ["chopin", "mise"],
+		"/home/me/.local/state/chopin": ["connector", "log"],
+	};
+	let grants = readGrantsAround(["/usr", "/home"], hidden, disk(tree), "linux");
+	expect(grants.sort()).toEqual([
+		"/home/me/.bashrc",
+		"/home/me/.local/bin",
+		"/home/me/.local/state/chopin/log",
+		"/home/me/.local/state/mise",
+		"/home/me/.ssh",
+		"/home/me/projects",
+		"/home/you",
+		"/usr",
+	]);
+	// No grant is the directory or one of its parents: each would show a run made after it.
+	for (let grant of grants) {
+		expect(hidden === grant || hidden.startsWith(`${grant}/`)).toBe(false);
+	}
+	// What a launch grants doesn't depend on what the directory holds, so a run made inside it
+	// after the launch is in no grant.
+	let busy = disk({
+		...tree,
+		[hidden]: ["runs", "machine.json"],
+		[`${hidden}/runs`]: ["first", "later"],
+	});
+	expect(readGrantsAround(["/usr", "/home"], hidden, busy, "linux").sort()).toEqual(grants);
+});
+
+test("a root that doesn't hold the state directory is granted as it is, and one inside it not at all", () => {
+	let hidden = "/home/me/state";
+	let none = disk({});
+	expect(readGrantsAround(["/usr", "/opt"], hidden, none, "linux")).toEqual(["/usr", "/opt"]);
+	expect(readGrantsAround([hidden, `${hidden}/runs`], hidden, none, "linux")).toEqual([]);
+});
+
+test("a link is granted by the real path it leads to, unless that is in the state directory or holds it", () => {
+	let hidden = "/home/me/state";
+	let around = disk(
+		{ "/home/me": ["a", "dotfiles", "into", "over", "private", "state"] },
+		["/home/me/private"],
+		{
+			"/home/me/a": "/data/a",
+			"/home/me/dotfiles": "/home/me/dotfiles-real",
+			"/home/me/into": "/home/me/state/runs",
+			"/home/me/over": "/home",
+		},
+	);
+	expect(readGrantsAround(["/home/me"], hidden, around, "linux").sort()).toEqual([
+		"/data/a",
+		"/home/me/dotfiles-real",
+	]);
+});
+
+test("a root reached through a link that holds the state directory is walked at its real path", () => {
+	let around = disk(
+		{ "/var/home": ["me", "you"], "/var/home/me": ["notes", "state"] },
+		[],
+		{ "/home": "/var/home" },
+	);
+	expect(readGrantsAround(["/home"], "/var/home/me/state", around, "linux").sort()).toEqual([
+		"/var/home/me/notes",
+		"/var/home/you",
+	]);
+});
+
+test("on Windows and macOS the state directory is found whatever the case its path is written in", () => {
+	let around = disk({
+		"C:\\Users": ["Me", "Other"],
+		"C:\\Users\\Me": ["Documents", ".Local"],
+		"C:\\Users\\Me\\.Local": ["State"],
+		"C:\\Users\\Me\\.Local\\State": ["Chopin", "Mise"],
+	});
+	expect(
+		readGrantsAround(
+			["C:\\Users"],
+			"c:\\users\\me\\.local\\state\\chopin",
+			around,
+			"win32",
+		).sort(),
+	).toEqual([
+		"C:\\Users\\Me\\.Local\\State\\Mise",
+		"C:\\Users\\Me\\Documents",
+		"C:\\Users\\Other",
+	]);
+	let mac = disk({ "/": ["Users", "usr"], "/Users": ["me"], "/Users/me": ["Library", "State"] });
+	expect(readGrantsAround(["/"], "/Users/me/state", mac, "darwin").sort()).toEqual([
+		"/Users/me/Library",
+		"/usr",
+	]);
 });

@@ -77,6 +77,15 @@ export function stateDirectory() {
 		);
 }
 
+/**
+ * Where a run's or a Planner's tokens are kept: `<worktree>.tokens`, a folder of that launch alone.
+ * A sandbox is given the folder, not the files in it, because a token is renewed by replacing its
+ * file and only a folder shows the new one.
+ */
+export function tokenFolder(worktree: string) {
+	return `${worktree}.tokens`;
+}
+
 /** A path segment made only of characters safe in any file system, never `.` or `..`. */
 export function segment(value: string) {
 	let safe = value.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -722,7 +731,7 @@ export async function pruneRuns(
 		await rm(extras, { recursive: true, force: true });
 		await rm(path, { recursive: true, force: true });
 		if (repository) await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
-		await rm(join(folder, `${entry.attempt}.github-token`), { force: true });
+		await rm(tokenFolder(path), { recursive: true, force: true });
 		await rm(join(folder, `${entry.attempt}.json`), { force: true });
 		removed.push(entry.attempt);
 	}

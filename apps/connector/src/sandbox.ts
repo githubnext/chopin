@@ -15,15 +15,17 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { arch, homedir, release, tmpdir } from "node:os";
-import { delimiter, dirname, join, sep } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import type { SandboxReport } from "@chopin/protocol/connector";
 import { type Host, probeSandbox } from "./sandbox-probe";
 import {
 	agentStateDirectories,
 	allowedHosts,
+	type Disk,
 	mxcRequest,
 	type Policy,
 	readableRoots,
+	readGrantsAround,
 	type SandboxEngine,
 	sandboxPath,
 	type SandboxSettings,
@@ -39,11 +41,17 @@ export type Launch = {
 	env: NodeJS.ProcessEnv;
 	/** Whether it has a stdin to write to; its stdout and stderr are always pipes. */
 	stdin: "pipe" | "ignore";
-	/** Directories it may write beside its working directory, such as a Planner's own worktree. */
+	/**
+	 * Directories it may write beside its working directory, such as a Planner's own worktree,
+	 * which are made empty where they aren't there yet: a sandbox can't be given a path that does
+	 * not exist.
+	 */
 	writable?: string[];
 	/**
-	 * Its own files in the connector's state directory, by path prefix: a run's worktree, journal
-	 * and token. Every other run's and the machine token stay out of its sight.
+	 * Its own paths in the connector's state directory: its worktree and the folder of its tokens,
+	 * each by name. It reads them, and writes the ones that are also writable. Nothing else in the
+	 * state directory is in its sight, however it came to be there, and the folder of a token must
+	 * hold only that launch's, as a token is renewed by replacing its file.
 	 */
 	own?: string[];
 };
@@ -224,37 +232,6 @@ function gitCommonDirectory(directory: string): string | undefined {
 	return path && existsSync(path) ? path : undefined;
 }
 
-/** What is in the connector's state directory that an agent must not see: every other run and the machine token. */
-export function connectorDenied(
-	directory: string,
-	own: readonly string[],
-	list: (path: string) => string[] = path => {
-		try {
-			return readdirSync(path);
-		} catch {
-			return [];
-		}
-	},
-): string[] {
-	let denied: string[] = [];
-	let mine = (path: string) => own.some(item => path === item || path.startsWith(item));
-	let ancestor = (path: string) => own.some(item => item.startsWith(path + sep));
-	for (let name of list(directory)) {
-		if (name.startsWith("machine.json")) denied.push(join(directory, name));
-	}
-	let sweep = (folder: string) => {
-		for (let name of list(folder)) {
-			let path = join(folder, name);
-			if (mine(path)) continue;
-			if (ancestor(path)) sweep(path);
-			else denied.push(path);
-		}
-	};
-	sweep(join(directory, "runs"));
-	sweep(join(directory, "planners"));
-	return denied;
-}
-
 export type SandboxOptions = {
 	/** The connector's state directory. */
 	directory: string;
@@ -365,6 +342,30 @@ function real(path: string) {
 	}
 }
 
+/** The directory or file this user can read at `path`, by its real path; not a socket or a device. */
+function readableAt(path: string) {
+	try {
+		let resolved = realpathSync(path);
+		let directory = statSync(resolved).isDirectory();
+		if (!directory && !statSync(resolved).isFile()) return undefined;
+		accessSync(resolved, directory ? constants.R_OK | constants.X_OK : constants.R_OK);
+		return resolved;
+	} catch {
+		return undefined;
+	}
+}
+
+const disk: Disk = {
+	list(directory) {
+		try {
+			return readdirSync(directory);
+		} catch {
+			return [];
+		}
+	},
+	resolve: readableAt,
+};
+
 /** The policy for one launch, from what is on the disk now. */
 export function launchPolicy(
 	engine: SandboxEngine,
@@ -382,6 +383,11 @@ export function launchPolicy(
 			mkdirSync(directory, { recursive: true, mode: 0o700 });
 		} catch { /* The agent says so if it needs it. */ }
 	}
+	for (let directory of launch.writable ?? []) {
+		try {
+			mkdirSync(directory, { recursive: true, mode: 0o700 });
+		} catch { /* The agent says so if it needs it. */ }
+	}
 	let places = [launch.cwd, ...launch.writable ?? []];
 	let commons = [...new Set(places.flatMap(place => gitCommonDirectory(real(place)) ?? []))];
 	let writable = [
@@ -391,24 +397,28 @@ export function launchPolicy(
 		temporary,
 		...options.settings?.writable ?? [],
 	].filter(path => exists(path));
-	let readable: string[];
+	let roots: string[];
 	if (platform === "win32") {
-		readable = [
+		roots = [
 			home,
 			...(launch.env.PATH ?? launch.env.Path ?? "").split(";").filter(entry =>
 				entry && readableDirectory(entry)
 			),
 		];
 	} else if (platform === "darwin") {
-		readable = ["/"];
+		roots = ["/"];
 	} else {
-		readable = readableRoots(readdirSync("/")).filter(readableDirectory);
+		roots = readableRoots(readdirSync("/")).filter(readableDirectory);
 	}
+	// Everything in the connector's state directory is out of sight but what the launch is given.
+	// MXC takes a path granted both ways as read-only, so a grant that is also writable is dropped.
+	let written = new Set(writable.map(real));
+	let readable = [
+		...readGrantsAround(roots, real(options.directory), disk, platform),
+		...(launch.own ?? []).filter(exists),
+	].filter(path => !written.has(real(path)));
 	let hooks = commons.map(common => join(common, "hooks")).filter(path => exists(path));
-	let denied = [
-		...secretPaths(platform, home),
-		...connectorDenied(options.directory, launch.own ?? []),
-	].filter(path => exists(path));
+	let denied = secretPaths(platform, home).filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };
 	let pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";
 	env[pathKey] = sandboxPath(env[pathKey], platform, real);

@@ -6,10 +6,11 @@ import {
 	mkdtempSync,
 	readFileSync,
 	realpathSync,
+	renameSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import { runAgent } from "./acp";
 import { checkouts } from "./checkouts";
@@ -118,11 +119,11 @@ function plan(
 ): CheckPlan {
 	return {
 		repoFile: "README.md",
-		notWritable: [
-			join(made.root, "outside.txt"),
-			join(home, "escaped.txt"),
-			join(made.state, "planted.txt"),
-		],
+		// The main checkout and the home are on the host, read-only. The folders above the state
+		// directory are not: the sandbox builds them in its own memory to hold the paths it was
+		// given, so a write there succeeds and is gone with the process, and the host never has it.
+		notWritable: [join(made.checkout, "outside.txt"), join(home, "escaped.txt")],
+		notPersisted: [join(made.root, "outside.txt"), join(made.state, "planted.txt")],
 		notReadable: [
 			join(home, ".ssh"),
 			join(home, ".aws", "credentials"),
@@ -150,7 +151,6 @@ function expectAllOk(result: CheckResult, github: boolean) {
 			"writeTemporary",
 			"cannotWrite0",
 			"cannotWrite1",
-			"cannotWrite2",
 			"cannotRead0",
 			"cannotRead1",
 			"cannotRead2",
@@ -211,7 +211,8 @@ sandboxTest(
 			// What it wrote is on the host, where the run's worktree is; what it was refused is not.
 			expect(readFileSync(join(worktree, "written-in-sandbox.txt"), "utf8")).toBe("ok");
 			expect(git(made.remote, "branch", "--list", "sandboxed")).toContain("sandboxed");
-			for (let path of ["outside.txt"]) expect(existsSync(join(made.root, path))).toBe(false);
+			expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
+			expect(existsSync(join(made.checkout, "outside.txt"))).toBe(false);
 			expect(existsSync(join(home, "escaped.txt"))).toBe(false);
 			expect(existsSync(join(made.state, "planted.txt"))).toBe(false);
 			// Chopin hears of the host it was refused, so its owner can allow it.
@@ -258,8 +259,8 @@ sandboxTest(
 		});
 		let abort = new AbortController();
 		let quiet = { write: () => true };
-		let reported = join(made.state, "planners", "octo-org", "score", "D_1.report.json");
 		let worktree = join(made.state, "planners", "octo-org", "score", "D_1");
+		let reported = join(worktree, "report.json");
 		let serving = servePlanners({
 			url: origin,
 			machine: MACHINE,
@@ -276,7 +277,7 @@ sandboxTest(
 				SANDBOX_CHECKS: JSON.stringify({
 					...plan(made, origin + "/", extra.url, github),
 					// A Planner runs in its checkout, which it may write, and makes its own worktree.
-					notWritable: [join(made.root, "outside.txt"), join(home, "escaped.txt")],
+					notWritable: [join(home, "escaped.txt")],
 				}),
 				CHOPIN_TEST_CREDENTIAL: "a-credential-the-agent-keeps",
 			},
@@ -299,6 +300,7 @@ sandboxTest(
 			expect(readFileSync(join(worktree, "planner.txt"), "utf8")).toBe("ok");
 			expect(git(made.remote, "branch", "--list", "sandboxed")).toContain("sandboxed");
 			expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
+			expect(existsSync(join(made.state, "planted.txt"))).toBe(false);
 		} finally {
 			abort.abort();
 			await serving;
@@ -308,6 +310,103 @@ sandboxTest(
 		}
 	},
 	150_000,
+);
+
+/**
+ * An agent starts first and a run, a Planner and a token file start after it, as they do on a
+ * machine that has served for a while. What it can see of the connector's state directory is
+ * settled when it starts, so nothing made later may be in its sight, and what it was given
+ * (its own worktree and the folder of its tokens, one of which is renewed) still is.
+ */
+async function startedLater(layout: "run" | "planner") {
+	let made = world(`late-${layout}`);
+	let chopin = server("chopin");
+	let sandbox = await createSandbox({
+		directory: made.state,
+		home,
+		server: new URL(chopin.url).origin,
+	});
+	let runs = join(made.state, "runs");
+	let planners = join(made.state, "planners", "octo", "score");
+	let worktree = join(layout === "run" ? runs : planners, layout === "run" ? "mine" : "D_1");
+	let tokens = `${worktree}.tokens`;
+	let cwd = layout === "run" ? worktree : made.checkout;
+	if (layout === "run") git(made.checkout, "worktree", "add", "--detach", worktree);
+	else mkdirSync(worktree, { recursive: true });
+	mkdirSync(tokens, { recursive: true });
+	writeFileSync(join(tokens, "github"), "first\n");
+	let later = [
+		join(runs, "later", "secret.txt"),
+		join(runs, "later.github-token"),
+		join(runs, "later.tokens", "github"),
+		join(runs, "later.json"),
+		join(planners, "D_later", "secret.txt"),
+		join(planners, "D_later.planner-token"),
+		join(planners, "D_later.tokens", "planner"),
+		join(made.state, "planners", "octo", "other", "D_x", "secret.txt"),
+		join(made.state, "repos", "octo", "other", "README.md"),
+		join(made.state, "machine.json.123.tmp"),
+	];
+	let child = sandbox.spawn({
+		command: [process.execPath, join(import.meta.dir, "testing/sandbox-watcher.ts")],
+		cwd,
+		env: {
+			...process.env,
+			SANDBOX_WATCH: JSON.stringify({
+				later,
+				own: { [join(tokens, "github")]: "second\n" },
+				hiddenIn: [runs, planners],
+			}),
+		},
+		stdin: "ignore",
+		...(layout === "planner" ? { writable: [worktree] } : {}),
+		own: [worktree, tokens],
+	});
+	let said = "";
+	child.stderr.on("data", chunk => said += chunk);
+	try {
+		for (let deadline = Date.now() + 60_000; !existsSync(join(cwd, "up")); await Bun.sleep(50)) {
+			if (Date.now() > deadline) {
+				throw new Error(`The process in the sandbox never started: ${said.slice(0, 2000)}`);
+			}
+		}
+		for (let path of later) {
+			mkdirSync(dirname(path), { recursive: true });
+			writeFileSync(path, "SECRET");
+		}
+		// The connector renews a token by replacing its file, which the sandbox must see.
+		writeFileSync(join(tokens, "github.new"), "second\n");
+		renameSync(join(tokens, "github.new"), join(tokens, "github"));
+		writeFileSync(join(cwd, "go"), "");
+		for (
+			let deadline = Date.now() + 60_000;
+			!existsSync(join(cwd, "report.json"));
+			await Bun.sleep(50)
+		) {
+			if (Date.now() > deadline) {
+				throw new Error(`The process in the sandbox never reported: ${said.slice(0, 2000)}`);
+			}
+		}
+		let result = JSON.parse(readFileSync(join(cwd, "report.json"), "utf8")) as CheckResult;
+		return Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
+			`${name}: ${value.detail}`
+		);
+	} finally {
+		try {
+			process.kill(-child.pid!, "SIGKILL");
+		} catch { /* It had already gone. */ }
+		await sandbox.close();
+		chopin.stop();
+	}
+}
+
+sandboxTest(
+	"a run, a Planner and their tokens made after an agent started are out of its sight, and its own worktree and renewed token are in it",
+	async () => {
+		expect(await startedLater("run")).toEqual([]);
+		expect(await startedLater("planner")).toEqual([]);
+	},
+	180_000,
 );
 
 let atomic = Bun.which("atomic-acp") && Bun.which("atomic");
@@ -324,7 +423,7 @@ test.skipIf(!usable || !atomic)(
 			`{
 cat README.md > /dev/null 2>&1 && echo readRepository=ok || echo readRepository=FAILED
 (echo ok > written.txt) 2>/dev/null && echo writeWorktree=ok || echo writeWorktree=FAILED
-(echo x > ${made.root}/outside.txt) 2>/dev/null && echo writeOutside=LEAKED || echo writeOutside=blocked
+(echo x > ${home}/escaped.txt) 2>/dev/null && echo writeOutside=LEAKED || echo writeOutside=blocked
 cat ${home}/.ssh/id_ed25519 > /dev/null 2>&1 && echo readSsh=LEAKED || echo readSsh=blocked
 cat ${made.state}/machine.json > /dev/null 2>&1 && echo readToken=LEAKED || echo readToken=blocked
 git add written.txt && git -c user.name=a -c user.email=a@a -c commit.gpgsign=false commit -qm scripted && git push ${made.remote} HEAD:refs/heads/scripted > /dev/null 2>&1 && echo push=ok || echo push=FAILED
@@ -381,7 +480,7 @@ curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || 
 			expect(lines).toEqual(
 				hasCurl ? expected : expected.filter(line => !/^(chopin|offList)=/.test(line)),
 			);
-			expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
+			expect(existsSync(join(home, "escaped.txt"))).toBe(false);
 			expect(git(made.remote, "branch", "--list", "scripted")).toContain("scripted");
 		} finally {
 			await sandbox.close();

@@ -8,6 +8,8 @@ export type CheckPlan = {
 	repoFile: string;
 	/** Paths a sandboxed process must not be able to write. */
 	notWritable: string[];
+	/** Paths it may write only in the sandbox's own memory, where the host never sees the file. */
+	notPersisted?: string[];
 	/** Files and directories it must not be able to read. */
 	notReadable: string[];
 	/** An environment variable it must still see, and its value: credentials are not hidden. */
@@ -77,6 +79,7 @@ export async function sandboxChecks(plan: CheckPlan, cwd = process.cwd()): Promi
 		let wrote = attempt(() => writeFileSync(path, "escaped"));
 		result[`cannotWrite${index}`] = { ok: !wrote.ok, detail: wrote.ok ? "written" : wrote.detail };
 	}
+	for (let path of plan.notPersisted ?? []) attempt(() => writeFileSync(path, "escaped"));
 	for (let [index, path] of plan.notReadable.entries()) {
 		// A masked directory lists nothing and a masked file can't be read: neither gives a secret.
 		result[`cannotRead${index}`] = (() => {

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { join } from "node:path";
 import type { Readable } from "node:stream";
 import type { PlannerAssignment } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
@@ -16,7 +17,7 @@ import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
-import { type ChosenPlanners, plannerWorktree, type StartFailures } from "./workspace";
+import { type ChosenPlanners, plannerWorktree, type StartFailures, tokenFolder } from "./workspace";
 import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
 
@@ -316,13 +317,16 @@ async function servePlanner(options: {
 			repository,
 			credential.document ?? options.id ?? document,
 		);
+		// Its tokens are kept in a folder of their own, which is all of them a sandbox is shown.
+		let tokenDirectory = tokenFolder(worktree);
+		await mkdir(tokenDirectory, { recursive: true, mode: 0o700 }).catch(() => {});
 		// The machine's own GitHub token, where Chopin gives one; without one the backend still starts
 		// in a registered checkout.
 		let github = await githubToken({
 			url: options.url,
 			machine: options.machine,
 			repository,
-			file: `${worktree}.github-token`,
+			file: join(tokenDirectory, "github"),
 			...(options.githubRefused ? { refused: options.githubRefused } : {}),
 			...(options.renewGitHubBeforeMs === undefined
 				? {}
@@ -353,7 +357,7 @@ async function servePlanner(options: {
 				url: options.url,
 				machine: options.machine,
 				document,
-				file: `${worktree}.planner-token`,
+				file: join(tokenDirectory, "planner"),
 				first: credential,
 			});
 			outcome = await launch(
@@ -551,10 +555,10 @@ async function launch(
 					: {}),
 			},
 			stdin: "ignore",
-			// The backend makes its own worktree beside its siblings', so it may write the folder
-			// that holds them; what it must not see of theirs is denied by name.
-			writable: [dirname(worktree)],
-			own: [worktree],
+			// The backend makes its own worktree, in a folder the sandbox makes for it, and sees
+			// nothing of its siblings' or of anyone's tokens but its own.
+			writable: [worktree],
+			own: [worktree, tokenFolder(worktree)],
 		});
 	} catch (error) {
 		return { how: error instanceof Error ? error.message : String(error) };

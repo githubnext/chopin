@@ -23,6 +23,7 @@ import {
 	prepareWorkspace,
 	runAttempt,
 	type StartFailures,
+	tokenFolder,
 } from "./workspace";
 import type { Checkouts } from "./checkouts";
 import { mkdir } from "node:fs/promises";
@@ -222,18 +223,17 @@ export async function runWork(
 	 */
 	let issued: Promise<GitHubToken | undefined> | undefined;
 	let github: GitHubToken | undefined;
+	let tokens = tokenFolder(
+		join(options.directory, "runs", runAttempt(input.id, implementation ? 1 : claim.generation)),
+	);
 	let token = () =>
 		issued ??= options.machine
-			? mkdir(join(options.directory, "runs"), { recursive: true, mode: 0o700 }).then(() =>
+			? mkdir(tokens, { recursive: true, mode: 0o700 }).then(() =>
 				githubToken({
 					url: options.url,
 					machine: options.machine!,
 					repository: input.source.repository,
-					file: join(
-						options.directory,
-						"runs",
-						`${runAttempt(input.id, implementation ? 1 : claim.generation)}.github-token`,
-					),
+					file: join(tokens, "github"),
 					...(options.githubRefused ? { refused: options.githubRefused } : {}),
 				})
 			)
@@ -283,7 +283,7 @@ export async function runWork(
 		let stop = await runAgent({
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
 			...(options.sandbox
-				? { sandbox: options.sandbox, writable: [prepared.extras], own: [path] }
+				? { sandbox: options.sandbox, writable: [prepared.extras], own: [path, tokenFolder(path)] }
 				: {}),
 			command: options.command,
 			cwd: path,
