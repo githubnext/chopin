@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { holdPaneDrag } from "./pane-drag-skip";
+
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 export type PaneSide = "left" | "right";
@@ -86,9 +88,14 @@ export type PaneDrag = {
  * `commit` hands the final width to React state and storage once, when the drag ends. Nothing
  * renders per move. `release` follows, whether or not there was anything to commit, so that what
  * `show` wrote as a stand-in for the width is taken back once the width itself is in place.
+ *
+ * A press that never moves the edge changes nothing: `begin` runs once, just before the first width
+ * is shown, and what it returns runs once, when the drag is over, after `release`.
  */
 export function startPaneDrag(
-	{ bounds, commit, frames, release, show, width }: {
+	{ begin, bounds, commit, frames, release, show, width }: {
+		/** Runs before the first width is shown; what it returns runs when the drag is over. */
+		begin?: () => () => void;
 		/** Read on every move, so a window that changes size mid-drag moves the bounds with it. */
 		bounds: () => Pick<PaneBounds, "min" | "max">;
 		commit: (width: number) => void;
@@ -104,10 +111,16 @@ export function startPaneDrag(
 	let shown = width;
 	let pending: number | undefined;
 	let over = false;
+	let begun = false;
+	let finish: (() => void) | undefined;
 
 	let flush = () => {
 		pending = undefined;
 		if (current === shown) return;
+		if (!begun) {
+			begun = true;
+			finish = begin?.();
+		}
 		shown = current;
 		show(shown);
 	};
@@ -126,6 +139,7 @@ export function startPaneDrag(
 			flush();
 			if (current !== started) commit(current);
 			release?.();
+			finish?.();
 		},
 		cancel() {
 			if (over) return;
@@ -133,6 +147,7 @@ export function startPaneDrag(
 			if (pending !== undefined) frames.cancel(pending);
 			pending = undefined;
 			release?.();
+			finish?.();
 		},
 	};
 }
@@ -173,6 +188,7 @@ export function usePaneDrag(
 			origin.current = event.clientX;
 			drag.current?.end();
 			drag.current = startPaneDrag({
+				begin: holdPaneDrag,
 				bounds: () => latest.current,
 				commit: value => latest.current.commit(value),
 				frames: browserFrames,

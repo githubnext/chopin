@@ -34,12 +34,13 @@ function frames() {
 	};
 }
 
-function drag(start: number, bounds = { min: 250, max: 400 }) {
+function drag(start: number, bounds = { min: 250, max: 400 }, held = false) {
 	let clock = frames();
 	let shown: number[] = [];
 	let committed: number[] = [];
 	let order: string[] = [];
 	let pane = startPaneDrag({
+		begin: held ? () => (order.push("begin"), () => order.push("finish")) : undefined,
 		bounds: () => bounds,
 		commit: width => (committed.push(width), order.push("commit")),
 		frames: clock.scheduler,
@@ -214,6 +215,54 @@ describe("dragging a pane edge", () => {
 		expect(shown).toEqual([]);
 		expect(committed).toEqual([]);
 		expect(order).toEqual(["release"]);
+	});
+
+	it("begins when the first width is shown, never for a press that does not move the edge, and finishes after releasing", () => {
+		let moved = drag(300, undefined, true);
+		moved.pane.move(10);
+		expect(moved.order).toEqual([]);
+		moved.frame();
+		moved.pane.move(10);
+		moved.frame();
+		expect(moved.order).toEqual(["begin"]);
+		moved.pane.end();
+		expect(moved.order).toEqual(["begin", "commit", "release", "finish"]);
+
+		let still = drag(300, undefined, true);
+		still.pane.end();
+		expect(still.order).toEqual(["release"]);
+
+		let netted = drag(300, undefined, true);
+		netted.pane.move(10);
+		netted.pane.move(-10);
+		netted.frame();
+		netted.pane.end();
+		// The pointer came back inside one frame, so nothing was ever shown.
+		expect(netted.order).toEqual(["release"]);
+	});
+
+	it("finishes a drag that the browser takes away, and does so once", () => {
+		let { frame, order, pane } = drag(300, undefined, true);
+
+		pane.move(10);
+		frame();
+		pane.cancel();
+		pane.end();
+		pane.cancel();
+
+		expect(order).toEqual(["begin", "release", "finish"]);
+	});
+
+	it("finishes a drag that came back to where it began, which commits nothing", () => {
+		let { committed, frame, order, pane } = drag(300, undefined, true);
+
+		pane.move(25);
+		frame();
+		pane.move(-25);
+		pane.end();
+
+		expect(committed).toEqual([]);
+		expect(order).toEqual(["begin", "release", "finish"]);
 	});
 
 	it("reads the bounds on every move, so a window that narrows mid-drag moves the maximum", () => {
