@@ -265,6 +265,13 @@ test("retention keeps the most recent finished runs, never one running or queued
 		// Its GitHub token, in its folder of tokens, which a run that ended would have deleted.
 		await mkdir(join(runs, "crashed.tokens"));
 		await writeFile(join(runs, "crashed.tokens", "github"), "ghu_left\n", { mode: 0o600 });
+		// What a connector of an earlier release left beside its runs: a token file named for the run,
+		// which it removed with the run and this one must too.
+		for (
+			let name of ["crashed.github-token", "a.github-token", "a.planner-token", "d.github-token"]
+		) {
+			await writeFile(join(runs, name), "ghu_old\n", { mode: 0o600 });
+		}
 		// This connector's run in progress, then one it accepted but has yet to start.
 		await prepare("running");
 		await writeFile(
@@ -291,6 +298,7 @@ test("retention keeps the most recent finished runs, never one running or queued
 			"c",
 			"c.json",
 			"d",
+			"d.github-token",
 			"d.json",
 			"queued.json",
 			"running",
@@ -303,6 +311,8 @@ test("retention keeps the most recent finished runs, never one running or queued
 		expect(existsSync(join(planner, "notes.txt"))).toBe(true);
 		// The oldest kept goes next; the run in progress never does.
 		expect(await pruneRuns(state, 1)).toEqual(["c"]);
+		// The token files an earlier release left go with their run and only with it: a kept run's stay.
+		expect(existsSync(join(runs, "d.github-token"))).toBe(true);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
