@@ -233,8 +233,24 @@ durable.
 - **Agents on a machine run in its process sandbox.** The connector starts the ACP
   agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
   MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
-  worktree, its git directory (hooks read-only), the agent's state and a private temporary
-  directory; the rest of the disk reads except credentials, and the connector's state
+  worktree, its git directory, the agent's state and a private temporary directory, and what
+  the owner adds. Git on the host runs what a repository's configuration names, so the git
+  directory is never written whole where that can be avoided: a run in a linked worktree
+  writes only `objects`, `refs`, `logs`, `worktrees` and `lfs` of the repository's, so its
+  `config`, `hooks`, `info`, submodules and top-level files, and any new file there such as a
+  `commondir`, are out of its reach; a Planner, in the person's own checkout, writes it whole
+  but for `config`, `config.worktree`, `hooks` and `info`. A linked worktree's `commondir`
+  and `config.worktree` and its worktree's `.git` file are read-only to both, and only the
+  launch's working directory says which repository it is. Every git command the connector
+  runs on the host goes through `apps/connector/src/git-host.ts`, which sets aside the
+  repository's hooks, fsmonitor and ssh command, and removes any `commondir` in a checkout's
+  own git directory when a launch starts and ends and before a run begins. That is the stated
+  limit: a Planner can still make one in the checkout it works in, which can't be held back
+  because it doesn't exist, and the person's own git there reads it until the Planner ends.
+  `git push -u`, `git branch -u` and a branch started from a remote one still run but can't
+  record their upstream, and deleting a ref fails in a linked worktree. See
+  [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox). The rest of
+  the disk reads except credentials, and the connector's state
   directory is left out of the read grants, so an agent sees there only its own worktree and
   the folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a
   denial win over a grant inside it, so a denial can't give an agent its own paths back);

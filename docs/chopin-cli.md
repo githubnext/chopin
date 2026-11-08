@@ -695,7 +695,7 @@ instead.
 
 |             | In the sandbox                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Writes      | Only the run's worktree (and the extra worktrees a build adds), the repository's git directory with its `hooks` read-only, the agent's own state (`~/.atomic`, `~/.copilot` or `~/.pdd-kit` for the built-in agents), a private temporary directory, and what you add with `--sandbox-write`. Nothing else.                                                                                                                                                                                  |
+| Writes      | Only the run's worktree (and the extra worktrees a build adds), the repository's git directory without the files git reads to decide which programs to run, and, for a run in a linked worktree, without its top level (see [Git in the sandbox](#git-in-the-sandbox)), the agent's own state (`~/.atomic`, `~/.copilot` or `~/.pdd-kit` for the built-in agents), a private temporary directory, and what you add with `--sandbox-write`. Nothing else.                                     |
 | Reads       | The rest of the disk, except `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, `.netrc`, `.git-credentials` and browser profiles, which read as empty or unreadable, and the connector's state directory (`--base-dir`), of which it sees only its own worktree and the folder of its own tokens. The machine token and every other run's and Planner's files, tokens included, are out of its sight, those made after it started too. |
 | Network     | Only through a proxy on your machine that allows the hosts below and refuses the rest. A direct connection fails, IPv6 is blocked, and the proxy resolves names.                                                                                                                                                                                                                                                                                                                             |
 | Environment | Everything it has today, including `GH_TOKEN` and `--env` values. `TMPDIR` points at the private directory, `PATH` names each directory by its real path, and `NODE_USE_ENV_PROXY=1` makes Node's own `fetch` use the proxy; the proxy variables come from MXC.                                                                                                                                                                                                                              |
@@ -738,6 +738,81 @@ machine or its networks.
 | `--no-sandbox`          | Never sandboxes. `chopin status` says it is off.                                                   |
 | `--sandbox-host <host>` | Allows an agent to reach one more host. Repeat it.                                                 |
 | `--sandbox-write <dir>` | Allows an agent to write one more directory, such as a package cache or a local remote. Repeat it. |
+
+### Git in the sandbox
+
+Git runs programs its configuration names: a hooks directory (`core.hooksPath`),
+a file-system monitor (`core.fsmonitor`), filters, an ssh command and credential
+helpers. The next `git` command on your machine reads that configuration from the
+repository's git directory and runs them as you, outside the sandbox: Chopin's own
+`git worktree add` for the next run, or your `git status` in a checkout an agent
+worked in. An agent that could write it would escape the sandbox, so three things
+keep it out of an agent's hands.
+
+**What an agent may write in the git directory depends on where it runs.**
+
+- A build, an investigation or a prototype runs in a linked worktree of your
+  checkout. It writes the worktree and, in the repository's git directory, only
+  `objects`, `refs`, `logs`, `worktrees` and `lfs`, where commits, branches, tags,
+  fetches and its other worktrees go. The rest is read-only to it: `config`,
+  `hooks`, `info`, the submodules' git directories, and the files at the top
+  (`HEAD`, `index` and `packed-refs` of your checkout), and it can't make a new
+  file there, such as a `commondir`. Inside `worktrees`, each linked worktree's
+  `commondir` and `config.worktree` are read-only, and so is the `.git` file in
+  its own worktree, which says where its git directory is.
+- A Planner runs in your checkout itself, whose git directory git writes at the top
+  (`HEAD`, `index` and the lock files beside them), so it writes the directory
+  whole, except `config`, `config.worktree`, `hooks`, `info` and every submodule's
+  and linked worktree's, which are read-only to it.
+
+**The connector's own git is hardened.** Every `git` command it runs on the host,
+`git worktree add` for a run, its fetches, its clean-up, sets aside a repository's
+`core.hooksPath`, `core.fsmonitor` and `core.sshCommand` (your own global ssh command
+stays), so a line an agent got into the configuration some other way is not run by
+the connector. Your own git is not hardened.
+
+**A `commondir` is removed.** Git reads `commondir` from any git directory that has one
+and takes the configuration, hooks and objects of the directory it names. Only a linked
+worktree's has one, and a sandbox can hold back only a path that exists, so the connector
+can't make one in your checkout's own `.git`, and a Planner, which writes that directory
+whole, can make it. The connector removes any it finds, and says so, when a Planner starts
+and when it ends, before it runs git there, and a run isn't started in a checkout that
+has one until it is asked again. While a Planner runs, though, one it made is there:
+**git you run in a checkout a Planner is working in can read configuration the Planner
+wrote.** `test -e .git/commondir` says whether it did; a checkout's own `.git` never has one.
+
+What this changes for an agent:
+
+- `git config` without `-c`, `git remote add`, `git submodule init` and `git lfs
+  install --local` fail with `could not write config file`. Give git one setting for
+  one command with `git -c <name>=<value> <command>`, and push to a URL instead of a
+  new remote.
+- **Upstream branches are not recorded.** `git push -u` (or `--set-upstream`),
+  `git branch -u` and `git checkout -b <branch> origin/<branch>` write which remote
+  branch a branch tracks into the configuration. The push, the branch and the checkout
+  still happen, and git still exits 0, but it prints `error: could not write config
+  file` and the branch has no upstream. `gh pr create` pushes with `--set-upstream`,
+  so it prints the same line. `git push origin HEAD:<branch>` says what it means and
+  prints nothing.
+- **In a linked worktree, deleting a ref fails.** Git takes a lock at the top of the
+  git directory to rewrite `packed-refs`, so `git branch -D`, `git tag -d`, the
+  deletions in `git fetch --prune` and `git gc` fail with `Read-only file system`.
+  `git rebase` and `git stash` finish and print the same line. Commits, branches,
+  fetches, checkouts, `git push` (a deleted branch on the remote included),
+  `git worktree add` and `git worktree remove` are not affected. A Planner in your
+  checkout deletes refs as usual.
+- Git inside a submodule can't write the submodule's git directory from a linked
+  worktree, and `git submodule update --init` can't record the submodule.
+- Only the working directory says which repository a launch is in. A folder an agent made
+  itself, as a Planner's worktree, names its git directory in a file of its own, and
+  that file is not believed.
+
+When a run or Planner starts, the connector makes an empty `hooks` or `info` folder in a
+checkout that has none, and an empty `config.worktree` in each git directory where the
+repository reads one (`extensions.worktreeConfig`, which a sparse checkout turns on),
+because a sandbox can hold back only a path that exists. A worktree an agent makes itself,
+with `git worktree add`, has a git directory of its own, which the agent writes whole.
+Run git in it as you would in any files the agent wrote.
 
 ### What each system needs
 
