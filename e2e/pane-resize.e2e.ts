@@ -12,7 +12,12 @@ import { expect, test } from "./room";
 import type { Chat } from "../packages/protocol/index";
 import type { Locator, Page } from "@playwright/test";
 
-type Watch = { writes: string[]; documentAnimations: number; chatEffects: number };
+type Watch = {
+	writes: string[];
+	documentAnimations: number;
+	chatEffects: number;
+	reducedMotionReads: number;
+};
 
 declare global {
 	interface Window {
@@ -32,7 +37,7 @@ function transcript(): Chat.Entry[] {
 /** Count what a drag must not do, from before the page's own scripts run. */
 async function watch(page: Page) {
 	await page.addInitScript(() => {
-		let log: Watch = { writes: [], documentAnimations: 0, chatEffects: 0 };
+		let log: Watch = { writes: [], documentAnimations: 0, chatEffects: 0, reducedMotionReads: 0 };
 		window.__paneWatch = log;
 		let setItem = Storage.prototype.setItem;
 		Storage.prototype.setItem = function(key: string, value: string) {
@@ -44,6 +49,12 @@ async function watch(page: Page) {
 		Document.prototype.getAnimations = function() {
 			log.documentAnimations++;
 			return getAnimations.call(this);
+		};
+		// Every message, and much else in the room, reads the reduced-motion preference as it renders.
+		let matchMedia = window.matchMedia.bind(window);
+		window.matchMedia = function(query: string) {
+			if (query.includes("prefers-reduced-motion")) log.reducedMotionReads++;
+			return matchMedia(query);
 		};
 		// The Chat measurement effect looks for its cards with this selector on every run.
 		let querySelectorAll = Element.prototype.querySelectorAll;
@@ -154,4 +165,31 @@ test("a Projects sidebar resize follows the pointer without asking the page what
 		.toEqual([...opening.writes, `chopin:pane:projects=${before + 60}`]);
 	await expect(handle).toHaveAttribute("aria-valuenow", String(before + 60));
 	expect((await box(sidebar)).width).toBeCloseTo(before + 60, 0);
+});
+
+test("a Projects sidebar resize renders the workspace on each step, not the room and its Chat", async ({ join, page, seed }) => {
+	let messages = [0, 1, 2, 3].flatMap(round =>
+		transcript().map(entry => ({ ...entry, id: `${round}-${entry.id}` }))
+	);
+	await seed("# Resize\n", { transcript: messages });
+	await watch(page);
+	await join("ana");
+	let handle = page.getByRole("separator", { name: "Resize Projects sidebar" });
+	let rail = page.getByRole("complementary", { name: "Chat", exact: true });
+	await expect(rail.getByText("Message 39 about the rollout plan").last()).toBeVisible();
+	await settle(page);
+	let opening = await watched(page);
+	let start = await box(handle);
+
+	await page.mouse.move(start.x + start.width / 2, start.y + 80);
+	await page.mouse.down();
+	await page.mouse.move(start.x + start.width / 2 + 60, start.y + 80, { steps: 10 });
+	await settle(page);
+	await page.mouse.up();
+
+	// Each of the 160 messages reads the reduced-motion preference whenever it renders, so the room
+	// rendering Chat once is 160 reads: 292 in all for this drag when the room rendered on its
+	// steps, about 130 for the workspace and what follows its measure when it does not.
+	let moving = await watched(page);
+	expect(moving.reducedMotionReads - opening.reducedMotionReads).toBeLessThan(260);
 });
