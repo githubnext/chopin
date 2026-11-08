@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 function isDirectory(path: string) {
 	try {
@@ -58,11 +58,11 @@ function mainGitDirectories(root: string): string[] {
 /**
  * The `commondir` files in the repository's main git directories. Git reads one from any git
  * directory that has it and takes the configuration, hooks and objects of the directory it
- * names, so one in a checkout's own git directory sends every git command run there, by a person
- * or by the connector, to a configuration an agent wrote and the programs it names. Only a
- * linked worktree's git directory has one, so none of these is anyone's but an agent's. A sandbox
- * can't hold back a file that doesn't exist, and can't hold back its creation in a directory that
- * must be written whole, a checkout's own.
+ * names, so one in a checkout's own git directory would send every git command run there by a
+ * person to a configuration an agent wrote. Only a linked worktree's git directory has one, so
+ * none of these is anyone's but an agent's. The sandbox's policy leaves no way to make one, and the
+ * connector's own git is told where the repository is and never looks for one; this is a cheap
+ * check for what an agent of a release without that policy left, or one that was not sandboxed.
  */
 export function plantedRedirects(root: string): string[] {
 	return mainGitDirectories(root).map(directory => join(directory, "commondir")).filter(file =>
@@ -80,4 +80,36 @@ export function removePlantedRedirects(root: string): string[] {
 		} catch { /* Left where it is, and found again. */ }
 	}
 	return removed;
+}
+
+function real(path: string) {
+	try {
+		return realpathSync(path);
+	} catch {
+		return resolve(path);
+	}
+}
+
+/**
+ * The directory in `<common>/worktrees` that belongs to the linked worktree at `place`: the one
+ * whose `gitdir` file, which git wrote when the worktree was made, names `<place>/.git`. Found
+ * from the repository's side, never from the `.git` file in the worktree, which an agent that
+ * works there can write.
+ */
+export function worktreeEntry(common: string, place: string): string | undefined {
+	let wanted = real(place);
+	let folder = join(common, "worktrees");
+	let names: string[] = [];
+	try {
+		names = readdirSync(folder);
+	} catch { /* No linked worktrees. */ }
+	for (let name of names) {
+		let entry = join(folder, name);
+		try {
+			let line = readFileSync(join(entry, "gitdir"), "utf8").split("\n")[0]?.trim() ?? "";
+			if (!line || basename(line) !== ".git") continue;
+			if (real(dirname(isAbsolute(line) ? line : resolve(entry, line))) === wanted) return entry;
+		} catch { /* Not an entry, or one without a gitdir. */ }
+	}
+	return undefined;
 }

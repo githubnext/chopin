@@ -118,6 +118,41 @@ export async function plannerWorktree(directory: string, repository: string, doc
 	return join(parent, segment(document));
 }
 
+/**
+ * A sandboxed Planner's own worktree of its checkout, made on the host before its backend starts:
+ * a linked worktree of `checkout` at `worktree`, detached at the checkout's HEAD, unless there is
+ * one there already, which stays as it is. A sandbox can't let the backend make it: that needs
+ * `worktrees` in the checkout's git directory written, which would let it alter every worktree
+ * of the person's, so the backend finds it made, as it must on every launch after the first,
+ * and the sandbox lets it write that worktree's own git directory alone. Resolves with whether
+ * `worktree` is a linked worktree of `checkout` now: a folder with something in it that is
+ * none is left alone.
+ */
+export async function preparePlannerWorktree(checkout: string, worktree: string): Promise<boolean> {
+	removePlantedRedirects(checkout);
+	let same = async (path: string) => (await realpath(path).catch(() => path));
+	let wanted = await same(worktree);
+	let listed = await gitAsync(["worktree", "list", "--porcelain"], { cwd: checkout })
+		.then(({ stdout }) => String(stdout));
+	let registered = false;
+	for (let line of listed.split("\n")) {
+		if (line.startsWith("worktree ") && await same(line.slice("worktree ".length)) === wanted) {
+			registered = true;
+		}
+	}
+	let present = await stat(worktree).then(info => info.isDirectory(), () => false);
+	if (registered && present) {
+		repositoryAt(worktree);
+		return true;
+	}
+	// Registered, but its folder is gone: git would refuse to make it again until it forgets it.
+	if (registered) await gitAsync(["worktree", "prune"], { cwd: checkout });
+	if (present && (await readdir(worktree)).length > 0) return false;
+	await gitAsync(["worktree", "add", "--detach", worktree], { cwd: checkout, timeout: 120_000 });
+	repositoryAt(worktree);
+	return true;
+}
+
 /** When a process started: `id` differs for each process that held a pid, `at` is in ms. */
 export type ProcessStart = { id: string; at: number };
 

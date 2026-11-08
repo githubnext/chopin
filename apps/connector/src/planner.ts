@@ -17,7 +17,13 @@ import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
-import { type ChosenPlanners, plannerWorktree, type StartFailures, tokenFolder } from "./workspace";
+import {
+	type ChosenPlanners,
+	plannerWorktree,
+	preparePlannerWorktree,
+	type StartFailures,
+	tokenFolder,
+} from "./workspace";
 import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
 
@@ -360,6 +366,20 @@ async function servePlanner(options: {
 				file: join(tokenDirectory, "planner"),
 				first: credential,
 			});
+			// A backend in the sandbox can't make its own worktree of the checkout (see
+			// `preparePlannerWorktree`), so it is made here. Never fatal: a backend that has no use
+			// for one starts all the same, and one that has says why itself.
+			if (options.sandbox && options.sandbox.report.engine !== "none") {
+				await preparePlannerWorktree(checkout, worktree).catch(error =>
+					output.say(
+						output.style.dim(
+							`… Couldn't make the worktree for ${document}'s Planner: ${
+								redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+							}`,
+						),
+					)
+				);
+			}
 			outcome = await launch(
 				{ ...options, document, cwd: checkout },
 				credential.token,
