@@ -38,13 +38,17 @@ FROM oven/bun:${BUN_VERSION} AS no-previous
 RUN mkdir -p /app/apps/web/dist/assets /app/apps/web/kept-assets/assets
 
 FROM ${PREVIOUS_IMAGE} AS previous
+# An image built before kept assets has no kept-assets directory. Making an empty one here keeps the
+# copy below working on Docker's classic builder, which Azure Container Registry builds use and which,
+# unlike BuildKit, fails a COPY whose wildcard matches nothing.
+USER root
+RUN mkdir -p /app/apps/web/kept-assets/assets
 
 FROM oven/bun:${BUN_VERSION} AS kept-assets
 WORKDIR /keep
 COPY scripts/keep-assets.ts ./
 COPY --from=previous /app/apps/web/dist/assets/ ./previous/
-# An image built before this step kept nothing, so a missing directory is not an error.
-COPY --from=previous /app/apps/web/kept-assets*/ ./kept/
+COPY --from=previous /app/apps/web/kept-assets/ ./kept/
 COPY --from=build /app/apps/web/dist/assets/ ./current/
 RUN bun keep-assets.ts --previous previous --kept kept --current current --out out
 
