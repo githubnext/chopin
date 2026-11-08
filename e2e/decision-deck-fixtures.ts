@@ -1,4 +1,5 @@
 import { storedQuestion } from "../apps/server/src/testing/plan";
+import { ulid } from "../packages/dialect/src/ulid";
 import { expect } from "./room";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
@@ -129,8 +130,12 @@ export async function openDecisionDocument(page: Page) {
 export function writtenSeed(
 	prompt: string,
 	description?: string,
-	/** A decision's page id comes from its record, so tests that open one in a shared repository need their own. */
-	widget = "01K0N4TR8K7JGM4R1J7PW4R8W0",
+	/**
+	 * A decision's page id comes from its record, and every test in a run shares one repository, so
+	 * each seed gets a record of its own. Two documents opening a page for one record collide: the
+	 * server refuses the second with "cannot open page", as it does a retry of the test that opened it.
+	 */
+	widget = ulid(),
 ): { source: string; state: SeedState; id: string } {
 	let question = "01K0N4V4E7Y6P4MJ5WD8XZF3W0";
 	let definition = {
