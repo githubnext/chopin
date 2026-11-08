@@ -60,6 +60,7 @@ import { fitsLegibly } from "./diagram-fit";
 import { DiagramSheet, ExpandDiagram, FitDiagram } from "./diagram-sheet";
 import { usePhone } from "../pointer";
 import { LanguageMenu } from "./language-menu";
+import { useNearViewport } from "./near-viewport";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { hiddenSides, scrollEdges } from "./tab-edges";
@@ -330,6 +331,10 @@ function Preview(
 
 	let drawn = block.kind === "math" || block.kind === "mermaid" || block.kind === "seecode"
 		|| block.kind === "wireframe";
+	// A Mermaid drawing is made once its block is within a screen of the reader, not when the document
+	// opens. Until then the block shows its source, as it does while a drawing is on its way.
+	let element = editor.getElementByKey(block.key);
+	let near = useNearViewport(element, block.kind === "mermaid");
 
 	useEffect(() => {
 		// A block that stopped being a diagram must stop showing one. Its
@@ -344,6 +349,7 @@ function Preview(
 			setFailed(undefined);
 			return;
 		}
+		if (block.kind === "mermaid" && !near) return;
 		let cancelled = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		if (block.kind === "seecode") setSpec(undefined);
@@ -413,7 +419,7 @@ function Preview(
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [drawn, block.key, block.kind, block.inline, block.source]);
+	}, [drawn, near, block.key, block.kind, block.inline, block.source]);
 
 	/*
 	 * Hiding is applied to the DOM, never to the document: the source is still
@@ -464,7 +470,6 @@ function Preview(
 		else delete element.dataset.planEditing;
 	});
 
-	let element = editor.getElementByKey(block.key);
 	let host = element?.querySelector<HTMLElement>("[data-plan-preview]");
 	// A wireframe is chromeless: the caret going in is the way to its source.
 	let chrome = block.kind === "wireframe"
