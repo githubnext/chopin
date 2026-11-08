@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import {
 	chmodSync,
 	cpSync,
@@ -13,7 +14,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gitAsync, gitSync, hostGitEnvironment } from "./git-host";
+import { gitAsync, gitSync, HOST_GIT_CONFIG, hostGitEnvironment, repositoryAt } from "./git-host";
 
 let scratch = realpathSync(mkdtempSync(join(tmpdir(), "chopin-git-host-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -129,6 +130,174 @@ test("a `commondir` an agent planted in a checkout's git directory sends plain g
 	expect(made.fired()).toEqual([]);
 });
 
+/** A global configuration file of a person, and the environment git finds it by. */
+function person(root: string, text: string) {
+	let home = join(root, "home");
+	mkdirSync(home, { recursive: true });
+	let file = join(home, "gitconfig");
+	writeFileSync(file, text);
+	let env: NodeJS.ProcessEnv = { ...process.env, HOME: home, GIT_CONFIG_GLOBAL: file };
+	delete env.GIT_SSH_COMMAND;
+	return env;
+}
+
+test("a remote that is a command, in a repository's configuration, is not run by the connector's git, which plain git runs", async () => {
+	let control = repository("ext-control");
+	let made = repository("ext");
+	for (let item of [control, made]) {
+		program(join(item.evil, "ext"), `touch '${item.ran}/ext'; exit 1`);
+		plain(item.repo, "config", "protocol.ext.allow", "always");
+		plain(item.repo, "config", "remote.origin.url", `ext::${join(item.evil, "ext")} %S`);
+	}
+	await plainSteps(control.repo, control.root);
+	expect(control.fired()).toContain("ext");
+	await connectorSteps(made.repo, made.root, (args, options) => gitAsync(args, options));
+	expect(made.fired()).toEqual([]);
+});
+
+test("a local repository named as a remote after the connector first saw the checkout is not fetched from, and its upload-pack program is not run; a local origin the person had is", async () => {
+	let control = repository("file-control");
+	let made = repository("file");
+	for (let item of [control, made]) {
+		let other = join(item.root, "other.git");
+		plain(item.root, "init", "--bare", other);
+		program(
+			join(item.evil, "uploadpack"),
+			`touch '${item.ran}/uploadpack'; exec git-upload-pack "$@"`,
+		);
+		if (item === made) {
+			// The connector saw the checkout before any agent had worked in it.
+			expect(gitSync(["status"], { cwd: item.repo }).status).toBe(0);
+		}
+		plain(item.repo, "config", "remote.origin.url", other);
+		plain(item.repo, "config", "remote.origin.uploadpack", join(item.evil, "uploadpack"));
+	}
+	await plainSteps(control.repo, control.root);
+	expect(control.fired()).toContain("uploadpack");
+	await connectorSteps(made.repo, made.root, (args, options) => gitAsync(args, options));
+	expect(made.fired()).not.toContain("uploadpack");
+	// A person whose origin is a local repository, as it was when the connector first saw it.
+	let local = repository("file-local");
+	let source = join(local.root, "source.git");
+	plain(local.root, "init", "--bare", source);
+	plain(local.repo, "remote", "set-url", "origin", source);
+	plain(local.repo, "push", "origin", "main");
+	for (let key of ["core.hooksPath", "core.fsmonitor", "core.sshCommand"]) {
+		plain(local.repo, "config", "--unset", key);
+	}
+	await gitAsync(["fetch", "origin"], { cwd: local.repo });
+});
+
+test("a credential helper in a repository's configuration is not asked for the connector's git's credentials, and the person's own is", async () => {
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch: () =>
+			new Response("no", { status: 401, headers: { "WWW-Authenticate": 'Basic realm="x"' } }),
+	});
+	try {
+		let ask = async (name: string, run: "plain" | "connector") => {
+			let made = repository(name);
+			let env = person(
+				made.root,
+				`[credential]\n\thelper = "!f() { touch '${made.ran}/person'; echo username=u; echo password=p; }; f"\n`,
+			);
+			plain(made.repo, "config", "remote.origin.url", `http://127.0.0.1:${server.port}/o/r.git`);
+			plain(
+				made.repo,
+				"config",
+				"credential.helper",
+				`!f() { touch '${made.ran}/repository'; }; f`,
+			);
+			for (let key of ["core.hooksPath", "core.fsmonitor", "core.sshCommand"]) {
+				plain(made.repo, "config", "--unset", key);
+			}
+			let shown = { ...env, GIT_TERMINAL_PROMPT: "0" };
+			if (run === "plain") {
+				await promisify(execFile)("git", ["-C", made.repo, "fetch", "origin"], { env: shown })
+					.catch(
+						() => undefined,
+					);
+			} else await gitAsync(["fetch", "origin"], { cwd: made.repo, env: shown }).catch(() => {});
+			return made.fired();
+		};
+		expect(await ask("credential-control", "plain")).toEqual(["person", "repository"]);
+		expect(await ask("credential", "connector")).toEqual(["person"]);
+	} finally {
+		server.stop(true);
+	}
+});
+
+test("the connector's git reads of the person's own configuration only what a fetch and a checkout need of it", async () => {
+	let made = repository("person");
+	let env = person(
+		made.root,
+		"[user]\n\tname = Someone\n[alias]\n\tsync = !touch nothing\n[core]\n\tautocrlf = true\n\teditor = vi\n"
+			+ '[url "https://mirror.example/"]\n\tinsteadOf = https://github.com/\n'
+			+ "[http]\n\tproxy = http://proxy.example:3128\n",
+	);
+	let ask = async (key: string) =>
+		String(
+			(await gitAsync(["config", "--get", key], { cwd: made.repo, env }).catch(() => ({
+				stdout: "",
+			}))).stdout,
+		).trim();
+	expect(await ask("user.name")).toBe("");
+	expect(await ask("alias.sync")).toBe("");
+	expect(await ask("core.editor")).toBe("");
+	expect(await ask("core.autocrlf")).toBe("true");
+	expect(await ask("url.https://mirror.example/.insteadof")).toBe("https://github.com/");
+	expect(await ask("http.proxy")).toBe("http://proxy.example:3128");
+});
+
+test("a commondir made after the connector first saw the checkout sends its git nowhere: it reads the checkout's own configuration, runs no filter of the redirect's, and plain git, which follows the file, does", async () => {
+	let redirected = (name: string) => {
+		let made = repository(name);
+		writeFileSync(join(made.repo, ".gitattributes"), "a.txt filter=evil\n");
+		plain(made.repo, "add", ".gitattributes");
+		plain(made.repo, "commit", "-m", "attributes");
+		program(join(made.evil, "smudge"), `touch '${made.ran}/smudge'; cat`);
+		let common = join(made.root, "common");
+		cpSync(join(made.repo, ".git"), common, { recursive: true });
+		made.configure(join(common, "config"));
+		plain(
+			made.root,
+			"config",
+			"--file",
+			join(common, "config"),
+			"filter.evil.smudge",
+			join(made.evil, "smudge"),
+		);
+		plain(made.root, "config", "--file", join(common, "config"), "redirect.marker", "yes");
+		for (let key of ["core.hooksPath", "core.fsmonitor", "core.sshCommand"]) {
+			plain(made.repo, "config", "--unset", key);
+		}
+		// What the fixture's own commits, made under its configuration, ran is not what is asked.
+		for (let name of readdirSync(made.ran)) rmSync(join(made.ran, name));
+		return {
+			made,
+			plant: () => writeFileSync(join(made.repo, ".git", "commondir"), `${common}\n`),
+		};
+	};
+	let control = redirected("redirect-control");
+	control.plant();
+	expect(plain(control.made.repo, "config", "--get", "redirect.marker").stdout.trim()).toBe("yes");
+	plain(control.made.repo, "worktree", "add", "--detach", join(control.made.root, "wt"));
+	expect(control.made.fired()).toContain("smudge");
+	let { made, plant } = redirected("redirect");
+	// The connector saw the checkout, then an agent made the file, then the connector ran git.
+	expect(gitSync(["status"], { cwd: made.repo }).status).toBe(0);
+	plant();
+	let asked = await gitAsync(["config", "--get", "redirect.marker"], { cwd: made.repo }).catch(
+		() => ({ stdout: "" }),
+	);
+	expect(String(asked.stdout).trim()).toBe("");
+	await gitAsync(["worktree", "add", "--detach", join(made.root, "wt")], { cwd: made.repo }).catch(
+		() => undefined,
+	);
+	expect(made.fired()).toEqual([]);
+});
+
 test("the ssh command a person chose is kept over the one a repository names, and a person's GIT_SSH_COMMAND over both", async () => {
 	let made = repository("ssh");
 	let home = join(made.root, "home");
@@ -153,29 +322,105 @@ test("the ssh command a person chose is kept over the one a repository names, an
 	expect(made.fired()).toEqual(["environment", "person"]);
 });
 
-test("the settings go after any a caller gave, so the credential helper the connector adds keeps its place", () => {
-	let env = hostGitEnvironment({
-		PATH: "/usr/bin",
+/** The `GIT_CONFIG_*` entries an environment holds, in order. */
+function entries(given: NodeJS.ProcessEnv) {
+	return Array.from({ length: Number(given.GIT_CONFIG_COUNT) }, (_, index) => [
+		given[`GIT_CONFIG_KEY_${index}`],
+		given[`GIT_CONFIG_VALUE_${index}`],
+	]);
+}
+
+test("every setting the connector's git is given: helpers reset and the person's named again, the caller's entries, then the hardening, with where the repository is and which configuration is read", () => {
+	let made = repository("settings");
+	let env: NodeJS.ProcessEnv = {
+		...person(made.root, "[credential]\n\thelper = store\n[user]\n\tname = Someone\n"),
 		GIT_CONFIG_COUNT: "2",
 		GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
 		GIT_CONFIG_VALUE_0: "",
 		GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
 		GIT_CONFIG_VALUE_1: "!f() { :; }; f",
 		GIT_SSH_COMMAND: "ssh -i key",
-	});
-	expect(env).toMatchObject({
-		GIT_CONFIG_COUNT: "4",
-		GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
-		GIT_CONFIG_VALUE_1: "!f() { :; }; f",
-		GIT_CONFIG_KEY_2: "core.hooksPath",
-		GIT_CONFIG_VALUE_2: "/dev/null",
-		GIT_CONFIG_KEY_3: "core.fsmonitor",
-		GIT_CONFIG_VALUE_3: "false",
+	};
+	let repo = repositoryAt(made.repo)!;
+	let hardened = hostGitEnvironment(env, repo);
+	expect(entries(hardened)).toEqual([
+		["credential.helper", ""],
+		["credential.helper", "store"],
+		["credential.https://github.com.helper", ""],
+		["credential.https://github.com.helper", "!f() { :; }; f"],
+		["core.hooksPath", "/dev/null"],
+		["core.fsmonitor", "false"],
+		["core.sshCommand", ""],
+		["core.attributesFile", "/dev/null"],
+		["protocol.ext.allow", "never"],
+		["protocol.file.allow", "never"],
+	]);
+	expect(hardened).toMatchObject({
+		GIT_CONFIG_NOSYSTEM: "1",
+		GIT_ATTR_NOSYSTEM: "1",
 		GIT_SSH_COMMAND: "ssh -i key",
+		GIT_DIR: join(made.repo, ".git"),
+		GIT_COMMON_DIR: join(made.repo, ".git"),
+		GIT_WORK_TREE: made.repo,
 	});
-	// A count that isn't one is not trusted.
-	expect(hostGitEnvironment({ PATH: "/usr/bin", GIT_CONFIG_COUNT: "many", GIT_SSH_COMMAND: "ssh" }))
-		.toMatchObject({ GIT_CONFIG_COUNT: "2", GIT_CONFIG_KEY_0: "core.hooksPath" });
+	// The person's own file is set aside for one the connector made, which holds none of its user.
+	expect(hardened.GIT_CONFIG_GLOBAL).not.toBe(env.GIT_CONFIG_GLOBAL);
+	expect(readFileSync(hardened.GIT_CONFIG_GLOBAL!, "utf8")).not.toContain("Someone");
+	// A checkout whose origin was local when it was first seen may use the local transport.
+	let local = hostGitEnvironment(env, { ...repo, localOrigin: true });
+	expect(entries(local).at(-1)).toEqual(["protocol.file.allow", "user"]);
+	// A count that isn't one is not trusted, and with no repository nothing says where one is.
+	let bare = hostGitEnvironment({
+		PATH: "/usr/bin",
+		GIT_CONFIG_COUNT: "many",
+		GIT_SSH_COMMAND: "ssh",
+	});
+	expect(bare.GIT_CONFIG_COUNT).toBe(String(HOST_GIT_CONFIG.length + 2));
+	expect(bare.GIT_DIR).toBeUndefined();
+	expect(bare.GIT_WORK_TREE).toBeUndefined();
+});
+
+test("the connector records a checkout's git directories once, from the directory and not from a file in it, and says whether its origin was a local repository", () => {
+	let made = repository("record");
+	// A file an agent made before the connector first looked is not read to find the repository.
+	writeFileSync(join(made.repo, ".git", "commondir"), `${join(made.root, "elsewhere")}\n`);
+	let repo = repositoryAt(made.repo)!;
+	expect(repo).toMatchObject({
+		workTree: made.repo,
+		gitDir: join(made.repo, ".git"),
+		commonDir: join(made.repo, ".git"),
+		localOrigin: false,
+	});
+	// Asked again, it is the same record, whatever changed since.
+	rmSync(join(made.repo, ".git", "commondir"));
+	plain(made.repo, "remote", "set-url", "origin", made.evil);
+	expect(repositoryAt(made.repo)).toBe(repo);
+	// A linked worktree's `.git` is a file, so git is asked, once.
+	let linked = join(made.root, "linked");
+	plain(made.repo, "worktree", "add", "--detach", linked);
+	expect(repositoryAt(linked)).toMatchObject({
+		workTree: linked,
+		gitDir: join(made.repo, ".git", "worktrees", "linked"),
+		commonDir: join(made.repo, ".git"),
+	});
+	// A local origin is seen as one: a path, a file URL, a relative path or a drive.
+	for (
+		let [name, url, local] of [
+			["path", "/srv/git/score.git", true],
+			["file", "file:///srv/git/score.git", true],
+			["relative", "../score.git", true],
+			["drive", "C:\\git\\score.git", true],
+			["https", "https://github.com/octo/score.git", false],
+			["scp", "git@github.com:octo/score.git", false],
+			["ssh", "ssh://git@github.com/octo/score.git", false],
+		] as const
+	) {
+		let seen = repository(`origin-${name}`);
+		plain(seen.repo, "remote", "set-url", "origin", url);
+		expect(repositoryAt(seen.repo)!.localOrigin).toBe(local);
+	}
+	// A folder that is no working tree has no record.
+	expect(repositoryAt(join(made.root, "ran"))).toBeUndefined();
 });
 
 test("no git command the connector runs on the host bypasses the hardened helper", () => {

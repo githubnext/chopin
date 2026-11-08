@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
 	chmodSync,
+	cpSync,
 	existsSync,
 	mkdirSync,
 	readdirSync,
@@ -131,6 +132,59 @@ test("the programs a checkout's configuration names don't run when the connector
 			encoding: "utf8",
 		});
 		expect(readdirSync(ran)).toEqual(expect.arrayContaining(["fsmonitor", "post-checkout"]));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("a run's worktree is found by the git directories the connector recorded when it made it, not by the files an agent can write there afterwards: its .git file and its entry's commondir sent elsewhere change nothing the connector's git does, and retention still removes it", async () => {
+	let { root, state, source } = await scoreCheckout();
+	try {
+		let ran = join(state, "ran");
+		let evil = join(state, "evil");
+		mkdirSync(ran);
+		mkdirSync(evil);
+		for (let name of ["post-checkout", "reference-transaction", "fsmonitor"]) {
+			writeFileSyncNow(join(evil, name), `#!/bin/sh\ntouch '${ran}/${name}'\n`);
+			chmodSync(join(evil, name), 0o755);
+		}
+		let prepared = await prepareWorkspace(root, state, { id: "t1", source });
+		expect(JSON.parse(await readFile(prepared.journalPath, "utf8")).root).toBe(root);
+		let common = join(root, ".git");
+		let entry = join(common, "worktrees", "t1");
+		// What an agent that wrote them would leave: a git directory of its own that names programs,
+		// and the worktree and its entry sending git there.
+		let fake = join(state, "fake");
+		cpSync(common, fake, { recursive: true });
+		git(fake, "config", "--file", join(fake, "config"), "core.hooksPath", evil);
+		git(fake, "config", "--file", join(fake, "config"), "core.fsmonitor", join(evil, "fsmonitor"));
+		writeFileSyncNow(join(entry, "commondir"), `${fake}\n`);
+		writeFileSyncNow(join(prepared.path, ".git"), `gitdir: ${join(fake, "worktrees", "t1")}\n`);
+		// The control: git that finds its directories where the files say is sent there.
+		expect(
+			spawnSync("git", [
+				"-C",
+				prepared.path,
+				"rev-parse",
+				"--path-format=absolute",
+				"--git-common-dir",
+			], { encoding: "utf8" }).stdout.trim(),
+		).toBe(fake);
+		expect(git(prepared.path, "rev-parse", "--path-format=absolute", "--git-common-dir")).toBe(
+			common,
+		);
+		expect(git(prepared.path, "rev-parse", "--path-format=absolute", "--git-dir")).toBe(entry);
+		git(prepared.path, "checkout", "-b", "chopin/implement-t1");
+		await endWorkspace(root, prepared);
+		let next = await prepareWorkspace(root, state, { id: "t2", source });
+		await endWorkspace(root, next);
+		expect(await pruneRuns(state, 1)).toEqual(["t1"]);
+		expect(readdirSync(ran)).toEqual([]);
+		expect(existsSync(prepared.path)).toBe(false);
+		let listed = git(root, "worktree", "list", "--porcelain").split("\n")
+			.filter(line => line.startsWith("worktree "));
+		expect(listed).toEqual([`worktree ${root}`, `worktree ${next.path}`]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
