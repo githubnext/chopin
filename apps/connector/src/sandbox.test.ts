@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	realpathSync,
 	rmSync,
@@ -250,10 +251,11 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.writable).toContain(planned);
 	expect(existsSync(planned)).toBe(true);
 	// A linked worktree's launch writes where commits and refs go, in the repository's git
-	// directory, and its worktrees' own, not the directory whole.
-	for (let name of ["objects", "refs", "logs", "worktrees"]) {
+	// directory, and its own worktree's directory there: not the directory whole, and not `worktrees`.
+	for (let name of ["objects", "refs", "logs"]) {
 		expect(policy.writable).toContain(join(checkout, ".git", name));
 	}
+	expect(policy.writable).toContain(join(checkout, ".git", "worktrees", "mine"));
 	for (
 		let path of [
 			join(checkout, ".git"),
@@ -261,6 +263,8 @@ test("a launch may write its worktree, its repository's git directory, its agent
 			join(checkout, ".git", "hooks"),
 			join(checkout, ".git", "info"),
 			join(checkout, ".git", "HEAD"),
+			join(checkout, ".git", "worktrees"),
+			join(checkout, ".git", "modules"),
 		]
 	) {
 		expect(policy.writable).not.toContain(path);
@@ -271,11 +275,18 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.writable).toContain(join(root, "home", ".atomic"));
 	// A directory that isn't there is not granted: MXC would refuse the request.
 	expect(policy.writable).not.toContain(join(root, "extra-missing"));
-	// What git reads to decide which programs to run, in what it may write: the worktree's pointer
-	// to its git directory and the file in that directory that says whose configuration it reads.
-	// The repository's own `config`, `hooks` and `info` are not written at all.
+	// What git reads to find its configuration, in what it may write: the worktree's pointer to its
+	// git directory, and in that directory the files that say whose configuration it reads and where
+	// the worktree is, and its own. The repository's own `config`, `hooks` and `info` are not
+	// written at all.
+	let entry = join(checkout, ".git", "worktrees", "mine");
 	expect(held(policy)).toEqual(
-		[join(checkout, ".git", "worktrees", "mine", "commondir"), join(worktree, ".git")].sort(),
+		[
+			join(entry, "commondir"),
+			join(entry, "config.worktree"),
+			join(entry, "gitdir"),
+			join(worktree, ".git"),
+		].sort(),
 	);
 	expect(policy.readable).toContain("/usr");
 	// What is around the state directory is read, and what is in it only by name: the launch's
@@ -295,72 +306,110 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.proxy).toBe("http://127.0.0.1:4000");
 });
 
-test("in a checkout's own git directory git's configuration, hooks and attributes are read-only, and the rest, where commits and refs go, is not", () => {
+test("in a checkout's own git directory everything is read-only but where commits and refs go: it is held whole, so nothing can be added to it", () => {
 	let repo = repository("git-checkout");
+	let before = readdirSync(repo.git).sort();
 	let policy = repo.policy(repo.checkout);
-	expect(held(policy)).toEqual([
-		join(repo.git, "config"),
-		join(repo.git, "hooks"),
-		join(repo.git, "info"),
-	].sort());
-	// The directory itself is written, and so is the checkout's, whose `.git` is not held back.
-	expect(policy.writable).toContain(repo.git);
+	// The directory is held whole, inside the checkout the launch writes, so no file can be made at
+	// its top level, a `commondir` among them, and none renamed or made again.
+	expect(held(policy)).toEqual([repo.git]);
 	expect(policy.writable).toContain(repo.checkout);
-	expect(held(policy)).not.toContain(join(repo.checkout, ".git"));
-	// A path granted to read and to write is taken as read-only, so the directory isn't also read.
-	expect(policy.readable).not.toContain(repo.git);
+	expect(policy.writable).not.toContain(repo.git);
+	for (let name of ["objects", "refs", "logs"]) {
+		expect(policy.writable).toContain(join(repo.git, name));
+	}
+	for (
+		let name of ["config", "hooks", "info", "HEAD", "index", "packed-refs", "worktrees", "modules"]
+	) {
+		expect(policy.writable).not.toContain(join(repo.git, name));
+	}
+	// And nothing is made in it for the sandbox's sake.
+	expect(readdirSync(repo.git).sort()).toEqual(before);
+	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
 });
 
-test("a repository that reads a configuration per worktree gets an empty one in each linked worktree's git directory, so an agent can't be the one to write it", () => {
+test("a launch in a linked worktree writes its own entry in the repository's git directory and no other: that is held, with the files in it that say where its configuration is, whatever the repository reads", () => {
 	let repo = repository("git-worktree-config");
-	gitCommand("-C", repo.checkout, "config", "extensions.worktreeConfig", "true");
 	let mine = repo.worktree("mine");
 	let other = repo.worktree("other");
-	let policy = repo.policy(mine);
 	let admin = (name: string) => join(repo.git, "worktrees", name);
-	for (let directory of [admin("mine"), admin("other")]) {
-		expect(readFileSync(join(directory, "config.worktree"), "utf8")).toBe("");
-		expect(held(policy)).toContain(join(directory, "config.worktree"));
-		// And the pointer to the configuration each reads, those of its siblings too.
-		expect(held(policy)).toContain(join(directory, "commondir"));
-	}
-	expect(held(policy)).toContain(join(mine, ".git"));
-	expect(held(policy)).not.toContain(join(other, ".git"));
-	// The repository's own is not the launch's to write, so nothing is made there.
-	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
-	// One that already has such a file keeps what is in it.
-	writeFileSync(join(admin("other"), "config.worktree"), "[core]\n\tsparseCheckout = true\n");
-	repo.policy(mine);
-	expect(readFileSync(join(admin("other"), "config.worktree"), "utf8")).toContain("sparseCheckout");
-	// A launch in the checkout itself writes its git directory whole, and so gets its own.
-	let inCheckout = repo.policy(repo.checkout);
-	expect(readFileSync(join(repo.git, "config.worktree"), "utf8")).toBe("");
-	expect(held(inCheckout)).toContain(join(repo.git, "config.worktree"));
-});
-
-test("a repository that doesn't read a configuration per worktree is not given empty files it never reads", () => {
-	let repo = repository("git-no-worktree-config");
-	let mine = repo.worktree("mine");
 	let policy = repo.policy(mine);
+	expect(policy.writable).toContain(admin("mine"));
+	expect(policy.writable).not.toContain(admin("other"));
+	expect(policy.writable).not.toContain(join(repo.git, "worktrees"));
+	// An empty `config.worktree` where there was none, which git ignores unless the repository reads
+	// one, so an agent can't be the one to write it; and the files that say where git is held back.
+	expect(readFileSync(join(admin("mine"), "config.worktree"), "utf8")).toBe("");
+	expect(held(policy)).toEqual(
+		[
+			join(admin("mine"), "commondir"),
+			join(admin("mine"), "config.worktree"),
+			join(admin("mine"), "gitdir"),
+			join(mine, ".git"),
+		].sort(),
+	);
+	// Nothing is made in a sibling's entry, or in the repository's top level.
+	expect(existsSync(join(admin("other"), "config.worktree"))).toBe(false);
 	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
-	expect(existsSync(join(repo.git, "worktrees", "mine", "config.worktree"))).toBe(false);
-	expect(held(policy).filter(path => path.endsWith("config.worktree"))).toEqual([]);
+	expect(held(policy)).not.toContain(join(other, ".git"));
+	// One that already has such a file keeps what is in it.
+	gitCommand("-C", repo.checkout, "config", "extensions.worktreeConfig", "true");
+	writeFileSync(join(admin("mine"), "config.worktree"), "[core]\n\tsparseCheckout = true\n");
+	repo.policy(mine);
+	expect(readFileSync(join(admin("mine"), "config.worktree"), "utf8")).toContain("sparseCheckout");
 });
 
-test("a repository without a hooks or info directory gets an empty one, which is then read-only like the rest", () => {
-	let repo = repository("git-bare-bones");
-	rmSync(join(repo.git, "hooks"), { recursive: true });
-	rmSync(join(repo.git, "info"), { recursive: true });
-	let policy = repo.policy(repo.checkout);
-	expect(existsSync(join(repo.git, "hooks"))).toBe(true);
-	expect(existsSync(join(repo.git, "info"))).toBe(true);
-	expect(held(policy)).toContain(join(repo.git, "hooks"));
-	expect(held(policy)).toContain(join(repo.git, "info"));
+test("one policy shape for every system: what a launch writes of its git directory is the same on Linux, macOS and Windows", () => {
+	let repo = repository("git-shapes");
+	let mine = repo.worktree("mine");
+	let shape = (platform: NodeJS.Platform, cwd: string) => {
+		let policy = launchPolicy(
+			platform === "darwin" ? "seatbelt" : platform === "win32" ? "processcontainer" : "bubblewrap",
+			{ ...systemHost(), platform },
+			{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore" },
+			{ directory: repo.base, home: join(repo.root, "home") },
+			"http://127.0.0.1:4000",
+			join(repo.root, "tmp"),
+		);
+		let git = (paths: readonly string[]) => paths.filter(path => path.startsWith(repo.git)).sort();
+		return { writable: git(policy.writable), held: held(policy), inGit: git(held(policy)) };
+	};
+	for (let cwd of [mine, repo.checkout]) {
+		let linux = shape("linux", cwd);
+		expect(shape("darwin", cwd)).toEqual(linux);
+		expect(shape("win32", cwd)).toEqual(linux);
+	}
 });
 
-test("a submodule's git directory, nested ones and one named with a slash included, is read-only in a checkout's launch, and not written at all in a linked worktree's", () => {
+test("a Planner's own worktree, found made in its checkout's repository, is written as a run's is: its entry and no other, and its .git file is held", () => {
+	let repo = repository("git-planner-worktree");
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", planned);
+	let persons = repo.worktree("persons");
+	let policy = repo.policy(repo.checkout, [planned]);
+	let admin = (name: string) => join(repo.git, "worktrees", name);
+	expect(policy.writable).toContain(repo.checkout);
+	expect(policy.writable).toContain(planned);
+	expect(policy.writable).toContain(admin("D_1"));
+	expect(policy.writable).not.toContain(admin("persons"));
+	expect(policy.writable).not.toContain(join(repo.git, "worktrees"));
+	expect(held(policy)).toEqual(
+		[
+			repo.git,
+			join(admin("D_1"), "commondir"),
+			join(admin("D_1"), "config.worktree"),
+			join(admin("D_1"), "gitdir"),
+			join(planned, ".git"),
+		].sort(),
+	);
+	expect(held(policy)).not.toContain(join(persons, ".git"));
+});
+
+test("a submodule's git directory and every worktree entry but the launch's own are read-only, as the rest of the git directory is: nothing of theirs is granted", () => {
 	let repo = repository("git-submodules");
 	let mine = repo.worktree("mine");
+	repo.worktree("theirs");
 	let gitDirectory = (...parts: string[]) => {
 		let path = join(...parts);
 		mkdirSync(join(path, "hooks"), { recursive: true });
@@ -368,22 +417,15 @@ test("a submodule's git directory, nested ones and one named with a slash includ
 		writeFileSync(join(path, "config"), "[core]\n");
 		return path;
 	};
-	let lib = gitDirectory(repo.git, "modules", "lib");
-	let nested = gitDirectory(lib, "modules", "deep");
-	let slashed = gitDirectory(repo.git, "modules", "ext", "tool");
-	let policy = repo.policy(repo.checkout);
-	for (let module of [lib, nested, slashed]) {
-		expect(held(policy)).toContain(join(module, "config"));
-		expect(held(policy)).toContain(join(module, "hooks"));
+	gitDirectory(repo.git, "modules", "lib");
+	gitDirectory(repo.git, "modules", "ext", "tool");
+	for (let cwd of [repo.checkout, mine]) {
+		let policy = repo.policy(cwd);
+		expect(policy.writable.filter(path => path.startsWith(join(repo.git, "modules")))).toEqual([]);
+		expect(policy.writable).not.toContain(join(repo.git, "worktrees", "theirs"));
+		expect(policy.writable.filter(path => path.startsWith(join(repo.git, "worktrees", "theirs"))))
+			.toEqual([]);
 	}
-	// The folder a slashed name makes isn't a git directory, and its refs and objects are written.
-	expect(held(policy)).not.toContain(join(repo.git, "modules", "ext", "config"));
-	expect(policy.writable).toContain(repo.git);
-	expect(held(policy)).not.toContain(join(lib, "objects"));
-	// A launch in a linked worktree writes none of the submodules' git directories.
-	let linked = repo.policy(mine);
-	expect(linked.writable).not.toContain(join(repo.git, "modules"));
-	expect(linked.writable.filter(path => path.startsWith(join(repo.git, "modules")))).toEqual([]);
 });
 
 test("a git directory named by a file in a folder the agent made earlier is not believed: only the working directory says which repository this is", () => {

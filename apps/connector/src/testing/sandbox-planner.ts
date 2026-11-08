@@ -1,9 +1,9 @@
 import { planFromEnvironment, report, sandboxChecks } from "./sandbox-checks";
 
 /**
- * A Planner backend that does what the sandbox tests ask of one: it makes its own worktree of the
- * checkout it runs in, tries each thing from inside the sandbox, writes what happened in that
- * worktree (the one place it was given) and waits to be stopped.
+ * A Planner backend that does what the sandbox tests ask of one: it finds the worktree of the
+ * checkout it runs in that the connector made for it, tries each thing from inside the sandbox,
+ * writes what happened in that worktree (the one place it was given) and waits to be stopped.
  */
 let plan = planFromEnvironment();
 plan.worktree = process.env.CHOPIN_WORKTREE!;

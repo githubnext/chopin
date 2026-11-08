@@ -1,4 +1,12 @@
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	appendFileSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	realpathSync,
+	renameSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -24,8 +32,10 @@ export type CheckPlan = {
 	extra?: string;
 	/** GitHub, when the machine running the test can reach it itself. */
 	github?: string;
-	/** Where it may write a new git worktree of the repository, when it is a Planner. */
+	/** A Planner's own worktree of the repository's checkout, which the connector made before it started. */
 	worktree?: string;
+	/** The git directory entry of another worktree of the same repository, which it must not alter. */
+	otherEntry?: string;
 };
 
 export type CheckResult = Record<string, { ok: boolean; detail?: string }>;
@@ -101,16 +111,36 @@ export async function sandboxChecks(plan: CheckPlan, cwd = process.cwd()): Promi
 		detail: process.env[plan.visible[0]],
 	};
 	result.commitAndPush = attempt(() => {
-		git(cwd, "add", "written-in-sandbox.txt");
-		git(cwd, "commit", "-m", "committed in the sandbox");
-		git(cwd, "push", plan.remote, "HEAD:refs/heads/sandboxed");
+		// A Planner works in its own worktree, which it finds made; an agent in its working directory.
+		let at = plan.worktree ?? cwd;
+		let file = plan.worktree ? "planner.txt" : "written-in-sandbox.txt";
+		writeFileSync(join(at, file), "ok");
+		git(at, "add", file);
+		git(at, "commit", "-m", "committed in the sandbox");
+		git(at, "push", plan.remote, "HEAD:refs/heads/sandboxed");
 	});
 	if (plan.worktree) {
 		let worktree = plan.worktree;
 		result.ownWorktree = attempt(() => {
-			git(cwd, "worktree", "add", "--detach", worktree);
-			writeFileSync(join(worktree, "planner.txt"), "ok");
+			if (realpathSync(git(worktree, "rev-parse", "--show-toplevel")) !== realpathSync(worktree)) {
+				throw new Error("not a worktree of its own");
+			}
 		});
+		// It can't make another worktree, or alter one that is anyone's.
+		let refused = (run: () => unknown) => {
+			let wrote = attempt(run);
+			return { ok: !wrote.ok, detail: wrote.ok ? "done" : wrote.detail };
+		};
+		result.cannotAddWorktree = refused(() =>
+			git(cwd, "worktree", "add", "--detach", `${worktree}-second`)
+		);
+		if (plan.otherEntry) {
+			let other = plan.otherEntry;
+			result.cannotAlterOtherCommondir = refused(() =>
+				writeFileSync(join(other, "commondir"), `${worktree}\n`)
+			);
+			result.cannotMoveOtherWorktree = refused(() => renameSync(other, `${other}.moved`));
+		}
 	}
 	result.chopin = await reach(plan.chopin);
 	let off = await reach(plan.offList);

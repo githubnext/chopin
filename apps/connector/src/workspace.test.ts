@@ -18,6 +18,7 @@ import {
 	git,
 	lockWorkspace,
 	noPushEnvironment,
+	preparePlannerWorktree,
 	prepareWorkspace,
 	processStart,
 	pruneRuns,
@@ -185,6 +186,47 @@ test("a run's worktree is found by the git directories the connector recorded wh
 		let listed = git(root, "worktree", "list", "--porcelain").split("\n")
 			.filter(line => line.startsWith("worktree "));
 		expect(listed).toEqual([`worktree ${root}`, `worktree ${next.path}`]);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("a sandboxed Planner's worktree is made in its checkout's repository before it starts, found again on later launches, made again when its folder is gone, and left alone when something else is there", async () => {
+	let { root, state } = await scoreCheckout();
+	try {
+		let worktree = join(state, "planners", "octo-org", "score", "D_1");
+		await mkdir(join(state, "planners", "octo-org", "score"), { recursive: true });
+		let listed = () =>
+			git(root, "worktree", "list", "--porcelain").split("\n")
+				.filter(line => line.startsWith("worktree ")).map(line => line.slice("worktree ".length));
+		expect(await preparePlannerWorktree(root, worktree)).toBe(true);
+		expect(listed()).toEqual([root, worktree]);
+		expect(await readFile(join(worktree, "file.txt"), "utf8")).toBe("base");
+		// Work the Planner did there is as it left it on the next launch.
+		await writeFile(join(worktree, "notes.txt"), "the Planner's");
+		git(worktree, "checkout", "-b", "planner/work");
+		expect(await preparePlannerWorktree(root, worktree)).toBe(true);
+		expect(listed()).toEqual([root, worktree]);
+		expect(await readFile(join(worktree, "notes.txt"), "utf8")).toBe("the Planner's");
+		expect(git(worktree, "branch", "--show-current")).toBe("planner/work");
+		// Its folder removed by hand: git still lists it, and it is made again.
+		await rm(worktree, { recursive: true, force: true });
+		expect(await preparePlannerWorktree(root, worktree)).toBe(true);
+		expect(listed()).toEqual([root, worktree]);
+		expect(existsSync(join(worktree, "file.txt"))).toBe(true);
+		// An empty folder, which an earlier launch made for a sandbox, becomes one.
+		let empty = join(state, "planners", "octo-org", "score", "D_2");
+		await mkdir(empty);
+		expect(await preparePlannerWorktree(root, empty)).toBe(true);
+		expect(existsSync(join(empty, "file.txt"))).toBe(true);
+		// A folder with something else in it is no worktree, and is not touched.
+		let other = join(state, "planners", "octo-org", "score", "D_3");
+		await mkdir(other);
+		await writeFile(join(other, "theirs.txt"), "not a worktree");
+		expect(await preparePlannerWorktree(root, other)).toBe(false);
+		expect(readdirSync(other)).toEqual(["theirs.txt"]);
+		expect(listed()).not.toContain(other);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
