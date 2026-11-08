@@ -265,6 +265,8 @@ export type SandboxOptions = {
 	refused?: (host: string, port: number) => void;
 	host?: Host;
 	executor?: string | undefined;
+	/** The person's home directory, whose credentials stay out of sight; this account's by default. */
+	home?: string;
 };
 
 /** The sandbox that doesn't confine: where none works or the owner turned it off. */
@@ -368,12 +370,12 @@ export function launchPolicy(
 	engine: SandboxEngine,
 	host: Host,
 	launch: Launch,
-	options: Pick<SandboxOptions, "directory" | "settings">,
+	options: Pick<SandboxOptions, "directory" | "settings" | "home">,
 	proxy: string,
 	temporary: string,
 ): Policy {
 	let { platform } = host;
-	let home = homedir();
+	let home = options.home ?? homedir();
 	let state = agentStateDirectories(launch.command, launch.env, home, platform);
 	for (let directory of state) {
 		try {

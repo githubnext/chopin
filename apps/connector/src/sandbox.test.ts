@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import type { Host } from "./sandbox-probe";
@@ -207,12 +207,16 @@ test("a launch may write its worktree, its repository's git directory, its agent
 		{
 			command: ["atomic-acp"],
 			cwd: worktree,
-			env: { PATH: process.env.PATH, HOME: homedir(), KEEP: "yes" },
+			env: { PATH: process.env.PATH, HOME: join(root, "home"), KEEP: "yes" },
 			stdin: "pipe",
 			writable: [join(base, "runs", "mine-worktrees")],
 			own: [worktree],
 		},
-		{ directory: base, settings: { writable: [join(root, "extra-missing")] } },
+		{
+			directory: base,
+			home: join(root, "home"),
+			settings: { writable: [join(root, "extra-missing")] },
+		},
 		"http://127.0.0.1:4000",
 		temporary,
 	);
@@ -220,7 +224,7 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.writable).toContain(join(base, "runs", "mine-worktrees"));
 	expect(policy.writable).toContain(join(checkout, ".git"));
 	expect(policy.writable).toContain(temporary);
-	expect(policy.writable).toContain(join(homedir(), ".atomic"));
+	expect(policy.writable).toContain(join(root, "home", ".atomic"));
 	// A directory that isn't there is not granted: MXC would refuse the request.
 	expect(policy.writable).not.toContain(join(root, "extra-missing"));
 	expect(policy.readonlyInside).toEqual([join(checkout, ".git", "hooks")]);
