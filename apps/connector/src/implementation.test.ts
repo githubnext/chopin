@@ -31,3 +31,21 @@ test.each([
 		"put its pullRequestNote, unchanged, at the end of the body of every pull request",
 	);
 });
+
+test.each([
+	["a build", implementationPrompt],
+	["a living document's first build", liveImplementationPrompt],
+	["a rebuild", rebuildPrompt],
+])(
+	"%s in the sandbox is told it can't add worktrees, rather than to make them",
+	(_name, prompt) => {
+		let open = prompt(worktrees);
+		expect(open).toContain("create them only inside /work/run-worktrees");
+		let confined = prompt({ ...worktrees, confined: true });
+		expect(confined).toContain("Your worktree is /work/run.");
+		expect(confined).toContain("`git worktree add` fails");
+		expect(confined).toContain("each one from its own branch in your worktree");
+		expect(confined).not.toContain("create them only inside");
+		expect(confined).not.toContain("CHOPIN_RUN_WORKTREES");
+	},
+);

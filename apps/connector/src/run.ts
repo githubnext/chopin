@@ -258,7 +258,9 @@ export async function runWork(
 				),
 		);
 		let path = prepared.path;
-		let worktrees = { root: path, extras: prepared.extras };
+		// A sandboxed agent can't add worktrees, which its prompt says (see `RunWorktrees`).
+		let confined = options.sandbox !== undefined && options.sandbox.report.engine !== "none";
+		let worktrees = { root: path, extras: prepared.extras, confined };
 		// A rebuild commits onto the existing pull request branches the agent checks out itself.
 		if (implementation && !rebuild) {
 			git(path, "checkout", "-b", `chopin/implement-${input.id.slice(0, 8)}`);
@@ -279,7 +281,6 @@ export async function runWork(
 		);
 		// A sandboxed agent can't reach this process's loopback bridge, and it may not honor the proxy
 		// it must use to reach Chopin, so it gets the stdio bridge, which does.
-		let confined = options.sandbox !== undefined && options.sandbox.report.engine !== "none";
 		let stop = await runAgent({
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
 			...(options.sandbox

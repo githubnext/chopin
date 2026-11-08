@@ -76,15 +76,26 @@ export async function relay(
 	};
 }
 
-/** Where a run's agent works: its own worktree, and the one folder for any extra worktrees. */
-export type RunWorktrees = { root: string; extras: string };
+/**
+ * Where a run's agent works: its own worktree, and the one folder for any extra worktrees. In the
+ * machine's process sandbox it can't add one: that needs the repository's list of worktrees written,
+ * which would let it alter every worktree of the person's.
+ */
+export type RunWorktrees = { root: string; extras: string; confined?: boolean };
 
-function worktreeLines({ root, extras }: RunWorktrees) {
+function worktreeLines({ root, extras, confined }: RunWorktrees) {
 	return [
 		`Your worktree is ${root}.`,
-		`For extra worktrees, as for concurrent PRs, create them only inside ${extras} (also in `
-		+ "$CHOPIN_RUN_WORKTREES) with `git worktree add`, never beside the checkout.",
-		"They are removed when this run ends, uncommitted changes included, so push what you keep.",
+		...confined
+			? [
+				"This sandbox lets git write your worktree and not add another (`git worktree add` fails):"
+				+ " for concurrent PRs, make each one from its own branch in your worktree, one after another.",
+			]
+			: [
+				`For extra worktrees, as for concurrent PRs, create them only inside ${extras} (also in `
+				+ "$CHOPIN_RUN_WORKTREES) with `git worktree add`, never beside the checkout.",
+				"They are removed when this run ends, uncommitted changes included, so push what you keep.",
+			],
 	];
 }
 
