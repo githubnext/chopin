@@ -81,9 +81,16 @@ async function localGitHub(global = "") {
 		secrets: () => [TOKEN],
 		stop: async () => {},
 	};
-	let saved = { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL };
+	let saved = {
+		PATH: process.env.PATH,
+		GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+		GIT_ALLOW_PROTOCOL: process.env.GIT_ALLOW_PROTOCOL,
+	};
 	process.env.PATH = `${bin}:${process.env.PATH}`;
 	process.env.GIT_CONFIG_GLOBAL = globalFile;
+	// The remotes here are directories, which the connector's git doesn't use unless its person's
+	// environment says it may, as a person's with a mirror of GitHub on disk would.
+	process.env.GIT_ALLOW_PROTOCOL = "file:https:http:ssh:git";
 	return {
 		scratch,
 		token,
@@ -96,6 +103,8 @@ async function localGitHub(global = "") {
 			process.env.PATH = saved.PATH;
 			if (saved.GIT_CONFIG_GLOBAL === undefined) delete process.env.GIT_CONFIG_GLOBAL;
 			else process.env.GIT_CONFIG_GLOBAL = saved.GIT_CONFIG_GLOBAL;
+			if (saved.GIT_ALLOW_PROTOCOL === undefined) delete process.env.GIT_ALLOW_PROTOCOL;
+			else process.env.GIT_ALLOW_PROTOCOL = saved.GIT_ALLOW_PROTOCOL;
 			await rm(scratch, { recursive: true, force: true });
 		},
 	};
