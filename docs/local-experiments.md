@@ -94,7 +94,8 @@ is `upload_investigation_image`; the connector handles reading and encoding the 
 Local execution uses the agent's skills and configured services. Where the machine has
 one, the connector starts the agent in the operating system's process sandbox (macOS
 Seatbelt, Linux bubblewrap or Windows ProcessContainer, through MXC): it writes only
-its worktree and its own state, can't read your SSH, cloud and GitHub credentials, and
+its worktree, its repository's git directory (not the configuration and hooks git runs
+programs from) and its own state, can't read your SSH, cloud and GitHub credentials, and
 reaches only an allow-list of hosts. `chopin status` says whether this machine has one,
 and [Sandbox](chopin-cli.md#sandbox) describes it. Without one the agent has your
 account's ordinary permissions, and a worktree organizes edits; it is not a sandbox.
