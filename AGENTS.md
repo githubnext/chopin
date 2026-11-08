@@ -535,6 +535,15 @@ so merge ranges from all mounted editors before replacing a registry entry.
 
 - Keep one React owner for derived code or diff previews. Mounting a second owner
   over the same node causes race-driven cleanup and remounting.
+- While a pane edge is dragged, `apps/web/src/pane-drag-skip.ts` leaves the document's
+  far tables and code blocks and Chat's far rows out of layout (`content-visibility: auto`
+  on blocks marked `data-drag-skip`, only while the page carries `data-pane-dragging`).
+  A geometry read inside such a block lays it out again for the read, so code that
+  measures on every resize step must not reach into far blocks. Mark only blocks far
+  from the window: with every block marked, the browser stopped anchoring the reader's
+  scroll position. A Playwright trace snapshot reads every element and can take seconds
+  on a page in that state, so the browser tests that drag long documents run with
+  `trace: "off"`.
 - Native `<select>` option values must remain globally unique, including the
   empty sentinel.
 - Add both MDXEditor's selected-cell class and Lexical's selected-cell theme

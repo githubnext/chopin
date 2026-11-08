@@ -1,0 +1,10 @@
+/*
+ * Marked by pane-drag-skip.ts for as long as a pane's edge is dragged: far blocks are left out of
+ * layout, at the height they had when the drag began, so only what is near the reader is laid out
+ * on each step. `auto` lets the browser keep what is on or near the screen, and what holds the
+ * selection or focus, laid out and drawn.
+ */
+:root[data-pane-dragging] [data-drag-skip] {
+	content-visibility: auto;
+	contain-intrinsic-block-size: auto var(--drag-skip-size, 0px);
+}
