@@ -1,5 +1,6 @@
 import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Source } from "@chopin/experiment";
+import type { SandboxReport } from "@chopin/protocol/connector";
 import { fail, fingerprint } from "./service";
 
 /** What a connector says about itself when it asks to pair; a checkout is optional. */
@@ -53,6 +54,8 @@ export type About = {
 	/** It has a Planner command, so it can run the Planner of a document it is chosen for. */
 	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
+	/** Whether the connector runs agents in the system's process sandbox, and if not, why. */
+	sandbox?: SandboxReport;
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
 export type Approval = {

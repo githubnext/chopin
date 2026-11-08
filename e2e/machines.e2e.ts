@@ -9,6 +9,9 @@ import {
 	CONNECTOR_HOST_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SANDBOX_FIX_HEADER,
+	CONNECTOR_SANDBOX_HEADER,
+	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
@@ -426,12 +429,17 @@ async function threeMachines(page: Page, repository?: string) {
 		[CONNECTOR_SERVICE_HEADER]: "1",
 		[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
+		[CONNECTOR_SANDBOX_HEADER]: "bubblewrap",
 	}, repository);
 	await pairedMachine(page, "studio", {
 		[CONNECTOR_HOST_HEADER]: "studio.local",
 		[CONNECTOR_PLATFORM_HEADER]: "darwin arm64",
 		[CONNECTOR_AGENT_HEADER]: "Atomic",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
+		[CONNECTOR_SANDBOX_HEADER]: "none",
+		[CONNECTOR_SANDBOX_REASON_HEADER]:
+			"MXC's Seatbelt backend needs macOS 15 or later. Update macOS.",
+		[CONNECTOR_SANDBOX_FIX_HEADER]: "softwareupdate --install --all",
 	}, repository);
 	await pairedMachine(page, "old-laptop", undefined, repository);
 	await page.goto("/machines");
@@ -478,6 +486,17 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(row("build-box").getByRole("button", { name: /^Copy / })).toHaveCount(0);
 	await expect(row("studio")).toContainText("macOS arm64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
+	// Whether its agents run in the system's sandbox: the connector's word, with why not on hover.
+	await expect(row("build-box").getByText("Sandboxed", { exact: true })).toHaveAttribute(
+		"data-tooltip",
+		"Sandboxed (Linux bubblewrap)",
+	);
+	await expect(row("studio").getByText("Not sandboxed", { exact: true })).toHaveAttribute(
+		"data-tooltip",
+		"Not sandboxed: MXC's Seatbelt backend needs macOS 15 or later. Update macOS. "
+			+ "Fix: softwareupdate --install --all",
+	);
+	await expect(row("old-laptop")).not.toContainText("andboxed");
 
 	// Sharing is off until its owner turns it on, from the row's switch, and stays on once saved.
 	let sharing = row("studio").getByRole("switch", { name: "Share studio with teammates" });
@@ -564,6 +583,9 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.getByRole("main")).not.toContainText("Address");
 	// Its owner, and no repository: a machine serves every repository its owner can push to.
 	await expect(page.locator(".machines-facts")).toContainText(`Owner${login}`);
+	await expect(page.locator(".machines-facts")).toContainText(
+		"SandboxSandboxed (Linux bubblewrap)",
+	);
 	await expect(page.locator(".machines-facts")).not.toContainText("Repositor");
 	await expect(page.getByRole("main")).not.toContainText("octo-org");
 	await shot(page, "phone-machine-detail");
