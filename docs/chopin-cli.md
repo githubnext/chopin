@@ -667,6 +667,142 @@ lists them all.
 `--keep-runs <n>` keeps `n` finished runs instead of 15, and `--keep-runs 0`
 keeps them all. `chopin` never removes a run that is going or waiting to start.
 
+## Sandbox
+
+`chopin connect` starts every agent and Planner command inside your operating
+system's own process sandbox, as Codex and Claude Code do for theirs, so a
+mistaken or hostile instruction in a document can't reach past the run's
+worktree. The sandbox is [MXC](https://github.com/microsoft/mxc) on every
+system: Seatbelt on macOS, bubblewrap on Linux and ProcessContainer on Windows.
+It needs no virtual machine, image or daemon, and your credentials and
+environment reach the agent as before.
+
+`chopin status`, and the line `chopin connect` prints once connected, say which
+you have, and so does the machine's row on the Machines page:
+
+```text
+Sandbox:    Sandboxed (Linux bubblewrap)
+Sandbox:    Not sandboxed: <why>. Runs go on without it.
+            Fix: <the one command>
+```
+
+The words are `Sandboxed (macOS Seatbelt)`, `Sandboxed (Linux bubblewrap)` or
+`Sandboxed (Windows ProcessContainer)`. Without a sandbox, runs go on
+unsandboxed and the machine says so. Choose `--require-sandbox` to refuse them
+instead.
+
+### What an agent can and can't do
+
+|             | In the sandbox                                                                                                                                                                                                                                                                                                                |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writes      | Only the run's worktree (and the extra worktrees a build adds), the repository's git directory with its `hooks` read-only, the agent's own state (`~/.atomic`, `~/.copilot` or `~/.pdd-kit` for the built-in agents), a private temporary directory, and what you add with `--sandbox-write`. Nothing else.                   |
+| Reads       | The rest of the disk, except `~/.ssh`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, `.netrc`, `.git-credentials`, browser profiles, the connector's machine token and every other run's and Planner's files. A denied directory reads as empty, a denied file as unreadable. |
+| Network     | Only through a proxy on your machine that allows the hosts below and refuses the rest. A direct connection fails, IPv6 is blocked, and the proxy resolves names.                                                                                                                                                              |
+| Environment | Everything it has today, including `GH_TOKEN` and `--env` values. `TMPDIR` points at the private directory, `PATH` names each directory by its real path, and `NODE_USE_ENV_PROXY=1` makes Node's own `fetch` use the proxy; the proxy variables come from MXC.                                                               |
+
+Hosts an agent may reach:
+
+- your Chopin server's origin, with its port;
+- GitHub: `github.com`, `api.github.com`, `codeload.github.com`,
+  `objects.githubusercontent.com` and `raw.githubusercontent.com`;
+- the model providers: `api.anthropic.com`, `api.openai.com`, `chatgpt.com`,
+  `auth.openai.com`, `generativelanguage.googleapis.com`,
+  `oauth2.googleapis.com`, `*.githubcopilot.com`,
+  `copilot-proxy.githubusercontent.com`, `openrouter.ai` and
+  `*.openai.azure.com`;
+- the package registries: `registry.npmjs.org`, `pypi.org`,
+  `files.pythonhosted.org`, `crates.io`, `index.crates.io` and
+  `static.crates.io`;
+- the hosts you add.
+
+The first time the proxy refuses a host, the terminal says so and which flag
+allows it. Add hosts and writable directories as you connect; they are saved
+with the rest of the settings, so run `chopin service install` again to give
+them to the service:
+
+```sh
+chopin connect --agent atomic \
+  --sandbox-host registry.corp.example \
+  --sandbox-host '*.corp.example:8443' \
+  --sandbox-write ~/.npm
+```
+
+A host is `host`, `*.host` (subdomains, not the bare domain) or `host:port`;
+without a port an entry allows 80 and 443. The proxy sees names and ports, never
+what a tunnel carries, and refuses a listed name that resolves to your own
+machine or its networks.
+
+| Option                  | What it does                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `--require-sandbox`     | Refuses a run when this machine has no sandbox, naming why. Off by default.                        |
+| `--no-sandbox`          | Never sandboxes. `chopin status` says it is off.                                                   |
+| `--sandbox-host <host>` | Allows an agent to reach one more host. Repeat it.                                                 |
+| `--sandbox-write <dir>` | Allows an agent to write one more directory, such as a package cache or a local remote. Repeat it. |
+
+### What each system needs
+
+**macOS** needs macOS 15 or later on Apple silicon, and nothing installed.
+MXC's Seatbelt backend isn't built for Intel Macs, which run unsandboxed.
+
+**Windows** needs Windows 11 24H2 or later (build 26100), x64 or Arm. MXC's
+ProcessContainer can't filter by name, so the proxy is its only way out. Reaching
+a proxy that has no package identity needs MXC's `ingress` and host loopback
+allowed, which is the weakest of the three setups.
+
+**Linux** needs bubblewrap and, for the proxy, `slirp4netns`, util-linux's
+`unshare` and `nsenter`, `ip` (iproute2), `iptables` with its `-restore`
+programs and the `nf_conntrack` kernel module, which Docker and most firewalls
+load, and user namespaces. `socat` and `ripgrep` aren't needed. `chopin
+status` names each one that is missing, with the package manager's command for
+it (apt, dnf, pacman or apk).
+
+On **Ubuntu 24.04 and later** AppArmor also restricts unprivileged user
+namespaces (`kernel.apparmor_restrict_unprivileged_userns=1`), which bubblewrap
+and `unshare` need. `chopin status` then gives one command that installs what
+is missing and permits those two programs, and nothing else:
+
+```sh
+sudo sh -c 'apt-get install -y slirp4netns && printf "%s\n" "abi <abi/4.0>," "include <tunables/global>" "profile chopin-mxc-bwrap /usr/bin/bwrap flags=(unconfined) { userns, }" "profile chopin-mxc-unshare /usr/bin/unshare flags=(unconfined) { userns, }" > /etc/apparmor.d/chopin-mxc && apparmor_parser -r /etc/apparmor.d/chopin-mxc'
+```
+
+It leaves out `apt-get` where nothing is missing, and names the paths of your
+own `bwrap` and `unshare`. The file is the same kind Ubuntu ships for podman
+and lxc: a profile for one program that grants it `userns`. It is narrower than
+the alternative, `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`,
+which lifts the restriction for every program on the machine. It still lets
+anyone who can run those two programs make a user namespace, which is what
+bubblewrap is for. To undo it, `sudo apparmor_parser -R
+/etc/apparmor.d/chopin-mxc && sudo rm /etc/apparmor.d/chopin-mxc`.
+
+The sandbox was run for real on Linux (Ubuntu 24.04, x64) only. macOS and
+Windows have the same policy, tests and executors, and were not run on a real Mac
+or Windows PC.
+
+### Things to know
+
+- **Files in `/tmp` are not visible.** Each sandbox has a private `/tmp`; keep
+  checkouts and agents elsewhere.
+- **Other agents' state.** Built-in agents' state directories are writable; for
+  another ACP agent add its directories with `--sandbox-write`.
+- **Caches.** `npm install` and similar write caches under your home, which an
+  agent may not; add `--sandbox-write ~/.npm` (or point the tool's cache at the
+  worktree) if you want them.
+- **Git over SSH** can't leave the sandbox. Chopin's own git commands use
+  https; so does the agent's, with your token.
+- **A local `file://` remote** or any path outside the worktree needs
+  `--sandbox-write`.
+- **Agents that ignore the proxy** can't reach the network at all. Node's `fetch`
+  is set to use it, and Bun and curl honor it themselves.
+- **A sandboxed agent gets the stdio bridge** for Chopin's tools, not the
+  loopback HTTP one, because it can't reach your machine's loopback.
+- **On Linux, MXC gives the environment to bubblewrap as arguments**, so other
+  accounts on a shared machine can read it with `ps`. On such a machine mount
+  `/proc` with `hidepid=2`.
+- **Telemetry.** MXC's is opt-in under its 1.0.0 contract. chopin never opts in.
+- **`connector.js`**, the downloaded script, carries no executor and runs
+  unsandboxed; the `chopin` binary carries MXC's and writes it to
+  `<base dir>/sandbox/` on first use.
+
 ## Which GitHub account pushes
 
 Builds and Planner commands push branches and open draft pull requests as you,
@@ -730,22 +866,26 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 
 ## Commands
 
-| Command                                                     | What it does                                                                                                      |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `chopin connect [--key <key>] --agent <id>`                 | Runs work from Chopin, in any repository you can push to, with a built-in agent. Pairs first if needed.           |
-| `chopin connect … -- <command>`                             | Runs any other ACP agent's command instead.                                                                       |
-| `chopin connect … --checkout <path>`                        | Uses your checkout for its repository's work instead of a clone. Repeat it for more; a bare path counts as one.   |
-| `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page. |
-| `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                        |
-| `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                |
-| `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                        |
-| `chopin status [--json]`                                    | Shows the server, pairing, the connector, the service and what it runs, your checkouts and clones, and the log.   |
-| `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                        |
-| `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                                                |
-| `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.                                       |
-| `chopin service uninstall`                                  | Removes the service. The pairing, settings and past runs stay.                                                    |
-| `chopin update [version] [--allow-downgrade] [--yes]`       | Installs the release your server asks for, or the one you name.                                                   |
-| `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                                             |
+| Command                                                     | What it does                                                                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `chopin connect [--key <key>] --agent <id>`                 | Runs work from Chopin, in any repository you can push to, with a built-in agent. Pairs first if needed.                      |
+| `chopin connect … -- <command>`                             | Runs any other ACP agent's command instead.                                                                                  |
+| `chopin connect … --checkout <path>`                        | Uses your checkout for its repository's work instead of a clone. Repeat it for more; a bare path counts as one.              |
+| `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page.            |
+| `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                                   |
+| `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                           |
+| `chopin connect … --require-sandbox`                        | Refuses runs on a machine with no [sandbox](#sandbox), instead of running them unsandboxed.                                  |
+| `chopin connect … --no-sandbox`                             | Never sandboxes agents and Planner commands.                                                                                 |
+| `chopin connect … --sandbox-host <host>`                    | Lets agents reach one more host through the sandbox. Repeat it.                                                              |
+| `chopin connect … --sandbox-write <dir>`                    | Lets agents write one more directory inside the sandbox. Repeat it.                                                          |
+| `chopin pair [--label <name>] [--key <key>]`                | Pairs this machine, or pairs it again. The label defaults to the hostname.                                                   |
+| `chopin status [--json]`                                    | Shows the server, pairing, the connector, the service and what it runs, the sandbox, your checkouts and clones, and the log. |
+| `chopin service install [--allow-downgrade] [--skip-check]` | Copies what `chopin connect` last ran and runs it as a background service.                                                   |
+| `chopin service status`                                     | Prints `running`, `stopped`, `restart-pending` or `not-installed`.                                                           |
+| `chopin service restart`                                    | Restarts the service with the settings it has, for example after an update.                                                  |
+| `chopin service uninstall`                                  | Removes the service. The pairing, settings and past runs stay.                                                               |
+| `chopin update [version] [--allow-downgrade] [--yes]`       | Installs the release your server asks for, or the one you name.                                                              |
+| `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                                                        |
 
 Every command takes `--base-dir <dir>`, or `CHOPIN_HOME`, to keep its files
 somewhere other than the default folder.

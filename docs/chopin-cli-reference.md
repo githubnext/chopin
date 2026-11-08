@@ -41,6 +41,7 @@ it connects.
 | `runs/`           | Each job's worktree, extra worktrees, journal, and GitHub token file while it runs. See [Where things live](chopin-cli.md#where-things-live-on-this-machine).                           |
 | `planners/`       | Each Planner command's worktree.                                                                                                                                                        |
 | `repos/`          | A clone of each repository work needed with no checkout named, as `repos/<owner>/<repo>`.                                                                                               |
+| `sandbox/`        | MXC's sandbox executor, written out of the `chopin` binary on first use, as `sandbox/<hash>/`. See [Sandbox](chopin-cli.md#sandbox).                                                    |
 
 Chopin stores only a hash of the machine token, plus the machine's own GitHub
 authorization, encrypted like a browser login.
