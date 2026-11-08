@@ -356,6 +356,55 @@ test("connect --keep-runs saves how many finished runs to keep, and removes olde
 	).toHaveLength(2);
 });
 
+test("connect saves the sandbox options for service install, says what the sandbox is, and refuses nonsense before it pairs", async () => {
+	let root = await checkout();
+	let write = join(scratch, "extra-writable");
+	let started = await connect("nothing", [
+		root,
+		"--require-sandbox",
+		"--sandbox-host",
+		"store.example.com:8443",
+		"--sandbox-host=*.corp.test",
+		"--sandbox-write",
+		write,
+		"--",
+		"agent",
+	]);
+	expect(started.code).toBe(0);
+	// Where this machine has no sandbox it says so, and that runs are refused.
+	expect(started.stdout).toMatch(
+		/Sandboxed \((macOS Seatbelt|Linux bubblewrap|Windows ProcessContainer)\)|Not sandboxed: .* Runs are refused \(--require-sandbox is on\)\./,
+	);
+	expect(JSON.parse(await readFile(join(started.directory, "config.json"), "utf8")).connect.sandbox)
+		.toEqual({
+			require: true,
+			hosts: ["store.example.com:8443", "*.corp.test"],
+			writable: [write],
+		});
+	let off = await connect("nothing", [root, "--no-sandbox", "--", "agent"]);
+	expect(off.code).toBe(0);
+	expect(off.stdout).toContain(
+		"Not sandboxed: It is turned off with --no-sandbox. Runs go on without it.",
+	);
+	expect(JSON.parse(await readFile(join(off.directory, "config.json"), "utf8")).connect.sandbox)
+		.toEqual({ off: true });
+	for (
+		let [args, message] of [
+			[
+				["--require-sandbox", "--no-sandbox"],
+				"--require-sandbox and --no-sandbox can't be used together.",
+			],
+			[["--sandbox-host", "https://example.com"], "--sandbox-host takes a host like example.com"],
+			[["--sandbox-host", "*"], "--sandbox-host takes a host like example.com"],
+		] as const
+	) {
+		let refused = await connect("pairing", [root, ...args, "--", "agent"]);
+		expect(refused.code).toBe(1);
+		expect(refused.stderr).toContain(message);
+		expect(refused.requests).toEqual([]);
+	}
+});
+
 test("connect refuses a --keep-runs that isn't a whole number, before it pairs", async () => {
 	let root = await checkout();
 	for (let bad of ["-1", "x", "1.5", "15abc"]) {

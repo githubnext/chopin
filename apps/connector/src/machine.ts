@@ -8,8 +8,12 @@ import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLANNER_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
+	CONNECTOR_SANDBOX_FIX_HEADER,
+	CONNECTOR_SANDBOX_HEADER,
+	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
+	type SandboxReport,
 } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
 import { CONNECTOR_HEADERS, ConnectorError, jsonObject, refusal } from "./mcp";
@@ -286,6 +290,8 @@ export type About = {
 	/** It has a Planner command, so Chopin may ask it to run the Planner of a document. */
 	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
+	/** Whether agents run in the system's process sandbox, and if not, why and the fix. */
+	sandbox?: SandboxReport;
 };
 
 /** `about` and this machine's hostname and platform, as headers; a value headers can't carry goes. */
@@ -298,6 +304,13 @@ function aboutHeaders(about: About): Record<string, string> {
 		...(about.plannerCommand ? { [CONNECTOR_PLANNER_COMMAND_HEADER]: "1" } : {}),
 		[CONNECTOR_AGENT_HEADER]: about.agent?.name,
 		[CONNECTOR_AGENT_VERSION_HEADER]: about.agent?.version,
+		[CONNECTOR_SANDBOX_HEADER]: about.sandbox?.engine,
+		...(about.sandbox?.engine === "none"
+			? {
+				[CONNECTOR_SANDBOX_REASON_HEADER]: about.sandbox.reason,
+				[CONNECTOR_SANDBOX_FIX_HEADER]: about.sandbox.fix,
+			}
+			: {}),
 	};
 	return Object.fromEntries(
 		Object.entries(headers).filter((entry): entry is [string, string] =>

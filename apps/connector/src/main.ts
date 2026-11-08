@@ -45,6 +45,9 @@ import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { checkouts as machineCheckouts, registerCheckouts } from "./checkouts";
 import { VERSION } from "./version";
+import { createSandbox, inspectSandbox } from "./sandbox";
+import { type SandboxSettings, validHostEntry } from "./sandbox-policy";
+import { sandboxLabel } from "@chopin/protocol/connector";
 import {
 	chosenPlanners,
 	connectors,
@@ -105,11 +108,17 @@ async function statusCommand(args: string[]) {
 	let parsed = parseArgs(args, { flags: ["json"] });
 	if (parsed.positional.length || parsed.rest) throw new Error(`Usage: ${SELF} status [--json]`);
 	let chosen = await chosenServer();
+	let directory = stateDirectory();
+	let config = await readConfig(directory);
 	let report = await collectStatus({
-		directory: stateDirectory(),
+		directory,
 		server: chosen.origin,
 		source: chosen.source,
 		host: systemHost(),
+		sandbox: (await inspectSandbox({
+			directory,
+			settings: (config.service?.settings ?? config.connect)?.sandbox,
+		})).report,
 	});
 	if (parsed.flags.has("json")) console.log(JSON.stringify(report, null, 2));
 	else createOutput().say(...formatStatus(report));
@@ -360,6 +369,34 @@ function runsToKeep(value: string | undefined) {
 }
 
 /**
+ * What the sandbox flags choose: `--require-sandbox` and `--no-sandbox` are opposites, each
+ * `--sandbox-host` is a host (`host`, `*.host` or `host:port`) agents may reach beyond the
+ * built-in list, and each `--sandbox-write` an absolute directory they may write.
+ */
+function sandboxChoice(
+	require: boolean,
+	off: boolean,
+	hosts: string[],
+	writable: string[],
+): SandboxSettings {
+	if (require && off) throw new Error("--require-sandbox and --no-sandbox can't be used together.");
+	for (let host of hosts) {
+		if (!validHostEntry(host)) {
+			throw new Error(
+				`--sandbox-host takes a host like example.com, *.example.com or example.com:8443; not "${host}".`,
+			);
+		}
+	}
+	let directories = writable.map(path => resolve(path));
+	return {
+		...(require ? { require } : {}),
+		...(off ? { off } : {}),
+		...(hosts.length ? { hosts } : {}),
+		...(directories.length ? { writable: directories } : {}),
+	};
+}
+
+/**
  * `connect`. `--service` marks the connector the installed service runs, which runs what install
  * copied. `--install-service` installs the service once connected, then stops; `injected` stands
  * in for this machine's service manager and chopin in tests.
@@ -369,9 +406,9 @@ export async function connect(
 	injected: { host?: ServiceHost; executable?: string } = {},
 ) {
 	let parsed = parseArgs(args, {
-		flags: ["service", "install-service", "skip-check"],
+		flags: ["service", "install-service", "skip-check", "require-sandbox", "no-sandbox"],
 		options: ["planner-command", "key", "name", "keep-runs", "agent"],
-		lists: ["planner", "env", "checkout"],
+		lists: ["planner", "env", "checkout", "sandbox-host", "sandbox-write"],
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
@@ -382,7 +419,8 @@ export async function connect(
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
 			|| parsed.options.has("name") || parsed.options.has("keep-runs")
 			|| parsed.options.has("agent") || parsed.flags.has("install-service")
-			|| parsed.flags.has("skip-check"))
+			|| parsed.flags.has("skip-check") || parsed.flags.has("require-sandbox")
+			|| parsed.flags.has("no-sandbox"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
@@ -427,6 +465,14 @@ export async function connect(
 	// A built-in agent's own variables come first, so an --env for one of them wins.
 	let env = saved?.env ?? environment([...builtIn?.env ?? [], ...parsed.lists.get("env") ?? []]);
 	let keepRuns = saved ? saved.keepRuns : runsToKeep(parsed.options.get("keep-runs"));
+	let sandboxSettings: SandboxSettings = saved
+		? saved.sandbox ?? {}
+		: sandboxChoice(
+			parsed.flags.has("require-sandbox"),
+			parsed.flags.has("no-sandbox"),
+			parsed.lists.get("sandbox-host") ?? [],
+			parsed.lists.get("sandbox-write") ?? [],
+		);
 	if (!service) {
 		requireProgram(command, process.cwd());
 		if (plannerCommand.length) requireProgram(plannerCommand, process.cwd());
@@ -467,6 +513,7 @@ export async function connect(
 				plannerCommand: saving.plannerCommand,
 				...(Object.keys(env).length ? { env } : {}),
 				...(keepRuns === undefined ? {} : { keepRuns }),
+				...(Object.keys(sandboxSettings).length ? { sandbox: sandboxSettings } : {}),
 			};
 		});
 	if (!service && (await connectors(directory)).some(item => item.service && item.running)) {
@@ -481,6 +528,8 @@ export async function connect(
 	let known = AGENTS.find(item => item.acp[0] === program);
 	/** This connection's token, once it has registered, to tell Chopin about the agent later. */
 	let connectionToken: string | undefined;
+	/** Where agents run, once the sandbox has been probed; checks before it start plainly. */
+	let sandbox: Awaited<ReturnType<typeof createSandbox>> | undefined;
 	/**
 	 * Keep the agent's name and version, as it answered ACP initialize, for the next connection to
 	 * send; told to Chopin at once when this one is connected, as at its first job.
@@ -507,6 +556,7 @@ export async function connect(
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 			signal,
+			...(sandbox ? { sandbox } : {}),
 			onInfo: agent => void rememberAgent(agent, token),
 		}).catch(() => {});
 	};
@@ -577,6 +627,27 @@ export async function connect(
 	let unwatch = service ? onStopRequest(directory, stop) : () => {};
 	let output = createOutput();
 	let permissions = permissionMemory();
+	// Probed once, here: agents start in the system's process sandbox where one works, else plainly,
+	// and the line says which. Chopin hears it with every connection.
+	let told = new Set<string>();
+	sandbox = await createSandbox({
+		directory,
+		server: url,
+		settings: sandboxSettings,
+		refused(host, port) {
+			let entry = `${host}:${port}`;
+			if (told.has(entry)) return;
+			told.add(entry);
+			output.say(
+				output.style.dim(
+					`  The sandbox kept an agent from reaching ${entry}. To allow it: ${SELF} connect `
+						+ `--sandbox-host ${host}${port === 443 || port === 80 ? "" : `:${port}`}`
+						+ ", then service install again if it runs as a service.",
+				),
+			);
+		},
+	});
+	let report = sandbox.report;
 	// Said once for each repository, and kept for chopin status, when the GitHub App can't push there.
 	let githubRefused = (message: string, repository: string) => {
 		if (fallback.record(repository)) output.say(output.style.dim(message));
@@ -633,6 +704,7 @@ export async function connect(
 				failures,
 				env,
 				githubRefused,
+				sandbox,
 			};
 			let planning = servePlanners(backends);
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.
@@ -654,6 +726,7 @@ export async function connect(
 								planner: plannerDocuments.length > 0,
 								plannerCommand: plannerCommand.length > 0,
 								agent: (await readConfig(directory)).agents?.[program],
+								sandbox: report,
 							},
 						);
 						connectionToken = registration.token;
@@ -661,6 +734,15 @@ export async function connect(
 						probeAgent(connectionToken, AbortSignal.any([abort.signal, signal]));
 						if (!announced) {
 							output.connected(Object.keys(registered));
+							output.say(
+								report.engine === "none"
+									? `${sandboxLabel(report)} ${
+										sandboxSettings.require
+											? "Runs are refused (--require-sandbox is on)."
+											: "Runs go on without it."
+									}`
+									: output.style.dim(sandboxLabel(report)),
+							);
 							for (let repository of registration.refused) {
 								output.error(
 									`You can't push to ${repository} on GitHub, so Chopin won't run its work here.`,
@@ -695,6 +777,7 @@ export async function connect(
 							env,
 							machine,
 							githubRefused,
+							sandbox,
 						}).finally(prune),
 				});
 				break;
@@ -718,6 +801,7 @@ export async function connect(
 		process.removeListener("SIGINT", stop);
 		process.removeListener("SIGTERM", stop);
 		unwatch();
+		await sandbox.close();
 		await release();
 	}
 	if (install) {

@@ -13,6 +13,7 @@ import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
 import type { Output } from "./output";
 import { ask, describePermission, permissionMemory } from "./permission";
+import type { Sandbox } from "./sandbox";
 import { stopProcessesIn } from "./processes";
 import {
 	discardWorkspace,
@@ -67,6 +68,8 @@ type Options = {
 	machine?: string;
 	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
 	githubRefused?: (message: string, repository: string) => void;
+	/** Where the agent starts: the machine's process sandbox, else plainly. */
+	sandbox?: Sandbox;
 };
 export const STOPPED = "Stopped from the connector terminal.";
 /** A run out of reach says it is still trying at most this often. */
@@ -274,8 +277,14 @@ export async function runWork(
 				: (input as { brief: string }).brief,
 			path,
 		);
+		// A sandboxed agent can't reach this process's loopback bridge, and it may not honor the proxy
+		// it must use to reach Chopin, so it gets the stdio bridge, which does.
+		let confined = options.sandbox !== undefined && options.sandbox.report.engine !== "none";
 		let stop = await runAgent({
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
+			...(options.sandbox
+				? { sandbox: options.sandbox, writable: [prepared.extras], own: [path] }
+				: {}),
 			command: options.command,
 			cwd: path,
 			env: {
@@ -312,7 +321,8 @@ export async function runWork(
 					+ "Do not commit or push unless the authorized brief specifically requests it.",
 			// Investigations need the local upload_image_file, so their tools come from this process:
 			// a loopback HTTP bridge when the agent accepts HTTP servers, the stdio bridge otherwise.
-			mcpServers(http) {
+			mcpServers(accepted) {
+				let http = accepted && !confined;
 				let name = implementation ? "chopin-implementation" : "chopin-investigation";
 				if (http && !implementation) {
 					let tools: ReturnType<typeof relay> | undefined;

@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CONNECTOR_UPDATE_REQUIRED } from "@chopin/protocol/connector";
+import { CONNECTOR_UPDATE_REQUIRED, type SandboxReport } from "@chopin/protocol/connector";
 import { SELF } from "./machine";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
@@ -501,3 +501,57 @@ test.skipIf(process.platform === "win32")(
 		expect(stdout).toContain("Machine:    paired as build-box (ada); Chopin accepts it\n");
 	},
 );
+
+test("status says whether agents run in the system's sandbox, and for a machine with none why and the one fix", async () => {
+	using server = chopin(() => Response.json({ id: "m1", label: "build-box", login: "ada" }));
+	let { directory, host } = await machine(server.url);
+	let sandbox = async (value: SandboxReport, settings?: { require?: boolean }) => {
+		if (settings) {
+			await writeFile(
+				join(directory, "config.json"),
+				JSON.stringify({
+					connect: {
+						server: server.url,
+						command: ["agent"],
+						planners: [],
+						plannerCommand: [],
+						sandbox: settings,
+					},
+				}),
+			);
+		}
+		let report = await collectStatus({
+			directory,
+			server: server.url,
+			source: "CHOPIN_URL",
+			host,
+			sandbox: value,
+		});
+		return { report, text: formatStatus(report).join("\n") };
+	};
+	let sandboxed = await sandbox({ engine: "bubblewrap" });
+	expect(sandboxed.report.sandbox).toEqual({ engine: "bubblewrap" });
+	expect(sandboxed.text).toContain("Sandbox:    Sandboxed (Linux bubblewrap)");
+	let none: SandboxReport = {
+		engine: "none",
+		reason: "The Linux sandbox can't run: slirp4netns isn't installed.",
+		fix: "sudo sh -c 'apt-get install -y slirp4netns'",
+	};
+	let unsandboxed = await sandbox(none);
+	expect(unsandboxed.report.sandbox).toEqual(none);
+	expect(unsandboxed.text).toContain(
+		"Sandbox:    Not sandboxed: The Linux sandbox can't run: slirp4netns isn't installed. "
+			+ "Runs go on without it.",
+	);
+	expect(unsandboxed.text).toContain(
+		"            Fix: sudo sh -c 'apt-get install -y slirp4netns'",
+	);
+	// With --require-sandbox saved, it says the runs are refused instead.
+	let required = await sandbox(none, { require: true });
+	expect(required.text).toContain("Runs are refused (--require-sandbox is on).");
+	expect(required.text).not.toContain("Runs go on without it.");
+	// A status that wasn't asked about the sandbox says nothing of it.
+	let silent = await collectStatus({ directory, server: server.url, source: "CHOPIN_URL", host });
+	expect(silent).not.toHaveProperty("sandbox");
+	expect(formatStatus(silent).join("\n")).not.toContain("Sandbox:");
+});

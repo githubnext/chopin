@@ -1,3 +1,5 @@
+import type { SandboxReport } from "@chopin/protocol/connector";
+import { sandboxLabel } from "@chopin/protocol/connector";
 import { type ConnectSettings, readConfig } from "./config";
 import { machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, jsonObject, refusal } from "./mcp";
@@ -88,6 +90,8 @@ export type StatusReport = {
 		githubCannotPush?: string[];
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
+	/** Whether agents run in the system's process sandbox, and if not, why and the one fix. */
+	sandbox?: SandboxReport;
 	log: string;
 	baseDir: string;
 	/** What the installed service runs, as `chopin service install` copied it. */
@@ -159,6 +163,7 @@ export async function collectStatus(options: {
 	source: ServerSource;
 	host: ServiceHost;
 	timeoutMs?: number;
+	sandbox?: SandboxReport;
 }): Promise<StatusReport> {
 	let { directory, server, host } = options;
 	let token = await machineToken(directory, server);
@@ -211,6 +216,7 @@ export async function collectStatus(options: {
 				: {}),
 		})),
 		service,
+		...(options.sandbox ? { sandbox: options.sandbox } : {}),
 		log: logPath(host.platform, directory),
 		baseDir: directory,
 		serviceRuns: config.service?.settings ?? null,
@@ -275,6 +281,18 @@ function size(bytes: number) {
 	if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} kB`;
 	if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 	return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+/** The sandbox's line, with what a run does without one and the fix on its own line. */
+function sandboxRows(report: SandboxReport, settings: ConnectSettings | null) {
+	if (report.engine !== "none") return [row("Sandbox", sandboxLabel(report))];
+	let consequence = settings?.sandbox?.require
+		? "Runs are refused (--require-sandbox is on)."
+		: "Runs go on without it.";
+	return [
+		row("Sandbox", `Not sandboxed: ${report.reason} ${consequence}`),
+		...(report.fix ? [more(`Fix: ${report.fix}`)] : []),
+	];
 }
 
 /** The report as lines for a person; `now` says when a failing Planner is tried again. */
@@ -358,6 +376,7 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					: []),
 				...service.notes.map(more),
 			]),
+		...(report.sandbox ? sandboxRows(report.sandbox, runs ?? last) : []),
 		...(kept.kept || kept.running
 			? [
 				row(

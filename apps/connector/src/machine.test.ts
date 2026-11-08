@@ -9,7 +9,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { parseArgs } from "./args";
 import { updateConfig } from "./config";
-import { classifyConnectorError, connectorMessage, machineFile, pair } from "./machine";
+import { classifyConnectorError, connectorMessage, machineFile, pair, register } from "./machine";
 import { createOutput } from "./output";
 import { ConnectorError } from "./mcp";
 import { git, stateDirectory } from "./workspace";
@@ -301,7 +301,7 @@ test.skipIf(process.platform === "win32")(
 		let chopin = fakeChopin();
 		expect(await cli(["pair"], home, chopin.url).exited).toBe(0);
 		chopin.calls.length = 0;
-		let connected = cli(["connect", root, "--", "fake-acp"], home, chopin.url, {
+		let connected = cli(["connect", root, "--no-sandbox", "--", "fake-acp"], home, chopin.url, {
 			PATH: [bin, process.env.PATH].join(delimiter),
 		});
 		let reported = async () => chopin.calls.find(call => call.path === "/api/connector/agent");
@@ -697,4 +697,48 @@ test("every command takes --base-dir, which moves the state directory", () => {
 		if (previous === undefined) delete process.env.CHOPIN_HOME;
 		else process.env.CHOPIN_HOME = previous;
 	}
+});
+
+function sandboxHeaders(headers: Headers) {
+	return Object.fromEntries(
+		[...headers].filter(([name]) => name.startsWith("chopin-connector-sandbox")),
+	);
+}
+
+test("connect tells Chopin whether agents run in the sandbox, and for a machine with none why and the one fix", async () => {
+	let seen: Headers[] = [];
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			seen.push(request.headers);
+			return Response.json({ token: "connection-token" });
+		},
+	});
+	cleanup.push(() => server.stop(true));
+	let url = `http://127.0.0.1:${server.port}`;
+	let machine = { label: "box", checkouts: [] };
+	await register(url, MACHINE_TOKEN, machine, undefined, { sandbox: { engine: "bubblewrap" } });
+	await register(url, MACHINE_TOKEN, machine, undefined, {
+		sandbox: {
+			engine: "none",
+			reason: "slirp4netns isn't installed.",
+			fix: "sudo apt-get install -y slirp4netns",
+		},
+	});
+	// A reason that headers can't carry is left out, not sent mangled.
+	await register(url, MACHINE_TOKEN, machine, undefined, {
+		sandbox: { engine: "none", reason: "caf\u00e9", fix: "sudo true" },
+	});
+	await register(url, MACHINE_TOKEN, machine, undefined, {});
+	expect(seen.map(sandboxHeaders)).toEqual([
+		{ "chopin-connector-sandbox": "bubblewrap" },
+		{
+			"chopin-connector-sandbox": "none",
+			"chopin-connector-sandbox-reason": "slirp4netns isn't installed.",
+			"chopin-connector-sandbox-fix": "sudo apt-get install -y slirp4netns",
+		},
+		{ "chopin-connector-sandbox": "none", "chopin-connector-sandbox-fix": "sudo true" },
+		{},
+	]);
 });
