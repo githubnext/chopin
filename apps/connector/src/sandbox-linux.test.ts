@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	realpathSync,
 	renameSync,
@@ -16,6 +17,7 @@ import { runAgent } from "./acp";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
+import { gitAsync, gitSync } from "./git-host";
 import { createSandbox, inspectSandbox } from "./sandbox";
 import type { CheckPlan, CheckResult } from "./testing/sandbox-checks";
 
@@ -407,6 +409,263 @@ sandboxTest(
 		expect(await startedLater("planner")).toEqual([]);
 	},
 	180_000,
+);
+
+/**
+ * What an agent tries in its repository's git directory, from inside the sandbox. Git on the host
+ * reads that directory and runs what it names: `core.hooksPath` and `core.fsmonitor`, a hook, a
+ * filter, the git directory a worktree points at. So the agent here tries to name its own
+ * programs in each place git looks, with `git config` and by writing the files, and then the
+ * host's own git commands run, as the connector's next `git worktree add` and a person's
+ * `git status` do. Whatever the agent was allowed to write, the host then ran.
+ */
+const GIT_ATTEMPTS = String.raw`
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+mine=$(git rev-parse --path-format=absolute --git-dir)
+evil="$PWD/evil"
+mkdir -p "$evil"
+for name in post-checkout reference-transaction pre-commit fsmonitor; do
+	printf '#!/bin/sh\ntouch "%s/%s"\n' "$RAN" "$name" > "$evil/$name"
+	chmod +x "$evil/$name"
+done
+try() { name=$1; shift; if "$@" > /dev/null 2>&1; then echo "$name=done"; else echo "$name=refused"; fi; }
+
+# What git is for: committing, branching, fetching, checking out and pushing.
+try commit sh -c 'echo changed > changed.txt && git add changed.txt && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in the sandbox"'
+try branch git branch from-sandbox
+try switch sh -c 'git checkout -q from-sandbox && git checkout -q -b topic'
+# Starting a branch from a remote one and pushing with -u both ask git to record an upstream in
+# the config, which it can't write: the branch and the push still happen.
+git checkout -q -b tracked origin/main > /dev/null 2>&1
+git push -q -u origin HEAD:refs/heads/pushed-u > /dev/null 2>&1
+try push git push -q origin HEAD:refs/heads/pushed
+try fetch git fetch -q origin
+try detach git checkout -q --detach origin/fresh
+if [ -n "$WT" ]; then try ownWorktree git worktree add -q --detach "$WT"; fi
+
+# What it must not: naming programs for git to run, in every place git reads them.
+try hooksPath git config core.hooksPath "$evil"
+try fsmonitor git config core.fsmonitor "$evil/fsmonitor"
+try sshCommand git config core.sshCommand "$evil/fsmonitor"
+try alias git config alias.sync "!touch \"$RAN/alias\""
+try configAppend sh -c 'printf "[core]\n\thooksPath = %s\n" "$2" >> "$1/config"' sh "$common" "$evil"
+try configReplace sh -c 'cp "$1/config" "$1/config.new" && printf "[core]\n\tfsmonitor = %s\n" "$2" >> "$1/config.new" && mv -f "$1/config.new" "$1/config"' sh "$common" "$evil/fsmonitor"
+rm -f "$common/config.new"
+try ownConfigWorktree sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" > "$1/config.worktree"' sh "$mine" "$evil/fsmonitor"
+try commonConfigWorktree sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" > "$1/config.worktree"' sh "$common" "$evil/fsmonitor"
+try hookReplace cp "$evil/post-checkout" "$common/hooks/post-checkout"
+try hookNew cp "$evil/reference-transaction" "$common/hooks/reference-transaction"
+try attributes sh -c 'echo "* filter=evil" >> "$1/info/attributes"' sh "$common"
+try exclude sh -c 'echo evil >> "$1/info/exclude"' sh "$common"
+# A submodule's git directory is read the same way, when git runs in it.
+try submoduleConfig sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" >> "$1/modules/vendor/config"' sh "$common" "$evil/fsmonitor"
+try submoduleHook cp "$evil/post-checkout" "$common/modules/vendor/hooks/post-checkout"
+# A git directory of its own, with a configuration that names a program, for git to be sent to.
+mkdir -p "$evil/fake" && cp -r "$common/." "$evil/fake/" && git config --file "$evil/fake/config" core.fsmonitor "$evil/fsmonitor"
+# A new file in the top level of the repository's git directory: a commondir sends git to the
+# configuration of the directory it names.
+try commonCommondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$common" "$evil/fake"
+if [ "$mine" != "$common" ]; then
+	# A linked worktree: the file in it, and the one in its git directory, say where its git
+	# directory and its configuration are, and the repository's own HEAD is the checkout's.
+	try commonHead sh -c 'echo "ref: refs/heads/evil" > "$1/HEAD"' sh "$common"
+	try worktreeFile sh -c 'printf "gitdir: %s\n" "$1" > .git' sh "$evil/fake"
+	try worktreeFileReplace sh -c 'rm -f .git && mkdir .git'
+	try commondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$mine" "$evil/fake"
+else
+	try gitDirMove sh -c 'mv .git .git.moved'
+fi
+echo finished=done
+`;
+
+async function gitAttempts(layout: "run" | "planner") {
+	let made = world(`git-${layout}`);
+	let ran = join(made.root, "ran");
+	mkdirSync(ran);
+	// A submodule, whose git directory is in the repository's.
+	let vendor = join(made.root, "vendor");
+	mkdirSync(vendor);
+	git(vendor, "init", "-b", "main");
+	writeFileSync(join(vendor, "lib.txt"), "a library\n");
+	git(vendor, "add", ".");
+	git(vendor, "commit", "-m", "library");
+	git(
+		made.checkout,
+		"-c",
+		"protocol.file.allow=always",
+		"submodule",
+		"add",
+		"-q",
+		vendor,
+		"vendor",
+	);
+	git(made.checkout, "commit", "-m", "vendor the library");
+	git(made.checkout, "push", "-q", "origin", "main");
+	// A branch only the remote has, for the agent to fetch.
+	git(made.remote, "branch", "fresh", "main");
+	// As a sparse checkout leaves a repository: per-worktree configuration is read, and there is
+	// no such file yet.
+	git(made.checkout, "config", "extensions.worktreeConfig", "true");
+	let worktree = join(made.state, "runs", "mine");
+	let planned = join(made.state, "planners", "octo", "score", "D_1");
+	if (layout === "run") git(made.checkout, "worktree", "add", "--detach", worktree);
+	let cwd = layout === "run" ? worktree : made.checkout;
+	let script = join(made.root, "attempts.sh");
+	writeFileSync(script, GIT_ATTEMPTS);
+	let before = readFileSync(join(made.checkout, ".git", "config"), "utf8");
+	let planted: string[] = [];
+	let sandbox = await createSandbox({
+		directory: made.state,
+		home,
+		server: "http://127.0.0.1:9",
+		settings: { writable: [made.remote] },
+		planted: files => planted.push(...files),
+	});
+	try {
+		expect(sandbox.report).toEqual({ engine: "bubblewrap" });
+		let child = sandbox.spawn({
+			command: ["sh", script],
+			cwd,
+			env: { ...process.env, RAN: ran, WT: layout === "planner" ? planned : "" },
+			stdin: "ignore",
+			...(layout === "planner" ? { writable: [planned] } : {}),
+			own: [layout === "run" ? worktree : planned],
+		});
+		let said = "";
+		let output = "";
+		child.stdout.on("data", chunk => output += chunk);
+		child.stderr.on("data", chunk => said += chunk);
+		await new Promise(done => child.once("close", done));
+		let attempts = Object.fromEntries(
+			output.trim().split("\n").filter(line => /^\w+=/.test(line)).map(line => line.split("=")),
+		);
+		if (attempts.finished !== "done") {
+			throw new Error(`The script in the sandbox didn't finish: ${output} ${said.slice(0, 2000)}`);
+		}
+		// Then git on the host, with nothing of the sandbox about it: what the connector does for
+		// the next run, what a person does in the checkout, and a hook-driven ref update.
+		let next = join(made.state, "runs", "next");
+		let hostGit = (directory: string, ...args: string[]) =>
+			spawnSync("git", ["-C", directory, ...args], { encoding: "utf8" }).status;
+		let host = [
+			hostGit(made.checkout, "worktree", "add", "--detach", next),
+			hostGit(made.checkout, "status"),
+			hostGit(next, "status"),
+			...(layout === "run" ? [hostGit(worktree, "status")] : []),
+			hostGit(made.checkout, "branch", "-f", "after-sandbox", "main"),
+			hostGit(made.checkout, "worktree", "prune"),
+			// And the connector's own, as prepareWorkspace and the end of a run make them.
+			await gitAsync([
+				"-C",
+				made.checkout,
+				"worktree",
+				"add",
+				"--detach",
+				join(made.state, "runs", "next-by-connector"),
+			]).then(() => 0, () => 1),
+			gitSync(["-C", made.checkout, "status"]).status,
+			await gitAsync(["-C", made.checkout, "worktree", "prune"]).then(() => 0, () => 1),
+		];
+		return {
+			checkout: made.checkout,
+			attempts,
+			host,
+			// What the agent's programs did when git ran them, which is to leave a file here.
+			ran: readdirSync(ran).sort(),
+			configChanged: readFileSync(join(made.checkout, ".git", "config"), "utf8") !== before,
+			upstream: spawnSync("git", ["-C", made.checkout, "config", "--get-regexp", "^branch\\."], {
+				encoding: "utf8",
+			}).stdout.trim(),
+			remote: git(made.remote, "branch", "--list").split("\n").map(line =>
+				line.trim().replace(/^\* /, "")
+			).sort(),
+			local: git(made.checkout, "branch", "--list", "--format=%(refname:short)").split("\n").sort(),
+			plannerWorktree: existsSync(join(planned, ".git")),
+			planted,
+			redirect: existsSync(join(made.checkout, ".git", "commondir")),
+		};
+	} finally {
+		await sandbox.close();
+	}
+}
+
+const PERMITTED = [
+	"commit",
+	"branch",
+	"switch",
+	"push",
+	"fetch",
+	"detach",
+];
+const REFUSED = [
+	"hooksPath",
+	"fsmonitor",
+	"sshCommand",
+	"alias",
+	"configAppend",
+	"configReplace",
+	"ownConfigWorktree",
+	"commonConfigWorktree",
+	"hookReplace",
+	"hookNew",
+	"attributes",
+	"exclude",
+	"submoduleConfig",
+	"submoduleHook",
+];
+
+async function expectGitUntouched(layout: "run" | "planner") {
+	let result = await gitAttempts(layout);
+	let linked = layout === "run";
+	// What was refused, and that nothing the agent wrote ran when git did on the host (each program
+	// it wrote leaves a file if it runs), with the config as it was.
+	expect({ attempts: result.attempts, ran: result.ran, configChanged: result.configChanged })
+		.toEqual({
+			attempts: {
+				...Object.fromEntries(PERMITTED.map(name => [name, "done"])),
+				...(layout === "planner" ? { ownWorktree: "done" } : {}),
+				...Object.fromEntries(REFUSED.map(name => [name, "refused"])),
+				...(linked
+					? {
+						worktreeFile: "refused",
+						worktreeFileReplace: "refused",
+						commondir: "refused",
+						commonHead: "refused",
+						// A run in a linked worktree can't make a file in the repository's git directory.
+						commonCommondir: "refused",
+					}
+					// A Planner writes its checkout's git directory whole, so it can make one. The
+					// connector removes it, and says so, when the launch ends, before anyone runs git.
+					: { gitDirMove: "refused", commonCommondir: "done" }),
+				finished: "done",
+			},
+			ran: [],
+			configChanged: false,
+		});
+	expect(result.planted).toEqual(linked ? [] : [join(result.checkout, ".git", "commondir")]);
+	expect(result.redirect).toBe(false);
+	// Git on the host works as it did.
+	expect(result.host.every(status => status === 0)).toBe(true);
+	// What git is for happened: its branches and refs, on both sides. An upstream, which is
+	// recorded in the config, is not.
+	expect(result.remote).toEqual(
+		expect.arrayContaining(["fresh", "main", "pushed", "pushed-u"]),
+	);
+	expect(result.local).toEqual(expect.arrayContaining(["from-sandbox", "topic", "tracked"]));
+	expect(result.upstream).toBe("");
+	expect(result.plannerWorktree).toBe(layout === "planner");
+}
+
+sandboxTest(
+	"in a run's worktree an agent can commit, branch, fetch, check out and push, and can't name programs for git to run: config, hooks, attributes and the worktree's own git files are refused, and git on the host then runs nothing of its",
+	() => expectGitUntouched("run"),
+	120_000,
+);
+
+sandboxTest(
+	"in a Planner's checkout the same: its git directory takes commits, branches and pushes, but the configuration, hooks and attributes in it are refused, and git on the host runs nothing of the agent's",
+	() => expectGitUntouched("planner"),
+	120_000,
 );
 
 let atomic = Bun.which("atomic-acp") && Bun.which("atomic");

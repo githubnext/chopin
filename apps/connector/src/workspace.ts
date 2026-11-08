@@ -3,14 +3,16 @@ import { existsSync } from "node:fs";
 import { mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, sep, win32 } from "node:path";
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
 import type { RunInput } from "@chopin/experiment";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { redacted } from "./connection";
+import { gitAsync, gitSync } from "./git-host";
+import { removePlantedRedirects } from "./git-directories";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 export function git(cwd: string, ...args: string[]): string {
-	let result = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 120_000 });
+	let result = gitSync(["-C", cwd, ...args], { timeout: 120_000 });
 	if (result.status !== 0) {
 		throw new Error(`Git ${args[0]} failed: ${result.stderr || result.error?.message}`);
 	}
@@ -529,15 +531,14 @@ export function noPushEnvironment(): Record<string, string> {
 
 /** Remove a finished spike's worktree and throwaway branch; its screenshots were uploaded. */
 export async function discardWorkspace(root: string, path: string, branch: string) {
+	removePlantedRedirects(root);
 	try {
-		await promisify(execFile)("git", ["-C", root, "worktree", "remove", "--force", path], {
-			timeout: 60_000,
-		});
+		await gitAsync(["-C", root, "worktree", "remove", "--force", path], { timeout: 60_000 });
 	} catch {
 		await rm(path, { recursive: true, force: true });
-		await promisify(execFile)("git", ["-C", root, "worktree", "prune"]).catch(() => {});
+		await gitAsync(["-C", root, "worktree", "prune"]).catch(() => {});
 	}
-	await promisify(execFile)("git", ["-C", root, "branch", "-D", branch]).catch(() => {});
+	await gitAsync(["-C", root, "branch", "-D", branch]).catch(() => {});
 }
 
 /**
@@ -554,6 +555,17 @@ export async function prepareWorkspace(
 	/** Credential configuration for git, through the environment, to fetch the run's commit. */
 	env: Record<string, string> = {},
 ) {
+	// An agent that ran here could have made a `commondir` in the checkout's git directory, which
+	// would send every git command below to configuration it wrote. It is removed and this run is
+	// refused, so its owner hears of it; sent again, the run goes ahead.
+	let planted = removePlantedRedirects(root);
+	if (planted.length) {
+		throw new Error(
+			`Not run: an agent had made ${planted.join(", ")} in ${root}'s git directory, where `
+				+ "only a linked worktree has one, and it sends git there to configuration the agent wrote. "
+				+ "It has been removed; run this again.",
+		);
+	}
 	let current = await workspace(root);
 	if (current.repository.toLowerCase() !== input.source.repository.toLowerCase()) {
 		throw new Error("Repository differs from the authorized run.");
@@ -586,21 +598,15 @@ export async function prepareWorkspace(
 	try {
 		git(root, "cat-file", "-e", `${input.source.commit}^{commit}`);
 	} catch {
-		await promisify(execFile)("git", ["-C", root, "fetch", "origin", input.source.commit], {
+		await gitAsync(["-C", root, "fetch", "origin", input.source.commit], {
 			timeout: 120_000,
 			env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: "0" },
 		});
 	}
 	let path = join(directory, "runs", attempt);
-	await promisify(execFile)("git", [
-		"-C",
-		root,
-		"worktree",
-		"add",
-		"--detach",
-		path,
-		input.source.commit,
-	], { timeout: 120_000 });
+	await gitAsync(["-C", root, "worktree", "add", "--detach", path, input.source.commit], {
+		timeout: 120_000,
+	});
 	let extras = extraWorktrees(path);
 	await mkdir(extras, { recursive: true, mode: 0o700 });
 	return { path, journalPath, extras };
@@ -628,6 +634,7 @@ export async function endWorkspace(
 	root: string,
 	prepared: { extras: string; journalPath: string },
 ) {
+	removePlantedRedirects(root);
 	await removeWorktreesIn(["-C", root], prepared.extras);
 	try {
 		let journal = JSON.parse(await readFile(prepared.journalPath, "utf8"));
@@ -649,7 +656,7 @@ const exec = promisify(execFile);
 async function removeWorktreesIn(repository: string[], folder: string) {
 	let inside = await realpath(folder).catch(() => undefined);
 	if (inside) {
-		let listed = await exec("git", [...repository, "worktree", "list", "--porcelain"])
+		let listed = await gitAsync([...repository, "worktree", "list", "--porcelain"])
 			.then(({ stdout }) => String(stdout))
 			.catch(() => "");
 		for (let line of listed.split("\n")) {
@@ -658,13 +665,13 @@ async function removeWorktreesIn(repository: string[], folder: string) {
 			let real = await realpath(path).catch(() => path);
 			if (!real.startsWith(inside + sep)) continue;
 			// Twice --force removes a locked worktree too.
-			await exec("git", [...repository, "worktree", "remove", "--force", "--force", path], {
+			await gitAsync([...repository, "worktree", "remove", "--force", "--force", path], {
 				timeout: 60_000,
 			}).catch(() => {});
 		}
 	}
 	await rm(folder, { recursive: true, force: true });
-	await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
+	await gitAsync([...repository, "worktree", "prune"]).catch(() => {});
 }
 
 /** The repository a run's worktree belongs to, as `--git-dir <dir>`; undefined when it has none. */
@@ -672,7 +679,7 @@ async function worktreeRepository(path: string) {
 	// Only a linked worktree has a .git file; a plain folder would name whatever repository holds it.
 	let link = await readFile(join(path, ".git"), "utf8").catch(() => "");
 	if (!link.startsWith("gitdir:")) return undefined;
-	let common = await exec("git", ["-C", path, "rev-parse", "--git-common-dir"])
+	let common = await gitAsync(["-C", path, "rev-parse", "--git-common-dir"])
 		.then(({ stdout }) => resolve(path, String(stdout).trim()))
 		.catch(() => undefined);
 	return common ? ["--git-dir", common] : undefined;
@@ -731,16 +738,17 @@ export async function pruneRuns(
 		}
 		let path = join(folder, entry.attempt);
 		let extras = extraWorktrees(path);
+		removePlantedRedirects(path);
 		let repository = await worktreeRepository(path);
 		if (repository) {
 			await removeWorktreesIn(repository, extras);
-			await exec("git", [...repository, "worktree", "remove", "--force", "--force", path], {
+			await gitAsync([...repository, "worktree", "remove", "--force", "--force", path], {
 				timeout: 60_000,
 			}).catch(() => {});
 		}
 		await rm(extras, { recursive: true, force: true });
 		await rm(path, { recursive: true, force: true });
-		if (repository) await exec("git", [...repository, "worktree", "prune"]).catch(() => {});
+		if (repository) await gitAsync([...repository, "worktree", "prune"]).catch(() => {});
 		await rm(tokenFolder(path), { recursive: true, force: true });
 		for (let file of legacyTokenFiles(path)) await rm(file, { force: true });
 		await rm(join(folder, `${entry.attempt}.json`), { force: true });

@@ -3,7 +3,13 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	writeFileSync as writeFileSyncNow,
+} from "node:fs";
 import {
 	connectors,
 	discardWorkspace,
@@ -54,6 +60,77 @@ test("isolates exact source and allows an authorized retry without executing an 
 		expect(await readFile(join(prepared.path, "source.txt"), "utf8")).toBe("first attempt's work");
 		await expect(prepareWorkspace(root, state, input, 2)).rejects.toThrow("already accepted");
 		await release();
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+/** A checkout of octo-org/score whose commit is the run's source, as `prepareWorkspace` is given it. */
+async function scoreCheckout() {
+	let root = await mkdtemp(join(tmpdir(), "chopin-hardened-root-"));
+	let state = await mkdtemp(join(tmpdir(), "chopin-hardened-state-"));
+	git(root, "init");
+	git(root, "config", "user.name", "Fixture");
+	git(root, "config", "user.email", "fixture@example.test");
+	git(root, "remote", "add", "origin", "https://github.com/octo-org/score.git");
+	await writeFile(join(root, "file.txt"), "base");
+	git(root, "add", ".");
+	git(root, "commit", "-m", "base");
+	let source = {
+		repositoryId: "R_1",
+		repository: "octo-org/score",
+		commit: git(root, "rev-parse", "HEAD"),
+	};
+	return { root, state, source };
+}
+
+test("a run isn't started in a checkout whose git directory an agent gave a commondir: it is removed, and the run goes on once it is asked again", async () => {
+	let { root, state, source } = await scoreCheckout();
+	try {
+		let planted = join(root, ".git", "commondir");
+		writeFileSyncNow(planted, `${join(state, "elsewhere")}\n`);
+		await expect(prepareWorkspace(root, state, { id: "r1", source })).rejects.toThrow(
+			`an agent had made ${planted}`,
+		);
+		expect(existsSync(planted)).toBe(false);
+		// Nothing of the refused run was begun, so the same run is accepted when it is sent again.
+		expect(existsSync(join(state, "runs", "r1.json"))).toBe(false);
+		let prepared = await prepareWorkspace(root, state, { id: "r1", source });
+		expect(existsSync(join(prepared.path, "file.txt"))).toBe(true);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("the programs a checkout's configuration names don't run when the connector adds, ends and removes a run's worktree, or discards a spike's", async () => {
+	let { root, state, source } = await scoreCheckout();
+	try {
+		let ran = join(state, "ran");
+		let evil = join(state, "evil");
+		mkdirSync(ran);
+		mkdirSync(evil);
+		for (let name of ["post-checkout", "reference-transaction", "fsmonitor"]) {
+			writeFileSyncNow(join(evil, name), `#!/bin/sh\ntouch '${ran}/${name}'\n`);
+			chmodSync(join(evil, name), 0o755);
+		}
+		git(root, "config", "core.hooksPath", evil);
+		git(root, "config", "core.fsmonitor", join(evil, "fsmonitor"));
+		let prepared = await prepareWorkspace(root, state, { id: "h1", source });
+		git(prepared.path, "checkout", "-b", "chopin/implement-h1");
+		await endWorkspace(root, prepared);
+		let spike = await prepareWorkspace(root, state, { id: "h2", source });
+		git(spike.path, "checkout", "-b", "chopin/spike-h2");
+		await discardWorkspace(root, spike.path, "chopin/spike-h2");
+		await endWorkspace(root, await prepareWorkspace(root, state, { id: "h3", source }));
+		expect(await pruneRuns(state, 1)).toEqual(["h1"]);
+		expect(readdirSync(ran)).toEqual([]);
+		// The fixture is live: git with no say of the connector's runs the hooks.
+		spawnSync("git", ["-C", root, "worktree", "add", "--detach", join(state, "plain")], {
+			encoding: "utf8",
+		});
+		expect(readdirSync(ran)).toEqual(expect.arrayContaining(["fsmonitor", "post-checkout"]));
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import {
 	accessSync,
@@ -17,6 +17,8 @@ import {
 import { arch, homedir, release, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { SandboxReport } from "@chopin/protocol/connector";
+import { moduleDirectories, removePlantedRedirects } from "./git-directories";
+import { gitSync } from "./git-host";
 import { type Host, probeSandbox } from "./sandbox-probe";
 import {
 	agentStateDirectories,
@@ -219,19 +221,6 @@ export function systemHost(env: NodeJS.ProcessEnv = process.env): Host {
 	};
 }
 
-/** The git directory a working tree shares with its checkout, where its commits and refs are written. */
-function gitCommonDirectory(directory: string): string | undefined {
-	let result = spawnSync("git", [
-		"-C",
-		directory,
-		"rev-parse",
-		"--path-format=absolute",
-		"--git-common-dir",
-	], { encoding: "utf8", timeout: 10_000 });
-	let path = result.status === 0 ? result.stdout.trim() : "";
-	return path && existsSync(path) ? path : undefined;
-}
-
 export type SandboxOptions = {
 	/** The connector's state directory. */
 	directory: string;
@@ -240,6 +229,8 @@ export type SandboxOptions = {
 	settings?: SandboxSettings;
 	/** Hears each host the proxy refuses, once. */
 	refused?: (host: string, port: number) => void;
+	/** Hears the `commondir` files an agent planted in a checkout's git directory, which were removed. */
+	planted?: (files: string[]) => void;
 	host?: Host;
 	executor?: string | undefined;
 	/** The person's home directory, whose credentials stay out of sight; this account's by default. */
@@ -366,6 +357,109 @@ const disk: Disk = {
 	resolve: readableAt,
 };
 
+/**
+ * The git directories of the working tree at `directory`: its own, and the one it shares with its
+ * checkout, where its commits and refs are written. They are the same for a checkout itself.
+ */
+function gitDirectories(directory: string): { own: string; common: string } | undefined {
+	let result = gitSync([
+		"-C",
+		directory,
+		"rev-parse",
+		"--path-format=absolute",
+		"--git-dir",
+		"--git-common-dir",
+	], { timeout: 10_000 });
+	let [own, common] = result.status === 0 ? result.stdout.trim().split("\n") : [];
+	return own && common && existsSync(common) ? { own, common } : undefined;
+}
+
+/** Whether a repository reads a `config.worktree` in each of its git directories, as a sparse checkout makes it. */
+function readsWorktreeConfig(common: string) {
+	let result = gitSync([
+		"config",
+		"--file",
+		join(common, "config"),
+		"--type=bool",
+		"--default",
+		"false",
+		"--get",
+		"extensions.worktreeConfig",
+	], { cwd: common, timeout: 10_000 });
+	return result.status === 0 && result.stdout.trim() === "true";
+}
+
+/**
+ * What git reads to decide which programs to run: `config`, which names a hooks directory, an
+ * fsmonitor, filters, an ssh command and credential helpers; `config.worktree`, which does the same
+ * for one working tree where `extensions.worktreeConfig` is on; `hooks`; `info`, where attributes
+ * are kept; `commondir`, which says whose configuration a git directory reads; and the `.git` file
+ * that says where a worktree's git directory is. Git on the host reads them the next time it runs
+ * there, outside the sandbox, so an agent that could write them would be running its own programs
+ * as the person. These are the paths held back inside what the launch may write.
+ *
+ * Where the launch is in a linked worktree, which is where a build, an investigation or a spike
+ * runs, the repository's git directory is not granted whole (see `GIT_SHARED_WRITES`): its
+ * `config`, `hooks`, `info`, submodules and top-level files are read-only without being listed,
+ * and so is any new file there, such as a `commondir`. What is held back is inside `worktrees`,
+ * which it may write: each linked worktree's `commondir` and `config.worktree`.
+ *
+ * Where the launch is in a checkout itself, as a Planner is, git writes the git directory's top
+ * level (its HEAD and index, and the locks beside them), so it is granted whole and the
+ * repository's own `config`, `config.worktree`, `hooks`, `info` and its submodules' are held back
+ * inside it, with each linked worktree's. A sandbox can only hold back a path that exists, so a
+ * `hooks` or `info` directory a checkout lacks is made empty first, and so is a `config.worktree`
+ * where one is read. A `commondir` can't be made, and `removePlantedRedirects` removes one an
+ * agent made.
+ */
+function gitReadonlyPaths(
+	git: { own: string; common: string },
+	worktree: string,
+): string[] {
+	let paths: string[] = [];
+	let hold = (path: string) => {
+		if (exists(path)) paths.push(path);
+	};
+	let { own, common } = git;
+	let checkout = own === common;
+	let perWorktree = readsWorktreeConfig(common);
+	// The git directory of each linked worktree holds its commondir, and its config.worktree.
+	let directories = disk.list(join(common, "worktrees")).map(name =>
+		join(common, "worktrees", name)
+	)
+		.filter(readableDirectory);
+	if (checkout) directories.unshift(common);
+	for (let directory of directories) {
+		if (perWorktree) {
+			try {
+				writeFileSync(join(directory, "config.worktree"), "", { flag: "wx" });
+			} catch { /* There is one, or it can't be made. */ }
+		}
+		hold(join(directory, "config.worktree"));
+		if (directory !== common) hold(join(directory, "commondir"));
+	}
+	if (checkout) {
+		for (let name of ["hooks", "info"]) {
+			try {
+				mkdirSync(join(common, name), { recursive: true });
+			} catch { /* The agent writes there if it is allowed to, and git says so if it isn't. */ }
+		}
+		for (let name of ["config", "hooks", "info"]) hold(join(common, name));
+		for (let module of moduleDirectories(join(common, "modules"))) {
+			for (let name of ["config", "config.worktree", "hooks", "info"]) hold(join(module, name));
+		}
+	}
+	// A linked worktree's `.git` is a file; a checkout's is its git directory, which is written.
+	let link = join(worktree, ".git");
+	try {
+		if (statSync(link).isFile()) paths.push(link);
+	} catch { /* No `.git` here. */ }
+	return [...new Set(paths)];
+}
+
+/** What a launch in a linked worktree may write in the repository's git directory: where commits, refs and worktrees go. */
+const GIT_SHARED_WRITES = ["objects", "refs", "logs", "worktrees", "lfs"];
+
 /** The policy for one launch, from what is on the disk now. */
 export function launchPolicy(
 	engine: SandboxEngine,
@@ -389,10 +483,20 @@ export function launchPolicy(
 		} catch { /* The agent says so if it needs it. */ }
 	}
 	let places = [launch.cwd, ...launch.writable ?? []];
-	let commons = [...new Set(places.flatMap(place => gitCommonDirectory(real(place)) ?? []))];
+	// Only the working directory says which repository this is. A folder the agent made itself, as
+	// a Planner's worktree, names a git directory in a file of its own, and what that file says
+	// is the agent's word.
+	let git = gitDirectories(real(launch.cwd));
+	// A checkout's git directory is written whole, a linked worktree's repository's in the parts
+	// where commits and refs go (see `gitReadonlyPaths`).
+	let gitWritable = !git
+		? []
+		: git.own === git.common
+		? [git.common]
+		: GIT_SHARED_WRITES.map(name => join(git.common, name));
 	let writable = [
 		...places,
-		...commons,
+		...gitWritable,
 		...state,
 		temporary,
 		...options.settings?.writable ?? [],
@@ -416,8 +520,11 @@ export function launchPolicy(
 	let readable = [
 		...readGrantsAround(roots, real(options.directory), disk, platform),
 		...(launch.own ?? []).filter(exists),
+		// A linked worktree's launch writes parts of the repository's git directory and reads the
+		// rest, which on Windows, where only some roots are read, is in no other grant.
+		...git && git.own !== git.common ? [git.common] : [],
 	].filter(path => !written.has(real(path)));
-	let hooks = commons.map(common => join(common, "hooks")).filter(path => exists(path));
+	let readonlyInside = git ? gitReadonlyPaths(git, launch.cwd) : [];
 	let denied = secretPaths(platform, home).filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };
 	let pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";
@@ -432,7 +539,7 @@ export function launchPolicy(
 		env,
 		readable,
 		writable,
-		readonlyInside: hooks,
+		readonlyInside,
 		denied,
 		proxy,
 	};
@@ -450,6 +557,15 @@ function spawnConfined(
 	let temporary = join(folder, "tmp");
 	mkdirSync(temporary, { mode: 0o700 });
 	let file = join(folder, "request.json");
+	// A checkout's own git directory is written whole, so an agent in it can make a `commondir`,
+	// which sends git to configuration it wrote. A person's git, or the connector's, runs there when
+	// the launch starts and when it ends, so what an earlier launch left is removed, and said, at
+	// both. A run in a linked worktree can't write it.
+	let cleared = () => {
+		let removed = removePlantedRedirects(launch.cwd);
+		if (removed.length) options.planted?.(removed);
+	};
+	cleared();
 	let request = mxcRequest(launchPolicy(engine, host, launch, options, proxy.url, temporary));
 	writeFileSync(file, JSON.stringify(request), { mode: 0o600 });
 	let child = spawn(executor, ["--config", file], {
@@ -457,7 +573,10 @@ function spawnConfined(
 		detached: process.platform !== "win32",
 		windowsHide: true,
 	}) as Spawned;
-	child.once("close", () => rmSync(folder, { recursive: true, force: true }));
+	child.once("close", () => {
+		rmSync(folder, { recursive: true, force: true });
+		cleared();
+	});
 	child.once("error", () => rmSync(folder, { recursive: true, force: true }));
 	return child;
 }
