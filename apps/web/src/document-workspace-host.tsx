@@ -9,6 +9,7 @@ import {
 } from "./anchored-child-surface";
 import { readDocumentRecovery, rememberChannel } from "./channel-recovery";
 import { readChildMotionStyle } from "./child-motion-driver";
+import { documentIntent } from "./document-intent";
 import { prepareDocumentLoad } from "./document-loader";
 import { updateDocumentMetadata } from "./document-actions";
 import { documentRouteIdentity } from "./document-route-swap";
@@ -249,7 +250,13 @@ export default function DocumentWorkspaceHost(
 		void prepareDocumentLoad(
 			address,
 			controller.signal,
-			Api,
+			{
+				channel: Api.channel,
+				// What the reader's pointer or focus already asked for, if it did, is not asked for twice.
+				document: (owner, repository, slug, signal) =>
+					documentIntent.take({ owner, repository, slug })
+						?? Api.document(owner, repository, slug, signal),
+			},
 			requestedRoute.page === "child" && !current
 				? parent => {
 					if (!active) return;
