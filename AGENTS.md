@@ -233,30 +233,37 @@ durable.
 - **Agents on a machine run in its process sandbox.** The connector starts the ACP
   agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
   MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
-  worktree or the Planner's checkout, the agent's state, a private temporary directory and what
-  the owner adds. Git on the host runs what a repository's configuration names, and finds that
-  configuration through files (a worktree's `.git`, a `commondir`) that name another directory, and
-  a sandbox can only hold back paths that exist. So the policy is an allow-list: the repository's
+  worktree or the Planner's own worktree, the agent's state, a private temporary directory and what
+  the owner adds. A sandboxed agent never writes the person's own checkout: a Planner runs in it
+  (`CHOPIN_CHECKOUT`, whether a regular checkout, a linked worktree of the person's or a clone
+  Chopin made) and reads it, whole, so its files, its submodules (whose `.git` files the person's
+  `git status` and `git diff` follow), its `.git`, index and `HEAD` are never writable, but where
+  the owner adds a path in it with `--sandbox-write`. The
+  working directory is written only where the connector made it for the launch (`Launch.own`). A
+  Planner's changes reach the person as commits and a pushed branch from its own worktree
+  (`CHOPIN_WORKTREE`), never by in-place edits. Git on the host runs what a repository's configuration names, and finds that
+  configuration through files (a worktree's or a submodule's `.git`, a `commondir`) that name another
+  directory, and a sandbox can only hold back paths that exist. So the policy is an allow-list: the repository's
   git directory is read-only whole, which also stops its entries being renamed or made again, with
-  only `objects`, `refs`, `logs` and `lfs` written in it, and, for a linked worktree the connector
+  only `objects`, `refs`, `logs` and `lfs` written in it (data git reads, not programs or
+  pointers), and only by a launch with a worktree of its own: for a linked worktree the connector
   made for the launch (a run's, or a Planner's own), that worktree's one entry in `worktrees/` with
   `commondir`, `gitdir` and `config.worktree` read-only inside it. Which entry is the launch's own
   is the connector's record of what it made for it (`Launch.own`), never what a folder is called or
-  what is in it, so a Planner's registered checkout, a regular one or a linked worktree of the
-  person's, has its whole git directory read-only: a `rebase-merge` with an `exec` line, a `HEAD` or
-  an `index` can't be written in the person's own entry. Its `config`, `hooks`, `info`, `HEAD`,
-  `index`, `packed-refs`, submodules, `worktrees` and every worktree's entry but the launch's own,
-  the person's included, are read-only, and no file can be added at its top level. Paths are real
+  what is in it. Its `config`, `hooks`, `info`, `HEAD`, `index`, `packed-refs`, submodules' git
+  directories, `worktrees` and every worktree's entry but the launch's own, the person's included,
+  are read-only, and no file can be added at its top level. The guarantee is that nothing a
+  sandboxed agent writes is in a tree the person's own git reads, but `objects`, `refs`, `logs` and
+  `lfs` (an agent can add commits and move branches there); the worktree an agent works in is its
+  own, and git run inside it by a person runs what the agent left. Paths are real
   paths: `repositoryAt` resolves a symbolic `.git` (and a `.git` file that leads through a link)
-  once, and the policy names that directory, never the link; a sandbox can hold back a file or a
-  directory but not a link, so a launch's folder whose `.git` is a link is read, not written (a
-  Planner then works in its own worktree). A Planner's own worktree is made by
+  once, and the policy names that directory, never the link. A Planner's own worktree is made by
   the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
   `git worktree add` would need `worktrees/` written; an unsandboxed backend makes it itself. The
-  limit, said plainly: in the sandbox `git add`, `commit` and `checkout` fail in a Planner's
-  checkout (its index and `HEAD` are at the top level, or in the person's entry) and work in the
-  launch's own worktree; `git worktree
-  add/remove`, `git config` without `-c`, `git remote add`, `branch -D`, `tag -d` and `gc` fail
+  limit, said plainly: in the sandbox anything written in a Planner's checkout, `git add`, `commit`
+  and `checkout` included, fails (it is read-only whole), and works in the launch's own worktree.
+  A Planner backend that edits `CHOPIN_CHECKOUT` in place must edit its worktree instead; nothing
+  in this repository does. `git worktree add/remove`, `git config` without `-c`, `git remote add`, `branch -D`, `tag -d` and `gc` fail
   everywhere; `push -u` can't record an upstream (see [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox)). Every git command the connector runs on the host
   goes through `apps/connector/src/git-host.ts`, which is told where the repository is
   (`GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, recorded by `repositoryAt` the first time the
@@ -266,7 +273,8 @@ durable.
   ssh command, attributes, `ext::` remotes, credential helpers and the local transport (allowed
   only where the person's `origin` was local when first seen). Not guaranteed: what an agent writes
   in its own worktree and its own entry (an unfinished rebase's `exec` lines, a repository it
-  `git init`s) is the agent's, and git run there by a person runs what is there; a repository's
+  `git init`s, a submodule it adds to its own index with a `.git` it wrote, which the connector's
+  git doesn't open) is the agent's, and git run there by a person runs what is there; a repository's
   own configuration is still read by the connector's git (filters, proxies), which the policy keeps
   an agent from writing. `removePlantedRedirects` remains as a cheap detector of a `commondir` an
   earlier release's agent left, and is not the defense. The rest of the disk reads except credentials, and the connector's state
