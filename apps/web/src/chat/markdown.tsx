@@ -1,6 +1,8 @@
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import { useLinkHref } from "@chopin/editor";
 
+import { sameJson } from "../same-json";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -77,20 +79,31 @@ export function InlineMarkdown({ links = true, source }: { links?: boolean; sour
 	);
 }
 
+type MessageMarkdownProps = {
+	className?: string;
+	/** Inline lead drawn before the first paragraph, styled as a mention. */
+	mention?: string;
+	references?: Chat.Reference[];
+	source: string;
+};
+
+/**
+ * Whether a message's Markdown needs drawing again. Parsing it is the cost of a row, and the room
+ * renders the transcript for reasons that have nothing to do with any message, so a message is
+ * drawn again only when what it says changes. A message to the Planner hands over its references
+ * as a new list on every render, so they are compared by what they say.
+ */
+export function sameMessageMarkdown(
+	before: MessageMarkdownProps,
+	after: MessageMarkdownProps,
+): boolean {
+	return before.source === after.source && before.className === after.className
+		&& before.mention === after.mention && sameJson(before.references, after.references);
+}
+
 /** The deliberately small Markdown dialect understood by Chat. */
-export function MessageMarkdown(
-	{
-		className,
-		mention,
-		references,
-		source,
-	}: {
-		className?: string;
-		/** Inline lead drawn before the first paragraph, styled as a mention. */
-		mention?: string;
-		references?: Chat.Reference[];
-		source: string;
-	},
+export const MessageMarkdown = memo(function MessageMarkdown(
+	{ className, mention, references, source }: MessageMarkdownProps,
 ) {
 	let model = referenceRenderModel(source, references);
 	let components: Components = {
@@ -145,4 +158,4 @@ export function MessageMarkdown(
 			</ReactMarkdown>
 		</div>
 	);
-}
+}, sameMessageMarkdown);

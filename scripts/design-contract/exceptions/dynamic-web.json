@@ -83,11 +83,11 @@
 				"dynamic",
 				"class",
 				"className",
-				"class > MessageMarkdown > <div>",
+				"class > MessageMarkdown > MessageMarkdown > <div>",
 				1
 			]
 		],
-		"sourceHash": "4d61ec8c02705e7acb9fb3ac8bfa892df4103e013fa55cf58b1e3d0f27ba56a7"
+		"sourceHash": "05d863e9009fe15704f889af6990fd428e7f28abaac911880fda818934f15501"
 	},
 	{
 		"file": "apps/web/src/project-sidebar.tsx",

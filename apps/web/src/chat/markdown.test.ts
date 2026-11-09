@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RepositoryLinksProvider } from "@chopin/editor";
 
 import { inlineText } from "./inline-text";
-import { InlineMarkdown, MessageMarkdown } from "./markdown";
+import { InlineMarkdown, MessageMarkdown, sameMessageMarkdown } from "./markdown";
 import { referenceRenderModel } from "./references";
 
 import type { Chat } from "@chopin/protocol";
@@ -321,4 +321,32 @@ test("every other link in Chat is as written, with or without a repository", () 
 	expect(inside).not.toContain("github.com");
 	// Without a repository to resolve against, a path stays the path it was.
 	expect(markdown("See [the review](docs/review.md)")).toContain('href="docs/review.md"');
+});
+
+test("a message's Markdown is drawn again only when what it says changes", () => {
+	let reference = {
+		kind: "document" as const,
+		id: "ref-1",
+		start: 4,
+		end: 9,
+		label: "The plan",
+		href: "/documents/octo-org/score/plan",
+		repositoryId: "R_1",
+		observedRevision: 3,
+		channelId: "c1",
+		observedSourceHash: "abc",
+	};
+	let props = { className: "body", mention: "@chopin", references: [reference], source: "See it" };
+	// A message to the Planner hands over its references as a new list on every render.
+	expect(sameMessageMarkdown(props, { ...props, references: [{ ...reference }] })).toBe(true);
+	expect(sameMessageMarkdown({ source: "Same" }, { source: "Same" })).toBe(true);
+
+	expect(sameMessageMarkdown(props, { ...props, source: "See it again" })).toBe(false);
+	expect(sameMessageMarkdown(props, { ...props, mention: undefined })).toBe(false);
+	expect(sameMessageMarkdown(props, { ...props, className: "other" })).toBe(false);
+	expect(sameMessageMarkdown(props, { ...props, references: [{ ...reference, end: 10 }] })).toBe(
+		false,
+	);
+	expect(sameMessageMarkdown(props, { ...props, references: undefined })).toBe(false);
+	expect(sameMessageMarkdown(props, { ...props, references: [] })).toBe(false);
 });
