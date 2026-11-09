@@ -52,9 +52,10 @@ type Ahead = {
 	/** When it was answered, once it has been. */
 	answeredAt?: number;
 	detail: Promise<Api.ChannelDetail>;
-	/** Set when its document changed after an opening was handed it, which then reads for itself. */
-	stale?: true;
 };
+
+/** An opening waiting on a read it was handed; `drop` makes it stop waiting and read for itself. */
+type Waiting = { documentId: string; drop: () => void };
 
 let key = ({ owner, repository, slug }: DocumentAddress) => `${owner}/${repository}/${slug}`;
 
@@ -62,9 +63,9 @@ export function createDocumentIntent(read: Read, now: () => number = () => perfo
 	let reads = new Map<string, Ahead>();
 	// When each document was last opened or had a read fail.
 	let done = new Map<string, number>();
-	// Reads an opening has been handed and is still waiting on, until it has them. They are no longer
-	// in `reads`, so a change to their document would not find them there.
-	let used = new Set<Ahead>();
+	// Openings waiting on a read they were handed, until they have it. Those reads are no longer in
+	// `reads`, so a change to their document would not find them there.
+	let used = new Set<Waiting>();
 	let usable = (ahead: Ahead) => now() - (ahead.answeredAt ?? ahead.at) < FRESH_MS;
 	return {
 		/**
@@ -96,19 +97,19 @@ export function createDocumentIntent(read: Read, now: () => number = () => perfo
 		 * restored or deleted and the record that was read may be from before. An old
 		 * address still opens a renamed document, so a click on its row would otherwise be given the
 		 * record it had before. The opening reads for itself instead. A read of any other document is
-		 * as good as it was. An opening already waiting on one, because the click came first, is given
-		 * its own read instead of the record when it arrives.
+		 * as good as it was. An opening already waiting on one, because the click came first, stops
+		 * waiting and makes its own read at once, whether or not the read it waited on ever answers.
 		 */
 		forget(documentId: string): void {
 			for (let [id, ahead] of reads) if (ahead.documentId === documentId) reads.delete(id);
-			for (let ahead of used) if (ahead.documentId === documentId) ahead.stale = true;
+			for (let waiting of used) if (waiting.documentId === documentId) waiting.drop();
 		},
 		/**
 		 * What an opening reads: the read that was started on intent, if one is under way or was
 		 * answered a moment ago (each is handed out once), or its own read. If the one it waited on
-		 * fails, or its document changed while it waited, the opening's own is made then.
+		 * fails, or its document changes while it waits, the opening's own is made then, once.
 		 */
-		read(
+		async read(
 			address: DocumentAddress,
 			own: () => Promise<Api.ChannelDetail>,
 		): Promise<Api.ChannelDetail> {
@@ -117,14 +118,26 @@ export function createDocumentIntent(read: Read, now: () => number = () => perfo
 			reads.delete(id);
 			done.set(id, now());
 			if (!ahead || !usable(ahead)) return own();
-			let handed = ahead;
-			used.add(handed);
-			return handed.detail
-				.then(
-					record => (handed.stale ? own() : record),
-					() => own(),
-				)
-				.finally(() => void used.delete(handed));
+			let dropped = Promise.withResolvers<void>();
+			let changed = false;
+			let waiting: Waiting = {
+				documentId: ahead.documentId,
+				drop: () => {
+					changed = true;
+					dropped.resolve();
+				},
+			};
+			used.add(waiting);
+			let record: Api.ChannelDetail | undefined;
+			try {
+				record = await Promise.race([
+					ahead.detail.catch(() => undefined),
+					dropped.promise.then(() => undefined),
+				]);
+			} finally {
+				used.delete(waiting);
+			}
+			return changed ? own() : record ?? own();
 		},
 	};
 }
