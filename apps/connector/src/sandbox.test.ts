@@ -181,13 +181,13 @@ function repository(name: string) {
 			gitCommand("-C", checkout, "worktree", "add", "--detach", path);
 			return path;
 		},
-		policy(cwd: string, writable: string[] = [], own: string[] = []) {
+		policy(cwd: string, writable: string[] = [], own: string[] = [], added: string[] = []) {
 			mkdirSync(join(root, "tmp"), { recursive: true });
 			return launchPolicy(
 				"bubblewrap",
 				{ ...systemHost(), platform: "linux" },
 				{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore", writable, own },
-				{ directory: base, home: join(root, "home") },
+				{ directory: base, home: join(root, "home"), settings: { writable: added } },
 				"http://127.0.0.1:4000",
 				join(root, "tmp"),
 			);
@@ -653,11 +653,13 @@ test("a launch whose working directory holds the connector's state directory, as
 		expect(policy.writable.some(path => path === home || path.startsWith(`${base}`))).toBe(false);
 	}
 	// A directory the owner adds with --sandbox-write that holds the state directory, `~` itself,
-	// is written around it and never in it.
+	// is written around it and never in it (a launch that works elsewhere than in `~`, which would
+	// be its checkout and never written).
+	mkdirSync(join(root, "work"));
 	let owner = launchPolicy(
 		"bubblewrap",
 		{ ...systemHost(), platform: "linux" },
-		{ command: ["pdd-kit", "planner"], cwd: home, env: {}, stdin: "ignore" },
+		{ command: ["pdd-kit", "planner"], cwd: join(root, "work"), env: {}, stdin: "ignore" },
 		{ directory: base, home, settings: { writable: [home] } },
 		"http://127.0.0.1:4000",
 		join(root, "tmp"),
@@ -692,6 +694,66 @@ test("a working directory inside the state directory is read by name only where 
 		expect(granted.filter(path => path === base || path.startsWith(`${base}/`)), cwd).toEqual([]);
 		expect(granted.filter(path => base.startsWith(`${path}/`)), cwd).toEqual([]);
 	}
+});
+
+test("a path the owner adds with --sandbox-write never makes the person's checkout writable: one that is it or inside it, or inside its git directory, is not granted, and one that holds it is granted with the checkout held read-only", () => {
+	let repo = repository("git-added");
+	mkdirSync(join(repo.checkout, "vendor"));
+	let granted = join(repo.root, "granted");
+	mkdirSync(granted);
+	let mine = repo.worktree("mine");
+	let under = (policy: ReturnType<typeof launchPolicy>) =>
+		policy.writable.filter(path => path === repo.checkout || path.startsWith(`${repo.checkout}/`));
+	// A Planner in the checkout and a run in a worktree of it: the checkout is the person's in both.
+	for (
+		let launch of [
+			(added: string[]) => repo.policy(repo.checkout, [], [], added),
+			(added: string[]) => repo.policy(mine, [], [mine], added),
+		]
+	) {
+		let alone = under(launch([]));
+		for (
+			let added of [
+				[join(repo.checkout, "vendor")],
+				[repo.checkout],
+				[repo.git],
+				[join(repo.git, "hooks")],
+				[join(repo.git, "modules", "lib")],
+			]
+		) {
+			let policy = launch([...added, granted]);
+			// Nothing of the checkout is written that was not before, and the rest is given.
+			expect(under(policy), added.join()).toEqual(alone);
+			expect(policy.writable, added.join()).toContain(granted);
+		}
+		// A folder that holds the checkout is written, around the state directory, and the checkout
+		// and its git directory are held read-only inside it.
+		let holder = launch([repo.root]);
+		expect(holder.writable).toContain(granted);
+		expect(under(holder)).toEqual(alone);
+		expect(holder.writable).not.toContain(repo.root);
+	}
+	let nested = repository("git-added-nested");
+	let outer = join(nested.root, "src");
+	mkdirSync(outer);
+	renameSync(nested.checkout, join(outer, "proj"));
+	let moved = launchPolicy(
+		"bubblewrap",
+		{ ...systemHost(), platform: "linux" },
+		{
+			command: ["pdd-kit", "planner"],
+			cwd: join(outer, "proj"),
+			env: {},
+			stdin: "ignore",
+			own: [],
+		},
+		{ directory: nested.base, home: join(nested.root, "home"), settings: { writable: [outer] } },
+		"http://127.0.0.1:4000",
+		join(nested.root, "tmp"),
+	);
+	expect(moved.writable).toContain(outer);
+	expect(held(moved)).toContain(join(outer, "proj"));
+	expect(held(moved)).toContain(join(outer, "proj", ".git"));
 });
 
 test("a worktree beside the state directory is written and not also granted to read, which MXC would take as read-only", () => {

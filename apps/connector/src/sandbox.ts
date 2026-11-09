@@ -16,7 +16,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { arch, homedir, release, tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import type { SandboxReport } from "@chopin/protocol/connector";
 import { removePlantedRedirects, worktreeEntry } from "./git-directories";
 import { type Repository, repositoryAt } from "./git-host";
@@ -474,13 +474,31 @@ export function launchPolicy(
 	let repository = repositoryAt(real(launch.cwd));
 	let git = repository ? gitAccess(repository, launch) : undefined;
 	let hidden = real(options.directory);
+	// The person's checkout and its git directory, which nothing the owner adds may open: a path
+	// they add that is one of them, or inside one (a submodule's folder, `.git/hooks`), is not
+	// granted, and one that holds one is granted with it held read-only. The person's own git reads
+	// and runs what is in them.
+	let checkout = repository && basename(repository.commonDir) === ".git"
+		? dirname(repository.commonDir)
+		: undefined;
+	let theirs = [
+		...person ? [person] : [],
+		...repository ? [repository.commonDir] : [],
+		...checkout ? [checkout] : [],
+	];
+	// What the owner adds is written around the state directory as well, never in it.
+	let added = readGrantsAround(options.settings?.writable ?? [], hidden, disk, platform).filter(
+		path => !theirs.some(kept => inside(real(path), kept, platform)),
+	);
+	let reopened = theirs.filter(kept =>
+		added.some(path => real(path) !== kept && inside(kept, real(path), platform))
+	);
 	let writable = [
 		...places,
 		...git?.writable ?? [],
 		...state,
 		temporary,
-		// What the owner adds is written around the state directory as well, never in it.
-		...readGrantsAround(options.settings?.writable ?? [], hidden, disk, platform),
+		...added,
 	].filter(path => exists(path));
 	let roots: string[];
 	if (platform === "win32") {
@@ -514,7 +532,7 @@ export function launchPolicy(
 		// The repository's git directory is read, whole, where only some roots are read (Windows).
 		...repository ? named(repository.commonDir) : [],
 	].filter(path => !written.has(real(path)));
-	let readonlyInside = git?.readonlyInside ?? [];
+	let readonlyInside = [...git?.readonlyInside ?? [], ...reopened];
 	let denied = secretPaths(platform, home).filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };
 	let pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";

@@ -1143,6 +1143,117 @@ sandboxTest(
 	120_000,
 );
 
+/** What a Planner tries in the person's checkout, which the owner has granted a path of or around. */
+const EXTRA_ATTEMPTS = String.raw`
+try() { name=$1; shift; if "$@" > /dev/null 2>&1; then echo "$name=done"; else echo "$name=refused"; fi; }
+try submoduleGit sh -c 'printf "redirected\n" > "$1/vendor/.git"' sh "$MAIN"
+try nestedGit sh -c 'printf "redirected\n" > "$1/vendor/deps/inner/.git"' sh "$MAIN"
+try submoduleFile sh -c 'echo x >> "$1/vendor/lib.txt"' sh "$MAIN"
+try checkoutFile sh -c 'echo x > "$1/agent-wrote.txt"' sh "$MAIN"
+try checkoutHook sh -c 'echo x > "$1/.git/hooks/post-checkout"' sh "$MAIN"
+try checkoutConfig sh -c 'echo x >> "$1/.git/config"' sh "$MAIN"
+try granted sh -c 'echo ok > "$1/ok.txt"' sh "$GRANTED"
+echo finished=done
+`;
+
+/**
+ * An owner's `--sandbox-write` path is the one grant the policy takes as given, so it must never
+ * reopen the person's checkout: a path that is the checkout, or inside it (a submodule's folder,
+ * the git directory), is not granted, and one that holds it is granted with the checkout still
+ * read-only.
+ */
+async function extraWrite(
+	name: string,
+	extra: (made: ReturnType<typeof world>) => string[],
+	launch: "planner" | "run" = "planner",
+) {
+	let made = submoduleWorld(name);
+	let granted = join(made.root, "granted");
+	mkdirSync(granted);
+	let sandbox = await createSandbox({
+		directory: made.state,
+		home,
+		server: "http://127.0.0.1:9",
+		settings: { writable: extra(made).concat(granted) },
+	});
+	try {
+		expect(sandbox.report).toEqual({ engine: "bubblewrap" });
+		let main = existsSync(join(made.root, "src", "proj"))
+			? join(made.root, "src", "proj")
+			: made.checkout;
+		// A run works in a worktree the connector made, and the person's checkout is where it came from.
+		let worktree = join(made.state, "runs", "mine");
+		if (launch === "run") {
+			git(main, "worktree", "add", "--detach", worktree);
+			repositoryAt(worktree);
+		}
+		let script = join(made.root, "extra.sh");
+		writeFileSync(script, EXTRA_ATTEMPTS);
+		let child = sandbox.spawn({
+			command: ["sh", script],
+			cwd: launch === "run" ? worktree : main,
+			env: { ...process.env, MAIN: main, GRANTED: granted },
+			stdin: "ignore",
+			...launch === "run" ? { own: [worktree] } : {},
+		});
+		let said = "";
+		let output = "";
+		child.stdout.on("data", chunk => output += chunk);
+		child.stderr.on("data", chunk => said += chunk);
+		await new Promise(done => child.once("close", done));
+		let attempts = Object.fromEntries(
+			output.trim().split("\n").filter(line => /^\w+=/.test(line)).map(line => line.split("=")),
+		);
+		if (attempts.finished !== "done") {
+			throw new Error(`The script in the sandbox didn't finish: ${output} ${said.slice(0, 2000)}`);
+		}
+		expect(attempts).toEqual({
+			submoduleGit: "refused",
+			nestedGit: "refused",
+			submoduleFile: "refused",
+			checkoutFile: "refused",
+			checkoutHook: "refused",
+			checkoutConfig: "refused",
+			// What the owner meant to give is given.
+			granted: "done",
+			finished: "done",
+		});
+		expect(readFileSync(join(granted, "ok.txt"), "utf8")).toBe("ok\n");
+		expect(readFileSync(join(main, "vendor", ".git"), "utf8")).toContain("modules/vendor");
+		expect(existsSync(join(main, "agent-wrote.txt"))).toBe(false);
+	} finally {
+		await sandbox.close();
+	}
+}
+
+sandboxTest(
+	"a path the owner grants inside the person's checkout, a submodule's folder or its git directory, is not granted, so a Planner can't rewrite a submodule's .git there",
+	async () => {
+		await extraWrite("extra-inside", made => [join(made.checkout, "vendor")]);
+		await extraWrite("extra-git", made => [join(made.checkout, ".git", "hooks")]);
+	},
+	120_000,
+);
+
+sandboxTest(
+	"the person's checkout given as a path to write is not granted, and a folder that holds it is granted with the checkout still read-only",
+	async () => {
+		await extraWrite("extra-is", made => [made.checkout]);
+		let under = (made: ReturnType<typeof world>) => {
+			// The checkout moves under a folder the owner grants, which holds no state directory.
+			let src = join(made.root, "src");
+			mkdirSync(src);
+			renameSync(made.checkout, join(src, "proj"));
+			return [src];
+		};
+		await extraWrite("extra-holds", under);
+		// A run's worktree is the agent's, and the checkout it came from is still the person's.
+		await extraWrite("extra-holds-run", under, "run");
+		await extraWrite("extra-is-run", made => [made.checkout], "run");
+	},
+	120_000,
+);
+
 /**
  * What an agent does in the worktree the connector made for its run, which is its own and which it
  * writes whole, the index included: it makes a `.git` in each submodule's folder, which git leaves

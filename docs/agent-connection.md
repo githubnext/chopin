@@ -1208,8 +1208,8 @@ connector makes it depends on the [sandbox](chopin-cli.md#sandbox):
   worktrees in the checkout's. **`CHOPIN_CHECKOUT` is read-only**: it is the
   person's own checkout, and the sandbox never lets an agent write its files, its
   submodules, its `.git`, its index or `HEAD`, whether it is a regular checkout or a
-  linked worktree of theirs, unless its owner adds a path in it with
-  `--sandbox-write`. A backend reads it, and does its work and its edits in
+  linked worktree of theirs, and no path its owner adds with `--sandbox-write` changes
+  that. A backend reads it, and does its work and its edits in
   `CHOPIN_WORKTREE`, from where its changes reach the person as commits and a
   pushed branch. See [Git in the sandbox](chopin-cli.md#git-in-the-sandbox). A
   folder at `CHOPIN_WORKTREE` that holds something and is no worktree is left as it is.
