@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	existsSync,
 	lstatSync,
@@ -482,6 +483,8 @@ try() { name=$1; shift; if "$@" > /dev/null 2>&1; then echo "$name=done"; else e
 
 # What git is for: committing, branching, fetching, checking out and pushing.
 try commit sh -c 'echo changed > changed.txt && git add changed.txt && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in the sandbox"'
+# Git LFS stores an object in the repository's lfs directory, by its hash, through a temporary file.
+try lfsObject sh -c 'mkdir -p "$1/lfs/objects/ab/cd" "$1/lfs/tmp" && echo object > "$1/lfs/tmp/part" && mv "$1/lfs/tmp/part" "$1/lfs/objects/ab/cd/abcd"' sh "$common"
 try branch git branch from-sandbox
 try switch sh -c 'git checkout -q from-sandbox && git checkout -q -b topic'
 # Starting a branch from a remote one and pushing with -u both ask git to record an upstream in
@@ -526,6 +529,9 @@ try submoduleHook cp "$evil/post-checkout" "$common/modules/vendor/hooks/post-ch
 # Sending git somewhere else.
 try commonCommondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$common" "$fake"
 try commonNewFile sh -c 'echo x > "$1/new-file"' sh "$common"
+# Names beside the one place LFS may write are not that place.
+try lfsSibling sh -c 'mkdir "$1/lfs-x" && echo x > "$1/lfs-x/object"' sh "$common"
+try lfsLock sh -c 'echo x > "$1/lfs.lock"' sh "$common"
 try commonHead sh -c 'echo "ref: refs/heads/evil" > "$1/HEAD"' sh "$common"
 try commonPackedRefs sh -c 'echo > "$1/packed-refs"' sh "$common"
 try entryCommondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$mine" "$fake"
@@ -591,6 +597,8 @@ function gitWorld(name: string) {
 	git(made.checkout, "push", "-q", "origin", "main");
 	// A branch only the remote has, for the agent to fetch.
 	git(made.remote, "branch", "fresh", "main");
+	// Where Git LFS keeps its objects, which a checkout has once LFS has been used in it.
+	mkdirSync(join(made.checkout, ".git", "lfs"));
 	// As a sparse checkout leaves a repository: per-worktree configuration is read, and there is
 	// no such file yet.
 	git(made.checkout, "config", "extensions.worktreeConfig", "true");
@@ -748,6 +756,7 @@ async function gitAttempts(layout: Layout) {
 }
 
 const PERMITTED = [
+	"lfsObject",
 	"commit",
 	"branch",
 	"switch",
@@ -775,6 +784,8 @@ const REFUSED = [
 	"submoduleHook",
 	"commonCommondir",
 	"commonNewFile",
+	"lfsSibling",
+	"lfsLock",
 	"commonHead",
 	"commonPackedRefs",
 	"entryCommondir",
@@ -879,6 +890,63 @@ sandboxTest(
 	"a Planner starts when its checkout's .git is a symbolic link to a git directory kept elsewhere, reads and commits in its own worktree, and can't write that checkout, replace the link or write the git directory",
 	() => expectGitUntouched("symlinked"),
 	120_000,
+);
+
+/**
+ * What Git LFS does when it stores an object: its clean filter, run by `git add`, writes the
+ * object under the repository's `lfs` directory, which is the one name in the git directory beside
+ * `objects`, `refs` and `logs` that a launch may write.
+ */
+const LFS = String.raw`
+cd "$WORK"
+printf '*.bin filter=lfs diff=lfs merge=lfs -text
+' > .gitattributes
+head -c 4096 /dev/zero | tr '\0' x > big.bin
+git -c user.name=a -c user.email=a@a -c commit.gpgsign=false 	-c 'filter.lfs.clean=git-lfs clean -- %f' -c filter.lfs.required=true 	add .gitattributes big.bin && echo added=done
+git -c user.name=a -c user.email=a@a -c commit.gpgsign=false commit -qm "a pointer" && echo committed=done
+`;
+
+test.skipIf(!usable || !Bun.which("git-lfs"))(
+	"Git LFS in a run's worktree stores its object in the repository's lfs directory, and the commit holds the pointer",
+	async () => {
+		let made = world("lfs");
+		let worktree = join(made.state, "runs", "mine");
+		git(made.checkout, "worktree", "add", "--detach", worktree);
+		// LFS has been used in this checkout, so its storage is there, as the policy requires.
+		mkdirSync(join(made.checkout, ".git", "lfs"));
+		let script = join(made.root, "lfs.sh");
+		writeFileSync(script, LFS);
+		let sandbox = await createSandbox({
+			directory: made.state,
+			home,
+			server: "http://127.0.0.1:9",
+		});
+		try {
+			let child = sandbox.spawn({
+				command: ["sh", script],
+				cwd: worktree,
+				env: { ...process.env, WORK: worktree },
+				stdin: "ignore",
+				own: [worktree],
+			});
+			let output = "";
+			child.stdout.on("data", chunk => output += chunk);
+			child.stderr.on("data", chunk => output += chunk);
+			await new Promise(done => child.once("close", done));
+			expect(output).toContain("added=done");
+			expect(output).toContain("committed=done");
+			let oid = createHash("sha256").update("x".repeat(4096)).digest("hex");
+			expect(
+				existsSync(
+					join(made.checkout, ".git", "lfs", "objects", oid.slice(0, 2), oid.slice(2, 4), oid),
+				),
+			).toBe(true);
+			expect(git(worktree, "show", "HEAD:big.bin")).toContain(`oid sha256:${oid}`);
+		} finally {
+			await sandbox.close();
+		}
+	},
+	60_000,
 );
 
 /**
