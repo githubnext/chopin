@@ -331,6 +331,33 @@ test("in a checkout's own git directory everything is read-only but where commit
 	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
 });
 
+test("the repository's lfs directory, where Git LFS keeps its objects, is written where it exists, and no name beside it, no new file at the top level and no lfs directory that isn't there is", () => {
+	let repo = repository("git-lfs");
+	mkdirSync(join(repo.git, "lfs", "objects"), { recursive: true });
+	// Names that only resemble it, and a file git or an agent might add at the top level.
+	mkdirSync(join(repo.git, "lfs-x"));
+	writeFileSync(join(repo.git, "lfs.lock"), "");
+	writeFileSync(join(repo.git, "new-file"), "");
+	let beside = (policy: ReturnType<typeof launchPolicy>) =>
+		policy.writable.filter(path => path.startsWith(`${repo.git}/`)).map(path =>
+			path.slice(repo.git.length + 1)
+		).sort();
+	for (let cwd of [repo.checkout, repo.worktree("mine")]) {
+		let policy = repo.policy(cwd, [], cwd === repo.checkout ? [] : [cwd]);
+		// Only these four, and a worktree's own entry: `lfs-x`, `lfs.lock` and `new-file` are not.
+		expect(beside(policy).filter(name => !name.startsWith("worktrees/"))).toEqual([
+			"lfs",
+			"logs",
+			"objects",
+			"refs",
+		]);
+	}
+	// Where there is none, none is granted and none is made for the sandbox's sake.
+	rmSync(join(repo.git, "lfs"), { recursive: true });
+	expect(beside(repo.policy(repo.checkout))).toEqual(["logs", "objects", "refs"]);
+	expect(existsSync(join(repo.git, "lfs"))).toBe(false);
+});
+
 test("a launch in a linked worktree writes its own entry in the repository's git directory and no other: that is held, with the files in it that say where its configuration is, whatever the repository reads", () => {
 	let repo = repository("git-worktree-config");
 	let mine = repo.worktree("mine");
