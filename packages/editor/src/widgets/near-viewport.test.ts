@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { NEAR_MARGIN, watchNear } from "./near-viewport";
+import { NEAR_MARGIN, watchNear, watchPlaced } from "./near-viewport";
 
 /** A browser's observer, told by the test what is in view. */
 function fakeObserver() {
@@ -77,4 +77,38 @@ test("where the browser cannot say what is in view, every block counts as near",
 	let stop = watchNear(target, scroller, () => near++, undefined);
 	expect(near).toBe(1);
 	stop();
+});
+
+test("a block's place is told once, whichever side of the margin it is on, and then no longer watched", () => {
+	let { made, Fake } = fakeObserver();
+	let told: boolean[] = [];
+	watchPlaced(target, scroller, near => told.push(near), Fake);
+	expect(made[0]!.observed).toEqual([target]);
+	expect(made[0]!.options).toEqual({ root: scroller, rootMargin: NEAR_MARGIN });
+	// The browser's first report is the block's place at mount: here, a long way out.
+	made[0]!.callback([{ isIntersecting: false }]);
+	made[0]!.callback([{ isIntersecting: true }]);
+	expect(told).toEqual([false]);
+	expect(made[0]!.disconnected).toBeGreaterThanOrEqual(1);
+	// The same for a block that is near.
+	let near = fakeObserver();
+	let nearTold: boolean[] = [];
+	watchPlaced(target, scroller, value => nearTold.push(value), near.Fake);
+	near.made[0]!.callback([{ isIntersecting: false }, { isIntersecting: true }]);
+	expect(nearTold).toEqual([true]);
+});
+
+test("the caller ends a watch of a block's place by leaving, and nothing is told after", () => {
+	let { made, Fake } = fakeObserver();
+	let told: boolean[] = [];
+	let stop = watchPlaced(target, scroller, near => told.push(near), Fake);
+	stop();
+	expect(made[0]!.disconnected).toBe(1);
+	expect(told).toEqual([]);
+});
+
+test("where the browser cannot say what is in view, a block's place is near", () => {
+	let told: boolean[] = [];
+	watchPlaced(target, scroller, near => told.push(near), undefined);
+	expect(told).toEqual([true]);
 });

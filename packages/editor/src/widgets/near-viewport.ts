@@ -11,7 +11,7 @@
  * every block counts as near: drawing too much beats a diagram that never arrives.
  */
 
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 
 type Intersection = { isIntersecting: boolean };
 
@@ -52,6 +52,48 @@ export function watchNear(
 	}, { root, rootMargin: NEAR_MARGIN });
 	observer.observe(target);
 	return () => observer.disconnect();
+}
+
+/**
+ * Tells `onPlaced` once whether `target` is within a screen of `root`'s view, the first time the
+ * browser says, whichever it is, then stops watching. Returns what ends the watch early.
+ */
+export function watchPlaced(
+	target: Element,
+	root: Element | null,
+	onPlaced: (near: boolean) => void,
+	Watcher: ObserverConstructor | undefined =
+		(globalThis as { IntersectionObserver?: ObserverConstructor }).IntersectionObserver,
+): () => void {
+	if (!Watcher) {
+		onPlaced(true);
+		return () => {};
+	}
+	let done = false;
+	let observer: Observer = new Watcher(entries => {
+		let latest = entries.at(-1);
+		if (done || !latest) return;
+		done = true;
+		observer.disconnect();
+		onPlaced(latest.isIntersecting);
+	}, { root, rootMargin: NEAR_MARGIN });
+	observer.observe(target);
+	return () => observer.disconnect();
+}
+
+/**
+ * Whether the element was within a screen of the reader when it mounted: undefined until the
+ * browser first says, a frame later, then fixed for as long as it stays mounted. A block that
+ * mounts again is placed again.
+ */
+export function useNearAtMount(ref: RefObject<HTMLElement | null>): boolean | undefined {
+	let [near, setNear] = useState<boolean>();
+	useEffect(() => {
+		let element = ref.current;
+		if (!element) return;
+		return watchPlaced(element, element.closest("[data-plan-scroll]"), setNear);
+	}, [ref]);
+	return near;
 }
 
 /** True from the first time the block is near, for as long as the caller keeps asking. */

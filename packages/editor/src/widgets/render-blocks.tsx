@@ -60,7 +60,7 @@ import { fitsLegibly } from "./diagram-fit";
 import { DiagramSheet, ExpandDiagram, FitDiagram } from "./diagram-sheet";
 import { usePhone } from "../pointer";
 import { LanguageMenu } from "./language-menu";
-import { useNearViewport } from "./near-viewport";
+import { useNearAtMount, useNearViewport } from "./near-viewport";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { hiddenSides, scrollEdges } from "./tab-edges";
@@ -90,7 +90,9 @@ type Block = {
  */
 const SeeCodeDiagram = lazy(() =>
 	import("@chopin/diagrams/react").then(({ Diagram, DiagramDrawing }) => ({
-		default: function SeeCodeDiagram({ spec, idPrefix }: { spec: unknown; idPrefix: string }) {
+		default: function SeeCodeDiagram(
+			{ spec, idPrefix, near }: { spec: unknown; idPrefix: string; near?: boolean },
+		) {
 			let phone = usePhone();
 			let [expanded, setExpanded] = useState<number>();
 			let opener = useRef<HTMLButtonElement | null>(null);
@@ -99,6 +101,7 @@ const SeeCodeDiagram = lazy(() =>
 					<Diagram
 						spec={spec}
 						idPrefix={idPrefix}
+						near={near}
 						onExpand={phone
 							? (button, width) => {
 								opener.current = button;
@@ -128,6 +131,30 @@ const SeeCodeDiagram = lazy(() =>
 		},
 	}))
 );
+
+/**
+ * A SeeCode diagram's preview. A diagram that mounts a long way from the reader opens on its whole
+ * drawing instead of playing its entrance where nobody is looking, which would rewrite its step
+ * counter and controls inside the editor for each step; one in view plays as it always has.
+ */
+function SeeCodePreview({ spec, idPrefix }: { spec: unknown; idPrefix: string }) {
+	let preview = useRef<HTMLDivElement>(null);
+	let near = useNearAtMount(preview);
+	return (
+		<div
+			ref={preview}
+			className="plan-seecode"
+			contentEditable={false}
+			role="region"
+			aria-label="Diagram preview"
+			tabIndex={0}
+		>
+			<Suspense fallback={null}>
+				<SeeCodeDiagram spec={spec} idPrefix={idPrefix} near={near} />
+			</Suspense>
+		</div>
+	);
+}
 
 const WireframeView = lazy(() =>
 	import("@chopin/diagrams/wireframe/view").then(({ Wireframe }) => ({ default: Wireframe }))
@@ -731,19 +758,7 @@ function Rendered(
 	}
 	if (block.kind === "seecode") {
 		if (spec === undefined) return null;
-		return (
-			<div
-				className="plan-seecode"
-				contentEditable={false}
-				role="region"
-				aria-label="Diagram preview"
-				tabIndex={0}
-			>
-				<Suspense fallback={null}>
-					<SeeCodeDiagram spec={spec} idPrefix={block.key} />
-				</Suspense>
-			</div>
-		);
+		return <SeeCodePreview spec={spec} idPrefix={block.key} />;
 	}
 
 	if (!html) return null;
