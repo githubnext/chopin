@@ -730,8 +730,11 @@ chopin connect --agent atomic \
 
 A host is `host`, `*.host` (subdomains, not the bare domain) or `host:port`;
 without a port an entry allows 80 and 443. The proxy sees names and ports, never
-what a tunnel carries, and refuses a listed name that resolves to your own
-machine or its networks.
+what a tunnel carries. It refuses a built-in name (GitHub, a model provider, a
+registry) that resolves to your own machine or its networks, because a public
+service has no business there. Your Chopin server's origin and the hosts you add
+are your choice, and may be on a private network, as a self-hosted server or a
+corporate registry is.
 
 | Option                  | What it does                                                                                       |
 | ----------------------- | -------------------------------------------------------------------------------------------------- |

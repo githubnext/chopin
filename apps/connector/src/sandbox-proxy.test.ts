@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { connect, createServer } from "node:net";
+import { allowedHosts } from "./sandbox-policy";
 import { privateAddress, type Proxy, startProxy } from "./sandbox-proxy";
 
 let servers: Array<{ close(): unknown }> = [];
@@ -178,19 +179,18 @@ test("a WebSocket upgrade sent as a plain request, without CONNECT, reaches a li
 	}
 });
 
-test("a listed name that leads to a private address is refused, unless the entry is a local one", async () => {
+test("a built-in name that leads to a private address is refused, unless the entry is a local one", async () => {
 	let port = listener("inside");
 	let proxy = await startProxy({
-		hosts: ["listed.example.com:" + port, "localhost:" + port],
+		hosts: [...allowedHosts("https://chopin.example.com"), "localhost:" + port],
 		resolve: async () => ["127.0.0.1"],
 	});
 	proxies.push(proxy);
-	let rebound = await ask(
-		proxy,
-		`CONNECT listed.example.com:${port} HTTP/1.1\r\nhost: listed.example.com:${port}\r\n\r\n`,
-	);
-	expect(rebound).toContain("403 Forbidden");
-	expect(rebound).toContain("resolves to a private address");
+	for (let host of ["api.github.com", "registry.npmjs.org", "api.openai.com"]) {
+		let rebound = await ask(proxy, `CONNECT ${host}:443 HTTP/1.1\r\nhost: ${host}:443\r\n\r\n`);
+		expect(rebound, host).toContain("403 Forbidden");
+		expect(rebound, host).toContain("resolves to a private address");
+	}
 	let local = await ask(
 		proxy,
 		`CONNECT localhost:${port} HTTP/1.1\r\nhost: localhost:${port}\r\n\r\n`,
@@ -198,6 +198,39 @@ test("a listed name that leads to a private address is refused, unless the entry
 	);
 	expect(local).toContain("200 Connection Established");
 	expect(local).toContain("inside:hi");
+});
+
+test("Chopin's own origin and the hosts the owner added are reached on a private network, and no other name that leads there is", async () => {
+	let port = listener("private");
+	let origin = `http://chopin.private.example:${port}`;
+	let proxy = await startProxy({
+		hosts: allowedHosts(origin, [`registry.corp.example:${port}`]),
+		resolve: async () => ["127.0.0.1"],
+	});
+	proxies.push(proxy);
+	for (let host of ["chopin.private.example", "registry.corp.example"]) {
+		let tunnelled = await ask(
+			proxy,
+			`CONNECT ${host}:${port} HTTP/1.1\r\nhost: ${host}:${port}\r\n\r\n`,
+			"hi",
+		);
+		expect(tunnelled, host).toContain("200 Connection Established");
+		expect(tunnelled, host).toContain("private:hi");
+	}
+	// A plain request to the origin is forwarded as well.
+	let page = await ask(
+		proxy,
+		`GET http://chopin.private.example:${port}/ HTTP/1.1\r\nhost: chopin.private.example:${port}\r\n\r\n`,
+	);
+	expect(page).toContain("200 OK");
+	// What the owner did not add is still refused, listed by the built-in lists or not.
+	let github = await ask(proxy, "CONNECT api.github.com:443 HTTP/1.1\r\n\r\n");
+	expect(github).toContain("resolves to a private address");
+	let unlisted = await ask(
+		proxy,
+		`CONNECT other.private.example:${port} HTTP/1.1\r\nhost: other.private.example:${port}\r\n\r\n`,
+	);
+	expect(unlisted).toContain("is not on the allow list");
 });
 
 test("an address of this machine or its networks is private; a public one is not", () => {

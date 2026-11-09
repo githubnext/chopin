@@ -72,22 +72,26 @@ function parseEntry(entry: string) {
 	return { host, port: match[2] === undefined ? undefined : Number(match[2]) };
 }
 
-/** Whether `host` is a name that always means this machine, or an IP address. */
-export function isLocalEntry(entry: string) {
-	let host = parseEntry(entry)?.host;
-	if (!host) return false;
-	return host === "localhost" || host.endsWith(".localhost") || /^[0-9.]+$/.test(host)
-		|| host.includes(":");
+const BUILT_IN_HOSTS = new Set([...GITHUB_HOSTS, ...MODEL_HOSTS, ...REGISTRY_HOSTS]);
+
+/**
+ * Whether an entry is one the owner chose: Chopin's own origin or a host added with
+ * `--sandbox-host`, which may be on a private network, as a self-hosted server or a corporate
+ * registry is. The built-in names are public services, so a name of theirs that leads to a
+ * private address has been pointed there.
+ */
+export function ownerEntry(entry: string) {
+	return !BUILT_IN_HOSTS.has(entry.trim().toLowerCase());
 }
 
-/** The entry of `hosts` that allows a connection to `host` on `port`, if one does. */
-export function matchingEntry(
+/** The entries of `hosts` that allow a connection to `host` on `port`. */
+export function matchingEntries(
 	hosts: readonly string[],
 	host: string,
 	port: number,
-): string | undefined {
+): string[] {
 	let name = host.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
-	return hosts.find(entry => {
+	return hosts.filter(entry => {
 		let parsed = parseEntry(entry);
 		if (!parsed) return false;
 		if (parsed.port === undefined ? !WEB_PORTS.has(port) : parsed.port !== port) {
@@ -97,6 +101,15 @@ export function matchingEntry(
 			? name.endsWith(parsed.host.slice(1)) && name.length > parsed.host.length - 1
 			: name === parsed.host;
 	});
+}
+
+/** The first entry of `hosts` that allows a connection to `host` on `port`, if one does. */
+export function matchingEntry(
+	hosts: readonly string[],
+	host: string,
+	port: number,
+): string | undefined {
+	return matchingEntries(hosts, host, port)[0];
 }
 
 /** An entry the owner may add: `host`, `*.host` or `host:port`, with no scheme or path. */

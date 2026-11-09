@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { connect, createServer, isIP, type Server, type Socket } from "node:net";
-import { isLocalEntry, matchingEntry } from "./sandbox-policy";
+import { matchingEntries, ownerEntry } from "./sandbox-policy";
 
 /** The proxy a sandbox's only way out goes through. */
 export type Proxy = {
@@ -23,8 +23,8 @@ const HEAD_LIMIT = 16 * 1024;
 const HEAD_END = Buffer.from("\r\n\r\n");
 
 /**
- * Whether an address is one a listed name must not lead to: this machine, its networks, link-local
- * and cloud metadata addresses. A name the owner allows may not be pointed at a service on the
+ * Whether an address is one a built-in name must not lead to: this machine, its networks,
+ * link-local and cloud metadata addresses. A public service may not be pointed at a service on the
  * machine it runs on.
  */
 export function privateAddress(address: string): boolean {
@@ -49,8 +49,9 @@ async function resolveAll(host: string) {
 /**
  * Start the allow-list proxy on loopback: HTTP CONNECT tunnels and plain HTTP requests (a
  * WebSocket upgrade among them) to the hosts in `hosts`, and a 403 for anything else. It sees
- * names and ports only, never what a tunnel carries. A host that isn't a local one is refused when
- * its name leads to a private address.
+ * names and ports only, never what a tunnel carries. A built-in name is refused when it leads to a
+ * private address; Chopin's own origin and the hosts the owner added are not, as they may be on a
+ * private network (see `ownerEntry`).
  */
 export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 	let resolve = options.resolve ?? resolveAll;
@@ -70,8 +71,8 @@ export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 		);
 	};
 	let open = async (client: Socket, host: string, port: number) => {
-		let entry = matchingEntry(options.hosts, host, port);
-		if (!entry) {
+		let entries = matchingEntries(options.hosts, host, port);
+		if (!entries.length) {
 			refuse(client, host, port, "not listed");
 			return undefined;
 		}
@@ -84,7 +85,7 @@ export async function startProxy(options: ProxyOptions): Promise<Proxy> {
 			client.end("HTTP/1.1 502 Bad Gateway\r\nconnection: close\r\ncontent-length: 0\r\n\r\n");
 			return undefined;
 		}
-		let safe = isLocalEntry(entry)
+		let safe = entries.some(ownerEntry)
 			? addresses
 			: addresses.filter(address => !privateAddress(address));
 		if (!safe[0]) {
