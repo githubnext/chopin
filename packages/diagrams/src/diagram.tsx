@@ -176,11 +176,19 @@ function DiagramView({
 		return () => clearTimeout(timer);
 	}, [reachedEnd, playback, maxStep, reduced]);
 
-	// Before paint, so the first frame already knows whether the controls are needed.
+	// Reading layout waits for the commit after the one that changed the drawing. Each diagram writes
+	// as it mounts (the step classes below), so a read in the same commit made the next diagram's read
+	// lay the page out again: fifty diagrams, fifty layouts. By the next commit every diagram that
+	// changed together has written what it will, and the reads of all of them share one layout.
+	let [settled, setSettled] = useState(0);
+	useLayoutEffect(() => setSettled(count => count + 1), [body, playback, zoom, expandable]);
+
+	// Before paint (the commit above is made before it too), so the first frame already knows whether
+	// the controls are needed.
 	useLayoutEffect(() => {
 		let stage = stageRef.current;
 		let svg = svgRef.current;
-		if (!stage || !svg) return;
+		if (!stage || !svg || settled === 0) return;
 		let measure = () => {
 			setOverflowing(stage.scrollWidth > stage.clientWidth + 1);
 			setAvailable(stage.clientWidth);
@@ -197,7 +205,7 @@ function DiagramView({
 		observer.observe(stage);
 		observer.observe(svg);
 		return () => observer.disconnect();
-	}, [body, playback, onWidth, zoom, expandable]);
+	}, [settled, onWidth]);
 
 	useEffect(() => {
 		let svg = svgRef.current;
