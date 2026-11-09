@@ -328,6 +328,25 @@ export function readableRoots(names: readonly string[]): string[] {
 	return names.filter(name => !skipped.has(name)).map(name => `/${name}`);
 }
 
+/** Where the connector keeps the clones it made, in its state directory. */
+export const CLONES = "repos";
+
+/**
+ * Whether `inner` is `outer` or inside it. Windows and macOS file systems usually ignore case, so
+ * a path written another way is the same.
+ */
+export function inside(
+	inner: string,
+	outer: string,
+	platform: NodeJS.Platform = process.platform,
+): boolean {
+	let path = platform === "win32" ? win32 : posix;
+	let fold = (value: string) =>
+		platform === "win32" || platform === "darwin" ? value.toLowerCase() : value;
+	let prefix = fold(outer.endsWith(path.sep) ? outer : outer + path.sep);
+	return fold(inner) === fold(outer) || fold(inner).startsWith(prefix);
+}
+
 /** What `readGrantsAround` asks of the disk. */
 export type Disk = {
 	/** The names in a directory; none where it can't be listed. */
@@ -356,10 +375,7 @@ export function readGrantsAround(
 	// Windows and macOS file systems usually ignore case, so a path written another way is the same.
 	let fold = (value: string) =>
 		platform === "win32" || platform === "darwin" ? value.toLowerCase() : value;
-	let within = (inner: string, outer: string) => {
-		let prefix = fold(outer.endsWith(path.sep) ? outer : outer + path.sep);
-		return fold(inner) === fold(outer) || fold(inner).startsWith(prefix);
-	};
+	let within = (inner: string, outer: string) => inside(inner, outer, platform);
 	let grants = new Set<string>();
 	let around = (directory: string) => {
 		let toward = path.relative(directory, hidden).split(path.sep)[0]!;

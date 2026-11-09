@@ -616,6 +616,84 @@ test("a git directory named by a file in a folder the agent made earlier is not 
 	expect(held(policy).filter(path => path.startsWith(other.git))).toEqual([]);
 });
 
+test("a launch whose working directory holds the connector's state directory, as a home does, is given what is around it by name and never the state directory or a parent of it", () => {
+	let root = join(readableScratch, "ancestor");
+	let home = join(root, "home");
+	let base = join(home, ".local", "state", "chopin", "connector");
+	mkdirSync(join(base, "runs", "other-run"), { recursive: true });
+	writeFileSync(join(base, "machine.json"), "{}");
+	writeFileSync(join(base, "runs", "other-run", "token"), "ghu_other");
+	mkdirSync(join(home, "notes"), { recursive: true });
+	mkdirSync(join(home, ".local", "share"), { recursive: true });
+	mkdirSync(join(home, ".local", "state", "other"), { recursive: true });
+	for (let platform of ["linux", "darwin"] as const) {
+		let policy = launchPolicy(
+			platform === "darwin" ? "seatbelt" : "bubblewrap",
+			{ ...systemHost(), platform },
+			{ command: ["pdd-kit", "planner"], cwd: home, env: {}, stdin: "ignore" },
+			{ directory: base, home },
+			"http://127.0.0.1:4000",
+			join(root, "tmp"),
+		);
+		// No grant is the state directory or holds it, whole, and nothing in it is named.
+		for (let path of policy.readable) {
+			expect(base === path || base.startsWith(`${path}/`), `${platform}: ${path}`).toBe(false);
+			expect(path.startsWith(`${base}/`), `${platform}: ${path}`).toBe(false);
+		}
+		// What is around the way to it is read, as the working directory is the launch's to read.
+		for (
+			let path of [
+				join(home, "notes"),
+				join(home, ".local", "share"),
+				join(home, ".local", "state", "other"),
+			]
+		) {
+			expect(policy.readable, platform).toContain(path);
+		}
+		expect(policy.writable.some(path => path === home || path.startsWith(`${base}`))).toBe(false);
+	}
+	// A directory the owner adds with --sandbox-write that holds the state directory, `~` itself,
+	// is written around it and never in it.
+	let owner = launchPolicy(
+		"bubblewrap",
+		{ ...systemHost(), platform: "linux" },
+		{ command: ["pdd-kit", "planner"], cwd: home, env: {}, stdin: "ignore" },
+		{ directory: base, home, settings: { writable: [home] } },
+		"http://127.0.0.1:4000",
+		join(root, "tmp"),
+	);
+	expect(owner.writable).toContain(join(home, "notes"));
+	for (let path of owner.writable) {
+		expect(base === path || base.startsWith(`${path}/`), path).toBe(false);
+		expect(path.startsWith(`${base}/`), path).toBe(false);
+	}
+});
+
+test("a working directory inside the state directory is read by name only where it is a clone the connector made, and not at all elsewhere in it", () => {
+	let root = join(readableScratch, "inside");
+	let base = join(root, "state");
+	let clone = join(base, "repos", "octo", "score");
+	let other = join(base, "runs", "other-run");
+	mkdirSync(clone, { recursive: true });
+	mkdirSync(other, { recursive: true });
+	writeFileSync(join(other, "token"), "ghu_other");
+	let policy = (cwd: string) =>
+		launchPolicy(
+			"bubblewrap",
+			{ ...systemHost(), platform: "linux" },
+			{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore" },
+			{ directory: base, home: join(root, "home") },
+			"http://127.0.0.1:4000",
+			join(root, "tmp"),
+		);
+	expect(policy(clone).readable).toContain(clone);
+	for (let cwd of [other, base, join(base, "repos"), join(base, "runs")]) {
+		let granted = policy(cwd).readable;
+		expect(granted.filter(path => path === base || path.startsWith(`${base}/`)), cwd).toEqual([]);
+		expect(granted.filter(path => base.startsWith(`${path}/`)), cwd).toEqual([]);
+	}
+});
+
 test("a worktree beside the state directory is written and not also granted to read, which MXC would take as read-only", () => {
 	let root = join(readableScratch, "beside");
 	let base = join(root, "state");

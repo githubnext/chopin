@@ -5,6 +5,7 @@ import { redacted } from "./connection";
 import { removePlantedRedirects } from "./git-directories";
 import { gitAsync, gitSync } from "./git-host";
 import { gitCredentials, type GitHubToken } from "./github-token";
+import { CLONES } from "./sandbox-policy";
 import { segment, workspace } from "./workspace";
 
 /** What git says when it reached GitHub over SSH and had nothing to authenticate with. */
@@ -63,7 +64,7 @@ export async function registerCheckouts(paths: string[]): Promise<Registered> {
 /** Where an on-demand clone of `repository` lives: `<base>/repos/<owner>/<repo>`, lowercase. */
 export function clonePath(directory: string, repository: string) {
 	let [owner = "", name = ""] = repository.toLowerCase().split("/");
-	return join(directory, "repos", segment(owner), segment(name));
+	return join(directory, CLONES, segment(owner), segment(name));
 }
 
 /** The clones in `<base>/repos/<owner>/<repo>`, with their repository as their folders name it. */
@@ -73,7 +74,7 @@ export async function clones(directory: string) {
 		(await readdir(path, { withFileTypes: true }).catch(() => []))
 			.filter(entry => entry.isDirectory() && !entry.name.endsWith(".tmp"))
 			.map(entry => entry.name).sort();
-	let base = join(directory, "repos");
+	let base = join(directory, CLONES);
 	for (let owner of await folders(base)) {
 		for (let name of await folders(join(base, owner))) {
 			let path = join(base, owner, name);

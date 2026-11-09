@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -355,6 +355,37 @@ test("connect --keep-runs saves how many finished runs to keep, and removes olde
 			.filter(line => line.startsWith("worktree ")),
 	).toHaveLength(2);
 });
+
+test.skipIf(process.platform === "win32")(
+	"the start check that names the agent once connected runs in an empty folder of its own where no checkout is registered, not the home directory, and in the checkout where one is",
+	async () => {
+		let record = join(scratch, "check-cwd");
+		await writeFile(
+			join(programs, "probe-cwd"),
+			'#!/bin/sh\npwd > "$PROBE_CWD"\nls -A >> "$PROBE_CWD"\n',
+			{ mode: 0o755 },
+		);
+		let asked = async (args: string[]) => {
+			await rm(record, { force: true });
+			let result = await connect("nothing", args, undefined, { PROBE_CWD: record });
+			expect(result.code).toBe(0);
+			for (let wait = 0; wait < 100 && !(await Bun.file(record).exists()); wait++) {
+				await Bun.sleep(50);
+			}
+			let [where = "", ...names] = (await readFile(record, "utf8")).trim().split("\n");
+			return { where, names };
+		};
+		let alone = await asked(["--no-sandbox", "--", "probe-cwd"]);
+		expect(alone.where).not.toBe(homedir());
+		expect(await realpath(dirname(alone.where))).toBe(await realpath(tmpdir()));
+		// Nothing in it to read, and it is gone with the connector.
+		expect(alone.names).toEqual([]);
+		await expect(stat(alone.where)).rejects.toThrow();
+		let root = await checkout();
+		let registered = await asked([root, "--no-sandbox", "--", "probe-cwd"]);
+		expect(registered.where).toBe(await realpath(root));
+	},
+);
 
 test("connect saves the sandbox options for service install, says what the sandbox is, and refuses nonsense before it pairs", async () => {
 	let root = await checkout();

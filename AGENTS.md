@@ -283,7 +283,10 @@ durable.
   earlier release's agent left, and is not the defense. The rest of the disk reads except credentials, and the connector's state
   directory is left out of the read grants, so an agent sees there only its own worktree and the
   folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a denial
-  win over a grant inside it, so a denial can't give an agent its own paths back); egress goes only
+  win over a grant inside it, so a denial can't give an agent its own paths back; a working directory or
+  an owner's `--sandbox-write` path that holds the state directory, a home or a dotfiles checkout, is read
+  and written around it too, and the connected start check with no registered checkout runs in an empty
+  folder of its own, not the home); egress goes only
   through a loopback allow-list proxy. Credentials in the agent's environment are not hidden. A
   machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
   `--require-sandbox`. Do not start an agent process outside the seam. The one exception is the two
