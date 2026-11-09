@@ -8,7 +8,7 @@
  */
 
 import { FRESH_MS } from "../apps/web/src/document-intent";
-import { createChannel, seedChannel } from "./database";
+import { createChannel, seedChannel, testChannelSlug } from "./database";
 import { expect, test } from "./room";
 
 import type { Page, Route } from "@playwright/test";
@@ -23,7 +23,54 @@ async function another(baseURL: string, text: string) {
 	let databasePort = Number(new URL(baseURL).port);
 	await createChannel(databasePort, id);
 	await seedChannel(databasePort, id, `${text}\n`);
-	return { slug: `test-${id.slice(0, 8)}`, title: `Test ${id.slice(0, 8)}`, text };
+	return { id, slug: testChannelSlug(id), title: `Test ${id.slice(0, 8)}`, text };
+}
+
+/**
+ * The Projects list holds every document the run's other tests make in the repository, newest
+ * first, and the page reads it again whenever one of them creates or renames one. A row that comes
+ * in above the pointer moves the rows beneath it, and the browser then says the pointer is on
+ * another row though it has not moved, so a document the test rests on, presses or focuses is not
+ * the one that is read. The list answers with the documents this test made, which only it
+ * changes, as the document-navigation tests do for theirs; the reads and the openings are the
+ * server's own.
+ */
+async function listOnly(
+	page: Page,
+	room: string,
+	documents: { id: string; slug: string; title: string }[],
+) {
+	let own = { id: room, slug: testChannelSlug(room), title: `Test ${room.slice(0, 8)}` };
+	await page.route("**/api/repositories/octo-org/score/channels*", route =>
+		route.fulfill({
+			json: {
+				canEdit: true,
+				channels: [own, ...documents].map(({ id, slug, title }) => ({
+					createdAt: "2026-08-19T12:00:00.000Z",
+					createdBy: "U_ana",
+					descriptionRevision: 0,
+					id,
+					repositoryId: "R_score",
+					repositoryName: "score",
+					repositoryOwner: "octo-org",
+					revision: 0,
+					slug,
+					title,
+					updatedAt: "2026-08-19T12:00:00.000Z",
+				})),
+				repository: {
+					defaultBranch: "main",
+					fullName: "octo-org/score",
+					id: "R_score",
+					name: "score",
+					owner: "octo-org",
+					ownerAvatarUrl: "https://example.invalid/octo-org.png",
+					permissions: { admin: false, pull: true, push: true },
+					private: true,
+					url: "https://github.com/octo-org/score",
+				},
+			},
+		}));
 }
 
 /** Every request for a document's record, by its slug, from now on. */
@@ -42,12 +89,13 @@ async function opened(page: Page, document: { title: string; text: string }) {
 	await expect(page.getByText(document.text, { exact: true })).toBeVisible();
 }
 
-test("a document is read when the pointer rests on its row, the row is pressed or the keyboard rests on it, and the click does not read it again", async ({ baseURL, join, seed }) => {
+test("a document is read when the pointer rests on its row, the row is pressed or the keyboard rests on it, and the click does not read it again", async ({ baseURL, join, page, room, seed }) => {
 	await seed("Original document.\n");
 	let resting = await another(baseURL!, "The document the pointer rests on.");
 	let pressed = await another(baseURL!, "The document that was pressed.");
 	let focused = await another(baseURL!, "The document the focus rests on.");
-	let page = await join("ana");
+	await listOnly(page, room, [resting, pressed, focused]);
+	await join("ana");
 	let reads = watchReads(page);
 	let row = (document: { title: string }) =>
 		sidebar(page).getByRole("link", { name: document.title, exact: true });
@@ -82,10 +130,11 @@ test("a document is read when the pointer rests on its row, the row is pressed o
 	});
 });
 
-test("opening a document nobody rested on reads it once, as before", async ({ baseURL, join, seed }) => {
+test("opening a document nobody rested on reads it once, as before", async ({ baseURL, join, page, room, seed }) => {
 	await seed("Original document.\n");
 	let clicked = await another(baseURL!, "The document that was only clicked.");
-	let page = await join("ana");
+	await listOnly(page, room, [clicked]);
+	await join("ana");
 	let reads = watchReads(page);
 
 	await sidebar(page).getByRole("link", { name: clicked.title, exact: true }).dispatchEvent(
@@ -112,10 +161,11 @@ async function answerFirstRead(
 	return reads;
 }
 
-test("a read started at rest that fails after the click is replaced by the opening's own, and the document opens", async ({ baseURL, join, seed }) => {
+test("a read started at rest that fails after the click is replaced by the opening's own, and the document opens", async ({ baseURL, join, page, room, seed }) => {
 	await seed("Original document.\n");
 	let target = await another(baseURL!, "The document whose first read fails.");
-	let page = await join("ana");
+	await listOnly(page, room, [target]);
+	await join("ana");
 	let held = Promise.withResolvers<void>();
 	let reads = await answerFirstRead(page, target, async route => {
 		await held.promise;
@@ -137,10 +187,11 @@ test("a read started at rest that fails after the click is replaced by the openi
 	expect(reads.count).toBe(2);
 });
 
-test("a read started at rest that the server turns away as signed out does not reload the page", async ({ baseURL, join, seed }) => {
+test("a read started at rest that the server turns away as signed out does not reload the page", async ({ baseURL, join, page, room, seed }) => {
 	await seed("Original document.\n");
 	let target = await another(baseURL!, "The document whose first read is turned away.");
-	let page = await join("ana");
+	await listOnly(page, room, [target]);
+	await join("ana");
 	let loads = 0;
 	page.on("load", () => void (loads += 1));
 	let turnedAway = false;
@@ -166,10 +217,11 @@ test("a read started at rest that the server turns away as signed out does not r
 	expect(reads.count).toBe(2);
 });
 
-test("a click that comes a while after the pointer rested on a row reads the document again", async ({ baseURL, join, seed }) => {
+test("a click that comes a while after the pointer rested on a row reads the document again", async ({ baseURL, join, page, room, seed }) => {
 	await seed("Original document.\n");
 	let target = await another(baseURL!, "The document that was read again.");
-	let page = await join("ana");
+	await listOnly(page, room, [target]);
+	await join("ana");
 	let reads = watchReads(page);
 	let row = sidebar(page).getByRole("link", { name: target.title, exact: true });
 	let answered = page.waitForResponse(response =>
