@@ -84,6 +84,19 @@ function watchReads(page: Page) {
 	return reads;
 }
 
+/** The id of the document in each notice of a change that the page's sidebar socket receives, from now on. */
+function watchChanges(page: Page) {
+	let changed: string[] = [];
+	page.on("websocket", socket => {
+		if (new URL(socket.url()).pathname !== "/ws/sidebar") return;
+		socket.on("framereceived", ({ payload }) => {
+			let frame = JSON.parse(String(payload)) as { kind: string; channelId?: string };
+			if (frame.kind === "sidebar:catalogue" && frame.channelId) changed.push(frame.channelId);
+		});
+	});
+	return changed;
+}
+
 async function opened(page: Page, document: { title: string; text: string }) {
 	await expect(page.getByRole("group", { name: `Document: ${document.title}` })).toBeVisible();
 	await expect(page.getByText(document.text, { exact: true })).toBeVisible();
@@ -236,4 +249,100 @@ test("a click that comes a while after the pointer rested on a row reads the doc
 
 	await opened(page, target);
 	expect(reads.filter(slug => slug === target.slug)).toHaveLength(2);
+});
+
+/** Rest the pointer on a row until the read that starts is answered. */
+async function restOn(page: Page, target: { slug: string; title: string }) {
+	let row = sidebar(page).getByRole("link", { name: target.title, exact: true });
+	let answered = page.waitForResponse(response =>
+		new URL(response.url()).pathname.endsWith(`/documents/${target.slug}`)
+	);
+	await row.hover();
+	await answered;
+	return row;
+}
+
+/**
+ * Wait until the page has been told this many times that a document changed, and has acted on it.
+ * The list the page is given keeps the row's old address, as a page does until it has read the list
+ * again, and a renamed document is still opened by its old address, so the click that follows is
+ * the one that could be given the record from before.
+ */
+async function toldOf(page: Page, told: string[], document: { id: string }, times: number) {
+	await expect.poll(() => told.filter(id => id === document.id).length).toBeGreaterThanOrEqual(
+		times,
+	);
+	// The page has acted on what it was told, not only had it arrive.
+	await page.evaluate(() => new Promise(resolve => setTimeout(resolve)));
+}
+
+test("a record read at rest is not used once the document has been renamed, however soon the click comes", async ({ baseURL, join, page, room, seed }) => {
+	await seed("Original document.\n");
+	let target = await another(baseURL!, "The document that was renamed.");
+	await listOnly(page, room, [target]);
+	// Both from before the page opens, for the socket that tells it of changes.
+	let told = watchChanges(page);
+	let reads = watchReads(page);
+	let renamed = `Renamed ${target.id.slice(0, 8)}`;
+	await join("ana");
+	let row = await restOn(page, target);
+
+	let response = await page.context().request.patch(`/api/channels/${target.id}`, {
+		headers: { origin: new URL(baseURL!).origin },
+		data: { title: renamed },
+	});
+	expect(response.ok()).toBe(true);
+	await toldOf(page, told, target, 1);
+	await row.click();
+
+	// The opening read for itself, the second read of this address, and shows the document as it is.
+	await opened(page, { title: renamed, text: target.text });
+	expect(reads.filter(slug => slug === target.slug)).toHaveLength(2);
+});
+
+test("a record read at rest is not used once the document has been deleted, however soon the click comes", async ({ baseURL, join, page, room, seed }) => {
+	await seed("Original document.\n");
+	let target = await another(baseURL!, "The document that was deleted.");
+	await listOnly(page, room, [target]);
+	let told = watchChanges(page);
+	let reads = watchReads(page);
+	await join("ana");
+	let row = await restOn(page, target);
+
+	// Archiving it is the first change the page is told of, and deleting it the second.
+	let headers = { origin: new URL(baseURL!).origin };
+	let archived = await page.context().request.post(`/api/channels/${target.id}/archive`, {
+		headers,
+	});
+	expect(archived.ok()).toBe(true);
+	let deleted = await page.context().request.delete(`/api/channels/${target.id}`, { headers });
+	expect(deleted.ok()).toBe(true);
+	await toldOf(page, told, target, 2);
+	await row.click();
+
+	// Only the server can say so: the record read at rest is of a document that was there.
+	await expect(page.getByRole("heading", { name: "Document not found", level: 1 })).toBeVisible();
+	expect(reads.filter(slug => slug === target.slug).length).toBeGreaterThanOrEqual(2);
+});
+
+test("a change to another document leaves the record read at rest for the click", async ({ baseURL, join, page, room, seed }) => {
+	await seed("Original document.\n");
+	let target = await another(baseURL!, "The document the pointer rested on.");
+	let other = await another(baseURL!, "A document that is renamed meanwhile.");
+	await listOnly(page, room, [target, other]);
+	let told = watchChanges(page);
+	let reads = watchReads(page);
+	await join("ana");
+	let row = await restOn(page, target);
+
+	let response = await page.context().request.patch(`/api/channels/${other.id}`, {
+		headers: { origin: new URL(baseURL!).origin },
+		data: { title: `Renamed ${other.id.slice(0, 8)}` },
+	});
+	expect(response.ok()).toBe(true);
+	await toldOf(page, told, other, 1);
+	await row.click();
+
+	await opened(page, target);
+	expect(reads.filter(slug => slug === target.slug)).toHaveLength(1);
 });

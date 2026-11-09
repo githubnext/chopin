@@ -10,6 +10,8 @@ import {
 
 import * as Api from "./api";
 
+import type { DocumentAddress } from "./document-intent";
+
 let address = { owner: "octo-org", repository: "score", slug: "plan" };
 let detail = (title: string) => ({ channel: { title } }) as unknown as Api.ChannelDetail;
 let settle = () => new Promise<void>(resolve => setTimeout(resolve));
@@ -28,6 +30,8 @@ function intent() {
 	);
 	return {
 		...made,
+		/** A row has its document's id; these documents are known by their slug unless a test says. */
+		start: (address: DocumentAddress, documentId = address.slug) => made.start(address, documentId),
 		reads,
 		own,
 		advance: (ms: number) => void (clock += ms),
@@ -192,6 +196,52 @@ test("each document has its own read, and an opening of another uses none", asyn
 	expect((await documents.read(address, documents.ordinary())).channel.title).toBe("Plan");
 });
 
+test("a record read before its document changed is not what an opening gets, however soon it comes", async () => {
+	let documents = intent();
+	documents.start(address, "plan-id");
+	await settle();
+	documents.forget("plan-id");
+	expect((await documents.read(address, documents.ordinary())).channel.title).toBe("Fresh");
+	expect(documents.own).toEqual(["Fresh"]);
+});
+
+test("a read still under way when its document changes is not waited for", async () => {
+	let documents = intent();
+	let held = documents.hold();
+	documents.start(address, "plan-id");
+	documents.forget("plan-id");
+	expect((await documents.read(address, documents.ordinary())).channel.title).toBe("Fresh");
+	held.release(detail("Before"));
+	await settle();
+	// What the read answers later does not come back to be used.
+	expect((await documents.read(address, documents.ordinary("Again"))).channel.title).toBe("Again");
+	expect(documents.own).toEqual(["Fresh", "Again"]);
+});
+
+test("a change to one document leaves the reads of the other documents as they were", async () => {
+	let documents = intent();
+	let other = { ...address, slug: "other" };
+	documents.start(address, "plan-id");
+	documents.start(other, "other-id");
+	await settle();
+	documents.forget("plan-id");
+	expect((await documents.read(other, documents.ordinary())).channel.title).toBe("Plan");
+	expect(documents.own).toEqual([]);
+	expect((await documents.read(address, documents.ordinary())).channel.title).toBe("Fresh");
+});
+
+test("a row is read again when the pointer rests on it after its document changed", async () => {
+	let documents = intent();
+	documents.start(address, "plan-id");
+	await settle();
+	documents.forget("plan-id");
+	documents.start(address, "plan-id");
+	expect(documents.reads).toHaveLength(2);
+	await settle();
+	expect((await documents.read(address, documents.ordinary())).channel.title).toBe("Plan");
+	expect(documents.own).toEqual([]);
+});
+
 test("a document's link has an address, and a child's, another page's and nothing have none", () => {
 	expect(addressOfHref("/documents/octo-org/score/plan")).toEqual(address);
 	expect(addressOfHref("/documents/octo-org/score/my%20plan")).toEqual({
@@ -234,7 +284,7 @@ function expiredSession() {
 
 test("a read nobody asked for does not reload the page when the session has ended", async () => {
 	let session = expiredSession();
-	documentIntent.start({ owner: "octo-org", repository: "score", slug: "resting" });
+	documentIntent.start({ owner: "octo-org", repository: "score", slug: "resting" }, "resting-id");
 	await settle();
 	expect(session.requested).toEqual(["/api/repositories/octo-org/score/documents/resting"]);
 	expect(session.reloads()).toBe(0);

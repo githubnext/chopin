@@ -17,8 +17,9 @@ import * as Api from "./api";
  * the reader can see depends on it. One that fails, for any reason, is dropped, and a session that
  * has ended does not reload the page for it. An opening that was waiting on one that failed makes
  * its own read, as it would have without any, and fails or not as that does. A read is used only
- * while it is under way or soon after it was answered, so a change made since the pointer came to
- * rest is not hidden from the click.
+ * while it is under way or soon after it was answered, and not after the page has been told that
+ * its document changed, so a change made since the pointer came to rest is not hidden from the
+ * click.
  */
 
 /**
@@ -44,6 +45,8 @@ export type DocumentAddress = { owner: string; repository: string; slug: string 
 type Read = (owner: string, repository: string, slug: string) => Promise<Api.ChannelDetail>;
 
 type Ahead = {
+	/** The id of the document the read is of, which is what a change to it names. */
+	documentId: string;
 	/** When the read started. */
 	at: number;
 	/** When it was answered, once it has been. */
@@ -63,13 +66,14 @@ export function createDocumentIntent(read: Read, now: () => number = () => perfo
 		 * Start reading a document, unless it is being read, or was read a moment ago, or has just been
 		 * opened, or its read has just failed.
 		 */
-		start(address: DocumentAddress): void {
+		start(address: DocumentAddress, documentId: string): void {
 			let id = key(address);
 			let known = reads.get(id);
 			if (known && usable(known)) return;
 			let last = done.get(id);
 			if (last !== undefined && now() - last < AGAIN_MS) return;
 			let ahead: Ahead = {
+				documentId,
 				at: now(),
 				detail: read(address.owner, address.repository, address.slug),
 			};
@@ -81,6 +85,16 @@ export function createDocumentIntent(read: Read, now: () => number = () => perfo
 					done.set(id, now());
 				},
 			);
+		},
+		/**
+		 * Drop the read of a document, under way or answered, because it was renamed, archived,
+		 * restored or deleted and the record that was read may be from before. An old
+		 * address still opens a renamed document, so a click on its row would otherwise be given the
+		 * record it had before. The opening reads for itself instead. A read of any other document is
+		 * as good as it was.
+		 */
+		forget(documentId: string): void {
+			for (let [id, ahead] of reads) if (ahead.documentId === documentId) reads.delete(id);
 		},
 		/**
 		 * What an opening reads: the read that was started on intent, if one is under way or was

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
+import { documentIntent } from "./document-intent";
 import { decisionWatchPlan, fallbackRefreshBatch } from "./sidebar-decision-plan";
 import { useSidebarDecisions } from "./use-sidebar-decisions";
 
@@ -46,6 +47,9 @@ export default function SidebarDecisionCounts({
 	}, []);
 	/** Someone changed a shown repository's documents: read them again, once a burst settles. */
 	let onCatalogue = useCallback((change: Sidebar.Catalogue) => {
+		// At once, not with the list: a click on the row comes before the list does, and the row's
+		// address may be the document's old one, which a rename leaves opening it.
+		documentIntent.forget(change.channelId);
 		let timers = catalogueTimers.current;
 		clearTimeout(timers.get(change.repositoryId));
 		timers.set(
