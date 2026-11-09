@@ -275,8 +275,12 @@ durable.
   win over a grant inside it, so a denial can't give an agent its own paths back); egress goes only
   through a loopback allow-list proxy. Credentials in the agent's environment are not hidden. A
   machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
-  `--require-sandbox`. Do not start an agent process outside the seam. See
-  [Sandbox](docs/chopin-cli.md#sandbox).
+  `--require-sandbox`. Do not start an agent process outside the seam. The one exception is the two
+  ACP `initialize` start checks, `chopin service install`'s and `chopin connect --install-service`'s
+  before the machine is paired (`checkAgent`): they are not runs, send the agent nothing from Chopin
+  (no document, prompt or instruction), last 10 seconds at most, and are not sandboxed, even with
+  `--require-sandbox`; `--skip-check` leaves them out. The check that names the agent to Chopin
+  once connected goes through the seam. See [Sandbox](docs/chopin-cli.md#sandbox).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 

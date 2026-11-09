@@ -146,7 +146,9 @@ function initialize(connection: ReturnType<ClientApp["connect"]>) {
 /**
  * Start the agent with `env` as its whole environment and ask it to initialize, then stop it.
  * Undefined once it answers within `timeoutMs`; otherwise how it failed. `onInfo` hears the name
- * and version it answered with.
+ * and version it answered with. It starts in `sandbox` when given one. The two start checks that
+ * come before any run, `chopin service install`'s and a connect's before the machine is paired,
+ * give none: they are not runs, and nothing from Chopin reaches the agent.
  */
 export async function checkAgent(
 	command: string[],
