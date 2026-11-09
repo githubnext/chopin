@@ -315,6 +315,9 @@ test("the ssh command a person chose is kept over the one a repository names, an
 		XDG_CONFIG_HOME: join(home, ".config"),
 	};
 	delete env.GIT_SSH_COMMAND;
+	// The fixture home is the person's whole configuration, whatever the runner has set.
+	delete env.GIT_CONFIG_GLOBAL;
+	delete env.GIT_CONFIG_SYSTEM;
 	await gitAsync(["-C", made.repo, "fetch", "origin"], { env }).catch(() => undefined);
 	expect(made.fired()).toEqual(["person"]);
 	program(join(made.root, "environment-ssh"), `touch '${made.ran}/environment'; exit 1`);
