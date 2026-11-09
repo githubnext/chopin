@@ -934,8 +934,10 @@ named like a hook. What that comes to:
   no name made there is a pointer, configuration, hook or program for your own git in
   your checkout. It reads the entry only to list, prune and remove the worktree (a
   `locked` file there keeps `git worktree prune` and `remove` from touching it unless
-  forced twice, which the connector's clean-up does) and, for `git gc`, its `HEAD` and
-  index.
+  forced twice, which the connector's clean-up does), to see which branch it has checked
+  out or is rebasing (so a planted `HEAD` or `rebase-merge/head-name` can make your git
+  refuse to check out or delete that branch, though nothing runs), and, for `git gc`,
+  its `HEAD` and index.
 - The connector's git, hardened as above and told where the repository is, runs
   nothing because of such a name. Tested, with these names planted, an unfinished
   rebase with an `exec` line and executables named like hooks among them: `status`,

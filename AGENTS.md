@@ -257,7 +257,8 @@ durable.
   new name in it (`future-pointer`, `rebase-merge/`, `locked`, a file named like a hook) is made. Such a
   name is never a pointer, configuration, hook or program for the person's git in their checkout, which
   stays read-only with the rest of the git directory (it reads the entry to list, prune and remove the
-  worktree, and `gc` reads its `HEAD` and index), and it makes no hardened connector git run anything
+  worktree, to see which branch it has checked out or is rebasing, which a planted name can make refuse
+  a checkout or delete of that branch, and `gc` reads its `HEAD` and index), and it makes no hardened connector git run anything
   (tested: status, fetch, the removal of the worktree and retention with such names planted, an unfinished
   rebase's `exec` line among them, run nothing; git run inside the worktree itself would, as the next
   sentences say). Which entry is the launch's own
