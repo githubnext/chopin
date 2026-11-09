@@ -383,6 +383,39 @@ function chipBox(element: Element) {
 }
 
 /**
+ * One photograph for every face, and a wait for it before a picture. A face (`face.tsx`) shows its
+ * person's initial until their photograph arrives from github.com, so the page a picture shows
+ * depends on how long github.com took. The drag's picture is taken on the first load and the
+ * keyboard step's after a reload, which finds the photograph in the cache; when it arrives between
+ * the two, they differ in the faces and nowhere else. Answering the requests here takes the network
+ * out of both pictures without loosening what they are compared on: the faces are drawn, and the
+ * same.
+ */
+const FACE = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">'
+	+ '<rect width="80" height="80" fill="#e6ece8"/><circle cx="40" cy="31" r="13" fill="#66776d"/>'
+	+ '<path d="M17 73c0-27 46-27 46 0" fill="#66776d"/></svg>';
+
+function fixFaces(page: Page) {
+	return page.route(
+		/^https:\/\/(avatars\.githubusercontent\.com\/|github\.com\/[^/?]+\.png(\?|$))/,
+		route => route.fulfill({ body: FACE, contentType: "image/svg+xml" }),
+	);
+}
+
+/** Every face beside the Projects sidebar has its photograph, or gave up and shows its initial. */
+function facesSettled(page: Page) {
+	return expect.poll(
+		() =>
+			page.evaluate(() =>
+				[...window.document.images]
+					.filter(image => !image.closest(".project-sidebar-frame"))
+					.every(image => image.complete && getComputedStyle(image).opacity !== "0")
+			),
+		{ message: "every face is drawn from its photograph or its initial" },
+	).toBe(true);
+}
+
+/**
  * What the workspace shows, the document and Chat, as a picture: everything to the right of the
  * Projects sidebar. The sidebar lists every document that the other tests of a run make in the
  * repository, and shows how many decisions are open in them, so a picture of it changes whenever
@@ -390,6 +423,7 @@ function chipBox(element: Element) {
  * it lists. The Projects edge's own width is held to the same value by the test, not by a picture.
  */
 async function workspaceShot(page: Page) {
+	await facesSettled(page);
 	let sidebar = (await page.locator(".project-sidebar-frame").boundingBox())!;
 	let left = sidebar.x + sidebar.width;
 	let view = page.viewportSize()!;
@@ -413,6 +447,7 @@ for (let { edge, label, pane } of EDGES) {
 		`a ${label} drag ends on the same page, and the reader in the same place, as a keyboard step to the same width`,
 		async ({ join, page, seed }, testInfo) => {
 			await seed(source(), { transcript: transcript(), threads: [await commented()] });
+			await fixFaces(page);
 			await join("ana");
 			await expect(content(page).locator("table")).toHaveCount(SECTIONS);
 			let handle = page.getByRole("separator", { name: edge });
