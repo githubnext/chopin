@@ -1,5 +1,13 @@
-import { appendFileSync, closeSync, existsSync, openSync, readSync } from "node:fs";
-import { homedir, hostname } from "node:os";
+import {
+	appendFileSync,
+	closeSync,
+	existsSync,
+	mkdtempSync,
+	openSync,
+	readSync,
+	rmSync,
+} from "node:fs";
+import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
@@ -493,8 +501,21 @@ export async function connect(
 			return checkout;
 		}),
 	);
-	/** Where the agent's start check runs: a registered checkout, else the home folder. */
-	let cwd = Object.values(registered)[0] ?? homedir();
+	/**
+	 * Where the agent's start check runs: a registered checkout, else an empty folder of its own,
+	 * made when first asked for and removed when the connector exits. Not the home folder, which
+	 * holds the state directory and everything a person keeps.
+	 */
+	let neutral: string | undefined;
+	let checkDirectory = () => {
+		let first = Object.values(registered)[0];
+		if (first) return first;
+		if (!neutral) {
+			let made = neutral = mkdtempSync(join(tmpdir(), "chopin-check-"));
+			process.once("exit", () => rmSync(made, { recursive: true, force: true }));
+		}
+		return neutral;
+	};
 	// The service runs what a terminal's connect saves, by the full paths this shell found.
 	let saving = service ? { command, plannerCommand } : {
 		command: await savedCommand(command, process.cwd()),
@@ -552,7 +573,7 @@ export async function connect(
 		let at = programAt(started);
 		started[at] = which(started[at]!) ?? started[at]!;
 		void checkAgent(started, {
-			cwd,
+			cwd: checkDirectory(),
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 			signal,
@@ -576,7 +597,7 @@ export async function connect(
 		let at = programAt(started);
 		started[at] = which(started[at]!) ?? started[at]!;
 		let failed = await checkAgent(started, {
-			cwd,
+			cwd: checkDirectory(),
 			env: { ...process.env, ...env },
 			timeoutMs: 10_000,
 			onInfo: agent => void rememberAgent(agent),

@@ -24,7 +24,9 @@ import { type Host, probeSandbox } from "./sandbox-probe";
 import {
 	agentStateDirectories,
 	allowedHosts,
+	CLONES,
 	type Disk,
+	inside,
 	mxcRequest,
 	type Policy,
 	readableRoots,
@@ -471,12 +473,14 @@ export function launchPolicy(
 	// names one in a file of its own, and what that file says is the agent's word.
 	let repository = repositoryAt(real(launch.cwd));
 	let git = repository ? gitAccess(repository, launch) : undefined;
+	let hidden = real(options.directory);
 	let writable = [
 		...places,
 		...git?.writable ?? [],
 		...state,
 		temporary,
-		...options.settings?.writable ?? [],
+		// What the owner adds is written around the state directory as well, never in it.
+		...readGrantsAround(options.settings?.writable ?? [], hidden, disk, platform),
 	].filter(path => exists(path));
 	let roots: string[];
 	if (platform === "win32") {
@@ -492,14 +496,23 @@ export function launchPolicy(
 		roots = readableRoots(readdirSync("/")).filter(readableDirectory);
 	}
 	// Everything in the connector's state directory is out of sight but what the launch is given.
+	// That holds for the working directory too, which may hold the state directory (a home, a
+	// dotfiles checkout): it is read as the roots are, around the state directory, and a working
+	// directory inside it is read whole only where it is a clone the connector made.
+	let named = (path: string) => {
+		let at = real(path);
+		if (!inside(at, hidden, platform)) return readGrantsAround([at], hidden, disk, platform);
+		let clones = join(hidden, CLONES);
+		return at !== clones && inside(at, clones, platform) ? [at] : [];
+	};
 	// MXC takes a path granted both ways as read-only, so a grant that is also writable is dropped.
 	let written = new Set(writable.map(real));
 	let readable = [
-		...readGrantsAround(roots, real(options.directory), disk, platform),
+		...readGrantsAround(roots, hidden, disk, platform),
 		...(launch.own ?? []).filter(exists),
-		...person ? [person] : [],
+		...person ? named(person) : [],
 		// The repository's git directory is read, whole, where only some roots are read (Windows).
-		...repository ? [repository.commonDir] : [],
+		...repository ? named(repository.commonDir) : [],
 	].filter(path => !written.has(real(path)));
 	let readonlyInside = git?.readonlyInside ?? [];
 	let denied = secretPaths(platform, home).filter(path => exists(path));

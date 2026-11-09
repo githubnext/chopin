@@ -370,7 +370,7 @@ sandboxTest(
  * settled when it starts, so nothing made later may be in its sight, and what it was given
  * (its own worktree and the folder of its tokens, one of which is renewed) still is.
  */
-async function startedLater(layout: "run" | "planner") {
+async function startedLater(layout: "run" | "planner" | "ancestor") {
 	let made = world(`late-${layout}`);
 	let chopin = server("chopin");
 	let sandbox = await createSandbox({
@@ -382,12 +382,17 @@ async function startedLater(layout: "run" | "planner") {
 	let planners = join(made.state, "planners", "octo", "score");
 	let worktree = join(layout === "run" ? runs : planners, layout === "run" ? "mine" : "D_1");
 	let tokens = `${worktree}.tokens`;
-	let cwd = layout === "run" ? worktree : made.checkout;
+	// An "ancestor" is a Planner whose checkout holds the state directory, as a home does.
+	let cwd = layout === "run" ? worktree : layout === "ancestor" ? made.root : made.checkout;
+	writeFileSync(join(made.root, "notes.txt"), "around");
 	if (layout === "run") git(made.checkout, "worktree", "add", "--detach", worktree);
 	else mkdirSync(worktree, { recursive: true });
 	mkdirSync(tokens, { recursive: true });
 	writeFileSync(join(tokens, "github"), "first\n");
 	let later = [
+		// What was there before it started is out of its sight as much.
+		join(made.state, "machine.json"),
+		join(runs, "other-run", "secret.txt"),
 		join(runs, "later", "secret.txt"),
 		join(runs, "later.github-token"),
 		join(runs, "later.tokens", "github"),
@@ -406,14 +411,18 @@ async function startedLater(layout: "run" | "planner") {
 			...process.env,
 			SANDBOX_WATCH: JSON.stringify({
 				later,
-				own: { [join(tokens, "github")]: "second\n" },
+				own: {
+					[join(tokens, "github")]: "second\n",
+					// What is around the state directory, in the folder that holds it, is read.
+					...(layout === "ancestor" ? { [join(made.root, "notes.txt")]: "around" } : {}),
+				},
 				hiddenIn: [runs, planners],
 				dir: worktree,
-				...(layout === "planner" ? { personsCheckout: true } : {}),
+				...(layout !== "run" ? { personsCheckout: true } : {}),
 			}),
 		},
 		stdin: "ignore",
-		...(layout === "planner" ? { writable: [worktree] } : {}),
+		...(layout !== "run" ? { writable: [worktree] } : {}),
 		own: [worktree, tokens],
 	});
 	let said = "";
@@ -446,9 +455,16 @@ async function startedLater(layout: "run" | "planner") {
 			}
 		}
 		let result = JSON.parse(readFileSync(join(worktree, "report.json"), "utf8")) as CheckResult;
-		return Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
+		let failed = Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
 			`${name}: ${value.detail}`
 		);
+		// A folder that holds the state directory is built in the sandbox's memory, as every folder
+		// above it is, so a write there succeeds and is gone with the process: it never reaches the disk.
+		if (layout === "ancestor") {
+			failed = failed.filter(line => !line.startsWith("cannotWriteCheckout"));
+			if (existsSync(join(made.root, "written"))) failed.push("written reached the host");
+		}
+		return failed;
 	} finally {
 		try {
 			process.kill(-child.pid!, "SIGKILL");
@@ -465,6 +481,14 @@ sandboxTest(
 		expect(await startedLater("planner")).toEqual([]);
 	},
 	180_000,
+);
+
+sandboxTest(
+	"a Planner whose checkout holds the connector's state directory, as a home does, reads what is around it and not the machine token, another run's files or what is made there later, and still has its own worktree and renewed token",
+	async () => {
+		expect(await startedLater("ancestor")).toEqual([]);
+	},
+	120_000,
 );
 
 /**

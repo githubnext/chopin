@@ -959,7 +959,11 @@ nothing.
   the state directory instead and grants everything in it but the way there,
   then grants the agent only its own worktree and token folder inside it. So what is
   made in the state directory after an agent starts, which is every later run and
-  Planner, is never in its sight. The price is that a file or folder made directly
+  Planner, is never in its sight. The same goes for the working directory: a Planner
+  whose checkout holds the state directory (your home, or a dotfiles checkout) reads it
+  around the state directory like everything else, and a directory you add with
+  `--sandbox-write` that holds it is written around it too. A working directory inside
+  the state directory is read only where it is a clone Chopin made in `repos/`. The price is that a file or folder made directly
   in one of those directories (your home, say) after a Planner backend started isn't
   visible to it until it starts again. On Linux those directories are built in the
   sandbox's memory, so a write directly in one succeeds and is gone when the agent
@@ -999,7 +1003,9 @@ nothing.
   nothing from Chopin, no document, prompt or instruction, reaches the agent, and they
   start it plainly, `--require-sandbox` included. `--skip-check` leaves them out. Every
   start after that, the check that tells Chopin the agent's name when a connection opens
-  included, goes through the sandbox.
+  included, goes through the sandbox. That check runs in your registered checkout, or,
+  where there is none, in an empty folder of its own in the system's temporary
+  directory, removed when the connector exits, and not in your home.
 - **Telemetry.** MXC's is opt-in under its 1.0.0 contract. chopin never opts in.
 - **`connector.js`**, the downloaded script, carries no executor and runs
   unsandboxed; the `chopin` binary carries MXC's and writes it to
