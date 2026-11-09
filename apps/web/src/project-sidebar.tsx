@@ -150,14 +150,17 @@ function useRowIntent() {
 	// The row of the document that is open is not one the reader is about to open.
 	let rowOf = (target: EventTarget) => {
 		let link = target instanceof Element ? target.closest(".project-sidebar-document-link") : null;
-		return link?.getAttribute("aria-current")
-			? undefined
-			: addressOfHref(link?.getAttribute("href"));
+		if (link?.getAttribute("aria-current")) return undefined;
+		let address = addressOfHref(link?.getAttribute("href"));
+		let documentId = link?.closest<HTMLElement>("[data-document-id]")?.dataset.documentId;
+		return address && documentId ? { address, documentId } : undefined;
 	};
 	let rest = (target: EventTarget) => {
 		cancel();
-		let address = rowOf(target);
-		if (address) timer.current = setTimeout(() => documentIntent.start(address), DWELL_MS);
+		let row = rowOf(target);
+		if (row) {
+			timer.current = setTimeout(() => documentIntent.start(row.address, row.documentId), DWELL_MS);
+		}
 	};
 	return {
 		onBlur: cancel,
@@ -172,8 +175,8 @@ function useRowIntent() {
 		},
 		onPointerDown: (event: PointerEvent) => {
 			cancel();
-			let address = rowOf(event.target);
-			if (address) documentIntent.start(address);
+			let row = rowOf(event.target);
+			if (row) documentIntent.start(row.address, row.documentId);
 		},
 		onPointerLeave: cancel,
 		// A touch or a pen has no resting place before a press, which is the intent.
