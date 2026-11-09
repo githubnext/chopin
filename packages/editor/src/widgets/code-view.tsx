@@ -195,14 +195,15 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	}, [renderer, language]);
 
 	// The view's width follows its container, so a resize is when the switch can
-	// change. Read before paint and before the renderer mounts, so a phone never
-	// highlights a block twice.
+	// change. The first answer comes from the observer too, and the renderer is
+	// not mounted before it, so a phone never highlights a block twice. The
+	// observer's callback runs after the frame's own layout, where the read costs
+	// nothing; read in the commit that mounted the view, each block's read came
+	// after the previous block's copy was written and laid the page out again.
 	useLayoutEffect(() => {
 		let element = view.current;
 		if (!element) return;
-		let update = () => setOverflow(readOverflow(element));
-		update();
-		let observer = new ResizeObserver(update);
+		let observer = new ResizeObserver(() => setOverflow(readOverflow(element)));
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, [renderer, broken]);
