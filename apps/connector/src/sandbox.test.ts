@@ -558,6 +558,29 @@ test("one policy shape for every system: what a launch writes of its git directo
 	}
 });
 
+test("on Windows a launch reads, of a checkout outside every directory it is given, its repository's git directory whole and nothing else of it: a run its worktree, a Planner its working directory", () => {
+	let repo = repository("windows-reads");
+	let mine = repo.worktree("mine");
+	let windows = (cwd: string, own: string[]) =>
+		launchPolicy(
+			"processcontainer",
+			{ ...systemHost(), platform: "win32" },
+			{ command: ["atomic-acp"], cwd, env: {}, stdin: "ignore", own },
+			{ directory: repo.base, home: join(repo.root, "home") },
+			"http://127.0.0.1:4000",
+			join(repo.root, "tmp"),
+		);
+	// A run: its worktree is written, which reads it; the checkout is not granted, but the git
+	// directory it came from is, since the worktree's `.git` leads into it, and that is read whole:
+	// its configuration, hooks, objects, and every worktree's entry.
+	let run = windows(mine, [mine]);
+	expect(run.writable).toContain(mine);
+	expect(run.readable).toEqual([repo.git]);
+	// A Planner works in the person's checkout, which is read whole with its git directory.
+	let planner = windows(repo.checkout, []);
+	expect([...planner.readable].sort()).toEqual([repo.checkout, repo.git].sort());
+});
+
 test("a Planner's own worktree, found made in its checkout's repository, is written as a run's is: its entry and no other, and its .git file is held", () => {
 	let repo = repository("git-planner-worktree");
 	let planned = join(repo.base, "planners", "octo", "score", "D_1");
