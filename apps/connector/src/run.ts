@@ -250,13 +250,18 @@ export async function runWork(
 			implementation ? undefined : claim.generation,
 			undefined,
 			// A registered checkout needs no token to be found, but fetching the run's commit into it
-			// takes one, as an agent's push does, and the machine's own login may not reach GitHub.
-			Object.keys(checkout.env).length > 0 || claim.spike
+			// takes one, as an agent's push does: the connector's git runs no credential helper of the
+			// person's, so a prototype's fetch gets the machine's token too, in this command's
+			// environment and no one else's.
+			Object.keys(checkout.env).length > 0
 				? checkout.env
 				: await token().then(value =>
 					value ? gitCredentials(value.file, input.source.repository) : {}
 				),
 		);
+		// A prototype never pushes and its agent is given no token, in its environment or on disk
+		// where it could read it: the one that fetched its commit is gone before the agent starts.
+		if (claim.spike) await issued?.then(value => value?.stop()).catch(() => {});
 		let path = prepared.path;
 		// A sandboxed agent can't add worktrees, which its prompt says (see `RunWorktrees`).
 		let confined = options.sandbox !== undefined && options.sandbox.report.engine !== "none";

@@ -11,6 +11,8 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { serveWork } from "./connection";
@@ -1215,6 +1217,157 @@ test.skipIf(process.platform === "win32")(
 			if (GH_TOKEN !== undefined) process.env.GH_TOKEN = GH_TOKEN;
 			if (GITHUB_TOKEN !== undefined) process.env.GITHUB_TOKEN = GITHUB_TOKEN;
 			delete process.env.CHOPIN_TEST_GITHUB;
+			await chopin.stop(true);
+			await rm(scratch, { recursive: true, force: true });
+		}
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"a prototype run in a registered checkout fetches its commit with the machine's token, for that fetch alone: the person's credential helper never runs and the agent is given no token",
+	async () => {
+		let token = `ghu_${"S".repeat(36)}`;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				if (new URL(request.url).pathname !== "/api/connector/github-token") {
+					return new Response(null, { status: 404 });
+				}
+				expect(await request.json()).toEqual({ repository: "org/repo" });
+				return Response.json({ token, expiresAt: Date.now() + 8 * 3_600_000 });
+			},
+		});
+		let scratch = await mkdtemp(join(tmpdir(), "chopin-spike-token-"));
+		let state = join(scratch, "state");
+		let real = Bun.which("git")!;
+		let plain = (cwd: string, ...args: string[]) => {
+			let result = spawnSync(real, [
+				"-c",
+				"user.name=Fixture",
+				"-c",
+				"user.email=fixture@example.test",
+				"-c",
+				"commit.gpgsign=false",
+				...args,
+			], { cwd, encoding: "utf8" });
+			if (result.status !== 0) throw new Error(`git ${args.join(" ")}: ${result.stderr}`);
+			return result.stdout.trim();
+		};
+		// The repository's private remote, which has a commit the person's checkout has not fetched.
+		let upstream = join(scratch, "upstream");
+		let root = join(scratch, "checkout");
+		await mkdir(upstream);
+		plain(upstream, "init", "-q", "-b", "main");
+		await writeFile(join(upstream, "source.txt"), "one");
+		plain(upstream, "add", ".");
+		plain(upstream, "commit", "-qm", "one");
+		plain(scratch, "clone", "-q", upstream, root);
+		plain(root, "remote", "set-url", "origin", "git@github.com:org/repo.git");
+		await writeFile(join(upstream, "source.txt"), "two");
+		plain(upstream, "commit", "-qam", "two");
+		let commit = plain(upstream, "rev-parse", "HEAD");
+		expect(spawnSync(real, ["cat-file", "-e", commit], { cwd: root }).status).not.toBe(0);
+		// A git that stands in for GitHub's private HTTPS remote: a fetch of origin succeeds only
+		// when the credentials Git would send are the machine's token, as a 401 would otherwise
+		// refuse it, and it records what it was shown.
+		let bin = join(scratch, "bin");
+		await mkdir(bin);
+		let shown = join(scratch, "shown");
+		await writeFile(
+			join(bin, "git"),
+			`#!/bin/sh
+if [ "$1" = fetch ] && [ "$2" = origin ]; then
+	filled=$(printf 'protocol=https\nhost=github.com\n\n' | "${real}" credential fill 2>/dev/null) || {
+		echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
+		exit 128
+	}
+	printf '%s\n' "$filled" > "${shown}"
+	case "$filled" in
+		*"password=${token}"*) ;;
+		*) echo "fatal: Authentication failed for 'https://github.com/org/repo.git/'" >&2; exit 128 ;;
+	esac
+	shift 2
+	GIT_ALLOW_PROTOCOL=file exec "${real}" fetch "${upstream}" "$@"
+fi
+exec "${real}" "$@"
+`,
+			{ mode: 0o755 },
+		);
+		// The person's own credential helper, which a connector's git must never run.
+		let helper = join(scratch, "helper-ran");
+		let global = join(scratch, "gitconfig");
+		await writeFile(
+			global,
+			`[credential]\n\thelper = "!f() { touch '${helper}'; echo username=person; echo password=theirs; }; f"\n`,
+		);
+		let seen = join(scratch, "agent");
+		let saved = {
+			GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+			PATH: process.env.PATH,
+			GH_TOKEN: process.env.GH_TOKEN,
+			GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+		};
+		process.env.GIT_CONFIG_GLOBAL = global;
+		process.env.PATH = `${bin}:${process.env.PATH}`;
+		delete process.env.GH_TOKEN;
+		delete process.env.GITHUB_TOKEN;
+		let terminal = captured();
+		let calls: string[] = [];
+		let api = {
+			call: async (name: string) => {
+				calls.push(name);
+				return {};
+			},
+		} as unknown as Awaited<ReturnType<typeof remote>>;
+		try {
+			await runWork(api, "experiment", {
+				spike: true,
+				passage: "We are not sure a CSS-only fade-in on the heading works without JavaScript.",
+				generation: 1,
+				runToken: "run-token",
+				input: {
+					id: crypto.randomUUID(),
+					documentId: crypto.randomUUID(),
+					brief: "Prototype the passage",
+					source: { repositoryId: "R_repo", repository: "org/repo", commit },
+					context: "",
+					requester: "a",
+					authorizer: "a",
+				},
+			}, {
+				checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
+				directory: state,
+				// What the agent has when it starts: its environment, and the folder its tokens are in.
+				command: [
+					"/bin/sh",
+					"-c",
+					`{ printf 'GH_TOKEN=%s\\nGITHUB_TOKEN=%s\\n' "$GH_TOKEN" "$GITHUB_TOKEN"; `
+					+ `printf 'tokens=%s\\n' "$(ls "$PWD.tokens" | tr '\\n' ' ')"; } > "$0"; exec "$1" "$2" --no-result`,
+					seen,
+					process.execPath,
+					new URL("./testing/fake-agent.ts", import.meta.url).pathname,
+				],
+				url: `http://127.0.0.1:${chopin.port}`,
+				machine: `chopin_m_${"M".repeat(43)}`,
+				signal: new AbortController().signal,
+				output: terminal.output,
+			});
+			expect(terminal.err()).toBe("");
+			expect(calls.filter(name => name !== "renew_experiment")).toEqual(["complete_experiment"]);
+			// The commit is in the person's checkout now, fetched with what Git was shown.
+			expect(spawnSync(real, ["cat-file", "-e", commit], { cwd: root }).status).toBe(0);
+			expect((await readFile(shown, "utf8")).split("\n")).toEqual(
+				expect.arrayContaining(["username=x-access-token", `password=${token}`]),
+			);
+			expect(existsSync(helper)).toBe(false);
+			// The agent never pushes and is given no token: not in its environment, nor on disk.
+			expect(await readFile(seen, "utf8")).toBe("GH_TOKEN=\nGITHUB_TOKEN=\ntokens=\n");
+		} finally {
+			for (let [name, value] of Object.entries(saved)) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
 			await chopin.stop(true);
 			await rm(scratch, { recursive: true, force: true });
 		}
