@@ -144,6 +144,37 @@ function boundedCopy(input: unknown): { value?: DiagramSpec; problem?: DiagramPr
 	}
 }
 
+/**
+ * Drawings already made. A page asks for each diagram several times as it opens (to see that it can
+ * be drawn, to draw it, again at the width its column turns out to have, and again when that width
+ * changes), and routing the edges of a graph is most of what drawing costs. The same specification
+ * at the same settings is the same drawing, so it is made once and handed out again: callers read
+ * a result and never change it. Bounded, so a reader who opens documents all day keeps the most
+ * recent drawings and not every one.
+ */
+const KEPT = { drawings: 400, characters: 8_000_000 };
+let kept = new Map<string, DiagramResult>();
+let keptCharacters = 0;
+
+function drawnOnce(key: string, make: () => DiagramResult): DiagramResult {
+	let held = kept.get(key);
+	if (held) {
+		// Most recently used last, so the oldest is what a full cache gives up.
+		kept.delete(key);
+		kept.set(key, held);
+		return held;
+	}
+	let made = make();
+	kept.set(key, made);
+	keptCharacters += made.ok ? made.body.length : 0;
+	for (let [oldest, result] of kept) {
+		if (oldest === key || kept.size <= KEPT.drawings && keptCharacters <= KEPT.characters) break;
+		kept.delete(oldest);
+		keptCharacters -= result.ok ? result.body.length : 0;
+	}
+	return made;
+}
+
 const FIX_HINTS: Record<string, string> = {
 	"is required": "add the field",
 	"unknown field": "remove the field",
@@ -219,7 +250,7 @@ export function renderDiagram(
 		spec.motion === "auto" && info.defaultMotion ? info.defaultMotion : spec.motion,
 		info.family,
 	);
-	let draw = (settings: Record<string, unknown>): DiagramResult => {
+	let render = (settings: Record<string, unknown>): DiagramResult => {
 		let result = info.renderer.render(spec, { preset: motion, settings });
 		let diagnostics = ((result.problems || []) as DiagramProblem[]).map((issue) => ({
 			...issue,
@@ -260,6 +291,9 @@ export function renderDiagram(
 			diagnostics,
 		};
 	};
+	let drawing = JSON.stringify(spec);
+	let draw = (settings: Record<string, unknown>): DiagramResult =>
+		drawnOnce(`${drawing}${JSON.stringify(settings)}`, () => render(settings));
 	try {
 		let ready = draw({});
 		if (!ready.ok) return ready;
