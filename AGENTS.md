@@ -252,15 +252,23 @@ durable.
   `commondir`, `gitdir`, `config.worktree` and the directories `hooks`, `info` and `modules` read-only
   inside it (made empty where there is none). A name made at the top of that entry can't be refused:
   git takes the lock of its `HEAD` and index by creating a file beside each, which a sandbox can't grant
-  for those names and refuse for the others (measured), and git reads nothing there as a hook or a
-  program. Which entry is the launch's own
+  for those names and refuse for the others (measured: `git add` and `git commit` fail with `Unable to
+  create 'index.lock'` when the entry is read-only), so that directory stays writable and a
+  new name in it (`future-pointer`, `rebase-merge/`, `locked`, a file named like a hook) is made. Such a
+  name is never a pointer, configuration, hook or program for the person's git in their checkout, which
+  stays read-only with the rest of the git directory (it reads the entry to list, prune and remove the
+  worktree, and `gc` reads its `HEAD` and index), and it makes no hardened connector git run anything
+  (tested: status, fetch, the removal of the worktree and retention with such names planted, an unfinished
+  rebase's `exec` line among them, run nothing; git run inside the worktree itself would, as the next
+  sentences say). Which entry is the launch's own
   is the connector's record of what it made for it (`Launch.own`), never what a folder is called or
   what is in it. Its `config`, `hooks`, `info`, `HEAD`, `index`, `packed-refs`, submodules' git
   directories, `worktrees` and every worktree's entry but the launch's own, the person's included,
   are read-only, and no file can be added at its top level. The guarantee is that nothing a
-  sandboxed agent writes is in a tree the person's own git reads, but `objects`, `refs`, `logs` and
-  `lfs` (an agent can add commits and move branches there); the worktree an agent works in is its
-  own, and git run inside it by a person runs what the agent left. Paths are real
+  sandboxed agent writes is in a tree the person's own git reads in their checkout, but `objects`,
+  `refs`, `logs` and `lfs` (an agent can add commits and move branches there) and the launch's own
+  entry, whose names are no pointer, configuration or program there; the worktree an agent works in
+  is its own, and git run inside it by a person runs what the agent left. Paths are real
   paths: `repositoryAt` resolves a symbolic `.git` (and a `.git` file that leads through a link)
   once, and the policy names that directory, never the link. A Planner's own worktree is made by
   the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because

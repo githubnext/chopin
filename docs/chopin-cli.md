@@ -850,8 +850,9 @@ and `lfs`, and its own worktree's entry in `worktrees/`; the rest of that
 directory, your other worktrees' entries included, it can't write. The connector's
 git does not look where an agent could have pointed it. Your own `git` in your
 checkout, while a Planner runs or after, is therefore not covered by the second
-layer and doesn't need it: no sandboxed agent wrote anything it reads, except
-those data directories.
+layer and doesn't need it: no sandboxed agent wrote anything it reads there, except
+those data directories and the launch's own entry, in which no name is a pointer,
+configuration, hook or program for it (see the last paragraph of this section).
 
 It does not make the worktree an agent works in safe to run git in: that tree is
 the agent's. Its files, what it makes in its own worktree's git entry (`HEAD`, the
@@ -923,12 +924,26 @@ takes the lock of its `HEAD` and its index by creating a file beside each and re
 it over them, and a sandbox can't grant that for those names and refuse it for every
 other: with the entry read-only and `HEAD`, the index and the logs granted as paths,
 `git add` and `git commit` fail with `Unable to create '…/index.lock': Read-only file
-system` (measured, real bubblewrap). So the entry is written as a directory, and an
-agent can make a file or folder there that git doesn't read. What git reads there as a
-pointer or as configuration, and what the repository's git directory holds read-only,
-is held, so what the agent makes there is no pointer and no configuration git
-reads; the rest is the agent's own, as the worktree is (an unfinished rebase's `exec`
-lines among it).
+system` (measured, real bubblewrap). So that directory stays writable, and an agent can
+make any file or folder in it: a `future-pointer`, a `rebase-merge/`, a `locked`, a file
+named like a hook. What that comes to:
+
+- Your checkout and the rest of your git directory stay read-only. What git reads in
+  the entry as a pointer or as configuration (`commondir`, `gitdir`, `config.worktree`)
+  and what your git directory holds read-only (`hooks`, `info`, `modules`) is held, so
+  no name made there is a pointer, configuration, hook or program for your own git in
+  your checkout. It reads the entry only to list, prune and remove the worktree (a
+  `locked` file there keeps `git worktree prune` and `remove` from touching it unless
+  forced twice, which the connector's clean-up does) and, for `git gc`, its `HEAD` and
+  index.
+- The connector's git, hardened as above and told where the repository is, runs
+  nothing because of such a name. Tested, with these names planted, an unfinished
+  rebase with an `exec` line and executables named like hooks among them: `status`,
+  `fetch`, adding the next run's worktree, a run's end, a prototype's removal and
+  retention's removal of the worktree ran nothing, while `git rebase --continue`,
+  which the connector never runs, ran the `exec` line.
+- Git run inside the worktree itself reads the rest as it reads the worktree, an
+  unfinished rebase's `exec` lines among it: that tree is the agent's, as said above.
 
 ### What each system needs
 
