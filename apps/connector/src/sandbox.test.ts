@@ -179,12 +179,12 @@ function repository(name: string) {
 			gitCommand("-C", checkout, "worktree", "add", "--detach", path);
 			return path;
 		},
-		policy(cwd: string, writable: string[] = []) {
+		policy(cwd: string, writable: string[] = [], own: string[] = []) {
 			mkdirSync(join(root, "tmp"), { recursive: true });
 			return launchPolicy(
 				"bubblewrap",
 				{ ...systemHost(), platform: "linux" },
-				{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore", writable },
+				{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore", writable, own },
 				{ directory: base, home: join(root, "home") },
 				"http://127.0.0.1:4000",
 				join(root, "tmp"),
@@ -277,11 +277,12 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.writable).not.toContain(join(root, "extra-missing"));
 	// What git reads to find its configuration, in what it may write: the worktree's pointer to its
 	// git directory, and in that directory the files that say whose configuration it reads and where
-	// the worktree is, and its own. The repository's own `config`, `hooks` and `info` are not
-	// written at all.
+	// the worktree is, and its own. The repository's own git directory is held whole, so its
+	// `config`, `hooks` and `info` are not written at all.
 	let entry = join(checkout, ".git", "worktrees", "mine");
 	expect(held(policy)).toEqual(
 		[
+			join(checkout, ".git"),
 			join(entry, "commondir"),
 			join(entry, "config.worktree"),
 			join(entry, "gitdir"),
@@ -333,7 +334,9 @@ test("a launch in a linked worktree writes its own entry in the repository's git
 	let mine = repo.worktree("mine");
 	let other = repo.worktree("other");
 	let admin = (name: string) => join(repo.git, "worktrees", name);
-	let policy = repo.policy(mine);
+	// The worktree is the connector's, made for this launch, which is what makes its entry the
+	// launch's.
+	let policy = repo.policy(mine, [], [mine]);
 	expect(policy.writable).toContain(admin("mine"));
 	expect(policy.writable).not.toContain(admin("other"));
 	expect(policy.writable).not.toContain(join(repo.git, "worktrees"));
@@ -342,6 +345,7 @@ test("a launch in a linked worktree writes its own entry in the repository's git
 	expect(readFileSync(join(admin("mine"), "config.worktree"), "utf8")).toBe("");
 	expect(held(policy)).toEqual(
 		[
+			repo.git,
 			join(admin("mine"), "commondir"),
 			join(admin("mine"), "config.worktree"),
 			join(admin("mine"), "gitdir"),
@@ -355,8 +359,48 @@ test("a launch in a linked worktree writes its own entry in the repository's git
 	// One that already has such a file keeps what is in it.
 	gitCommand("-C", repo.checkout, "config", "extensions.worktreeConfig", "true");
 	writeFileSync(join(admin("mine"), "config.worktree"), "[core]\n\tsparseCheckout = true\n");
-	repo.policy(mine);
+	repo.policy(mine, [], [mine]);
 	expect(readFileSync(join(admin("mine"), "config.worktree"), "utf8")).toContain("sparseCheckout");
+});
+
+test("a Planner whose checkout is itself a linked worktree of the person's holds that checkout's git entry read-only, with the rest of the git directory, and writes only its own worktree's entry", () => {
+	let repo = repository("git-planner-linked");
+	// The person's own checkout of the repository is a linked worktree, which is where the Planner
+	// runs; the connector makes the Planner's worktree from it.
+	let persons = join(repo.root, "persons-checkout");
+	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", persons);
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", persons, "worktree", "add", "--detach", planned);
+	let admin = (name: string) => join(repo.git, "worktrees", name);
+	// The launch, as `planner.ts` makes it: the checkout is where it runs, and the worktree is its
+	// own.
+	let policy = repo.policy(persons, [planned], [planned]);
+	expect(policy.writable).toContain(persons);
+	expect(policy.writable).toContain(planned);
+	expect(policy.writable).toContain(admin("D_1"));
+	// The person's entry is theirs: its HEAD, index and any rebase in progress are what their own
+	// git reads and runs, so nothing in it is written, and nothing is made in it for the sandbox's sake.
+	expect(policy.writable.filter(path => path.startsWith(admin("persons-checkout")))).toEqual([]);
+	expect(existsSync(join(admin("persons-checkout"), "config.worktree"))).toBe(false);
+	expect(policy.writable).not.toContain(join(repo.git, "worktrees"));
+	expect(policy.writable).not.toContain(repo.git);
+	for (let name of ["objects", "refs", "logs"]) {
+		expect(policy.writable).toContain(join(repo.git, name));
+	}
+	// The repository's git directory is held whole, as a regular checkout's is, so the person's
+	// entry can't be renamed or made again either; the checkout's `.git` file is held, and the
+	// Planner's own worktree's pointers are, as a run's are.
+	expect(held(policy)).toEqual(
+		[
+			repo.git,
+			join(admin("D_1"), "commondir"),
+			join(admin("D_1"), "config.worktree"),
+			join(admin("D_1"), "gitdir"),
+			join(persons, ".git"),
+			join(planned, ".git"),
+		].sort(),
+	);
 });
 
 test("one policy shape for every system: what a launch writes of its git directory is the same on Linux, macOS and Windows", () => {
@@ -366,7 +410,13 @@ test("one policy shape for every system: what a launch writes of its git directo
 		let policy = launchPolicy(
 			platform === "darwin" ? "seatbelt" : platform === "win32" ? "processcontainer" : "bubblewrap",
 			{ ...systemHost(), platform },
-			{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore" },
+			{
+				command: ["pdd-kit", "planner"],
+				cwd,
+				env: {},
+				stdin: "ignore",
+				own: cwd === mine ? [mine] : [],
+			},
 			{ directory: repo.base, home: join(repo.root, "home") },
 			"http://127.0.0.1:4000",
 			join(repo.root, "tmp"),
@@ -387,7 +437,7 @@ test("a Planner's own worktree, found made in its checkout's repository, is writ
 	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
 	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", planned);
 	let persons = repo.worktree("persons");
-	let policy = repo.policy(repo.checkout, [planned]);
+	let policy = repo.policy(repo.checkout, [planned], [planned]);
 	let admin = (name: string) => join(repo.git, "worktrees", name);
 	expect(policy.writable).toContain(repo.checkout);
 	expect(policy.writable).toContain(planned);
@@ -420,7 +470,7 @@ test("a submodule's git directory and every worktree entry but the launch's own 
 	gitDirectory(repo.git, "modules", "lib");
 	gitDirectory(repo.git, "modules", "ext", "tool");
 	for (let cwd of [repo.checkout, mine]) {
-		let policy = repo.policy(cwd);
+		let policy = repo.policy(cwd, [], cwd === mine ? [mine] : []);
 		expect(policy.writable.filter(path => path.startsWith(join(repo.git, "modules")))).toEqual([]);
 		expect(policy.writable).not.toContain(join(repo.git, "worktrees", "theirs"));
 		expect(policy.writable.filter(path => path.startsWith(join(repo.git, "worktrees", "theirs"))))
@@ -436,7 +486,7 @@ test("a git directory named by a file in a folder the agent made earlier is not 
 	let planned = join(repo.base, "planners", "octo", "score", "D_1");
 	mkdirSync(planned, { recursive: true });
 	writeFileSync(join(planned, ".git"), `gitdir: ${other.git}\n`);
-	let policy = repo.policy(mine, [planned]);
+	let policy = repo.policy(mine, [planned], [mine]);
 	expect(policy.writable).toContain(planned);
 	expect(policy.writable).toContain(join(repo.git, "objects"));
 	expect(policy.writable).not.toContain(other.git);

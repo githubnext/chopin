@@ -760,22 +760,30 @@ these written inside it:
 - `objects`, `refs`, `logs` and `lfs`, where commits, branches, tags, fetched
   objects and LFS objects go;
 - for a run, an investigation or a prototype, which run in a linked worktree of
-  your checkout, that worktree's own entry in `worktrees/`, where its `HEAD`,
-  index, merge and fetch state and the lock files beside them are, with the three
-  files in it that name configuration, `commondir`, `gitdir` and `config.worktree`,
-  read-only inside it; and the `.git` file in the worktree, which says where its
-  entry is, read-only too;
+  your checkout that the connector made for that run, that worktree's own entry in
+  `worktrees/`, where its `HEAD`, index, merge and fetch state and the lock files
+  beside them are, with the three files in it that name configuration, `commondir`,
+  `gitdir` and `config.worktree`, read-only inside it; and the `.git` file in the
+  worktree, which says where its entry is, read-only too;
 - for a Planner, whose working directory is your checkout itself, the checkout's
-  files and the same four directories, and its own worktree's entry exactly as a
-  run has: the connector makes the Planner's worktree before it starts
-  ([Environment](agent-connection.md#environment)).
+  files and the same four directories, and nothing of the checkout's own git
+  directory, whether your checkout is a regular one or a linked worktree of yours
+  (then your entry in `worktrees/` is read-only, and so is the `.git` file in it).
+  Its own worktree's entry is written exactly as a run's is: the connector makes the
+  Planner's worktree before it starts
+  ([Environment](agent-connection.md#environment)), and which entry is the
+  launch's own is the connector's record of what it made for it, never what a folder
+  is called or what is in it.
 
 So the repository's `config`, `hooks`, `info`, `HEAD`, `index` and `packed-refs`,
-its submodules, `worktrees` itself and every other worktree's entry, yours
-included, are read-only, and so is any file git adds to its top level later. A
-`commondir`, a new worktree entry and a `.git` made again are all refused. An
-agent can't name a program for git to run in any place git looks, nor send git to
-a directory where it has.
+its submodules, `worktrees` itself and every worktree's entry but the one the
+connector made for that launch, your own checkout's included, are read-only, and
+so is any file git adds to its top level later. A `commondir`, a new worktree
+entry and a `.git` made again are all refused, and so are a `rebase-merge`,
+`rebase-apply` or `sequencer` folder, a `HEAD`, an `index` or a reflog in your
+entry, which is where your own `git rebase --continue` would find an `exec` line
+to run. An agent can't name a program for git to run in any place git looks, nor
+send git to a directory where it has.
 
 **Git on your machine, run by Chopin.** Every `git` command the connector runs
 (`git worktree add` for a run, its fetches, its clean-up, a Planner's worktree)
@@ -821,7 +829,8 @@ What this changes for an agent. Each of these fails with `Read-only file system`
 or `could not write config file`:
 
 - **`git add`, `git commit`, `git checkout` and `git switch` in a Planner's
-  checkout**: they need its index and `HEAD`, at the top of the git directory. The
+  checkout**: they need its index and `HEAD`, at the top of the git directory, or,
+  where your checkout is a linked worktree, in your entry in `worktrees/`. The
   Planner's own worktree takes them, and so does a run's. A Planner edits documents
   through Chopin's tools and not git.
 - **`git fetch` in a Planner's checkout** writes `FETCH_HEAD` there and fails; `git
