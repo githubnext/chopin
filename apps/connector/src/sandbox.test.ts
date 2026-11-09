@@ -309,26 +309,74 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(policy.proxy).toBe("http://127.0.0.1:4000");
 });
 
-test("in a checkout's own git directory everything is read-only but where commits and refs go: it is held whole, so nothing can be added to it", () => {
+test("a launch in a checkout the connector did not make for it, the person's own, writes none of it: the checkout and its git directory are read-only whole, and no name in the git directory is granted", () => {
 	let repo = repository("git-checkout");
 	let before = readdirSync(repo.git).sort();
 	let policy = repo.policy(repo.checkout);
-	// The directory is held whole, inside the checkout the launch writes, so no file can be made at
-	// its top level, a `commondir` among them, and none renamed or made again.
+	// Nothing in the checkout is written: not its files, not its `.git`, and with no worktree of its
+	// own there is nothing to commit in, so not even where commits go.
+	expect(
+		policy.writable.filter(path => path === repo.checkout || path.startsWith(`${repo.checkout}/`)),
+	)
+		.toEqual([]);
+	expect(policy.readable).toContain(repo.checkout);
+	// The directory is held whole, so no file can be made at its top level, a `commondir` among them.
 	expect(held(policy)).toEqual([repo.git]);
-	expect(policy.writable).toContain(repo.checkout);
+	// And nothing is made in it for the sandbox's sake.
+	expect(readdirSync(repo.git).sort()).toEqual(before);
+	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
+});
+
+test("a Planner in the person's checkout writes its own worktree and where commits go in the repository's git directory, and nothing else of the repository", () => {
+	let repo = repository("git-planner-checkout");
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", planned);
+	// A submodule's folder, with the `.git` file that sends the person's own git to its git directory.
+	mkdirSync(join(repo.checkout, "vendor"));
+	writeFileSync(join(repo.checkout, "vendor", ".git"), "gitdir: ../.git/modules/vendor\n");
+	let before = readdirSync(repo.git).sort();
+	let policy = repo.policy(repo.checkout, [planned], [planned]);
+	expect(policy.writable).toContain(planned);
+	expect(policy.writable).not.toContain(repo.checkout);
 	expect(policy.writable).not.toContain(repo.git);
+	// Where its worktree's commits, branches, fetched objects and LFS objects go, and its entry.
 	for (let name of ["objects", "refs", "logs"]) {
 		expect(policy.writable).toContain(join(repo.git, name));
 	}
+	expect(policy.writable).toContain(join(repo.git, "worktrees", "D_1"));
 	for (
 		let name of ["config", "hooks", "info", "HEAD", "index", "packed-refs", "worktrees", "modules"]
 	) {
 		expect(policy.writable).not.toContain(join(repo.git, name));
 	}
-	// And nothing is made in it for the sandbox's sake.
+	// Of the checkout itself, only the directories there are written, and none of its files.
+	expect(
+		policy.writable.filter(path => path.startsWith(`${repo.checkout}/`)).map(path =>
+			path.slice(repo.checkout.length + 1)
+		).sort(),
+	).toEqual([
+		".git/logs",
+		".git/objects",
+		".git/refs",
+		".git/worktrees/D_1",
+	]);
 	expect(readdirSync(repo.git).sort()).toEqual(before);
-	expect(existsSync(join(repo.git, "config.worktree"))).toBe(false);
+});
+
+test("a Planner's checkout inside the connector's state directory, which a clone the connector made is, is read by name and not written", () => {
+	let repo = repository("git-planner-clone");
+	// A clone is made in `<base>/repos/<owner>/<repo>`, where nothing is read but what is named.
+	let clone = join(repo.base, "repos", "octo", "score");
+	mkdirSync(join(repo.base, "repos", "octo"), { recursive: true });
+	gitCommand("clone", "-q", repo.checkout, clone);
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", clone, "worktree", "add", "--detach", planned);
+	let policy = repo.policy(clone, [planned], [planned]);
+	expect(policy.readable).toContain(clone);
+	expect(policy.writable).not.toContain(clone);
+	expect(policy.writable).toContain(planned);
 });
 
 test("the repository's lfs directory, where Git LFS keeps its objects, is written where it exists, and no name beside it, no new file at the top level and no lfs directory that isn't there is", () => {
@@ -342,10 +390,17 @@ test("the repository's lfs directory, where Git LFS keeps its objects, is writte
 		policy.writable.filter(path => path.startsWith(`${repo.git}/`)).map(path =>
 			path.slice(repo.git.length + 1)
 		).sort();
-	for (let cwd of [repo.checkout, repo.worktree("mine")]) {
-		let policy = repo.policy(cwd, [], cwd === repo.checkout ? [] : [cwd]);
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", planned);
+	let mine = repo.worktree("mine");
+	let launches = [
+		() => repo.policy(repo.checkout, [planned], [planned]),
+		() => repo.policy(mine, [], [mine]),
+	];
+	for (let launch of launches) {
 		// Only these four, and a worktree's own entry: `lfs-x`, `lfs.lock` and `new-file` are not.
-		expect(beside(policy).filter(name => !name.startsWith("worktrees/"))).toEqual([
+		expect(beside(launch()).filter(name => !name.startsWith("worktrees/"))).toEqual([
 			"lfs",
 			"logs",
 			"objects",
@@ -354,7 +409,7 @@ test("the repository's lfs directory, where Git LFS keeps its objects, is writte
 	}
 	// Where there is none, none is granted and none is made for the sandbox's sake.
 	rmSync(join(repo.git, "lfs"), { recursive: true });
-	expect(beside(repo.policy(repo.checkout))).toEqual(["logs", "objects", "refs"]);
+	expect(beside(launches[0]!())).toEqual(["logs", "objects", "refs", "worktrees/D_1"]);
 	expect(existsSync(join(repo.git, "lfs"))).toBe(false);
 });
 
@@ -392,7 +447,7 @@ test("a launch in a linked worktree writes its own entry in the repository's git
 	expect(readFileSync(join(admin("mine"), "config.worktree"), "utf8")).toContain("sparseCheckout");
 });
 
-test("a Planner whose checkout is itself a linked worktree of the person's holds that checkout's git entry read-only, with the rest of the git directory, and writes only its own worktree's entry", () => {
+test("a Planner whose checkout is itself a linked worktree of the person's reads that checkout and its git entry and writes only its own worktree's entry", () => {
 	let repo = repository("git-planner-linked");
 	// The person's own checkout of the repository is a linked worktree, which is where the Planner
 	// runs; the connector makes the Planner's worktree from it.
@@ -405,7 +460,8 @@ test("a Planner whose checkout is itself a linked worktree of the person's holds
 	// The launch, as `planner.ts` makes it: the checkout is where it runs, and the worktree is its
 	// own.
 	let policy = repo.policy(persons, [planned], [planned]);
-	expect(policy.writable).toContain(persons);
+	expect(policy.writable).not.toContain(persons);
+	expect(policy.readable).toContain(persons);
 	expect(policy.writable).toContain(planned);
 	expect(policy.writable).toContain(admin("D_1"));
 	// The person's entry is theirs: its HEAD, index and any rebase in progress are what their own
@@ -418,21 +474,20 @@ test("a Planner whose checkout is itself a linked worktree of the person's holds
 		expect(policy.writable).toContain(join(repo.git, name));
 	}
 	// The repository's git directory is held whole, as a regular checkout's is, so the person's
-	// entry can't be renamed or made again either; the checkout's `.git` file is held, and the
-	// Planner's own worktree's pointers are, as a run's are.
+	// entry can't be renamed or made again either; the checkout, `.git` file included, is read-only
+	// whole, and the Planner's own worktree's pointers are held, as a run's are.
 	expect(held(policy)).toEqual(
 		[
 			repo.git,
 			join(admin("D_1"), "commondir"),
 			join(admin("D_1"), "config.worktree"),
 			join(admin("D_1"), "gitdir"),
-			join(persons, ".git"),
 			join(planned, ".git"),
 		].sort(),
 	);
 });
 
-test("a Planner's checkout whose .git is a symbolic link has its git directory granted by its real path and is read, not written, because a link can't be held", () => {
+test("a Planner's checkout whose .git is a symbolic link has its git directory granted by its real path, never through the link, and is read as any checkout is", () => {
 	let repo = repository("git-symlink");
 	// A checkout made by a tool that keeps the git directory elsewhere and links it in.
 	let store = join(repo.root, "store", "checkout.git");
@@ -452,9 +507,8 @@ test("a Planner's checkout whose .git is a symbolic link has its git directory g
 	for (let path of [...policy.writable, ...held(policy), ...policy.readable]) {
 		expect(path === repo.git || path.startsWith(`${repo.git}/`)).toBe(false);
 	}
-	// The link is a name in the checkout that an agent could replace, and the person's own git would
-	// then read and run what it led to. It can't be held, so the checkout is read, not written; the
-	// Planner's own worktree, whose `.git` is a file that is held, is written as before.
+	// The link is a name in the checkout, which is the person's: read whole, so no agent replaces it.
+	// The Planner's own worktree, whose `.git` is a file that is held, is written.
 	expect(policy.writable).not.toContain(repo.checkout);
 	expect(policy.readable).toContain(repo.checkout);
 	expect(policy.writable).toContain(planned);
@@ -481,12 +535,21 @@ test("one policy shape for every system: what a launch writes of its git directo
 			join(repo.root, "tmp"),
 		);
 		let git = (paths: readonly string[]) => paths.filter(path => path.startsWith(repo.git)).sort();
-		return { writable: git(policy.writable), held: held(policy), inGit: git(held(policy)) };
+		return {
+			writable: git(policy.writable),
+			held: held(policy),
+			inGit: git(held(policy)),
+			// Whether the working directory is written: the connector's own worktree, not the person's.
+			writesWorkingDirectory: policy.writable.includes(cwd),
+			readsWorkingDirectory: policy.readable.includes(cwd),
+		};
 	};
 	for (let cwd of [mine, repo.checkout]) {
 		let linux = shape("linux", cwd);
 		expect(shape("darwin", cwd)).toEqual(linux);
 		expect(shape("win32", cwd)).toEqual(linux);
+		expect(linux.writesWorkingDirectory).toBe(cwd === mine);
+		expect(linux.readsWorkingDirectory).toBe(cwd !== mine);
 	}
 });
 
@@ -498,7 +561,7 @@ test("a Planner's own worktree, found made in its checkout's repository, is writ
 	let persons = repo.worktree("persons");
 	let policy = repo.policy(repo.checkout, [planned], [planned]);
 	let admin = (name: string) => join(repo.git, "worktrees", name);
-	expect(policy.writable).toContain(repo.checkout);
+	expect(policy.writable).not.toContain(repo.checkout);
 	expect(policy.writable).toContain(planned);
 	expect(policy.writable).toContain(admin("D_1"));
 	expect(policy.writable).not.toContain(admin("persons"));
@@ -553,7 +616,7 @@ test("a git directory named by a file in a folder the agent made earlier is not 
 	expect(held(policy).filter(path => path.startsWith(other.git))).toEqual([]);
 });
 
-test("a checkout beside the state directory is written and not also granted to read, which MXC would take as read-only", () => {
+test("a worktree beside the state directory is written and not also granted to read, which MXC would take as read-only", () => {
 	let root = join(readableScratch, "beside");
 	let base = join(root, "state");
 	let checkout = join(root, "score");
@@ -562,7 +625,7 @@ test("a checkout beside the state directory is written and not also granted to r
 	let policy = launchPolicy(
 		"bubblewrap",
 		{ ...systemHost(), platform: "linux" },
-		{ command: ["pdd-kit", "planner"], cwd: checkout, env: {}, stdin: "ignore" },
+		{ command: ["pdd-kit", "planner"], cwd: checkout, env: {}, stdin: "ignore", own: [checkout] },
 		{ directory: base, home: join(root, "home") },
 		"http://127.0.0.1:4000",
 		join(root, "tmp"),

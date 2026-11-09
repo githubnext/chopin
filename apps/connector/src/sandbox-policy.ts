@@ -222,7 +222,7 @@ export type Policy = {
 	env: Record<string, string | undefined>;
 	/** Everything the process may read, beyond what it may write. */
 	readable: readonly string[];
-	/** Where it may write: its worktree or checkout, its state, its private temporary directory. */
+	/** Where it may write: its own worktree, its state, its private temporary directory. */
 	writable: readonly string[];
 	/** Inside a writable directory, read-only: what git reads to decide which programs to run. */
 	readonlyInside?: readonly string[];

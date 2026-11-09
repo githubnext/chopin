@@ -575,8 +575,9 @@ async function launch(
 					: {}),
 			},
 			stdin: "ignore",
-			// The backend makes its own worktree, in a folder the sandbox makes for it, and sees
-			// nothing of its siblings' or of anyone's tokens but its own.
+			// It writes its own worktree, which the connector made for it, and nothing of the checkout
+			// it runs in, which is the person's and read-only; it sees nothing of its siblings' or of
+			// anyone's tokens but its own.
 			writable: [worktree],
 			own: [worktree, tokenFolder(worktree)],
 		});

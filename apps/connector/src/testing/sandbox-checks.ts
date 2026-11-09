@@ -83,7 +83,11 @@ export async function sandboxChecks(plan: CheckPlan, cwd = process.cwd()): Promi
 	result.readRepository = attempt(() => {
 		if (!readFileSync(join(cwd, plan.repoFile), "utf8").length) throw new Error("empty");
 	});
-	result.writeWorktree = attempt(() => writeFileSync(join(cwd, "written-in-sandbox.txt"), "ok"));
+	// An agent writes the worktree it runs in; a Planner runs in the person's checkout, which it
+	// reads, and writes the worktree it finds made for it.
+	result.writeWorktree = attempt(() =>
+		writeFileSync(join(plan.worktree ?? cwd, "written-in-sandbox.txt"), "ok")
+	);
 	result.writeTemporary = attempt(() =>
 		writeFileSync(join(process.env.TMPDIR ?? "/nonexistent", "private.txt"), "ok")
 	);
@@ -133,6 +137,10 @@ export async function sandboxChecks(plan: CheckPlan, cwd = process.cwd()): Promi
 			let wrote = attempt(run);
 			return { ok: !wrote.ok, detail: wrote.ok ? "done" : wrote.detail };
 		};
+		// The person's checkout, where it runs, is read-only: no file, no submodule, no `.git`.
+		result.cannotWriteCheckout = refused(() =>
+			writeFileSync(join(cwd, "written-in-sandbox.txt"), "ok")
+		);
 		result.cannotAddWorktree = refused(() =>
 			git(cwd, "worktree", "add", "--detach", `${worktree}-second`)
 		);
