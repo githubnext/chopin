@@ -2,13 +2,16 @@ import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	readlinkSync,
 	realpathSync,
 	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -540,6 +543,7 @@ if [ -n "$MAIN" ]; then
 	try checkoutWrite sh -c 'echo ok > "$1/agent-wrote.txt"' sh "$MAIN"
 	try checkoutGitMove sh -c 'mv "$1/.git" "$1/.git.moved"' sh "$MAIN"
 	try checkoutGitReplace sh -c 'mv "$1/.git" "$1/.git.moved" && mkdir "$1/.git"' sh "$MAIN"
+	try checkoutGitRelink sh -c 'rm -f "$1/.git" && ln -s "$2" "$1/.git"' sh "$MAIN" "$evil/fake"
 	try checkoutCommit sh -c 'cd "$1" && echo more > more.txt && git add more.txt && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in the checkout"' sh "$MAIN"
 	if [ -f "$MAIN/.git" ]; then
 		# The checkout is a linked worktree of the person's, so its git directory is the person's
@@ -627,12 +631,29 @@ async function afterwards(made: ReturnType<typeof world>, worktree: string, link
 /**
  * `run`: an agent in the worktree the connector made for its run. `planner`: a Planner in the
  * person's checkout, with its own worktree. `linked`: the same, where the person's checkout is
- * itself a linked worktree of their repository.
+ * itself a linked worktree of their repository. `symlinked`: the same as `planner`, where the
+ * checkout's `.git` is a symbolic link to a git directory kept elsewhere.
  */
-type Layout = "run" | "planner" | "linked";
+type Layout = "run" | "planner" | "linked" | "symlinked";
 
 async function gitAttempts(layout: Layout) {
 	let made = gitWorld(`git-${layout}`);
+	let store = join(made.root, "store", "checkout.git");
+	if (layout === "symlinked") {
+		// As a tool that keeps git directories in a store of its own leaves a checkout.
+		mkdirSync(dirname(store));
+		renameSync(join(made.checkout, ".git"), store);
+		symlinkSync(store, join(made.checkout, ".git"));
+		// The submodule's git directory names its working tree relative to where it was.
+		git(
+			made.checkout,
+			"config",
+			"--file",
+			join(store, "modules", "vendor", "config"),
+			"core.worktree",
+			join(made.checkout, "vendor"),
+		);
+	}
 	let ran = join(made.root, "ran");
 	mkdirSync(ran);
 	let run = layout === "run";
@@ -712,6 +733,11 @@ async function gitAttempts(layout: Layout) {
 			).sort(),
 			local: git(made.checkout, "branch", "--list", "--format=%(refname:short)").split("\n").sort(),
 			checkoutWritten: existsSync(join(checkout, "agent-wrote.txt")),
+			// Whether the link is as it was.
+			link: layout === "symlinked"
+				? lstatSync(join(made.checkout, ".git")).isSymbolicLink()
+					&& readlinkSync(join(made.checkout, ".git")) === store
+				: undefined,
 			planted,
 			redirect: existsSync(join(made.checkout, ".git", "commondir")),
 			entries: readdirSync(join(made.checkout, ".git", "worktrees")).sort(),
@@ -787,7 +813,8 @@ async function expectGitUntouched(layout: Layout) {
 				...Object.fromEntries(PERMITTED.map(name => [name, "done"])),
 				...Object.fromEntries(REFUSED.map(name => [name, "refused"])),
 				...(linked ? {} : {
-					checkoutWrite: "done",
+					// Its files, but not where `.git` is a link, which can't be held: that checkout is read.
+					checkoutWrite: layout === "symlinked" ? "refused" : "done",
 					checkoutGitMove: "refused",
 					checkoutGitReplace: "refused",
 					// The index and HEAD are in its git directory, which is read-only to it.
@@ -795,6 +822,7 @@ async function expectGitUntouched(layout: Layout) {
 					...(layout === "linked"
 						? Object.fromEntries(PERSONS_ENTRY.map(name => [name, "refused"]))
 						: { checkoutConfig: "refused" }),
+					checkoutGitRelink: "refused",
 				}),
 				finished: "done",
 			},
@@ -808,7 +836,7 @@ async function expectGitUntouched(layout: Layout) {
 	expect(result.entries).not.toContain("made-up");
 	expect(result.entries).toContain("persons-other");
 	// Git on the host works as it did, and the worktree still leads to the repository it came from.
-	expect(result.host.statuses.every(status => status === 0)).toBe(true);
+	expect(result.host.statuses).toEqual(result.host.statuses.map(() => 0));
 	if (linked) expect(result.host.commonDirectory).toBe(join(result.made.checkout, ".git"));
 	// What git is for happened: its branches and refs, on both sides. An upstream, which is
 	// recorded in the config, is not.
@@ -817,7 +845,9 @@ async function expectGitUntouched(layout: Layout) {
 	);
 	expect(result.local).toEqual(expect.arrayContaining(["from-sandbox", "topic", "tracked"]));
 	expect(result.upstream).toBe("");
-	expect(result.checkoutWritten).toBe(!linked);
+	expect(result.checkoutWritten).toBe(layout === "planner" || layout === "linked");
+	// A link in the checkout is as it was, and git on the host reads the repository through it.
+	if (layout === "symlinked") expect(result.link).toBe(true);
 	if (result.person) {
 		// The person's own git finds their checkout as it was: no rebase, no merge, nothing added
 		// to the entry or taken from it, and its HEAD is the same.
@@ -842,6 +872,12 @@ sandboxTest(
 sandboxTest(
 	"a Planner whose checkout is a linked worktree of the person's can't write that worktree's git entry, plant a rebase with an exec line in it or commit there, and its own worktree still commits and pushes",
 	() => expectGitUntouched("linked"),
+	120_000,
+);
+
+sandboxTest(
+	"a Planner starts when its checkout's .git is a symbolic link to a git directory kept elsewhere, reads and commits in its own worktree, and can't write that checkout, replace the link or write the git directory",
+	() => expectGitUntouched("symlinked"),
 	120_000,
 );
 

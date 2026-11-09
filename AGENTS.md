@@ -246,7 +246,11 @@ durable.
   person's, has its whole git directory read-only: a `rebase-merge` with an `exec` line, a `HEAD` or
   an `index` can't be written in the person's own entry. Its `config`, `hooks`, `info`, `HEAD`,
   `index`, `packed-refs`, submodules, `worktrees` and every worktree's entry but the launch's own,
-  the person's included, are read-only, and no file can be added at its top level. A Planner's own worktree is made by
+  the person's included, are read-only, and no file can be added at its top level. Paths are real
+  paths: `repositoryAt` resolves a symbolic `.git` (and a `.git` file that leads through a link)
+  once, and the policy names that directory, never the link; a sandbox can hold back a file or a
+  directory but not a link, so a launch's folder whose `.git` is a link is read, not written (a
+  Planner then works in its own worktree). A Planner's own worktree is made by
   the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
   `git worktree add` would need `worktrees/` written; an unsandboxed backend makes it itself. The
   limit, said plainly: in the sandbox `git add`, `commit` and `checkout` fail in a Planner's

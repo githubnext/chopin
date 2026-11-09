@@ -9,11 +9,13 @@ import {
 	readdirSync,
 	readFileSync,
 	realpathSync,
+	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { gitAsync, gitSync, HOST_GIT_CONFIG, hostGitEnvironment, repositoryAt } from "./git-host";
 
 let scratch = realpathSync(mkdtempSync(join(tmpdir(), "chopin-git-host-")));
@@ -421,6 +423,38 @@ test("the connector records a checkout's git directories once, from the director
 	}
 	// A folder that is no working tree has no record.
 	expect(repositoryAt(join(made.root, "ran"))).toBeUndefined();
+});
+
+test("a checkout whose .git is a symbolic link, or a .git file that leads through one, is recorded by the real paths of its git directories, which git on the host is told", async () => {
+	let made = repository("links");
+	// A checkout made by a tool that keeps the git directory elsewhere and links it in.
+	let store = join(made.root, "store", "repo.git");
+	mkdirSync(dirname(store));
+	renameSync(join(made.repo, ".git"), store);
+	symlinkSync(join("..", "store", "repo.git"), join(made.repo, ".git"));
+	let repo = repositoryAt(made.repo)!;
+	expect(repo).toMatchObject({ workTree: made.repo, gitDir: store, commonDir: store });
+	// The environment git on the host is given names the real directory, not the link in the
+	// folder an agent writes, and the link pointed elsewhere later changes nothing.
+	let hardened = hostGitEnvironment(process.env, repo);
+	expect(hardened.GIT_DIR).toBe(store);
+	expect(hardened.GIT_COMMON_DIR).toBe(store);
+	rmSync(join(made.repo, ".git"));
+	symlinkSync(made.evil, join(made.repo, ".git"));
+	expect(repositoryAt(made.repo)).toBe(repo);
+	await gitAsync(["worktree", "add", "--detach", join(made.root, "wt")], { cwd: made.repo });
+	expect(readdirSync(join(store, "worktrees"))).toEqual(["wt"]);
+	// A worktree whose `.git` file names its entry through a link is recorded by the real paths too.
+	let through = join(made.root, "through");
+	symlinkSync(store, through);
+	let linked = join(made.root, "linked");
+	plain(store, "worktree", "add", "--detach", linked);
+	writeFileSync(join(linked, ".git"), `gitdir: ${join(through, "worktrees", "linked")}\n`);
+	expect(repositoryAt(linked)).toMatchObject({
+		workTree: linked,
+		gitDir: join(store, "worktrees", "linked"),
+		commonDir: store,
+	});
 });
 
 test("no git command the connector runs on the host bypasses the hardened helper", () => {
