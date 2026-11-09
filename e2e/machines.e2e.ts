@@ -486,17 +486,10 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(row("build-box").getByRole("button", { name: /^Copy / })).toHaveCount(0);
 	await expect(row("studio")).toContainText("macOS arm64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
-	// Whether its agents run in the system's sandbox: the connector's word, with why not on hover.
-	await expect(row("build-box").getByText("Sandboxed", { exact: true })).toHaveAttribute(
-		"data-tooltip",
-		"Sandboxed (Linux bubblewrap)",
-	);
-	await expect(row("studio").getByText("Not sandboxed", { exact: true })).toHaveAttribute(
-		"data-tooltip",
-		"Not sandboxed: MXC's Seatbelt backend needs macOS 15 or later. Update macOS. "
-			+ "Fix: softwareupdate --install --all",
-	);
-	await expect(row("old-laptop")).not.toContainText("andboxed");
+	// A person has no say in the sandbox, so the table doesn't mention it.
+	for (let name of ["build-box", "studio", "old-laptop"]) {
+		await expect(row(name)).not.toContainText("andboxed");
+	}
 
 	// Sharing is off until its owner turns it on, from the row's switch, and stays on once saved.
 	let sharing = row("studio").getByRole("switch", { name: "Share studio with teammates" });
