@@ -1313,16 +1313,19 @@ test("a message sent from an open child while a deploy waits for a turn keeps th
 });
 
 /**
- * Holds the lock every fenced write of the writer lease takes (`#assertLease` in the PostgreSQL
- * adapter), so that a process that has to write next stands where it is. Taken while nothing is
- * being written, it stops the old process at the commit of its cut, after it has stopped taking
- * requests and while every socket is still open, as the cut stands for a few milliseconds when
- * nothing is held.
+ * The lock every fenced write of the writer lease takes (`#assertLease` in the PostgreSQL
+ * adapter): `hold` takes it, so that a process that has to write next stands where it is. Taken
+ * when the old process's cut begins, it stops that process at the commit of its cut, after it has
+ * stopped taking requests and while every socket is still open, as the cut stands for a few
+ * milliseconds when nothing is held. It is connected first, so that `hold` is one round trip.
  */
 async function holdWrites(database: string) {
 	let sql = new SQL(database, { max: 1 });
-	await sql`SELECT pg_advisory_lock(2043237433, hashtext('chopin:writer'))`;
+	await sql`SELECT 1`;
 	return {
+		async hold() {
+			await sql`SELECT pg_advisory_lock(2043237433, hashtext('chopin:writer'))`;
+		},
 		async release() {
 			try {
 				await sql`SELECT pg_advisory_unlock(2043237433, hashtext('chopin:writer'))`;
@@ -1356,7 +1359,7 @@ test("messages sent without a pause while the old process is cutting, with its s
 		}
 	})();
 	await until("the first messages to be answered", () => planner.prompts.length >= 2, 30_000);
-	// Idle before the deploy, so that nothing is being written when the writes are held.
+	// Idle before the deploy: every message answered, so that no turn is left to wait for.
 	phase.sending = false;
 	await until(
 		"every message so far to be answered",
@@ -1364,19 +1367,37 @@ test("messages sent without a pause while the old process is cutting, with its s
 			planner.prompts.length === sent.length
 			&& (await turns(world.database, room)).every(row => row.state === "ended"),
 	);
-	await Bun.sleep(300);
 
-	let held = await holdWrites(world.database);
+	let writes = await holdWrites(world.database);
 	// Let go of the lock however the test ends, so that a process stood at its cut can exit.
-	closers.push(async () => void await held.release());
+	closers.push(async () => void await writes.release());
 	let deploy = beginDeploy(world);
+	let leaseReleased = false;
+	void deploy.released.then(() => {
+		leaseReleased = true;
+	}, () => {});
+	// Not before the cut begins. The old process first settles, still serving: it commits and
+	// checkpoints every document, and a commit's checkpoint is made 500 ms after it
+	// (`scheduleCheckpoint`), so a message answered less than that before SIGTERM leaves a write
+	// that stops on the lock, before the listener, and the process never stops listening. Readiness
+	// going off is the cut's first step, after every write before it and with the whole unready
+	// window still to run, so the next write the process makes is the cut's own.
+	await until(
+		"the old process to begin its cut",
+		async () => (await text(slotUrl("a", "/api/health/ready")))?.[1] === "draining",
+	);
+	await writes.hold();
 	// The old process stops taking requests, then stands at the commit of its cut. Its sockets are
 	// open, and the page keeps on pressing Enter.
 	await until("the old process to stop listening", async () => (await live("a")) === undefined);
 	let fromAt = performance.now();
 	phase.sending = true;
 	await Bun.sleep(1_500);
-	let toAt = await held.release();
+	// The cut stood still all that time: a lock taken after the window would have let it by.
+	expect(leaseReleased, "the old process released the lease while its writes were held").toBe(
+		false,
+	);
+	let toAt = await writes.release();
 	let done = await deploy.finish();
 	await until(
 		"messages to have followed the release",
