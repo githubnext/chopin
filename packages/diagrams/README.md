@@ -36,7 +36,9 @@ The browser sends a request to the API.
 ````
 
 The fence is collaborative source text. The editor shows a derived viewer beside it and keeps
-inspection and playback state local to each reader. Source is capped at 64 KiB before parsing;
+inspection and playback state local to each reader. A diagram plays its entrance when it mounts;
+one that mounts more than a screen from the reader, which the editor says through `near`, opens on
+its last step instead, as under reduced motion. Source is capped at 64 KiB before parsing;
 `renderDiagram` validates the spec. An incomplete human edit shows an error without hiding its
 source. Planner edits that introduce invalid specs fail before changing the document.
 

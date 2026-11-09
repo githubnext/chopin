@@ -34,6 +34,7 @@ import {
 	type Playback,
 	restart as restartPlayback,
 	running,
+	settle,
 	step as stepPlayback,
 } from "./playback";
 import { namespaceSvgIds } from "./viewer/namespace";
@@ -50,6 +51,12 @@ export type DiagramProps = {
 	 * given the column width it was laid out for.
 	 */
 	onExpand?: (opener: HTMLButtonElement, availableWidth: number) => void;
+	/**
+	 * Whether the host found the diagram within a screen of the reader when it mounted. One that is
+	 * not opens on its last step instead of playing its entrance to nobody; unset plays, as it does
+	 * wherever no host says. The host may say it after the first frame.
+	 */
+	near?: boolean;
 };
 
 type ReadyDiagram = Extract<DiagramResult, { ok: true }>;
@@ -93,6 +100,7 @@ function DiagramView({
 	description,
 	idPrefix,
 	onExpand,
+	near,
 	onWidth,
 }: Omit<DiagramProps, "spec"> & { result: ReadyDiagram; onWidth: (width: number) => void }) {
 	let expandable = onExpand !== undefined;
@@ -108,7 +116,7 @@ function DiagramView({
 	let [reduced, setReduced] = useState(prefersReducedMotion);
 	let motion = result.motion && result.motion !== "none" ? result.motion : null;
 	let maxStep = motion ? Math.max(0, result.steps ?? 0) : 0;
-	let [mode, setMode] = useState<Playback>(() => initialPlayback(maxStep, reduced));
+	let [mode, setMode] = useState<Playback>(() => initialPlayback(maxStep, reduced, near));
 	let [playback, setPlayback] = useState(0);
 	let [overflowing, setOverflowing] = useState(false);
 	let [available, setAvailable] = useState(0);
@@ -135,6 +143,11 @@ function DiagramView({
 		query.addEventListener("change", update);
 		return () => query.removeEventListener("change", update);
 	}, []);
+
+	// Found far from the reader after it mounted playing: hold the last step, not a step at a time.
+	useEffect(() => {
+		if (near === false) setMode((current) => settle(current, maxStep));
+	}, [near, maxStep]);
 
 	// Animated playback counts each step as its animation starts (onAnimationStart).
 	// Reduced motion has no animation to follow, so it shows one step per interval.
@@ -559,6 +572,7 @@ export function Diagram({ spec, ...props }: DiagramProps) {
 			description={props.description}
 			idPrefix={props.idPrefix}
 			onExpand={props.onExpand}
+			near={props.near}
 		/>
 	);
 }

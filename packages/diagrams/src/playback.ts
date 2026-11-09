@@ -10,9 +10,23 @@ export type Playback =
 	| { kind: "playing"; from: number; at: number }
 	| { kind: "paused"; at: number };
 
-/** Reduced motion never plays on its own: it opens on the whole diagram. */
-export function initialPlayback(steps: number, reduced: boolean): Playback {
-	return reduced ? { kind: "paused", at: steps } : { kind: "playing", from: 0, at: 0 };
+/**
+ * Reduced motion never plays on its own: it opens on the whole diagram. Nor does a diagram the host
+ * found far from the reader (`near` false), which nobody is looking at: it opens on the last step,
+ * where playing would leave it. A diagram near the reader, or one no host has placed, plays.
+ */
+export function initialPlayback(steps: number, reduced: boolean, near?: boolean): Playback {
+	return reduced || near === false
+		? { kind: "paused", at: steps }
+		: { kind: "playing", from: 0, at: 0 };
+}
+
+/**
+ * A diagram that began to play and was then found far from the reader goes straight to its last
+ * step. One the reader has already paused keeps the step they chose.
+ */
+export function settle(playback: Playback, steps: number): Playback {
+	return playback.kind === "playing" ? { kind: "paused", at: steps } : playback;
 }
 
 export function running(playback: Playback): boolean {

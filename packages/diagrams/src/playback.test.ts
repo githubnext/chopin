@@ -9,6 +9,7 @@ import {
 	play,
 	restart,
 	running,
+	settle,
 	step,
 } from "./playback";
 
@@ -48,4 +49,25 @@ test("reduced motion opens on the whole diagram without playing", () => {
 	let playback = initialPlayback(4, true);
 	expect(playback).toEqual({ kind: "paused", at: 4 });
 	expect(running(playback)).toBe(false);
+});
+
+test("a diagram the host found far from the reader opens on its whole drawing; near it, or not yet placed, it plays", () => {
+	// Far: held on its last step, as reduced motion holds it, and as playing ends.
+	expect(initialPlayback(6, false, false)).toEqual({ kind: "paused", at: 6 });
+	expect(initialPlayback(6, false, false)).toEqual(finish(advance(restart(), 6, 6), 6));
+	// Near the reader, or with no host that says (the gallery), it plays from the first step.
+	expect(initialPlayback(6, false, true)).toEqual(restart());
+	expect(initialPlayback(6, false, undefined)).toEqual(restart());
+	// Reduced motion opens on the whole drawing wherever the diagram is.
+	expect(initialPlayback(6, true, true)).toEqual({ kind: "paused", at: 6 });
+	expect(initialPlayback(6, true, false)).toEqual({ kind: "paused", at: 6 });
+});
+
+test("a diagram found far from the reader after it began playing settles on its last step; one the reader paused keeps its own", () => {
+	let playing = advance(initialPlayback(6, false), 6, 2);
+	expect(settle(playing, 6)).toEqual({ kind: "paused", at: 6 });
+	expect(running(settle(playing, 6))).toBe(false);
+	expect(settle(initialPlayback(6, false), 6)).toEqual({ kind: "paused", at: 6 });
+	let paused = pause(playing, 6);
+	expect(settle(paused, 6)).toBe(paused);
 });
