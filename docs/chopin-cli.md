@@ -831,9 +831,9 @@ a check and the command at which something could change. It also:
 - runs no credential helper: every helper any configuration names, a repository's
   and yours, is reset (`credential.helper=` empty) and none is named again. A fetch
   that needs a login gets the machine's GitHub token from the connector, which
-  hands it over in the command's environment, as it does for a run's commit and
-  for a clone; a prototype run in a registered checkout is given none, so it can
-  fetch only what needs no login;
+  hands it over in the command's environment, as it does for the fetch of a run's
+  commit (a prototype's too) and for a clone. A prototype's agent never gets that
+  token: it is gone before the agent starts;
 - refuses the local transport (`protocol.file.allow=never`), whatever the checkout's
   `origin` is. Set `GIT_ALLOW_PROTOCOL` in the connector's environment if you fetch
   through a mirror on disk.
