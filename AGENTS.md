@@ -270,8 +270,10 @@ durable.
   connector sees a working tree and never read from the files an agent can write), reads a copy of
   the person's configuration of the settings a fetch and a checkout need (`GIT_CONFIG_NOSYSTEM`,
   `GIT_CONFIG_GLOBAL`), and replaces what a repository may set for hooks, the file-system monitor, the
-  ssh command, attributes, `ext::` remotes, credential helpers and the local transport (allowed
-  only where the person's `origin` was local when first seen). Not guaranteed: what an agent writes
+  ssh command, attributes, `ext::` remotes, credential helpers (reset, and none of the person's
+  named again; a command's caller gives the credentials it needs in the environment) and the
+  local transport (never allowed; `GIT_ALLOW_PROTOCOL` in the connector's own environment is the
+  person's way to a mirror on disk). Not guaranteed: what an agent writes
   in its own worktree and its own entry (an unfinished rebase's `exec` lines, a repository it
   `git init`s, a submodule it adds to its own index with a `.git` it wrote, which the connector's
   git doesn't open) is the agent's, and git run there by a person runs what is there; a repository's

@@ -618,6 +618,12 @@ function gitWorld(name: string) {
 	return made;
 }
 
+/**
+ * The fixture's origin is a bare repository on this disk, which the connector's git never fetches
+ * from unless its person allows the transport, as they would for a mirror on disk.
+ */
+const LOCAL_REMOTE = { ...process.env, GIT_ALLOW_PROTOCOL: "file" };
+
 /** What git on the host does after an agent ran: the person's own git and the connector's. */
 async function afterwards(made: ReturnType<typeof world>, worktree: string, linked: boolean) {
 	let next = join(made.state, "runs", "next");
@@ -634,8 +640,11 @@ async function afterwards(made: ReturnType<typeof world>, worktree: string, link
 		await gitAsync(["worktree", "add", "--detach", join(made.state, "runs", "next-by-connector")], {
 			cwd: made.checkout,
 		}).then(() => 0, () => 1),
-		await gitAsync(["fetch", "origin"], { cwd: made.checkout }).then(() => 0, () => 1),
-		gitSync(["ls-remote", "origin"], { cwd: made.checkout }).status,
+		await gitAsync(["fetch", "origin"], { cwd: made.checkout, env: LOCAL_REMOTE }).then(
+			() => 0,
+			() => 1,
+		),
+		gitSync(["ls-remote", "origin"], { cwd: made.checkout, env: LOCAL_REMOTE }).status,
 		gitSync(["status"], { cwd: made.checkout }).status,
 		await gitAsync(["worktree", "prune"], { cwd: made.checkout }).then(() => 0, () => 1),
 	];
@@ -1205,7 +1214,10 @@ sandboxTest(
 			gitSync(["status", "--short"], { cwd: worktree }).status,
 			gitSync(["diff"], { cwd: worktree }).status,
 			gitSync(["ls-files", "--stage"], { cwd: worktree }).status,
-			await gitAsync(["fetch", "origin"], { cwd: worktree }).then(() => 0, () => 1),
+			await gitAsync(["fetch", "origin"], { cwd: worktree, env: LOCAL_REMOTE }).then(
+				() => 0,
+				() => 1,
+			),
 		];
 		expect(hostile).toEqual(hostile.map(() => 0));
 		// `git submodule status` stops at a gitlink the repository's .gitmodules doesn't name, as it
