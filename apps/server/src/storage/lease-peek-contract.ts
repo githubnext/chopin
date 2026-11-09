@@ -42,11 +42,15 @@ export function leasePeekContract(name: string, factory: StorageFactory) {
 				expect(second.fencing).toBe(first.fencing + 1);
 				expect((await storage.leases.peek(released))!.free).toBe(false);
 
+				// Both are read after the same wait, so neither depends on how soon after it was taken a
+				// read lands: a database slower than the short lease's time would otherwise find it free.
 				let expiring = id("expiring");
+				let lasting = id("lasting");
 				await storage.leases.acquire(expiring, "first", 20);
-				expect((await storage.leases.peek(expiring))!.free).toBe(false);
+				await storage.leases.acquire(lasting, "first", 60_000);
 				await Bun.sleep(60);
 				expect((await storage.leases.peek(expiring))!.free).toBe(true);
+				expect((await storage.leases.peek(lasting))!.free).toBe(false);
 			} finally {
 				await storage.close();
 			}
