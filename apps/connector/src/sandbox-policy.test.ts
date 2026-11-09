@@ -4,9 +4,9 @@ import {
 	allowedHosts,
 	commandLine,
 	type Disk,
-	isLocalEntry,
 	matchingEntry,
 	mxcRequest,
+	ownerEntry,
 	type Policy,
 	readableRoots,
 	readGrantsAround,
@@ -82,9 +82,13 @@ test("Chopin's origin carries its port, a loopback one included, and the owner's
 	expect(matchingEntry(hosts, "127.0.0.1", 9000)).toBeUndefined();
 	expect(matchingEntry(hosts, "store.example.com", 8443)).toBe("store.example.com:8443");
 	expect(matchingEntry(hosts, "build.corp.test", 443)).toBe("*.corp.test");
-	expect(isLocalEntry("127.0.0.1:8788")).toBe(true);
-	expect(isLocalEntry("localhost:8788")).toBe(true);
-	expect(isLocalEntry("github.com")).toBe(false);
+	// What the owner chose may be on a private network; a built-in name may not.
+	for (let entry of ["127.0.0.1:8788", "localhost:8788", "store.example.com:8443", "*.corp.test"]) {
+		expect(ownerEntry(entry), entry).toBe(true);
+	}
+	for (let entry of ["github.com", "api.github.com", "*.githubcopilot.com", "registry.npmjs.org"]) {
+		expect(ownerEntry(entry), entry).toBe(false);
+	}
 });
 
 test("a host the owner adds is a name, a *. name or a name with a port, and nothing else", () => {
