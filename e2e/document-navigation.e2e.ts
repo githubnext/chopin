@@ -644,6 +644,13 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	let originalPath = await original.getAttribute("href");
 	expect(originalPath).toBeTruthy();
 
+	// A new document is announced to every sidebar watching its repository, its author's included,
+	// and each reads the catalogue once the burst has been quiet for 250 ms. That read belongs to the
+	// creation, not to a switch, and it lands whenever the test has got to by then.
+	let announced = page.waitForResponse(response =>
+		response.request().method() === "GET"
+		&& new URL(response.url()).pathname === "/api/repositories/octo-org/score/channels"
+	);
 	await projects.getByRole("button", { name: "New document", exact: true }).click();
 	await expect(page).toHaveURL(/\/documents\/octo-org\/score\/[a-z]+-[a-z]+(?:-\d+)?$/);
 	let created = projects.locator('a[aria-current="page"]');
@@ -659,6 +666,8 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	).toHaveLength(initialNavigationRequests);
 	await expect.poll(() => latestVisit()?.documentId).not.toBeUndefined();
 	let createdDocumentId = latestVisit()!.documentId!;
+	await announced;
+	await expect(projects.getByText("Loading more…", { exact: true })).toHaveCount(0);
 
 	let documentRoutePattern = "**/api/repositories/octo-org/score/documents/*";
 	let release = Promise.withResolvers<void>();
