@@ -736,12 +736,12 @@ service has no business there. Your Chopin server's origin and the hosts you add
 are your choice, and may be on a private network, as a self-hosted server or a
 corporate registry is.
 
-| Option                  | What it does                                                                                       |
-| ----------------------- | -------------------------------------------------------------------------------------------------- |
-| `--require-sandbox`     | Refuses a run when this machine has no sandbox, naming why. Off by default.                        |
-| `--no-sandbox`          | Never sandboxes. `chopin status` says it is off.                                                   |
-| `--sandbox-host <host>` | Allows an agent to reach one more host. Repeat it.                                                 |
-| `--sandbox-write <dir>` | Allows an agent to write one more directory, such as a package cache or a local remote. Repeat it. |
+| Option                  | What it does                                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `--require-sandbox`     | Refuses a run when this machine has no sandbox, naming why. Off by default.                                                             |
+| `--no-sandbox`          | Never sandboxes. `chopin status` says it is off.                                                                                        |
+| `--sandbox-host <host>` | Allows an agent to reach one more host. Repeat it.                                                                                      |
+| `--sandbox-write <dir>` | Allows an agent to write one more directory, such as a package cache or a local remote, but never your checkout (see below). Repeat it. |
 
 ### Git in the sandbox
 
@@ -758,8 +758,8 @@ directory it names says. An agent that could write any of them would escape the
 sandbox, and a sandbox can hold back only a path that already exists, so it can't
 forbid the making of a `commondir`, or of a `.git` in a submodule's empty folder,
 by name. So the rule is simple: **a sandboxed agent never writes your checkout**,
-unless you grant a path in it yourself with `--sandbox-write`, which is the one way
-to make it writable. Then there are two more layers, and each is an allow-list.
+and nothing you add with `--sandbox-write` changes that (see below). Then there are
+two more layers, and each is an allow-list.
 
 **Your checkout is read-only, whole.** A Planner runs in your checkout, the one you
 named with `--checkout` or a clone Chopin made in `repos/`, and reads it: its
@@ -838,7 +838,11 @@ a check and the command at which something could change. It also:
 **What this does and doesn't guarantee.** Your checkout's files, its submodules,
 its configuration, hooks and `info`, every file in it that says where git is (a
 `.git`, a `commondir`), its index and its `HEAD` are never writable by a sandboxed
-agent, but where you add one of those paths with `--sandbox-write`. What an agent does write in your git directory is `objects`, `refs`, `logs`
+agent, and a path you add with `--sandbox-write` is no exception: one that is your
+checkout or inside it (a submodule's folder, `.git/hooks`) or inside its git directory
+is not granted, and one that holds your checkout is granted with the checkout and its
+git directory held read-only, whether the agent is a Planner in the checkout or a run in
+a worktree of it. What an agent does write in your git directory is `objects`, `refs`, `logs`
 and `lfs`, and its own worktree's entry in `worktrees/`; the rest of that
 directory, your other worktrees' entries included, it can't write. The connector's
 git does not look where an agent could have pointed it. Your own `git` in your

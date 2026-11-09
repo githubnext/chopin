@@ -237,9 +237,10 @@ durable.
   the owner adds. A sandboxed agent never writes the person's own checkout: a Planner runs in it
   (`CHOPIN_CHECKOUT`, whether a regular checkout, a linked worktree of the person's or a clone
   Chopin made) and reads it, whole, so its files, its submodules (whose `.git` files the person's
-  `git status` and `git diff` follow), its `.git`, index and `HEAD` are never writable, but where
-  the owner adds a path in it with `--sandbox-write`. The
-  working directory is written only where the connector made it for the launch (`Launch.own`). A
+  `git status` and `git diff` follow), its `.git`, index and `HEAD` are never writable, and no path
+  the owner adds with `--sandbox-write` changes that: one that is the checkout or inside it (a
+  submodule's folder) or its git directory is not granted, and one that holds it is granted with
+  the checkout held read-only. The working directory is written only where the connector made it for the launch (`Launch.own`). A
   Planner's changes reach the person as commits and a pushed branch from its own worktree
   (`CHOPIN_WORKTREE`), never by in-place edits. Git on the host runs what a repository's configuration names, and finds that
   configuration through files (a worktree's or a submodule's `.git`, a `commondir`) that name another
