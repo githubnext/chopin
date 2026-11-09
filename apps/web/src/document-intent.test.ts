@@ -229,6 +229,33 @@ test("a document that changes after the click, while the opening still waits on 
 	expect(documents.own).toEqual(["Own"]);
 });
 
+test("a document that changes after the click is read again at once, though the read never answers", async () => {
+	let documents = intent();
+	documents.hold();
+	documents.start(address, "plan-id");
+	let opening = documents.read(address, documents.ordinary("Own"));
+	documents.forget("plan-id");
+	documents.forget("plan-id");
+	let gave = await Promise.race([
+		opening.then(record => record.channel.title),
+		new Promise<string>(resolve => setTimeout(() => resolve("still waiting"), 50)),
+	]);
+	expect(gave).toBe("Own");
+	expect(documents.own).toEqual(["Own"]);
+});
+
+test("a read that fails after its opening was told to read again does not make it read twice", async () => {
+	let documents = intent();
+	let held = documents.hold();
+	documents.start(address, "plan-id");
+	let opening = documents.read(address, documents.ordinary("Own"));
+	documents.forget("plan-id");
+	held.fail(new Error("gone"));
+	expect((await opening).channel.title).toBe("Own");
+	await settle();
+	expect(documents.own).toEqual(["Own"]);
+});
+
 test("a change to another document after the click leaves the waiting opening with its read", async () => {
 	let documents = intent();
 	let held = documents.hold();
