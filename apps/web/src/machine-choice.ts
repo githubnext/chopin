@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { machines as liveMachines, newestFirst, ownerHint } from "./machine-summary";
+import { sameJson } from "./same-json";
 
 import type { Machine, TeammateMachine } from "./machine-summary";
 import type { Session } from "@chopin/protocol";
@@ -255,6 +256,27 @@ export function nextReading(): number {
 	return ++readings;
 }
 
+/** What the hook holds: the choice as last read, and where that read began in the order of `nextReading`. */
+export type Held = { state?: MachineChoiceState; read: number };
+
+/**
+ * What is held after a read that began at `began` answered `value`, the one answered before it
+ * having begun at `previous`. An answer that repeats the held choice keeps the very same hold, so
+ * the room that draws it renders nothing: the read's place in the order matters only when a number
+ * was minted since the last read, a word of the socket's, which makes this read the first to begin
+ * after it. Reads minted one after another have nothing between them, so skipping the move is
+ * then exact, however many of them the hold has not followed.
+ */
+export function afterRead(
+	held: Held,
+	value: MachineChoiceState,
+	began: number,
+	previous: number,
+): Held {
+	if (!held.state || !sameJson(held.state, value)) return { state: value, read: began };
+	return began === previous + 1 ? held : { ...held, read: began };
+}
+
 export type MachineChoice = {
 	state?: MachineChoiceState;
 	/** Where the read that produced `state` began in the order of `nextReading`; 0 before any. */
@@ -298,11 +320,12 @@ export async function setShared(machine: string, shared: boolean): Promise<boole
  * serves every machine button of the document, so they always agree.
  */
 export function useMachineChoice(room: string, enabled: boolean): MachineChoice {
-	let [state, setState] = useState<MachineChoiceState>();
-	let [read, setRead] = useState(0);
+	let [{ state, read }, setHeld] = useState<Held>({ read: 0 });
 	let [saving, setSaving] = useState(false);
 	let [error, setError] = useState<string>();
 	let generation = useRef(0);
+	// Where the read answered last began; the hold follows it only when it says something new.
+	let answeredAt = useRef(0);
 	let refresh = useCallback(() => {
 		if (!enabled || document.visibilityState === "hidden") return;
 		let mine = ++generation.current;
@@ -310,15 +333,16 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 		fetch(endpoint(room)).then(answer).then(
 			value => {
 				if (mine !== generation.current) return;
-				setState(value);
-				setRead(began);
+				let previous = answeredAt.current;
+				answeredAt.current = began;
+				setHeld(held => afterRead(held, value, began, previous));
 			},
 			() => {},
 		);
 	}, [room, enabled]);
 	useEffect(() => {
-		setState(undefined);
-		setRead(0);
+		answeredAt.current = 0;
+		setHeld({ read: 0 });
 		if (!enabled) return;
 		refresh();
 		let timer = window.setInterval(refresh, REFRESH_MS);
@@ -355,7 +379,7 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 		setSaving(true);
 		setError(undefined);
 		// Shown at once; the server's answer replaces it.
-		setState(current => current && { ...current, choice: machine });
+		setHeld(held => held.state ? { ...held, state: { ...held.state, choice: machine } } : held);
 		try {
 			let value = await answer(
 				await fetch(endpoint(room), {
@@ -365,8 +389,8 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 				}),
 			);
 			if (mine === generation.current) {
-				setState(value);
-				setRead(began);
+				answeredAt.current = began;
+				setHeld({ state: value, read: began });
 			}
 		} catch (failure) {
 			setError(failure instanceof Error ? failure.message : "Chopin couldn’t save that choice");
