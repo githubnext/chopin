@@ -5,6 +5,7 @@ import {
 	chmodSync,
 	constants,
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -414,10 +415,23 @@ function gitAccess(
 		}
 		// A linked worktree's `.git` is a file that says where its entry is.
 		try {
-			if (statSync(join(place, ".git")).isFile()) readonlyInside.push(join(place, ".git"));
+			if (lstatSync(join(place, ".git")).isFile()) readonlyInside.push(join(place, ".git"));
 		} catch { /* No `.git` here. */ }
 	}
 	return { writable, readonlyInside: [...new Set(readonlyInside)] };
+}
+
+/**
+ * Whether `.git` in `folder` is a symbolic link, as some tools leave one. A sandbox can hold back
+ * a file or a directory but not a link, so the link would stay a name in a folder an agent writes
+ * that it could point at a git directory of its own, for the person's git to read and run.
+ */
+function linksGit(folder: string) {
+	try {
+		return lstatSync(join(folder, ".git")).isSymbolicLink();
+	} catch {
+		return false;
+	}
 }
 
 /** The policy for one launch, from what is on the disk now. */
@@ -443,13 +457,16 @@ export function launchPolicy(
 		} catch { /* The agent says so if it needs it. */ }
 	}
 	let places = [launch.cwd, ...launch.writable ?? []];
+	// A folder whose `.git` is a link can't have it held, so it is read and not written: the git
+	// directory it leads to is granted by its real path, as any is.
+	let linked = places.filter(linksGit);
 	// Only the connector's record of the working directory says which repository this is, and so
 	// where its git directories are: a folder the agent made itself, as a Planner's worktree,
 	// names one in a file of its own, and what that file says is the agent's word.
 	let repository = repositoryAt(real(launch.cwd));
 	let git = repository ? gitAccess(repository, launch) : undefined;
 	let writable = [
-		...places,
+		...places.filter(place => !linked.includes(place)),
 		...git?.writable ?? [],
 		...state,
 		temporary,
@@ -474,6 +491,7 @@ export function launchPolicy(
 	let readable = [
 		...readGrantsAround(roots, real(options.directory), disk, platform),
 		...(launch.own ?? []).filter(exists),
+		...linked,
 		// The repository's git directory is read, whole, where only some roots are read (Windows).
 		...repository ? [repository.commonDir] : [],
 	].filter(path => !written.has(real(path)));

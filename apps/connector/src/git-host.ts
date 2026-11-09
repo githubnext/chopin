@@ -80,9 +80,12 @@ function kindOf(path: string) {
  * The connector's record of the git directories of the working tree at `path`, made the first time
  * it is asked for and kept: the checkout's `.git` where that is a directory, which no file in
  * it is read to find, else what git says once for a working tree whose `.git` is a file (a linked
- * worktree, a separate git directory), and whether its `origin` was a local repository. It is
- * asked for when a checkout is registered or cloned and when a run's worktree has just been made,
- * before any agent works there. Undefined where `path` is no working tree.
+ * worktree, a separate git directory), and whether its `origin` was a local repository. They are
+ * recorded by their real paths, which are what the sandbox's policy names too: a `.git` that is a
+ * symbolic link, as some tools leave one, or a `.git` file that leads through one, is a link in a
+ * folder an agent writes, and neither git nor a sandbox should find the repository through it
+ * again. It is asked for when a checkout is registered or cloned and when a run's worktree has
+ * just been made, before any agent works there. Undefined where `path` is no working tree.
  */
 export function repositoryAt(path: string): Repository | undefined {
 	let workTree = real(path);
@@ -93,7 +96,7 @@ export function repositoryAt(path: string): Repository | undefined {
 	let gitDir: string;
 	let commonDir: string;
 	if (kind === "directory") {
-		gitDir = commonDir = dot;
+		gitDir = commonDir = real(dot);
 	} else if (kind === "file") {
 		let result = spawnSync("git", [
 			"rev-parse",
@@ -103,8 +106,8 @@ export function repositoryAt(path: string): Repository | undefined {
 		], { cwd: workTree, encoding: "utf8", env: hostGitEnvironment(process.env), timeout: 10_000 });
 		let [own, common] = result.status === 0 ? result.stdout.trim().split("\n") : [];
 		if (!own || !common) return undefined;
-		gitDir = own;
-		commonDir = common;
+		gitDir = real(own);
+		commonDir = real(common);
 	} else return undefined;
 	let repository: Repository = { workTree, gitDir, commonDir, localOrigin: false };
 	let origin = spawnSync("git", ["config", "--get", "remote.origin.url"], {

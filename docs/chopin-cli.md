@@ -785,6 +785,16 @@ entry, which is where your own `git rebase --continue` would find an `exec` line
 to run. An agent can't name a program for git to run in any place git looks, nor
 send git to a directory where it has.
 
+Every path above is a real path, taken by the connector once, when it first sees
+the checkout or makes the worktree. A checkout whose `.git` is a symbolic link, as
+some tools leave one, is recorded by the directory the link leads to, and so is a
+`.git` file that leads through one; nothing is named through the link, which a
+sandbox could not mount over. A sandbox can hold back a file or a directory but
+not a link, and a link in a folder an agent writes could be pointed at a git
+directory of its own for your next `git` command to read and run. So a Planner
+reads a checkout whose `.git` is a link and does not write it: it works in its own
+worktree.
+
 **Git on your machine, run by Chopin.** Every `git` command the connector runs
 (`git worktree add` for a run, its fetches, its clean-up, a Planner's worktree)
 is told where the repository is instead of looking for it: the git directory, its
@@ -833,6 +843,9 @@ or `could not write config file`:
   where your checkout is a linked worktree, in your entry in `worktrees/`. The
   Planner's own worktree takes them, and so does a run's. A Planner edits documents
   through Chopin's tools and not git.
+- **Writing the files of a Planner's checkout whose `.git` is a symbolic link** fails
+  with `Read-only file system`, for the reason above. A `.git` that is a directory or
+  a file (`git init --separate-git-dir` makes one) is not affected.
 - **`git fetch` in a Planner's checkout** writes `FETCH_HEAD` there and fails; `git
   fetch --no-write-fetch-head` works. In a worktree it works, as it keeps
   `FETCH_HEAD` in the worktree's own entry.

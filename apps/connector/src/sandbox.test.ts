@@ -7,11 +7,13 @@ import {
 	readdirSync,
 	readFileSync,
 	realpathSync,
+	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import type { Host } from "./sandbox-probe";
 import {
@@ -401,6 +403,36 @@ test("a Planner whose checkout is itself a linked worktree of the person's holds
 			join(planned, ".git"),
 		].sort(),
 	);
+});
+
+test("a Planner's checkout whose .git is a symbolic link has its git directory granted by its real path and is read, not written, because a link can't be held", () => {
+	let repo = repository("git-symlink");
+	// A checkout made by a tool that keeps the git directory elsewhere and links it in.
+	let store = join(repo.root, "store", "checkout.git");
+	mkdirSync(dirname(store));
+	renameSync(repo.git, store);
+	symlinkSync(join("..", "store", "checkout.git"), repo.git);
+	let planned = join(repo.base, "planners", "octo", "score", "D_1");
+	mkdirSync(join(repo.base, "planners", "octo", "score"), { recursive: true });
+	gitCommand("-C", repo.checkout, "worktree", "add", "--detach", planned);
+	let policy = repo.policy(repo.checkout, [planned], [planned]);
+	// Where commits go is named by the real directory, never through the link, which a sandbox
+	// can't mount over and the agent could point elsewhere.
+	for (let name of ["objects", "refs", "logs"]) {
+		expect(policy.writable).toContain(join(store, name));
+	}
+	expect(held(policy)).toContain(store);
+	for (let path of [...policy.writable, ...held(policy), ...policy.readable]) {
+		expect(path === repo.git || path.startsWith(`${repo.git}/`)).toBe(false);
+	}
+	// The link is a name in the checkout that an agent could replace, and the person's own git would
+	// then read and run what it led to. It can't be held, so the checkout is read, not written; the
+	// Planner's own worktree, whose `.git` is a file that is held, is written as before.
+	expect(policy.writable).not.toContain(repo.checkout);
+	expect(policy.readable).toContain(repo.checkout);
+	expect(policy.writable).toContain(planned);
+	expect(policy.writable).toContain(join(store, "worktrees", "D_1"));
+	expect(held(policy)).toContain(join(planned, ".git"));
 });
 
 test("one policy shape for every system: what a launch writes of its git directory is the same on Linux, macOS and Windows", () => {
