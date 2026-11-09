@@ -218,6 +218,37 @@ test("a read still under way when its document changes is not waited for", async
 	expect(documents.own).toEqual(["Fresh", "Again"]);
 });
 
+test("a document that changes after the click, while the opening still waits on the read, is read again", async () => {
+	let documents = intent();
+	let held = documents.hold();
+	documents.start(address, "plan-id");
+	let opening = documents.read(address, documents.ordinary("Own"));
+	documents.forget("plan-id");
+	held.release(detail("Before"));
+	expect((await opening).channel.title).toBe("Own");
+	expect(documents.own).toEqual(["Own"]);
+});
+
+test("a change to another document after the click leaves the waiting opening with its read", async () => {
+	let documents = intent();
+	let held = documents.hold();
+	documents.start(address, "plan-id");
+	let opening = documents.read(address, documents.ordinary("Own"));
+	documents.forget("other-id");
+	held.release(detail("Plan"));
+	expect((await opening).channel.title).toBe("Plan");
+	expect(documents.own).toEqual([]);
+});
+
+test("a change that comes after an opening has its read does not make a later opening read twice", async () => {
+	let documents = intent();
+	documents.start(address, "plan-id");
+	expect((await documents.read(address, documents.ordinary("Own"))).channel.title).toBe("Plan");
+	documents.forget("plan-id");
+	expect((await documents.read(address, documents.ordinary("Later"))).channel.title).toBe("Later");
+	expect(documents.own).toEqual(["Later"]);
+});
+
 test("a change to one document leaves the reads of the other documents as they were", async () => {
 	let documents = intent();
 	let other = { ...address, slug: "other" };
