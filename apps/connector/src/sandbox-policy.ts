@@ -328,6 +328,93 @@ export function readableRoots(names: readonly string[]): string[] {
 	return names.filter(name => !skipped.has(name)).map(name => `/${name}`);
 }
 
+/** What `windowsReadRoots` asks of the disk. */
+export type WindowsDisk = {
+	/** Whether `path` is a directory this user can read. */
+	directory(path: string): boolean;
+	/** The names in a directory; none where it can't be listed. */
+	list(path: string): string[];
+};
+
+/**
+ * The variables tools name their installations by, which MXC's baseline for a container reads
+ * (`getAvailableToolsPolicy` in its SDK), and whether each holds one directory or a list.
+ */
+const TOOL_VARIABLES: ReadonlyArray<readonly [string, "one" | "list"]> = [
+	["PYTHONPATH", "list"],
+	["PYTHONHOME", "one"],
+	["VCINSTALLDIR", "one"],
+	["VSINSTALLDIR", "one"],
+	["PSModulePath", "list"],
+	["VCPKG_ROOT", "one"],
+	["GOPATH", "one"],
+	["GOROOT", "one"],
+	["CARGO_HOME", "one"],
+	["RUSTUP_HOME", "one"],
+	["JAVA_HOME", "one"],
+	["NVM_HOME", "one"],
+	["NVM_SYMLINK", "one"],
+	["NODE_PATH", "list"],
+	["DOTNET_ROOT", "one"],
+	["CONDA_PREFIX", "one"],
+	["VIRTUAL_ENV", "one"],
+	["PYENV_ROOT", "one"],
+];
+
+const semicolonList = (text: string | undefined) =>
+	(text ?? "").split(";").filter(entry => entry.trim());
+
+/**
+ * What a Windows ProcessContainer is given to read: it refuses every directory it wasn't given
+ * but those AppContainer's default permissions let any container read (`C:\Windows`,
+ * `C:\Program Files`). So the read set is the person's profile and MXC's own baseline for a
+ * container, as its SDK computes it (`getAvailableToolsPolicy` and `getUserProfilePolicy`): the
+ * directories of `PATH` and of the variables above, each where it is a directory and not under
+ * `%WINDIR%`, and the per-user programs under `%LOCALAPPDATA%\Programs`. Another drive, another
+ * user's profile and any folder outside these are not read, a checkout among them, until the
+ * launch is given its working directory. MXC's baseline also grants the system drive's root where
+ * PowerShell 7 is on `PATH`; that is left out, because granted around the state directory it
+ * would be a grant of every folder on the drive. A blank `PATH` adds nothing. Names are
+ * case-insensitive, as Windows' are.
+ */
+export function windowsReadRoots(
+	env: Record<string, string | undefined>,
+	home: string,
+	disk: WindowsDisk,
+): string[] {
+	let value = (name: string) => {
+		if (env[name] !== undefined) return env[name];
+		let key = Object.keys(env).find(item => item.toLowerCase() === name.toLowerCase());
+		return key === undefined ? undefined : env[key];
+	};
+	let windows = win32.resolve(value("WINDIR") || value("SystemRoot") || "C:\\Windows")
+		.toLowerCase();
+	let candidates = [
+		...semicolonList(value("PATH")),
+		...TOOL_VARIABLES.flatMap(([name, kind]) => {
+			let text = value(name);
+			return text ? kind === "list" ? semicolonList(text) : [text.trim()] : [];
+		}),
+	];
+	let programs = value("LOCALAPPDATA")
+		? win32.join(value("LOCALAPPDATA")!, "Programs")
+		: undefined;
+	if (programs && disk.directory(programs)) {
+		candidates.push(...disk.list(programs).map(name => win32.join(programs, name)));
+	}
+	let seen = new Set<string>();
+	let roots: string[] = [];
+	for (let candidate of [home, ...candidates]) {
+		let resolved = win32.resolve(candidate);
+		let key = resolved.toLowerCase();
+		let system = key === windows || key.startsWith(`${windows}\\`);
+		if (seen.has(key) || system && candidate !== home || !disk.directory(resolved)) continue;
+		seen.add(key);
+		roots.push(resolved);
+	}
+	return roots;
+}
+
 /** Where the connector keeps the clones it made, in its state directory. */
 export const CLONES = "repos";
 

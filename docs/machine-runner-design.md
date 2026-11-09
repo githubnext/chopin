@@ -34,7 +34,9 @@ What was built: one `Sandbox` seam in the connector that every agent and Planner
 process a run uses goes through (the two ACP `initialize` start checks, which send
 the agent nothing, don't); one MXC policy (writes only to the run's worktree, the places
 in its git directory where commits and refs go and its own worktree's entry there,
-and the agent's own state; reads of the rest of the disk except
+and the agent's own state; reads of the rest of the disk (on Windows, a
+ProcessContainer's baseline: the profile, the tool directories and the working
+directory, see the Sandbox section) except
 credentials, other runs' files and the machine token; egress denied outright
 with a loopback allow-list proxy as the only way out, because no MXC engine
 filters by name); a probe that launches a command that does nothing in the same

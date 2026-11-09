@@ -35,6 +35,7 @@ import {
 	sandboxPath,
 	type SandboxSettings,
 	secretPaths,
+	windowsReadRoots,
 } from "./sandbox-policy";
 import { type Proxy, startProxy } from "./sandbox-proxy";
 
@@ -524,12 +525,10 @@ export function launchPolicy(
 	].filter(path => exists(path));
 	let roots: string[];
 	if (platform === "win32") {
-		roots = [
-			home,
-			...(launch.env.PATH ?? launch.env.Path ?? "").split(";").filter(entry =>
-				entry && readableDirectory(entry)
-			),
-		];
+		roots = windowsReadRoots(launch.env, home, {
+			directory: readableDirectory,
+			list: directory => disk.list(directory),
+		});
 	} else if (platform === "darwin") {
 		roots = ["/"];
 	} else {
