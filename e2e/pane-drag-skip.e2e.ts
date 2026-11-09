@@ -81,29 +81,52 @@ function settle(page: Page) {
  * Put the document at a share of its scrollable length, or with the paragraph that has this text in
  * the middle of its window, and Chat at a share of its own, and wait until they stay. Only the
  * document's own scroller moves: `scrollIntoView` would move the one around it too.
+ *
+ * Chat is asked again if it did not stay. A render of it that comes between the write and the
+ * scroll event the write causes finds the reader still at the newest line, which every render
+ * keeps them on, and puts the rail back there. Chat renders again for each change that another
+ * test of a run makes to the repository's documents (the rail was written once in four seconds
+ * with no other writer, and fourteen times with one creating a document every 300 ms), so in a
+ * run of many specs a render lands in that frame now and then.
  */
 async function place(page: Page, document: number | string | undefined, chat: number) {
-	await page.evaluate(([document_, chat_]: [number | string | undefined, number]) => {
-		let scroller: HTMLElement | null = window.document.querySelector(
-			".plan-content[contenteditable='true']",
+	let held = false;
+	for (let attempt = 0; attempt < 5 && !held; attempt++) {
+		let target = await page.evaluate(
+			([document_, chat_]: [number | string | undefined, number]) => {
+				let scroller: HTMLElement | null = window.document.querySelector(
+					".plan-content[contenteditable='true']",
+				);
+				while (
+					scroller
+					&& !(getComputedStyle(scroller).overflowY === "auto"
+						&& scroller.scrollHeight > scroller.clientHeight + 100)
+				) scroller = scroller.parentElement;
+				if (typeof document_ === "number") {
+					scroller!.scrollTop = (scroller!.scrollHeight - scroller!.clientHeight) * document_;
+				} else if (typeof document_ === "string") {
+					let paragraph = [...window.document.querySelectorAll(".plan-content > p")]
+						.find(element => element.textContent!.includes(document_))!;
+					let box = scroller!.getBoundingClientRect();
+					scroller!.scrollTop += paragraph.getBoundingClientRect().top - box.top - box.height / 2;
+				}
+				let rail = window.document.querySelector<HTMLElement>("[data-chat-scroll]")!;
+				rail.scrollTop = (rail.scrollHeight - rail.clientHeight) * chat_;
+				return rail.scrollTop;
+			},
+			[document, chat] as [number | string | undefined, number],
 		);
-		while (
-			scroller
-			&& !(getComputedStyle(scroller).overflowY === "auto"
-				&& scroller.scrollHeight > scroller.clientHeight + 100)
-		) scroller = scroller.parentElement;
-		if (typeof document_ === "number") {
-			scroller!.scrollTop = (scroller!.scrollHeight - scroller!.clientHeight) * document_;
-		} else if (typeof document_ === "string") {
-			let paragraph = [...window.document.querySelectorAll(".plan-content > p")]
-				.find(element => element.textContent!.includes(document_))!;
-			let box = scroller!.getBoundingClientRect();
-			scroller!.scrollTop += paragraph.getBoundingClientRect().top - box.top - box.height / 2;
-		}
-		let rail = window.document.querySelector<HTMLElement>("[data-chat-scroll]")!;
-		rail.scrollTop = (rail.scrollHeight - rail.clientHeight) * chat_;
-	}, [document, chat] as [number | string | undefined, number]);
-	await settle(page);
+		await settle(page);
+		held = await page.evaluate(
+			wanted =>
+				Math.abs(
+					window.document.querySelector<HTMLElement>("[data-chat-scroll]")!.scrollTop - wanted,
+				)
+					<= 1,
+			target,
+		);
+	}
+	expect(held, "Chat stays where it was put").toBe(true);
 }
 
 /** Where the reader is, in both panes, as the browser keeps it. */
@@ -345,6 +368,22 @@ function chipBox(element: Element) {
 	return element.getBoundingClientRect().toJSON() as DOMRect;
 }
 
+/**
+ * What the workspace shows, the document and Chat, as a picture: everything to the right of the
+ * Projects sidebar. The sidebar lists every document that the other tests of a run make in the
+ * repository, and shows how many decisions are open in them, so a picture of it changes whenever
+ * one of those tests runs, and neither the drag nor the keyboard step has anything to do with what
+ * it lists. The Projects edge's own width is held to the same value by the test, not by a picture.
+ */
+async function workspaceShot(page: Page) {
+	let sidebar = (await page.locator(".project-sidebar-frame").boundingBox())!;
+	let left = sidebar.x + sidebar.width;
+	let view = page.viewportSize()!;
+	return page.screenshot({
+		clip: { x: left, y: 0, width: view.width - left, height: view.height },
+	});
+}
+
 function same(first: Buffer, second: Buffer) {
 	return createHash("sha256").update(first).digest("hex")
 		=== createHash("sha256").update(second).digest("hex");
@@ -403,7 +442,7 @@ for (let { edge, label, pane } of EDGES) {
 				await page.mouse.move(5, 5);
 				await page.evaluate(() => (window.document.activeElement as HTMLElement | null)?.blur());
 				let [box, where] = await steady();
-				return { chip: box, reading: where, shot: await page.screenshot() };
+				return { chip: box, reading: where, shot: await workspaceShot(page) };
 			}
 
 			let width = () =>
