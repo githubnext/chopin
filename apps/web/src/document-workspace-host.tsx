@@ -252,10 +252,13 @@ export default function DocumentWorkspaceHost(
 			controller.signal,
 			{
 				channel: Api.channel,
-				// What the reader's pointer or focus already asked for, if it did, is not asked for twice.
+				// A read the reader's pointer or focus started is not made twice, and if it fails this
+				// read is made as it would have been without it.
 				document: (owner, repository, slug, signal) =>
-					documentIntent.take({ owner, repository, slug })
-						?? Api.document(owner, repository, slug, signal),
+					documentIntent.read(
+						{ owner, repository, slug },
+						() => Api.document(owner, repository, slug, signal),
+					),
 			},
 			requestedRoute.page === "child" && !current
 				? parent => {
