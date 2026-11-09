@@ -4,6 +4,7 @@ import type {
 	PublishedInvestigation,
 } from "@chopin/experiment/records";
 import { experimentRequest } from "./api";
+import { sameJson } from "../same-json";
 import type { Wire } from "../wire";
 import type { SelectionPatch } from "@chopin/experiment";
 
@@ -45,9 +46,12 @@ export class ExperimentStore {
 				this.#controller.signal,
 			);
 			if (request !== this.#request) return;
-			this.items = result.experiments;
-			this.error = "";
-			this.changed();
+			// The same list again is not news: publishing it renders the whole room for nothing.
+			if (this.error || !sameJson(this.items, result.experiments)) {
+				this.items = result.experiments;
+				this.error = "";
+				this.changed();
+			}
 			for (let item of result.experiments) {
 				if (item.decisionCount && !this.values.has(item.id)) void this.load(item.id);
 			}
@@ -60,8 +64,11 @@ export class ExperimentStore {
 			if (
 				controller === this.#controller && !controller.signal.aborted && request === this.#request
 			) {
-				this.error = String((error as Error).message);
-				this.changed();
+				let message = String((error as Error).message);
+				if (this.error !== message) {
+					this.error = message;
+					this.changed();
+				}
 			}
 		}
 	}

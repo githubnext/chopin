@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import {
+	afterRead,
 	chosenMachine,
 	machineButtonLabel,
 	machineRows,
@@ -528,4 +529,23 @@ test("a word that waits for a newer read of the list says nothing, never what th
 		let name = told(listed, word, "mona", true, false);
 		expect(plannerWithheld(word, name)).toBe(false);
 	}
+});
+
+test("a read that says what the choice held changes nothing the page draws, unless a word of the socket's came between the two reads", () => {
+	let held = { state: state({ choice: "M_box" }), read: 5 };
+	// The same answer in a new object, read right after the one before it: the very same hold, so
+	// the room that draws it does not render again, and neither does the next one read after that,
+	// though the hold still says where the first of them began.
+	let same = state({ choice: "M_box" });
+	expect(afterRead(held, same, 6, 5)).toBe(held);
+	expect(afterRead(held, same, 7, 6)).toBe(held);
+	// Another number was minted between two reads, a word of the socket's: this read began after it
+	// and the last one before, so which of the two is current changes, and the hold must move.
+	let later = afterRead(held, same, 8, 6);
+	expect(later).toEqual({ state: held.state, read: 8 });
+	expect(later.state).toBe(held.state);
+	// A different answer replaces the state, whatever the numbers; so does the first one.
+	let moved = state({ choice: "M_box", machines: [machine({ connected: false })] });
+	expect(afterRead(held, moved, 6, 5)).toEqual({ state: moved, read: 6 });
+	expect(afterRead({ read: 0 }, same, 1, 0)).toEqual({ state: same, read: 1 });
 });

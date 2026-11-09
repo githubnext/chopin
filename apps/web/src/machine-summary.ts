@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { SandboxReport } from "@chopin/protocol/connector";
+import { sameJson } from "./same-json";
 
 /** One of the signed-in person's paired machines, as `GET /api/connector/machines` lists it. */
 export type Machine = {
@@ -167,9 +168,11 @@ export type LiveMachines = {
 
 /**
  * One copy of the person's machine list, and the teammates' machines shared with them, for the
- * whole page, so the sidebar's count, a document's machine buttons and the Machines page agree. `watch` hears every answer. While anything `poll`s,
- * the list is asked again every `interval` ms the page is visible, so a machine going offline or
- * coming back shows within seconds; otherwise it is asked on `load` alone.
+ * whole page, so the sidebar's count, a document's machine buttons and the Machines page agree.
+ * `watch` hears each answer that says something new: one that repeats what the page holds is
+ * dropped, so a poll every few seconds renders nothing until a machine changes. While anything
+ * `poll`s, the list is asked again every `interval` ms the page is visible, so a machine going
+ * offline or coming back shows within seconds; otherwise it is asked on `load` alone.
  */
 export function machineFeed(
 	list: (signal: AbortSignal) => Promise<Array<Machine | TeammateMachine>>,
@@ -196,14 +199,16 @@ export function machineFeed(
 			try {
 				let listed = await list(mine.signal);
 				if (mine.signal.aborted) return;
-				set({
+				let answer = {
 					machines: listed.filter(isOwn),
 					teammates: listed.filter(isTeammate),
 					error: "",
-				});
+				};
+				if (!sameJson(current, answer)) set(answer);
 			} catch (error) {
 				if (mine.signal.aborted) return;
-				set({ ...current, error: error instanceof Error ? error.message : "unavailable" });
+				let message = error instanceof Error ? error.message : "unavailable";
+				if (current.error !== message) set({ ...current, error: message });
 			}
 		}
 		schedule();
