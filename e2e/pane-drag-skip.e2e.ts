@@ -82,12 +82,14 @@ function settle(page: Page) {
  * the middle of its window, and Chat at a share of its own, and wait until they stay. Only the
  * document's own scroller moves: `scrollIntoView` would move the one around it too.
  *
- * Chat is asked again if it did not stay. A render of it that comes between the write and the
+ * Both are asked again if they did not stay. A render of Chat that comes between the write and the
  * scroll event the write causes finds the reader still at the newest line, which every render
  * keeps them on, and puts the rail back there. Chat renders again for each change that another
  * test of a run makes to the repository's documents (the rail was written once in four seconds
  * with no other writer, and fourteen times with one creating a document every 300 ms), so in a
- * run of many specs a render lands in that frame now and then.
+ * run of many specs a render lands in that frame now and then. A paragraph that was put in the
+ * middle once stopped 37 px from where every other run stopped, in a run of 300 under that load;
+ * what moved it is not known, so it too is put again until it is in the middle.
  */
 async function place(page: Page, document: number | string | undefined, chat: number) {
 	let held = false;
@@ -118,15 +120,27 @@ async function place(page: Page, document: number | string | undefined, chat: nu
 		);
 		await settle(page);
 		held = await page.evaluate(
-			wanted =>
-				Math.abs(
-					window.document.querySelector<HTMLElement>("[data-chat-scroll]")!.scrollTop - wanted,
-				)
-					<= 1,
-			target,
+			([wanted, document_]: [number, number | string | undefined]) => {
+				let rail = window.document.querySelector<HTMLElement>("[data-chat-scroll]")!;
+				if (Math.abs(rail.scrollTop - wanted) > 1) return false;
+				if (typeof document_ !== "string") return true;
+				let scroller: HTMLElement | null = window.document.querySelector(
+					".plan-content[contenteditable='true']",
+				);
+				while (
+					scroller
+					&& !(getComputedStyle(scroller).overflowY === "auto"
+						&& scroller.scrollHeight > scroller.clientHeight + 100)
+				) scroller = scroller.parentElement;
+				let paragraph = [...window.document.querySelectorAll(".plan-content > p")]
+					.find(element => element.textContent!.includes(document_))!;
+				let box = scroller!.getBoundingClientRect();
+				return Math.abs(paragraph.getBoundingClientRect().top - box.top - box.height / 2) <= 1;
+			},
+			[target, document] as [number, number | string | undefined],
 		);
 	}
-	expect(held, "Chat stays where it was put").toBe(true);
+	expect(held, "the document and Chat stay where they were put").toBe(true);
 }
 
 /** Where the reader is, in both panes, as the browser keeps it. */
