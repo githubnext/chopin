@@ -23,7 +23,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@chopin/visuals";
-import { sandboxLabel, sandboxSummary } from "@chopin/protocol/connector";
+import { sandboxSummary } from "@chopin/protocol/connector";
 import { ago } from "../build-model";
 import { FavoriteStar } from "../favorite-star";
 import { IconButton } from "../icon-button";
@@ -488,15 +488,6 @@ function MachineTable(
 											? <span>{agentName(own.agent)}</span>
 											: <Dash label="Agent unknown" />}
 										{own?.planner && <span className="machines-secondary">Can reply</span>}
-										{own?.sandbox && (
-											<span
-												className="machines-secondary"
-												data-tooltip={sandboxLabel(own.sandbox)}
-												tabIndex={0}
-											>
-												{own.sandbox.engine === "none" ? "Not sandboxed" : "Sandboxed"}
-											</span>
-										)}
 									</span>
 								</TableCell>
 								<TableCell className="machines-share-column">
