@@ -249,7 +249,11 @@ durable.
   only `objects`, `refs`, `logs` and `lfs` written in it (data git reads, not programs or
   pointers), and only by a launch with a worktree of its own: for a linked worktree the connector
   made for the launch (a run's, or a Planner's own), that worktree's one entry in `worktrees/` with
-  `commondir`, `gitdir` and `config.worktree` read-only inside it. Which entry is the launch's own
+  `commondir`, `gitdir`, `config.worktree` and the directories `hooks`, `info` and `modules` read-only
+  inside it (made empty where there is none). A name made at the top of that entry can't be refused:
+  git takes the lock of its `HEAD` and index by creating a file beside each, which a sandbox can't grant
+  for those names and refuse for the others (measured), and git reads nothing there as a hook or a
+  program. Which entry is the launch's own
   is the connector's record of what it made for it (`Launch.own`), never what a folder is called or
   what is in it. Its `config`, `hooks`, `info`, `HEAD`, `index`, `packed-refs`, submodules' git
   directories, `worktrees` and every worktree's entry but the launch's own, the person's included,

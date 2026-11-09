@@ -368,19 +368,34 @@ const disk: Disk = {
 const GIT_WRITES = ["objects", "refs", "logs", "lfs"];
 
 /**
+ * The directories of the repository's git directory that are read-only there, and are in a launch's
+ * own worktree entry too: made empty where there is none, and held. Git doesn't read hooks or
+ * what `info` says of attributes from an entry, so they are not a place for them, and a
+ * worktree's `modules` holds git directories of submodules, each with a configuration of its own.
+ */
+const ENTRY_HELD = ["hooks", "info", "modules"];
+
+/**
  * What a launch may write of its repository's git directory, as an allow-list. It writes a
  * working tree only where the connector made it for the launch (`own`: a run's worktree, a
  * Planner's worktree from `preparePlannerWorktree`), and for each such linked worktree it writes
  * that worktree's own entry in `worktrees`, where its HEAD, index, fetch results and the locks
- * beside them are, with the three files git reads there to find configuration held read-only
+ * beside them are, with the three files git reads there to find configuration, and the three
+ * directories the repository's git directory holds read-only too (`ENTRY_HELD`), held read-only
  * inside it, and `objects`, `refs`, `logs` and `lfs` of the repository's git directory, where
  * its commits, branches, fetched objects and LFS objects go. Everything else is read-only, and
  * the directories that hold it can't be renamed or made again, because they are mounted: the
  * repository's `config`, `hooks`, `info`, `HEAD`, `packed-refs` and the git directories of its
  * submodules, `worktrees` itself and every worktree's but the launch's own, and any file git adds
  * to the top level later, such as a `commondir`. A sandbox can only hold back a path that exists,
- * and a new name can't be refused one by one, so the top level is not granted at all. A launch with
- * no worktree of its own writes none of it. What it costs is in `docs/chopin-cli.md`.
+ * and a new name can't be refused one by one, so the top level is not granted at all. The one
+ * place that has to be is the launch's own entry: git takes the lock of its `HEAD` and its index
+ * by creating a file beside each and renaming it over them, which a sandbox can't grant for these
+ * names and refuse for the others (measured: with the entry read-only and `HEAD`, `index` and `logs`
+ * granted as paths, `git add` and `git commit` say `Unable to create 'index.lock': Read-only file
+ * system`), so a name made at the top of the entry is made. Git reads nothing there as a hook or a
+ * program, and what it reads as a pointer or as configuration is held. A launch with no worktree
+ * of its own writes none of it. What it costs is in `docs/chopin-cli.md`.
  *
  * A working directory that is not among `own` is the person's: a Planner's checkout, a regular
  * one or a linked worktree of theirs. It is read-only whole, in `launchPolicy`, so what the
@@ -390,8 +405,8 @@ const GIT_WRITES = ["objects", "refs", "logs", "lfs"];
  * repository's side: the entry whose `gitdir` file names the folder (see `worktreeEntry`), never
  * the `.git` file in a folder an agent writes. That file, which says where a worktree's entry is,
  * is read-only too. An entry's `config.worktree` is made empty where there is none, which git
- * ignores unless `extensions.worktreeConfig` is on, so an agent can't be the one to make it; an
- * entry that can't be held this way is not granted.
+ * ignores unless `extensions.worktreeConfig` is on, so an agent can't be the one to make it, and
+ * so are its `hooks`, `info` and `modules`; an entry that can't be held this way is not granted.
  */
 function gitAccess(
 	repository: Repository,
@@ -411,7 +426,14 @@ function gitAccess(
 			try {
 				writeFileSync(join(entry, "config.worktree"), "", { flag: "wx" });
 			} catch { /* There is one, or it can't be made. */ }
-			let held = ["commondir", "gitdir", "config.worktree"].map(name => join(entry, name));
+			for (let name of ENTRY_HELD) {
+				try {
+					mkdirSync(join(entry, name));
+				} catch { /* There is one, or it can't be made. */ }
+			}
+			let held = ["commondir", "gitdir", "config.worktree", ...ENTRY_HELD].map(name =>
+				join(entry, name)
+			);
 			if (held.every(file => exists(file))) {
 				writable.push(entry);
 				readonlyInside.push(...held);

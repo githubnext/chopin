@@ -782,8 +782,9 @@ these written inside it, and only by a launch that has a worktree of its own:
   your checkout that the connector made for that run, that worktree's own entry in
   `worktrees/`, where its `HEAD`, index, merge and fetch state and the lock files
   beside them are, with the three files in it that name configuration, `commondir`,
-  `gitdir` and `config.worktree`, read-only inside it; and the `.git` file in the
-  worktree, which says where its entry is, read-only too;
+  `gitdir` and `config.worktree`, and the folders `hooks`, `info` and `modules`
+  (which the repository's git directory holds read-only too), read-only inside it;
+  and the `.git` file in the worktree, which says where its entry is, read-only too;
 - for a Planner, its own worktree's entry, written exactly as a run's is, and the
   same four directories: the connector makes the Planner's worktree before it
   starts, and which entry is the launch's own is the connector's record of what it
@@ -909,9 +910,23 @@ any of this. For them the connector's git is hardened as above, the agent writes
 git directory, and it is as it was before the sandbox: a worktree an agent made
 organizes edits and is not a sandbox.
 
-When a run or Planner starts, the connector makes an empty `config.worktree` in the
-launch's own worktree entry where there is none, because a sandbox can hold back
-only a path that exists. Git ignores it unless `extensions.worktreeConfig` is on.
+When a run or Planner starts, the connector makes an empty `config.worktree` and empty
+`hooks`, `info` and `modules` folders in the launch's own worktree entry where there are
+none, because a sandbox can hold back only a path that exists. Git ignores
+`config.worktree` unless `extensions.worktreeConfig` is on, and reads no hook or
+configuration from the other three in an entry.
+
+**A new name at the top of the launch's own worktree entry can't be refused.** Git
+takes the lock of its `HEAD` and its index by creating a file beside each and renaming
+it over them, and a sandbox can't grant that for those names and refuse it for every
+other: with the entry read-only and `HEAD`, the index and the logs granted as paths,
+`git add` and `git commit` fail with `Unable to create '…/index.lock': Read-only file
+system` (measured, real bubblewrap). So the entry is written as a directory, and an
+agent can make a file or folder there that git doesn't read. What git reads there as a
+pointer or as configuration, and what the repository's git directory holds read-only,
+is held, so what the agent makes there is no pointer and no configuration git
+reads; the rest is the agent's own, as the worktree is (an unfinished rebase's `exec`
+lines among it).
 
 ### What each system needs
 

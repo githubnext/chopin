@@ -571,6 +571,15 @@ try commonHead sh -c 'echo "ref: refs/heads/evil" > "$1/HEAD"' sh "$common"
 try commonPackedRefs sh -c 'echo > "$1/packed-refs"' sh "$common"
 try entryCommondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$mine" "$fake"
 try entryGitdir sh -c 'printf "%s\n" "$2" > "$1/gitdir"' sh "$mine" "$fake/.git"
+# Names the repository's own git directory holds read-only are held in the launch's entry too,
+# and an entry's own, which git never reads there as hooks or pointers, is not a place for them.
+try entryHooksFile sh -c 'mkdir -p "$1/hooks" && echo x > "$1/hooks/file"' sh "$mine"
+try entryHooksReplace sh -c 'mv "$1/hooks" "$1/hooks.moved" && mkdir "$1/hooks" && echo x > "$1/hooks/file"' sh "$mine"
+try entryInfoFile sh -c 'mkdir -p "$1/info" && echo x > "$1/info/sparse-checkout"' sh "$mine"
+try entryModulesFile sh -c 'mkdir -p "$1/modules/x" && echo x > "$1/modules/x/config"' sh "$mine"
+# What cannot be refused: git takes the locks of its own HEAD and index by creating a file beside
+# each, so a name made at the top of the entry is made.
+try entryNewName sh -c 'echo x > "$1/future-pointer"' sh "$mine"
 try entryRename sh -c 'mv "$1" "$1.moved" && mv "$1.moved" "$1"' sh "$mine"
 try entryRecreate sh -c 'mv "$1" "$1.moved" && mkdir "$1" && cp -r "$1.moved/." "$1/" && rm -f "$1/commondir" && printf "%s\n" "$2" > "$1/commondir"' sh "$mine" "$fake"
 try newEntry sh -c 'mkdir "$1/worktrees/made-up" && printf "%s\n" "$2" > "$1/worktrees/made-up/commondir"' sh "$common" "$fake"
@@ -834,6 +843,10 @@ const REFUSED = [
 	"commonPackedRefs",
 	"entryCommondir",
 	"entryGitdir",
+	"entryHooksFile",
+	"entryHooksReplace",
+	"entryInfoFile",
+	"entryModulesFile",
 	"entryRename",
 	"entryRecreate",
 	"newEntry",
@@ -867,6 +880,8 @@ async function expectGitUntouched(layout: Layout) {
 			attempts: {
 				...Object.fromEntries(PERMITTED.map(name => [name, "done"])),
 				...Object.fromEntries(REFUSED.map(name => [name, "refused"])),
+				// The one name that is made: see the script.
+				entryNewName: "done",
 				...(linked ? {} : {
 					// The person's checkout is read-only whole, whatever its `.git` is: its files are not
 					// written either.
