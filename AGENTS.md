@@ -238,15 +238,20 @@ durable.
   configuration through files (a worktree's `.git`, a `commondir`) that name another directory, and
   a sandbox can only hold back paths that exist. So the policy is an allow-list: the repository's
   git directory is read-only whole, which also stops its entries being renamed or made again, with
-  only `objects`, `refs`, `logs` and `lfs` written in it, and, for a linked worktree (a run's, or
-  a Planner's own), that worktree's one entry in `worktrees/` with `commondir`, `gitdir` and
-  `config.worktree` read-only inside it. Its `config`, `hooks`, `info`, `HEAD`, `index`,
-  `packed-refs`, submodules, `worktrees` and every other worktree's entry, the person's included,
-  are read-only, and no file can be added at its top level. A Planner's own worktree is made by
+  only `objects`, `refs`, `logs` and `lfs` written in it, and, for a linked worktree the connector
+  made for the launch (a run's, or a Planner's own), that worktree's one entry in `worktrees/` with
+  `commondir`, `gitdir` and `config.worktree` read-only inside it. Which entry is the launch's own
+  is the connector's record of what it made for it (`Launch.own`), never what a folder is called or
+  what is in it, so a Planner's registered checkout, a regular one or a linked worktree of the
+  person's, has its whole git directory read-only: a `rebase-merge` with an `exec` line, a `HEAD` or
+  an `index` can't be written in the person's own entry. Its `config`, `hooks`, `info`, `HEAD`,
+  `index`, `packed-refs`, submodules, `worktrees` and every worktree's entry but the launch's own,
+  the person's included, are read-only, and no file can be added at its top level. A Planner's own worktree is made by
   the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
   `git worktree add` would need `worktrees/` written; an unsandboxed backend makes it itself. The
   limit, said plainly: in the sandbox `git add`, `commit` and `checkout` fail in a Planner's
-  checkout (its index and `HEAD` are at the top level) and work in a worktree; `git worktree
+  checkout (its index and `HEAD` are at the top level, or in the person's entry) and work in the
+  launch's own worktree; `git worktree
   add/remove`, `git config` without `-c`, `git remote add`, `branch -D`, `tag -d` and `gc` fail
   everywhere; `push -u` can't record an upstream (see [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox)). Every git command the connector runs on the host
   goes through `apps/connector/src/git-host.ts`, which is told where the repository is

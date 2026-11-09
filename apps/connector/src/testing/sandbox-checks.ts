@@ -36,6 +36,8 @@ export type CheckPlan = {
 	worktree?: string;
 	/** The git directory entry of another worktree of the same repository, which it must not alter. */
 	otherEntry?: string;
+	/** The git directory of the person's own checkout, where that is a linked worktree: their entry. */
+	personsEntry?: string;
 };
 
 export type CheckResult = Record<string, { ok: boolean; detail?: string }>;
@@ -140,6 +142,26 @@ export async function sandboxChecks(plan: CheckPlan, cwd = process.cwd()): Promi
 				writeFileSync(join(other, "commondir"), `${worktree}\n`)
 			);
 			result.cannotMoveOtherWorktree = refused(() => renameSync(other, `${other}.moved`));
+		}
+		if (plan.personsEntry) {
+			// What the person's own git reads and runs in their checkout: its HEAD, and an unfinished
+			// rebase, whose `exec` lines it would run outside the sandbox on `git rebase --continue`.
+			let entry = plan.personsEntry;
+			result.cannotWritePersonsHead = refused(() =>
+				writeFileSync(join(entry, "HEAD"), "ref: refs/heads/evil\n")
+			);
+			result.cannotPlantRebase = refused(() => {
+				mkdirSync(join(entry, "rebase-merge"));
+				writeFileSync(
+					join(entry, "rebase-merge", "git-rebase-todo"),
+					`exec touch ${worktree}/rebase-exec\n`,
+				);
+			});
+			result.cannotCommitInCheckout = refused(() => {
+				writeFileSync(join(cwd, "more.txt"), "more");
+				git(cwd, "add", "more.txt");
+				git(cwd, "commit", "-m", "in the checkout");
+			});
 		}
 	}
 	result.chopin = await reach(plan.chopin);

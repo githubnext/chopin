@@ -1206,7 +1206,8 @@ connector makes it depends on the [sandbox](chopin-cli.md#sandbox):
   lets the backend write that one worktree's git directory and not the list of
   worktrees in the checkout's, and so does any `git add`, `git commit` or `git
   checkout` in `CHOPIN_CHECKOUT` itself, whose files the backend may write but not its
-  `.git`. See [Git in the sandbox](chopin-cli.md#git-in-the-sandbox). A folder at
+  `.git`, nor, where that checkout is a linked worktree of the person's, their entry for it
+  in the repository's `worktrees/`. See [Git in the sandbox](chopin-cli.md#git-in-the-sandbox). A folder at
   `CHOPIN_WORKTREE` that holds something and is no worktree is left as it is.
 
 The connector renews the Planner credential in `CHOPIN_PLANNER_TOKEN_FILE` 5 minutes

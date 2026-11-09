@@ -17,7 +17,7 @@ import { runAgent } from "./acp";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
-import { prepareWorkspace } from "./workspace";
+import { preparePlannerWorktree, prepareWorkspace } from "./workspace";
 import { gitAsync, gitSync } from "./git-host";
 import { createSandbox, inspectSandbox } from "./sandbox";
 import type { CheckPlan, CheckResult } from "./testing/sandbox-checks";
@@ -233,106 +233,125 @@ sandboxTest(
 	120_000,
 );
 
+/**
+ * A Planner backend started as `servePlanners` starts it, in a checkout the person registered:
+ * their repository's own, or, with `linked`, a linked worktree of it.
+ */
+async function plannerBackend(linked: boolean) {
+	let made = world(linked ? "planner-linked" : "planner");
+	// Another worktree, the person's own.
+	git(made.checkout, "worktree", "add", "--detach", join(made.root, "persons-other"));
+	let checkout = linked ? join(made.root, "persons-checkout") : made.checkout;
+	if (linked) git(made.checkout, "worktree", "add", "--detach", checkout);
+	let chopin = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			if (new URL(request.url).pathname === "/api/connector/planner") {
+				return Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: {
+						id: "D_1",
+						repository: "octo-org/score",
+						url: `${new URL(request.url).origin}/octo-org/score/plan`,
+					},
+				});
+			}
+			return new Response("chopin");
+		},
+	});
+	let extra = server("owner-added");
+	let github = await githubReachable();
+	let origin = chopin.url.origin;
+	let sandbox = await createSandbox({
+		directory: made.state,
+		home,
+		server: origin,
+		settings: { hosts: [new URL(extra.url).host], writable: [made.remote] },
+	});
+	let abort = new AbortController();
+	let quiet = { write: () => true };
+	let worktree = join(made.state, "planners", "octo-org", "score", "D_1");
+	let reported = join(worktree, "report.json");
+	let serving = servePlanners({
+		url: origin,
+		machine: MACHINE,
+		documents: ["D_1"],
+		command: [process.execPath, join(import.meta.dir, "testing/sandbox-planner.ts")],
+		checkouts: checkouts({
+			directory: made.state,
+			registered: { "octo-org/score": checkout },
+		}),
+		directory: made.state,
+		output: createOutput(quiet, quiet, {}),
+		signal: abort.signal,
+		env: {
+			SANDBOX_CHECKS: JSON.stringify({
+				...plan(made, origin + "/", extra.url, github),
+				// A Planner runs in its checkout, whose files it may write but not its git directory,
+				// and finds its own worktree there, made by the connector.
+				notWritable: [
+					join(home, "escaped.txt"),
+					join(made.checkout, ".git", "config"),
+					join(made.checkout, ".git", "commondir"),
+				],
+				otherEntry: join(made.checkout, ".git", "worktrees", "persons-other"),
+				// Where the checkout is a linked worktree, its git directory is the person's own entry.
+				...(linked
+					? { personsEntry: git(checkout, "rev-parse", "--path-format=absolute", "--git-dir") }
+					: {}),
+			}),
+			CHOPIN_TEST_CREDENTIAL: "a-credential-the-agent-keeps",
+		},
+		sandbox,
+	});
+	try {
+		for (let deadline = Date.now() + 90_000; !existsSync(reported); await Bun.sleep(100)) {
+			if (Date.now() > deadline) throw new Error("The Planner backend never reported.");
+		}
+		let result = JSON.parse(readFileSync(reported, "utf8").trim()) as CheckResult;
+		let failed = Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
+			`${name}: ${value.detail}`
+		);
+		expect(failed).toEqual([]);
+		for (
+			let name of [
+				"ownWorktree",
+				"cannotAddWorktree",
+				"cannotAlterOtherCommondir",
+				"cannotMoveOtherWorktree",
+				...linked ? ["cannotWritePersonsHead", "cannotPlantRebase", "cannotCommitInCheckout"] : [],
+			]
+		) {
+			expect(result, name).toHaveProperty(name);
+		}
+		expect(result).toHaveProperty("readRepository");
+		expect(result).toHaveProperty("commitAndPush");
+		expect(result).toHaveProperty("chopin");
+		expect(result).toHaveProperty("offList");
+		expect(readFileSync(join(worktree, "planner.txt"), "utf8")).toBe("ok");
+		expect(git(made.remote, "branch", "--list", "sandboxed")).toContain("sandboxed");
+		expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
+		expect(existsSync(join(made.state, "planted.txt"))).toBe(false);
+	} finally {
+		abort.abort();
+		await serving;
+		await sandbox.close();
+		await chopin.stop(true);
+		extra.stop();
+	}
+}
+
 sandboxTest(
 	"a Planner backend in the sandbox finds its own worktree made, reads its checkout and writes and commits in that worktree, with the same limits, and can't add or alter any other worktree",
-	async () => {
-		let made = world("planner");
-		// Another worktree, the person's own.
-		git(made.checkout, "worktree", "add", "--detach", join(made.root, "persons-other"));
-		let chopin = Bun.serve({
-			hostname: "127.0.0.1",
-			port: 0,
-			fetch(request) {
-				if (new URL(request.url).pathname === "/api/connector/planner") {
-					return Response.json({
-						token: `chopin_p_${"P".repeat(43)}`,
-						expiresAt: Date.now() + 15 * 60_000,
-						document: {
-							id: "D_1",
-							repository: "octo-org/score",
-							url: `${new URL(request.url).origin}/octo-org/score/plan`,
-						},
-					});
-				}
-				return new Response("chopin");
-			},
-		});
-		let extra = server("owner-added");
-		let github = await githubReachable();
-		let origin = chopin.url.origin;
-		let sandbox = await createSandbox({
-			directory: made.state,
-			home,
-			server: origin,
-			settings: { hosts: [new URL(extra.url).host], writable: [made.remote] },
-		});
-		let abort = new AbortController();
-		let quiet = { write: () => true };
-		let worktree = join(made.state, "planners", "octo-org", "score", "D_1");
-		let reported = join(worktree, "report.json");
-		let serving = servePlanners({
-			url: origin,
-			machine: MACHINE,
-			documents: ["D_1"],
-			command: [process.execPath, join(import.meta.dir, "testing/sandbox-planner.ts")],
-			checkouts: checkouts({
-				directory: made.state,
-				registered: { "octo-org/score": made.checkout },
-			}),
-			directory: made.state,
-			output: createOutput(quiet, quiet, {}),
-			signal: abort.signal,
-			env: {
-				SANDBOX_CHECKS: JSON.stringify({
-					...plan(made, origin + "/", extra.url, github),
-					// A Planner runs in its checkout, whose files it may write but not its git directory,
-					// and finds its own worktree there, made by the connector.
-					notWritable: [
-						join(home, "escaped.txt"),
-						join(made.checkout, ".git", "config"),
-						join(made.checkout, ".git", "commondir"),
-					],
-					otherEntry: join(made.checkout, ".git", "worktrees", "persons-other"),
-				}),
-				CHOPIN_TEST_CREDENTIAL: "a-credential-the-agent-keeps",
-			},
-			sandbox,
-		});
-		try {
-			for (let deadline = Date.now() + 90_000; !existsSync(reported); await Bun.sleep(100)) {
-				if (Date.now() > deadline) throw new Error("The Planner backend never reported.");
-			}
-			let result = JSON.parse(readFileSync(reported, "utf8").trim()) as CheckResult;
-			let failed = Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
-				`${name}: ${value.detail}`
-			);
-			expect(failed).toEqual([]);
-			for (
-				let name of [
-					"ownWorktree",
-					"cannotAddWorktree",
-					"cannotAlterOtherCommondir",
-					"cannotMoveOtherWorktree",
-				]
-			) {
-				expect(result, name).toHaveProperty(name);
-			}
-			expect(result).toHaveProperty("readRepository");
-			expect(result).toHaveProperty("commitAndPush");
-			expect(result).toHaveProperty("chopin");
-			expect(result).toHaveProperty("offList");
-			expect(readFileSync(join(worktree, "planner.txt"), "utf8")).toBe("ok");
-			expect(git(made.remote, "branch", "--list", "sandboxed")).toContain("sandboxed");
-			expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
-			expect(existsSync(join(made.state, "planted.txt"))).toBe(false);
-		} finally {
-			abort.abort();
-			await serving;
-			await sandbox.close();
-			await chopin.stop(true);
-			extra.stop();
-		}
-	},
+	() => plannerBackend(false),
+	150_000,
+);
+
+sandboxTest(
+	"a Planner backend whose checkout is a linked worktree of the person's finds its own worktree made, and can't write that worktree's git entry, plant a rebase in it or commit there",
+	() => plannerBackend(true),
 	150_000,
 );
 
@@ -521,8 +540,25 @@ if [ -n "$MAIN" ]; then
 	try checkoutWrite sh -c 'echo ok > "$1/agent-wrote.txt"' sh "$MAIN"
 	try checkoutGitMove sh -c 'mv "$1/.git" "$1/.git.moved"' sh "$MAIN"
 	try checkoutGitReplace sh -c 'mv "$1/.git" "$1/.git.moved" && mkdir "$1/.git"' sh "$MAIN"
-	try checkoutConfig sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" >> "$1/.git/config"' sh "$MAIN" "$evil/fsmonitor"
 	try checkoutCommit sh -c 'cd "$1" && echo more > more.txt && git add more.txt && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in the checkout"' sh "$MAIN"
+	if [ -f "$MAIN/.git" ]; then
+		# The checkout is a linked worktree of the person's, so its git directory is the person's
+		# entry in worktrees/: what their own git reads, and runs from an unfinished rebase.
+		person=$(git -C "$MAIN" rev-parse --path-format=absolute --git-dir)
+		try personRebaseMerge sh -c 'mkdir "$1/rebase-merge" && printf "exec touch \"%s/rebase-exec\"\n" "$2" > "$1/rebase-merge/git-rebase-todo"' sh "$person" "$RAN"
+		try personRebaseApply sh -c 'mkdir "$1/rebase-apply"' sh "$person"
+		try personSequencer sh -c 'mkdir "$1/sequencer" && printf "pick 0000000\n" > "$1/sequencer/todo"' sh "$person"
+		try personHead sh -c 'echo "ref: refs/heads/evil" > "$1/HEAD"' sh "$person"
+		try personOrigHead sh -c 'echo 0123456789abcdef0123456789abcdef01234567 > "$1/ORIG_HEAD"' sh "$person"
+		try personIndex sh -c 'printf x >> "$1/index"' sh "$person"
+		try personLogs sh -c 'echo x >> "$1/logs/HEAD"' sh "$person"
+		try personConfigWorktree sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" > "$1/config.worktree"' sh "$person" "$evil/fsmonitor"
+		try personCommondir sh -c 'printf "%s\n" "$2" > "$1/commondir"' sh "$person" "$fake"
+		try personRename sh -c 'mv "$1" "$1.moved"' sh "$person"
+		try personRecreate sh -c 'mv "$1" "$1.moved" && mkdir "$1"' sh "$person"
+	else
+		try checkoutConfig sh -c 'printf "[core]\n\tfsmonitor = %s\n" "$2" >> "$1/.git/config"' sh "$MAIN" "$evil/fsmonitor"
+	fi
 fi
 echo finished=done
 `;
@@ -588,17 +624,34 @@ async function afterwards(made: ReturnType<typeof world>, worktree: string, link
 	};
 }
 
-async function gitAttempts(layout: "run" | "planner") {
+/**
+ * `run`: an agent in the worktree the connector made for its run. `planner`: a Planner in the
+ * person's checkout, with its own worktree. `linked`: the same, where the person's checkout is
+ * itself a linked worktree of their repository.
+ */
+type Layout = "run" | "planner" | "linked";
+
+async function gitAttempts(layout: Layout) {
 	let made = gitWorld(`git-${layout}`);
 	let ran = join(made.root, "ran");
 	mkdirSync(ran);
-	let linked = layout === "run";
-	let worktree = linked
+	let run = layout === "run";
+	let worktree = run
 		? join(made.state, "runs", "mine")
 		: join(made.state, "planners", "octo-org", "score", "D_1");
+	// What the Planner runs in: the person's checkout, which is a linked worktree of the repository
+	// in the third layout.
+	let checkout = layout === "linked" ? join(made.root, "persons-checkout") : made.checkout;
+	if (layout === "linked") git(made.checkout, "worktree", "add", "--detach", checkout);
+	let entry = layout === "linked"
+		? git(checkout, "rev-parse", "--path-format=absolute", "--git-dir")
+		: undefined;
+	let entryBefore = entry ? readdirSync(entry).sort() : [];
+	let headBefore = entry ? readFileSync(join(entry, "HEAD"), "utf8") : "";
 	// A Planner's worktree is made by the connector, on the host, before the backend starts.
 	mkdirSync(dirname(worktree), { recursive: true });
-	git(made.checkout, "worktree", "add", "--detach", worktree);
+	if (run) git(made.checkout, "worktree", "add", "--detach", worktree);
+	else await preparePlannerWorktree(checkout, worktree);
 	let script = join(made.root, "attempts.sh");
 	writeFileSync(script, GIT_ATTEMPTS);
 	let before = readFileSync(join(made.checkout, ".git", "config"), "utf8");
@@ -612,12 +665,14 @@ async function gitAttempts(layout: "run" | "planner") {
 	});
 	try {
 		expect(sandbox.report).toEqual({ engine: "bubblewrap" });
+		// As `run.ts` and `planner.ts` start them: a run's own worktree is where it works; a
+		// Planner works in the checkout and has its own worktree beside it.
 		let child = sandbox.spawn({
 			command: ["sh", script],
-			cwd: linked ? worktree : made.checkout,
-			env: { ...process.env, RAN: ran, WORK: worktree, MAIN: linked ? "" : made.checkout },
+			cwd: run ? worktree : checkout,
+			env: { ...process.env, RAN: ran, WORK: worktree, MAIN: run ? "" : checkout },
 			stdin: "ignore",
-			...(linked ? {} : { writable: [worktree] }),
+			...(run ? {} : { writable: [worktree] }),
 			own: [worktree],
 		});
 		let said = "";
@@ -631,9 +686,19 @@ async function gitAttempts(layout: "run" | "planner") {
 		if (attempts.finished !== "done") {
 			throw new Error(`The script in the sandbox didn't finish: ${output} ${said.slice(0, 2000)}`);
 		}
-		let host = await afterwards(made, worktree, linked);
+		let host = await afterwards(made, worktree, run);
 		return {
 			made,
+			checkout,
+			// What the person's own git finds in their linked checkout's entry afterwards.
+			person: entry
+				? {
+					names: readdirSync(entry).sort(),
+					before: entryBefore,
+					head: readFileSync(join(entry, "HEAD"), "utf8") === headBefore,
+					status: spawnSync("git", ["-C", checkout, "status"], { encoding: "utf8" }).stdout,
+				}
+				: undefined,
 			attempts,
 			host,
 			// What the agent's programs did when git ran them, which is to leave a file here.
@@ -646,7 +711,7 @@ async function gitAttempts(layout: "run" | "planner") {
 				line.trim().replace(/^\* /, "")
 			).sort(),
 			local: git(made.checkout, "branch", "--list", "--format=%(refname:short)").split("\n").sort(),
-			checkoutWritten: existsSync(join(made.checkout, "agent-wrote.txt")),
+			checkoutWritten: existsSync(join(checkout, "agent-wrote.txt")),
 			planted,
 			redirect: existsSync(join(made.checkout, ".git", "commondir")),
 			entries: readdirSync(join(made.checkout, ".git", "worktrees")).sort(),
@@ -698,7 +763,22 @@ const REFUSED = [
 	"worktreeFileReplace",
 ];
 
-async function expectGitUntouched(layout: "run" | "planner") {
+/** What a Planner may not do in its person's checkout when that is a linked worktree of theirs. */
+const PERSONS_ENTRY = [
+	"personRebaseMerge",
+	"personRebaseApply",
+	"personSequencer",
+	"personHead",
+	"personOrigHead",
+	"personIndex",
+	"personLogs",
+	"personConfigWorktree",
+	"personCommondir",
+	"personRename",
+	"personRecreate",
+];
+
+async function expectGitUntouched(layout: Layout) {
 	let result = await gitAttempts(layout);
 	let linked = layout === "run";
 	expect({ attempts: result.attempts, ran: result.ran, configChanged: result.configChanged })
@@ -710,9 +790,11 @@ async function expectGitUntouched(layout: "run" | "planner") {
 					checkoutWrite: "done",
 					checkoutGitMove: "refused",
 					checkoutGitReplace: "refused",
-					checkoutConfig: "refused",
-					// The index is at the top of its git directory, which is read-only to it.
+					// The index and HEAD are in its git directory, which is read-only to it.
 					checkoutCommit: "refused",
+					...(layout === "linked"
+						? Object.fromEntries(PERSONS_ENTRY.map(name => [name, "refused"]))
+						: { checkoutConfig: "refused" }),
 				}),
 				finished: "done",
 			},
@@ -736,6 +818,13 @@ async function expectGitUntouched(layout: "run" | "planner") {
 	expect(result.local).toEqual(expect.arrayContaining(["from-sandbox", "topic", "tracked"]));
 	expect(result.upstream).toBe("");
 	expect(result.checkoutWritten).toBe(!linked);
+	if (result.person) {
+		// The person's own git finds their checkout as it was: no rebase, no merge, nothing added
+		// to the entry or taken from it, and its HEAD is the same.
+		expect(result.person.names).toEqual(result.person.before);
+		expect(result.person.head).toBe(true);
+		expect(result.person.status).not.toMatch(/rebas|merg|cherry|revert|bisect/i);
+	}
 }
 
 sandboxTest(
@@ -747,6 +836,12 @@ sandboxTest(
 sandboxTest(
 	"a Planner in its checkout and its own worktree can do the same in that worktree, writes the checkout's files but not its .git, and git on the host runs nothing of the agent's",
 	() => expectGitUntouched("planner"),
+	120_000,
+);
+
+sandboxTest(
+	"a Planner whose checkout is a linked worktree of the person's can't write that worktree's git entry, plant a rebase with an exec line in it or commit there, and its own worktree still commits and pushes",
+	() => expectGitUntouched("linked"),
 	120_000,
 );
 
