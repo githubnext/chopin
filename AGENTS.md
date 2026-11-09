@@ -286,8 +286,8 @@ durable.
   own configuration is still read by the connector's git (filters, proxies), which the policy keeps
   an agent from writing. `removePlantedRedirects` remains as a cheap detector of a `commondir` an
   earlier release's agent left, and is not the defense. The rest of the disk reads except credentials (on Windows only what a
-  ProcessContainer is given: the profile, MXC's baseline of tool directories, per-user programs and the
-  working directory, see `windowsReadRoots`; not run on Windows), and the connector's state
+  ProcessContainer is given: the profile, MXC's baseline of tool directories, per-user programs, the
+  working directory and worktree and the repository's git directory, whole, see `windowsReadRoots` and `launchPolicy`; not run on Windows), and the connector's state
   directory is left out of the read grants, so an agent sees there only its own worktree and the
   folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a denial
   win over a grant inside it, so a denial can't give an agent its own paths back; a working directory or
