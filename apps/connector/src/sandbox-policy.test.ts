@@ -13,6 +13,7 @@ import {
 	sandboxPath,
 	secretPaths,
 	validHostEntry,
+	windowsReadRoots,
 } from "./sandbox-policy";
 
 const real = (path: string) => path === "/run/user/1/fnm/bin" ? "/home/me/.fnm/v24/bin" : path;
@@ -377,4 +378,60 @@ test("on Windows and macOS the state directory is found whatever the case its pa
 		"/Users/me/Library",
 		"/usr",
 	]);
+});
+
+/** A Windows disk of directories, for the read roots: `list` names what is directly in one. */
+function windowsDisk(directories: string[]) {
+	let known = new Set(directories.map(path => path.toLowerCase()));
+	return {
+		directory: (path: string) => known.has(path.toLowerCase()),
+		list: (path: string) =>
+			directories.filter(item => item.toLowerCase().startsWith(`${path.toLowerCase()}\\`))
+				.map(item => item.slice(path.length + 1)).filter(name => !name.includes("\\")),
+	};
+}
+
+test("on Windows a launch reads the profile and MXC's baseline for a container, and no other folder or drive", () => {
+	let home = "C:\\Users\\me";
+	let disk = windowsDisk([
+		home,
+		"C:\\Tools\\bin",
+		"D:\\sdk\\bin",
+		"D:\\go",
+		"C:\\Windows",
+		"C:\\Windows\\System32",
+		"C:\\Users\\me\\AppData\\Local\\Programs",
+		"C:\\Users\\me\\AppData\\Local\\Programs\\Git",
+		"C:\\Users\\me\\AppData\\Local\\Programs\\Python",
+		"C:\\Program Files\\PowerShell\\Modules",
+		// Folders the person can read and the baseline does not name.
+		"D:\\data",
+		"E:\\",
+		"C:\\Users\\other",
+	]);
+	let roots = windowsReadRoots(
+		{
+			// Windows' own spelling of the name, a blank entry and one that isn't there, which MXC skips.
+			Path: "C:\\Tools\\bin;;C:\\Windows\\System32;D:\\sdk\\bin;C:\\gone;d:\\SDK\\bin",
+			GOROOT: "D:\\go",
+			PSModulePath: "C:\\Program Files\\PowerShell\\Modules;C:\\missing\\Modules",
+			LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local",
+			WINDIR: "C:\\Windows",
+		},
+		home,
+		disk,
+	);
+	expect(roots).toEqual([
+		home,
+		"C:\\Tools\\bin",
+		"D:\\sdk\\bin",
+		"C:\\Program Files\\PowerShell\\Modules",
+		"D:\\go",
+		"C:\\Users\\me\\AppData\\Local\\Programs\\Git",
+		"C:\\Users\\me\\AppData\\Local\\Programs\\Python",
+	]);
+	// A blank, absent or empty-valued PATH grants nothing but the profile.
+	for (let env of [{}, { PATH: "" }, { PATH: ";;" }, { Path: undefined }]) {
+		expect(windowsReadRoots(env, home, disk)).toEqual([home]);
+	}
 });
