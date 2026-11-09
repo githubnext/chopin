@@ -669,13 +669,14 @@ keeps them all. `chopin` never removes a run that is going or waiting to start.
 
 ## Sandbox
 
-`chopin connect` starts every agent and Planner command inside your operating
-system's own process sandbox, as Codex and Claude Code do for theirs, so a
-mistaken or hostile instruction in a document can't reach past the run's
-worktree. The sandbox is [MXC](https://github.com/microsoft/mxc) on every
-system: Seatbelt on macOS, bubblewrap on Linux and ProcessContainer on Windows.
-It needs no virtual machine, image or daemon, and your credentials and
-environment reach the agent as before.
+`chopin connect` starts every agent and Planner command that runs work inside your
+operating system's own process sandbox, as Codex and Claude Code do for theirs, so a
+mistaken or hostile instruction in a document can't reach past the run's worktree.
+Two start checks, which send the agent nothing, are the exception (see
+[Things to know](#things-to-know)). The sandbox is
+[MXC](https://github.com/microsoft/mxc) on every system: Seatbelt on macOS, bubblewrap
+on Linux and ProcessContainer on Windows. It needs no virtual machine, image or daemon,
+and your credentials and environment reach the agent as before.
 
 `chopin status`, and the line `chopin connect` prints once connected, say which
 you have, and so does the machine's row on the Machines page:
@@ -960,6 +961,14 @@ nothing.
 - **On Linux, MXC gives the environment to bubblewrap as arguments**, so other
   accounts on a shared machine can read it with `ps`. On such a machine mount
   `/proc` with `hidepid=2`.
+- **Two start checks are not sandboxed.** `chopin service install`, and `chopin connect
+  --install-service` before the machine is paired, start your agent once with your
+  environment to send ACP `initialize` and wait up to 10 seconds, so a service is not
+  installed, nor a pairing key spent, on an agent that can't start. They are not runs:
+  nothing from Chopin, no document, prompt or instruction, reaches the agent, and they
+  start it plainly, `--require-sandbox` included. `--skip-check` leaves them out. Every
+  start after that, the check that tells Chopin the agent's name when a connection opens
+  included, goes through the sandbox.
 - **Telemetry.** MXC's is opt-in under its 1.0.0 contract. chopin never opts in.
 - **`connector.js`**, the downloaded script, carries no executor and runs
   unsandboxed; the `chopin` binary carries MXC's and writes it to
