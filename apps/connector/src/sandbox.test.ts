@@ -146,6 +146,17 @@ function held(policy: ReturnType<typeof launchPolicy>) {
 	return [...policy.readonlyInside ?? []].sort();
 }
 
+/**
+ * What is held read-only in a launch's own worktree entry: the three files that say where git is
+ * and the three directories the repository's git directory holds read-only too. Git writes the
+ * rest of the entry's top level by taking a lock beside each file, so it is not held.
+ */
+function inEntry(entry: string) {
+	return ["commondir", "config.worktree", "gitdir", "hooks", "info", "modules"].map(name =>
+		join(entry, name)
+	);
+}
+
 function gitCommand(...args: string[]) {
 	let result = spawnSync("git", [
 		"-c",
@@ -285,9 +296,7 @@ test("a launch may write its worktree, its repository's git directory, its agent
 	expect(held(policy)).toEqual(
 		[
 			join(checkout, ".git"),
-			join(entry, "commondir"),
-			join(entry, "config.worktree"),
-			join(entry, "gitdir"),
+			...inEntry(entry),
 			join(worktree, ".git"),
 		].sort(),
 	);
@@ -430,9 +439,7 @@ test("a launch in a linked worktree writes its own entry in the repository's git
 	expect(held(policy)).toEqual(
 		[
 			repo.git,
-			join(admin("mine"), "commondir"),
-			join(admin("mine"), "config.worktree"),
-			join(admin("mine"), "gitdir"),
+			...inEntry(admin("mine")),
 			join(mine, ".git"),
 		].sort(),
 	);
@@ -479,9 +486,7 @@ test("a Planner whose checkout is itself a linked worktree of the person's reads
 	expect(held(policy)).toEqual(
 		[
 			repo.git,
-			join(admin("D_1"), "commondir"),
-			join(admin("D_1"), "config.worktree"),
-			join(admin("D_1"), "gitdir"),
+			...inEntry(admin("D_1")),
 			join(planned, ".git"),
 		].sort(),
 	);
@@ -569,9 +574,7 @@ test("a Planner's own worktree, found made in its checkout's repository, is writ
 	expect(held(policy)).toEqual(
 		[
 			repo.git,
-			join(admin("D_1"), "commondir"),
-			join(admin("D_1"), "config.worktree"),
-			join(admin("D_1"), "gitdir"),
+			...inEntry(admin("D_1")),
 			join(planned, ".git"),
 		].sort(),
 	);
