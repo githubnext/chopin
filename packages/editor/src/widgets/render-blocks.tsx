@@ -19,7 +19,16 @@
  * race.
  */
 
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
@@ -594,6 +603,24 @@ function sidesOf(element: HTMLElement): ReturnType<typeof hiddenSides> {
 }
 
 /**
+ * The object a block's markup is given to React as. React 19 compares `dangerouslySetInnerHTML` by
+ * identity and sets `innerHTML` again for any other object: the whole drawing is parsed and
+ * replaced, and the editor's mutation observer reads the page's layout, though the markup is the
+ * very string it was. The previews render again on every editor update, so a new object each time
+ * redrew every diagram and formula for every keystroke anywhere in the document.
+ */
+function useInnerHtml(html: string) {
+	return useMemo(() => ({ __html: html }), [html]);
+}
+
+/** A formula, as KaTeX drew it. */
+function Formula({ html, inline }: { html: string; inline: boolean }) {
+	let inner = useInnerHtml(html);
+	if (inline) return <span dangerouslySetInnerHTML={inner} />;
+	return <div contentEditable={false} dangerouslySetInnerHTML={inner} />;
+}
+
+/**
  * A drawn diagram in its own horizontal scroller.
  *
  * Mermaid lays text out at its authored size, so shrinking a wide chart to the
@@ -619,6 +646,16 @@ export function Diagram(
 	let phone = usePhone();
 	let expand = useRef<HTMLButtonElement>(null);
 	let [more, setMore] = useState<ReturnType<typeof hiddenSides>>();
+	let inner = useInnerHtml(html);
+	// The copy's IDs are its own, so its markers and styles never resolve to the drawing in the
+	// document.
+	let sheet = useMemo(
+		() =>
+			expanded
+				? { __html: html.replaceAll(`ace-mermaid-${id}`, `ace-mermaid-${id}-sheet`) }
+				: undefined,
+		[expanded, html, id],
+	);
 
 	useEffect(() => {
 		let element = region.current;
@@ -663,7 +700,7 @@ export function Diagram(
 				// Mermaid draws its labels as HTML. Inside the editable root, a
 				// click would otherwise put a caret in a label and type into it.
 				contentEditable={false}
-				dangerouslySetInnerHTML={{ __html: html }}
+				dangerouslySetInnerHTML={inner}
 			/>
 			{phone && !fit && <ExpandDiagram buttonRef={expand} onExpand={() => setExpanded(true)} />}
 			{!phone && !fit && <FitDiagram fitted={fitted} onToggle={() => setFitted(!fitted)} />}
@@ -675,14 +712,7 @@ export function Diagram(
 						requestAnimationFrame(() => expand.current?.focus());
 					}}
 				>
-					<div
-						className="plan-diagram-sheet-drawing"
-						// The copy's IDs are its own, so its markers and styles
-						// never resolve to the drawing in the document.
-						dangerouslySetInnerHTML={{
-							__html: html.replaceAll(`ace-mermaid-${id}`, `ace-mermaid-${id}-sheet`),
-						}}
-					/>
+					<div className="plan-diagram-sheet-drawing" dangerouslySetInnerHTML={sheet} />
 				</DiagramSheet>
 			)}
 		</>
@@ -769,8 +799,7 @@ function Rendered(
 	// Inline math is a span inside a sentence, so what wraps it has to be one
 	// too: a block element here would put a formula somebody wrote mid-clause
 	// on a line of its own, and the rest of the sentence after it.
-	if (block.inline) return <span dangerouslySetInnerHTML={{ __html: html }} />;
-	return <div contentEditable={false} dangerouslySetInnerHTML={{ __html: html }} />;
+	return <Formula html={html} inline={block.inline} />;
 }
 
 /** Asked for with the toggle, or opened by going into the block. */
