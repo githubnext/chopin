@@ -729,7 +729,7 @@ async function removeWorktreesIn(where: Where, folder: string) {
 function legacyRepository(path: string): Where | undefined {
 	let record = repositoryAt(path);
 	return record
-		? { repository: { gitDir: record.commonDir, commonDir: record.commonDir, localOrigin: false } }
+		? { repository: { gitDir: record.commonDir, commonDir: record.commonDir } }
 		: undefined;
 }
 

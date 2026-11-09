@@ -24,9 +24,9 @@ import { promisify } from "node:util";
  *   configuration file as `-c` does): the hooks, the file-system monitor, the ssh command (also
  *   pinned in `GIT_SSH_COMMAND` to the person's own, which wins over any configuration), the
  *   global attributes file, remotes that are commands (`protocol.ext.allow`) and the local
- *   transport (`protocol.file.allow`), which only a checkout whose own origin was a local path
- *   when the connector first saw it may use. Credential helpers a repository named are reset, and
- *   the person's own are named again after the reset.
+ *   transport (`protocol.file.allow`), which is never allowed. Every credential helper any
+ *   configuration named is reset and none is named again: what a command needs to authenticate,
+ *   its caller gives in the environment (`GIT_CONFIG_*`, as `gitCredentials` does).
  *
  * What this does not do: a repository's configuration is still read, so a filter, a proxy or
  * another setting a repository carries applies to the connector's commands as it would to anyone's.
@@ -39,6 +39,7 @@ export const HOST_GIT_CONFIG: Array<[string, string]> = [
 	["core.sshCommand", ""],
 	["core.attributesFile", "/dev/null"],
 	["protocol.ext.allow", "never"],
+	["protocol.file.allow", "never"],
 ];
 
 /** What the connector knows of a working tree and its git directories. */
@@ -49,8 +50,6 @@ export type Repository = {
 	gitDir: string;
 	/** The repository's own git directory, which holds its configuration, hooks, objects and refs. */
 	commonDir: string;
-	/** Whether the person's `origin` was a local path or `file://` URL when the connector first saw it. */
-	localOrigin: boolean;
 };
 
 let records = new Map<string, Repository>();
@@ -61,11 +60,6 @@ function real(path: string) {
 	} catch {
 		return resolve(path);
 	}
-}
-
-/** Whether `url` names a repository on this machine's disk rather than a host. */
-function isLocalUrl(url: string) {
-	return /^(?:file:|\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|\\\\)/.test(url);
 }
 
 function kindOf(path: string) {
@@ -80,7 +74,7 @@ function kindOf(path: string) {
  * The connector's record of the git directories of the working tree at `path`, made the first time
  * it is asked for and kept: the checkout's `.git` where that is a directory, which no file in
  * it is read to find, else what git says once for a working tree whose `.git` is a file (a linked
- * worktree, a separate git directory), and whether its `origin` was a local repository. They are
+ * worktree, a separate git directory). They are
  * recorded by their real paths, which are what the sandbox's policy names too: a `.git` that is a
  * symbolic link, as some tools leave one, or a `.git` file that leads through one, is a link in a
  * folder an agent writes, and neither git nor a sandbox should find the repository through it
@@ -109,14 +103,7 @@ export function repositoryAt(path: string): Repository | undefined {
 		gitDir = real(own);
 		commonDir = real(common);
 	} else return undefined;
-	let repository: Repository = { workTree, gitDir, commonDir, localOrigin: false };
-	let origin = spawnSync("git", ["config", "--get", "remote.origin.url"], {
-		cwd: workTree,
-		encoding: "utf8",
-		env: hostGitEnvironment(process.env, repository),
-		timeout: 10_000,
-	});
-	repository.localOrigin = origin.status === 0 && isLocalUrl(origin.stdout.trim());
+	let repository: Repository = { workTree, gitDir, commonDir };
 	records.set(workTree, repository);
 	return repository;
 }
@@ -125,16 +112,13 @@ export function repositoryAt(path: string): Repository | undefined {
 type Person = {
 	/** A file in the connector's own temporary directory: what a fetch and a checkout need. */
 	file: string;
-	/** Their `credential.*` entries, in order: helpers, and settings for them. */
-	credentials: Array<[string, string]>;
 	/** The ssh command git would use without a repository's say. */
 	ssh: string;
 };
 
 /**
  * What a checkout and a fetch need of a person's configuration: where to fetch from and how to
- * reach it (`url.*`, `http.*`, `ssh.*`, `transfer.*`, `fetch.*`, `safe.*`), who vouches for it
- * (`credential.*`, given separately), how files are written (line endings, symlinks and names,
+ * reach it (`url.*`, `http.*`, `ssh.*`, `transfer.*`, `fetch.*`, `safe.*`), how files are written (line endings, symlinks and names,
  * `core.*` of those kinds) and their own filters (`filter.*`, `lfs.*`), which is what a Git LFS
  * checkout needs. The rest, a person's aliases, editor, pager, hooks and monitor among it, is not.
  */
@@ -223,7 +207,6 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 	else delete reading.GIT_DIR;
 	let entries = [...entriesOf("--system", reading), ...entriesOf("--global", reading)];
 	let file = join(privateDirectory(), `gitconfig-${people.size}`);
-	let credentials: Array<[string, string]> = [];
 	let kept: string[] = [];
 	let ssh = "";
 	for (let [name, value] of entries) {
@@ -231,15 +214,14 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 		let last = name.lastIndexOf(".");
 		let section = name.slice(0, Math.max(first, 0));
 		if (name === "core.sshcommand") ssh = value;
-		if (section === "credential") credentials.push([name, value]);
-		else if (first > 0 && (SECTIONS.has(section) || CORE.has(name))) {
+		if (first > 0 && (SECTIONS.has(section) || CORE.has(name))) {
 			// A section with its subsection, as git writes them, and the value quoted.
 			let subsection = first === last ? "" : ` "${quote(name.slice(first + 1, last))}"`;
 			kept.push(`[${section}${subsection}]\n\t${name.slice(last + 1)} = "${quote(value)}"\n`);
 		}
 	}
 	writeFileSync(file, kept.join(""), { mode: 0o600 });
-	let person = { file, credentials, ssh: ssh || env.GIT_SSH || "ssh" };
+	let person = { file, ssh: ssh || env.GIT_SSH || "ssh" };
 	people.set(key, person);
 	return person;
 }
@@ -257,18 +239,15 @@ export function hostGitEnvironment(
 	let count = Number(env.GIT_CONFIG_COUNT ?? 0);
 	if (!Number.isInteger(count) || count < 0) count = 0;
 	let hardened: NodeJS.ProcessEnv = { ...env };
-	// Credential helpers any configuration named are reset first, then the person's own named again.
-	let entries: Array<[string, string]> = [["credential.helper", ""], ...person.credentials];
+	// Credential helpers any configuration named are reset first, and none is named again.
+	let entries: Array<[string, string]> = [["credential.helper", ""]];
 	for (let index = 0; index < count; index++) {
 		let name = env[`GIT_CONFIG_KEY_${index}`];
 		if (name !== undefined) entries.push([name, env[`GIT_CONFIG_VALUE_${index}`] ?? ""]);
 		delete hardened[`GIT_CONFIG_KEY_${index}`];
 		delete hardened[`GIT_CONFIG_VALUE_${index}`];
 	}
-	entries.push(...HOST_GIT_CONFIG, [
-		"protocol.file.allow",
-		repository?.localOrigin ? "user" : "never",
-	]);
+	entries.push(...HOST_GIT_CONFIG);
 	hardened.GIT_CONFIG_COUNT = String(entries.length);
 	entries.forEach(([name, value], index) => {
 		hardened[`GIT_CONFIG_KEY_${index}`] = name;

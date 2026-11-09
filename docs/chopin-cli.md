@@ -820,18 +820,20 @@ a check and the command at which something could change. It also:
 
 - reads a copy of your git configuration that the connector made once, with
   your system and global files set aside (`GIT_CONFIG_NOSYSTEM`,
-  `GIT_CONFIG_GLOBAL`): your credential helpers, `url.*` rewrites, `http.*` and
-  `ssh.*` settings, `safe.directory`, line-ending and symlink settings and your
-  filters, which a Git LFS checkout needs; not your aliases, hooks, editor or
-  user;
+  `GIT_CONFIG_GLOBAL`): your `url.*` rewrites, `http.*` and `ssh.*` settings,
+  `safe.directory`, line-ending and symlink settings and your filters, which a Git
+  LFS checkout needs; not your credential helpers, aliases, hooks, editor or user;
 - sets aside what a repository's configuration says for the programs git
   runs: `core.hooksPath`, `core.fsmonitor`, `core.sshCommand` (your own ssh
-  command is kept, in `GIT_SSH_COMMAND`), `core.attributesFile`, remotes that are
-  commands (`protocol.ext.allow=never`) and credential helpers a repository named;
-- refuses the local transport (`protocol.file.allow=never`), unless your `origin`
-  was a local path or a `file://` URL when the connector first saw the checkout.
-  Set `GIT_ALLOW_PROTOCOL` in the connector's environment if you fetch through a
-  mirror on disk.
+  command is kept, in `GIT_SSH_COMMAND`), `core.attributesFile` and remotes that are
+  commands (`protocol.ext.allow=never`);
+- runs no credential helper: every helper any configuration names, a repository's
+  and yours, is reset (`credential.helper=` empty) and none is named again. A fetch
+  that needs a login gets the machine's GitHub token from the connector, which
+  hands it over in the command's environment;
+- refuses the local transport (`protocol.file.allow=never`), whatever the checkout's
+  `origin` is. Set `GIT_ALLOW_PROTOCOL` in the connector's environment if you fetch
+  through a mirror on disk.
 
 **What this does and doesn't guarantee.** Your checkout's files, its submodules,
 its configuration, hooks and `info`, every file in it that says where git is (a
