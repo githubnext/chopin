@@ -233,6 +233,44 @@ test("a sandboxed Planner's worktree is made in its checkout's repository before
 	}
 });
 
+test("a sandboxed Planner's worktree is made on the host without running any filter its checkout's configuration defines, and holds the files as they are committed", async () => {
+	let { root, state } = await scoreCheckout();
+	try {
+		let ran = join(state, "ran");
+		await mkdir(ran);
+		let program = (name: string, body: string) => {
+			let path = join(state, name);
+			writeFileSyncNow(path, `#!/bin/sh\n${body}\n`);
+			chmodSync(path, 0o755);
+			return path;
+		};
+		await writeFile(join(root, ".gitattributes"), "* filter=mine\nother.txt filter=process\n");
+		await writeFile(join(root, "other.txt"), "other");
+		git(root, "add", ".");
+		git(root, "commit", "-m", "attributes");
+		git(root, "config", "filter.mine.smudge", program("smudge", `touch '${ran}/smudge'; cat`));
+		git(root, "config", "filter.mine.clean", "cat");
+		git(root, "config", "filter.process.process", program("process", `touch '${ran}/process'`));
+		// Plain git runs both (and fails at the process, which does not answer), so that nothing
+		// having run below means something.
+		let control = join(state, "control");
+		spawnSync("git", ["-C", root, "worktree", "add", "--detach", control], { stdio: "ignore" });
+		expect((await readdir(ran)).sort()).toEqual(["process", "smudge"]);
+		for (let name of await readdir(ran)) await rm(join(ran, name));
+		let worktree = join(state, "planners", "octo-org", "score", "D_1");
+		await mkdir(join(state, "planners", "octo-org", "score"), { recursive: true });
+		expect(await preparePlannerWorktree(root, worktree)).toBe(true);
+		expect(await readdir(ran)).toEqual([]);
+		expect(await readFile(join(worktree, "file.txt"), "utf8")).toBe("base");
+		expect(await readFile(join(worktree, "other.txt"), "utf8")).toBe("other");
+		expect(existsSync(join(worktree, ".gitattributes"))).toBe(true);
+		expect(git(worktree, "rev-parse", "HEAD")).toBe(git(root, "rev-parse", "HEAD"));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
 test("replaces a lock left by a connector whose process is gone, and keeps a live one", async () => {
 	let state = await mkdtemp(join(tmpdir(), "chopin-state-"));
 	try {

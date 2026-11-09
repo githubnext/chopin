@@ -234,6 +234,7 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 export function hostGitEnvironment(
 	env: NodeJS.ProcessEnv = process.env,
 	repository?: Repository,
+	after: Array<[string, string]> = [],
 ): NodeJS.ProcessEnv {
 	let person = personConfig(env, repository);
 	let count = Number(env.GIT_CONFIG_COUNT ?? 0);
@@ -247,7 +248,7 @@ export function hostGitEnvironment(
 		delete hardened[`GIT_CONFIG_KEY_${index}`];
 		delete hardened[`GIT_CONFIG_VALUE_${index}`];
 	}
-	entries.push(...HOST_GIT_CONFIG);
+	entries.push(...HOST_GIT_CONFIG, ...after);
 	hardened.GIT_CONFIG_COUNT = String(entries.length);
 	entries.forEach(([name, value], index) => {
 		hardened[`GIT_CONFIG_KEY_${index}`] = name;
@@ -265,6 +266,31 @@ export function hostGitEnvironment(
 	return hardened;
 }
 
+/**
+ * Settings that leave every filter any configuration defines with no command: a smudge, a clean
+ * and a process that are empty run nothing, and none is required. A `.gitattributes` that selects
+ * one then has git copy the file as it is stored.
+ */
+function withoutFilters(env: NodeJS.ProcessEnv, repository?: Repository): Array<[string, string]> {
+	let listed = spawnSync("git", ["config", "--name-only", "--get-regexp", "^filter\\."], {
+		cwd: repository?.workTree ?? tmpdir(),
+		encoding: "utf8",
+		env: hostGitEnvironment(env, repository),
+		timeout: 10_000,
+	});
+	let drivers = new Set(
+		(listed.status === 0 ? listed.stdout.split("\n") : []).filter(Boolean).map(name =>
+			name.slice("filter.".length, name.lastIndexOf("."))
+		),
+	);
+	return [...drivers].flatMap(driver => [
+		[`filter.${driver}.smudge`, ""],
+		[`filter.${driver}.clean`, ""],
+		[`filter.${driver}.process`, ""],
+		[`filter.${driver}.required`, "false"],
+	]);
+}
+
 type Options = {
 	/** Where the command runs; for a working tree the connector has recorded, that is the repository. */
 	cwd?: string;
@@ -272,16 +298,23 @@ type Options = {
 	env?: NodeJS.ProcessEnv;
 	maxBuffer?: number;
 	repository?: Repository;
+	/** Run no filter, as a checkout of files the person has not asked to see converted needs. */
+	noFilters?: boolean;
 };
 
 function prepared(options: Options) {
 	let repository = options.repository ?? (options.cwd ? repositoryAt(options.cwd) : undefined);
-	return hostGitEnvironment(options.env ?? process.env, repository);
+	let env = options.env ?? process.env;
+	return hostGitEnvironment(
+		env,
+		repository,
+		options.noFilters ? withoutFilters(env, repository) : [],
+	);
 }
 
 /** Run git to its end, as `spawnSync` does. */
 export function gitSync(args: string[], options: Omit<Options, "maxBuffer"> = {}) {
-	let { repository: _repository, ...rest } = options;
+	let { repository: _repository, noFilters: _noFilters, ...rest } = options;
 	return spawnSync("git", args, { encoding: "utf8", ...rest, env: prepared(options) });
 }
 
@@ -289,6 +322,6 @@ const execFileAsync = promisify(execFile);
 
 /** Run git to its end, as `execFile` does, resolving with its output and rejecting as it fails. */
 export function gitAsync(args: string[], options: Options = {}) {
-	let { repository: _repository, ...rest } = options;
+	let { repository: _repository, noFilters: _noFilters, ...rest } = options;
 	return execFileAsync("git", args, { ...rest, env: prepared(options) });
 }

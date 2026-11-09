@@ -965,8 +965,12 @@ nothing.
   sandbox's memory, so a write directly in one succeeds and is gone when the agent
   exits; nothing reaches the disk.
 - **A Planner's worktree** is made by the connector, on your machine and with git
-  hardened as above, at `CHOPIN_WORKTREE`: a linked worktree of the checkout,
-  detached at its `HEAD`, which the backend finds there and works in. The sandbox
+  hardened as above and no filter run (not yours, a repository's or Git LFS's: every
+  filter is given no command, so a `.gitattributes` that selects one changes nothing),
+  at `CHOPIN_WORKTREE`: a linked worktree of the checkout, detached at its `HEAD`,
+  which the backend finds there and works in. Its files are as git stores them, so
+  an LFS file is its pointer until the backend's own git, in its sandbox, converts it.
+  A run's worktree is still made with your filters, which a Git LFS checkout needs. The sandbox
   lets the backend write that worktree and its own git entry and nothing beside it,
   which is why the backend can't make it with `git worktree add` itself. The checkout
   the backend runs in is yours: it reads it and writes nothing of it.
