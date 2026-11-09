@@ -21,8 +21,8 @@ import { runAgent } from "./acp";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
-import { preparePlannerWorktree, prepareWorkspace } from "./workspace";
-import { gitAsync, gitSync } from "./git-host";
+import { discardWorkspace, preparePlannerWorktree, prepareWorkspace } from "./workspace";
+import { gitAsync, gitSync, repositoryAt } from "./git-host";
 import { createSandbox, inspectSandbox } from "./sandbox";
 import type { CheckPlan, CheckResult } from "./testing/sandbox-checks";
 
@@ -293,8 +293,8 @@ async function plannerBackend(linked: boolean) {
 		env: {
 			SANDBOX_CHECKS: JSON.stringify({
 				...plan(made, origin + "/", extra.url, github),
-				// A Planner runs in its checkout, whose files it may write but not its git directory,
-				// and finds its own worktree there, made by the connector.
+				// A Planner runs in its checkout, which it reads and doesn't write, and finds its own
+				// worktree, made by the connector, where it writes.
 				notWritable: [
 					join(home, "escaped.txt"),
 					join(made.checkout, ".git", "config"),
@@ -322,6 +322,7 @@ async function plannerBackend(linked: boolean) {
 		for (
 			let name of [
 				"ownWorktree",
+				"cannotWriteCheckout",
 				"cannotAddWorktree",
 				"cannotAlterOtherCommondir",
 				"cannotMoveOtherWorktree",
@@ -335,6 +336,10 @@ async function plannerBackend(linked: boolean) {
 		expect(result).toHaveProperty("chopin");
 		expect(result).toHaveProperty("offList");
 		expect(readFileSync(join(worktree, "planner.txt"), "utf8")).toBe("ok");
+		expect(readFileSync(join(worktree, "written-in-sandbox.txt"), "utf8")).toBe("ok");
+		// The person's checkout has nothing of what the Planner wrote.
+		expect(existsSync(join(checkout, "written-in-sandbox.txt"))).toBe(false);
+		expect(existsSync(join(checkout, "planner.txt"))).toBe(false);
 		expect(git(made.remote, "branch", "--list", "sandboxed")).toContain("sandboxed");
 		expect(existsSync(join(made.root, "outside.txt"))).toBe(false);
 		expect(existsSync(join(made.state, "planted.txt"))).toBe(false);
@@ -348,13 +353,13 @@ async function plannerBackend(linked: boolean) {
 }
 
 sandboxTest(
-	"a Planner backend in the sandbox finds its own worktree made, reads its checkout and writes and commits in that worktree, with the same limits, and can't add or alter any other worktree",
+	"a Planner backend in the sandbox finds its own worktree made, reads its checkout, writes and commits in that worktree and not in the checkout, with the same limits, and can't add or alter any other worktree",
 	() => plannerBackend(false),
 	150_000,
 );
 
 sandboxTest(
-	"a Planner backend whose checkout is a linked worktree of the person's finds its own worktree made, and can't write that worktree's git entry, plant a rebase in it or commit there",
+	"a Planner backend whose checkout is a linked worktree of the person's finds its own worktree made, and can't write that checkout, its git entry, plant a rebase in it or commit there",
 	() => plannerBackend(true),
 	150_000,
 );
@@ -403,6 +408,8 @@ async function startedLater(layout: "run" | "planner") {
 				later,
 				own: { [join(tokens, "github")]: "second\n" },
 				hiddenIn: [runs, planners],
+				dir: worktree,
+				...(layout === "planner" ? { personsCheckout: true } : {}),
 			}),
 		},
 		stdin: "ignore",
@@ -412,7 +419,11 @@ async function startedLater(layout: "run" | "planner") {
 	let said = "";
 	child.stderr.on("data", chunk => said += chunk);
 	try {
-		for (let deadline = Date.now() + 60_000; !existsSync(join(cwd, "up")); await Bun.sleep(50)) {
+		for (
+			let deadline = Date.now() + 60_000;
+			!existsSync(join(worktree, "up"));
+			await Bun.sleep(50)
+		) {
 			if (Date.now() > deadline) {
 				throw new Error(`The process in the sandbox never started: ${said.slice(0, 2000)}`);
 			}
@@ -424,17 +435,17 @@ async function startedLater(layout: "run" | "planner") {
 		// The connector renews a token by replacing its file, which the sandbox must see.
 		writeFileSync(join(tokens, "github.new"), "second\n");
 		renameSync(join(tokens, "github.new"), join(tokens, "github"));
-		writeFileSync(join(cwd, "go"), "");
+		writeFileSync(join(worktree, "go"), "");
 		for (
 			let deadline = Date.now() + 60_000;
-			!existsSync(join(cwd, "report.json"));
+			!existsSync(join(worktree, "report.json"));
 			await Bun.sleep(50)
 		) {
 			if (Date.now() > deadline) {
 				throw new Error(`The process in the sandbox never reported: ${said.slice(0, 2000)}`);
 			}
 		}
-		let result = JSON.parse(readFileSync(join(cwd, "report.json"), "utf8")) as CheckResult;
+		let result = JSON.parse(readFileSync(join(worktree, "report.json"), "utf8")) as CheckResult;
 		return Object.entries(result).filter(([, value]) => !value.ok).map(([name, value]) =>
 			`${name}: ${value.detail}`
 		);
@@ -545,7 +556,7 @@ try worktreeAdd git worktree add -q --detach "$evil/second"
 try worktreeFile sh -c 'printf "gitdir: %s\n" "$1" > .git' sh "$fake"
 try worktreeFileReplace sh -c 'rm -f .git && mkdir .git'
 if [ -n "$MAIN" ]; then
-	# A Planner's working directory is its person's checkout, which it writes but for its .git.
+	# A Planner's working directory is its person's checkout, which it reads and writes none of.
 	try checkoutWrite sh -c 'echo ok > "$1/agent-wrote.txt"' sh "$MAIN"
 	try checkoutGitMove sh -c 'mv "$1/.git" "$1/.git.moved"' sh "$MAIN"
 	try checkoutGitReplace sh -c 'mv "$1/.git" "$1/.git.moved" && mkdir "$1/.git"' sh "$MAIN"
@@ -824,8 +835,9 @@ async function expectGitUntouched(layout: Layout) {
 				...Object.fromEntries(PERMITTED.map(name => [name, "done"])),
 				...Object.fromEntries(REFUSED.map(name => [name, "refused"])),
 				...(linked ? {} : {
-					// Its files, but not where `.git` is a link, which can't be held: that checkout is read.
-					checkoutWrite: layout === "symlinked" ? "refused" : "done",
+					// The person's checkout is read-only whole, whatever its `.git` is: its files are not
+					// written either.
+					checkoutWrite: "refused",
 					checkoutGitMove: "refused",
 					checkoutGitReplace: "refused",
 					// The index and HEAD are in its git directory, which is read-only to it.
@@ -856,7 +868,7 @@ async function expectGitUntouched(layout: Layout) {
 	);
 	expect(result.local).toEqual(expect.arrayContaining(["from-sandbox", "topic", "tracked"]));
 	expect(result.upstream).toBe("");
-	expect(result.checkoutWritten).toBe(layout === "planner" || layout === "linked");
+	expect(result.checkoutWritten).toBe(false);
 	// A link in the checkout is as it was, and git on the host reads the repository through it.
 	if (layout === "symlinked") expect(result.link).toBe(true);
 	if (result.person) {
@@ -875,20 +887,346 @@ sandboxTest(
 );
 
 sandboxTest(
-	"a Planner in its checkout and its own worktree can do the same in that worktree, writes the checkout's files but not its .git, and git on the host runs nothing of the agent's",
+	"a Planner in its checkout and its own worktree can do the same in that worktree, writes nothing of the checkout, and git on the host runs nothing of the agent's",
 	() => expectGitUntouched("planner"),
 	120_000,
 );
 
 sandboxTest(
-	"a Planner whose checkout is a linked worktree of the person's can't write that worktree's git entry, plant a rebase with an exec line in it or commit there, and its own worktree still commits and pushes",
+	"a Planner whose checkout is a linked worktree of the person's can't write that checkout, its git entry, plant a rebase with an exec line in it or commit there, and its own worktree still commits and pushes",
 	() => expectGitUntouched("linked"),
 	120_000,
 );
 
 sandboxTest(
-	"a Planner starts when its checkout's .git is a symbolic link to a git directory kept elsewhere, reads and commits in its own worktree, and can't write that checkout, replace the link or write the git directory",
+	"a Planner starts when its checkout's .git is a symbolic link to a git directory kept elsewhere, reads and commits in its own worktree, and can't write that checkout, replace the link or write the git directory, as it can't write any checkout",
 	() => expectGitUntouched("symlinked"),
+	120_000,
+);
+
+/**
+ * A repository whose checkout has every kind of submodule: one that is initialized and has a
+ * submodule of its own, which is initialized too, and one that is not initialized, as `git clone`
+ * leaves them. Git on the host recurses into the first two when it runs `git status` in the
+ * checkout, through the `.git` file in each, and reads and runs the configuration it leads to.
+ */
+function submoduleWorld(name: string) {
+	let made = world(name);
+	let allow = ["-c", "protocol.file.allow=always"];
+	let library = (folder: string, file: string) => {
+		let path = join(made.root, folder);
+		mkdirSync(path);
+		git(path, "init", "-b", "main");
+		writeFileSync(join(path, file), `the ${folder} library\n`);
+		git(path, "add", ".");
+		git(path, "commit", "-m", folder);
+		return path;
+	};
+	let inner = library("inner", "inner.txt");
+	let vendor = library("vendor", "lib.txt");
+	git(vendor, ...allow, "submodule", "add", "-q", inner, "deps/inner");
+	git(vendor, "commit", "-m", "vendor the inner library");
+	let extra = library("extra", "extra.txt");
+	git(made.checkout, ...allow, "submodule", "add", "-q", vendor, "vendor");
+	git(made.checkout, ...allow, "submodule", "update", "--init", "--recursive", "-q");
+	git(made.checkout, ...allow, "submodule", "add", "-q", extra, "extra");
+	git(made.checkout, "submodule", "deinit", "-f", "extra");
+	git(made.checkout, "commit", "-m", "vendor the libraries");
+	git(made.checkout, "push", "-q", "origin", "main");
+	return made;
+}
+
+/**
+ * Where a Planner could make the person's own git run a program of its choice through a
+ * submodule: `git status`, `git diff` and the commands that use them open each submodule of the
+ * person's checkout, and read the git directory its `.git` file names, where `core.fsmonitor` is a
+ * program to run. So the Planner copies a submodule's git directory to where it may write (its
+ * own worktree), names a program in the copy's configuration, and tries to point a `.git` in the
+ * checkout at the copy, in each kind of submodule and by each way it can think of: rewriting the
+ * file, removing it, making it where there is none, renaming the folder away and making it again,
+ * and writing files in the submodule or the checkout around it. It may read the checkout, and it
+ * writes, commits and pushes in its own worktree.
+ */
+const SUBMODULE_ATTEMPTS = String.raw`
+cd "$MAIN"
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+evil="$WORK/.evil"
+mkdir -p "$evil/vendor-git"
+printf '#!/bin/sh\ntouch "%s/fsmonitor"\n' "$RAN" > "$evil/fsmonitor"
+chmod +x "$evil/fsmonitor"
+try() { name=$1; shift; if "$@" > /dev/null 2>&1; then echo "$name=done"; else echo "$name=refused"; fi; }
+
+try present sh -c 'test -f "$1/vendor/.git" && test -f "$1/vendor/deps/inner/.git" && test -d "$1/extra" && test ! -e "$1/extra/.git" && test -d "$2/vendor" && test -d "$2/extra"' sh "$MAIN" "$WORK"
+# What it may do: read the checkout and its submodules, and the git directory it copies.
+try readSubmodule sh -c 'cat "$1/vendor/lib.txt" "$1/vendor/deps/inner/inner.txt"' sh "$MAIN"
+try readSubmoduleHistory git -C "$MAIN/vendor" log --oneline
+try copyGitDirectory sh -c 'cp -r "$1/modules/vendor/." "$2/" && sed -i "/worktree/d" "$2/config" && printf "[core]\n\tfsmonitor = %s\n" "$3" >> "$2/config"' sh "$common" "$evil/vendor-git" "$evil/fsmonitor"
+# What it may not: write the checkout, which is the person's.
+try checkoutFile sh -c 'echo ok > "$1/agent-wrote.txt"' sh "$MAIN"
+try checkoutFolder mkdir "$MAIN/docs"
+try checkoutCopy cp -r "$common/modules/vendor" "$MAIN/.evil"
+# An initialized submodule.
+try initializedRedirect sh -c 'printf "gitdir: %s\n" "$2" > "$1/vendor/.git"' sh "$MAIN" "$evil/vendor-git"
+try initializedRemove rm -f "$MAIN/vendor/.git"
+try initializedEdit sh -c 'echo x >> "$1/vendor/lib.txt"' sh "$MAIN"
+try initializedAdd sh -c 'echo x > "$1/vendor/new.txt"' sh "$MAIN"
+try initializedRename sh -c 'mv "$1/vendor" "$1/vendor.moved"' sh "$MAIN"
+try initializedReplace sh -c 'rm -rf "$1/vendor" && mkdir "$1/vendor" && printf "gitdir: %s\n" "$2" > "$1/vendor/.git"' sh "$MAIN" "$evil/vendor-git"
+# One that is not initialized: an empty folder, where git takes a new .git for a submodule to open.
+try uninitializedRedirect sh -c 'printf "gitdir: %s\n" "$2" > "$1/extra/.git"' sh "$MAIN" "$evil/vendor-git"
+try uninitializedDirectory mkdir "$MAIN/extra/.git"
+try uninitializedAdd sh -c 'echo x > "$1/extra/new.txt"' sh "$MAIN"
+try uninitializedReplace sh -c 'rm -rf "$1/extra" && mkdir "$1/extra" && printf "gitdir: %s\n" "$2" > "$1/extra/.git"' sh "$MAIN" "$evil/vendor-git"
+# A submodule of a submodule.
+try nestedRedirect sh -c 'printf "gitdir: %s\n" "$2" > "$1/vendor/deps/inner/.git"' sh "$MAIN" "$evil/vendor-git"
+try nestedReplace sh -c 'rm -rf "$1/vendor/deps" && mkdir -p "$1/vendor/deps/inner" && printf "gitdir: %s\n" "$2" > "$1/vendor/deps/inner/.git"' sh "$MAIN" "$evil/vendor-git"
+# Its own worktree is where it works.
+try worktreeCommit sh -c 'cd "$1" && echo ok > agent-wrote.txt && git add agent-wrote.txt && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in its own worktree"' sh "$WORK"
+try worktreePush git -C "$WORK" push -q origin HEAD:refs/heads/pushed
+echo finished=done
+`;
+
+/** What the person's own git is run as: with no configuration of theirs, and with some that opens submodules. */
+function personsGit(directory: string, ...args: string[]) {
+	return [
+		spawnSync("git", ["-C", directory, ...args], {
+			encoding: "utf8",
+			env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+		}),
+		spawnSync("git", [
+			"-C",
+			directory,
+			"-c",
+			"submodule.recurse=true",
+			"-c",
+			"status.submoduleSummary=true",
+			"-c",
+			"diff.submodule=log",
+			...args,
+		], { encoding: "utf8" }),
+	];
+}
+
+sandboxTest(
+	"a Planner reads a checkout with submodules and its own worktree commits and pushes, but it can't write the checkout, a submodule's .git or any file under it, initialized, not initialized or inside another, so the person's own git opens nothing of the agent's",
+	async () => {
+		let made = submoduleWorld("submodules-planner");
+		let ran = join(made.root, "ran");
+		mkdirSync(ran);
+		let worktree = join(made.state, "planners", "octo-org", "score", "D_1");
+		mkdirSync(dirname(worktree), { recursive: true });
+		await preparePlannerWorktree(made.checkout, worktree);
+		let script = join(made.root, "submodules.sh");
+		writeFileSync(script, SUBMODULE_ATTEMPTS);
+		let pointers = () =>
+			["vendor", "vendor/deps/inner", "extra"].map(folder => {
+				try {
+					return readFileSync(join(made.checkout, folder, ".git"), "utf8");
+				} catch {
+					return undefined;
+				}
+			});
+		let before = pointers();
+		let sandbox = await createSandbox({
+			directory: made.state,
+			home,
+			server: "http://127.0.0.1:9",
+			settings: { writable: [made.remote] },
+		});
+		try {
+			expect(sandbox.report).toEqual({ engine: "bubblewrap" });
+			let child = sandbox.spawn({
+				command: ["sh", script],
+				cwd: made.checkout,
+				env: { ...process.env, RAN: ran, WORK: worktree, MAIN: made.checkout },
+				stdin: "ignore",
+				writable: [worktree],
+				own: [worktree],
+			});
+			let said = "";
+			let output = "";
+			child.stdout.on("data", chunk => output += chunk);
+			child.stderr.on("data", chunk => said += chunk);
+			await new Promise(done => child.once("close", done));
+			let attempts = Object.fromEntries(
+				output.trim().split("\n").filter(line => /^\w+=/.test(line)).map(line => line.split("=")),
+			);
+			if (attempts.finished !== "done") {
+				throw new Error(
+					`The script in the sandbox didn't finish: ${output} ${said.slice(0, 2000)}`,
+				);
+			}
+			// The person's own git, as they would run it in their checkout afterwards.
+			let statuses = ["status", "diff", "submodule"].flatMap(command =>
+				personsGit(made.checkout, ...command === "submodule" ? [command, "status"] : [command])
+			);
+			expect({ attempts, ran: readdirSync(ran).sort() }).toEqual({
+				attempts: {
+					present: "done",
+					readSubmodule: "done",
+					readSubmoduleHistory: "done",
+					copyGitDirectory: "done",
+					checkoutFile: "refused",
+					checkoutFolder: "refused",
+					checkoutCopy: "refused",
+					initializedRedirect: "refused",
+					initializedRemove: "refused",
+					initializedEdit: "refused",
+					initializedAdd: "refused",
+					initializedRename: "refused",
+					initializedReplace: "refused",
+					uninitializedRedirect: "refused",
+					uninitializedDirectory: "refused",
+					uninitializedAdd: "refused",
+					uninitializedReplace: "refused",
+					nestedRedirect: "refused",
+					nestedReplace: "refused",
+					worktreeCommit: "done",
+					worktreePush: "done",
+					finished: "done",
+				},
+				// Each program the agent named leaves a file when git runs it; none ran.
+				ran: [],
+			});
+			expect(statuses.map(result => result.status)).toEqual(statuses.map(() => 0));
+			// The checkout is as it was: its submodules' pointers, its folders, and nothing added.
+			expect(pointers()).toEqual(before);
+			expect(before[0]).toContain("modules/vendor");
+			expect(before[2]).toBeUndefined();
+			for (let name of ["vendor.moved", "extra.moved", ".evil", "docs", "agent-wrote.txt"]) {
+				expect(existsSync(join(made.checkout, name)), name).toBe(false);
+			}
+			expect(readFileSync(join(made.checkout, "vendor", "lib.txt"), "utf8")).toBe(
+				"the vendor library\n",
+			);
+			expect(statuses[0]!.stdout).toContain("nothing to commit, working tree clean");
+			// What it wrote is in its own worktree, and what it committed there reached the remote.
+			expect(readFileSync(join(worktree, "agent-wrote.txt"), "utf8")).toBe("ok\n");
+			expect(git(made.remote, "branch", "--list", "pushed")).toContain("pushed");
+		} finally {
+			await sandbox.close();
+		}
+	},
+	120_000,
+);
+
+/**
+ * What an agent does in the worktree the connector made for its run, which is its own and which it
+ * writes whole, the index included: it makes a `.git` in each submodule's folder, which git leaves
+ * empty, pointing at a git directory of its own whose configuration names programs, and adds a
+ * submodule of its own with one. The connector's git, and its removal of the worktree, then run.
+ */
+const RUN_SUBMODULE_ATTEMPTS = String.raw`
+cd "$WORK"
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+evil="$WORK/.evil"
+fake="$evil/fake"
+mkdir -p "$fake"
+cp -r "$common/." "$fake/"
+for hook in fsmonitor post-checkout; do
+	printf '#!/bin/sh\ntouch "%s/%s"\n' "$RAN" "$hook" > "$evil/$hook"
+	chmod +x "$evil/$hook"
+done
+git config --file "$fake/config" core.fsmonitor "$evil/fsmonitor"
+git config --file "$fake/config" core.hooksPath "$evil"
+try() { name=$1; shift; if "$@" > /dev/null 2>&1; then echo "$name=done"; else echo "$name=refused"; fi; }
+
+try present sh -c 'test -d "$1/vendor" && test -d "$1/extra" && test ! -e "$1/vendor/.git" && test ! -e "$1/extra/.git"' sh "$WORK"
+try readTracked cat README.md .gitmodules
+try writeWorktree sh -c 'mkdir -p docs && echo ok > docs/note.txt'
+try redirect sh -c 'printf "gitdir: %s\n" "$2" > "$1/vendor/.git"' sh "$WORK" "$fake"
+# A submodule of its own, in its own worktree.
+try newGitlink sh -c 'cd "$1" && git update-index --add --cacheinfo 160000,"$(git rev-parse HEAD)",agent-sub && mkdir agent-sub && printf "gitdir: %s\n" "$2" > agent-sub/.git' sh "$WORK" "$fake"
+try commit sh -c 'git add docs && git -c user.name=agent -c user.email=agent@example.test -c commit.gpgsign=false commit -qm "in the sandbox"'
+try push git push -q origin HEAD:refs/heads/pushed
+# The person's checkout, which is not its to write.
+try checkoutRedirect sh -c 'printf "gitdir: %s\n" "$2" > "$1/vendor/.git"' sh "$MAIN" "$fake"
+echo finished=done
+`;
+
+sandboxTest(
+	"in a run's worktree an agent that points a submodule's .git at a git directory of its own, and adds a submodule with one, gets nothing run by the connector's git or its removal of the worktree, and can't do the same in the person's checkout",
+	async () => {
+		let made = submoduleWorld("submodules-run");
+		let ran = join(made.root, "ran");
+		mkdirSync(ran);
+		let worktree = join(made.state, "runs", "mine");
+		git(made.checkout, "worktree", "add", "--detach", worktree);
+		repositoryAt(worktree);
+		let script = join(made.root, "run-submodules.sh");
+		writeFileSync(script, RUN_SUBMODULE_ATTEMPTS);
+		let sandbox = await createSandbox({
+			directory: made.state,
+			home,
+			server: "http://127.0.0.1:9",
+			settings: { writable: [made.remote] },
+		});
+		let attempts: Record<string, string>;
+		try {
+			let child = sandbox.spawn({
+				command: ["sh", script],
+				cwd: worktree,
+				env: { ...process.env, RAN: ran, WORK: worktree, MAIN: made.checkout },
+				stdin: "ignore",
+				own: [worktree],
+			});
+			let said = "";
+			let output = "";
+			child.stdout.on("data", chunk => output += chunk);
+			child.stderr.on("data", chunk => said += chunk);
+			await new Promise(done => child.once("close", done));
+			attempts = Object.fromEntries(
+				output.trim().split("\n").filter(line => /^\w+=/.test(line)).map(line => line.split("=")),
+			);
+			if (attempts.finished !== "done") {
+				throw new Error(
+					`The script in the sandbox didn't finish: ${output} ${said.slice(0, 2000)}`,
+				);
+			}
+		} finally {
+			await sandbox.close();
+		}
+		expect(attempts).toEqual({
+			present: "done",
+			readTracked: "done",
+			writeWorktree: "done",
+			// Its own worktree is its own: what it makes there is its to make.
+			redirect: "done",
+			newGitlink: "done",
+			commit: "done",
+			push: "done",
+			// The person's is not.
+			checkoutRedirect: "refused",
+			finished: "done",
+		});
+		expect(readFileSync(join(made.checkout, "vendor", ".git"), "utf8")).toContain("modules/vendor");
+		// The connector's own git, as a run and a Planner make it, in that worktree.
+		let hostile = [
+			gitSync(["status", "--short"], { cwd: worktree }).status,
+			gitSync(["diff"], { cwd: worktree }).status,
+			gitSync(["ls-files", "--stage"], { cwd: worktree }).status,
+			await gitAsync(["fetch", "origin"], { cwd: worktree }).then(() => 0, () => 1),
+		];
+		expect(hostile).toEqual(hostile.map(() => 0));
+		// `git submodule status` stops at a gitlink the repository's .gitmodules doesn't name, as it
+		// does for anyone, but it runs nothing either.
+		gitSync(["submodule", "status"], { cwd: worktree });
+		expect(readdirSync(ran)).toEqual([]);
+		// The redirect is real: git without the connector's settings runs what it names, so that
+		// it ran nothing above is the connector's doing and not an attempt that went nowhere.
+		spawnSync("git", ["-C", worktree, "status"], {
+			env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+		});
+		expect(readdirSync(ran)).toContain("fsmonitor");
+		for (let name of readdirSync(ran)) rmSync(join(ran, name));
+		// And its removal of the worktree, as a finished spike's is.
+		await discardWorkspace(made.checkout, worktree, "no-such-branch");
+		expect(existsSync(worktree)).toBe(false);
+		expect(readdirSync(ran)).toEqual([]);
+		// The person's own git in their checkout, which the agent never wrote, runs nothing.
+		for (let result of personsGit(made.checkout, "status")) expect(result.status).toBe(0);
+		expect(readdirSync(ran)).toEqual([]);
+	},
 	120_000,
 );
 

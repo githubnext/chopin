@@ -55,9 +55,10 @@ export type Launch = {
 	 * each by name. It reads them, and writes the ones that are also writable. Nothing else in the
 	 * state directory is in its sight, however it came to be there, and the folder of a token must
 	 * hold only that launch's, as a token is renewed by replacing its file. A worktree among them
-	 * is one the connector made for this launch, so its entry in the repository's git directory is
-	 * written too; a working directory that is not among them, a Planner's checkout, is the
-	 * person's, and its git directory is not (see `gitAccess`).
+	 * is one the connector made for this launch, so it is written, and its entry in the repository's
+	 * git directory with it; a working directory that is not among them, a Planner's checkout, is the
+	 * person's own and is read, whole, whatever is in it: its files, its submodules and its git
+	 * directory, but for where commits go (see `gitAccess`).
 	 */
 	own?: string[];
 };
@@ -365,41 +366,42 @@ const disk: Disk = {
 const GIT_WRITES = ["objects", "refs", "logs", "lfs"];
 
 /**
- * What a launch may write of its repository's git directory, as an allow-list: the repository's
- * own is read-only whole, with `objects`, `refs`, `logs` and `lfs`, where commits, branches,
- * fetched objects and LFS objects go, written inside it; and, for each linked worktree the
- * connector made for the launch, that worktree's own entry in `worktrees`, where its HEAD, index,
- * fetch results and the locks beside them are, with the three files git reads there to find
- * configuration held read-only inside it. Everything else is read-only, and the directories that
- * hold it can't be renamed or made again, because they are mounted: the repository's `config`,
- * `hooks`, `info`, `HEAD`, `packed-refs` and submodules, `worktrees` itself and every worktree's
- * but the launch's own, and any file git adds to the top level later, such as a `commondir`. A
- * sandbox can only hold back a path that exists, and a new name can't be refused one by one, so
- * the top level is not granted at all. What it costs is in `docs/chopin-cli.md`.
+ * What a launch may write of its repository's git directory, as an allow-list. It writes a
+ * working tree only where the connector made it for the launch (`own`: a run's worktree, a
+ * Planner's worktree from `preparePlannerWorktree`), and for each such linked worktree it writes
+ * that worktree's own entry in `worktrees`, where its HEAD, index, fetch results and the locks
+ * beside them are, with the three files git reads there to find configuration held read-only
+ * inside it, and `objects`, `refs`, `logs` and `lfs` of the repository's git directory, where
+ * its commits, branches, fetched objects and LFS objects go. Everything else is read-only, and
+ * the directories that hold it can't be renamed or made again, because they are mounted: the
+ * repository's `config`, `hooks`, `info`, `HEAD`, `packed-refs` and the git directories of its
+ * submodules, `worktrees` itself and every worktree's but the launch's own, and any file git adds
+ * to the top level later, such as a `commondir`. A sandbox can only hold back a path that exists,
+ * and a new name can't be refused one by one, so the top level is not granted at all. A launch with
+ * no worktree of its own writes none of it. What it costs is in `docs/chopin-cli.md`.
  *
- * Which worktrees are the launch's own is the connector's record of what it made for it (`own`: a
- * run's worktree, a Planner's worktree from `preparePlannerWorktree`), never what a folder is
- * called or what is in it. A working directory that is not one of them is the person's: a Planner's
- * checkout, a regular one or a linked worktree of theirs. Its git directory, whichever it is, is
- * read-only like the rest, so what the person's own git reads and runs there (an unfinished
- * rebase's `exec` lines, a `HEAD`, a hook) is not the agent's to write. Where the entry of an own
- * worktree is is read from the repository's side: the entry whose `gitdir` file names the folder
- * (see `worktreeEntry`), never the `.git` file in a folder an agent writes. That file, which says
- * where a worktree's entry is, is read-only too, in every working directory. An entry's
- * `config.worktree` is made empty where there is none, which git ignores unless
- * `extensions.worktreeConfig` is on, so an agent can't be the one to make it; an entry that can't
- * be held this way is not granted.
+ * A working directory that is not among `own` is the person's: a Planner's checkout, a regular
+ * one or a linked worktree of theirs. It is read-only whole, in `launchPolicy`, so what the
+ * person's own git reads and runs there is not the agent's to write: its files, its submodules'
+ * (a `.git` file in one sends git to the directory it names), its `.git`, its `HEAD`, its `index`
+ * and an unfinished rebase's `exec` lines. Where the entry of an own worktree is is read from the
+ * repository's side: the entry whose `gitdir` file names the folder (see `worktreeEntry`), never
+ * the `.git` file in a folder an agent writes. That file, which says where a worktree's entry is,
+ * is read-only too. An entry's `config.worktree` is made empty where there is none, which git
+ * ignores unless `extensions.worktreeConfig` is on, so an agent can't be the one to make it; an
+ * entry that can't be held this way is not granted.
  */
 function gitAccess(
 	repository: Repository,
 	launch: Pick<Launch, "cwd" | "writable" | "own">,
 ): { writable: string[]; readonlyInside: string[] } {
 	let { commonDir } = repository;
-	let writable = GIT_WRITES.map(name => join(commonDir, name));
+	let writable: string[] = [];
 	// The repository's git directory is read-only whole, inside whatever the launch may write.
 	let readonlyInside: string[] = [commonDir];
 	let owned = new Set((launch.own ?? []).map(real));
-	for (let place of [launch.cwd, ...launch.writable ?? []]) {
+	let granted = false;
+	for (let place of writtenPlaces(launch)) {
 		let entry = owned.has(real(place)) ? worktreeEntry(commonDir, place) : undefined;
 		// A launch in a linked worktree of its own is in the one the connector recorded, and no other.
 		if (entry && place === launch.cwd && real(entry) !== real(repository.gitDir)) entry = undefined;
@@ -411,6 +413,7 @@ function gitAccess(
 			if (held.every(file => exists(file))) {
 				writable.push(entry);
 				readonlyInside.push(...held);
+				granted = true;
 			}
 		}
 		// A linked worktree's `.git` is a file that says where its entry is.
@@ -418,20 +421,22 @@ function gitAccess(
 			if (lstatSync(join(place, ".git")).isFile()) readonlyInside.push(join(place, ".git"));
 		} catch { /* No `.git` here. */ }
 	}
+	// Commits, branches and objects go to the repository's git directory from a worktree of its own.
+	if (granted) writable.push(...GIT_WRITES.map(name => join(commonDir, name)));
 	return { writable, readonlyInside: [...new Set(readonlyInside)] };
 }
 
 /**
- * Whether `.git` in `folder` is a symbolic link, as some tools leave one. A sandbox can hold back
- * a file or a directory but not a link, so the link would stay a name in a folder an agent writes
- * that it could point at a git directory of its own, for the person's git to read and run.
+ * The places a launch writes: the folders it was given beside its working directory, and the
+ * working directory itself where the connector made it for the launch (`own`). Any other working
+ * directory is the person's, which no sandboxed agent writes.
  */
-function linksGit(folder: string) {
-	try {
-		return lstatSync(join(folder, ".git")).isSymbolicLink();
-	} catch {
-		return false;
-	}
+function writtenPlaces(launch: Pick<Launch, "cwd" | "writable" | "own">) {
+	let owned = new Set((launch.own ?? []).map(real));
+	return [
+		...owned.has(real(launch.cwd)) ? [launch.cwd] : [],
+		...launch.writable ?? [],
+	];
 }
 
 /** The policy for one launch, from what is on the disk now. */
@@ -456,17 +461,18 @@ export function launchPolicy(
 			mkdirSync(directory, { recursive: true, mode: 0o700 });
 		} catch { /* The agent says so if it needs it. */ }
 	}
-	let places = [launch.cwd, ...launch.writable ?? []];
-	// A folder whose `.git` is a link can't have it held, so it is read and not written: the git
-	// directory it leads to is granted by its real path, as any is.
-	let linked = places.filter(linksGit);
+	let places = writtenPlaces(launch);
+	// The working directory is written only where the connector made it for this launch. Any
+	// other is the person's own checkout, which is read, whole, and never written: what their git
+	// reads and runs in it (its files and submodules' `.git`, its `.git`, its index) stays theirs.
+	let person = places.includes(launch.cwd) ? undefined : real(launch.cwd);
 	// Only the connector's record of the working directory says which repository this is, and so
 	// where its git directories are: a folder the agent made itself, as a Planner's worktree,
 	// names one in a file of its own, and what that file says is the agent's word.
 	let repository = repositoryAt(real(launch.cwd));
 	let git = repository ? gitAccess(repository, launch) : undefined;
 	let writable = [
-		...places.filter(place => !linked.includes(place)),
+		...places,
 		...git?.writable ?? [],
 		...state,
 		temporary,
@@ -491,7 +497,7 @@ export function launchPolicy(
 	let readable = [
 		...readGrantsAround(roots, real(options.directory), disk, platform),
 		...(launch.own ?? []).filter(exists),
-		...linked,
+		...person ? [person] : [],
 		// The repository's git directory is read, whole, where only some roots are read (Windows).
 		...repository ? [repository.commonDir] : [],
 	].filter(path => !written.has(real(path)));
