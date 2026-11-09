@@ -21,15 +21,21 @@ import type { StorageAdapter } from "../storage/port";
 import type { Socket, SocketData } from "../wire";
 
 export const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+/**
+ * Waits for a condition for a time, not a count of event-loop turns: a turn that saves to
+ * PostgreSQL waits on round trips and commits while the loop turns idly, so a count says how fast
+ * the loop spun, not whether the database was given long enough. The time ends before bun's 5 s
+ * limit on a test, so a condition that never holds is named instead of the test timing out.
+ */
 export const waitFor = async (
 	condition: () => boolean | Promise<boolean>,
 	what = "a condition",
 ) => {
-	for (let attempt = 0; attempt < 200; attempt++) {
-		if (await condition()) return;
+	let deadline = Date.now() + 4_000;
+	while (!await condition()) {
+		if (Date.now() >= deadline) throw new Error(`timed out waiting for ${what}`);
 		await tick();
 	}
-	throw new Error(`timed out waiting for ${what}`);
 };
 
 export let cleanups: Array<() => Promise<void> | void> = [];
