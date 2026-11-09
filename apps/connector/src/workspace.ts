@@ -575,7 +575,12 @@ export function noPushEnvironment(): Record<string, string> {
 export async function discardWorkspace(root: string, path: string, branch: string) {
 	removePlantedRedirects(root);
 	try {
-		await gitAsync(["worktree", "remove", "--force", path], { cwd: root, timeout: 60_000 });
+		// Twice --force removes a locked worktree too, which a `locked` file an agent made in its own
+		// git entry would otherwise leave, and its branch, behind.
+		await gitAsync(["worktree", "remove", "--force", "--force", path], {
+			cwd: root,
+			timeout: 60_000,
+		});
 	} catch {
 		await rm(path, { recursive: true, force: true });
 		await gitAsync(["worktree", "prune"], { cwd: root }).catch(() => {});

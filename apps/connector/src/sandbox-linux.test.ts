@@ -580,6 +580,12 @@ try entryModulesFile sh -c 'mkdir -p "$1/modules/x" && echo x > "$1/modules/x/co
 # What cannot be refused: git takes the locks of its own HEAD and index by creating a file beside
 # each, so a name made at the top of the entry is made.
 try entryNewName sh -c 'echo x > "$1/future-pointer"' sh "$mine"
+# More of the same: an unfinished rebase whose todo runs a program, a lock, and executables named like
+# hooks. None is a pointer, configuration or a program git runs from there; git run inside the
+# worktree would run the rebase's exec line on a rebase --continue, which nothing here does.
+try entryRebaseTodo sh -c 'mkdir "$1/rebase-merge" && printf "exec touch \"%s/rebase-exec\"\n" "$2" > "$1/rebase-merge/git-rebase-todo"' sh "$mine" "$RAN"
+try entryLocked sh -c 'echo planted > "$1/locked"' sh "$mine"
+try entryHookNames sh -c 'for n in post-checkout post-commit reference-transaction pre-commit fsmonitor; do printf "#!/bin/sh\ntouch \"%s/entry-%s\"\n" "$2" "$n" > "$1/$n" && chmod +x "$1/$n"; done' sh "$mine" "$RAN"
 try entryRename sh -c 'mv "$1" "$1.moved" && mv "$1.moved" "$1"' sh "$mine"
 try entryRecreate sh -c 'mv "$1" "$1.moved" && mkdir "$1" && cp -r "$1.moved/." "$1/" && rm -f "$1/commondir" && printf "%s\n" "$2" > "$1/commondir"' sh "$mine" "$fake"
 try newEntry sh -c 'mkdir "$1/worktrees/made-up" && printf "%s\n" "$2" > "$1/worktrees/made-up/commondir"' sh "$common" "$fake"
@@ -880,8 +886,11 @@ async function expectGitUntouched(layout: Layout) {
 			attempts: {
 				...Object.fromEntries(PERMITTED.map(name => [name, "done"])),
 				...Object.fromEntries(REFUSED.map(name => [name, "refused"])),
-				// The one name that is made: see the script.
+				// The names that are made, in the launch's own entry: see the script. Nothing runs them.
 				entryNewName: "done",
+				entryRebaseTodo: "done",
+				entryLocked: "done",
+				entryHookNames: "done",
 				...(linked ? {} : {
 					// The person's checkout is read-only whole, whatever its `.git` is: its files are not
 					// written either.

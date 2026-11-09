@@ -9,6 +9,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readdirSync,
+	readFileSync,
 	writeFileSync as writeFileSyncNow,
 } from "node:fs";
 import {
@@ -24,6 +25,8 @@ import {
 	pruneRuns,
 	workspace,
 } from "./workspace";
+import { worktreeEntry } from "./git-directories";
+import { gitAsync } from "./git-host";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 
 test("isolates exact source and allows an authorized retry without executing an attempt twice", async () => {
@@ -133,6 +136,80 @@ test("the programs a checkout's configuration names don't run when the connector
 			encoding: "utf8",
 		});
 		expect(readdirSync(ran)).toEqual(expect.arrayContaining(["fsmonitor", "post-checkout"]));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
+test("names an agent makes at the top of its worktree's own git entry, which a sandbox can't refuse, make the connector's git run nothing: status, fetch, the next run's worktree, a run's end, a prototype's removal and retention, with an unfinished rebase's exec line among them", async () => {
+	let { root, state, source } = await scoreCheckout();
+	try {
+		let ran = join(state, "ran");
+		mkdirSync(ran);
+		let common = join(root, ".git");
+		let plain = (cwd: string, ...args: string[]) =>
+			spawnSync("git", ["-c", "commit.gpgsign=false", "-C", cwd, ...args], {
+				encoding: "utf8",
+				env: {
+					...process.env,
+					GIT_SEQUENCE_EDITOR:
+						`sh -c 'printf "break\\nexec touch ${ran}/rebase-exec\\n" > "$1"' sh`,
+				},
+			});
+		// What an agent in the sandbox can make in its own entry: any name, which nothing there is
+		// a pointer or a configuration for, and a rebase it leaves unfinished, whose todo has an
+		// `exec` line, which git run in that worktree would run on `rebase --continue`.
+		let plant = (path: string) => {
+			let entry = worktreeEntry(common, path)!;
+			for (let name of ["post-checkout", "post-commit", "reference-transaction", "pre-commit"]) {
+				writeFileSyncNow(join(entry, name), `#!/bin/sh\ntouch '${ran}/entry-${name}'\n`);
+				chmodSync(join(entry, name), 0o755);
+			}
+			writeFileSyncNow(join(entry, "future-pointer"), "x");
+			writeFileSyncNow(join(entry, "locked"), "planted by an agent\n");
+			expect(plain(path, "rebase", "-i", "--root").status).toBe(0);
+			expect(readFileSync(join(entry, "rebase-merge", "git-rebase-todo"), "utf8")).toContain(
+				"exec touch",
+			);
+			return entry;
+		};
+		let first = await prepareWorkspace(root, state, { id: "p1", source });
+		let entry = plant(first.path);
+		expect(plain(first.path, "status").stdout).toContain("rebase in progress");
+		// The connector's git, in the worktree and from the checkout.
+		git(first.path, "status");
+		git(first.path, "log", "-1");
+		let remote = join(state, "remote.git");
+		spawnSync("git", ["init", "-q", "--bare", remote]);
+		plain(root, "push", "-q", remote, "HEAD:refs/heads/main");
+		await gitAsync(["fetch", remote, "+refs/heads/*:refs/remotes/fixture/*"], {
+			cwd: root,
+			env: { ...process.env, GIT_ALLOW_PROTOCOL: "file" },
+		});
+		let spike = await prepareWorkspace(root, state, { id: "s1", source });
+		git(spike.path, "checkout", "-b", "chopin/spike-s1");
+		let spikeEntry = plant(spike.path);
+		await discardWorkspace(root, spike.path, "chopin/spike-s1");
+		expect(existsSync(spike.path)).toBe(false);
+		expect(existsSync(spikeEntry)).toBe(false);
+		expect(git(root, "branch", "--list", "chopin/spike-s1")).toBe("");
+		await endWorkspace(root, first);
+		await Bun.sleep(5);
+		let next = await prepareWorkspace(root, state, { id: "p2", source });
+		await endWorkspace(root, next);
+		expect(await pruneRuns(state, 1)).toEqual(["p1"]);
+		expect(existsSync(first.path)).toBe(false);
+		expect(existsSync(entry)).toBe(false);
+		expect(readdirSync(join(common, "worktrees"))).toEqual(["p2"]);
+		// None of it ran a program an agent named.
+		expect(readdirSync(ran)).toEqual([]);
+		// The control: the same unfinished rebase is live for git that runs it.
+		let control = join(state, "control");
+		plain(root, "worktree", "add", "--detach", control);
+		expect(plain(control, "rebase", "-i", "--root").status).toBe(0);
+		expect(plain(control, "rebase", "--continue").status).toBe(0);
+		expect(readdirSync(ran)).toEqual(["rebase-exec"]);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 		await rm(state, { recursive: true, force: true });
