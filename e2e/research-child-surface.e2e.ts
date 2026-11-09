@@ -34,11 +34,6 @@ function rootSheet(page: Page, room: string) {
 	);
 }
 
-// Generic Chat reference links can remount; child closing then uses the document fallback.
-function parentDocumentHeading(page: Page, room: string) {
-	return rootSheet(page, room).getByRole("heading", { name: "Document", exact: true });
-}
-
 function titleBar(page: Page, room: string) {
 	return rootSheet(page, room).locator("[data-document-title-bar]");
 }
@@ -278,7 +273,7 @@ test("the root's Chat stays live while a child is open, across every close path"
 
 	async function expectClosed() {
 		await expect(surface).toHaveCount(0);
-		await expect(parentDocumentHeading(page, room)).toBeFocused();
+		await expect(childLink).toBeFocused();
 		await expect(page).toHaveURL(url => url.pathname === child.path.replace(/\/children\/.*$/, ""));
 		await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(
 			parentScrollTop,
@@ -409,7 +404,7 @@ test("Lift keeps the child for the surface toggle and presence, returns for the 
 	});
 	await page.keyboard.press("Enter");
 	await expect(surface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink).toBeFocused();
 	// Focus stays on the return control through the 250ms close, then lands on the opener.
 	expect(
 		await focusTrail.evaluate(trail => {
@@ -505,7 +500,7 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 		&& url.hash === "#note"
 	);
 	await expect(surface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink).toBeFocused();
 	await expect.poll(() => parentScroll.evaluate(element => element.scrollTop)).toBe(originalScroll);
 	await expect(parentChat).toBeVisible();
 
@@ -514,13 +509,13 @@ test("an in-app child preserves and restores its mounted parent", async ({ baseU
 	await expect(parentChat).toBeVisible();
 	await page.goBack();
 	await expect(surface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink).toBeFocused();
 
 	await childLink.click();
 	await expect(surface).toBeVisible();
 	await returnToRoot(page, room);
 	await expect(surface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink).toBeFocused();
 });
 
 test("an in-app child opens and submits its own comment composer", async ({ baseURL, join, page, room, seed }) => {
@@ -742,7 +737,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		&& url.hash === "#siblings"
 	);
 	await expect(secondSurface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink(secondTitle)).toBeFocused();
 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
@@ -802,11 +797,11 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		delete state.__chopinHeldFrames;
 	});
 	await expect(firstSurface).toBeFocused();
-	await expect(parentDocumentHeading(page, room)).not.toBeFocused();
+	await expect(childLink(secondTitle)).not.toBeFocused();
 	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
 	await page.keyboard.press("Escape");
 	await expect(firstSurface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink(firstTitle)).toBeFocused();
 
 	await childLink(firstTitle).click();
 	await childLink(secondTitle).click();
@@ -818,7 +813,7 @@ test("a delayed sibling route removes the previous editable child immediately", 
 		&& url.hash === "#siblings"
 	);
 	await expect(page.locator(`[data-workspace-room="${first.id}"]`)).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(childLink(secondTitle)).toBeFocused();
 });
 
 test("a direct child keeps direct-entry history when opening a sibling", async ({ baseURL, page, room, seed }) => {
@@ -856,7 +851,7 @@ test("a direct child keeps direct-entry history when opening a sibling", async (
 		&& url.hash === ""
 	);
 	await expect(secondSurface).toHaveCount(0);
-	await expect(parentDocumentHeading(page, room)).toBeFocused();
+	await expect(secondLink).toBeFocused();
 });
 
 test("a recovered child id enters the canonical anchored child workspace", async ({ baseURL, page, room, seed }) => {

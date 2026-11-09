@@ -476,6 +476,13 @@ export function Transcript(
 	let pinned = useRef(true);
 	// Growth follows only a reader resting on the last line, not one a few pixels up.
 	let flush = useRef(true);
+	// The reader is following the newest line: true from the last time they were near it until they
+	// scroll up. Unlike `pinned` it does not give way when a row grows under them, which lengthens the
+	// distance without their having moved.
+	let follow = useRef(true);
+	let scrolledTo = useRef(0);
+	// The animation frame in which the transcript next moves to its newest line.
+	let pin = useRef(0);
 	let previous = useRef<{ groups: Set<string>; atoms: Set<string>; planned: boolean }>(undefined);
 	let entered = useRef(new Set<string>());
 	let places = useRef(new Map<string, OfferPlace>());
@@ -581,7 +588,10 @@ export function Transcript(
 				entering.has(message.id) && message.author.kind === "member"
 				&& message.author.handle === handle
 			)
-		) pinned.current = true;
+		) {
+			pinned.current = true;
+			follow.current = true;
+		}
 		// Rows that arrived behind a hidden Chat (the phone tab) are not news when it opens. Only a
 		// row carrying a mark can be told apart from news, so with none the question is not asked: it
 		// forces a layout, and this runs after every render.
@@ -677,10 +687,20 @@ export function Transcript(
 	}, [active, offerPlacements, stampOffers]);
 
 	// Any render may grow a row, so every render keeps a reader near the bottom on the newest line.
+	// Whether the reader is following is decided here, before the render's growth can move them; the
+	// move waits for the animation frame. `scrollHeight` asks the browser to lay the page out, and
+	// read in the commit that has just changed the transcript it made the layout twice for a render
+	// that came after another in the same task: once for the read, once for the frame. In the frame
+	// one render or twenty make it once, and the frame's own layout serves it.
 	useLayoutEffect(() => {
-		let element = scroller.current;
-		if (active && pinned.current && element) element.scrollTop = element.scrollHeight;
+		if (!active || !follow.current) return;
+		cancelAnimationFrame(pin.current);
+		pin.current = requestAnimationFrame(() => {
+			let element = scroller.current;
+			if (element && follow.current) element.scrollTop = element.scrollHeight;
+		});
 	});
+	useEffect(() => () => cancelAnimationFrame(pin.current), []);
 
 	// Rows grow after they mount (streaming, work details, offer cards) and the pane resizes
 	// (phone keyboard, composer, window); a reader at the bottom stays on the newest line.
@@ -706,6 +726,8 @@ export function Transcript(
 		if (!message) return;
 		pinned.current = false;
 		flush.current = false;
+		follow.current = false;
+		cancelAnimationFrame(pin.current);
 		message.scrollIntoView({ block: "center", inline: "nearest" });
 		let exact = highlightSource(sourceOwner.current, message, sourceDestination.source);
 		message.dataset.sourceExact = String(exact);
@@ -726,6 +748,10 @@ export function Transcript(
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
 				pinned.current = distance < 48;
 				flush.current = distance <= 2;
+				// Near the newest line is following it; moving up leaves it.
+				if (pinned.current) follow.current = true;
+				else if (element.scrollTop < scrolledTo.current) follow.current = false;
+				scrolledTo.current = element.scrollTop;
 			}}
 		>
 			<span
