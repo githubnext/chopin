@@ -460,6 +460,71 @@ test("a checkout whose .git is a symbolic link, or a .git file that leads throug
 	});
 });
 
+/** A repository with a submodule that is initialized, one that is not, and one in a folder, as a checkout has them. */
+function withSubmodules(name: string) {
+	let made = repository(name);
+	let library = join(made.root, "library");
+	mkdirSync(library);
+	plain(library, "init", "-b", "main");
+	writeFileSync(join(library, "lib.txt"), "a library\n");
+	plain(library, "add", ".");
+	plain(library, "commit", "-m", "library");
+	let add = (path: string) =>
+		plain(made.repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", library, path);
+	// Neither of the configuration's programs is wanted while the fixture is made.
+	let configuration = readFileSync(join(made.repo, ".git", "config"), "utf8");
+	plain(made.repo, "config", "--unset", "core.hooksPath");
+	plain(made.repo, "config", "--unset", "core.fsmonitor");
+	plain(made.repo, "config", "--unset", "core.sshCommand");
+	add("vendor");
+	add("libs/tool");
+	add("extra");
+	plain(made.repo, "submodule", "deinit", "-f", "extra");
+	plain(made.repo, "commit", "-m", "vendor the library");
+	writeFileSync(join(made.repo, ".git", "config"), configuration);
+	return made;
+}
+
+test("the connector's git runs nothing named by a submodule whose .git an agent pointed at a git directory of its own, which plain git does", async () => {
+	let redirect = (made: ReturnType<typeof withSubmodules>) => {
+		// A copy of the submodule's git directory, where the agent could write, naming programs to run.
+		let copy = join(made.root, "evil", "vendor-git");
+		cpSync(join(made.repo, ".git", "modules", "vendor"), copy, { recursive: true });
+		let config = readFileSync(join(copy, "config"), "utf8").replace(/^\s*worktree = .*\n/m, "");
+		writeFileSync(join(copy, "config"), config);
+		made.configure(join(copy, "config"));
+		writeFileSync(join(made.repo, "vendor", ".git"), `gitdir: ${copy}\n`);
+		// A file in it that git has to look at again, so that its status is worked out and not cached.
+		writeFileSync(join(made.repo, "vendor", "lib.txt"), "a library, edited\n");
+	};
+	let control = withSubmodules("submodule-control");
+	redirect(control);
+	spawnSync("git", ["-C", control.repo, "status"], {
+		encoding: "utf8",
+		env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" },
+	});
+	// The fixture is live: plain git opens the submodule and runs its file-system monitor.
+	expect(control.fired()).toContain("fsmonitor");
+	let made = withSubmodules("submodule-connector");
+	redirect(made);
+	let results = [
+		gitSync(["status"], { cwd: made.repo }).status,
+		gitSync(["diff"], { cwd: made.repo }).status,
+		gitSync(["ls-files", "--stage"], { cwd: made.repo }).status,
+		gitSync(["submodule", "status"], { cwd: made.repo }).status,
+		gitSync(["submodule", "foreach", "true"], { cwd: made.repo }).status,
+		await gitAsync(["fetch", "origin"], { cwd: made.repo }).then(() => 0, () => 1),
+		await gitAsync(["worktree", "add", "--detach", join(made.root, "next")], { cwd: made.repo })
+			.then(() => 0, () => 1),
+		await gitAsync(["worktree", "remove", "--force", "--force", join(made.root, "next")], {
+			cwd: made.repo,
+		}).then(() => 0, () => 1),
+	];
+	// The fetch has no remote to reach; the rest work as they do for anyone.
+	expect(results.filter((_, index) => index !== 5)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+	expect(made.fired()).toEqual([]);
+});
+
 test("no git command the connector runs on the host bypasses the hardened helper", () => {
 	let directory = import.meta.dir;
 	let spawning = /\b(spawn|spawnSync|execFile|execFileSync|exec)\(\s*(\[\s*)?["'`]git["'`]/;
