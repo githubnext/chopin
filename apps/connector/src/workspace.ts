@@ -124,7 +124,10 @@ export async function plannerWorktree(directory: string, repository: string, doc
  * one there already, which stays as it is. A sandbox can't let the backend make it: that needs
  * `worktrees` in the checkout's git directory written, which would let it alter every worktree
  * of the person's, so the backend finds it made, as it must on every launch after the first,
- * and the sandbox lets it write that worktree's own git directory alone. Resolves with whether
+ * and the sandbox lets it write that worktree's own git directory alone. It is made with no
+ * filter run, whoever defined it (a Git LFS checkout's own are the person's, and a repository's
+ * `.gitattributes` may select any): its files are as git stores them, an LFS pointer for an LFS
+ * file, which the backend's own git converts, in its sandbox, as it needs. Resolves with whether
  * `worktree` is a linked worktree of `checkout` now: a folder with something in it that is
  * none is left alone.
  */
@@ -148,7 +151,11 @@ export async function preparePlannerWorktree(checkout: string, worktree: string)
 	// Registered, but its folder is gone: git would refuse to make it again until it forgets it.
 	if (registered) await gitAsync(["worktree", "prune"], { cwd: checkout });
 	if (present && (await readdir(worktree)).length > 0) return false;
-	await gitAsync(["worktree", "add", "--detach", worktree], { cwd: checkout, timeout: 120_000 });
+	await gitAsync(["worktree", "add", "--detach", worktree], {
+		cwd: checkout,
+		timeout: 120_000,
+		noFilters: true,
+	});
 	repositoryAt(worktree);
 	return true;
 }

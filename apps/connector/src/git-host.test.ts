@@ -259,6 +259,52 @@ test("no credential helper is asked for the connector's git's credentials, wheth
 	}
 });
 
+test("a command run with noFilters checks files out without running any filter, the person's or the repository's, and one run without it still does, as a Git LFS checkout needs", async () => {
+	let made = repository("filters");
+	program(join(made.evil, "smudge"), `touch '${made.ran}/smudge'; cat`);
+	program(join(made.evil, "required"), `touch '${made.ran}/required'; cat`);
+	program(join(made.evil, "process"), `touch '${made.ran}/process'`);
+	writeFileSync(
+		join(made.repo, ".gitattributes"),
+		"a.txt filter=mine\nb.txt filter=theirs\nc.txt filter=lfsish\n",
+	);
+	writeFileSync(join(made.repo, "b.txt"), "b");
+	writeFileSync(join(made.repo, "c.txt"), "c");
+	plain(made.repo, "add", ".");
+	plain(made.repo, "commit", "-m", "attributes");
+	for (let key of ["core.hooksPath", "core.fsmonitor", "core.sshCommand"]) {
+		plain(made.repo, "config", "--unset", key);
+	}
+	// What the fixture's own commit ran is not what is asked.
+	for (let name of readdirSync(made.ran)) rmSync(join(made.ran, name));
+	// One filter in the repository's configuration, one in the person's, as Git LFS is, which is
+	// required, and one that names a process, as Git LFS does too, which fails a checkout that runs it.
+	plain(made.repo, "config", "filter.mine.smudge", join(made.evil, "smudge"));
+	plain(made.repo, "config", "filter.lfsish.process", join(made.evil, "process"));
+	plain(made.repo, "config", "filter.lfsish.required", "true");
+	let env = person(
+		made.root,
+		`[filter "theirs"]\n\tsmudge = ${join(made.evil, "required")}\n\trequired = true\n`,
+	);
+	let add = (name: string, options: { noFilters?: boolean }) =>
+		gitAsync(["worktree", "add", "--detach", join(made.root, name)], {
+			cwd: made.repo,
+			env,
+			...options,
+		}).then(() => undefined, error => String((error as { stderr?: unknown }).stderr));
+	// A checkout with filters runs all three, and the process that doesn't answer fails it.
+	expect(await add("with", {})).toContain("fatal");
+	expect(made.fired()).toEqual(["process", "required", "smudge"]);
+	for (let name of readdirSync(made.ran)) rmSync(join(made.ran, name));
+	rmSync(join(made.repo, ".git", "worktrees"), { recursive: true, force: true });
+	rmSync(join(made.root, "with"), { recursive: true, force: true });
+	expect(await add("without", { noFilters: true })).toBeUndefined();
+	expect(made.fired()).toEqual([]);
+	for (let [file, text] of [["a.txt", "a"], ["b.txt", "b"], ["c.txt", "c"]]) {
+		expect(readFileSync(join(made.root, "without", file!), "utf8")).toBe(text!);
+	}
+});
+
 test("the connector's git reads of the person's own configuration only what a fetch and a checkout need of it", async () => {
 	let made = repository("person");
 	let env = person(

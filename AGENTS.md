@@ -259,7 +259,8 @@ durable.
   paths: `repositoryAt` resolves a symbolic `.git` (and a `.git` file that leads through a link)
   once, and the policy names that directory, never the link. A Planner's own worktree is made by
   the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
-  `git worktree add` would need `worktrees/` written; an unsandboxed backend makes it itself. The
+  `git worktree add` would need `worktrees/` written, and with no filter run (`noFilters`: every
+  filter any configuration defines is given no command); an unsandboxed backend makes it itself. The
   limit, said plainly: in the sandbox anything written in a Planner's checkout, `git add`, `commit`
   and `checkout` included, fails (it is read-only whole), and works in the launch's own worktree.
   A Planner backend that edits `CHOPIN_CHECKOUT` in place must edit its worktree instead; nothing
