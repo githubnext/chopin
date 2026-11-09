@@ -8,6 +8,12 @@ ARG PREVIOUS_IMAGE=no-previous
 FROM oven/bun:${BUN_VERSION} AS manifests
 WORKDIR /app
 
+# node-pty, which the connector's sandbox library depends on, compiles a native module when it
+# installs. These tools stay in the install stages; the runtime image starts from a clean base.
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends python3 make g++ \
+	&& rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 COPY patches ./patches
 COPY apps/connector/package.json ./apps/connector/package.json
