@@ -25,11 +25,12 @@ describe.skipIf(!url)("PostgreSQL saved Planner requests", () => {
 			return storage;
 		};
 		let lease = `chopin:test-deferred-${crypto.randomUUID()}`;
-		let w = await world({ ...extra, storage: await connect(), reopen: connect, lease });
+		// Registered before the world's own cleanup, which runs first: a Chat still saving a turn is
+		// closed while its database is open, not left to fail on a connection that was closed under it.
 		cleanups.push(async () => {
 			for (let storage of opened) await storage.close().catch(() => {});
 		});
-		return w;
+		return world({ ...extra, storage: await connect(), reopen: connect, lease });
 	};
 
 	it("keep a message, an automatic follow-up, a task draft and a comment note that waited behind a running turn through a kill, and start each once, in order, afterwards", async () => {
