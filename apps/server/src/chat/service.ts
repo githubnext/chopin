@@ -3534,7 +3534,6 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				success,
 				part.type === "tool-output-denied",
 			);
-			// After the row exists, so a result that came with no earlier call is noted at its own message.
 			if (staged.length) stageImages(context, staged, part.toolCallId);
 			return;
 		}
