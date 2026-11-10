@@ -75,7 +75,7 @@ test("a ready research notice links to its child document while other notices st
 		queued: [],
 	}));
 
-	expect(markup).toContain(`<a href="${childPath}"`);
+	expect(markup).toContain(`<a class="aui-md-a" href="${childPath}"`);
 	expect(markup).toContain(">Open the research document</a>");
 	expect(markup).toContain(
 		"Research could not be completed. You can retry it from the research card.",
@@ -155,7 +155,7 @@ test("the published ready notice renders its actual child route in Transcript", 
 		queued: [],
 	}));
 
-	expect(markup).toContain(`<a href="${path}"`);
+	expect(markup).toContain(`<a class="aui-md-a" href="${path}"`);
 	expect(markup).toContain('rel="noopener noreferrer" target="_blank"');
 	expect(markup).toContain(">Open the research document</a>");
 	expect(markup).toContain('class="chat-markdown min-w-0 break-words text-sm');

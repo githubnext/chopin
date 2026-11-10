@@ -1,15 +1,21 @@
-import { memo } from "react";
-import ReactMarkdown from "react-markdown";
+import { createContext, memo, useContext, useMemo, useRef } from "react";
 import { useLinkHref } from "@chopin/editor";
+import remarkGfm from "remark-gfm";
 
+import { MarkdownText } from "../markdown-text/markdown-text";
 import { sameJson } from "../same-json";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
 import "./markdown.css";
 
+import type { ComponentProps } from "react";
 import type { Chat } from "@chopin/protocol";
-import type { Components } from "react-markdown";
+import type { MarkdownTextProps } from "../markdown-text/markdown-text";
+import type { ReferenceRenderModel } from "./references";
+
+/** MarkdownText's `components` prop: the elements a surface draws its own way. */
+export type MarkdownComponents = NonNullable<MarkdownTextProps["components"]>;
 
 export const CHAT_ELEMENTS = [
 	"a",
@@ -31,16 +37,35 @@ export const CHAT_ELEMENTS = [
 	"ul",
 ];
 
-let paragraph: NonNullable<Components["p"]> = ({ children }) => <p>{children}</p>;
+/** What a message may also say: GitHub's tables, strikethrough and task lists. */
+export const MESSAGE_ELEMENTS = [
+	...CHAT_ELEMENTS,
+	"del",
+	"input",
+	"table",
+	"tbody",
+	"td",
+	"th",
+	"thead",
+	"tr",
+];
+
+/** A heading in Chat is a line of text: a message has no document structure. */
+let paragraph = ({ children }: ComponentProps<"p">) => <p className="aui-md-p">{children}</p>;
 
 /** A link someone wrote: a path in the repository opens the file on GitHub, as in the document. */
-export const ChatLink: NonNullable<Components["a"]> = ({ children, href }) => (
-	<a href={useLinkHref(href)} rel="noopener noreferrer" target="_blank">
+export const ChatLink = ({ children, className, href }: ComponentProps<"a">) => (
+	<a
+		className={["aui-md-a", className].filter(Boolean).join(" ")}
+		href={useLinkHref(href)}
+		rel="noopener noreferrer"
+		target="_blank"
+	>
 		{children}
 	</a>
 );
 
-export const CHAT_COMPONENTS: Components = {
+export const CHAT_COMPONENTS: MarkdownComponents = {
 	a: ChatLink,
 	h1: paragraph,
 	h2: paragraph,
@@ -62,21 +87,43 @@ export function inlineSource(source: string): string {
 		.replace(/^>/, "\\>");
 }
 
+let NO_PLUGINS: never[] = [];
+
+/**
+ * One line of text, drawn in a `span` that adds no box of its own. Raw HTML is dropped when
+ * `skipHtml` is set, and shown as the text it was written as when it is not.
+ */
+export function MarkdownPhrase(
+	{ components, links, skipHtml, source }: {
+		components: MarkdownComponents;
+		links: boolean;
+		skipHtml: boolean;
+		source: string;
+	},
+) {
+	return (
+		<MarkdownText
+			allowedElements={links ? CHAT_INLINE : INLINE_WITHOUT_LINKS}
+			className="aui-md-line"
+			components={components}
+			container="span"
+			defer={false}
+			remarkPlugins={NO_PLUGINS}
+			skipHtml={skipHtml}
+			text={inlineSource(source)}
+			unwrapDisallowed
+		/>
+	);
+}
+
+let INLINE_WITHOUT_LINKS = CHAT_INLINE.filter(name => name !== "a");
+
 /**
  * One line of agent-written text, such as a task's title or criterion, with Chat's inline
  * Markdown: code spans, emphasis and links. Pass `links={false}` inside another control.
  */
 export function InlineMarkdown({ links = true, source }: { links?: boolean; source: string }) {
-	return (
-		<ReactMarkdown
-			allowedElements={links ? CHAT_INLINE : CHAT_INLINE.filter(name => name !== "a")}
-			components={CHAT_COMPONENTS}
-			skipHtml
-			unwrapDisallowed
-		>
-			{inlineSource(source)}
-		</ReactMarkdown>
-	);
+	return <MarkdownPhrase components={CHAT_COMPONENTS} links={links} skipHtml source={source} />;
 }
 
 type MessageMarkdownProps = {
@@ -85,6 +132,8 @@ type MessageMarkdownProps = {
 	mention?: string;
 	references?: Chat.Reference[];
 	source: string;
+	/** The Planner is still writing this message: its root says so as `data-status="running"`. */
+	streaming?: boolean;
 };
 
 /**
@@ -98,64 +147,81 @@ export function sameMessageMarkdown(
 	after: MessageMarkdownProps,
 ): boolean {
 	return before.source === after.source && before.className === after.className
-		&& before.mention === after.mention && sameJson(before.references, after.references);
+		&& before.mention === after.mention && !before.streaming === !after.streaming
+		&& sameJson(before.references, after.references);
+}
+
+/** The references of the message being drawn, which its links read to become chips. */
+let References = createContext<ReferenceRenderModel["references"]>([]);
+
+/** A typed reference is a chip; any other link is as written. */
+function MessageLink(props: ComponentProps<"a">) {
+	let references = useContext(References);
+	let attributes = props as Record<string, unknown>;
+	let property = attributes["data-chat-reference-index"] ?? attributes["dataChatReferenceIndex"];
+	let index = typeof property === "string" ? Number(property) : -1;
+	let reference = Number.isSafeInteger(index) ? references[index] : undefined;
+	if (!reference) return <ChatLink href={props.href}>{props.children}</ChatLink>;
+	return reference.kind === "research"
+		? <span className="chat-reference" data-chat-reference="research">{reference.label}</span>
+		: (
+			<a className="chat-reference" data-chat-reference={reference.kind} href={reference.href}>
+				{reference.label}
+			</a>
+		);
+}
+
+/** A task list's box shows its state and is never a control. */
+function TaskBox({ checked }: ComponentProps<"input">) {
+	return <input checked={!!checked} disabled readOnly type="checkbox" />;
+}
+
+let MESSAGE_COMPONENTS: MarkdownComponents = { ...CHAT_COMPONENTS, a: MessageLink, input: TaskBox };
+
+/** Strikethrough needs two tildes, so "about ~5 minutes, ~10 at most" stays as it was written. */
+let GITHUB_FLAVOURED = [[remarkGfm, { singleTilde: false }]] as const;
+
+/** Keeps the identity of the references while what they say is unchanged. */
+function useSame<T>(value: T): T {
+	let held = useRef(value);
+	if (!sameJson(held.current, value)) held.current = value;
+	return held.current;
 }
 
 /** The deliberately small Markdown dialect understood by Chat. */
 export const MessageMarkdown = memo(function MessageMarkdown(
-	{ className, mention, references, source }: MessageMarkdownProps,
+	{ className, mention, references, source, streaming }: MessageMarkdownProps,
 ) {
-	let model = referenceRenderModel(source, references);
-	let components: Components = {
-		...CHAT_COMPONENTS,
-		a: ({ children, href, node }) => {
-			let property = node?.properties?.dataChatReferenceIndex
-				?? node?.properties?.["data-chat-reference-index"];
-			let index = typeof property === "string" ? Number(property) : -1;
-			let reference = Number.isSafeInteger(index) ? model.references[index] : undefined;
-			return reference
-				? reference.kind === "research"
-					? (
-						<span
-							className="chat-reference"
-							data-chat-reference="research"
-						>
-							{reference.label}
-						</span>
-					)
-					: (
-						<a
-							className="chat-reference"
-							data-chat-reference={reference.kind}
-							href={reference.href}
-						>
-							{reference.label}
-						</a>
-					)
-				: <ChatLink href={href}>{children}</ChatLink>;
-		},
-	};
+	let held = useSame(references);
+	let model = useMemo(() => referenceRenderModel(source, held), [source, held]);
+	let remarkPlugins = useMemo(
+		() => [...GITHUB_FLAVOURED, [referenceRemarkPlugin, model], orderedRunsRemarkPlugin],
+		[model],
+	);
 	return (
-		<div
-			className={`chat-markdown ${className ?? ""}`}
-			data-chat-markdown
-			data-chat-mention-lead={mention ? "" : undefined}
-		>
-			{mention && (
-				<>
-					<span className="chat-mention">{mention}</span>
-					{" "}
-				</>
-			)}
-			<ReactMarkdown
-				allowedElements={CHAT_ELEMENTS}
-				components={components}
-				remarkPlugins={[[referenceRemarkPlugin, model], orderedRunsRemarkPlugin]}
+		<References.Provider value={model.references}>
+			<MarkdownText
+				allowedElements={MESSAGE_ELEMENTS}
+				className={["chat-markdown", className].filter(Boolean).join(" ")}
+				components={MESSAGE_COMPONENTS}
+				containerProps={{
+					"data-chat-markdown": "",
+					"data-chat-mention-lead": mention ? "" : undefined,
+				}}
+				lead={mention
+					? (
+						<>
+							<span className="chat-mention">{mention}</span>
+							{" "}
+						</>
+					)
+					: undefined}
+				remarkPlugins={remarkPlugins as MarkdownTextProps["remarkPlugins"]}
 				skipHtml
+				status={streaming ? "running" : "complete"}
+				text={model.source}
 				unwrapDisallowed
-			>
-				{model.source}
-			</ReactMarkdown>
-		</div>
+			/>
+		</References.Provider>
 	);
 }, sameMessageMarkdown);

@@ -1,26 +1,30 @@
 /**
- * Decision cards read Markdown with Chat's renderer.
+ * Decision cards read Markdown with Chat's renderer, MarkdownText.
  *
  * The same element allowlist, link handling and continued numbered lists as a
  * Chat message, with two additions a decision needs: a ```mermaid fence draws
- * with the document's own Mermaid renderer, and an image shows only when it is
- * this document's own upload. Raw HTML is shown as the text it was written as,
- * so a question that mentions `<div>` still says so.
+ * with the document's own Mermaid renderer (MarkdownText's `componentsByLanguage`),
+ * and an image shows only when it is this document's own upload. Raw HTML is shown
+ * as the text it was written as, so a question that mentions `<div>` still says so.
+ * A card is not a message: its code has no copy header, and its text is read
+ * without GitHub's table, strikethrough and autolink syntax, except an option's
+ * own visual, which also reads tables.
  */
 
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 import { QuestionMarkdownContext } from "@chopin/question/react";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import { gfmTable } from "micromark-extension-gfm-table";
 
-import { CHAT_COMPONENTS, CHAT_ELEMENTS, CHAT_INLINE, inlineSource } from "./chat/markdown";
+import { CHAT_COMPONENTS, CHAT_ELEMENTS, MarkdownPhrase } from "./chat/markdown";
 import { orderedRunsRemarkPlugin } from "./chat/ordered-runs";
+import { MarkdownText } from "./markdown-text/markdown-text";
 
 import type { ReactNode } from "react";
-import type { Components } from "react-markdown";
 import type { QuestionMarkdownRenderer } from "@chopin/question/react";
+import type { MarkdownComponents } from "./chat/markdown";
+import type { SyntaxHighlighterProps } from "./markdown-text/markdown-text";
 
 const CardDiagram = lazy(() =>
 	import("@chopin/editor/card-diagram").then(({ CardDiagram }) => ({ default: CardDiagram }))
@@ -92,26 +96,25 @@ function CardImage({ alt, document, src }: { alt: string; document: string; src?
 	);
 }
 
-function text(node: unknown): string {
-	if (!node || typeof node !== "object") return "";
-	let value = node as { type?: string; value?: string; children?: unknown[] };
-	if (value.type === "text") return value.value ?? "";
-	return (value.children ?? []).map(text).join("");
+/** A card's diagram: the document's own Mermaid renderer, in place of the fence's `pre`. */
+function CardMermaid({ code }: SyntaxHighlighterProps) {
+	return (
+		<Suspense fallback={<div className="question-diagram" data-question-diagram="pending" />}>
+			<CardDiagram source={code.replace(/\n$/, "")} />
+		</Suspense>
+	);
 }
 
-function mermaidSource(node: unknown): string | undefined {
-	let code = (node as { children?: unknown[] } | undefined)?.children?.[0] as {
-		tagName?: string;
-		properties?: { className?: unknown };
-	} | undefined;
-	let classes = code?.tagName === "code" ? code.properties?.className : undefined;
-	if (!Array.isArray(classes) || !classes.includes("language-mermaid")) return undefined;
-	return text(code).replace(/\n$/, "");
-}
+let NO_HEADER = () => null;
 
-function blockComponents(document: string): Components {
+let MERMAID = { mermaid: { CodeHeader: NO_HEADER, SyntaxHighlighter: CardMermaid } };
+
+function blockComponents(document: string): MarkdownComponents {
 	return {
 		...CHAT_COMPONENTS,
+		CodeHeader: NO_HEADER,
+		// A preview's table is its own scrolling lane in the card's styles, so it needs no wrapper.
+		table: ({ children }) => <table className="aui-md-table">{children}</table>,
 		img: ({ alt, src }) => (
 			<CardImage
 				alt={alt ?? ""}
@@ -119,20 +122,11 @@ function blockComponents(document: string): Components {
 				src={typeof src === "string" ? src : undefined}
 			/>
 		),
-		pre: ({ children, node }) => {
-			let source = mermaidSource(node);
-			if (source === undefined) return <pre>{children}</pre>;
-			return (
-				<Suspense fallback={<div className="question-diagram" data-question-diagram="pending" />}>
-					<CardDiagram source={source} />
-				</Suspense>
-			);
-		},
 	};
 }
 
 /** A heading or label is a phrase, so its code spans take the card's own inline-code chip. */
-const INLINE_COMPONENTS: Components = {
+const INLINE_COMPONENTS: MarkdownComponents = {
 	...CHAT_COMPONENTS,
 	code: ({ children }) => <code className="inline-code">{children}</code>,
 };
@@ -171,32 +165,36 @@ export function lineBreaksRemarkPlugin() {
 	return (tree: MarkdownNode) => walk(tree);
 }
 
+let PLAIN_BLOCKS = [orderedRunsRemarkPlugin, lineBreaksRemarkPlugin];
+let PREVIEW_BLOCKS = [tablesRemarkPlugin, orderedRunsRemarkPlugin, lineBreaksRemarkPlugin];
+
 export function questionMarkdown(document: string): QuestionMarkdownRenderer {
 	let components = blockComponents(document);
 	return {
 		inline: (source, { links }) => (
-			<ReactMarkdown
-				allowedElements={links ? CHAT_INLINE : CHAT_INLINE.filter(name => name !== "a")}
+			<MarkdownPhrase
 				components={INLINE_COMPONENTS}
-				unwrapDisallowed
-			>
-				{inlineSource(source)}
-			</ReactMarkdown>
+				links={links}
+				skipHtml={false}
+				source={source}
+			/>
 		),
-		block: (source, place) => (
-			<ReactMarkdown
+		block: (source, place, root) => (
+			<MarkdownText
 				allowedElements={place === "preview" ? PREVIEW_ELEMENTS : BLOCK_ELEMENTS}
+				className={root.className}
 				components={components}
-				remarkPlugins={place === "preview"
-					? [tablesRemarkPlugin, orderedRunsRemarkPlugin, lineBreaksRemarkPlugin]
-					: [orderedRunsRemarkPlugin, lineBreaksRemarkPlugin]}
+				componentsByLanguage={MERMAID}
+				containerProps={ROOT_PROPS}
+				remarkPlugins={place === "preview" ? PREVIEW_BLOCKS : PLAIN_BLOCKS}
+				text={source}
 				unwrapDisallowed
-			>
-				{source}
-			</ReactMarkdown>
+			/>
 		),
 	};
 }
+
+let ROOT_PROPS = { "data-question-markdown": "" };
 
 /** Card text in this document renders as Markdown, with this document's images. */
 export function QuestionMarkdownProvider(

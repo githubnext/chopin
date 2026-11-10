@@ -76,20 +76,6 @@
 		"sourceHash": "63213489ee99add048d63095e34c02e5342e9e1bb8c9714cc3746f97404d6eee"
 	},
 	{
-		"file": "apps/web/src/chat/markdown.tsx",
-		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > MessageMarkdown > MessageMarkdown > <div>",
-				1
-			]
-		],
-		"sourceHash": "05d863e9009fe15704f889af6990fd428e7f28abaac911880fda818934f15501"
-	},
-	{
 		"file": "apps/web/src/project-sidebar.tsx",
 		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
 		"cases": [
@@ -396,5 +382,369 @@
 			]
 		],
 		"sourceHash": "619132cbf2bc755f03dfcb257af75c6170e7238181e5a49fd6c2e5399a4e049b"
+	},
+	{
+		"file": "apps/web/src/markdown-text/markdown-text.tsx",
+		"reason": "MarkdownText draws its root with the class and attributes its surface passes (Chat's message root, a decision card's body); each caller's static classes are scanned at its own call site. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"codeOverrides",
+				"unresolved JSX props > MarkdownCodeOverride: FC<ComponentProps<CodeComponent>> > <CodeOverride>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MarkdownCodeOverride: FC<ComponentProps<CodeComponent>> > <CodeOverride>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MarkdownPreOverride: FC<ComponentProps<PreComponent>> > <PreOverride>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"options",
+				"unresolved JSX props > MarkdownRenderer: FC<MarkdownRendererProps> > <ReactMarkdown>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"options",
+				"unresolved JSX props > DeferredMarkdownRenderer: FC<MarkdownRendererProps> > <MarkdownRenderer>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"stableRest",
+				"unresolved JSX props > MarkdownTextInner: FC<MarkdownTextInnerProps> > <Renderer>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"containerProps",
+				"unresolved JSX props > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > MarkdownTextImpl: FC<MarkdownTextProps> > <MarkdownTextInner>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"[className, \"aui-md\"].filter(Boolean)",
+				"class > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
+				1
+			]
+		],
+		"sourceHash": "e67d97781c59a45f5975c7c0966c197d1b9ed2093430c6a8033be13cfcbee7cb"
+	},
+	{
+		"file": "apps/web/src/markdown-text/memoization.tsx",
+		"reason": "The memoizing wrapper forwards the properties react-markdown computed to the component it wraps, unchanged. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > withoutNode > <Component>",
+				1
+			]
+		],
+		"sourceHash": "a9cceda09bc6905e37be11e647def47a8aa0d6e900510f7e912f4b26b44ce0c4"
+	},
+	{
+		"file": "apps/web/src/markdown-text/default-components.tsx",
+		"reason": "MarkdownText's elements forward the properties react-markdown computed from the parsed message (a link's href, a table cell's alignment, a list's task-list class, a code block's language class) onto the element and add only their fixed aui-md-* class; the values are parsed message data, never authored styles. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h1>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h2>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h3>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h4>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h5>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <h6>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <p>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <a>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <blockquote>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <ul>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <ol>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <hr>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <table>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <th>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <td>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <tr>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <li>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <strong>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <sup>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > <pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > defaultComponents > Code > <code>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <ul>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <ol>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <li>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <pre>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > Code > <code>",
+				1
+			]
+		],
+		"sourceHash": "637735195d7fc8e3af215e4639cd15fd0b40810654b6b2f9206453db9a395223"
+	},
+	{
+		"file": "apps/web/src/markdown-text/code-blocks.tsx",
+		"reason": "The fenced-code override re-emits the pre and code properties react-markdown computed from the parsed message (a block's language class) onto the pre and code it draws; nothing is authored here. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > DefaultPre: PreComponent > <pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > DefaultCode: CodeComponent > <code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > PreOverrideImpl > <FallbackPre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"withDefaultProps<any>(preProps)(props)",
+				"unresolved JSX props > WrappedPre > <Pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"withDefaultProps<any>(codeProps)(props)",
+				"unresolved JSX props > WrappedCode > <Code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CodeOverrideImpl: FC<CodeOverrideProps> > <components.Code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CodeOverrideImpl: FC<CodeOverrideProps> > <CodeBlockOverride>",
+				1
+			]
+		],
+		"sourceHash": "536278deba1ca3bd121443588f57e37f7ecb4df845d6d106d5b3f0fd3abf99d9"
+	},
+	{
+		"file": "apps/web/src/question-markdown.tsx",
+		"reason": "The decision card's Markdown root takes the class its place gives it from the question package (one of five fixed roots); static classes there are scanned. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"root.className",
+				"class > questionMarkdown > <MarkdownText>",
+				1
+			]
+		],
+		"sourceHash": "8f8433e53e188bfb21813716660a6b9c8369dc8b814cc0e7a19fdde9e9f23401"
+	},
+	{
+		"file": "apps/web/src/chat/markdown.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"[\"aui-md-a\", className].filter(Boolean)",
+				"class > ChatLink > <a>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"[\"chat-markdown\", className].filter(Boolean)",
+				"class > MessageMarkdown > MessageMarkdown > <MarkdownText>",
+				1
+			]
+		],
+		"sourceHash": "820f3b308b4b241516a2ea9fa3b88b181138c923bbdb715893cce532b1e3fb98"
 	}
 ]
