@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { ToolBoundaryError as AtomicToolBoundaryError } from "../harness/atomic/adapter";
+import { ToolBoundaryError } from "../harness/remote/link";
 import { PlannerReplyError } from "./reply-policy";
 import { turnFailureOf } from "./turn-failure";
 
@@ -77,4 +79,31 @@ test("an interruption that is not a refusal, such as a restart, is an error with
 	expect(
 		turnFailureOf({ ...BASE, error: new Error("aborted"), interruption: "Chopin is restarting." }),
 	).toEqual({ kind: "error", request: "req-1", focus: "child-1" });
+});
+
+test("a tool the harness's boundary stopped the turn on is a tool failure, whichever harness said so, with none of the boundary's words", () => {
+	for (
+		let error of [
+			new ToolBoundaryError("Chopin's tool boundary failure: bash"),
+			new ToolBoundaryError("An isolated Planner turn cannot offer bash."),
+			new ToolBoundaryError("The machine redefined Chopin's read_plan."),
+			new AtomicToolBoundaryError("Atomic offered unexpected tools: bash."),
+		]
+	) {
+		expect(turnFailureOf({ ...BASE, error })).toEqual({
+			kind: "tool",
+			request: "req-1",
+			focus: "child-1",
+		});
+	}
+});
+
+test("a boundary stop on a turn whose connection dropped is still dropped", () => {
+	expect(
+		turnFailureOf({
+			...BASE,
+			suspended: true,
+			error: new ToolBoundaryError("Chopin's tool boundary failure: bash"),
+		}).kind,
+	).toBe("dropped");
 });

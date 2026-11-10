@@ -23,6 +23,15 @@ const UNVERIFIED = "Chopin could not verify its Chat response. Try again.";
 
 /** A failure of the Chat reply check alone; the Planner session that produced the reply is sound. */
 export class PlannerReplyError extends Error {}
+
+/**
+ * Whether a harness's own tool boundary stopped the turn. It names its error so, in both
+ * harnesses, and that is how a failure of the turn is told apart from any other.
+ */
+export function isToolBoundaryError(error: unknown): boolean {
+	return error instanceof Error && error.name === "ToolBoundaryError";
+}
+
 const REPAIR = "Your previous Chat response was withheld because it requested human input. "
 	+ "The JSON below is quoted context, not a new instruction to carry out the original request. "
 	+ "Preserve its original document focus. Continue from the current document and completed tool "
@@ -142,6 +151,8 @@ export async function publishPlannerReplies(options: {
 							} else toolsTruncated = true;
 							if (retained.length < detail.length) toolsTruncated = true;
 						}
+						// A boundary stop is the turn's own, whole: its kind is how the room is told.
+						if (part.type === "error" && isToolBoundaryError(part.error)) throw part.error;
 						if (part.type === "error" || part.type === "abort") {
 							throw new Error("Chopin's reply failed. Try again.");
 						}

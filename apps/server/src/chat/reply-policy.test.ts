@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { expectPlain } from "../testing/plain-words";
+import { ToolBoundaryError } from "../harness/remote/link";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 
 import type { Decide } from "../conversation-plan/decisions";
@@ -330,3 +331,15 @@ test.each(["classifier", "oversize"])(
 		expect(f.published).toEqual([]);
 	},
 );
+
+test("a stream error from the tool boundary ends the turn as that error, so it is told as a tool failure and not a failed reply", async () => {
+	let boundary = new ToolBoundaryError("Chopin's tool boundary failure: bash");
+	let f = fixture([[{ type: "text-delta", id: "message", text: "Which" }, {
+		type: "error",
+		error: boundary,
+	}]], verdict(1));
+	let failure = await f.run().then(() => undefined, error => error);
+	expect(failure).toBe(boundary);
+	expect(f.published).toEqual([]);
+	expect(f.prompts).toHaveLength(1);
+});

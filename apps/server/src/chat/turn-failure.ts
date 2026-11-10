@@ -1,6 +1,6 @@
 import type { Chat as Wire } from "@chopin/protocol";
 
-import { PlannerReplyError } from "./reply-policy";
+import { isToolBoundaryError, PlannerReplyError } from "./reply-policy";
 
 type Input = {
 	error: unknown;
@@ -13,6 +13,9 @@ type Input = {
 	/** The child document that was open when it was sent. */
 	focus?: string;
 };
+
+/** What a room is told, in the transcript, when a tool the turn needed was not offered. */
+export const TOOL_UNAVAILABLE = "The reply stopped: a tool it needed isn't available.";
 
 const TIMED_OUT = /timed?[\s-]?out|ETIMEDOUT|deadline exceeded/i;
 
@@ -34,6 +37,8 @@ export function turnFailureOf(input: Input): Wire.TurnFailure {
 		return { kind: "error", ...turn };
 	}
 	if (!(error instanceof Error)) return { kind: "unreachable", ...turn };
+	// Both harnesses' own boundary checks name their error so; their words are Chopin's, not the model's.
+	if (isToolBoundaryError(error)) return { kind: "tool", ...turn };
 	if (error instanceof PlannerReplyError) return { kind: "error", ...turn };
 	if (error.name === "TimeoutError" || TIMED_OUT.test(error.message)) {
 		return { kind: "timed-out", ...turn };
