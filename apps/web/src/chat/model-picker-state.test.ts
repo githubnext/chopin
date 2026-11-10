@@ -111,9 +111,9 @@ describe("what the trigger says", () => {
 	test("adds the level only when one was chosen for the model", () => {
 		expect(triggerText(catalog, { model: "acme/large", thinkingLevel: "high" })).toEqual({
 			name: "Large",
-			level: "High",
+			level: "high",
 		});
-		expect(triggerText(catalog, { thinkingLevel: "max" })).toEqual({ name: "Small", level: "Max" });
+		expect(triggerText(catalog, { thinkingLevel: "max" })).toEqual({ name: "Small", level: "max" });
 		// A level its model does not offer is not shown.
 		expect(triggerText(catalog, { model: "acme/large", thinkingLevel: "max" })).toEqual({
 			name: "Large",
@@ -123,7 +123,7 @@ describe("what the trigger says", () => {
 	test("gives the model, its level and what went missing as the name of the control", () => {
 		expect(triggerLabel(catalog, undefined)).toBe("Model: Small");
 		expect(triggerLabel(catalog, { model: "acme/large", thinkingLevel: "xhigh" })).toBe(
-			"Model: Large, Extra high reasoning is no longer available for this model, so Chopin used its default.",
+			"Model: Large, xhigh reasoning is no longer available for this model, so Chopin used its default.",
 		);
 	});
 
@@ -138,22 +138,15 @@ describe("what the trigger says", () => {
 		expect(triggerLabel(catalog, { model: "acme/gone" })).toContain("no longer available");
 	});
 
-	test("tells levels that read alike apart, each in its own spelling, in the trigger and its name", () => {
+	test("shows each level exactly as it was reported, so levels that read alike stay two, in the trigger and its name", () => {
 		let shown = alikeLevels.map(level => triggerText(alike, asking(level)).level);
-		expect(shown).toEqual([
-			"Extra high",
-			"“extra high”",
-			"High",
-			"“High”",
-			"\u00df-fast",
-			"SS-fast",
-		]);
+		expect(shown).toEqual(["xhigh", "extra high", "high", "High", "\u00df-fast", "SS-fast"]);
 		let named = alikeLevels.map(level => triggerLabel(alike, asking(level)));
 		expect(named).toEqual([
+			"Model: Odd, reasoning xhigh",
 			"Model: Odd, reasoning extra high",
-			"Model: Odd, reasoning “extra high”",
 			"Model: Odd, reasoning high",
-			"Model: Odd, reasoning “High”",
+			"Model: Odd, reasoning High",
 			"Model: Odd, reasoning \u00df-fast",
 			"Model: Odd, reasoning SS-fast",
 		]);
@@ -161,7 +154,6 @@ describe("what the trigger says", () => {
 		expect(titles).toEqual(named);
 		for (let list of [shown, named, titles]) {
 			expect(new Set(list).size).toBe(alikeLevels.length);
-			expect(new Set(list.map(text => text!.toLowerCase())).size).toBe(alikeLevels.length);
 		}
 	});
 
@@ -214,8 +206,7 @@ describe("what the composer's strip says about the document's model", () => {
 			.toEqual({ tone: "info", text: gone });
 		expect(composerModelNotice(undefined, false, { thinkingLevel: "xhigh" })).toEqual({
 			tone: "info",
-			text:
-				"Extra high reasoning is no longer available for this model, so Chopin used its default.",
+			text: "xhigh reasoning is no longer available for this model, so Chopin used its default.",
 		});
 		// What could not be read still comes before it, as it does with a catalog.
 		expect(composerModelNotice(undefined, true, { model: "acme/large" })).toEqual({
