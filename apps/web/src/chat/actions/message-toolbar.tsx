@@ -133,8 +133,8 @@ export let MessageToolbar = memo(function MessageToolbar(
 	let [pickerOpen, setPickerOpen] = useState(false);
 	let [pinned, setPinned] = useState(false);
 	let [copying, setCopying] = useState<Which>();
-	let { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: COPIED_MS });
-	let engaged = pinned || menuOpen || pickerOpen || isCopied;
+	let { isCopied, isFailed, copyToClipboard } = useCopyToClipboard({ copiedDuration: COPIED_MS });
+	let engaged = pinned || menuOpen || pickerOpen || isCopied || isFailed;
 
 	let menuPosition = useAnchored(menuOpen, moreButton, menu, "end");
 	let pickerPosition = useAnchored(pickerOpen, addButton, picker, "end");
@@ -279,7 +279,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 				reactable={reactable}
 			/>
 			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
-				{isCopied ? "Copied" : ""}
+				{isCopied ? "Copied" : isFailed ? "Couldn't copy" : ""}
 			</span>
 			{menuOpen && createPortal(
 				<div
@@ -293,11 +293,19 @@ export let MessageToolbar = memo(function MessageToolbar(
 				>
 					<MenuItem onClick={() => copy("markdown")}>
 						<CopySwap copied={isCopied && copying === "markdown"} />
-						{isCopied && copying === "markdown" ? "Copied" : "Copy"}
+						{isCopied && copying === "markdown"
+							? "Copied"
+							: isFailed && copying === "markdown"
+							? "Couldn't copy"
+							: "Copy"}
 					</MenuItem>
 					<MenuItem onClick={() => copy("plain")}>
 						<CopySwap copied={isCopied && copying === "plain"} />
-						{isCopied && copying === "plain" ? "Copied" : "Copy as plain text"}
+						{isCopied && copying === "plain"
+							? "Copied"
+							: isFailed && copying === "plain"
+							? "Couldn't copy"
+							: "Copy as plain text"}
 					</MenuItem>
 					{canRetry && (
 						<MenuItem
