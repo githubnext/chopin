@@ -22,7 +22,7 @@ function le(value: number, length: number): number[] {
 	return be(value, length).toReversed();
 }
 
-function png(width: number, height: number, ...chunks: number[][]): number[] {
+function pngBeforeItsData(width: number, height: number, ...chunks: number[][]): number[] {
 	return [
 		0x89,
 		...ascii("PNG\r\n\x1a\n"),
@@ -41,6 +41,10 @@ function png(width: number, height: number, ...chunks: number[][]): number[] {
 		0,
 		...chunks.flat(),
 	];
+}
+
+function png(width: number, height: number, ...chunks: number[][]): number[] {
+	return pngBeforeItsData(width, height, ...chunks, pngChunk("IDAT", [0x78, 0x9c]));
 }
 
 function dataUrl(bytes: readonly number[], type = "image/png"): string {
@@ -67,6 +71,10 @@ test("the size is read from the payload however the address writes it", () => {
 			`data:image/png;base64,${base64.slice(0, 8)}\n ${base64.slice(8)}`,
 			`data:image/png,${escaped}`,
 			`data:image/apng;base64,${base64}`,
+			`data:image/png;charset=utf-8;base64,${base64}`,
+			`data:image/png; base64,${base64}`,
+			`data:image/png ;BASE64,${base64}`,
+			`data:image/png;name=a.png,${escaped}`,
 		]
 	) expect(dataImageSize(src), src).toEqual(expected);
 });
@@ -264,7 +272,10 @@ test("a WebP whose first chunk is not one of those, or is cut short, has no size
 	).toBeUndefined();
 });
 
-function tiff(order: "II" | "MM", ...entries: Array<[tag: number, value: number]>): number[] {
+function tiff(
+	order: "II" | "MM",
+	...entries: Array<[tag: number, value: number, type?: number, count?: number]>
+): number[] {
 	let word = (value: number) => order === "II" ? le(value, 2) : be(value, 2);
 	let long = (value: number) => order === "II" ? le(value, 4) : be(value, 4);
 	return [
@@ -272,13 +283,11 @@ function tiff(order: "II" | "MM", ...entries: Array<[tag: number, value: number]
 		...word(42),
 		...long(8),
 		...word(entries.length),
-		...entries.flatMap(([tag, value]) => [
+		...entries.flatMap(([tag, value, type = 3, count = 1]) => [
 			...word(tag),
-			...word(3),
-			...long(1),
-			...word(value),
-			0,
-			0,
+			...word(type),
+			...long(count),
+			...(type === 4 ? long(value) : [...word(value), 0, 0]),
 		]),
 		...long(0),
 	];
@@ -318,7 +327,20 @@ test("a JPEG's size is in its frame header, past whatever segments come before i
 		.toBeUndefined();
 	expect(
 		dataImageSize(
-			dataUrl([0xff, 0xd8, 0xff, 0xff, 0xff, 0x01, ...JFIF, ...frame(0xc0, 90, 30)], "image/jpeg"),
+			dataUrl([
+				0xff,
+				0xd8,
+				0xff,
+				0xff,
+				0xff,
+				0x01,
+				...JFIF,
+				...frame(0xc0, 90, 30),
+				0xff,
+				0xda,
+				0,
+				2,
+			], "image/jpeg"),
 		),
 	).toEqual({ width: 90, height: 30 });
 });
@@ -418,7 +440,9 @@ test("a PNG turned by an eXIf chunk before its image data is drawn with its widt
 	});
 	expect(dataImageSize(dataUrl(png(90, 30, upright, data)))).toEqual({ width: 90, height: 30 });
 	expect(dataImageSize(dataUrl(png(90, 30, data, sideways)))).toEqual({ width: 90, height: 30 });
-	expect(dataImageSize(dataUrl(png(90, 30, gamma)))).toEqual({ width: 90, height: 30 });
+	expect(dataImageSize(dataUrl(png(90, 30, gamma, data)))).toEqual({ width: 90, height: 30 });
+	expect(dataImageSize(dataUrl(pngBeforeItsData(90, 30, gamma)))).toBeUndefined();
+	expect(dataImageSize(dataUrl(pngBeforeItsData(90, 30)))).toBeUndefined();
 });
 
 function ico(...sizes: Array<[width: number, height: number]>): number[] {
@@ -639,4 +663,190 @@ test("files an encoder wrote give the size Chromium draws them at, and none wher
 	expect(drawn("raster-18x6-two-sizes.ico")).toEqual({ width: 18, height: 6 });
 	expect(drawn("raster-18x6-cropped.avif")).toBeUndefined();
 	expect(drawn("raster-18x6-and-6x18.ico")).toBeUndefined();
+});
+
+test("only the first EXIF block of a JPEG is read, as Chromium reads it, and an orientation is a SHORT of count 1", () => {
+	let sideways = exif(tiff("II", [ORIENTATION, 6]));
+	let upright = exif(tiff("II", [ORIENTATION, 1]));
+	let silent = exif(tiff("II", [0x0100, 6]));
+	let wide = { width: 90, height: 30 };
+	let tall = { width: 30, height: 90 };
+	let make = (...segments: number[][]) =>
+		dataImageSize(dataUrl(jpeg(JFIF, ...segments, frame(0xc0, 90, 30)), "image/jpeg"));
+
+	expect(make(upright, sideways)).toEqual(wide);
+	expect(make(silent, sideways)).toEqual(wide);
+	expect(make(sideways, upright)).toEqual(tall);
+	expect(make(exif(tiff("II", [ORIENTATION, 1], [ORIENTATION, 6])))).toEqual(wide);
+	expect(make(exif(tiff("MM", [ORIENTATION, 6], [ORIENTATION, 1])))).toEqual(tall);
+	expect(make(exif(tiff("II", [ORIENTATION, 6, 4])))).toEqual(wide);
+	expect(make(exif(tiff("MM", [ORIENTATION, 6, 4])))).toEqual(wide);
+	expect(make(exif(tiff("II", [ORIENTATION, 6, 3, 2])))).toEqual(wide);
+	expect(make(exif(tiff("II", [ORIENTATION, 6, 3, 1])))).toEqual(tall);
+});
+
+test("an eXIf chunk of a PNG turns it only by an orientation that is a SHORT of count 1, and only when the chunk is whole", () => {
+	let data = pngChunk("IDAT", [0x78, 0x9c]);
+	let wide = { width: 90, height: 30 };
+	let make = (block: number[]) =>
+		dataImageSize(dataUrl(png(90, 30, pngChunk("eXIf", block), data)));
+
+	expect(make(tiff("MM", [ORIENTATION, 6, 4]))).toEqual(wide);
+	expect(make(tiff("II", [ORIENTATION, 6, 3, 2]))).toEqual(wide);
+	expect(make(tiff("MM", [ORIENTATION, 1], [ORIENTATION, 6]))).toEqual(wide);
+	expect(make(tiff("MM", [ORIENTATION, 6], [ORIENTATION, 1]))).toEqual({ width: 30, height: 90 });
+	let whole = png(90, 30, pngChunk("eXIf", tiff("MM", [ORIENTATION, 6])), data);
+	let start = 33;
+	for (let cut = start; cut < start + 8 + tiff("MM", [ORIENTATION, 6]).length; cut++) {
+		expect(dataImageSize(dataUrl(whole.slice(0, cut))), `cut at ${cut}`).toBeUndefined();
+	}
+});
+
+function density(
+	{ x, y, unit = 2, pixels, inFirstDirectory = false }: {
+		x?: number;
+		y?: number;
+		unit?: number;
+		pixels?: [number, number];
+		inFirstDirectory?: boolean;
+	},
+): number[] {
+	let entries: Array<[number, number, number, number[]?]> = [];
+	let rationals: number[] = [];
+	let count = (x === undefined ? 0 : 1) + (y === undefined ? 0 : 1) + 1
+		+ (pixels ? (inFirstDirectory ? 2 : 1) : 0);
+	let afterDirectory = 8 + 2 + 12 * count + 4;
+	for (let [tag, value] of [[0x011a, x], [0x011b, y]] as const) {
+		if (value === undefined) continue;
+		entries.push([tag, 5, afterDirectory + rationals.length]);
+		rationals.push(...be(value, 4), ...be(1, 4));
+	}
+	entries.push([0x0128, 3, 0, [...be(unit, 2), 0, 0]]);
+	let subDirectory: number[] = [];
+	if (pixels && inFirstDirectory) {
+		entries.push([0xa002, 4, pixels[0]], [0xa003, 4, pixels[1]]);
+	} else if (pixels) {
+		entries.push([0x8769, 4, afterDirectory + rationals.length]);
+		subDirectory = [
+			...be(2, 2),
+			...be(0xa002, 2),
+			...be(4, 2),
+			...be(1, 4),
+			...be(pixels[0], 4),
+			...be(0xa003, 2),
+			...be(4, 2),
+			...be(1, 4),
+			...be(pixels[1], 4),
+			...be(0, 4),
+		];
+	}
+	return [
+		...ascii("MM"),
+		...be(42, 2),
+		...be(8, 4),
+		...be(entries.length, 2),
+		...entries.flatMap(([tag, type, value, inline]) => [
+			...be(tag, 2),
+			...be(type, 2),
+			...be(1, 4),
+			...(inline ?? be(value, 4)),
+		]),
+		...be(0, 4),
+		...rationals,
+		...subDirectory,
+	];
+}
+
+test("a JPEG whose EXIF resolution Chromium may apply as a density correction has no size claimed, and any other is its frame", () => {
+	let jpegWith = (block: number[]) =>
+		dataImageSize(dataUrl(jpeg(exif(block), JFIF, frame(0xc0, 18, 6)), "image/jpeg"));
+	let wide = { width: 18, height: 6 };
+
+	for (
+		let block of [
+			density({ x: 144, y: 72, pixels: [9, 6] }),
+			density({ x: 144, y: 72, pixels: [9, 6], inFirstDirectory: true }),
+			density({ x: 144, y: 144, pixels: [9, 3] }),
+			density({ x: 100, y: 72, pixels: [13, 6] }),
+			density({ x: 72, y: 144, pixels: [18, 3] }),
+		]
+	) expect(jpegWith(block), `${block}`).toBeUndefined();
+	for (
+		let block of [
+			density({ x: 144, y: 72 }),
+			density({ x: 144, y: 72, pixels: [18, 6] }),
+			density({ x: 144, y: 72, unit: 1, pixels: [9, 6] }),
+			density({ x: 144, y: 72, unit: 3, pixels: [9, 6] }),
+			density({ x: 144, pixels: [9, 6] }),
+			density({ pixels: [9, 6] }),
+			density({ x: 72, y: 72, pixels: [4000, 3000] }),
+		]
+	) expect(jpegWith(block), `${block}`).toEqual(wide);
+});
+
+test("a frame header may come after the EXIF block or before it, up to the start of the scan", () => {
+	let sideways = exif(tiff("II", [ORIENTATION, 6]));
+
+	expect(
+		dataImageSize(dataUrl(jpeg(JFIF, frame(0xc0, 90, 30), sideways), "image/jpeg")),
+	).toEqual({ width: 30, height: 90 });
+	expect(
+		dataImageSize(
+			dataUrl(
+				[...jpeg(JFIF, frame(0xc0, 90, 30)).slice(0, -4), 0xff, 0xda, 0, 2, ...sideways],
+				"image/jpeg",
+			),
+		),
+	).toEqual({ width: 90, height: 30 });
+	expect(
+		dataImageSize(dataUrl(jpeg(JFIF, frame(0xc0, 90, 30), sideways).slice(0, -8), "image/jpeg")),
+	).toBeUndefined();
+});
+
+test("no beginning of an encoder's file gives a size other than the file's own, only that size or none", () => {
+	let types: Record<string, string> = {
+		avif: "image/avif",
+		bmp: "image/bmp",
+		gif: "image/gif",
+		ico: "image/x-icon",
+		jpg: "image/jpeg",
+		png: "image/png",
+		webp: "image/webp",
+	};
+	let names = [
+		...Object.keys(types).flatMap(
+			extension => [`raster-18x6.${extension}`, `raster-6x18.${extension}`],
+		),
+		"raster-18x6-turned.jpg",
+		"raster-18x6-turned.png",
+		"raster-18x6-turned.avif",
+		"raster-18x6-two-sizes.ico",
+	];
+
+	for (let name of names) {
+		let bytes = readFileSync(new URL(name, FIXTURES));
+		let type = types[name.split(".").pop()!]!;
+		let whole = dataImageSize(dataUrl([...bytes], type));
+		expect(whole, name).toBeDefined();
+		for (let cut = 0; cut < bytes.length; cut++) {
+			let prefix = dataImageSize(dataUrl([...bytes.subarray(0, cut)], type));
+			if (prefix !== undefined) expect(prefix, `${name} cut at ${cut}`).toEqual(whole!);
+		}
+	}
+});
+
+test("a header cut inside a field never gives the size its beginning would, only the size of the whole or none", () => {
+	let tall = bmp(info(90, 70_000));
+	let wide = bmp(info(70_000, 30));
+
+	for (let bytes of [tall, wide]) {
+		let whole = dataImageSize(dataUrl(bytes, "image/bmp"));
+		expect(whole).toEqual(
+			bytes === tall ? { width: 90, height: 70_000 } : { width: 70_000, height: 30 },
+		);
+		for (let cut = 0; cut < bytes.length; cut++) {
+			let prefix = dataImageSize(dataUrl(bytes.slice(0, cut), "image/bmp"));
+			if (prefix !== undefined) expect(prefix, `cut at ${cut}`).toEqual(whole!);
+		}
+	}
 });

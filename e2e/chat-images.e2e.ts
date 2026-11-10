@@ -972,6 +972,26 @@ test("an image written into a message holds the shape its own bytes give from th
 		{ name: "avif, turned by its rotation", src: written("raster-18x6-turned.avif"), ratio: 1 / 3 },
 		{ name: "ico, of two sizes", src: written("raster-18x6-two-sizes.ico"), ratio: 3 },
 		{ name: "jpg named as a png", src: written("raster-18x6.jpg", "image/png"), ratio: 3 },
+		{
+			name: "jpg with two EXIF blocks, the second turning it",
+			src: written("raster-18x6-two-exif.jpg"),
+			ratio: 3,
+		},
+		{
+			name: "jpg whose orientation is not a SHORT",
+			src: written("raster-18x6-exif-long.jpg"),
+			ratio: 3,
+		},
+		{
+			name: "png whose orientation is not a SHORT",
+			src: written("raster-18x6-exif-long.png"),
+			ratio: 3,
+		},
+		{
+			name: "png with a charset parameter",
+			src: written("raster-18x6.png").replace("data:image/png;", "data:image/png;charset=utf-8;"),
+			ratio: 3,
+		},
 		{ name: "png with percent escapes", src: `data:image/png,${percent}`, ratio: 3 },
 	);
 	await seed("# Written\n", {
@@ -1045,10 +1065,18 @@ test("an image written into a message whose shape is not read from its bytes kee
 			broken: false,
 		},
 		{
-			name: "png cut off",
-			src: `data:image/png;base64,${fixture("raster-18x6.png").subarray(0, 40).toString("base64")}`,
+			name: "png that cannot be decoded",
+			src: `data:image/png;base64,${
+				Buffer.from(fixture("raster-18x6.png")).fill(0, 29, 33).toString("base64")
+			}`,
 			fixed: false,
 			broken: true,
+		},
+		{
+			name: "jpg whose EXIF density Chromium applies",
+			src: written("raster-18x6-density.jpg"),
+			fixed: true,
+			broken: false,
 		},
 	];
 	await seed("# Fallback\n", {
@@ -1075,7 +1103,9 @@ test("an image written into a message whose shape is not read from its bytes kee
 		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
 		if (!broken) await expect(figure.locator("img")).toHaveAttribute("src", src);
 	}
-	let cut = await figureBox(all.nth(cases.findIndex(({ name }) => name === "png cut off")));
+	let cut = await figureBox(
+		all.nth(cases.findIndex(({ name }) => name === "png that cannot be decoded")),
+	);
 	expect(Math.abs(cut.frame.width / cut.frame.height / 3 - 1)).toBeLessThan(0.01);
 	let valid = cases.flatMap(({ broken }, index) => broken ? [] : [all.nth(index)]);
 	let before = [];

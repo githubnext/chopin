@@ -22,7 +22,7 @@ const AUTH_PATH = /^\/auth(?:\/|$)/;
 const DATA_IMAGE = new RegExp(
 	`^data:(?:${
 		RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
-	})(?:;base64)?,`,
+	})(?:\\s*;[^;,]*)*\\s*,`,
 	"i",
 );
 

@@ -104,6 +104,43 @@ test("a raster image written into the message loads as it was written, whatever 
 	expect(isDataImage("data:image/svg+xml,<svg/>")).toBe(false);
 });
 
+test("a data address with parameters of its type, or white space around them, is a raster image written into the message as well", () => {
+	for (
+		let src of [
+			"data:image/png;charset=utf-8;base64,iVBORw0KGgo=",
+			"data:image/png;name=a.png;base64,AAAA",
+			"data:image/png; base64,AAAA",
+			"data:image/png ;base64,AAAA",
+			"data:image/png;base64 ,AAAA",
+			"data:image/jpeg;charset=binary,%FF%D8%FF",
+			"data:image/webp;foo;bar=baz;base64,AAAA",
+			"DATA:IMAGE/PNG;CHARSET=UTF-8;BASE64,AAAA",
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "data", url: src });
+		expect(isDataImage(src), src).toBe(true);
+	}
+});
+
+test("parameters never make SVG, markup or another type a raster image", () => {
+	for (
+		let src of [
+			"data:image/svg+xml;charset=utf-8;base64,PHN2Zy8+",
+			"data:image/svg+xml;name=image/png;base64,PHN2Zy8+",
+			"data:image/pngx;charset=utf-8;base64,AAAA",
+			"data:image/png+xml;charset=utf-8;base64,AAAA",
+			"data:text/html;charset=image/png,<script>alert(1)</script>",
+			"data:text/html;image/png;base64,PHNjcmlwdD4=",
+			"data:;image/png;base64,AAAA",
+			"data:image/png;base64",
+			"data:image/png;charset=utf-8",
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "unavailable" });
+		expect(isDataImage(src), src).toBe(false);
+	}
+});
+
 test("script, markup, SVG and any other scheme are never loaded", () => {
 	for (
 		let src of [
