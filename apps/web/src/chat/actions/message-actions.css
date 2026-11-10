@@ -122,6 +122,10 @@
 	pointer-events: auto;
 }
 
+/*
+ * Idle, a touch screen's toolbar has no size and shows nothing, but it is not removed: it stays in
+ * the accessibility tree and a key press reaches it, and a long press or focus brings it up.
+ */
 @media (hover: none) {
 	.chat-message-body {
 		display: flex;
@@ -129,7 +133,10 @@
 	}
 
 	.chat-message-toolbar {
-		display: none;
+		width: 0;
+		height: 0;
+		overflow: hidden;
+		padding: 0;
 	}
 
 	.chat-message-body[data-chat-engaged],
@@ -153,6 +160,10 @@
 		order: -1;
 		display: inline-flex;
 		align-self: flex-end;
+		width: auto;
+		height: auto;
+		overflow: visible;
+		padding: 0.125rem;
 		margin-block: calc(-1 * var(--chat-toolbar-lane)) 0;
 		translate: none;
 		opacity: 1;
