@@ -88,6 +88,15 @@ test("a data address with parameters of its type is drawn, and has its own shape
 	expect(markup).not.toContain("Image can’t be shown");
 });
 
+test("a data address whose type Markdown followed with percent-encoded white space is drawn as written, and has its own shape at the first render", () => {
+	let src = png(90, 30).replace("data:image/png;", "data:image/png%20;");
+	let markup = firstRender({ src, alt: "With a space" });
+
+	expect(frame(markup)).toEqual({ width: "90", height: "30", sized: true });
+	expect(markup).toContain(`src="${src}"`);
+	expect(markup).not.toContain("Image can’t be shown");
+});
+
 test("a size the image part states wins over what the bytes of a data address say", () => {
 	let markup = firstRender({ src: png(90, 30), alt: "Stated", width: 30, height: 90 });
 

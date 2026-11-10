@@ -122,6 +122,50 @@ test("a data address with parameters of its type, or white space around them, is
 	}
 });
 
+test("a raster type that Markdown has followed with percent-encoded white space, as it does a space before a parameter, is a raster image written into the message, loaded as it was written", () => {
+	for (
+		let src of [
+			"data:image/png%20;base64,AAAA",
+			"data:image/png%09;base64,AAAA",
+			"data:image/png%20%20;base64,AAAA",
+			"data:image/png%0a%0B%0c%0D;base64,AAAA",
+			"data:image/png %20\t;charset=utf-8;base64,AAAA",
+			"data:image/png%20,%89PNG",
+			"DATA:IMAGE/PNG%20;BASE64,AAAA",
+			"data:image/jpeg%20;base64,/9j/4AAQ",
+			"data:image/avif%20;base64,AAAAHGZ0eXBhdmlm",
+			"data:image/vnd.microsoft.icon%20;base64,AAABAAEA",
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "data", url: src });
+		expect(isDataImage(src), src).toBe(true);
+	}
+});
+
+test("percent-encoded white space never makes SVG, markup, another type or a different name a raster image", () => {
+	for (
+		let src of [
+			"data:image/svg+xml%20;base64,PHN2Zy8+",
+			"data:image/svg+xml%20;image/png;base64,PHN2Zy8+",
+			"data:image/svg+xml%20;charset=image/png,<svg onload=alert(1)/>",
+			"data:text/html%20;base64,PHNjcmlwdD4=",
+			"data:text/html%09;charset=image/png,<script>alert(1)</script>",
+			"data:image/png%20x;base64,AAAA",
+			"data:image/pngx%20;base64,AAAA",
+			"data:image/png+xml%20;base64,AAAA",
+			"data:image/png%2520;base64,AAAA",
+			"data:image/png%2;base64,AAAA",
+			"data:image/png%20%;base64,AAAA",
+			"data:image/png%20",
+			"data:image/png%20;base64",
+			"data:%20;image/png;base64,AAAA",
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "unavailable" });
+		expect(isDataImage(src), src).toBe(false);
+	}
+});
+
 test("parameters never make SVG, markup or another type a raster image", () => {
 	for (
 		let src of [
@@ -161,6 +205,10 @@ test(
 			["data:image/png" + " ;".repeat(many) + "x", false],
 			["data:image/svg+xml" + " ;".repeat(many) + ",", false],
 			["data:" + "image/png".repeat(many) + ",", false],
+			["data:image/png" + "%20".repeat(many) + ",", true],
+			["data:image/png" + "%20".repeat(many) + "x,", false],
+			["data:image/png" + "%2".repeat(many) + ",", false],
+			["data:image/png" + " %20\\t".repeat(many) + ";base64,AAAA", true],
 		];
 		let outcomes = cases.map(([src, expected]) => [
 			isDataImage(src) === expected,
@@ -178,7 +226,7 @@ test(
 		expect(run.signalCode, run.stderr.toString()).toBeUndefined();
 		expect(run.exitCode, run.stderr.toString()).toBe(0);
 		expect(JSON.parse(run.stdout.toString())).toEqual(
-			Array.from({ length: 12 }, () => [true, true]),
+			Array.from({ length: 16 }, () => [true, true]),
 		);
 	},
 	20_000,

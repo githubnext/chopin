@@ -1160,6 +1160,131 @@ test("a data address whose parameters run long is drawn at its own shape from th
 	expect(await figureBox(figure)).toEqual(before);
 });
 
+function base64Of(markup: string): string {
+	return Buffer.from(markup).toString("base64");
+}
+
+test("a raster data address whose type Markdown has followed with a space or tab is drawn as Markdown encoded it, at its own shape from the first paint, and one a browser cannot decode or that is not a raster image is not", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let base64 = fixture("raster-18x6.png").toString("base64");
+	let drawn = [
+		{
+			name: "space before the parameter",
+			written: `data:image/png ;base64,${base64}`,
+			src: `data:image/png%20;base64,${base64}`,
+		},
+		{
+			name: "tab before the parameter",
+			written: `data:image/png\t;base64,${base64}`,
+			src: `data:image/png%09;base64,${base64}`,
+		},
+		{
+			name: "capitals and two spaces",
+			written: `DATA:IMAGE/PNG  ;BASE64,${base64}`,
+			src: `DATA:IMAGE/PNG%20%20;BASE64,${base64}`,
+		},
+	];
+	let undecodable = [
+		{ name: "space after the marker", written: `data:image/png;base64 ,${base64}` },
+		{
+			name: "marker before another parameter",
+			written: `data:image/png;base64;charset=utf-8,${base64}`,
+		},
+	];
+	let refused = [
+		{
+			name: "svg after a space",
+			written: `data:image/svg+xml ;base64,${
+				base64Of(
+					'<svg xmlns="http://www.w3.org/2000/svg" onload="window.__svgRan = 1"><script>window.__svgRan = 1</script></svg>',
+				)
+			}`,
+		},
+		{
+			name: "html after a space",
+			written: `data:text/html ;base64,${base64Of("<script>window.__svgRan = 1</script>")}`,
+		},
+	];
+	await seed("# Spaces\n", {
+		transcript: oneMessageEachLine(
+			[...drawn, ...undecodable, ...refused].map(({ name, written }) => `![${name}](<${written}>)`)
+				.join("\n"),
+		),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(drawn.length + undecodable.length + refused.length);
+	for (let [index, { name }] of refused.entries()) {
+		let figure = all.nth(drawn.length + undecodable.length + index);
+		await expect(figure.getByText("Image can’t be shown")).toBeVisible();
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect(figure.locator("img")).toHaveCount(0);
+	}
+	for (let [index, { name, src }] of drawn.entries()) {
+		let figure = all.nth(index);
+		await expect(figure.locator("img")).toHaveAttribute("src", src);
+		await expect(figure.locator("img")).toHaveAttribute("alt", name);
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect.poll(async () => (await naturalSize(figure)).width, name).toBe(18);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+	}
+	for (let [index, { name }] of undecodable.entries()) {
+		let figure = all.nth(drawn.length + index);
+		await expect(figure).toHaveAttribute("data-load", "broken");
+		await expect(figure.getByText("Couldn’t load image")).toBeVisible();
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+	}
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	for (let { name } of drawn) {
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / 3 - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+	}
+	for (let { name } of undecodable) {
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / (4 / 3) - 1), `${name} at the first paint`)
+			.toBeLessThan(0.01);
+	}
+	let before = await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))));
+	for (let [index, { frame }] of before.entries()) {
+		expect(Math.abs(frame.width / frame.height / 3 - 1), `${drawn[index]!.name} while it loads`)
+			.toBeLessThan(0.01);
+	}
+
+	await decoding.release();
+	for (let index of drawn.keys()) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "shown");
+	}
+	await settled(all.last());
+	expect(await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))))).toEqual(before);
+
+	let figure = all.nth(0);
+	await figure.hover();
+	let [download] = await Promise.all([
+		page.waitForEvent("download"),
+		figure.getByRole("button", { name: "Download image" }).click(),
+	]);
+	expect(download.suggestedFilename()).toBe("space-before-the-parameter.png");
+	expect(readFileSync((await download.path())!).equals(fixture("raster-18x6.png"))).toBe(true);
+	await figure.getByRole("button", { name: "Copy image" }).click();
+	await expect(figure.getByRole("button", { name: "Copied image" })).toBeVisible();
+	expect(
+		await page.evaluate(async () => {
+			let [item] = await navigator.clipboard.read();
+			let blob = await item!.getType("image/png");
+			return Array.from(new Uint8Array(await blob.arrayBuffer()).slice(0, 4));
+		}),
+	).toEqual([0x89, 0x50, 0x4e, 0x47]);
+	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
+});
+
 test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let script =
