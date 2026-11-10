@@ -16,6 +16,8 @@ export let COPIED_MS = 1500;
 
 const TOOLBAR_MARGIN = 8;
 const SHIFT = "--chat-toolbar-shift";
+const RESERVE = "--chat-toolbar-reserve";
+const TALL = "data-chat-tall";
 
 type Which = "markdown" | "plain";
 
@@ -176,8 +178,9 @@ export let MessageToolbar = memo(function MessageToolbar(
 			let natural = bar.getBoundingClientRect().top - shift;
 			let room = element.getBoundingClientRect().bottom - bar.offsetHeight - natural;
 			let seen = view.getBoundingClientRect().top;
-			// Only a message whose top has scrolled away; one whose top is shown keeps its bar where it is.
-			let wanted = element.getBoundingClientRect().top < seen ? seen + TOOLBAR_MARGIN - natural : 0;
+			// Only a message taller than the pane, whose top has scrolled away; any other is scrolled to.
+			let tall = element.hasAttribute(TALL) && element.getBoundingClientRect().top < seen;
+			let wanted = tall ? seen + TOOLBAR_MARGIN - natural : 0;
 			element.style.setProperty(SHIFT, `${Math.max(0, Math.min(wanted, room))}px`);
 		};
 		let enter = () => {
@@ -199,6 +202,31 @@ export let MessageToolbar = memo(function MessageToolbar(
 			element.removeEventListener("focusout", leave);
 			view.removeEventListener("scroll", place);
 			element.style.removeProperty(SHIFT);
+		};
+	}, [host]);
+
+	// A message taller than the pane gets a column beside its text for the bar, which is kept in view
+	// over it, so the bar covers none of that message's text. It is set from the message's size and the
+	// pane's, never from the pointer, so the text does not move when the bar appears.
+	useEffect(() => {
+		let element = host.current;
+		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
+		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
+		let measure = () => {
+			let bar = element.querySelector<HTMLElement>('[data-slot="message-actions"]');
+			let tall = element.offsetHeight > view.clientHeight;
+			element.toggleAttribute(TALL, tall);
+			if (bar && tall) element.style.setProperty(RESERVE, `${bar.offsetWidth}px`);
+			else element.style.removeProperty(RESERVE);
+		};
+		measure();
+		let observer = new ResizeObserver(measure);
+		observer.observe(element);
+		observer.observe(view);
+		return () => {
+			observer.disconnect();
+			element.removeAttribute(TALL);
+			element.style.removeProperty(RESERVE);
 		};
 	}, [host]);
 
