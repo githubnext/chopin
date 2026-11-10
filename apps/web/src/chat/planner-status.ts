@@ -12,13 +12,14 @@ export const PLANNER_HOW_TO_FIX =
  *
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
- * `cant-start` is not being able to, with why as the machine reported it and what has been tried;
+ * `cant-start` is not being able to, with why as the machine reported it and what has been tried,
+ * and a `starting` one says which launch it waits on (`attempt`) once an earlier one exited;
  * `disconnected` and `held` say the work is kept; `none` says a machine is needed. Only the GitHub
  * login is ever named, never someone else's machine, so another person's machine is "@mona's
  * machine"; the viewer's own machine is named plainly. `status-copy.test.tsx` keeps it so.
  */
 export type PlannerStatus =
-	| { kind: "starting"; text: string }
+	| { kind: "starting"; text: string; attempt?: number }
 	| { kind: "cant-start"; title: string; reason: string; detail: string; attempts: number }
 	| { kind: "disconnected"; text: string }
 	| { kind: "held"; text: string }
@@ -79,7 +80,13 @@ export function plannerStatus(
 		};
 	}
 	let failure = planner.failure;
-	if (!failure) return { kind: "starting", text: `Connecting to ${where}` };
+	if (!failure) {
+		return {
+			kind: "starting",
+			text: `Connecting to ${where}`,
+			...(planner.attempt === undefined ? {} : { attempt: planner.attempt }),
+		};
+	}
 	return {
 		kind: "cant-start",
 		attempts: failure.attempts,

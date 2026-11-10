@@ -31,6 +31,19 @@ test("says what is happening and where while a Planner starts, naming the viewer
 	});
 });
 
+test("carries the launch a starting Planner waits on once an earlier one exited, and none before", () => {
+	expect(
+		plannerStatus({ state: "starting", login: "mona", attempt: 2 }, "Build box"),
+	).toEqual({ kind: "starting", text: "Connecting to Build box", attempt: 2 });
+	let first = plannerStatus({ state: "starting", login: "mona" }, "Build box")!;
+	expect("attempt" in first).toBe(false);
+	// A machine that cannot start is told by what it tried, not by the launch it waits on.
+	expect(plannerStatus({ ...failing(), attempt: 4 }, "Build box")).toMatchObject({
+		kind: "cant-start",
+		attempts: 3,
+	});
+});
+
 test("says nothing while the machine is not known, rather than a name that may be another machine's", () => {
 	expect(plannerStatus({ state: "starting", login: "mona" }, null)).toBeUndefined();
 	expect(plannerStatus({ state: "disconnected", login: "mona" }, null)).toBeUndefined();

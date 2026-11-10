@@ -446,11 +446,13 @@ describe("a Planner backend that keeps failing to start", () => {
 			machineId: laptop.id,
 		});
 
-		// One launch that exited is a transient failure: the document still just says starting.
+		// One launch that exited is a transient failure: the document still just says starting, and
+		// counts the launch it waits on, the second.
 		expect((await laptop.report(failing(channel.id, 1))).status).toBe(200);
 		expect(await runtime.plannerStarting(channel.id)).toEqual({
 			login: "member",
 			machineId: laptop.id,
+			attempt: 2,
 		});
 
 		// The second in a row is not.
@@ -461,6 +463,7 @@ describe("a Planner backend that keeps failing to start", () => {
 		expect(await runtime.plannerStarting(channel.id)).toEqual({
 			login: "member",
 			machineId: laptop.id,
+			attempt: 3,
 			failure: {
 				attempts: 2,
 				reason,

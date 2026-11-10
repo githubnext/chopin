@@ -119,13 +119,15 @@ export declare namespace Session {
 	 * Chopin keeps for it: there is no deadline, and it resumes them when it reconnects
 	 * (see docs/agent-connection.md). `starting` is a paired machine of `login`'s asked to start it, which has yet to
 	 * attach; with `failure`, its backend has exited before attaching more than once in a
-	 * row. Only the GitHub login is named, never its machine or checkout.
+	 * row, and with `attempt`, its backend has exited before attaching at least once, so the launch
+	 * in flight or next is that one. `attempt` is absent until one has, and never a guess. Only the
+	 * GitHub login is named, never its machine or checkout.
 	 */
 	export type PlannerAttachment =
 		| { state: "attached"; login: string }
 		| { state: "held"; login: string; until: string }
 		| { state: "disconnected"; login: string }
-		| { state: "starting"; login: string; failure?: PlannerStartFailure }
+		| { state: "starting"; login: string; failure?: PlannerStartFailure; attempt?: number }
 		| { state: "none" };
 
 	/**
