@@ -581,23 +581,20 @@ nothing. Otherwise the document's machine button carries it (a thin spinner whil
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
 while the Planner is away, and no dot at all where no machine is connected, the same
 bare icon as a button with no machine, never the machine's own green) with its words in
-the button's name and at the top of its menu, and nowhere else: the composer's top edge is left alone,
-as a chat's header, not its text field, carries a contact's state. A
-person with no machine button (no machine paired or shared, a title bar that does not
-show one, a phone whose top bar an open child has taken) has nowhere else to see the
-state, so for them the composer's top edge says every state, and, for a machine that
-cannot be connected to, draws the reason exactly as the machine reported it, except
-while the page's offline notice shows: the page cannot hear the machine then, and the
-notice is the one thing said about the connection, so the strip says nothing and returns
-by itself with the state then known. One
-decision, `plannerPlacement`, chooses this for the button, its menu and the strip, so
-they cannot disagree. A screen reader hears each problem state once as it begins, from
-a live region of the page, and nothing when it clears. While the page's offline notice
-shows, that live region is empty and says nothing new, whatever the state does meanwhile,
-so the notice is the only thing a screen reader hears of the connection; the region
-remembers what it last said, so a state that carried on through the loss is not said
-again when the connection returns, and a different one is said once. Other harnesses
-never send it, and Chat then shows nothing.
+the button's name and at the top of its menu, and as the connection banner at the Chat
+composer's top edge, once, as it changes: _reconnecting_ while a machine is being connected to,
+_dropped_ for a machine that cannot be connected to (with the reason exactly as the machine
+reported it, the attempts and _How to fix_, and a button that asks the machine to try again
+through `chat:wake`), that is offline or that has stepped away (no button: only that machine
+can come back), and, for a person with no machine button, _No machine is connected._ The
+page cannot hear the machine while the room's own connection is lost, so the banner then
+tells that connection alone and tells the machine again, with the state then known, once
+the connection is back. `plannerForBanner` and `connectionStep` decide this, so the button
+and the banner cannot disagree. A screen reader hears each phase once as it begins, from
+one live region of the page, and nothing when it clears; the region remembers the machine
+state it last said, so one that carried on through a loss is not said again when the
+connection returns, and a different one is said once. Other harnesses never send it, and
+Chat then shows nothing.
 
 These words are plain and name none of Chopin's own terms: _Connecting to studio_,
 _Can't connect to studio_, _studio is offline. Last seen 10:31 AM._ for a machine that is away (_Your work is kept._ where no time is known), _studio stepped away.
@@ -615,7 +612,7 @@ run cards carry `disconnected` beside the status they last reported: each reads
 its clock held at the last report; an open card says what it last reported and what
 happens when the Planner returns. A card offers Pause, named as waiting for the Planner
 to reconnect, because Chopin holds it, and no Resume, which it cannot hold. While the
-page's offline notice shows, the cards say nothing of the machine: no **disconnected**, no
+page's connection banner shows, the cards say nothing of the machine: no **disconnected**, no
 note, and a plain Pause, with the status as last reported, a still neutral ring and the
 clock held; the words come back with the connection, as the state then is. Decisions
 stay where they were and stay answerable. **Build plan** says to reconnect the machine
@@ -983,7 +980,7 @@ refusal for a passing reason keeps the message hidden and is asked again after a
 lost connection is asked again on the next one. A message that can
 never be delivered as sent, or that the server turned down for good, says **Couldn't send** on
 itself, with the reason and **Try again** and **Delete**, and never in a strip above the composer. While the
-page's one offline notice shows, that line gives way to it and returns with the connection.
+page's connection banner shows, that line gives way to it and returns with the connection.
 A full queue is not that: the message stays marked as waiting to send. The outbox is used only
 with a server that acknowledges sends (`chatSendAcks`), and only for messages to the machine.
 
