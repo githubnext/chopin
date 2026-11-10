@@ -412,3 +412,193 @@ test("a state is said again when it is entered again after the Planner was healt
 		"Connecting to Box B",
 	]);
 });
+
+const PLANNER_AWAY = plannerStatus({ state: "disconnected", login: "mona" }, "Build box");
+const PLANNER_HELD = plannerStatus({ state: "held", login: "mona", until: AT }, "Build box");
+
+test("a machine that returns after its drop was shown says so, and that the reply kept going only while the same one still runs", () => {
+	for (let planner of [PLANNER_AWAY, PLANNER_HELD]) {
+		let { view } = run(
+			{ planner, turn: "t1", messages: 12 },
+			{ plannerAttached: true, turn: "t1", messages: 14 },
+		);
+		expect(view).toEqual({
+			phase: "resumed",
+			layer: "planner",
+			text: "The machine is back. The reply kept going.",
+			caught: "2 new messages",
+		});
+	}
+});
+
+test("a reply that is gone when the machine returns is said to have ended, never to have kept going", () => {
+	for (let turn of [undefined, "t2"]) {
+		let { view } = run(
+			{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+			{ plannerAttached: true, turn, messages: 13 },
+		);
+		expect(view).toEqual({
+			phase: "resumed",
+			layer: "planner",
+			text: "The machine is back. The reply ended while it was away.",
+			caught: "1 new message",
+		});
+	}
+});
+
+test("no reply running when the machine dropped means nothing is claimed about one on its return", () => {
+	let { view } = run({ planner: PLANNER_AWAY, turn: undefined }, {
+		plannerAttached: true,
+		turn: "t9",
+	});
+	expect(view).toEqual({
+		phase: "resumed",
+		layer: "planner",
+		text: "The machine is back.",
+		caught: "Nothing new while it was away.",
+	});
+});
+
+test("a Planner state that is only withheld or hidden is not a return, and the return is still told once it is real", () => {
+	let gap = run({ planner: PLANNER_AWAY, turn: "t1" }, { planner: undefined, turn: "t1" });
+	expect(gap.view).toEqual({ phase: "online" });
+	let back = step(gap.memory, { plannerAttached: true, turn: "t1" });
+	expect(back.view).toMatchObject({ phase: "resumed", layer: "planner" });
+});
+
+test("a machine that is starting or failing to start after a drop was shown keeps the drop to compare with", () => {
+	let starting = plannerStatus({ state: "starting", login: "mona" }, "Build box");
+	let failing = plannerStatus(
+		{ state: "starting", login: "mona", failure: { attempts: 2, reason: "x", at: AT } },
+		"Build box",
+	);
+	let { view } = run(
+		{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+		{ planner: starting, turn: "t1", messages: 12 },
+		{ planner: failing, turn: "t1", messages: 12 },
+		{ plannerAttached: true, turn: "t1", messages: 12 },
+	);
+	expect(view).toMatchObject({
+		phase: "resumed",
+		text: "The machine is back. The reply kept going.",
+	});
+});
+
+test("a first connection, and a machine that was never shown dropped, is no return", () => {
+	let starting = plannerStatus({ state: "starting", login: "mona" }, "Build box");
+	expect(run({ planner: starting }, { plannerAttached: true }).view).toEqual({ phase: "online" });
+	expect(run({ plannerAttached: true }).view).toEqual({ phase: "online" });
+});
+
+test("no machine told after a drop makes the next attachment a new machine, not a return", () => {
+	let none = plannerStatus({ state: "none" });
+	expect(run({ planner: PLANNER_AWAY }, { planner: none }, { plannerAttached: true }).view)
+		.toEqual({ phase: "online" });
+});
+
+test("a return is told only once the transcript on screen is this socket's own, so a restart waited out in silence claims nothing", () => {
+	let waiting = run(
+		{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+		{ plannerAttached: true, current: false, turn: undefined, messages: 0 },
+	);
+	expect(waiting.view).toEqual({ phase: "online" });
+	let arrived = step(waiting.memory, { plannerAttached: true, turn: "t1", messages: 12 });
+	expect(arrived.view).toMatchObject({
+		phase: "resumed",
+		text: "The machine is back. The reply kept going.",
+		caught: "Nothing new while it was away.",
+	});
+});
+
+test("the machine's return is said briefly and then the banner goes", () => {
+	let back = run({ planner: PLANNER_AWAY }, { plannerAttached: true });
+	expect(back.view.phase).toBe("resumed");
+	expect(connectionStep(expireResumed(back.memory), { ...WELL, plannerAttached: true }).view)
+		.toEqual({ phase: "online" });
+});
+
+test("the machine returning together with the socket is one return, told by the socket", () => {
+	let { view, memory } = run(
+		{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+		{ socket: "lost", turn: "t1", messages: 12 },
+		{ plannerAttached: true, turn: "t1", messages: 13 },
+	);
+	expect(view).toEqual({
+		phase: "resumed",
+		text: "Back. The reply kept going.",
+		caught: "1 new message",
+	});
+	// Nothing more about the machine is left to say once that has gone.
+	expect(
+		connectionStep(expireResumed(memory), { ...WELL, plannerAttached: true, messages: 13 }).view,
+	)
+		.toEqual({ phase: "online" });
+});
+
+test("a machine still away when the socket returns is told after the socket's return, and its own return after that", () => {
+	let sequence = run(
+		{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+		{ socket: "lost", turn: "t1", messages: 12 },
+		{ planner: PLANNER_AWAY, turn: "t1", messages: 12 },
+	);
+	expect(sequence.view).toMatchObject({ phase: "resumed" });
+	let after = step(expireResumed(sequence.memory), { planner: PLANNER_AWAY, turn: "t1" });
+	expect(after.view).toMatchObject({ phase: "dropped", layer: "planner" });
+	expect(step(after.memory, { plannerAttached: true, turn: "t1", messages: 12 }).view)
+		.toMatchObject({
+			phase: "resumed",
+			layer: "planner",
+		});
+});
+
+test("the machine's return is spoken once, and spoken again after a later drop", () => {
+	let away = step(INITIAL_MEMORY, { planner: PLANNER_AWAY });
+	let said = connectionSpeech(NOTHING_SPOKEN, away.view)!;
+	let back = step(away.memory, { plannerAttached: true });
+	let returned = connectionSpeech(said.spoken, back.view)!;
+	expect(returned.said).toBe("The machine is back. Nothing new while it was away.");
+	expect(connectionSpeech(returned.spoken, back.view)).toBeUndefined();
+	expect(connectionSpeech(returned.spoken, { phase: "online" })).toEqual({
+		spoken: NOTHING_SPOKEN,
+		said: "",
+	});
+	// Dropped again, it is a new drop and is said.
+	expect(connectionSpeech(returned.spoken, away.view)?.said).toBe(
+		"Build box is offline. Your work is kept.",
+	);
+});
+
+test("the attempt that reopened the socket is kept through catching up, and never made up", () => {
+	let lostThenBack = run({ socket: "lost", failures: 2 }, { synced: false, reopened: 3 });
+	expect(lostThenBack.view).toEqual({
+		phase: "reconnecting",
+		layer: "sync",
+		text: "Catching up",
+		attempt: 3,
+	});
+	// With no attempt known the count is left out rather than guessed.
+	let unknown = run({ socket: "lost", failures: 2 }, { synced: false });
+	expect(unknown.view).toEqual({ phase: "reconnecting", layer: "sync", text: "Catching up" });
+	let transcript = run({ socket: "lost" }, { current: false, reopened: 1 });
+	expect(transcript.view).toMatchObject({ layer: "sync", attempt: 1 });
+});
+
+test("a machine being connected to shows no attempt count it does not know", () => {
+	let starting = plannerStatus({ state: "starting", login: "mona" }, "Build box");
+	let { view } = step(INITIAL_MEMORY, { planner: starting });
+	expect(view).toMatchObject({ phase: "reconnecting", layer: "planner" });
+	expect("attempt" in view).toBe(false);
+});
+
+test("a return after edits were dropped never says the changes are synced", () => {
+	let { view } = run(
+		{ socket: "lost", messages: 12, lostEdits: 0 },
+		{ messages: 12, lostEdits: 1 },
+	);
+	expect(view).toEqual({ phase: "resumed", text: "Back online.", caught: "" });
+	expect(connectionSpeech(NOTHING_SPOKEN, view)?.said).toBe("Back online.");
+	// Edits dropped in an earlier outage are not this one's.
+	expect(run({ socket: "lost", lostEdits: 1 }, { lostEdits: 1 }).view).toMatchObject({
+		caught: "Your changes are synced",
+	});
+});

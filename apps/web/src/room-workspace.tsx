@@ -1328,6 +1328,10 @@ export function RoomWorkspace(
 		synced: planState.synced,
 		transcript: profile.chat ? transcriptFacts : NO_TRANSCRIPT,
 		planner: profile.chat ? plannerForBanner(plannerNote, hasMachineButton) : undefined,
+		// Only the machine's own word on this socket is a return; a status that is withheld, hidden
+		// by the machine button or from another socket is not.
+		plannerAttached: profile.chat && attachment?.state === "attached",
+		lostEdits: planState.lost ?? 0,
 		plannerHeld: plannerWithheldNow,
 		reconnect: () => wire?.reconnect(),
 		wake: () => {
