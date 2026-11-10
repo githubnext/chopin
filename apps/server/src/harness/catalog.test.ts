@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { atomicThinkingLevels, remoteCatalog } from "./catalog";
+import { atomicThinkingLevels, remoteCatalog, remoteCommands } from "./catalog";
 
 describe("the thinking levels Atomic offers a model", () => {
 	it("offers none for a model that does not reason", () => {
@@ -137,5 +137,32 @@ describe("the catalog of a remote Planner", () => {
 	it("has no default when neither names one", () => {
 		let { default: _, ...models } = reported.models;
 		expect(remoteCatalog({ models }, undefined)!.default).toBeUndefined();
+	});
+});
+
+describe("the commands of a remote Planner", () => {
+	it("are none for a client that reported none", () => {
+		expect(remoteCommands(undefined)).toBeUndefined();
+		expect(remoteCommands({})).toBeUndefined();
+		expect(remoteCommands({ models: { available: [] } })).toBeUndefined();
+		expect(remoteCommands({ commands: [] })).toBeUndefined();
+	});
+
+	it("keep the order, spelling, duplicates and kinds the client gave, and leave a missing description out", () => {
+		expect(remoteCommands({
+			commands: [
+				{ name: "Review", kind: "prompt", description: "" },
+				{ name: "skill:x", kind: "skill" },
+				{ name: "Review", kind: "prompt", description: "again" },
+				{ name: "ship", kind: "Pipeline" },
+				{ name: "", kind: "workflow" },
+			],
+		})).toEqual([
+			{ name: "Review", kind: "prompt", description: "" },
+			{ name: "skill:x", kind: "skill" },
+			{ name: "Review", kind: "prompt", description: "again" },
+			{ name: "ship", kind: "Pipeline" },
+			{ name: "", kind: "workflow" },
+		]);
 	});
 });

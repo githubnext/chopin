@@ -21,6 +21,10 @@
 			"types": "./address.ts",
 			"default": "./address.ts"
 		},
+		"./commands": {
+			"types": "./commands.ts",
+			"default": "./commands.ts"
+		},
 		"./model-choice": {
 			"types": "./model-choice.ts",
 			"default": "./model-choice.ts"

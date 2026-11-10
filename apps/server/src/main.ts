@@ -19,6 +19,7 @@ import { displayTitle, parse, ulid } from "@chopin/dialect";
 import {
 	harnessFor,
 	plannerCatalog,
+	plannerCommands,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
 	shutdownHarnesses,
@@ -1200,6 +1201,15 @@ async function plannerStatus(channelId: string): Promise<PlannerAttachment> {
 const modelChoices: ModelChoiceDeps = {
 	catalog: async channelId =>
 		config.agent ? plannerCatalog(config.harness, channelId, config.model || undefined) : undefined,
+	commands: async channelId => {
+		if (!config.agent) return undefined;
+		let channel = await storage.channels.get(channelId);
+		if (!channel) return undefined;
+		return plannerCommands(config.harness, channelId, {
+			owner: channel.repositoryOwner,
+			name: channel.repositoryName,
+		});
+	},
 	known: channelId => plannerOfferKnown(config.harness, channelId),
 	fellBack: channelId => {
 		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);

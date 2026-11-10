@@ -570,6 +570,75 @@ function listen(run: Run, signal: AbortSignal | undefined): void {
 	void run.done.catch(() => {}).finally(() => signal.removeEventListener("abort", run.stop));
 }
 
+/**
+ * The commands an Atomic session in `cwd` offers as `/name`: its prompt templates, its skills
+ * (named `skill:name`, as Atomic invokes them) and the workflows registered for it. It reads them
+ * from a session built as a Planner's is, in the operator's agent directory and the checkout, and
+ * ends that session at once: nothing is sent to a model. Atomic's own extension commands are not
+ * listed, since a person could not run them from a message.
+ */
+export async function sessionCommands(
+	runtime: ModelRuntime,
+	settings: Pick<AtomicSettings, "extensions">,
+	cwd: string,
+	agentDir = getAgentDir(),
+): Promise<Wire.CommandOption[]> {
+	let operator = JSON.parse(await optionalFile(join(agentDir, "settings.json")) ?? "{}");
+	let settingsManager = await fullSettings(operator, cwd);
+	let loader = new DefaultResourceLoader({
+		cwd,
+		agentDir,
+		settingsManager,
+		additionalExtensionPaths: [...settings.extensions ?? []],
+	});
+	await loader.reload();
+	let { session } = await createAgentSession({
+		cwd,
+		agentDir,
+		modelRuntime: runtime,
+		fallbackModels: [],
+		sessionManager: SessionManager.inMemory(cwd),
+		settingsManager,
+		resourceLoader: loader,
+	});
+	try {
+		let commands: Wire.CommandOption[] = [];
+		for (let template of session.promptTemplates) {
+			commands.push({ name: template.name, description: template.description, kind: "prompt" });
+		}
+		for (let skill of loader.getSkillCatalog?.().commands ?? []) {
+			commands.push({
+				name: `skill:${skill.name}`,
+				description: skill.description,
+				kind: "skill",
+			});
+		}
+		let workflow = session.getToolDefinition("workflow");
+		if (workflow) {
+			let listed = await workflow.execute(
+				"chopin-commands",
+				{ action: "list" } as never,
+				undefined,
+				undefined,
+				session.extensionRunner.createContext() as never,
+			);
+			let items = (JSON.parse(resultText(listed)) as { items?: unknown }).items;
+			for (let item of Array.isArray(items) ? items : []) {
+				let { name, description } = item as { name?: unknown; description?: unknown };
+				if (typeof name !== "string") continue;
+				commands.push({
+					name,
+					...(typeof description === "string" ? { description } : {}),
+					kind: "workflow",
+				});
+			}
+		}
+		return commands;
+	} finally {
+		await session.dispose();
+	}
+}
+
 /** Host-process `HarnessV1` implementation over `@bastani/atomic`. */
 export function createAtomicAdapter(
 	settings: AtomicSettings,
@@ -577,6 +646,8 @@ export function createAtomicAdapter(
 	shutdown(): Promise<void>;
 	/** What a document's Planner can be set to run; see `atomicCatalog`. */
 	catalog(defaultModel: string | undefined): Promise<Wire.ModelCatalog>;
+	/** The commands a Planner working in `cwd` offers; see `sessionCommands`. */
+	commands(cwd: string): Promise<Wire.CommandOption[]>;
 } {
 	if (!ATOMIC_AUTH_MODES.includes(settings.auth)) {
 		throw new Error(`HARNESS_AUTH ${settings.auth} is not a supported atomic authentication mode`);
@@ -985,6 +1056,10 @@ export function createAtomicAdapter(
 
 		async catalog(defaultModel) {
 			return atomicCatalog(await (runtime ??= createRuntime(settings)), settings, defaultModel);
+		},
+
+		async commands(cwd) {
+			return sessionCommands(await (runtime ??= createRuntime(settings)), settings, cwd);
 		},
 
 		async shutdown() {

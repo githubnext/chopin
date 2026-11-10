@@ -294,7 +294,21 @@ export declare namespace Chat {
 		choice?: ModelChoice;
 		/** The chosen model's catalog name, kept when the model is no longer offered. */
 		modelName?: string;
+		/**
+		 * What `/` offers beyond Chopin's own commands: the commands the document's agent reports,
+		 * in the order, spelling and with the duplicates it reported them. Absent where it
+		 * reports none (an older client, or a harness with no commands), and the composer then
+		 * offers only Chopin's own.
+		 */
+		commands?: CommandOption[];
 	};
+
+	/**
+	 * One command the document's agent offers. `kind` says what it is, as the agent defines it:
+	 * `skill`, `prompt` (a prompt template) and `workflow` are the ones Chopin knows. A command
+	 * is run as `/name args`, except a workflow, which is asked for by name.
+	 */
+	export type CommandOption = { name: string; description?: string; kind: string };
 
 	/**
 	 * Sent to everyone in the room when a turn could not read the document's model choice, or the

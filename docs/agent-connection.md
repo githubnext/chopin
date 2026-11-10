@@ -610,9 +610,12 @@ level can therefore never be chosen, and a turn never carries one.
   empty `id` is ignored, and an empty `thinkingLevel` is dropped from it.
 - **`commands`** is reserved for the commands a client offers, such as skills,
   prompt templates and workflows: `name`, `description` and `kind`, a string the client defines
-  (`skill`, `prompt`, `workflow`). Chopin keeps them with the catalog, as written, and does not show
-  them yet. Send them only when they are real: a client that
-  has none omits the field.
+  (`skill`, `prompt`, `workflow`). Chopin keeps them with the catalog, as written (order, spelling,
+  repeated entries and a missing `description` included), and tells the room's composers what the
+  attached client holds in the `commands` of `chat:model`. They are the attached client's alone:
+  nothing a client reported is offered once it has left, and another machine's are never sent to
+  this document. Send them only when they are real: a client that has none omits the field, and
+  its composer then offers Chopin's own commands only.
 
 A person's choice reaches the client in the next turn: `model` is the chosen model's `id`, and
 `thinkingLevel` one of that model's levels (or the default model's, when no model was chosen),

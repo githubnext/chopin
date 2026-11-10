@@ -70,3 +70,20 @@ export function remoteCatalog(
 			: {}),
 	};
 }
+
+/**
+ * The commands an attached client reported, for the browser, in the order, spelling and with the
+ * duplicates it gave them. None reported, or none left in the list, is no commands: `/` then offers
+ * only Chopin's own.
+ */
+export function remoteCommands(
+	reported: CapabilityCatalog | undefined,
+): Wire.CommandOption[] | undefined {
+	let commands = reported?.commands;
+	if (!commands?.length) return undefined;
+	return commands.map(command => ({
+		name: command.name,
+		kind: command.kind,
+		...(command.description !== undefined ? { description: command.description } : {}),
+	}));
+}
