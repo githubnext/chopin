@@ -493,10 +493,6 @@ export function resultText(result: unknown): string {
 	return serialize(result);
 }
 
-/**
- * A finished tool's result, with the images it made kept as content blocks Chat shows. A file the
- * Planner read is not an image it made.
- */
 export function resultWithImages(result: unknown, toolName: string): NonNullable<unknown> {
 	let content = (result as { content?: unknown } | null)?.content;
 	let made = toolName !== "read" && Array.isArray(content)
