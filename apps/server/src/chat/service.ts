@@ -305,9 +305,7 @@ export function workingFor(chat: Chat | undefined, thread: string, channel?: str
 
 export type TurnImages = {
 	work: Promise<void>;
-	/** The entry holding the turn's images. */
 	entry?: string;
-	/** Tool calls whose images were taken already. */
 	calls: Set<string>;
 };
 
@@ -379,7 +377,6 @@ export type Chat = {
 	writing?: string;
 	/** The dedicated entry collecting tool calls for this turn. */
 	tooling?: string;
-	/** The running turn's images; a turn's transcript is saved only once their work settles. */
 	turnImages?: TurnImages;
 	/** Pending removal of the agent's cursor, cancelled if it edits again. */
 	lingering?: ReturnType<typeof setTimeout>;
@@ -3739,7 +3736,6 @@ function turnImages(chat: Chat): TurnImages {
 	return chat.turnImages ??= { work: Promise.resolve(), calls: new Set() };
 }
 
-/** Waits for the ending turn's images; any that settle later belong to no turn and are not shown. */
 export async function endTurnImages(chat: Chat): Promise<void> {
 	let images = chat.turnImages;
 	if (!images) return;

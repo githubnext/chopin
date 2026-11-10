@@ -354,7 +354,6 @@ export const toolImageSchema = z.object({
 	caption: z.string().optional().catch(undefined),
 });
 
-/** A tool result that carries `content` blocks, some of them images. */
 export const toolContentSchema = z.object({
 	content: z.array(z.unknown()),
 });
