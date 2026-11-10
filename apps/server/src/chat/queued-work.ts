@@ -17,18 +17,24 @@ export type Queued = {
 	job?: { job: { kind: ConversationPlan.JobKind } };
 };
 
-const JOBS: Record<ConversationPlan.JobKind, string> = {
-	heading: "Refreshing the document's title",
+const JOBS: Record<Exclude<ConversationPlan.JobKind, "heading">, string> = {
 	refine: "Preparing a decision suggestion",
 	suggest: "Preparing a decision suggestion",
 	prose: "Linking a decision to the document's text",
 	"decision-followup": "Re-checking decisions against the document",
 };
 
-/** One waiting turn as clients see it. */
-export function project(item: Queued): Wire.Waiting {
+/**
+ * One waiting turn as clients see it, or none for a document's title being refreshed: it runs
+ * whenever a first message is saved and ends in moments, so it is never a place in the queue that
+ * somebody waits behind.
+ */
+export function project(item: Queued): Wire.Waiting | undefined {
 	if (item.job) {
-		return { id: item.id, handle: item.handle, kind: "job", text: JOBS[item.job.job.kind] };
+		let kind = item.job.job.kind;
+		return kind === "heading"
+			? undefined
+			: { id: item.id, handle: item.handle, kind: "job", text: JOBS[kind] };
 	}
 	if (item.draft) {
 		return { id: item.id, handle: item.handle, kind: "draft", text: "Draft of the build tasks" };

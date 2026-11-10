@@ -56,14 +56,18 @@ describe("what the queue says of each kind of waiting turn", () => {
 			kind: "followup",
 			text: "Automatic follow-up",
 		});
-		for (
-			let kind of ["heading", "refine", "suggest", "prose", "decision-followup"] as const
-		) {
+		for (let kind of ["refine", "suggest", "prose", "decision-followup"] as const) {
 			let shown = project({ id: kind, handle: "chopin", text: prompt, job: { job: { kind } } });
 			expect(shown).toMatchObject({ kind: "job", handle: "chopin" });
-			expect(shown.text).toMatch(/^[A-Z][^.]+[a-z]$/);
+			expect(shown!.text).toMatch(/^[A-Z][^.]+[a-z]$/);
 			expect(JSON.stringify(shown)).not.toContain("SECRET");
 		}
+	});
+
+	it("shows no place for a title being refreshed, which is over in moments", () => {
+		expect(
+			project({ id: "h", handle: "chopin", text: "x", job: { job: { kind: "heading" } } }),
+		).toBeUndefined();
 	});
 
 	it("is a message before it is a thread: a typed message about a thread is still the person's", () => {

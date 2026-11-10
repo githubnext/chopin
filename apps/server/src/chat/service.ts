@@ -740,7 +740,7 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * it is in plain words instead.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.map(project);
+	return chat.waiting.flatMap(item => project(item) ?? []);
 }
 
 function queued(chat: Chat, server: Server<SocketData>, room: string): void {
