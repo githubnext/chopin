@@ -331,7 +331,7 @@ opened stays sent and waits to be tried again. The outbox sends one message at a
 time, oldest first, once the current connection's transcript has arrived, and only
 to a server that acknowledges sends. A refused send or a `failed` entry says
 "Couldn't send" on the message with Try again and Delete, never in a strip above
-the composer, and not while the page's offline notice shows. A refusal with a passing reason is not a
+the composer, and not while the page's connection banner shows. A refusal with a passing reason is not a
 refusal of the message: a full queue behind a running turn (`planner-queue-full`, twenty requests; a
 machine that is away has no bound, and keeps every request until it is back, as a chat app keeps
 a message for someone offline) or a storage, room or authorization trouble that will pass
@@ -555,8 +555,8 @@ so merge ranges from all mounted editors before replacing a registry entry.
   `refused()` so a proxy's 4xx cannot be mistaken for it. A request waiting when
   the 1012 arrives rejects as `WireLost` with `restarting` set; only a caller whose
   request carries its own identity, as `chat:send` does, may send it again quietly.
-  For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the document's one
-  offline notice stays away, and every other surface that speaks of a lost connection
+  For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the page's one
+  connection banner stays away, and every other surface that speaks of a lost connection
   waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both. What the
   page draws holds through that quiet too (`readsConnected` for Build plan and the editors'
   controls, `quietRestart` for Chat's hint and composer): a control that comes and goes with the
