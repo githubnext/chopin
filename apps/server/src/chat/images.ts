@@ -19,7 +19,6 @@ const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$
 
 function contentBlocks(output: unknown): unknown[] | undefined {
 	if (typeof output === "string") {
-		if (!output.startsWith("{") || !output.includes('"content"')) return undefined;
 		try {
 			output = JSON.parse(output);
 		} catch {
