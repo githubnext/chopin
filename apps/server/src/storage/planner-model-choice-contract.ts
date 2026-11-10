@@ -50,6 +50,28 @@ export function plannerModelChoiceContract(name: string, factory: StorageFactory
 			}
 		});
 
+		test("keeps a model and a level exactly as written, whatever their spelling or length", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				// The catalog a harness reports is not bounded, so a person can choose what it lists.
+				for (
+					let [model, thinkingLevel] of [
+						[`acme/${"m".repeat(5_000)}`, "extra high"],
+						['with space \n and "quotes"', "\u4f4e"],
+						["", ""],
+						["acme/small", "x".repeat(10_000)],
+					] as const
+				) {
+					let choice = { channelId, model, thinkingLevel, userId, updatedAt: AT };
+					await storage.plannerModelChoices.put(lease, choice);
+					expect(await storage.plannerModelChoices.get(channelId)).toEqual(choice);
+				}
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("refuses a choice for a document or a person that does not exist, and a stale writer", async () => {
 			let storage = await openedStorage(factory);
 			try {
