@@ -497,6 +497,35 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	await client.detach();
 });
 
+test("leaves the popover from the level an arrow key chose, even when Tab follows at once", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	// A busy page runs animation frames late. Here they come a second late, so whatever waits for
+	// the next frame has not happened when the next key arrives.
+	await page.addInitScript(() => {
+		let frame = window.requestAnimationFrame.bind(window);
+		window.requestAnimationFrame = callback =>
+			frame(() => setTimeout(() => callback(performance.now()), 1_000));
+	});
+	await page.reload();
+	await ready(page);
+	let { client } = await attachClient(room, CATALOG);
+	await trigger(page).press("Enter");
+	await search(page).fill("deep");
+	await search(page).press("Enter");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Deep");
+	await trigger(page).press("Enter");
+	await expect(search(page)).toBeFocused();
+	await search(page).press("Tab");
+	await expect(level(page, "Default")).toBeFocused();
+	await page.keyboard.press("ArrowRight");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning low");
+	await page.keyboard.press("Tab");
+	await expect(popover(page)).toHaveCount(0);
+	await client.detach();
+});
+
 test("lists a catalog that repeats a model or a level as the client reported it", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
