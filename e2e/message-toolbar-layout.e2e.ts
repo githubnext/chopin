@@ -461,6 +461,59 @@ test("on a desktop the toolbar kept in view on a message taller than the viewpor
 	}
 });
 
+test("on a desktop a message that is 13 px shorter than the pane, scrolled until its top is 78 px above it, still has its toolbar in the pane and clear of its text", async ({ join, seed }) => {
+	let almost = [
+		{ id: "n1", author: { kind: "member", handle: "ben" }, text: "Before it.", ts: 1_700_000_001 },
+		{
+			id: "n2",
+			author: { kind: "agent" },
+			text: Array.from({ length: 4 }, (_, index) => `Paragraph ${index + 1}: ${PARAGRAPH}`).join(
+				"\n\n",
+			),
+			ts: 1_700_000_002,
+		},
+		...Array.from({ length: 6 }, (_, index) => ({
+			id: `n${index + 3}`,
+			author: { kind: "member", handle: "ben" },
+			text: `After it, line ${index + 1}.`,
+			ts: 1_700_000_003 + index,
+		})),
+	];
+	await seed("# Layout\n", { transcript: almost });
+	let page = await join("ana");
+	let target = message(page, "n2");
+	let bar = toolbar(target);
+	let size = page.viewportSize()!;
+	let [view, box] = await Promise.all([scroller(page).boundingBox(), target.boundingBox()]);
+	await page.setViewportSize({
+		width: size.width,
+		height: Math.round(size.height + box!.height + 13 - view!.height),
+	});
+	// The pane is 13 px taller than the message is before any toolbar column is set aside for it.
+	await expect.poll(async () => Math.round((await scroller(page).boundingBox())!.height))
+		.toBe(Math.round(box!.height + 13));
+	let pane = (await scroller(page).boundingBox())!;
+	await scroller(page).evaluate((element, wanted) => {
+		let top = element.querySelector('[data-chat-message-id="n2"]')!.getBoundingClientRect().top
+			- element.getBoundingClientRect().top;
+		element.scrollTop += top + wanted;
+	}, 78);
+	let seen = (await target.boundingBox())!;
+	expect(Math.round(pane.y - seen.y)).toBe(78);
+
+	await page.mouse.move(0, 0);
+	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+	await expect(bar).toHaveCSS("opacity", "1");
+	await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(pane.y);
+	await expect.poll(() => coveredText(bar, "[data-chat-message-id]")).toEqual([]);
+	let first = (await bar.getByRole("button").first().boundingBox())!;
+	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
+	await expect(bar).toHaveCSS("opacity", "1");
+	expect(
+		await bar.getByRole("button").first().evaluate(element => element.matches(":hover")),
+	).toBe(true);
+});
+
 test("on a phone a long press in the middle of a message taller than the screen keeps the toolbar on screen, with every button a touch target", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);

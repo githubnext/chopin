@@ -214,7 +214,13 @@ export let MessageToolbar = memo(function MessageToolbar(
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let measure = () => {
 			let bar = element.querySelector<HTMLElement>('[data-slot="message-actions"]');
-			let tall = element.offsetHeight > view.clientHeight;
+			// Tall is not only taller than the pane: a message that cannot be shown whole with its bar,
+			// which hangs above its top, can be scrolled until its top is out and its bar with it.
+			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
+			let hang = bar
+				? element.getBoundingClientRect().top - (bar.getBoundingClientRect().top - shift)
+				: 0;
+			let tall = element.offsetHeight + Math.max(0, hang) > view.clientHeight;
 			element.toggleAttribute(TALL, tall);
 			if (bar && tall) element.style.setProperty(RESERVE, `${bar.offsetWidth}px`);
 			else element.style.removeProperty(RESERVE);
