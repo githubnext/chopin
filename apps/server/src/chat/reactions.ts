@@ -2,26 +2,8 @@ import type { Chat as Wire, Request } from "@chopin/protocol";
 
 import { broadcast, fail, PASSING, reply } from "../wire";
 import type { Socket } from "../wire";
-import { MAX_MESSAGE_BYTES } from "./limits";
 import type { Room } from "./service";
 
-/**
- * The one resource bound: everything the reactions to a message hold (each emoji and each handle)
- * may take as many bytes as the message itself may, `MAX_MESSAGE_BYTES`. No emoji is refused for
- * its form or its length on its own; a sequence of any length is kept as sent.
- */
-export const MAX_REACTION_BYTES = MAX_MESSAGE_BYTES;
-
-export function reactionBytes(reactions: readonly Wire.Reaction[]): number {
-	return reactions.reduce(
-		(total, reaction) =>
-			total + Buffer.byteLength(reaction.emoji)
-			+ reaction.handles.reduce((sum, handle) => sum + Buffer.byteLength(handle), 0),
-		0,
-	);
-}
-
-/** The reactions after one person's emoji is added or taken back, in the order first used. */
 export function toggle(
 	reactions: readonly Wire.Reaction[] | undefined,
 	handle: string,
@@ -52,14 +34,12 @@ export function toggle(
 	};
 }
 
-/** Whether a message may carry reactions: a person's or the Planner's, never a system notice. */
 export function reactable(entry: Wire.Entry | undefined): entry is Wire.Entry {
 	return !!entry && entry.author.kind !== "system";
 }
 
 const INTENTS = new Set(["confused", "disagree", "approve", "ack", "more"]);
 
-/** Saved reactions are read back strictly: a malformed list is a malformed transcript. */
 export function validateReactions(entry: Wire.Entry): void {
 	let kept = entry as Wire.Entry & { viaReaction?: unknown; answeredIntents?: unknown };
 	if (
@@ -94,12 +74,8 @@ export function validateReactions(entry: Wire.Entry): void {
 		) throw new Error("hosted channel has invalid chat reactions");
 		emojis.add(reaction!.emoji);
 	}
-	if (reactionBytes(reactions as Wire.Reaction[]) > MAX_REACTION_BYTES) {
-		throw new Error("hosted channel has invalid chat reactions");
-	}
 }
 
-/** What a change of reactions tells whatever may answer it; called only once it is saved. */
 export type Reacted = {
 	entry: Wire.Entry;
 	emoji: string;
@@ -108,13 +84,6 @@ export type Reacted = {
 	ws: Socket;
 };
 
-/**
- * Add or take back the sender's reaction to a message.
- *
- * Taken after every send already admitted, so a reaction never overtakes the message it is to,
- * and saved before anyone hears of it. The caller has already checked that the sender may read
- * the document.
- */
 export function react(
 	context: Room,
 	ws: Socket,
@@ -153,10 +122,7 @@ async function reactNow(
 	let next = toggle(entry.reactions, handle, msg.emoji, msg.on);
 	let answer = { kind: "chat:react", ts: 0, id: msg.id, emoji: msg.emoji, on: msg.on } as const;
 	if (!next.changed) return reply(ws, msg.rid, answer);
-	if (msg.on && reactionBytes(next.reactions) > MAX_REACTION_BYTES) {
-		return fail(ws, msg.rid, "this message has as many reactions as it can take");
-	}
-	// The saved transcript carries the new list before the live one does.
+	// Persistence before publication: the saved transcript carries the new list before the live one.
 	await context.persist(() => ({
 		entries: chat.entries.map(value =>
 			value === entry
