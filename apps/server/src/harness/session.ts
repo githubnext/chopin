@@ -21,6 +21,7 @@ import {
 import { createHumanInput, PendingInputs } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
+import { startingTurn } from "./turn-level";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
@@ -335,22 +336,21 @@ export async function openPlannerSession(
 					// The remote turn aborts it when the turn ends or the link drops mid-tool.
 					let hostTools = remote ? new AbortController() : undefined;
 					if (remote) remote.hostTools = hostTools;
-					// A level is for one turn: each turn sets it, or clears the last one's.
-					if (planner) planner.thinkingLevel = choice?.thinkingLevel;
-					if (remote) remote.thinkingLevel = choice?.thinkingLevel;
-					return agent.stream({
-						session: active,
-						prompt,
-						abortSignal,
-						options: {
-							...channel,
-							...(choice?.model ? { model: choice.model } : {}),
-							instructions,
-							owner: current,
-							githubTools: tools,
-							...(hostTools ? { toolSignal: hostTools.signal } : {}),
-						},
-					});
+					// The level is on this turn alone, as the model is: nothing is left for the next one.
+					return startingTurn(choice?.thinkingLevel, () =>
+						agent.stream({
+							session: active,
+							prompt,
+							abortSignal,
+							options: {
+								...channel,
+								...(choice?.model ? { model: choice.model } : {}),
+								instructions,
+								owner: current,
+								githubTools: tools,
+								...(hostTools ? { toolSignal: hostTools.signal } : {}),
+							},
+						}));
 				},
 				destroy: () =>
 					stopped ??= (async () => {

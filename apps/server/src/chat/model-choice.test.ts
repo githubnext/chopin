@@ -355,9 +355,10 @@ describe("what the next turn runs", () => {
 	});
 });
 
-/** A Planner that records which model each turn asked for. */
+/** A Planner that records which model and thinking level each turn asked for. */
 function recordingPlanner() {
 	let models: Array<string | undefined> = [];
+	let levels: Array<string | undefined> = [];
 	let fake: HarnessV1 = {
 		specificationVersion: "harness-v1",
 		harnessId: "model-choice",
@@ -368,6 +369,7 @@ function recordingPlanner() {
 				isResume: false,
 				async doPromptTurn(options) {
 					models.push(options.model);
+					levels.push((options as { thinkingLevel?: string }).thinkingLevel);
 					options.emit({ type: "text-start", id: "reply" });
 					options.emit({ type: "text-delta", id: "reply", delta: "Done." });
 					options.emit({ type: "text-end", id: "reply" });
@@ -398,7 +400,7 @@ function recordingPlanner() {
 			};
 		},
 	};
-	return { fake, models };
+	return { fake, models, levels };
 }
 
 describe("a Planner turn", () => {
@@ -407,7 +409,7 @@ describe("a Planner turn", () => {
 	) {
 		let opened = await openPlan("Related prose.\n");
 		let identity = await authenticatedMemory(opened);
-		let { fake, models } = recordingPlanner();
+		let { fake, models, levels } = recordingPlanner();
 		identity.context.modelChoice = picked;
 		identity.context.openPlannerSession = (owner, channel) =>
 			openPlannerSession(owner, channel, {
@@ -447,7 +449,7 @@ describe("a Planner turn", () => {
 			identity.revokeAll();
 			await Plan.close(opened.plan);
 		};
-		return { opened, send, models, said, finish };
+		return { opened, send, models, levels, said, finish };
 	}
 
 	test("runs the chosen model, and the harness's default when nobody chose", async () => {
@@ -462,6 +464,35 @@ describe("a Planner turn", () => {
 			expect(models).toEqual([undefined, "acme/large", undefined]);
 		} finally {
 			await finish();
+		}
+	});
+
+	test("puts the chosen thinking level on the turn, and none when nobody chose one", async () => {
+		let choice: { model?: string; thinkingLevel?: string } = {};
+		let { send, levels, finish } = await room(async () => choice);
+		try {
+			await send("first");
+			choice = { model: "acme/large", thinkingLevel: "high" };
+			await send("second");
+			choice = { thinkingLevel: "low" };
+			await send("third");
+			choice = {};
+			await send("fourth");
+			expect(levels).toEqual([undefined, "high", "low", undefined]);
+		} finally {
+			await finish();
+		}
+	});
+
+	test("keeps a level to its own document's turn when two turns run at once", async () => {
+		let first = await room(async () => ({ thinkingLevel: "high" }));
+		let second = await room(async () => ({ thinkingLevel: "low" }));
+		let third = await room(async () => ({}));
+		try {
+			await Promise.all([first.send("one"), second.send("two"), third.send("three")]);
+			expect([first.levels, second.levels, third.levels]).toEqual([["high"], ["low"], [undefined]]);
+		} finally {
+			await Promise.all([first.finish(), second.finish(), third.finish()]);
 		}
 	});
 

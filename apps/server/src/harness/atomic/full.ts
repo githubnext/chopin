@@ -30,11 +30,6 @@ export type FullPlanner = {
 	rootOf?: (runId: string) => string;
 	/** Woken on every change to `runs`. */
 	waiters?: Set<() => void>;
-	/**
-	 * The thinking level a person chose for the next turn, from the catalog's levels for its model;
-	 * absent runs the session's own. The turn applies it to the session and the model it runs.
-	 */
-	thinkingLevel?: string;
 	/** The tools Atomic offers the running turn, set before its first stream part. */
 	activeTools?: readonly string[];
 	/**
