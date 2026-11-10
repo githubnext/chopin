@@ -6,9 +6,11 @@ import type { ConnectionView } from "./connection-phase";
  * The room's socket and the document's sync are the cause of anything the connection cut off, so
  * their banner is the whole slot and a refused send or a failed reply waits behind it. A Planner
  * that is away or absent is another fact: it shows beside a message the server refused or a reply
- * that failed, which it did not cause. The one exception is a machine that dropped (held or
- * disconnected), whose banner already tells why a reply failed, and a retry cannot reach it: that
- * reply's own line stays in the transcript until its banner is drawn. Where the composer is not
+ * that failed, which it did not cause. The one exception is a reply that failed as its machine
+ * dropped (held or disconnected): the machine's banner tells why, and a retry cannot reach it, so
+ * that reply's own line stays in the transcript until its banner is drawn. A reply whose failure
+ * was already shown (`shown`) before the machine dropped failed for another cause, and keeps its
+ * banner and Retry beside the machine's. Where the composer is not
  * drawn (an archived or read-only document) there is no slot, and nothing leaves the transcript.
  */
 export type BannerSlot = {
@@ -25,12 +27,13 @@ export function bannerSlot(
 	send: boolean,
 	failure: boolean,
 	composer = true,
+	shown = false,
 ): BannerSlot {
 	if (!composer) return { connection: false, quietsNotices: false };
-	let shown = view && view.phase !== "online" ? view : undefined;
-	if (shown && shown.layer !== "planner") return { connection: true, quietsNotices: true };
-	let kind = shown && "plannerKind" in shown ? shown.plannerKind : undefined;
-	let machineDropped = kind === "held" || kind === "disconnected";
-	let lead: BannerSlot["lead"] = send ? "send" : failure && !machineDropped ? "failure" : undefined;
-	return { ...(lead ? { lead } : {}), connection: !!shown, quietsNotices: !!lead };
+	let told = view && view.phase !== "online" ? view : undefined;
+	if (told && told.layer !== "planner") return { connection: true, quietsNotices: true };
+	let kind = told && "plannerKind" in told ? told.plannerKind : undefined;
+	let droppedWithIt = (kind === "held" || kind === "disconnected") && !shown;
+	let lead: BannerSlot["lead"] = send ? "send" : failure && !droppedWithIt ? "failure" : undefined;
+	return { ...(lead ? { lead } : {}), connection: !!told, quietsNotices: !!lead };
 }
