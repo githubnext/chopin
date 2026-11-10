@@ -186,7 +186,7 @@ test("a message the machine could not take says so as the server did, and points
 	expect(waiting).toEqual({
 		kind: "send",
 		title: "Still connecting to @mona's machine. Try again in a moment.",
-		retry: true,
+		retry: false,
 		link: { label: "Open machines", href: "/machines" },
 	});
 });
