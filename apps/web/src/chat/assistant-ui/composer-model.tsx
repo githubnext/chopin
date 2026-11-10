@@ -123,8 +123,9 @@ type TriggerProps = {
 };
 
 /**
- * The control that names the model that will run. On a phone it is the icon alone, its words in
- * the accessible name. It never manages its own open state: the caller owns both.
+ * The control that names the model that will run. On a phone it is the icon and the short name,
+ * the level and chevron left to the accessible name. It never manages its own open state: the
+ * caller owns both.
  */
 export function ComposerModelTrigger(props: TriggerProps) {
 	return (
