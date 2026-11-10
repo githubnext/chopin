@@ -552,6 +552,8 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	// The catalog no longer lists it, so it is named by the id the client gave it.
 	let gone = "acme/large is no longer available, so Chopin used its default model.";
 	await expect(trigger(page)).toHaveAccessibleName(`Model: Small, ${gone}`);
+	// The tooltip stays short: the strip above the composer already says why.
+	await expect(trigger(page)).toHaveAttribute("title", "Model: Small");
 	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
 	await shoot(chat(page), "model-picker-gone-desktop");
 	await openPicker(page);
