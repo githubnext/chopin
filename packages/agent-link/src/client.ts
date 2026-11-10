@@ -274,9 +274,8 @@ type RunsReport = { active: string[]; paused: string[]; cards: LinkRun[] };
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
 function decodedBytes(data: string): number {
-	let clean = data.replace(/\s+/g, "");
-	let padding = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
-	return Math.max(1, Math.floor(clean.length / 4) * 3 - padding);
+	let clean = data.replace(/\s+/g, "").replace(/={1,2}$/, "");
+	return Math.max(1, Math.floor(clean.length * 3 / 4));
 }
 
 function fitImages(message: ClientMessageOf<"part">): ClientMessageOf<"part"> {

@@ -842,7 +842,8 @@ already have:
 ] }
 ```
 
-- `data` is the image's bytes in standard base64; `mimeType` is their type:
+- `data` is the image's bytes in standard base64, with or without its `=` padding;
+  `mimeType` is their type:
   `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/avif`, `image/bmp`
   or `image/x-icon`. The usual other names, such as `image/jpg`, `image/apng`,
   `image/x-ms-bmp` and `image/vnd.microsoft.icon`, are read as the type their
