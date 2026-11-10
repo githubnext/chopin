@@ -67,7 +67,7 @@ import {
 	filterCommands,
 } from "./commands";
 import { MentionPicker } from "./mention-picker";
-import { fallbackNotice } from "./model-picker-state";
+import { composerModelNotice } from "./model-picker-state";
 import { useModelChoice } from "./use-model-choice";
 import {
 	chatAuthors,
@@ -304,17 +304,18 @@ export function Chat(
 	let typing = useRef<TypingReporter | undefined>(undefined);
 	let counts = runCounts(runs);
 	// What the document's agent can be set to run, and what everyone in the room has set it to.
-	let modelControl = useModelChoice({
+	let { control: modelControl, unreadable: modelUnreadable } = useModelChoice({
 		wire,
 		room,
 		connected,
 		enabled: agent && !readonly && !archived,
 	});
-	// A refused choice, or a choice the agent can no longer honour, is said until it is made again.
-	// One object while its words stand: the composer's strip eases in and out as that value changes.
-	let modelWords = modelControl?.refusal
-		?? (modelControl && fallbackNotice(modelControl.catalog, modelControl.choice));
-	let modelTone = modelControl?.refusal ? "warning" as const : "info" as const;
+	// A refused choice, a choice the server could not read, or one the agent can no longer honour is
+	// said until it is made again. One object while its words stand: the composer's strip eases in
+	// and out as that value changes.
+	let modelShown = composerModelNotice(modelControl, modelUnreadable);
+	let modelWords = modelShown?.text;
+	let modelTone = modelShown?.tone ?? "info";
 	let modelNotice = useMemo<ComposerNotice | undefined>(
 		() => modelWords ? { tone: modelTone, text: modelWords } : undefined,
 		[modelWords, modelTone],

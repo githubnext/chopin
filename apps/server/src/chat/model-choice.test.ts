@@ -565,18 +565,94 @@ describe("a Planner turn", () => {
 		}
 	});
 
-	test("still runs when the choice cannot be read, with the harness's default", async () => {
-		let { send, models, finish } = await room(async () => {
+	test("still runs when the choice cannot be read, with the harness's default, and says so in Chat and to the composers", async () => {
+		let { opened, send, models, said, finish } = await room(async () => {
 			throw new Error("storage is busy");
 		});
 		let silenced = console.error;
 		console.error = () => {};
+		let lines: string[] = [];
 		try {
 			await send("hello");
+			lines = said();
 		} finally {
 			console.error = silenced;
 			await finish();
 		}
 		expect(models).toEqual([undefined]);
+		// Never silently: the default ran, and the room is told that the choice could not be read.
+		let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+		expect(lines.filter(text => text.includes("couldn't be read"))).toEqual([unread]);
+		for (let text of lines) expectPlain(text, "the unreadable-choice notice");
+		expect(opened.broadcasts.filter(frame => frame.kind === "chat:model-unreadable")).toMatchObject(
+			[
+				{ unreadable: true },
+			],
+		);
+	});
+
+	test("tells a person who joins that the last turn could not read the choice, and nothing once one could", async () => {
+		let readable = false;
+		let { opened, send, finish } = await room(async () => {
+			if (!readable) throw new Error("storage is busy");
+			return { model: "acme/large" };
+		});
+		let joined = () => {
+			let frames: Array<{ kind: string; unreadable?: boolean }> = [];
+			Chat.greet(
+				opened.plan.chat,
+				{ send: (text: string) => frames.push(JSON.parse(text)) } as never,
+			);
+			return frames.filter(frame => frame.kind.startsWith("chat:model")).map(frame => [
+				frame.kind,
+				frame.unreadable,
+			]);
+		};
+		let silenced = console.error;
+		console.error = () => {};
+		try {
+			expect(joined()).toEqual([]);
+			await send("first");
+			expect(joined()).toEqual([["chat:model-unreadable", true]]);
+			readable = true;
+			await send("second");
+			expect(joined()).toEqual([]);
+		} finally {
+			console.error = silenced;
+			await finish();
+		}
+	});
+
+	test("says a choice it could not read once while that holds, clears it when a later turn reads it, and says it again if it fails again", async () => {
+		let readable = false;
+		let { opened, send, models, said, finish } = await room(async () => {
+			if (!readable) throw new Error("the catalog is unavailable");
+			return { model: "acme/large" };
+		});
+		let silenced = console.error;
+		console.error = () => {};
+		let lines: string[] = [];
+		try {
+			await send("first");
+			await send("second");
+			readable = true;
+			await send("third");
+			readable = false;
+			await send("fourth");
+			lines = said();
+		} finally {
+			console.error = silenced;
+			await finish();
+		}
+		// The default ran whenever the choice could not be read, and the chosen model when it could.
+		expect(models).toEqual([undefined, undefined, "acme/large", undefined]);
+		let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+		expect(lines.filter(text => text.includes("couldn't be read"))).toEqual([unread, unread]);
+		// The composers hear a change only, so the strip is neither repeated nor left up once it is untrue.
+		expect(
+			opened.broadcasts.filter(frame => frame.kind === "chat:model-unreadable").map(frame =>
+				frame.unreadable
+			),
+		).toEqual([true, false, true]);
 	});
 });

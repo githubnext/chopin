@@ -15,14 +15,24 @@ export type ModelControl = {
 	choose: (next: Wire.ModelChoice) => void;
 };
 
-type Held = { room: string; wire: Socket; catalog?: Wire.ModelCatalog; choice?: Wire.ModelChoice };
+type Held = {
+	room: string;
+	wire: Socket;
+	catalog?: Wire.ModelCatalog;
+	choice?: Wire.ModelChoice;
+	/** The server ran the harness's default because a turn could not read the choice. */
+	unreadable?: boolean;
+};
 type Asked = { sequence: number; choice: Wire.ModelChoice };
 
 /**
  * The document's model choice, shared by the room: the catalog the harness offers and the choice
  * everyone sees. A pick shows at once and is sent when the connection allows; the server's answer
- * (or its refusal, which puts the shared choice back) decides. Nothing is returned where the
- * harness offers no choice or the person cannot make one.
+ * (or its refusal, which puts the shared choice back) decides. No `control` is returned where the
+ * harness offers no choice or the person cannot make one. `unreadable` is the server's word that
+ * its last turn could not read the choice and ran the harness's default. Only the server ends it:
+ * its word that a turn could read it again, or a new transcript (a join, a reconnect, a restarted
+ * server), after which it is said again if it still holds.
  */
 export function useModelChoice(
 	{ wire, room, connected, enabled }: {
@@ -31,7 +41,7 @@ export function useModelChoice(
 		connected: boolean;
 		enabled: boolean;
 	},
-): ModelControl | undefined {
+): { control: ModelControl | undefined; unreadable: boolean } {
 	let [held, setHeld] = useState<Held>();
 	let [asked, setAsked] = useState<Asked>();
 	let [refusal, setRefusal] = useState<string>();
@@ -43,9 +53,26 @@ export function useModelChoice(
 		setHeld(undefined);
 		setAsked(undefined);
 		setRefusal(undefined);
-		return wire.on<Wire.ModelState>("chat:model", frame => {
-			setHeld({ room, wire, catalog: frame.catalog, choice: frame.choice });
-		});
+		let stops = [
+			wire.on<Wire.ModelState>("chat:model", frame => {
+				setHeld(current => ({
+					...(current?.unreadable ? { unreadable: true } : {}),
+					room,
+					wire,
+					catalog: frame.catalog,
+					choice: frame.choice,
+				}));
+			}),
+			wire.on<Wire.ModelUnreadable>("chat:model-unreadable", frame => {
+				setHeld(current => ({ ...current, room, wire, unreadable: frame.unreadable }));
+			}),
+			wire.on<Wire.History>("chat:history", () => {
+				setHeld(current => current && { ...current, unreadable: false });
+			}),
+		];
+		return () => {
+			for (let stop of stops) stop();
+		};
 	}, [wire, room]);
 
 	// Sent once connected, newest only: the server keeps the order it hears them in.
@@ -71,9 +98,9 @@ export function useModelChoice(
 		setAsked({ sequence: ++sequence.current, choice: next });
 	}, []);
 
-	if (!enabled || !wire || held?.wire !== wire || held.room !== room || !held.catalog) {
-		return undefined;
-	}
-	let choice = asked && !sameChoice(asked.choice, held.choice) ? asked.choice : held.choice;
-	return { catalog: held.catalog, choice, refusal, choose };
+	let current = held && held.wire === wire && held.room === room ? held : undefined;
+	let unreadable = enabled && current?.unreadable === true;
+	if (!enabled || !wire || !current?.catalog) return { control: undefined, unreadable };
+	let choice = asked && !sameChoice(asked.choice, current.choice) ? asked.choice : current.choice;
+	return { control: { catalog: current.catalog, choice, refusal, choose }, unreadable };
 }

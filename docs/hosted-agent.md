@@ -62,6 +62,13 @@ while the reason stands (and again if it changes, or comes back after the choice
 the composer shows what will run. The stored choice is
 kept, so it returns to force if the model does. Background jobs never carry a choice.
 
+A turn that cannot read the choice at all (the catalog or the stored choice fails to load) never
+runs the default silently. It runs the default, Chat says once, while that holds, that the
+document's model choice couldn't be read, and the server tells the room with `chat:model-unreadable`
+(`true`, and `false` when a later turn can read it again; a person who joins meanwhile is sent
+`true` after the Chat history), so every open composer shows the same words in its strip until a
+turn can read the choice again. Nothing stored is changed.
+
 ## Coaching in an invoked turn
 
 The Planner is instructed to develop a small, provisional account of the problem

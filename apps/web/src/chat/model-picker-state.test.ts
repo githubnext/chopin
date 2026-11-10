@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	chooseLevel,
 	chooseModel,
+	composerModelNotice,
 	fallbackNotice,
 	levelSteps,
 	matchesQuery,
@@ -138,6 +139,36 @@ describe("what the trigger says", () => {
 		);
 		expect(fallbackNotice(catalog, { model: "acme/large", thinkingLevel: "low" })).toBeUndefined();
 		expect(fallbackNotice(catalog, undefined)).toBeUndefined();
+	});
+});
+
+describe("what the composer's strip says about the document's model", () => {
+	let held = { catalog, choice: { model: "acme/large" } as Chat.ModelChoice, refusal: undefined };
+	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+
+	test("says nothing while the choice stands, and nothing where no model can be chosen", () => {
+		expect(composerModelNotice(held, false)).toBeUndefined();
+		expect(composerModelNotice(undefined, false)).toBeUndefined();
+	});
+
+	test("says the choice could not be read when the server ran the default for that reason, as information", () => {
+		expect(composerModelNotice(held, true)).toEqual({ tone: "info", text: unread });
+		// Even where the browser holds no catalog, the strip still tells what ran.
+		expect(composerModelNotice(undefined, true)).toEqual({ tone: "info", text: unread });
+	});
+
+	test("puts a refused choice first, then what could not be read, then a model that has gone", () => {
+		let refused = { ...held, refusal: "That model isn't available." };
+		expect(composerModelNotice(refused, true)).toEqual({
+			tone: "warning",
+			text: "That model isn't available.",
+		});
+		let gone = { ...held, choice: { model: "acme/gone" } };
+		expect(composerModelNotice(gone, false)).toEqual({
+			tone: "info",
+			text: "acme/gone is no longer available, so Chopin used its default model.",
+		});
+		expect(composerModelNotice(gone, true)).toEqual({ tone: "info", text: unread });
 	});
 });
 

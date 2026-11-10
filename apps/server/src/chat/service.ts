@@ -32,6 +32,7 @@ import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
+import { UNREADABLE_NOTICE } from "@chopin/protocol/model-choice";
 import { settledStages } from "@chopin/protocol/run-stages";
 
 import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
@@ -363,6 +364,8 @@ export type Chat = {
 	starting?: boolean;
 	/** The fallback notice the transcript last said, so a choice that stays gone is said once. */
 	modelNotice?: string;
+	/** Whether the composers were last told the choice could not be read, so only a change is sent. */
+	modelUnreadable?: boolean;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
 	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
@@ -772,6 +775,8 @@ export function greet(chat: Chat, ws: Socket): void {
 		queued: visible(chat),
 		participation: { enabled: !!chat.initiativeEnabled, paused: false },
 	});
+	// After the history, which ends whatever an earlier connection was told of it.
+	if (chat.modelUnreadable) tell(ws, { kind: "chat:model-unreadable", ts: 0, unreadable: true });
 }
 
 export type Room = {
@@ -2958,11 +2963,14 @@ async function run(
 			}
 		} else {
 			let existingDecisions = new Set(plan.records.keys());
-			let picked = await context.modelChoice?.().catch(error => {
+			let unreadable = false;
+			let picked = await context.modelChoice?.().catch((error): { notice: string } => {
 				console.error("[chat] could not read the model choice:", error);
-				return undefined;
+				unreadable = true;
+				return { notice: UNREADABLE_NOTICE };
 			});
-			// A choice the harness no longer offers falls back to its default: say so, once.
+			// A choice the harness no longer offers, or that could not be read, falls back to its
+			// default: say so, once.
 			if (picked?.notice && picked.notice !== chat.modelNotice) {
 				say(chat, server, room, {
 					id: ulid(),
@@ -2972,6 +2980,11 @@ async function run(
 				});
 			}
 			chat.modelNotice = picked?.notice;
+			// The composers show it too, and are told when it no longer holds.
+			if (unreadable !== !!chat.modelUnreadable) {
+				chat.modelUnreadable = unreadable;
+				broadcast(server, room, { kind: "chat:model-unreadable", ts: 0, unreadable });
+			}
 			let { notice: _, ...choice } = picked ?? {};
 			let session = opened.session;
 			await publishPlannerReplies({
