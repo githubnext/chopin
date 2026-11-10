@@ -41,7 +41,11 @@ const NOTHING_NEW = "Nothing new while it was away.";
 /** How long the resumed words stay before the banner goes. */
 export const RESUMED_MS = 4000;
 
-export type ConnectionAction = "reconnect" | "wake";
+/**
+ * What a banner's button asks for: `reconnect` the room's socket, `wake` a machine that cannot
+ * start, or `choose` another machine, which retries nothing.
+ */
+export type ConnectionAction = "reconnect" | "wake" | "choose";
 
 export type ConnectionView =
 	| { phase: "online" }
@@ -109,6 +113,11 @@ export type ConnectionFacts = {
 	plannerAttached?: boolean;
 	/** The reconnect attempt that opened the socket, as the banner last counted it; unknown if none. */
 	reopened?: number;
+	/**
+	 * The viewer may choose the machine this document's Planner runs on, so a Planner that is away
+	 * can be offered a different one. Chopin cannot reconnect someone else's machine.
+	 */
+	chooseMachine?: boolean;
 };
 
 /** What a loss that was shown leaves to say when it ends. */
@@ -198,7 +207,7 @@ function withAway(memory: ConnectionMemory, away: ConnectionMemory["away"]): Con
 	return away ? { ...rest, away } : rest;
 }
 
-function plannerView(status: PlannerStatus): ConnectionView {
+function plannerView(status: PlannerStatus, chooseMachine = false): ConnectionView {
 	let text = plannerSentence(status);
 	switch (status.kind) {
 		case "starting":
@@ -221,6 +230,13 @@ function plannerView(status: PlannerStatus): ConnectionView {
 			};
 		case "disconnected":
 		case "held":
+			return {
+				phase: "dropped",
+				layer: "planner",
+				text,
+				plannerKind: status.kind,
+				...(chooseMachine ? { action: "choose" as const } : {}),
+			};
 		case "none":
 			return { phase: "dropped", layer: "planner", text, plannerKind: status.kind };
 	}
@@ -319,7 +335,7 @@ export function connectionStep(
 	}
 	return {
 		memory: withAway(memory, away),
-		view: facts.planner ? plannerView(facts.planner) : { phase: "online" },
+		view: facts.planner ? plannerView(facts.planner, facts.chooseMachine) : { phase: "online" },
 	};
 }
 
@@ -331,8 +347,8 @@ export function expireResumed(memory: ConnectionMemory): ConnectionMemory {
 
 /** Which layer a banner's button asks to retry, or nothing where it has no button. */
 export function retryLayer(view: ConnectionView): "socket" | "planner" | undefined {
-	if (view.phase !== "dropped" || !view.action) return undefined;
-	return view.action === "reconnect" ? "socket" : "planner";
+	if (view.phase !== "dropped") return undefined;
+	return view.action === "reconnect" ? "socket" : view.action === "wake" ? "planner" : undefined;
 }
 
 /**

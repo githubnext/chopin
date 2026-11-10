@@ -28,6 +28,15 @@ import type { ChoosableMachine, MachineChoice, MachineRow, MachineState } from "
 export const ADD_MACHINE_PATH = "/machines?add";
 
 /**
+ * Opens the machine menu from elsewhere on the page, as a click on the button does: the one
+ * button a document has, in the title bar or a phone's top bar. Nothing where it is not drawn.
+ */
+export function openMachinePicker() {
+	document.querySelector<HTMLButtonElement>("button.machine-button[aria-expanded='false']")
+		?.click();
+}
+
+/**
  * A machine as an icon with its state as a dot on the icon's corner: the cloud icon for one the
  * background service runs, the laptop otherwise, the same two as Add machine's menu. The dot is
  * the Machines page's status dot. With no machine it is the laptop in tertiary ink, no dot.
