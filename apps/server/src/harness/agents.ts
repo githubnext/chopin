@@ -9,7 +9,12 @@ import { createScopedTools } from "../agent/scoped-tools";
 import type { ConversationPlan } from "@chopin/protocol";
 import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
-import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
+import {
+	BACKGROUND_TOOL_NAMES,
+	PLANNER_TOOL_NAMES,
+	REACTION_TOOL_NAMES,
+	VISUAL_PLANNER_TOOL_NAMES,
+} from "./tool-names";
 import { harnessFor } from "./harnesses";
 import { carryingThinkingLevel } from "./turn-level";
 
@@ -89,17 +94,20 @@ function reporting(tools: ToolSet, room: DocumentRoom, toolSignal?: AbortSignal)
 
 export function createPlannerAgent(
 	harness: HarnessV1,
-	profile?: ConversationPlan.JobKind,
+	profile?: ConversationPlan.JobKind | "reaction",
 	visual = false,
 ) {
-	let names = profile
+	let reaction = profile === "reaction";
+	let names: readonly string[] = profile === "reaction"
+		? REACTION_TOOL_NAMES
+		: profile
 		? BACKGROUND_TOOL_NAMES[profile]
 		: visual
 		? VISUAL_PLANNER_TOOL_NAMES
 		: PLANNER_TOOL_NAMES;
 	return new HarnessAgent({
 		harness: carryingThinkingLevel(harness),
-		tools: plannerTools,
+		tools: reaction ? {} : plannerTools,
 		activeTools: [...names],
 		permissionMode: "allow-reads",
 		callOptionsSchema: z.custom<PlannerCallOptions>(),
@@ -108,7 +116,7 @@ export function createPlannerAgent(
 				...rest,
 				model: options.model,
 				instructions: options.instructions,
-				tools: reporting(
+				tools: reaction ? {} : reporting(
 					scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
 					options.room,
 					options.toolSignal,
@@ -128,6 +136,7 @@ export let visualPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()
 export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");
 export let refinePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "refine");
 export let prosePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "prose");
+export let reactionPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "reaction");
 export let decisionFollowupPlannerAgent = createPlannerAgent(
 	harnessFor(harnessSelection()),
 	"decision-followup",
