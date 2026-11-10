@@ -1696,7 +1696,38 @@ describe("Agent connection capability catalog", () => {
 		}
 	});
 
-	it("closes the link on a catalog that breaks the limits, and keeps the last good one before it", async () => {
+	it("takes a catalog with odd entries as written and keeps the link, so one model cannot take the Planner offline", async () => {
+		let { server, channel } = await setup();
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		let odd = {
+			models: {
+				available: [
+					{ id: "usable", name: "Usable" },
+					{
+						id: `acme/${"x".repeat(300)}`,
+						name: "n".repeat(129),
+						description: "d".repeat(4_001),
+						thinkingLevels: ["extra high", "deep thought", "\u4f4e"],
+					},
+					{ id: "", name: "" },
+				],
+			},
+			commands: [{ name: "x", kind: "slash command" }],
+		};
+		raw.send({ type: "capabilities", catalog: odd });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(odd);
+		// Still attached: the next report is read, and a detach ends it as the client chose.
+		raw.send({ type: "capabilities", catalog: catalog });
+		await until(() => link.catalog?.models?.available.length === 2, 1_000);
+		raw.send({ type: "detach" });
+		expect((await raw.closed).code).toBe(LINK_CLOSE.detached);
+	});
+
+	it("closes the link on a catalog of the wrong type, and keeps the last good one before it", async () => {
 		let { server, channel } = await setup();
 		let raw = await rawLink(server.url, undefined, "capability-catalog");
 		raw.send({ type: "attach", version: 1, document: channel.id });
@@ -1706,7 +1737,7 @@ describe("Agent connection capability catalog", () => {
 		await until(() => link.catalog !== undefined, 1_000);
 		raw.send({
 			type: "capabilities",
-			catalog: { models: { available: [{ id: "x", name: "X", thinkingLevels: ["not valid"] }] } },
+			catalog: { models: { available: [{ id: "x", name: "X", thinkingLevels: "high" }] } },
 		});
 		expect(await raw.next("error")).toMatchObject({ code: "malformed-message" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);

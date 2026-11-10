@@ -178,13 +178,13 @@ a field this page does not list is refused, except inside a
 
 Shared limits, in characters unless stated:
 
-| Kind  | Fields                                                                                                                                                                                            | Limit      |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| id    | `session`, `turn`, `request`, `toolCallId`, part `id`, run and stage `id`, `run`, `workflowRunId`, `workflowStageId`, `rootRunId`, `active` and `paused` entries, `document.id` in `attached`     | 1 to 128   |
-| name  | tool names, `toolName`, `names` entries, `modelId`, `responseFormat.name`                                                                                                                         | 1 to 128   |
-| short | question `header`, `finishReason.raw`                                                                                                                                                             | up to 128  |
-| note  | `message`, every `title`, `error`, `turn.model`, `responseFormat.description`, question text, option `label` and `description`, `choices` entries, `placeholder`, `initial`, run and stage `name` | up to 4000 |
-| text  | `prompt`, `instructions`, `delta`, `input`                                                                                                                                                        | the frame  |
+| Kind  | Fields                                                                                                                                                                                        | Limit      |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| id    | `session`, `turn`, `request`, `toolCallId`, part `id`, run and stage `id`, `run`, `workflowRunId`, `workflowStageId`, `rootRunId`, `active` and `paused` entries, `document.id` in `attached` | 1 to 128   |
+| name  | tool names, `toolName`, `names` entries, `responseFormat.name`                                                                                                                                | 1 to 128   |
+| short | question `header`, `finishReason.raw`                                                                                                                                                         | up to 128  |
+| note  | `message`, every `title`, `error`, `responseFormat.description`, question text, option `label` and `description`, `choices` entries, `placeholder`, `initial`, run and stage `name`           | up to 4000 |
+| text  | `prompt`, `instructions`, `delta`, `input`, and the model and level fields of the [capability catalog](#capability-catalog): `modelId`, `turn.model`, `turn.thinkingLevel`                    | the frame  |
 
 Other fields state their own limits where they appear.
 
@@ -550,9 +550,13 @@ Messages for a session or turn that has ended are ignored, except a
 With `capability-catalog`, a client tells Chopin what it offers in one message, so that a
 document's composer can let a person choose what the client runs. The catalog is one value that
 grows by adding fields; adding a kind of capability later needs no new message and no new feature.
-Commands already fit it, as listed below. Chopin reads a catalog as it was written: a field it
-has no use for is ignored and kept, never refused, and no count bounds the models or commands a
-client lists, only the frame's size. What the fields below do list is checked as written here.
+Commands already fit it, as listed below. Chopin reads a catalog as it was written. Nothing says
+how a model, a thinking level or a command is spelled or how long its text runs, so Chopin refuses
+no string for its spelling or its length (a level may be `extra high` or `低`, an `id` any length,
+a `name` or `kind` empty) and never changes one. A field it has no use for is ignored and kept,
+never refused, and no count bounds the models or commands a client lists. Only the frame's size
+bounds a catalog, and only a value of the wrong type (a number where a string is listed, a
+string where an array is) breaks a rule here. An odd entry never closes the link.
 
 ```text
 { "type": "capabilities", "catalog": {
@@ -574,35 +578,36 @@ client lists, only the frame's size. What the fields below do list is checked as
   person signs in to another provider. Each report replaces the earlier one whole: a field left out
   is no longer offered, and `{ "catalog": {} }` withdraws everything. A client that offered the
   feature and does not report offers no choice, the same as a client from before the feature. Sending
-  `capabilities` without having offered the feature, or a catalog whose listed fields break the rules below, is a
-  `protocol` or `malformed-message` violation. The catalog is held with the link, not stored: after a
+  `capabilities` without having offered the feature is a `protocol` violation, and a catalog whose fields have the
+  wrong type (listed below), a `malformed-message` one. The catalog is held with the link, not stored: after a
   server restart a resumed client sends it again.
 - **`models.available`** lists the models in the order to show them within a provider, as many as the
   frame holds (Atomic's own list runs past 1,700).
-  `id` (at most 256 characters) is the exact string the client wants back as a turn's `model`; Chopin
-  never parses or normalizes it. `name` (at most 128) is what a person reads. `provider` groups
-  models in the picker: `id` groups, `name` (default: `id`) labels the group, and a model with no
-  `provider` is listed without a group. `description` is one line of text, at most 4,000 characters
-  like the protocol's other text. Chopin
-  shows names and descriptions as text, never as Markdown.
-- **`thinkingLevels`** are the levels of reasoning this model supports, as identifiers
-  matching `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`, in the order to show them. Atomic's are `off`,
-  `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; other clients may define their own and
-  Chopin shows an identifier it does not know with its first letter capitalized. A model with none
-  or an empty list has no reasoning control, and the composer hides it. Chopin sends back only a
-  level the model listed.
+  `id` is the exact string the client wants back as a turn's `model`; Chopin never parses, bounds
+  or normalizes it. `name` is what a person reads. `provider` groups models in the picker: `id`
+  groups, `name` (default: `id`) labels the group, and a model with no `provider` is listed without a
+  group. `description` is one line of text. Chopin shows names and descriptions as text, never as
+  Markdown. A model listed twice stays listed twice, in the order given; a choice of its `id` is
+  the first entry's.
+- **`thinkingLevels`** are the levels of reasoning this model supports, as strings in the order to
+  show them. Atomic's are `off`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; other clients
+  may define their own, spelled as they like, and Chopin shows a level it does not know with its first
+  letter capitalized. A model with none or an empty list has no reasoning control, and the composer
+  hides it. Chopin sends back only a level the model listed.
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`
   should be one of `available`; the composer shows that model as the document's current one until
   somebody chooses another. An operator's `MODEL` takes its place when it is set.
 - **`commands`** is reserved for the commands a client offers, such as skills,
-  prompt templates and workflows: `name` (at most 128), `description` (at most 4,000, so a skill's
-  own fits) and `kind`, an
-  identifier the client defines (`skill`, `prompt`, `workflow`). Chopin validates and keeps them
-  with the catalog and does not show them yet. Send them only when they are real: a client that
+  prompt templates and workflows: `name`, `description` and `kind`, a string the client defines
+  (`skill`, `prompt`, `workflow`). Chopin keeps them with the catalog, as written, and does not show
+  them yet. Send them only when they are real: a client that
   has none omits the field.
 
 A person's choice reaches the client in the next turn: `model` is the chosen model's `id`, and
-`thinkingLevel` one of that model's levels (or the default model's, when no model was chosen).
+`thinkingLevel` one of that model's levels (or the default model's, when no model was chosen),
+each exactly as the client spelled it. A turn leaves out an empty `model`, which is also how a
+deployment without `MODEL` reads, so a client should not list a model whose `id` is empty: it would
+be listed and chosen but run as the client's default.
 Chopin checks both against the last catalog the client reported when it accepts the choice and
 again when the turn starts. A model the catalog no longer lists, or a level its model no longer
 lists, is not sent: the turn runs with the client's default, and the document's Chat says so. A

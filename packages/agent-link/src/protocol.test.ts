@@ -448,24 +448,56 @@ describe("The capability catalog", () => {
 		expect(parsed).toEqual({ ok: true, message: { type: "capabilities", catalog: odd } });
 	});
 
-	it("refuses what cannot be shown or sent back as a turn's model and level", () => {
+	it("accepts every string a client reports as it was written, however it is spelled or how long", () => {
+		// The protocol does not say how a model, a level or a command is spelled, so none is refused.
+		let odd = {
+			models: {
+				available: [
+					{
+						id: `acme/${"x".repeat(300)}`,
+						name: "n".repeat(129),
+						provider: { id: "p".repeat(200), name: "P".repeat(200) },
+						description: "d".repeat(4_001),
+						thinkingLevels: ["extra high", "deep thought", "\u4f4e", "x".repeat(300), "a:b=c", ""],
+					},
+					{ id: "", name: "" },
+					{ id: 'with space \n and "quotes"', name: "Line\nbreak", thinkingLevels: [] },
+				],
+				default: { id: "y".repeat(300), thinkingLevel: "extra high" },
+			},
+			commands: [
+				{ name: "n".repeat(200), description: "d".repeat(5_000), kind: "slash command" },
+				{ name: "", kind: "" },
+			],
+		};
+		let message = { type: "capabilities" as const, catalog: odd };
+		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
+	});
+
+	it("refuses only a value of the wrong type, which no client of this feature sends", () => {
 		let refused = (value: unknown) =>
 			parseClientMessage(JSON.stringify({ type: "capabilities", catalog: value })).ok;
-		expect(refused({ models: { available: [{ id: "", name: "x" }] } })).toBe(false);
-		expect(refused({ models: { available: [{ id: "a", name: "" }] } })).toBe(false);
 		expect(refused({ models: { available: [{ id: 3, name: "x" }] } })).toBe(false);
+		expect(refused({ models: { available: [{ id: "a" }] } })).toBe(false);
 		expect(refused({ models: { available: "none" } })).toBe(false);
-		expect(
-			refused({ models: { available: [{ id: "a", name: "x", thinkingLevels: ["not a level"] }] } }),
-		)
+		expect(refused({ models: { available: [{ id: "a", name: "x", thinkingLevels: "high" }] } }))
 			.toBe(false);
-		expect(refused({ commands: [{ name: "x", kind: "not a kind" }] })).toBe(false);
-		expect(refused({ commands: [{ name: "", kind: "skill" }] })).toBe(false);
-		// A description is text like the protocol's other text, at most 4,000 characters.
-		expect(
-			refused({ models: { available: [{ id: "a", name: "x", description: "d".repeat(4_001) }] } }),
-		)
+		expect(refused({ models: { available: [{ id: "a", name: "x", thinkingLevels: [3] }] } }))
 			.toBe(false);
+		expect(refused({ models: { available: [{ id: "a", name: "x", description: 3 }] } }))
+			.toBe(false);
+		expect(refused({ models: { available: [], default: { thinkingLevel: "low" } } })).toBe(false);
+		expect(refused({ commands: [{ name: "x", kind: 3 }] })).toBe(false);
+		expect(refused({ commands: [{ kind: "skill" }] })).toBe(false);
+	});
+
+	it("bounds a report only by the frame it travels in", () => {
+		let big = { models: { available: [{ id: "a".repeat(MAX_LINK_MESSAGE_BYTES), name: "x" }] } };
+		expect(parseClientMessage(JSON.stringify({ type: "capabilities", catalog: big })))
+			.toMatchObject({
+				ok: false,
+				code: "message-too-large",
+			});
 	});
 
 	it("takes as many models and commands as the frame holds, and a description as long as a skill's", () => {
@@ -531,8 +563,18 @@ describe("The capability catalog", () => {
 		expect(parseServerMessage(JSON.stringify(turn))).toEqual({ ok: true, message: turn });
 		let chosen = { ...turn, model: "acme/large:preview", thinkingLevel: "high" };
 		expect(parseServerMessage(JSON.stringify(chosen))).toEqual({ ok: true, message: chosen });
-		expect(parseServerMessage(JSON.stringify({ ...turn, thinkingLevel: "very high" })).ok).toBe(
-			false,
-		);
+		// What the client reported is what comes back, however it is spelled or how long.
+		let odd = { ...turn, model: `acme/${"m".repeat(5_000)}`, thinkingLevel: "very high" };
+		expect(parseServerMessage(JSON.stringify(odd))).toEqual({ ok: true, message: odd });
+		let long = {
+			type: "part" as const,
+			session: "s",
+			turn: "t",
+			part: {
+				type: "stream-start" as const,
+				modelId: odd.model,
+			},
+		};
+		expect(parseClientMessage(JSON.stringify(long))).toEqual({ ok: true, message: long });
 	});
 });

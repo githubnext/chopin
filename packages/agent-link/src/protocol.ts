@@ -129,7 +129,8 @@ const usage = z.strictObject({
  * Chopin's host tools are called with `host-tool-call` instead.
  */
 export const streamPartSchema = z.discriminatedUnion("type", [
-	z.strictObject({ type: z.literal("stream-start"), modelId: name.optional() }),
+	// The model a client ran is one its own catalog may have named, so it is bounded by the frame only.
+	z.strictObject({ type: z.literal("stream-start"), modelId: z.string().optional() }),
 	z.strictObject({ type: z.literal("text-start"), id }),
 	z.strictObject({ type: z.literal("text-delta"), id, delta: text }),
 	z.strictObject({ type: z.literal("text-end"), id }),
@@ -174,31 +175,33 @@ const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 /**
  * One model a client can run. `id` is the exact string the turn's `model` carries when a person
  * chooses it, kept as the client wrote it. `thinkingLevels` lists the levels the model supports in
- * the order to show them, as plain identifiers the client defines (Atomic's are `off`, `minimal`,
- * `low`, `medium`, `high`, `xhigh` and `max`); absent or empty means the model has no reasoning
- * control. `provider` groups the model in the picker.
+ * the order to show them, as strings the client defines (Atomic's are `off`, `minimal`, `low`,
+ * `medium`, `high`, `xhigh` and `max`); absent or empty means the model has no reasoning control.
+ * `provider` groups the model in the picker.
  *
- * A catalog is read as it was written: any number of entries, and a field this version has no use
- * for is ignored and kept, not refused, so a client can report more than Chopin shows. Only the
- * frame's own limit bounds it.
+ * A catalog is read as it was written. Nothing says how a model, a level or a command is spelled
+ * or how long its text runs, so a value of the right type is never refused and never changed: an
+ * odd entry cannot close the link, whatever it holds. Any number of entries is taken, and a field
+ * this version has no use for is ignored and kept, so a client can report more than Chopin shows.
+ * Only the frame's own limit bounds a catalog.
  */
 export const catalogModelSchema = z.looseObject({
-	id: z.string().min(1).max(256),
-	name,
-	provider: z.looseObject({ id: name, name: name.optional() }).optional(),
-	description: note.optional(),
-	thinkingLevels: z.array(identifier).optional(),
+	id: z.string(),
+	name: z.string(),
+	provider: z.looseObject({ id: z.string(), name: z.string().optional() }).optional(),
+	description: z.string().optional(),
+	thinkingLevels: z.array(z.string()).optional(),
 });
 
 /**
  * One command a client offers, such as a skill, a prompt template or a workflow. `kind` says
- * which, as a plain identifier the client defines. Chopin keeps the entries it is given and shows
- * none of them yet.
+ * which, as a string the client defines. Chopin keeps the entries it is given and shows none of
+ * them yet.
  */
 export const catalogCommandSchema = z.looseObject({
-	name,
-	description: note.optional(),
-	kind: identifier,
+	name: z.string(),
+	description: z.string().optional(),
+	kind: z.string(),
 });
 
 /**
@@ -209,11 +212,7 @@ export const catalogCommandSchema = z.looseObject({
 export const capabilityCatalogSchema = z.looseObject({
 	models: z.looseObject({
 		available: z.array(catalogModelSchema),
-		default: z.looseObject({
-			id: z.string().min(1).max(256),
-			thinkingLevel: identifier.optional(),
-		})
-			.optional(),
+		default: z.looseObject({ id: z.string(), thinkingLevel: z.string().optional() }).optional(),
 	}).optional(),
 	commands: z.array(catalogCommandSchema).optional(),
 });
@@ -475,13 +474,17 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		turn: id,
 		prompt: text,
 		instructions: text.optional(),
-		model: z.string().max(MAX_NOTE).optional(),
+		/**
+		 * The model's id as the client's catalog (or the operator's `MODEL`) spelled it, bounded by
+		 * the frame only, so a model a catalog may list can be chosen.
+		 */
+		model: z.string().optional(),
 		/**
 		 * With `capability-catalog`: the thinking level a person chose for the document, one of the
-		 * levels the client reported for `model` (or for its default model when `model` is absent).
-		 * Absent when nobody chose one: the client uses its own.
+		 * levels the client reported for `model` (or for its default model when `model` is absent),
+		 * as it spelled it. Absent when nobody chose one: the client uses its own.
 		 */
-		thinkingLevel: identifier.optional(),
+		thinkingLevel: z.string().optional(),
 		tools: z.array(toolSpec).max(MAX_TOOLS),
 		responseFormat: responseFormat.optional(),
 	}),
