@@ -867,6 +867,236 @@ test("a raster image of any format is drawn, from this site or written into the 
 	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
 });
 
+const WRITTEN_TYPES = {
+	avif: "image/avif",
+	bmp: "image/bmp",
+	gif: "image/gif",
+	ico: "image/x-icon",
+	jpg: "image/jpeg",
+	png: "image/png",
+	webp: "image/webp",
+} as const;
+
+function fixture(name: string): Buffer {
+	return readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
+}
+
+function written(
+	name: string,
+	type: string = WRITTEN_TYPES[name.split(".").pop() as keyof typeof WRITTEN_TYPES],
+): string {
+	return `data:${type};base64,${fixture(name).toString("base64")}`;
+}
+
+async function holdDecodingOfWrittenImages(page: Page) {
+	await page.addInitScript(() => {
+		let held: HTMLImageElement[] = [];
+		let open = false;
+		document.addEventListener("load", event => {
+			let image = event.target;
+			if (open || !(image instanceof HTMLImageElement) || !image.src.startsWith("data:")) return;
+			event.stopImmediatePropagation();
+			held.push(image);
+		}, true);
+		let firstSeen = new Map<string, { load: string | null; ratio: number }>();
+		new MutationObserver(() => {
+			for (let figure of document.querySelectorAll("[data-chat-image]")) {
+				let key = figure.querySelector("figcaption")?.textContent ?? "";
+				let frame = figure.querySelector("[data-chat-image-frame]");
+				if (!frame || firstSeen.has(key)) continue;
+				let box = frame.getBoundingClientRect();
+				firstSeen.set(key, {
+					load: figure.getAttribute("data-load"),
+					ratio: box.width / box.height,
+				});
+			}
+		}).observe(document, { childList: true, subtree: true });
+		Object.assign(window, {
+			__firstSeen: () => Object.fromEntries(firstSeen),
+			__release: () => {
+				open = true;
+				for (let image of held.splice(0)) image.dispatchEvent(new Event("load"));
+			},
+		});
+	});
+	return {
+		firstSeen: () =>
+			page.evaluate(() =>
+				(window as any).__firstSeen() as Record<string, { load: string | null; ratio: number }>
+			),
+		release: () => page.evaluate(() => (window as any).__release()),
+	};
+}
+
+async function naturalSize(figure: Locator) {
+	return figure.locator("img").evaluate(image => ({
+		height: (image as HTMLImageElement).naturalHeight,
+		width: (image as HTMLImageElement).naturalWidth,
+	}));
+}
+
+async function figureBox(figure: Locator) {
+	let frame = (await figure.locator("[data-chat-image-frame]").boundingBox())!;
+	return { ...(await layout(figure)), frame: { height: frame.height, width: frame.width } };
+}
+
+function oneMessageEachLine(text: string): Chat.Entry[] {
+	return text.split("\n").map((line, index): Chat.Entry => ({
+		id: `written-${index}`,
+		author: { kind: "member", handle: "bo" },
+		text: line,
+		ts: 1_700_000_000_000 + index * 1000,
+	}));
+}
+
+test("an image written into a message holds the shape its own bytes give from the first paint, whatever its format and way up, so nothing moves when it is decoded", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let percent = [...fixture("raster-18x6.png")].map(byte =>
+		`%${byte.toString(16).padStart(2, "0")}`
+	).join("");
+	let cases: Array<{ name: string; src: string; ratio: number }> = [];
+	for (let extension of Object.keys(WRITTEN_TYPES)) {
+		cases.push(
+			{ name: `${extension}, landscape`, src: written(`raster-18x6.${extension}`), ratio: 3 },
+			{ name: `${extension}, portrait`, src: written(`raster-6x18.${extension}`), ratio: 1 / 3 },
+		);
+	}
+	cases.push(
+		{
+			name: "jpg, turned by its EXIF orientation",
+			src: written("raster-18x6-turned.jpg"),
+			ratio: 1 / 3,
+		},
+		{ name: "png, turned by its eXIf chunk", src: written("raster-18x6-turned.png"), ratio: 1 / 3 },
+		{ name: "avif, turned by its rotation", src: written("raster-18x6-turned.avif"), ratio: 1 / 3 },
+		{ name: "ico, of two sizes", src: written("raster-18x6-two-sizes.ico"), ratio: 3 },
+		{ name: "jpg named as a png", src: written("raster-18x6.jpg", "image/png"), ratio: 3 },
+		{ name: "png with percent escapes", src: `data:image/png,${percent}`, ratio: 3 },
+	);
+	await seed("# Written\n", {
+		transcript: oneMessageEachLine(cases.map(({ name, src }) => `![${name}](${src})`).join("\n")),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(cases.length);
+	for (let figure of await all.all()) await figure.scrollIntoViewIfNeeded();
+	await expect.poll(() =>
+		all.locator("img").evaluateAll(images =>
+			images.filter(image => !(image as HTMLImageElement).naturalWidth).map(image =>
+				(image as HTMLImageElement).alt
+			)
+		)
+	).toEqual([]);
+	for (let figure of await all.all()) await expect(figure).toHaveAttribute("data-load", "loading");
+	await settled(all.last());
+
+	let before = await Promise.all((await all.all()).map(figureBox));
+	let firstSeen = await decoding.firstSeen();
+	for (let [index, { name, ratio, src }] of cases.entries()) {
+		let figure = all.nth(index);
+		let natural = await naturalSize(figure);
+		let frame = before[index]!.frame;
+		expect(natural.width / natural.height, name).toBeCloseTo(ratio, 5);
+		expect(Math.abs(frame.width / frame.height / ratio - 1), `${name} while it loads`).toBeLessThan(
+			0.01,
+		);
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / ratio - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+		await expect(figure.locator("img")).toHaveAttribute("src", src);
+		await expect(figure.locator("img")).toHaveAttribute("alt", name);
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+	}
+
+	await decoding.release();
+	for (let figure of await all.all()) await expect(figure).toHaveAttribute("data-load", "shown");
+	await settled(all.last());
+	let after = await Promise.all((await all.all()).map(figureBox));
+	expect(after).toEqual(before);
+	for (let [index, { name, ratio }] of cases.entries()) {
+		let natural = await naturalSize(all.nth(index));
+		expect(natural.width / natural.height, name).toBeCloseTo(ratio, 5);
+		expect(Math.abs(after[index]!.frame.width / after[index]!.frame.height / ratio - 1), name)
+			.toBeLessThan(0.01);
+	}
+});
+
+test("an image written into a message whose shape is not read from its bytes keeps the fixed frame, and is drawn or reported as before", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let cases = [
+		{ name: "not a PNG", src: "data:image/png;base64,AAAA", fixed: true, broken: true },
+		{ name: "no payload", src: "data:image/png;base64,", fixed: true, broken: true },
+		{ name: "cut short", src: "data:image/webp,RIFF", fixed: true, broken: true },
+		{
+			name: "icon of two shapes",
+			src: written("raster-18x6-and-6x18.ico"),
+			fixed: true,
+			broken: false,
+		},
+		{
+			name: "avif cropped by its clean aperture",
+			src: written("raster-18x6-cropped.avif"),
+			fixed: true,
+			broken: false,
+		},
+		{
+			name: "png cut off",
+			src: `data:image/png;base64,${fixture("raster-18x6.png").subarray(0, 40).toString("base64")}`,
+			fixed: false,
+			broken: true,
+		},
+	];
+	await seed("# Fallback\n", {
+		transcript: oneMessageEachLine(cases.map(({ name, src }) => `![${name}](${src})`).join("\n")),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(cases.length);
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	for (let [index, { broken, fixed, name, src }] of cases.entries()) {
+		let figure = all.nth(index);
+		let ratio = firstSeen[name]!.ratio;
+		expect(firstSeen[name]!.load, name).toBe("loading");
+		expect(Math.abs(ratio / (fixed ? 4 / 3 : 3) - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+		if (broken) {
+			await expect(figure).toHaveAttribute("data-load", "broken");
+			await expect(figure.getByText("Couldn’t load image")).toBeVisible();
+			await expect(figure.getByRole("button")).toHaveCount(0);
+		}
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		if (!broken) await expect(figure.locator("img")).toHaveAttribute("src", src);
+	}
+	let cut = await figureBox(all.nth(cases.findIndex(({ name }) => name === "png cut off")));
+	expect(Math.abs(cut.frame.width / cut.frame.height / 3 - 1)).toBeLessThan(0.01);
+	let valid = cases.flatMap(({ broken }, index) => broken ? [] : [all.nth(index)]);
+	let before = [];
+	for (let figure of valid) {
+		await expect.poll(async () => (await naturalSize(figure)).width).toBeGreaterThan(0);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+		let held = await figureBox(figure);
+		expect(Math.abs(held.frame.width / held.frame.height / (4 / 3) - 1)).toBeLessThan(0.01);
+		before.push(held);
+	}
+	await decoding.release();
+	for (let [index, figure] of valid.entries()) {
+		await expect(figure).toHaveAttribute("data-load", "shown");
+		await settled(figure);
+		expect(await figureBox(figure)).toEqual(before[index]);
+		expect(await figure.locator("img").boundingBox()).toEqual(
+			await figure.locator("[data-chat-image-frame]").boundingBox(),
+		);
+	}
+});
+
 test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let script =

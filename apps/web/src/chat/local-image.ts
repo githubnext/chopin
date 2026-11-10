@@ -6,7 +6,7 @@ type Raster = {
 	is(head: Uint8Array): boolean;
 };
 
-function text(head: Uint8Array, offset: number, expected: string): boolean {
+export function text(head: Uint8Array, offset: number, expected: string): boolean {
 	return head.length >= offset + expected.length
 		&& [...expected].every((letter, index) => head[offset + index] === letter.charCodeAt(0));
 }
@@ -72,6 +72,10 @@ const RASTERS: readonly Raster[] = [
 ];
 
 export const RASTER_TYPE_NAMES: readonly string[] = RASTERS.flatMap(raster => raster.named);
+
+export function rasterType(head: Uint8Array): string | undefined {
+	return RASTERS.find(raster => raster.is(head))?.type;
+}
 
 const HEAD_BYTES = 64;
 

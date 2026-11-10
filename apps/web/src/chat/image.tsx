@@ -47,6 +47,7 @@ import {
 	loadState,
 	settledOnMount,
 } from "./image-state";
+import { dataImageSize } from "./image-size";
 import { loadLocalImage } from "./local-image";
 import "./image.css";
 
@@ -177,6 +178,13 @@ function useLoad(url: string | undefined, pending: boolean) {
 		onError: () => url && setSettled({ src: url, outcome: "broken" }),
 		onLoad: () => url && setSettled({ src: url, outcome: "shown" }),
 	};
+}
+
+function useFrameImage(image: ChatImageData, source: ImageSource): ChatImageData {
+	let stated = frameRatio(image.width, image.height) !== undefined;
+	let written = !stated && source.kind === "data" ? source.url : undefined;
+	let size = useMemo(() => written === undefined ? undefined : dataImageSize(written), [written]);
+	return size ? { ...image, ...size } : image;
 }
 
 function ImageRoot(
@@ -460,9 +468,10 @@ export function ImageFigure(
 	let anchor = useRef<HTMLSpanElement>(null);
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
+	let framed = useFrameImage(image, source);
 	let open = () => host.open(id);
 	return (
-		<ImageRoot image={image} load={load} variant={variant}>
+		<ImageRoot image={framed} load={load} variant={variant}>
 			<span className="chat-image-anchor" ref={anchor} />
 			<div
 				className="chat-image-frame"
