@@ -69,6 +69,8 @@ export type AgentHooks = {
 	unavailable?: (channelId: string) => boolean;
 	/** Observes attached links. */
 	register?: LinkOptions["register"];
+	/** A document's attached client reported what it offers, which may be nothing now. */
+	catalogChanged?: (channelId: string) => void;
 	timeoutMs?: number;
 	revalidateEveryMs?: number;
 	/** How often the link is sent a protocol ping. */
@@ -301,6 +303,9 @@ export function agentLink(
 		timeoutMs: hooks.timeoutMs,
 		revalidateEveryMs: hooks.revalidateEveryMs,
 		features,
+		catalogChanged: () => {
+			if (channelId) hooks.catalogChanged?.(channelId);
+		},
 	});
 	return link;
 }

@@ -46,6 +46,14 @@ export const AGENT_FEATURES = {
 	 * Without the feature the server only closes with 1012.
 	 */
 	restartNotice: "restart-notice",
+	/**
+	 * The client may report what it offers in one `capabilities` message: the models it can run,
+	 * each with the thinking levels it supports, and room for commands. A person's choice of model
+	 * and thinking level then reaches the client in the turn's `model` and `thinkingLevel`. Without
+	 * the feature, or without a report, a document's composer offers no choice and a turn carries
+	 * only the deployment's own `model`, as before.
+	 */
+	capabilityCatalog: "capability-catalog",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -162,6 +170,56 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 
 /** A plain identifier: no spaces, quotes, `:` or `=`, so it cannot hold an assignment. */
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
+
+/** The most models, and the most commands, one `capabilities` message may name. */
+export const MAX_CATALOG_ENTRIES = 512;
+/** The most thinking levels one model may name. */
+const MAX_THINKING_LEVELS = 16;
+/** The longest one-line description of a model or command, in UTF-16 code units. */
+export const MAX_DESCRIPTION_LENGTH = 400;
+
+/**
+ * One model a client can run. `id` is the exact string the turn's `model` carries when a person
+ * chooses it, kept as the client wrote it. `thinkingLevels` lists the levels the model supports in
+ * the order to show them, as plain identifiers the client defines (Atomic's are `off`, `minimal`,
+ * `low`, `medium`, `high`, `xhigh` and `max`); absent or empty means the model has no reasoning
+ * control. `provider` groups the model in the picker.
+ */
+export const catalogModelSchema = z.strictObject({
+	id: z.string().min(1).max(256),
+	name,
+	provider: z.strictObject({ id: name, name: name.optional() }).optional(),
+	description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+	thinkingLevels: z.array(identifier).max(MAX_THINKING_LEVELS).optional(),
+});
+
+/**
+ * One command a client offers, such as a skill, a prompt template or a workflow. `kind` says
+ * which, as a plain identifier the client defines. Chopin keeps the entries it is given and shows
+ * none of them yet.
+ */
+export const catalogCommandSchema = z.strictObject({
+	name,
+	description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+	kind: identifier,
+});
+
+/**
+ * What a client offers, as one value that grows by adding fields rather than messages. A report
+ * replaces the earlier one whole; a field it leaves out is offered no longer. `models.default` is
+ * the model, and the thinking level, the client uses when a turn names none.
+ */
+export const capabilityCatalogSchema = z.strictObject({
+	models: z.strictObject({
+		available: z.array(catalogModelSchema).max(MAX_CATALOG_ENTRIES),
+		default: z.strictObject({
+			id: z.string().min(1).max(256),
+			thinkingLevel: identifier.optional(),
+		})
+			.optional(),
+	}).optional(),
+	commands: z.array(catalogCommandSchema).max(MAX_CATALOG_ENTRIES).optional(),
+});
 
 /**
  * The structured error a failed `tool-result` may carry as its `result`, either
@@ -332,6 +390,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 	}),
 	z.strictObject({ type: z.literal("detach") }),
 	/**
+	 * With `capability-catalog`: what the client offers now, sent right after `attached` (and
+	 * after any `resume`, which stays the first message) and again whenever it changes.
+	 */
+	z.strictObject({ type: z.literal("capabilities"), catalog: capabilityCatalogSchema }),
+	/**
 	 * With `resumable-sessions`, the first message after `attached`: the sessions this client
 	 * still holds from a link that dropped, and the questions each still waits on.
 	 */
@@ -416,6 +479,12 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		prompt: text,
 		instructions: text.optional(),
 		model: z.string().max(MAX_NOTE).optional(),
+		/**
+		 * With `capability-catalog`: the thinking level a person chose for the document, one of the
+		 * levels the client reported for `model` (or for its default model when `model` is absent).
+		 * Absent when nobody chose one: the client uses its own.
+		 */
+		thinkingLevel: identifier.optional(),
 		tools: z.array(toolSpec).max(MAX_TOOLS),
 		responseFormat: responseFormat.optional(),
 	}),
@@ -446,6 +515,9 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("resumed"), sessions: heldSessions }),
 ]);
 
+export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;
+export type CatalogModel = z.infer<typeof catalogModelSchema>;
+export type CatalogCommand = z.infer<typeof catalogCommandSchema>;
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 export type StreamPart = z.infer<typeof streamPartSchema>;

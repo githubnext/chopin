@@ -9,7 +9,7 @@ import {
 	LINK_CLOSE,
 	MAX_LINK_MESSAGE_BYTES,
 } from "@chopin/agent-link";
-import { AgentRefused } from "@chopin/agent-link/client";
+import { AgentRefused, connectAgent } from "@chopin/agent-link/client";
 
 import { GitHubError } from "../../github/client";
 import * as Store from "../../questions/store";
@@ -1519,6 +1519,144 @@ describe("Agent connection protocol", () => {
 			output: { error: "The session has ended." },
 			isError: true,
 		});
+	});
+});
+
+describe("Agent connection capability catalog", () => {
+	let catalog = {
+		models: {
+			available: [
+				{ id: "acme/large", name: "Large", thinkingLevels: ["off", "high"] },
+				{ id: "acme/small", name: "Small" },
+			],
+			default: { id: "acme/small" },
+		},
+	};
+
+	it("holds what the client last reported and tells the document each time, replacing it whole", async () => {
+		let { auth, channel } = await linkAuth();
+		let changed: string[] = [];
+		let server = linkServer(auth, 300, undefined, undefined, undefined, undefined, {
+			catalogChanged: id => changed.push(id),
+		});
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		expect((await raw.next("attached")).features).toEqual(["capability-catalog"]);
+		let link = server.links.at(-1)!;
+		expect(link.catalog).toBeUndefined();
+		raw.send({ type: "capabilities", catalog });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(catalog);
+		let next = { models: { available: [{ id: "acme/other", name: "Other" }] } };
+		raw.send({ type: "capabilities", catalog: next });
+		await until(() => link.catalog?.models?.available[0]?.id === "acme/other", 1_000);
+		expect(link.catalog).toEqual(next);
+		raw.send({ type: "capabilities", catalog: {} });
+		await until(() => link.catalog?.models === undefined, 1_000);
+		expect(link.catalog).toEqual({});
+		expect(changed).toEqual([channel.id, channel.id, channel.id]);
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
+	it("is reported by the test client after attached, behind a resumable link's resume", async () => {
+		let { server, channel, script } = await setup();
+		for (let resumable of [false, true]) {
+			let client = await connectAgent({
+				url: server.url,
+				token: MEMBER_TOKEN,
+				document: channel.id,
+				handlers: script.handlers,
+				resumable,
+				capabilities: catalog,
+			});
+			let link = server.links.at(-1)!;
+			await until(() => link.catalog !== undefined, 1_000);
+			expect(link.catalog).toEqual(catalog);
+			expect(client.features).toContain("capability-catalog");
+			// A later report replaces it, and one a server never offered is not sent.
+			expect(client.report({ commands: [{ name: "notes", kind: "skill" }] })).toBe(true);
+			await until(() => link.catalog?.models === undefined, 1_000);
+			expect(link.catalog).toEqual({ commands: [{ name: "notes", kind: "skill" }] });
+			await client.detach();
+		}
+		let quiet = await attach(server.url, channel.id, script.handlers);
+		expect(quiet.report(catalog)).toBe(false);
+		await quiet.detach();
+	});
+
+	it("is a protocol violation from a client that did not offer the feature", async () => {
+		let { server, channel } = await setup();
+		for (let header of [undefined, "run-stage-deltas"]) {
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			raw.send({ type: "capabilities", catalog });
+			expect(await raw.next("error")).toMatchObject({ code: "protocol" });
+			expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);
+		}
+	});
+
+	it("closes the link on a catalog that breaks the limits, and keeps the last good one before it", async () => {
+		let { server, channel } = await setup();
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		raw.send({ type: "capabilities", catalog });
+		await until(() => link.catalog !== undefined, 1_000);
+		raw.send({
+			type: "capabilities",
+			catalog: { models: { available: [{ id: "x", name: "X", thinkingLevels: ["not valid"] }] } },
+		});
+		expect(await raw.next("error")).toMatchObject({ code: "malformed-message" });
+		expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);
+		expect(link.catalog).toEqual(catalog);
+	});
+
+	it("carries a person's model and level in the next turn only to a client that offered the feature", async () => {
+		let { server, channel } = await setup();
+		for (
+			let [header, sent] of [
+				[undefined, false],
+				["run-stage-deltas", false],
+				["capability-catalog", true],
+			] as const
+		) {
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+			let opening = adapterFor(server, planner).doStart({
+				sessionId: `chosen-${header}`,
+				sandboxSession,
+				sessionWorkDir: "/tmp",
+			});
+			let start = await raw.next("start");
+			raw.send({ type: "started", session: start.session });
+			let opened = await opening;
+			cleanups.push(() => opened.doDestroy());
+			planner.thinkingLevel = "high";
+			let turns: unknown[] = [];
+			let running = opened.doPromptTurn({
+				prompt: "go",
+				skills: [],
+				tools: [],
+				model: "acme/large",
+				emit: part => turns.push(part),
+			});
+			let turn = await raw.next("turn");
+			expect(turn.model).toBe("acme/large");
+			expect("thinkingLevel" in turn).toBe(sent);
+			if (sent) expect(turn.thinkingLevel).toBe("high");
+			// The level was for that turn alone: nothing is left to leak into the next.
+			expect(planner.thinkingLevel).toBeUndefined();
+			raw.send({ type: "turn-end", session: turn.session, turn: turn.turn, status: "finished" });
+			await (await running).done.then(() => {}, () => {});
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
 	});
 });
 

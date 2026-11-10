@@ -322,6 +322,7 @@ describe("Agent connection messages", () => {
 			decisionOptionPreviews: AGENT_FEATURES.decisionOptionPreviews,
 			resumableSessions: AGENT_FEATURES.resumableSessions,
 			restartNotice: AGENT_FEATURES.restartNotice,
+			capabilityCatalog: AGENT_FEATURES.capabilityCatalog,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -396,5 +397,94 @@ describe("Agent connection messages", () => {
 		expect(agentUrl("http://127.0.0.1:8787").href).toBe("ws://127.0.0.1:8787/api/v1/agent");
 		expect(agentUrl("ws://127.0.0.1:1/custom").href).toBe("ws://127.0.0.1:1/custom");
 		expect(() => agentUrl("ftp://chopin.test")).toThrow("http(s) or ws(s)");
+	});
+});
+
+describe("The capability catalog", () => {
+	let catalog = {
+		models: {
+			available: [
+				{
+					id: "acme/large:preview",
+					name: "Large",
+					provider: { id: "acme", name: "Acme" },
+					description: "Slower and more careful.",
+					thinkingLevels: ["off", "low", "high", "xhigh"],
+				},
+				{ id: "acme/small", name: "Small" },
+			],
+			default: { id: "acme/small" },
+		},
+		commands: [{ name: "release-notes", kind: "skill", description: "Draft release notes." }],
+	};
+
+	it("is a feature a client asks for, named as the documentation names it", () => {
+		expect(AGENT_FEATURES.capabilityCatalog).toBe("capability-catalog");
+		expect(WIRE.capabilityCatalog).toBe(AGENT_FEATURES.capabilityCatalog);
+	});
+
+	it("round-trips models, thinking levels and commands exactly as reported", () => {
+		let message = { type: "capabilities" as const, catalog };
+		let parsed = parseClientMessage(JSON.stringify(message));
+		expect(parsed).toEqual({ ok: true, message });
+		expect(encodeMessage(message)).toBe(JSON.stringify(message));
+	});
+
+	it("accepts an empty report and keeps the order, duplicates and spelling of what it names", () => {
+		expect(parseClientMessage(JSON.stringify({ type: "capabilities", catalog: {} }))).toEqual({
+			ok: true,
+			message: { type: "capabilities", catalog: {} },
+		});
+		let odd = {
+			models: {
+				available: [
+					{ id: "Z/b", name: "B", thinkingLevels: ["high", "off", "high"] },
+					{ id: "Z/b", name: "B again" },
+					{ id: "a/c", name: "C" },
+				],
+			},
+		};
+		let parsed = parseClientMessage(JSON.stringify({ type: "capabilities", catalog: odd }));
+		expect(parsed).toEqual({ ok: true, message: { type: "capabilities", catalog: odd } });
+	});
+
+	it("refuses what cannot be shown or sent back as a turn's model and level", () => {
+		let refused = (value: unknown) =>
+			parseClientMessage(JSON.stringify({ type: "capabilities", catalog: value })).ok;
+		expect(refused({ models: { available: [{ id: "", name: "x" }] } })).toBe(false);
+		expect(refused({ models: { available: [{ id: "a", name: "" }] } })).toBe(false);
+		expect(
+			refused({ models: { available: [{ id: "a", name: "x", thinkingLevels: ["not a level"] }] } }),
+		)
+			.toBe(false);
+		expect(
+			refused({ models: { available: [{ id: "a", name: "x", description: "d".repeat(401) }] } }),
+		)
+			.toBe(false);
+		expect(refused({ models: { available: [{ id: "a", name: "x", price: 1 }] } })).toBe(false);
+		expect(
+			refused({
+				models: { available: Array.from({ length: 513 }, (_, i) => ({ id: `m${i}`, name: "m" })) },
+			}),
+		)
+			.toBe(false);
+		expect(refused({ commands: [{ name: "x", kind: "not a kind" }] })).toBe(false);
+		expect(refused({ widgets: [] })).toBe(false);
+	});
+
+	it("rides a turn as an optional thinking level beside the model, and old turns still parse", () => {
+		let turn = {
+			type: "turn" as const,
+			session: "s",
+			turn: "t",
+			prompt: "p",
+			tools: [],
+		};
+		expect(parseServerMessage(JSON.stringify(turn))).toEqual({ ok: true, message: turn });
+		let chosen = { ...turn, model: "acme/large:preview", thinkingLevel: "high" };
+		expect(parseServerMessage(JSON.stringify(chosen))).toEqual({ ok: true, message: chosen });
+		expect(parseServerMessage(JSON.stringify({ ...turn, thinkingLevel: "very high" })).ok).toBe(
+			false,
+		);
 	});
 });

@@ -5,6 +5,7 @@
  */
 
 import type {
+	CapabilityCatalog,
 	ClientMessage,
 	ClientMessageOf,
 	InputCall,
@@ -29,6 +30,7 @@ export const WIRE = {
 	decisionOptionPreviews: "decision-option-previews",
 	resumableSessions: "resumable-sessions",
 	restartNotice: "restart-notice",
+	capabilityCatalog: "capability-catalog",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;
@@ -96,6 +98,12 @@ export type AgentOptions = {
 	resumable?: boolean;
 	/** What a dropped link of this client held, from its `resumption`; implies `resumable`. */
 	resume?: Resumption;
+	/**
+	 * Asks for `capability-catalog` and reports what this client offers (its models with their
+	 * thinking levels) as soon as the link is attached, after any `resume`. Without it the
+	 * document's composer offers no choice of model. `AgentClient.report` replaces it later.
+	 */
+	capabilities?: CapabilityCatalog;
 };
 
 /** A question this client asked and still waits on, which a later link may carry on. */
@@ -164,6 +172,11 @@ export type AgentClient = {
 	 * report too large for one frame is sent as several, splitting the delta cards' stages.
 	 */
 	reportRuns(session: string, runs: { active: string[]; paused: string[]; cards: LinkRun[] }): void;
+	/**
+	 * Reports a changed catalog, replacing the earlier one whole. False when the server did not
+	 * accept `capability-catalog` or the link is no longer open.
+	 */
+	report(catalog: CapabilityCatalog): boolean;
 	/** Sends one message; false when the link is no longer open. */
 	send(message: ClientMessage): boolean;
 	detach(): Promise<LinkClosed>;
@@ -206,7 +219,12 @@ type HeaderWebSocket = new(
  * A socket to the link URL offering the subprotocol and carrying the bearer; browsers cannot
  * send one. The socket fails to open unless the server echoes the subprotocol.
  */
-export function linkSocket(url: URL, token: string, resumable = false): WebSocket {
+export function linkSocket(
+	url: URL,
+	token: string,
+	resumable = false,
+	catalog = false,
+): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
 			authorization: `Bearer ${token}`,
@@ -214,6 +232,7 @@ export function linkSocket(url: URL, token: string, resumable = false): WebSocke
 				WIRE.runStageDeltas,
 				WIRE.decisionOptionPreviews,
 				...(resumable ? [WIRE.resumableSessions, WIRE.restartNotice] : []),
+				...(catalog ? [WIRE.capabilityCatalog] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -296,7 +315,12 @@ function settleCalls(turn: TurnState, message: string): void {
 /** Attaches to one document as its Planner and serves the server's requests. */
 export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 	let resumable = options.resumable !== false || options.resume !== undefined;
-	let socket = linkSocket(agentUrl(options.url), options.token, resumable);
+	let socket = linkSocket(
+		agentUrl(options.url),
+		options.token,
+		resumable,
+		options.capabilities !== undefined,
+	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();
 	let sessions = new Set<string>();
@@ -567,6 +591,10 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			}
 			for (let part of splitRuns(session, runs)) send(part);
 		},
+		report(catalog) {
+			if (!features.includes(WIRE.capabilityCatalog)) return false;
+			return send({ type: "capabilities", catalog });
+		},
 		send,
 		detach() {
 			ended = true;
@@ -647,6 +675,8 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 					ready = true;
 					attaching.resolve(client);
 				}
+				// After the `resume`, which must be a resumable link's first message.
+				if (options.capabilities) client.report(options.capabilities);
 			} else if (message.type === "refused") {
 				failAttach(
 					message.retry === true,

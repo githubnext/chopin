@@ -222,7 +222,11 @@ export function linkServer(
 	graceMs = 2_000,
 	liveness?: { pingEveryMs: number; pongTimeoutMs: number; maxSilenceMs?: number },
 	planners?: MachinePlanners,
-	holds: { attachments?: PlannerAttachments; options?: PlannerAttachmentOptions } = {},
+	holds: {
+		attachments?: PlannerAttachments;
+		options?: PlannerAttachmentOptions;
+		catalogChanged?: (channelId: string) => void;
+	} = {},
 ) {
 	let links: AgentLink[] = [];
 	let sockets = new Set<ServerWebSocket<AgentSocketData>>();
@@ -248,6 +252,7 @@ export function linkServer(
 					timeoutMs,
 					revalidateEveryMs,
 					...liveness,
+					catalogChanged: holds.catalogChanged,
 					register(_channelId, link) {
 						links.push(link);
 						return () => {

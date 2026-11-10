@@ -42,6 +42,11 @@ export type RemotePlanner =
 			runId?: string,
 		) => Promise<void | "held" | "unconfirmed">;
 		/**
+		 * The thinking level a person chose for the next turn, set just before it starts and taken
+		 * by it. Only a client that offered `capability-catalog` is sent it.
+		 */
+		thinkingLevel?: string;
+		/**
 		 * Stops the server's host tools for the next turn. That turn aborts it when it
 		 * ends without its caller stopping it, so a host tool still running, such as an
 		 * open Decision, ends with the turn instead of holding it open.
