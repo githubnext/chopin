@@ -1,6 +1,7 @@
 /** Only the judgment HTTP boundary is fake; scheduler, authorization and turns are real. */
 import type { JevQuestion, JevRequest } from "../apps/server/src/conversation-plan/jev";
 import { authoringJudgment } from "./authoring-judgments";
+import { reactionJudgment } from "./reaction-judgments";
 
 let network = globalThis.fetch;
 let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -15,6 +16,8 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	let request = JSON.parse(String(init.body)) as JevRequest;
 	let authoring = authoringJudgment(request);
 	if (authoring) return Response.json(authoring);
+	let reactions = reactionJudgment(request);
+	if (reactions) return Response.json(reactions);
 	if (request.questions.build_ready?.type === "noul") {
 		return Response.json({
 			model: "jev-e2e-initiative",
