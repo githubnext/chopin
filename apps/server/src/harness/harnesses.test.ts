@@ -7,6 +7,7 @@ import {
 	harnesses,
 	harnessFor,
 	plannerCatalog,
+	plannerCommands,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
 	registerCredential,
@@ -159,6 +160,51 @@ it("offers a remote Planner only what the client attached to the document report
 	expect(await plannerCatalog("remote", "doc-b", undefined)).toBeUndefined();
 	detach();
 	expect(await plannerCatalog("remote", "doc-a", undefined)).toBeUndefined();
+});
+
+it("offers a remote Planner's commands only from the client attached to that document, and none once it leaves", async () => {
+	let repository = { owner: "acme", name: "plans" };
+	let reportedByA: { commands?: Array<{ name: string; kind: string; description?: string }> } = {
+		commands: [
+			{ name: "skill:notes", kind: "skill", description: "Take notes" },
+			{ name: "review", kind: "prompt" },
+			{ name: "review", kind: "prompt" },
+		],
+	};
+	let machineA = {
+		get catalog() {
+			return reportedByA;
+		},
+	} as unknown as AgentLink;
+	let machineB = {
+		get catalog() {
+			return { models: { available: [] } };
+		},
+	} as unknown as AgentLink;
+	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
+	let detachA = attachLink("doc-a", machineA);
+	// Exactly as the client reported them, a repeated entry included.
+	expect(await plannerCommands("remote", "doc-a", repository)).toEqual([
+		{ name: "skill:notes", kind: "skill", description: "Take notes" },
+		{ name: "review", kind: "prompt" },
+		{ name: "review", kind: "prompt" },
+	]);
+	// Another document's machine is not this document's.
+	expect(await plannerCommands("remote", "doc-b", repository)).toBeUndefined();
+	detachA();
+	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
+	// A different machine takes the document over: it never inherits the first one's commands.
+	let detachB = attachLink("doc-a", machineB);
+	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
+	detachB();
+	// An older client reports no commands at all.
+	let older = attachLink("doc-a", { catalog: undefined } as unknown as AgentLink);
+	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
+	older();
+	// A harness that reports none offers none.
+	harnessFor({ harness: "copilot-sdk" });
+	expect(await plannerCommands("copilot-sdk", "doc-a", repository)).toBeUndefined();
+	await shutdownHarnesses();
 });
 
 it("knows what a remote Planner offers only from an attached client that has reported, or never will", () => {

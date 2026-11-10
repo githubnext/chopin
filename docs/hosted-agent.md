@@ -88,6 +88,22 @@ banner when that is drawn, and giving way, as the composer's other notices do, t
 own connection banner, a refused send and a failed reply, then returning with the connection
 ([design guide](../apps/web/DESIGN.md)).
 
+### Commands the Planner offers
+
+The same `chat:model` carries `commands`: what `/` offers in Chat besides Chopin's own
+(`/research`), each with a `name`, a `kind` and a one-line `description`. Only the document's own
+Planner supplies them, read each time somebody joins or the state changes:
+
+| Harness                     | Commands                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atomic`                    | What an Atomic session in the Planner's working directory finds: its prompt templates (`prompt`), its skills (`skill`, named `skill:name`, as Atomic invokes them) and the workflows registered for it (`workflow`). The session is built as a Planner's is, in the operator's agent directory and the checkout, and ended at once; nothing goes to a model. It is read once for 30 seconds per directory, however many people join. Atomic's own extension commands are not offered. |
+| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), as written, and nothing once that client has left. An older client, or one that reports none, offers none, and so does a machine that is away.                                                                                                                                                                                                                                 |
+| `copilot-sdk` and any other | None.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+The list is the document's Planner's alone. A remote Planner's commands are held with its attached
+link, so another person's machine, or an earlier client of the same document, never shows its own.
+A list that cannot be read leaves the field out and never fails the model state.
+
 ## Coaching in an invoked turn
 
 The Planner is instructed to develop a small, provisional account of the problem

@@ -811,3 +811,34 @@ describe("a Planner turn", () => {
 		).toEqual([true, false, true]);
 	});
 });
+
+describe("a document's commands in its model state", () => {
+	test("tells the room what the harness offers, in the order and with the duplicates it reported", async () => {
+		let { opened, deps } = await sets(() => undefined);
+		let commands: Wire.CommandOption[] = [
+			{ name: "review", kind: "prompt", description: "Review the diff" },
+			{ name: "review", kind: "prompt" },
+		];
+		deps.commands = async () => commands;
+		expect((await modelState(deps, opened.channel.id)).commands).toEqual(commands);
+	});
+
+	test("leaves the field out where the harness offers none, and never fails the state for it", async () => {
+		let { opened, deps } = await sets();
+		expect("commands" in await modelState(deps, opened.channel.id)).toBe(false);
+		deps.commands = async () => [];
+		expect("commands" in await modelState(deps, opened.channel.id)).toBe(false);
+		let error = console.error;
+		console.error = () => {};
+		try {
+			deps.commands = async () => {
+				throw new Error("no session");
+			};
+			let state = await modelState(deps, opened.channel.id);
+			expect("commands" in state).toBe(false);
+			expect(state.catalog).toEqual(catalog);
+		} finally {
+			console.error = error;
+		}
+	});
+});

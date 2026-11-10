@@ -23,6 +23,11 @@ export type ModelChoiceDeps = {
 	/** What the document's harness can be set to run now; none where it offers no choice. */
 	catalog: (channelId: string) => Promise<Wire.ModelCatalog | undefined>;
 	/**
+	 * The commands the document's harness offers beyond Chopin's own, read each time: a remote
+	 * Planner's are its attached client's alone, so none outlive that client. Absent means none.
+	 */
+	commands?: (channelId: string) => Promise<Wire.CommandOption[] | undefined>;
+	/**
 	 * Whether what the harness offers is known now, which may be nothing: false while a remote
 	 * Planner has no client to ask, or one that has yet to report. The stored choice is then not
 	 * told to the room with no catalog, since it is neither gone nor honored. Absent means known.
@@ -66,7 +71,15 @@ export async function modelState(
 	deps: ModelChoiceDeps,
 	channelId: string,
 ): Promise<Wire.ModelState> {
-	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	let [catalog, saved, commands] = await Promise.all([
+		deps.catalog(channelId),
+		stored(deps, channelId),
+		// Commands are an extra: a harness that cannot list them never stops the model state.
+		deps.commands?.(channelId).catch((error): undefined => {
+			console.error("[chat] could not read the document's commands:", error);
+			return undefined;
+		}),
+	]);
 	let told = saved.choice && (catalog || (deps.known?.(channelId) ?? true));
 	return {
 		kind: "chat:model",
@@ -75,6 +88,7 @@ export async function modelState(
 		...(told
 			? { choice: saved.choice, ...(saved.modelName ? { modelName: saved.modelName } : {}) }
 			: {}),
+		...(commands?.length ? { commands } : {}),
 	};
 }
 
