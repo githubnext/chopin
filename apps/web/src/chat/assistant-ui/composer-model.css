@@ -62,18 +62,25 @@
 }
 
 .composer-model-search {
-	display: flex;
+	position: relative;
 	flex: none;
-	align-items: center;
-	gap: calc(var(--spacing) * 1.5);
-	min-height: calc(var(--spacing) * 8);
-	padding-inline: calc(var(--spacing) * 2);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	margin: 0 calc(var(--menu-padding) * -1) var(--menu-padding);
 	color: var(--color-text-tertiary);
 }
+/* The icon sits inside the field, so the field's focus ring spans the whole row. */
+.composer-model-search-icon {
+	position: absolute;
+	top: 50%;
+	left: calc(var(--spacing) * 2.5);
+	translate: 0 -50%;
+	pointer-events: none;
+}
 .composer-model-search-input {
-	min-width: 0;
-	flex: 1;
-	height: calc(var(--spacing) * 8);
+	display: block;
+	width: 100%;
+	height: calc(var(--spacing) * 9);
+	padding-inline: calc(var(--spacing) * 9) calc(var(--spacing) * 2.5);
 	border: 0;
 	background: transparent;
 	color: var(--color-text-primary);
@@ -82,11 +89,6 @@
 }
 .composer-model-search-input::placeholder {
 	color: var(--color-text-quaternary);
-}
-.composer-model-search {
-	border-bottom: var(--edge-width) solid var(--color-edge);
-	margin: 0 calc(var(--menu-padding) * -1) var(--menu-padding);
-	padding-inline: calc(var(--spacing) * 3);
 }
 
 .composer-model-list {
@@ -155,7 +157,7 @@
 	flex-direction: column;
 	gap: var(--spacing);
 	margin: var(--menu-padding) calc(var(--menu-padding) * -1) 0;
-	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 2.5);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5) calc(var(--spacing) * 2.5);
 	border-top: var(--edge-width) solid var(--color-edge);
 }
 .composer-reasoning-label {

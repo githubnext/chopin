@@ -221,6 +221,14 @@
 	margin-bottom: calc(0.625rem + var(--edge-width));
 	box-shadow: var(--shadow-resting-strong);
 }
+/* On a narrow screen the models, like the references, meet both edges of the composer. */
+@media (max-width: 40rem) {
+	.chat-composer .composer-menu[data-variant="models"] {
+		right: calc(-1 * var(--edge-width));
+		width: auto;
+		max-width: none;
+	}
+}
 .chat-composer [data-chat-reference-picker] {
 	right: calc(-1 * var(--edge-width));
 	max-height: min(16rem, 45dvh, 45vh);
