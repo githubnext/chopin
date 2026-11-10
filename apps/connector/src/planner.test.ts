@@ -1312,6 +1312,117 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+	"connect --planner-command starts a Planner that exited again at once when Chopin's Planner poll says a person asked for it",
+	async () => {
+		let { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+		let { WebStandardStreamableHTTPServerTransport } = await import(
+			"@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
+		);
+		let { CallToolRequestSchema, ListToolsRequestSchema } = await import(
+			"@modelcontextprotocol/sdk/types.js"
+		);
+		let polls: string[][] = [];
+		let document = "";
+		let directory = await mkdtemp(join(scratch, "asked-"));
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, LEAVING_BACKEND);
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request): Promise<Response> {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: MACHINE });
+				}
+				if (path === "/api/connector/connections") {
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					return Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", repository: "octo-org/score", url: document },
+					});
+				}
+				if (path === "/api/connector/machine") return Response.json({ login: "ada" });
+				if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+				let mcp = new Server({ name: "fake-chopin", version: "1" }, {
+					capabilities: { tools: {} },
+				});
+				mcp.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+				mcp.setRequestHandler(CallToolRequestSchema, async call => {
+					let args = (call.params.arguments ?? {}) as { planners?: string[] };
+					let value: unknown = {};
+					if (call.params.name === "wait_for_work" && args.planners) {
+						polls.push(args.planners);
+						if (polls.length === 1) {
+							value = { kind: "planners", planners: [{ id: "D_1", url: document }] };
+						} else if (polls.length === 2) {
+							// Once the backend has exited, and the connector waits on this answer, Chopin still
+							// asks for it, because a person asked now.
+							await until(async () => (await entries(log)).some(entry => entry.exited), 10_000);
+							await Bun.sleep(500);
+							value = {
+								kind: "planners",
+								planners: [{ id: "D_1", url: document }],
+								retry: ["D_1"],
+							};
+						} else await new Promise(() => {});
+					} else if (call.params.name === "wait_for_work") await new Promise(() => {});
+					return { content: [{ type: "text", text: JSON.stringify(value) }] };
+				});
+				let transport = new WebStandardStreamableHTTPServerTransport({
+					sessionIdGenerator: undefined,
+					enableJsonResponse: true,
+				});
+				await mcp.connect(transport);
+				return transport.handleRequest(request);
+			},
+		});
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		document = `${origin}/octo-org/score/plan`;
+		let root = await checkout();
+		let state = await mkdtemp(join(scratch, "state-"));
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "main.ts"),
+			"connect",
+			"--no-sandbox",
+			root,
+			"--planner-command",
+			`${process.execPath} ${script} ${log}`,
+			"--",
+			process.execPath,
+		], {
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		let output = Promise.all([
+			new Response(connector.stdout).text(),
+			new Response(connector.stderr).text(),
+		]);
+		try {
+			await until(async () => (await entries(log)).filter(entry => entry.pid).length >= 2, 20_000);
+			connector.kill("SIGINT");
+			expect(await Promise.race([connector.exited, Bun.sleep(10_000).then(() => "timed out")]))
+				.toBe(0);
+			let [stdout] = await output;
+			expect(stdout).toContain(`Starting the Planner for ${document} again now, as someone asked.`);
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+		}
+	},
+	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
 	"a dispatched Planner that exits by itself starts again only once Chopin's Planner poll still asks for it",
 	async () => {
 		let chopin = Bun.serve({
@@ -1380,6 +1491,117 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 	40_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a dispatched Planner that exited starts again at once when Chopin says a person asked, and a running one is left as it is",
+	async () => {
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: request =>
+				new URL(request.url).pathname === "/api/connector/planner"
+					? Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: "D_1", repository: "octo-org/score", url: "http://x/plan" },
+					})
+					: new Response(null, { status: 404 }),
+		});
+		let directory = await mkdtemp(join(scratch, "retry-"));
+		let leaving = join(directory, "leaving.ts");
+		let staying = join(directory, "staying.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(leaving, LEAVING_BACKEND);
+		await writeFile(staying, STAYING_BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let options = {
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: [],
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
+			directory,
+			output: createOutput(sink, sink, {}),
+			signal: abort.signal,
+		};
+		let planners = dispatchedPlanners({ ...options, command: [process.execPath, leaving, log] });
+		let launches = async () => (await entries(log)).filter(entry => entry.pid).length;
+		let random = Math.random;
+		// Every restart waits the longest its backoff allows: 1 s, then 2 s, then 4 s.
+		Math.random = () => 0.999;
+		let D_1 = [{ id: "D_1", url: "http://x/plan" }];
+		let exited = async (count: number) => {
+			await until(
+				async () => (await entries(log)).filter(entry => entry.exited).length === count,
+				10_000,
+			);
+			await until(async () => planners.running().length === 0, 5_000);
+		};
+		try {
+			planners.assign(D_1);
+			await exited(1);
+			// Asked for again as usual: it waits out its backoff before it starts.
+			let asked = Date.now();
+			planners.assign(D_1);
+			await until(async () => await launches() === 2, 5_000);
+			expect(Date.now() - asked).toBeGreaterThanOrEqual(900);
+			await exited(2);
+
+			// Asked for again because a person asked: it starts at once, without the 2 s backoff.
+			asked = Date.now();
+			planners.assign(D_1, undefined, ["D_1"]);
+			await until(async () => await launches() === 3, 5_000);
+			expect(Date.now() - asked).toBeLessThan(900);
+			await exited(3);
+
+			// Already waiting out its 4 s backoff when a person asks: the wait is cut short.
+			planners.assign(D_1);
+			await Bun.sleep(300);
+			expect(await launches()).toBe(3);
+			asked = Date.now();
+			planners.assign(D_1, undefined, ["D_1"]);
+			await until(async () => await launches() === 4, 5_000);
+			expect(Date.now() - asked).toBeLessThan(900);
+			expect(said).toContain("Starting the Planner for http://x/plan again now, as someone asked.");
+		} finally {
+			Math.random = random;
+			abort.abort();
+			await planners.stop();
+		}
+
+		// A backend that is running is never stopped or started twice for it.
+		let alive = new AbortController();
+		let runs = join(directory, "staying.jsonl");
+		let kept = dispatchedPlanners({
+			...options,
+			signal: alive.signal,
+			command: [process.execPath, staying, runs],
+		});
+		try {
+			kept.assign(D_1);
+			await until(
+				async () => (await entries(runs)).filter(entry => entry.pid).length === 1,
+				10_000,
+			);
+			kept.assign(D_1, undefined, ["D_1"]);
+			await Bun.sleep(1_500);
+			expect((await entries(runs)).filter(entry => entry.pid)).toHaveLength(1);
+			expect((await entries(runs)).filter(entry => entry.stopped)).toHaveLength(0);
+			expect(kept.running()).toEqual(["D_1"]);
+		} finally {
+			alive.abort();
+			await kept.stop();
+			await chopin.stop(true);
+		}
+	},
+	60_000,
 );
 
 test.skipIf(process.platform === "win32")(

@@ -34,6 +34,12 @@ export type PlannerControl = {
 	planners: PlannerAssignment[];
 	/** Why Chopin stopped asking for a document it no longer lists, by id, when it knows. */
 	stopped?: Record<string, string>;
+	/**
+	 * Listed documents a person asked to have started again now, by id: a backend that exited
+	 * starts without waiting out its backoff, and one that is running is left as it is. Sent even
+	 * when the list is unchanged; a connector from before it runs the same list and ignores it.
+	 */
+	retry?: string[];
 };
 /** The coding agent's name and version from its ACP initialize answer, when it has given one. */
 export const CONNECTOR_AGENT_HEADER = "chopin-connector-agent";
