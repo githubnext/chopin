@@ -246,12 +246,11 @@ describe("mention picker markup", () => {
 		expect(html).toContain('aria-label="chopin"');
 		expect(html).toContain('aria-label="octocat"');
 		expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
-		let active = html.match(/<button[^>]*id="mentions-option-1"[^>]*>/)![0];
-		for (
-			let attribute of ['aria-selected="true"', 'role="option"', 'tabindex="-1"', 'type="button"']
-		) {
-			expect(active).toContain(attribute);
-		}
+		expect(html).toContain('id="mentions-option-1" role="option" tabindex="-1" type="button"');
+		// And the one selected is that active option.
+		expect(html.match(/<button[^>]*id="mentions-option-1"[^>]*>/)![0]).toContain(
+			'aria-selected="true"',
+		);
 	});
 
 	test("draws a decorative avatar for people and the Planner mark for the Planner", () => {
