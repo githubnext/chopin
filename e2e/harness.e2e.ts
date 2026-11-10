@@ -15,8 +15,10 @@ import { expectFocusIndicator } from "./focus";
  * Slice 5: a scripted Planner turn through the real host tools, chat
  * projection, and sockets, against the isolated `AGENT=on` harness project.
  */
+import { readFileSync } from "node:fs";
+
 import { FAKE_MCP_PORT, PULL_REQUESTS } from "./harness/fixtures";
-import { expect, ready, test } from "./room";
+import { authenticate, expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -715,4 +717,87 @@ test("a failed reply waits behind the connection banner when the connection drop
 	).toBe(1);
 	// The failure is not one of the live region's words: only the connection is spoken.
 	await expect(phaseVoice(opened)).not.toContainText(/429|reply/);
+});
+
+test("images the Planner makes reach Chat as stored, generated images only readers are served", async ({ baseURL, browser, join, page, room, seed }) => {
+	await seed("# Picture plan\nRefunds stop at the cap.\n");
+	let frames = await recordChat(page);
+	let pictures = [
+		{
+			file: "the-cap.webp",
+			type: "image/webp",
+			width: 1536,
+			height: 1024,
+			alt: "The cap is a balance of 100.",
+		},
+		{
+			file: "option-write-back.png",
+			type: "image/png",
+			width: 960,
+			height: 420,
+			alt: "Write-back: write, cache, then database later",
+		},
+		{
+			file: "option-write-through.png",
+			type: "image/png",
+			width: 960,
+			height: 420,
+			alt: "Write-through: write, cache, database",
+		},
+	].map(picture => ({
+		...picture,
+		bytes: readFileSync(new URL(`./fixtures/${picture.file}`, import.meta.url)),
+	}));
+	let opened = await join("ana");
+	let chat = chatPane(opened);
+	await chatInput(chat).fill("@chopin GENERATE-IMAGES draw the cap and both write paths");
+	await chat.getByRole("button", { name: "Send message" }).click();
+
+	let shown = () =>
+		frames("chat:message").map(item => item.frame.entry).findLast(entry =>
+			entry.images?.length === 3
+		);
+	await expect.poll(() => shown()?.images?.length, { timeout: 30_000 }).toBe(3);
+	let images = shown()!.images!;
+	expect(shown()!.author).toEqual({ kind: "agent" });
+	expect(images.map(({ alt, width, height, generated }) => ({ alt, width, height, generated })))
+		.toEqual(pictures.map(({ alt, width, height }) => ({ alt, width, height, generated: true })));
+	for (let [index, image] of images.entries()) {
+		expect(image.src).toMatch(/^\/images\/[0-9a-f]{64}\.(webp|png)$/);
+		let served = await opened.request.get(`${image.src}?document=${room}`);
+		expect(served.status()).toBe(200);
+		expect(served.headers()["content-type"]).toBe(pictures[index]!.type);
+		expect(served.headers()["x-content-type-options"]).toBe("nosniff");
+		expect(served.headers()["content-security-policy"]).toBe("default-src 'none'; sandbox");
+		expect((await served.body()).equals(pictures[index]!.bytes)).toBe(true);
+	}
+	await expect.poll(() => frames("chat:state").at(-1)?.frame.busy).toBe(false);
+
+	for (let picture of pictures) {
+		let image = chat.getByRole("img", { name: picture.alt, exact: true });
+		await expect(image).toBeVisible();
+		await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth))
+			.toBe(picture.width);
+	}
+	await expect(chat.getByText("Generated", { exact: true })).toHaveCount(3);
+
+	await opened.reload();
+	await ready(opened);
+	let reloaded = chatPane(opened);
+	for (let picture of pictures) {
+		await expect(reloaded.getByRole("img", { name: picture.alt, exact: true })).toBeVisible();
+	}
+
+	let scoped = `${images[0]!.src}?document=${room}`;
+	expect((await fetch(new URL(scoped, baseURL))).status).toBe(404);
+	let stranger = await browser.newContext({ baseURL });
+	try {
+		let outsider = await stranger.newPage();
+		await authenticate(outsider, `score-outsider-${crypto.randomUUID()}`, baseURL!);
+		expect((await stranger.request.get("/api/session")).status()).toBe(200);
+		expect((await stranger.request.get(scoped)).status()).toBe(404);
+		expect((await stranger.request.get(images[0]!.src)).status()).toBe(404);
+	} finally {
+		await stranger.close();
+	}
 });
