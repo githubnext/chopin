@@ -58,6 +58,8 @@ import { answerWake } from "./chat/wake";
 import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
 import * as Reactions from "./chat/reactions";
+import { replyToReaction } from "./chat/reaction-worker";
+import { respond as respondToReaction } from "./chat/reaction-reply";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
@@ -742,6 +744,32 @@ function conversation(
 				&& room.members.get(member.data.client) === member
 				&& Rooms.get(room.id) === room && room.plan === opened && !room.closing
 				&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id);
+		},
+		reactionAuthorize: async (sessionId, actor) => {
+			let member = [...room.members.values()].find(member =>
+				!member.data.closed && member.data.sessionId === sessionId
+				&& Initiative.actor(member) === actor
+			);
+			// Read access is enough: this only keeps a reader's reaction from being answered after the
+			// reader has left or lost it. It starts nothing and grants nothing.
+			if (!member || await refreshAccess(member, true) !== "allowed") return false;
+			return !member.data.closed && room.members.get(member.data.client) === member
+				&& Rooms.get(room.id) === room && room.plan === opened && !room.closing
+				&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id);
+		},
+		reactionReply: async input => {
+			if (!config.agent || room.parentChannelId || Service.implementationActive(opened)) {
+				return undefined;
+			}
+			if (plannerAttachments && !plannerAttachments.attached(room.id)) return undefined;
+			// Read-only: it never claims an owner, so a reader's reaction cannot make anyone one.
+			let binding = await ownerBindings!.resolve(room.id);
+			if (!binding) return undefined;
+			try {
+				return await replyToReaction(input, { binding, channelId: room.id, model: config.model });
+			} finally {
+				binding.release();
+			}
 		},
 		plannerNotAttached: plannerAttachments
 			? async () => {
@@ -1504,7 +1532,10 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			// A reader may react; the access check that other requests get on arrival is made here,
 			// since a viewer-allowed frame skips it.
 			if (!await plannerWritable(room, ws, frame.rid, false)) return;
-			await Reactions.react(chat(room, ws), ws, frame);
+			{
+				let context = chat(room, ws);
+				await Reactions.react(context, ws, frame, reacted => respondToReaction(context, reacted));
+			}
 			return;
 
 		case "conversation-plan:correct":

@@ -26,6 +26,7 @@
 		"@lexical/headless": "catalog:mdx",
 		"@lexical/yjs": "catalog:mdx",
 		"ai": "catalog:harness",
+		"emojibase-data": "17.0.0",
 		"lexical": "catalog:mdx",
 		"y-protocols": "catalog:mdx",
 		"typebox": "catalog:harness",
