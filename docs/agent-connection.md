@@ -756,6 +756,8 @@ fields:
   `host-tool-call`) or a declared own tool.
 - A failed own tool's `tool-result` may carry a
   [structured tool error](#structured-tool-errors) as its `result`.
+- A successful own tool's `tool-result` may carry the
+  [images it made](#images-a-tool-made) as content blocks in its `result`.
 - `finishReason.unified` is one of `stop`, `length`, `content-filter`,
   `tool-calls`, `error`, `other`. `usage` and `totalUsage` are
   `{ "inputTokens": { "total?", "noCache?", "cacheRead?", "cacheWrite?" }, "outputTokens": { "total?", "text?", "reasoning?" } }`
@@ -825,6 +827,46 @@ what crosses the connection: `host-tool-result.output` reaches the client exactl
 the host tool returned it (except the two reading tools; see
 [Reading a large document](#reading-a-large-document)), and a failed host call
 keeps its `{ "error": "<message>" }` output.
+
+### Images a tool made
+
+An own tool that made images, such as an image generator, shows them in Chat by
+sending, as its final successful `result`, an object whose `content` array holds
+`image` blocks beside any `text` blocks, the shape MCP and Atomic tool results
+already have:
+
+```text
+{ "content": [
+  { "type": "text", "text": "" },
+  { "type": "image", "data": "<base64>", "mimeType": "image/png", "alt?": "", "caption?": "" }
+] }
+```
+
+- `data` is the image's bytes in standard base64; `mimeType` is `image/png`,
+  `image/jpeg`, `image/webp` or `image/gif`.
+- `alt` says what the image shows, in words, and `caption` is a line shown with it.
+  Both are optional and kept as given, an empty string included. Chat shows its
+  own words for an image without `alt`.
+- Extra keys in a block, and an `alt` or `caption` that is not a string, are
+  ignored. The JSON text of the same object is read the same way.
+
+Chopin stores each image block it can host, a PNG, JPEG, WebP or GIF of at most
+1 MiB whose bytes are of its `mimeType` and whose size it can read, as one of the
+document's own images, the same store as `upload_image`. Only after the bytes are
+stored does Chat show it, labelled as generated, on the turn's message: every
+image a turn makes, from any call, goes on one message, in the order they were
+made, and several show as one gallery. Browsers load it from
+`/images/<sha256>.<ext>`, which serves it only to people who can read the
+document, with its own `Content-Type`, `X-Content-Type-Options: nosniff` and a
+`sandbox` content security policy, so no SVG or HTML is ever served from it.
+Any other block, SVG and HTML among them, is left out of Chat, and the tool's row
+in Work details shows the `text` blocks and how many images the result carried,
+never their bytes. A `preliminary` or failed result shows no images.
+`@chopin/agent-link` exports the block as `toolImageSchema`. Like the
+[structured tool error](#structured-tool-errors), it is a convention, not a new
+wire shape: `result` is still any JSON, so a client sends it to any server, and a
+server that does not know it shows the result as before. The whole message,
+images included, stays within the 2 MiB message limit.
 
 ### Reading a large document
 
@@ -1054,7 +1096,9 @@ twice give the same path. The server never reads a path on the Planner's side:
 a remote Planner encodes its own file. A call fails with the usual host tool
 error for an image over 1 MiB, an unsupported type, bytes that are not the
 declared type, an archived document, or a call outside a live Planner turn. The
-image loads only for people who can read this document. A workflow stage has no
+image loads only for people who can read this document. Chat also shows the
+image, with its `alt`, as a generated image on the turn's message, like the
+[images a tool made](#images-a-tool-made). A workflow stage has no
 turn of its own, so from a stage use the MCP `upload_image` tool with the same
 bytes, or pass the Markdown down from a Planner turn.
 
