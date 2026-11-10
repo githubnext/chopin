@@ -1,15 +1,14 @@
 /**
- * A reactor who may write starts an ordinary Planner turn. A reader's reaction cannot: a Planner
- * turn can edit the document and claims the document's owner for whoever started it, so a
- * worker with no tools answers instead, under the owner the document already has.
+ * A reaction to the Planner's message starts a Planner turn. A reactor who may write starts the
+ * ordinary one. A reader's turn is the same turn in the Chat, queued, streamed and stopped like
+ * any other, but with no tools, under the owner the document already has, and never claiming one.
  */
 import type { Chat as Wire } from "@chopin/protocol";
 
 import { actor as actorOf } from "./initiative";
-import { checkPlannerReply, PlannerReplyError } from "./reply-policy";
 import { classify, type ReactionIntent, type ReactionItem, type Reading } from "./reaction-intent";
 import type { Reacted } from "./reactions";
-import { full, instruct, jobReady, type MemberEntry, postAgentReply, type Room } from "./service";
+import { full, instruct, jobReady, type MemberEntry, type Room } from "./service";
 
 export const DEBOUNCE_MS = 5_000;
 const BATCH_SLACK_MS = 1_000;
@@ -64,6 +63,17 @@ export function reactionInstruction(
 		+ `${GUIDANCE[intent] ?? ""} Answer the reaction once, briefly, in Chat. Do not edit the `
 		+ "document or open decisions for it, and do not reply with another acknowledgement. "
 		+ "Then stop.";
+}
+
+export function readerReactionInstruction(
+	entry: Wire.Entry,
+	emoji: string,
+	handle: string,
+	intent: ReactionIntent,
+	preceding: ReactionItem["preceding"],
+): string {
+	return `${reactionInstruction(entry, emoji, handle, intent)}\n`
+		+ `The messages before it, oldest first: ${JSON.stringify(preceding)}`;
 }
 
 /** What is logged of a failure: its kind, never its message, which can quote the conversation. */
@@ -123,7 +133,6 @@ export function createResponder(
 	let controller = new AbortController();
 	let timer: unknown;
 	let closed = false;
-	let lane: Promise<void> = Promise.resolve();
 	let sleeping = new Set<{ timer: unknown; wake: () => void }>();
 
 	function sleep(ms: number): Promise<void> {
@@ -192,10 +201,10 @@ export function createResponder(
 		}
 	}
 
-	async function dispatch(candidate: Candidate, reading: Reading) {
+	async function dispatch(candidate: Candidate, outcome: Reading) {
 		let { context, handle, emoji } = candidate;
 		let { chat } = context;
-		let intent = reading.intent;
+		let intent = outcome.intent;
 		let entry = present(context, candidate.entryId, handle, emoji);
 		if (!entry || !candidate.sessionId) return;
 		let guard = `${entry.id}\u0000${intent}`;
@@ -203,7 +212,7 @@ export function createResponder(
 		// until that turn ends it is not known whether it will answer this person too.
 		if (asked.has(guard)) {
 			let waiting = backlog.get(guard) ?? [];
-			waiting.push({ candidate, reading });
+			waiting.push({ candidate, reading: outcome });
 			backlog.set(guard, waiting);
 			return;
 		}
@@ -232,15 +241,12 @@ export function createResponder(
 						&& await jobReady(context, sessionId),
 				);
 			}
-			if (
-				!context.reactionReply
-				|| !await context.reactionAuthorize?.(candidate.sessionId, candidate.actor)
-			) return release();
-			lane = lane.then(() =>
-				answer(candidate, intent).catch(err =>
-					console.error("[chat] a reader's reaction could not be answered:", kind(err))
-				).finally(release)
-			);
+			let readerContext: Room = { ...context, claimantSessionId: undefined };
+			let allowed = async () =>
+				!!await context.reactionAuthorize?.(sessionId, candidate.actor)
+				&& await jobReady(readerContext, undefined);
+			if (closed || chat.closed || !await allowed()) return release();
+			return await turn(candidate, intent, release, allowed, readerContext);
 		} catch (err) {
 			release();
 			console.error("[chat] a reaction's answer could not be started:", kind(err));
@@ -264,6 +270,7 @@ export function createResponder(
 		intent: ReactionIntent,
 		release: () => void,
 		authorize: () => Promise<boolean>,
+		reader?: Room,
 	) {
 		let { context, handle, emoji } = candidate;
 		let { chat } = context;
@@ -304,11 +311,20 @@ export function createResponder(
 				}
 				try {
 					await instruct(
-						context,
+						reader ?? context,
 						"Chopin",
-						reactionInstruction(current, emoji, handle, intent),
+						reader
+							? readerReactionInstruction(
+								current,
+								emoji,
+								handle,
+								intent,
+								precedingOf(context, current),
+							)
+							: reactionInstruction(current, emoji, handle, intent),
 						"",
 						{
+							...(reader ? { reader: true as const, authorize } : {}),
 							spent: () =>
 								closed || chat.closed || !present(context, candidate.entryId, handle, emoji),
 							started: () => {
@@ -332,41 +348,6 @@ export function createResponder(
 			let accepted = chat.sending.then(accept, accept);
 			chat.sending = accepted.then(() => {}, () => {});
 			await accepted;
-		}
-	}
-
-	async function answer(candidate: Candidate, intent: ReactionIntent) {
-		let { context, handle, emoji } = candidate;
-		let { chat } = context;
-		let idle = () => !chat.busy && !chat.starting && chat.waiting.length === 0;
-		let text: string | undefined;
-		while (await until(candidate, idle)) {
-			let entry = present(context, candidate.entryId, handle, emoji)!;
-			text ??= await context.reactionReply!({
-				entry,
-				emoji,
-				handle,
-				intent,
-				preceding: precedingOf(context, entry),
-				signal: controller.signal,
-			});
-			if (!text) {
-				console.error("[chat] a reader's reaction was not answered: no reply could be made");
-				return;
-			}
-			if (!await context.reactionAuthorize?.(candidate.sessionId!, candidate.actor)) return;
-			if (
-				!await checkPlannerReply(text, context.decide, controller.signal).catch(error => {
-					if (!(error instanceof PlannerReplyError)) throw error;
-					return false;
-				})
-			) {
-				console.error("[chat] a reader's reaction was not answered: its reply was withheld");
-				return;
-			}
-			let result = await postAgentReply(context, text, { entry, intent });
-			if (result !== "busy") return;
-			await sleep(IDLE_POLL_MS);
 		}
 	}
 

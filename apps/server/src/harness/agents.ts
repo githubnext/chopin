@@ -248,13 +248,6 @@ export let researchReportAgent = structuredAgent(
 	researchReportSchema,
 	false,
 );
-/** The short answer to a reader's reaction: text only, from a worker with no tools. */
-export let reactionReplySchema = z.object({ text: z.string().min(1).max(2_000) }).strict();
-export let reactionReplyAgent = structuredAgent(
-	harnessFor(harnessSelection()),
-	reactionReplySchema,
-	false,
-);
 export let researchAnswerAgent = structuredAgent(
 	harnessFor(harnessSelection()),
 	researchAnswerSchema,

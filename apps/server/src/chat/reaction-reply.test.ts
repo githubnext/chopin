@@ -2,111 +2,22 @@ import { expect, spyOn, test } from "bun:test";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
-import type { JevAnswer, JevRequest, JevResult } from "../conversation-plan/jev";
-import type { Socket } from "../wire";
-import { flush, installInitiativeCleanup } from "./initiative.test-fixtures";
+import { flush } from "./initiative.test-fixtures";
 import { until } from "./job.test-fixtures";
-import { createResponder, DEBOUNCE_MS, reactionInstruction, respond } from "./reaction-reply";
-import { react } from "./reactions";
+import { DEBOUNCE_MS, reactionInstruction } from "./reaction-reply";
+import {
+	agentEntry,
+	entryA1,
+	fillers,
+	finishTurn,
+	installReactionFixtures,
+	person,
+	planner,
+	reactAs,
+} from "./reaction.test-fixtures";
 import * as Chat from "./service";
 
-let setup = installInitiativeCleanup();
-
-function agentEntry(id: string, text: string, extra: object = {}): Wire.Entry {
-	return { id, author: { kind: "agent" }, text, ts: 2, ...extra } as Wire.Entry;
-}
-
-function scripted(
-	scores?: { intent: string; probability: number; confidence: number; noul: number },
-) {
-	let requests: JevRequest[] = [];
-	let decide = async (request: JevRequest): Promise<JevResult> => {
-		requests.push(request);
-		let answers: Record<string, JevAnswer> = {};
-		for (let key of Object.keys(request.questions)) {
-			if (key === "input") answers.input = { type: "noul", noul: 0 };
-			if (!key.startsWith("intent:")) continue;
-			let id = key.slice("intent:".length);
-			let { intent, probability, confidence, noul } = scores
-				?? { intent: "confused", probability: 0.9, confidence: 0.88, noul: 0.95 };
-			let rest = (1 - probability) / 5;
-			answers[key] = {
-				type: "choice",
-				choice: intent,
-				confidence,
-				probabilities: Object.fromEntries(
-					["confused", "disagree", "approve", "ack", "more", "none"].map(name => [
-						name,
-						name === intent ? probability : rest,
-					]),
-				),
-			};
-			answers[`reply:${id}`] = { type: "noul", noul };
-		}
-		return {
-			model: "fake/classifier",
-			answers,
-			latencyMs: 1,
-			usage: { input_tokens: 1, output_tokens: 1 },
-		};
-	};
-	return { decide, requests };
-}
-
-async function room(options: { decide?: boolean; scores?: Parameters<typeof scripted>[0] } = {}) {
-	let h = await setup.harness();
-	h.chat.entries.push(
-		{ id: "m0", author: { kind: "member", handle: "ana" }, text: "Plan the harp rollout.", ts: 1 },
-		agentEntry("a1", "I proposed three phases."),
-		{ id: "s1", author: { kind: "system" }, text: "ana asked Chopin to draft.", ts: 3 },
-	);
-	let classifier = scripted(options.scores);
-	if (options.decide !== false) h.context.decide = classifier.decide;
-	let saved: string[] = [];
-	h.context.persist = async () => {
-		saved.push(JSON.stringify(h.chat.entries));
-	};
-	h.chat.reactions = createResponder({ clock: h.clock });
-	let claims = spyOn(h.context.auth.storage.channels, "claimAgentOwner");
-	return { ...h, requests: classifier.requests, saved, claims };
-}
-
-type Room = Awaited<ReturnType<typeof room>>;
-
-function person(handle: string): Socket {
-	return {
-		data: {
-			handle,
-			principalId: `U_${handle}`,
-			sessionId: "session",
-			client: `${handle}-tab`,
-			canEdit: true,
-		},
-		send() {},
-	} as unknown as Socket;
-}
-
-async function reactAs(h: Room, handle: string, emoji: string, on = true, id = "a1") {
-	await react(
-		h.context,
-		person(handle),
-		{ kind: "chat:react", rid: crypto.randomUUID(), ts: 0, id, emoji, on },
-		reacted => respond(h.context, reacted),
-	);
-}
-
-async function finishTurn(h: Room, text = "Here is another way to see it.") {
-	let running = h.chat.turn?.id;
-	h.emit("assistant.message_delta", { messageId: `turn-${running}`, deltaContent: text });
-	h.emit("assistant.message", { messageId: `turn-${running}` });
-	h.emit("session.idle");
-	await until(() => !h.chat.busy || h.chat.turn?.id !== running);
-}
-
-const entryA1 = (h: Room) =>
-	h.chat.entries.find(entry => entry.id === "a1")! as Wire.Entry & {
-		answeredIntents?: string[];
-	};
+let { room } = installReactionFixtures();
 
 test("a question mark on the Planner's message starts one Planner turn after the debounce, read in code", async () => {
 	let h = await room();
@@ -391,145 +302,11 @@ test("a writer who is no longer allowed when the turn would be queued gets none"
 	await reactAs(h, "ben", "\u2753");
 	await h.clock.advance(DEBOUNCE_MS + 100);
 	h.context.initiativeAuthorize = async () => false;
-	h.context.reactionReply = undefined;
 	h.chat.waiting.length = 0;
 	await h.clock.advance(2_000);
 	expect(entryA1(h).answeredIntents).toBeUndefined();
 	await finishTurn(h, "First turn done.");
 	expect(h.prompts).toHaveLength(1);
-});
-
-test("a reader's reaction is answered by a worker with no tools and never starts a Planner turn or claims an owner", async () => {
-	let h = await room();
-	h.context.initiativeAuthorize = async () => false;
-	h.context.reactionAuthorize = async () => true;
-	let inputs: Chat.ReactionReplyInput[] = [];
-	h.context.reactionReply = async input => {
-		inputs.push(input);
-		return "Let me say that differently.";
-	};
-	await reactAs(h, "ben", "\u2753");
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await until(() => h.chat.entries.some(entry => entry.text === "Let me say that differently."));
-	let answer = h.chat.entries.at(-1) as Wire.Entry & { viaReaction?: true };
-	expect(answer).toMatchObject({ author: { kind: "agent" }, viaReaction: true });
-	expect(h.prompts).toEqual([]);
-	expect(h.claims).not.toHaveBeenCalled();
-	expect(entryA1(h).answeredIntents).toEqual(["confused"]);
-	expect(inputs).toHaveLength(1);
-	expect(inputs[0]).toMatchObject({ emoji: "\u2753", handle: "ben", intent: "confused" });
-	expect(inputs[0]!.preceding.map(message => message.author)).toEqual(["member"]);
-	expect(
-		h.frames.some(frame =>
-			frame.kind === "chat:message" && JSON.stringify(frame).includes("Let me say")
-		),
-	).toBe(true);
-	await reactAs(h, "cy", "\u2753");
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await flush();
-	expect(inputs).toHaveLength(1);
-});
-
-test("a reader's answer waits for the running turn, with no deadline, and is posted when the Chat is idle", async () => {
-	let h = await room();
-	h.context.initiativeAuthorize = async () => false;
-	h.context.reactionAuthorize = async () => true;
-	h.context.reactionReply = async () => "Let me say that differently.";
-	await Chat.send(h.context, person("ana"), {
-		kind: "chat:send",
-		rid: crypto.randomUUID(),
-		ts: 0,
-		requestId: crypto.randomUUID(),
-		to: "planner",
-		text: "Keep going.",
-	});
-	await until(() => h.prompts.length === 1);
-	await reactAs(h, "ben", "\u2753");
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await h.clock.advance(24 * 60 * 60_000);
-	expect(h.chat.entries.some(entry => entry.text === "Let me say that differently.")).toBe(false);
-	await finishTurn(h, "First turn done.");
-	await h.clock.advance(2_000);
-	await until(() => h.chat.entries.some(entry => entry.text === "Let me say that differently."));
-	expect(h.chat.entries.at(-1)!.text).toBe("Let me say that differently.");
-});
-
-test("a reader's reaction taken back, or a reader who has gone, is not answered", async () => {
-	let removed = await room();
-	removed.context.initiativeAuthorize = async () => false;
-	removed.context.reactionAuthorize = async () => true;
-	let calls = 0;
-	removed.context.reactionReply = async () => {
-		calls++;
-		return "text";
-	};
-	await reactAs(removed, "ben", "\u2753");
-	await removed.clock.advance(2_000);
-	await reactAs(removed, "ben", "\u2753", false);
-	await removed.clock.advance(60_000);
-	expect(calls).toBe(0);
-
-	let gone = await room();
-	gone.context.initiativeAuthorize = async () => false;
-	gone.context.reactionAuthorize = async () => false;
-	gone.context.reactionReply = async () => {
-		calls++;
-		return "text";
-	};
-	await reactAs(gone, "ben", "\u2753");
-	await gone.clock.advance(DEBOUNCE_MS + 100);
-	await flush();
-	expect(calls).toBe(0);
-	expect(gone.prompts).toEqual([]);
-	expect(gone.claims).not.toHaveBeenCalled();
-});
-
-test("a reader's reaction with no owner, or with the agent off, is kept and nothing is posted or claimed", async () => {
-	let errors = spyOn(console, "error").mockImplementation(() => {});
-	for (let configured of [true, false]) {
-		let h = await room();
-		h.context.initiativeAuthorize = async () => false;
-		h.context.reactionAuthorize = async () => true;
-		if (configured) h.context.reactionReply = async () => undefined;
-		let before = h.chat.entries.length;
-		await reactAs(h, "ben", "\u2753");
-		await h.clock.advance(DEBOUNCE_MS + 100);
-		await flush();
-		expect(h.chat.entries).toHaveLength(before);
-		expect(h.prompts).toEqual([]);
-		expect(h.claims).not.toHaveBeenCalled();
-		expect(entryA1(h).answeredIntents).toBeUndefined();
-		expect(entryA1(h).reactions).toEqual([{ emoji: "\u2753", handles: ["ben"] }]);
-	}
-	errors.mockRestore();
-});
-
-test("a reader's answer and its record are saved together, and a failed save leaves neither", async () => {
-	let h = await room();
-	let errors = spyOn(console, "error").mockImplementation(() => {});
-	h.context.initiativeAuthorize = async () => false;
-	h.context.reactionAuthorize = async () => true;
-	h.context.reactionReply = async () => "Let me say that differently.";
-	let persist = h.context.persist;
-	let failing = false;
-	h.context.persist = async view => {
-		if (failing) throw new Error("storage busy");
-		return persist(view);
-	};
-	await reactAs(h, "ben", "\u2753");
-	failing = true;
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await flush();
-	expect(h.chat.entries.some(entry => entry.text === "Let me say that differently.")).toBe(false);
-	expect(entryA1(h).answeredIntents).toBeUndefined();
-	failing = false;
-	await reactAs(h, "cy", "\u2753");
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await until(() => h.chat.entries.some(entry => entry.text === "Let me say that differently."));
-	let saved = JSON.parse(h.saved.at(-1)!) as Array<Wire.Entry & { answeredIntents?: string[] }>;
-	expect(saved.find(entry => entry.id === "a1")!.answeredIntents).toEqual(["confused"]);
-	expect(saved.at(-1)!.text).toBe("Let me say that differently.");
-	errors.mockRestore();
 });
 
 test("reactions read together go to the classifier in one request", async () => {
@@ -551,48 +328,6 @@ test("reactions read together go to the classifier in one request", async () => 
 	await until(() => h.prompts.length === 2);
 	await finishTurn(h);
 });
-
-test("a reader's answer that asks for input is withheld like any Planner text, and nothing is recorded", async () => {
-	let h = await room();
-	let errors = spyOn(console, "error").mockImplementation(() => {});
-	let decide = h.context.decide!;
-	h.context.decide = async request => {
-		let result = await decide(request);
-		if ("input" in request.questions) result.answers.input = { type: "noul", noul: 0.95 };
-		return result;
-	};
-	h.context.initiativeAuthorize = async () => false;
-	h.context.reactionAuthorize = async () => true;
-	h.context.reactionReply = async () => "What exactly confused you? Tell me and I will rewrite it.";
-	let before = h.chat.entries.length;
-	await reactAs(h, "ben", "\u2753");
-	await h.clock.advance(DEBOUNCE_MS + 100);
-	await flush();
-	await flush();
-	expect(h.chat.entries).toHaveLength(before);
-	expect(entryA1(h).answeredIntents).toBeUndefined();
-	errors.mockRestore();
-});
-
-async function planner(h: Room) {
-	await Chat.send(h.context, person("ana"), {
-		kind: "chat:send",
-		rid: crypto.randomUUID(),
-		ts: 0,
-		requestId: crypto.randomUUID(),
-		to: "planner",
-		text: "Keep going.",
-	});
-	await until(() => h.prompts.length === 1);
-}
-
-function fillers(count: number, from = 0) {
-	return Array.from({ length: count }, (_, index) => ({
-		id: `filler-${from + index}`,
-		handle: "ana",
-		text: "queued",
-	})) as unknown as Chat.Chat["waiting"];
-}
 
 test("a place that fills while the reaction's answer is authorized is waited for again, not taken as the answer", async () => {
 	let h = await room();
@@ -674,24 +409,4 @@ test("a person who gives a reading after its turn is queued is answered if the f
 	expect(h.prompts[1]).toContain(JSON.stringify("cy"));
 	await finishTurn(h);
 	expect(h.prompts).toHaveLength(2);
-});
-
-test("a reader's answer whose save fails gives back only its own reading, not one recorded while it saved", async () => {
-	let h = await room();
-	let errors = spyOn(console, "error").mockImplementation(() => {});
-	let persist = h.context.persist;
-	h.context.persist = async () => {
-		// Another request's reading is recorded and kept while this answer is being saved.
-		entryA1(h).answeredIntents = [...(entryA1(h).answeredIntents ?? []), "disagree"];
-		throw new Error("storage busy");
-	};
-	let result = await Chat.postAgentReply(h.context, "Let me say that differently.", {
-		entry: entryA1(h),
-		intent: "confused",
-	});
-	expect(result).toBe("failed");
-	expect(h.chat.entries.some(entry => entry.text === "Let me say that differently.")).toBe(false);
-	expect(entryA1(h).answeredIntents).toEqual(["disagree"]);
-	h.context.persist = persist;
-	errors.mockRestore();
 });

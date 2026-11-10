@@ -58,7 +58,6 @@ import { answerWake } from "./chat/wake";
 import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
 import * as Reactions from "./chat/reactions";
-import { replyToReaction } from "./chat/reaction-worker";
 import { respond as respondToReaction } from "./chat/reaction-reply";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
@@ -756,20 +755,6 @@ function conversation(
 			return !member.data.closed && room.members.get(member.data.client) === member
 				&& Rooms.get(room.id) === room && room.plan === opened && !room.closing
 				&& !archivingChannels.has(room.id) && !deletingChannels.has(room.id);
-		},
-		reactionReply: async input => {
-			if (!config.agent || room.parentChannelId || Service.implementationActive(opened)) {
-				return undefined;
-			}
-			if (plannerAttachments && !plannerAttachments.attached(room.id)) return undefined;
-			// Read-only: it never claims an owner, so a reader's reaction cannot make anyone one.
-			let binding = await ownerBindings!.resolve(room.id);
-			if (!binding) return undefined;
-			try {
-				return await replyToReaction(input, { binding, channelId: room.id, model: config.model });
-			} finally {
-				binding.release();
-			}
 		},
 		plannerNotAttached: plannerAttachments
 			? async () => {

@@ -106,6 +106,8 @@ export async function publishPlannerReplies(options: {
 	files?: PlannerFiles;
 	signal: AbortSignal;
 	decide: Decide | undefined;
+	/** False for a session with no tools: a withheld reply is not repaired through them, only reported. */
+	repair?: boolean;
 	/** Count new, durably captured Planner decisions from the authoritative document state. */
 	capturedDecisions?: () => number;
 	/** Count decisions that already existed and that the Planner repeated this turn. */
@@ -206,6 +208,9 @@ export async function publishPlannerReplies(options: {
 			throw error;
 		}
 		if (!rejected) return;
+		if (options.repair === false) {
+			throw new PlannerReplyError("Chopin's answer asked for input, so it was withheld.");
+		}
 	}
 	let count = options.capturedDecisions?.() ?? 0;
 	let kept = options.keptDecisions?.() ?? 0;
