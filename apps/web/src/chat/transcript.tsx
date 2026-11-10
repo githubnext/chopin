@@ -445,7 +445,7 @@ function MessageGroup(
 			data-chat-enter={enter || undefined}
 			data-chat-entry
 		>
-			<div className="w-6 shrink-0">
+			<div className="w-6 shrink-0" data-chat-avatar="">
 				{item.continued
 					? null
 					: item.author.kind === "agent"
@@ -456,7 +456,7 @@ function MessageGroup(
 				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"}`}
 			>
 				{!item.continued && (
-					<div className="flex items-baseline gap-1.5 text-sm">
+					<div className="flex items-baseline gap-1.5 text-sm" data-chat-head="">
 						<span className="min-w-0 break-all font-semibold">{name}</span>
 						<span className="text-2xs text-text-tertiary tabular-nums">
 							{active ? `Started at ${when(active.ts!)}` : when(first.ts!)}
