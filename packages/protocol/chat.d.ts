@@ -20,6 +20,7 @@ export declare namespace Chat {
 		| Request<PauseRun>
 		| Request<ResumeRun>
 		| Request<Wake>
+		| Request<React>
 		| Request<SetParticipation>
 		| Request<SetModel>
 		| Request<Typing>;
@@ -38,6 +39,8 @@ export declare namespace Chat {
 		| CompactionState
 		| InThread
 		| Woke
+		| Reacted
+		| Reactions
 		| ParticipationState
 		| ModelState
 		| ModelUnreadable;
@@ -285,6 +288,12 @@ export declare namespace Chat {
 		 * existed, which is only its `text`.
 		 */
 		turnFailure?: TurnFailure;
+		/**
+		 * Who reacted to this message with which emoji, one item per distinct emoji in the order
+		 * each was first used, with the handles in the order they reacted. Absent when nobody has.
+		 * Only a member's or the Planner's message carries any.
+		 */
+		reactions?: Reaction[];
 	};
 
 	/**
@@ -301,6 +310,9 @@ export declare namespace Chat {
 		request?: string;
 		focus?: string;
 	};
+
+	/** One emoji on a message and everyone who used it. The emoji is kept exactly as sent. */
+	export type Reaction = { emoji: string; handles: string[] };
 
 	/** Transient Planner turn state. */
 	export type Turn = {
@@ -653,4 +665,21 @@ export declare namespace Chat {
 		asked: boolean;
 		why?: "attached" | "disconnected" | "held" | "no-machine" | "unavailable";
 	};
+
+	/**
+	 * Add (`on`) or take back the sender's own reaction to a member's or the Planner's message.
+	 * Anyone who can read the document may, including a reader who cannot write. Asking for what
+	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent. What a
+	 * message's reactions hold in all, emoji and handles, may take as many bytes as a message may.
+	 */
+	export type React = KIND<"chat:react"> & { id: string; emoji: string; on: boolean };
+
+	/** The reaction is as asked, saved. */
+	export type Reacted = KIND<"chat:react"> & { id: string; emoji: string; on: boolean };
+
+	/**
+	 * A message's reactions changed, saved first; sent to everyone with the Chat open. The list
+	 * replaces the one the message had, in the order `Entry.reactions` has.
+	 */
+	export type Reactions = KIND<"chat:reactions"> & { id: string; reactions: Reaction[] };
 }
