@@ -23,6 +23,12 @@ const PLANNER = {
 	text: "I renamed *the section*.\n\n1. one\n2. two",
 };
 
+const SPACED = {
+	id: "message-spaced",
+	text:
+		"Spaced  out   words\tand ![alt](https://example.com/p.png) a gap.\n\nSecond  paragraph with <b>html</b>  inside.",
+};
+
 function transcript() {
 	return [
 		{
@@ -175,7 +181,14 @@ test("Copy writes the Markdown of a person's message and of the Planner's reply 
 });
 
 test("Copy as plain text writes the message as the page shows it", async ({ join, seed }) => {
-	await seed("# Actions\n", { transcript: transcript() });
+	await seed("# Actions\n", {
+		transcript: [...transcript(), {
+			id: SPACED.id,
+			author: { kind: "member", handle: "ben" },
+			text: SPACED.text,
+			ts: 1_700_000_003,
+		}],
+	});
 	let page = await join("ana");
 	await page.context().grantPermissions([...CLIPBOARD]);
 	let menu = await openMenu(page, message(page, PERSON.id));
@@ -189,6 +202,15 @@ test("Copy as plain text writes the message as the page shows it", async ({ join
 	let planner = await openMenu(page, message(page, PLANNER.id));
 	await planner.getByRole("menuitem", { name: "Copy as plain text" }).click();
 	await expect.poll(() => clipboard(page)).toBe("I renamed the section.\n\none\ntwo");
+
+	let spaced = message(page, SPACED.id);
+	let drawn = await spaced.locator("[data-chat-message-text]").evaluate(element =>
+		(element as HTMLElement).innerText.trim()
+	);
+	expect(drawn).toBe("Spaced out words and a gap.\n\nSecond paragraph with html inside.");
+	let spacedMenu = await openMenu(page, spaced);
+	await spacedMenu.getByRole("menuitem", { name: "Copy as plain text" }).click();
+	await expect.poll(() => clipboard(page)).toBe(drawn);
 });
 
 test("nothing Chopin draws around a message is copied with it", async ({ join, seed }) => {
