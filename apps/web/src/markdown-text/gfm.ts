@@ -16,16 +16,24 @@ const TASKS = 4;
  * of nothing but hyphens, spaces, tabs, pipes, colons and the `>` of a quote, with at least one
  * hyphen. A column with no pipe at all is a table too (`a` over `:-`), so a pipe in the text is not
  * the test; a row like that is.
+ *
+ * Two lookaheads find the pipe or colon and the hyphen, and the row itself is one run of the
+ * class: a run that holds the hyphen as a required step between two runs of the same class would
+ * try every hyphen of a long line as that step, and a message may be 64 KiB. Each line is read
+ * once. Only the line's own run is searched, so a line separator that Markdown does not know
+ * (U+2028) never joins a row to a pipe after it.
  */
-const DELIMITER_ROW = /^(?=[^\n\r]*[|:])[ \t>|:-]*-[ \t>|:-]*$/m;
+const DELIMITER_ROW = /^(?=[ \t>|:-]*[|:])(?=[ \t>|:-]*-)[ \t>|:-]*$/m;
 
 /**
  * A task box is a bracket around a space, a line ending, `x` or `X`. A line ending inside it
  * carries the container's prefix on the next line (the indentation of a list item, the `>` of a
  * quote), and micromark reads the box across it (`- [` over `  ] a`), so the test allows
  * whitespace, `>` and at most one `x` between the brackets, which is more than the syntax needs.
+ * The `x` carries the run after it, so the two runs never share a character and a long run of
+ * spaces after a lone bracket is read once.
  */
-const TASK_BOX = /\[[\s>]*[xX]?[\s>]*\]/;
+const TASK_BOX = /\[[\s>]*(?:[xX][\s>]*)?\]/;
 
 /**
  * Which parts of GitHub's Markdown a source can use, from marks without which the syntax cannot

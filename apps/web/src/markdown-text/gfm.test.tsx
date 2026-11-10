@@ -218,3 +218,145 @@ test("what it reads is tables, strikethrough and task lists, and no footnote or 
 	expect(footnote).not.toContain("<a");
 	expect(footnote).toContain("Footnote[^1] and https://example.com and a@b.co");
 });
+
+// What the choice was before its two scans were made linear, kept here as the reference they are
+// compared with: both backtracked quadratically around a character the other repeated class
+// could also take (the hyphen of a delimiter row, the space of a task box).
+const REFERENCE_DELIMITER_ROW = /^(?=[^\n\r]*[|:])[ \t>|:-]*-[ \t>|:-]*$/m;
+const REFERENCE_TASK_BOX = /\[[\s>]*[xX]?[\s>]*\]/;
+
+const TABLE_ONLY = "| a |\n| - |";
+const TASKS_ONLY = "- [x] a";
+const STRIKETHROUGH_ONLY = "~~a~~";
+
+/** The plugin the reference tests would have given a source: the one for the parts they find. */
+function referenceChoice(source: string) {
+	let marks: string[] = [];
+	if (REFERENCE_DELIMITER_ROW.test(source)) marks.push(TABLE_ONLY);
+	if (source.includes("~~")) marks.push(STRIKETHROUGH_ONLY);
+	if (REFERENCE_TASK_BOX.test(source)) marks.push(TASKS_ONLY);
+	return messageGfmRemarkPlugin(marks.join("\n\n"));
+}
+
+/** Like `sources`, but made of the characters the two scans are about, and every line ending. */
+function scanSources(count: number): string[] {
+	let tokens = [
+		"|",
+		"-",
+		"--",
+		":",
+		">",
+		" ",
+		"\t",
+		"[",
+		"]",
+		"x",
+		"X",
+		"a",
+		"!",
+		"\n",
+		"\r",
+		"\r\n",
+		"\u2028",
+		"\u2029",
+		"\u00a0",
+		"\n> ",
+		"\n  ",
+	];
+	let seed = 987654;
+	let next = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+	let made: string[] = [];
+	for (let index = 0; index < count; index++) {
+		let length = 1 + Math.floor(next() * 16);
+		let text = "";
+		for (let token = 0; token < length; token++) text += tokens[Math.floor(next() * tokens.length)];
+		made.push(text);
+	}
+	return made;
+}
+
+test("the scans that choose the parts find what they found before they were made linear", () => {
+	let generated = [...SOURCES, ...sources(20000), ...scanSources(40000)];
+	for (let source of generated) {
+		let chosen = messageGfmRemarkPlugin(source);
+		if (!/[\u2028\u2029]/.test(source)) {
+			expect(chosen, JSON.stringify(source)).toBe(referenceChoice(source));
+			continue;
+		}
+		// A line separator that is not a line ending in Markdown ends a line only to the regular
+		// expression: the reference could find a row there that no parser reads, never the reverse.
+		let missed = referenceChoice(source);
+		if (chosen !== missed) {
+			expect(REFERENCE_DELIMITER_ROW.test(source), JSON.stringify(source)).toBe(true);
+		}
+	}
+});
+
+test("nor does reading with the chosen parts differ for sources with every line ending", () => {
+	for (let source of scanSources(6000)) expectSame(source);
+});
+
+/** The fastest of a few runs, so one pause of a busy machine does not fail a test. */
+function fastest(source: string): number {
+	let best = Infinity;
+	for (let run = 0; run < 3; run++) {
+		let start = performance.now();
+		messageGfmRemarkPlugin(source);
+		best = Math.min(best, performance.now() - start);
+	}
+	return best;
+}
+
+// A Chat message may be 64 KiB and its parts are chosen on the render path. Each of these took
+// from a few hundred milliseconds to seconds when the scans backtracked; linear, they take well
+// under one.
+const LONG = 60000;
+const BOUND = 50;
+const ADVERSARIAL: Record<string, string> = {
+	"a bracket and a long run of spaces": "Read [" + " ".repeat(LONG) + "!",
+	"a bracket and a long run of quote marks": "[" + ">".repeat(LONG) + "!",
+	"a bracket and a long run of line endings": "[" + " \n".repeat(LONG / 2) + "!",
+	"a bracket and a long run of x with spaces": "[" + "x ".repeat(LONG / 2) + "!",
+	"many brackets, each with a run of spaces": ("[" + " ".repeat(9)).repeat(LONG / 10),
+	"a pipe, a long run of hyphens and a stray mark": "|" + "-".repeat(LONG) + "!",
+	"a long line of pipes and hyphens and a stray mark": "|---".repeat(LONG / 4) + "!",
+	"a long line of hyphens and colons and a stray mark": "-:".repeat(LONG / 2) + "!",
+	"a long run of spaces and a stray mark after a hyphen": " ".repeat(LONG) + "-!",
+	"many long lines of hyphens and a stray mark": ("-".repeat(99) + "!\n").repeat(LONG / 100),
+	"many short rows with CRLF endings": "|-!\r\n".repeat(LONG / 4),
+	"many short rows with CR endings": "|-!\r".repeat(LONG / 3),
+	"many rows ended by a line separator": "-\u2028".repeat(LONG / 2),
+	"many rows ended by a line separator, and a pipe": "-\u2028".repeat(LONG / 2) + "|",
+	"the same line repeated": "- - - -\n".repeat(LONG / 8),
+};
+
+test("choosing the parts of a long message takes time in proportion to its length", () => {
+	for (let [name, source] of Object.entries(ADVERSARIAL)) {
+		expect(source.length, name).toBeGreaterThanOrEqual(LONG - 100);
+		expect(fastest(source), name).toBeLessThan(BOUND);
+	}
+});
+
+test("a task box or delimiter row at the end of a long message still chooses its part", () => {
+	let tasks = messageGfmRemarkPlugin(TASKS_ONLY);
+	let table = messageGfmRemarkPlugin(TABLE_ONLY);
+	let both = messageGfmRemarkPlugin(`${TABLE_ONLY}\n\n${TASKS_ONLY}`);
+	expect(tasks).toBeDefined();
+	expect(table).toBeDefined();
+	expect(both).toBeDefined();
+	expect(new Set([tasks, table, both]).size).toBe(3);
+	let lines = "text [ \n".repeat(LONG / 8);
+	expect(messageGfmRemarkPlugin(lines)).toBeUndefined();
+	expect(messageGfmRemarkPlugin(lines + "- [x] a")).toBe(tasks);
+	expect(messageGfmRemarkPlugin("[" + " ".repeat(LONG) + "]")).toBe(tasks);
+	expect(messageGfmRemarkPlugin("[" + " ".repeat(LONG) + "x" + "\n>".repeat(LONG / 2) + "]"))
+		.toBe(tasks);
+	expect(messageGfmRemarkPlugin("[" + " ".repeat(LONG) + "xx]")).toBeUndefined();
+	let hyphens = "-".repeat(LONG);
+	expect(messageGfmRemarkPlugin(hyphens + "\n")).toBeUndefined();
+	expect(messageGfmRemarkPlugin("a\n|" + hyphens + "|")).toBe(table);
+	expect(messageGfmRemarkPlugin("a\n" + hyphens + ":")).toBe(table);
+	expect(messageGfmRemarkPlugin("|" + hyphens + "!\n| - |")).toBe(table);
+	expect(messageGfmRemarkPlugin("|" + hyphens + "!\n| - |\n\n- [x] a")).toBe(both);
+	expect(messageGfmRemarkPlugin("|" + hyphens + "\r\n|" + hyphens + "|\r\n")).toBe(table);
+});
