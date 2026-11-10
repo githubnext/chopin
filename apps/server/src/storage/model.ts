@@ -1114,13 +1114,15 @@ export type DeferredTurnTransition = {
 };
 
 /**
- * Rewrites the text of a row that is still `waiting`, and its saved delivery with it when one is
- * given. Only a message a person typed (`composer` or `invoke_planner`) has text of its own to
+ * Rewrites the text of a row that is still `waiting`, with the references that stand in it, and its
+ * saved delivery when one is given. Only a message a person typed (`composer` or `invoke_planner`) has text of its own to
  * rewrite; the row's order and every other field stay as they were accepted.
  */
 export type DeferredTurnEdit = {
 	id: string;
 	text: string;
+	/** The references that stand in the new text, at their new places. */
+	references: JsonValue[];
 	/** The saved delivery, rewritten for the new text; a row without one has none to rewrite. */
 	delivery?: JsonValue;
 };

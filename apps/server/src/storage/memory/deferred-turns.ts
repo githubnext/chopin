@@ -136,6 +136,7 @@ export class MemoryDeferredTurnStore implements DeferredTurnStore {
 			return { action: "edit", changed: false, reason: "state", turn: copy(row) };
 		}
 		row.text = change.text;
+		row.references = structuredClone(change.references);
 		if (change.delivery !== undefined) row.delivery = structuredClone(change.delivery);
 		return { action: "edit", changed: true, turn: copy(row) };
 	}

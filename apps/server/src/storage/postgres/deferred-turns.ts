@@ -211,7 +211,8 @@ async function edit(sql: TransactionSQL, change: DeferredTurnEdit): Promise<Defe
 		: sql`${JSON.stringify(change.delivery)}::text::jsonb`;
 	let [saved] = await sql<TurnRow[]>`
 		UPDATE planner_deferred_turns
-		SET text = ${change.text}, delivery = ${delivery}
+		SET text = ${change.text}, references_json = ${JSON.stringify(change.references)}::text::jsonb,
+			delivery = ${delivery}
 		WHERE id = ${change.id}
 		RETURNING ${sql.unsafe(COLUMNS)}
 	`;

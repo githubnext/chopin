@@ -3923,6 +3923,7 @@ async function editNow(context: Room, ws: Socket, msg: Request<Wire.Edit>): Prom
 			action: "edit",
 			id: item.deferred.row,
 			text,
+			references: references as unknown as JsonValue[],
 			...(rewritten
 				? {
 					delivery: {

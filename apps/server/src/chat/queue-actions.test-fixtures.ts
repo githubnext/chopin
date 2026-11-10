@@ -5,6 +5,8 @@
  */
 import { expect, test } from "bun:test";
 
+import { ulid } from "@chopin/dialect";
+
 import * as Chat from "./service";
 import { memberEntry, tick, waitFor } from "./deferred.test-fixtures";
 
@@ -46,6 +48,31 @@ async function editing(
 	);
 	return answer(person.frames, rid);
 }
+
+/** Resolves each requested range to a document reference labelled by the text it covers. */
+const references = {
+	resolve: async (input: {
+		text: string;
+		requests?: Array<{ kind: "document"; channelId: string; start: number; end: number }>;
+	}) => {
+		let text = input.text.trim();
+		return {
+			text,
+			references: (input.requests ?? []).map(request => ({
+				id: ulid(),
+				kind: "document" as const,
+				start: request.start,
+				end: request.end,
+				label: text.slice(request.start, request.end),
+				href: "/documents/octo-org/score/other",
+				repositoryId: "R_score",
+				observedRevision: 0,
+				channelId: request.channelId,
+				observedSourceHash: `sha256:${"a".repeat(64)}`,
+			})),
+		};
+	},
+};
 
 const queueOf = (w: World) =>
 	(w.events.findLast(event => event.kind === "chat:queue") as unknown as {
@@ -354,6 +381,71 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		for (let turn = 0; turn < 5; turn++) w.planner.release();
 		await w.turns(5);
 		expect(queueOf(w)).toEqual([]);
+	});
+
+	test("the references of an edited message are kept with its row: they still point where its text says, after a restart too", async () => {
+		let w = await open({ away: true });
+		w.context.references = references as never;
+		let target = crypto.randomUUID();
+		let requestId = crypto.randomUUID();
+		await Chat.send(
+			w.context,
+			w.socket().ws,
+			{
+				kind: "chat:send",
+				rid: "send",
+				requestId,
+				to: "planner",
+				text: "fix #Other",
+				references: [{ kind: "document", channelId: target, start: 4, end: 10 }],
+				ts: 0,
+			} as never,
+		);
+		expect((await w.rows())[0]!.references).toMatchObject([{ start: 4, end: 10 }]);
+
+		// Words added before it: the reference moves with its text, in the entry and in the row.
+		let moved = await editing(w, "ana", requestId, "please fix #Other");
+		expect(moved).toMatchObject({ kind: "chat:edit", references: [{ start: 11, end: 17 }] });
+		expect((await w.rows())[0]!.references).toMatchObject([{
+			start: 11,
+			end: 17,
+			label: "#Other",
+		}]);
+		let restarted = await w.restart();
+		await Chat.recover(restarted);
+		await tick();
+		let [kept] = restarted.chat.waiting;
+		expect(kept!.text).toBe("please fix #Other");
+		expect(kept!.references).toMatchObject([{ start: 11, end: 17, label: "#Other" }]);
+		expect(queueOf(w)[0]).toMatchObject({ references: [{ start: 11, end: 17 }] });
+
+		// Touched by the edit, it is dropped everywhere, and the text stays the person's.
+		restarted.references = references as never;
+		let touched = await editing(w, "ana", requestId, "please fix #Othe");
+		expect(touched.kind).toBe("chat:edit");
+		expect(touched.references).toBeUndefined();
+		expect((await w.rows())[0]!.references).toEqual([]);
+		// References the edit names itself are resolved as a send resolves them, and kept the same way.
+		let named = await editing(w, "ana", requestId, "see #Other and #More", {
+			references: [
+				{ kind: "document", channelId: target, start: 4, end: 10 },
+				{ kind: "document", channelId: crypto.randomUUID(), start: 15, end: 20 },
+			],
+		});
+		expect(named).toMatchObject({ kind: "chat:edit", references: [{ start: 4 }, { start: 15 }] });
+		let again = await w.restart();
+		await Chat.recover(again);
+		await tick();
+		expect(again.chat.waiting[0]!.references).toMatchObject([
+			{ start: 4, end: 10, label: "#Other" },
+			{ start: 15, end: 20, label: "#More" },
+		]);
+		await w.attach();
+		await w.turns(1);
+		// The Planner is given each reference by the id its row kept, so a stale range would lose it.
+		expect(w.prompts[0]).toMatch(
+			/see #Other \[reference id: \w+\] and #More \[reference id: \w+\]/,
+		);
 	});
 
 	test("an edit is kept through a restart: the next process starts the message with the edited text", async () => {

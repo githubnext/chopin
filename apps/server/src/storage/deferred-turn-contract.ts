@@ -180,7 +180,11 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 				let saved = inserted(await storage.deferredTurns.insert(lease, first));
 				inserted(await storage.deferredTurns.insert(lease, second));
 
-				let edited = await storage.deferredTurns.edit(lease, { id: first.id, text: "Shorter." });
+				let edited = await storage.deferredTurns.edit(lease, {
+					id: first.id,
+					text: "Shorter.",
+					references: [],
+				});
 				expect(edited).toMatchObject({ action: "edit", changed: true, turn: { text: "Shorter." } });
 				// Nothing but the text moves: order, delivery, state and fencing stay.
 				expect(await storage.deferredTurns.get(channelId, first.requestId)).toEqual({
@@ -192,20 +196,26 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 				await storage.deferredTurns.edit(lease, {
 					id: first.id,
 					text: "Shorter still.",
+					references: [{ path: "docs/design.md", ranges: [[1, 4]] }],
 					delivery: rewritten,
 				});
 				expect(await storage.deferredTurns.get(channelId, first.requestId)).toEqual({
 					...saved,
 					text: "Shorter still.",
+					references: [{ path: "docs/design.md", ranges: [[1, 4]] }],
 					delivery: rewritten,
 				});
-				await storage.deferredTurns.edit(lease, { id: first.id, text: "Shorter." });
+				await storage.deferredTurns.edit(lease, { id: first.id, text: "Shorter.", references: [] });
 				expect((await storage.deferredTurns.get(channelId, first.requestId))!.delivery).toEqual(
 					rewritten,
 				);
 				expect((await storage.deferredTurns.list(channelId, ["waiting"])).map(row => row.id))
 					.toEqual([first.id, second.id]);
-				let invoked = await storage.deferredTurns.edit(lease, { id: second.id, text: "From MCP." });
+				let invoked = await storage.deferredTurns.edit(lease, {
+					id: second.id,
+					text: "From MCP.",
+					references: [],
+				});
 				expect(invoked).toMatchObject({ changed: true, turn: { text: "From MCP." } });
 
 				await storage.deferredTurns.transition(lease, {
@@ -214,7 +224,11 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 					to: "started",
 					at: later(3),
 				});
-				let late = await storage.deferredTurns.edit(lease, { id: first.id, text: "Too late." });
+				let late = await storage.deferredTurns.edit(lease, {
+					id: first.id,
+					text: "Too late.",
+					references: [],
+				});
 				expect(late).toMatchObject({
 					action: "edit",
 					changed: false,
@@ -231,9 +245,13 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 					to: "cancelled",
 					at: later(4),
 				});
-				expect(await storage.deferredTurns.edit(lease, { id: second.id, text: "Gone." }))
+				expect(
+					await storage.deferredTurns.edit(lease, { id: second.id, text: "Gone.", references: [] }),
+				)
 					.toMatchObject({ changed: false, reason: "state" });
-				expect(await storage.deferredTurns.edit(lease, { id: id("nothing"), text: "x" }))
+				expect(
+					await storage.deferredTurns.edit(lease, { id: id("nothing"), text: "x", references: [] }),
+				)
 					.toEqual({ action: "edit", changed: false, reason: "missing" });
 			} finally {
 				await storage.close();
@@ -247,7 +265,11 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 				for (let kind of ["comment", "draft", "invoke_system"] as const) {
 					let row = turn(channelId, { kind, text: kind === "comment" ? "" : "kept" });
 					inserted(await storage.deferredTurns.insert(lease, row));
-					let outcome = await storage.deferredTurns.edit(lease, { id: row.id, text: "changed" });
+					let outcome = await storage.deferredTurns.edit(lease, {
+						id: row.id,
+						text: "changed",
+						references: [],
+					});
 					expect(outcome).toMatchObject({ action: "edit", changed: false, reason: "illegal" });
 					expect((await storage.deferredTurns.get(channelId, row.requestId))!.text).toBe(row.text);
 				}
@@ -643,7 +665,12 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 				let edited = await commit(storage, lease, channelId, {
 					expectedRevision: 1,
 					sidecar: { text: "Edited in a commit." },
-					deferredTurns: [{ action: "edit", id: row.id, text: "Edited in a commit." }],
+					deferredTurns: [{
+						action: "edit",
+						id: row.id,
+						text: "Edited in a commit.",
+						references: [],
+					}],
 				});
 				expect(edited.deferredTurns).toEqual([
 					expect.objectContaining({
@@ -661,7 +688,7 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 					expectedRevision: 2,
 					deferredTurns: [
 						{ action: "transition", id: row.id, from: "waiting", to: "started", at: later(1) },
-						{ action: "edit", id: row.id, text: "Too late." },
+						{ action: "edit", id: row.id, text: "Too late.", references: [] },
 					],
 				});
 				expect(raced.deferredTurns).toEqual([
