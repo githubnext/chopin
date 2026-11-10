@@ -169,6 +169,8 @@ describe("refusals of a send", () => {
 		"temporarily-unavailable": "passing",
 		// Answers a delete only, and is its last word; a send never gets it.
 		"message-not-deletable": "final",
+		// Answers a cancel or an edit of a queued message only, and is its last word.
+		"already-started": "final",
 	};
 
 	test("every code in the protocol is classified, and only a passing one is sent again", async () => {

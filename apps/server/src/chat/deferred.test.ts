@@ -31,12 +31,13 @@ test("a message that waits behind a running turn is saved as a row before it is 
 		text: "second",
 		handle: "ana",
 	});
-	// In the transcript at once, marked sent, and not twice in the queue's own listing.
+	// In the transcript at once, marked sent, and listed in the queue, which is where the Chat shows
+	// it until its turn starts.
 	expect(memberEntry(w.context, "second")?.deliveryState).toBe("sent");
 	let queue = w.events.findLast(event => event.kind === "chat:queue") as unknown as
 		| { waiting: unknown[] }
 		| undefined;
-	expect(queue?.waiting ?? []).toEqual([]);
+	expect(queue?.waiting).toEqual([{ id: answer.id, handle: "ana", text: "second" }]);
 	// What the commit saved already holds the message: nothing was acknowledged ahead of it.
 	let stored = await w.storage.collaboration.load(w.channel.id, new Date());
 	expect(JSON.stringify(stored!.sidecar)).toContain('"second"');
@@ -46,6 +47,11 @@ test("a message that waits behind a running turn is saved as a row before it is 
 	await w.turns(2);
 	expect(w.prompts.filter(prompt => prompt.includes("second"))).toHaveLength(1);
 	expect(memberEntry(w.context, "second")?.deliveryState).toBe("delivered");
+	expect(
+		(w.events.findLast(event => event.kind === "chat:queue") as unknown as {
+			waiting: unknown[];
+		}).waiting,
+	).toEqual([]);
 	// The one that was running was a row too, from its acceptance.
 	expect((await w.rows()).map(value => value.state)).toEqual(["ended", "ended"]);
 });

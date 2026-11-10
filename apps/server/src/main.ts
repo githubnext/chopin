@@ -1503,6 +1503,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			}
 			return;
 
+		case "chat:edit":
+			if (!room.plan) return;
+			if (room.plan.parentChannelId) {
+				fail(ws, frame.rid, "this document's Chat is on its root document");
+				return;
+			}
+			// What the Planner reads is the editor's: they must still be able to write.
+			if (!await plannerWritable(room, ws, frame.rid)) return;
+			await Chat.edit(chat(room, ws), ws, frame);
+			return;
+
 		case "chat:abort":
 		case "chat:resume":
 		case "chat:pause-run":
@@ -1517,7 +1528,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			}
 			if (frame.kind === "chat:abort") await Chat.abort(chat(room, ws), ws);
 			else if (frame.kind === "chat:resume") await Chat.resume(chat(room, ws), ws);
-			else if (frame.kind === "chat:unqueue") Chat.unqueue(chat(room, ws), ws, frame);
+			else if (frame.kind === "chat:unqueue") await Chat.unqueue(chat(room, ws), ws, frame);
 			else if (frame.kind === "chat:delete") await Chat.remove(chat(room, ws), ws, frame);
 			else if (frame.kind === "chat:retry") await Chat.retry(chat(room, ws), ws, frame);
 			else await Chat.controlRun(chat(room, ws), ws, frame);

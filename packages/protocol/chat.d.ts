@@ -18,6 +18,7 @@ export declare namespace Chat {
 		| Request<PauseRun>
 		| Request<ResumeRun>
 		| Request<Unqueue>
+		| Request<Edit>
 		| Request<Delete>
 		| Request<Retry>
 		| Request<Wake>
@@ -33,6 +34,8 @@ export declare namespace Chat {
 		| State
 		| Queue
 		| Sent
+		| Unqueued
+		| Edited
 		| Deleted
 		| Retried
 		| Woke
@@ -336,12 +339,22 @@ export declare namespace Chat {
 		runs?: Runs;
 	};
 
-	/** A message waiting for the current turn to end. */
+	/**
+	 * Planner work waiting for the current turn to end, in the order it will start.
+	 *
+	 * Without `kind` it is a message somebody typed to the Planner: `handle` is its author, `text`
+	 * is the message and `references` are the ones it carries. With `kind` it is work nobody typed,
+	 * and `text` is a plain sentence the server wrote about it, never the prompt the Planner will
+	 * read: `comment` is a reply to a comment, `draft` a draft of the build tasks, `followup` a
+	 * follow-up Chopin runs by itself, and `job` a background job. Only an author may change what
+	 * they typed; the rest is shown and cannot be changed.
+	 */
 	export type Waiting = {
 		id: string;
 		handle: string;
 		text: string;
 		references?: Reference[];
+		kind?: "comment" | "draft" | "followup" | "job";
 	};
 
 	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
@@ -385,8 +398,32 @@ export declare namespace Chat {
 	/** Resume one paused workflow run. Anyone may; the transcript records who did. */
 	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string };
 
-	/** Withdraw a queued message. Only its author may. */
+	/**
+	 * Cancel a message waiting in the queue. Only its author may. It leaves the queue and the Chat
+	 * for everyone and is never delivered. Answered with `Unqueued`, or refused with the code
+	 * `already-started` when it is no longer waiting, because its turn started first.
+	 */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };
+
+	/** The message was cancelled, or had been cancelled by its author already. */
+	export type Unqueued = KIND<"chat:unqueue"> & { id: string };
+
+	/**
+	 * Change the text of a message waiting in the queue, before its turn starts. Only its author
+	 * may, and only while it waits: the change and the check that it still waits are one step, so a
+	 * turn that starts first is never rewritten and the edit is refused with the code
+	 * `already-started`. The text follows the rules of `Send` for a message to the Planner. Without
+	 * `references` the message keeps the references that still stand in the new text; with them, they
+	 * are resolved as `Send` resolves them.
+	 */
+	export type Edit = KIND<"chat:edit"> & {
+		id: string;
+		text: string;
+		references?: ReferenceRequest[];
+	};
+
+	/** The message now reads as `entry.text`, where it waits. */
+	export type Edited = KIND<"chat:edit"> & { id: string; text: string; references?: Reference[] };
 
 	/**
 	 * Delete a message the machine has not taken yet. Only its author may, and one that was

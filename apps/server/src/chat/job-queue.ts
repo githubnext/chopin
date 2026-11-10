@@ -34,8 +34,20 @@ export function safeProjection<Args extends unknown[]>(project: (...args: Args) 
 	};
 }
 
-export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
+/**
+ * Takes one waiting turn out of the queue without telling anyone, so the rest keep their order
+ * and a turn that ends now cannot start it. False when it is no longer waiting.
+ */
+export function dequeue(chat: Chat, item: Waiting): boolean {
+	if (!chat.waiting.includes(item)) return false;
+	chat.waiting = chat.waiting.filter(value => value !== item);
+	return true;
+}
+
+export function createJobQueue({ queued, report, state, startRun, MAX_QUEUE }: {
 	MAX_QUEUE: number;
+	/** Tells whoever waits on a turn that will not run that it was skipped. */
+	report: (waiting: Waiting, outcome: { status: "skipped" }) => unknown;
 	queued: (chat: Chat, server: Server<SocketData>, room: string) => void;
 	state: (chat: Chat, server: Server<SocketData>, room: string) => void;
 	startRun: (
@@ -50,8 +62,21 @@ export function createJobQueue({ queued, state, startRun, MAX_QUEUE }: {
 		jobTurn?: JobTurn,
 	) => void;
 }) {
-	function cancelQueuedJobs(context: Announcer, reason: string): number {
+	/**
+	 * Ends queued work without running it. With no `only` it ends every queued background job, as
+	 * archiving and closing a document do. With `only` it ends that one waiting turn, whatever it
+	 * is, which is how a person's own queued message leaves the queue: the queue is shown to the
+	 * room again and whoever waits on the turn is told it was skipped.
+	 */
+	function cancelQueuedJobs(context: Announcer, reason: string, only?: Waiting): number {
 		let { chat, server, room } = context;
+		if (only) {
+			if (!dequeue(chat, only)) return 0;
+			if (only.job) finishJob(only.job, { status: "failed", reason: jobReason(reason) });
+			else void report(only, { status: "skipped" });
+			queued(chat, server, room);
+			return 1;
+		}
 		let retained: Waiting[] = [];
 		let cancelled = 0;
 		for (let waiting of chat.waiting) {

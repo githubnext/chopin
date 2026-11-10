@@ -172,7 +172,7 @@ test("a task draft runs a Planner turn with no member message and says who asked
 	expect(retry).toMatchObject({ ok: true, existing: false });
 });
 
-test("a task draft queued behind another turn stays out of the visible queue", async () => {
+test("a task draft queued behind another turn shows in the queue in plain words, never as its prompt", async () => {
 	let { context, events, prompts, releases, turnOpened } = await setup();
 	let first = turnOpened();
 	await Chat.instruct(context, "ana", "Apply the comment.", "Comment accepted.");
@@ -181,13 +181,20 @@ test("a task draft queued behind another turn stays out of the visible queue", a
 	expect(result).toMatchObject({ ok: true, state: "queued" });
 	expect(drafting(events)).toEqual(["queued"]);
 	let queue = events.findLast(event => event.kind === "chat:queue");
-	expect(queue?.waiting ?? []).toEqual([]);
+	expect(queue?.waiting).toEqual([{
+		id: expect.any(String),
+		handle: "ana",
+		kind: "draft",
+		text: "Draft of the build tasks",
+	}]);
+	expect(JSON.stringify(queue)).not.toContain("Revise the tasks.");
 	expect(await Chat.draftTasks(context, "ben", 4, "Revise the tasks.", "@ben asked."))
 		.toMatchObject({ ok: true, existing: true });
 
 	let second = turnOpened();
 	releases[0]!();
 	await second;
+	expect(events.findLast(event => event.kind === "chat:queue")?.waiting).toEqual([]);
 	expect(prompts.at(-1)).toBe("@ana: Revise the tasks.");
 	expect(drafting(events)).toEqual(["queued", "running"]);
 	releases[1]!();

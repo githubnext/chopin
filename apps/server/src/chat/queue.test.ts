@@ -816,7 +816,7 @@ describe("what a turn is acting on", () => {
 		expect(chat.waiting[0]).toMatchObject({ thread: "t1" });
 	});
 
-	it("keeps the thread off the wire", async () => {
+	it("shows a comment's turn as a reply to a comment, without its prompt or thread", async () => {
 		let { context, sent } = room({ busy: true });
 		await Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
 
@@ -824,8 +824,11 @@ describe("what a turn is acting on", () => {
 		expect(queue?.waiting).toEqual([{
 			id: expect.any(String),
 			handle: "ana",
-			text: "do the thing",
+			kind: "comment",
+			text: "Reply to a comment",
 		}]);
+		expect(JSON.stringify(queue)).not.toContain("do the thing");
+		expect(JSON.stringify(queue)).not.toContain("t1");
 	});
 
 	it("says a room with no turn running is acting on nothing", () => {
@@ -891,7 +894,7 @@ describe("draining the queue", () => {
 		expect(Chat.pending(chat)).toBeUndefined();
 	});
 
-	it("keeps `spent` off the wire", async () => {
+	it("keeps `spent` and the prompt off the wire, and says what an automatic turn is", async () => {
 		let { context, sent } = room({ busy: true });
 		await Chat.instruct(context, "ana", "do the thing", "notice", { spent: () => false });
 
@@ -899,8 +902,10 @@ describe("draining the queue", () => {
 		expect(queue?.waiting).toEqual([{
 			id: expect.any(String),
 			handle: "ana",
-			text: "do the thing",
+			kind: "followup",
+			text: "Automatic follow-up",
 		}]);
+		expect(JSON.stringify(queue)).not.toContain("do the thing");
 	});
 });
 
@@ -1072,5 +1077,203 @@ describe("a process that is stopping", () => {
 		Chat.interrupt(idle, "unused");
 		expect(idle.turnController.signal.aborted).toBe(false);
 		expect(idle.interruption).toBeUndefined();
+	});
+});
+
+const frame = (frames: Sent[], rid: string) => frames.find(item => item.rid === rid);
+const shown = (sent: Sent[]) =>
+	((sent.findLast(item => item.kind === "chat:queue")?.waiting ?? []) as Array<{ text: string }>)
+		.map(item => item.text);
+
+describe("cancelling and editing a message that waits in memory", () => {
+	async function queuedMessages(texts: string[]) {
+		let state = room({ busy: true });
+		for (let text of texts) {
+			await Chat.send(state.context, sender(), message(text, "planner"));
+		}
+		return state;
+	}
+	it("lets the author cancel it through cancelQueuedJobs: it leaves the queue, the rest keep their order and the room is told", async () => {
+		let { chat, context, sent } = await queuedMessages(["one", "two", "three"]);
+		let replies: Sent[] = [];
+		let skipped: unknown[] = [];
+		let target = chat.waiting[1]!;
+		target.ended = outcome => void skipped.push(outcome);
+
+		Chat.unqueue(context, sender("ana", "U_ana", replies), {
+			kind: "chat:unqueue",
+			rid: "cancel",
+			id: target.id,
+			ts: 0,
+		});
+
+		expect(frame(replies, "cancel")).toMatchObject({ kind: "chat:unqueue", id: target.id });
+		expect(chat.waiting.map(item => item.text)).toEqual(["one", "three"]);
+		expect(shown(sent)).toEqual(["one", "three"]);
+		await Promise.resolve();
+		expect(skipped).toEqual([{ status: "skipped" }]);
+		// Cancelling it again is the plain answer: its turn did not start, nothing waits for it.
+		await Chat.unqueue(context, sender("ana", "U_ana", replies), {
+			kind: "chat:unqueue",
+			rid: "again",
+			id: target.id,
+			ts: 0,
+		});
+		expect(frame(replies, "again")).toMatchObject({
+			kind: "session:error",
+			code: "already-started",
+		});
+		// What starts next is what was left, in order.
+		expect(Chat.pending(chat)?.text).toBe("one");
+		expect(Chat.pending(chat)?.text).toBe("three");
+	});
+
+	it("keeps cancelQueuedJobs ending every job and only the jobs when it names none", async () => {
+		let { chat, context } = await queuedMessages(["one"]);
+		let state = { prompts: 0 };
+		let settled: unknown[] = [];
+		chat.waiting.push({
+			id: "job",
+			handle: "chopin",
+			text: "(background job)",
+			job: {
+				job: {
+					id: "j",
+					kind: "decision-followup",
+					target: "q",
+					trigger: "t",
+					status: "pending",
+					attempts: 0,
+					at: "",
+				},
+				prompt: `job ${++state.prompts}`,
+				done: outcome => void settled.push(outcome),
+			},
+		});
+		expect(Chat.cancelQueuedJobs(context, "The document closed.")).toBe(1);
+		expect(chat.waiting.map(item => item.text)).toEqual(["one"]);
+		expect(settled).toEqual([{ status: "failed", reason: "The document closed." }]);
+	});
+
+	it("refuses anyone else, and work nobody typed, and changes nothing", async () => {
+		let { chat, context, sent } = await queuedMessages(["ana's message"]);
+		await Chat.instruct(context, "ana", "a comment prompt", "notice", { thread: "t1" });
+		let before = structuredClone(shown(sent));
+		let replies: Sent[] = [];
+		let ana = chat.waiting[0]!;
+		let comment = chat.waiting[1]!;
+
+		Chat.unqueue(context, sender("bob", "U_bob", replies), {
+			kind: "chat:unqueue",
+			rid: "bob-cancel",
+			id: ana.id,
+			ts: 0,
+		});
+		await Chat.edit(context, sender("bob", "U_bob", replies), {
+			kind: "chat:edit",
+			rid: "bob-edit",
+			id: ana.id,
+			text: "bob's words",
+			ts: 0,
+		});
+		for (let rid of ["bob-cancel", "bob-edit"]) {
+			expect(frame(replies, rid)).toMatchObject({ kind: "session:error" });
+			expect(frame(replies, rid)?.code).toBeUndefined();
+		}
+		// Not even its asker may cancel or edit what is not a message.
+		Chat.unqueue(context, sender("ana", "U_ana", replies), {
+			kind: "chat:unqueue",
+			rid: "comment-cancel",
+			id: comment.id,
+			ts: 0,
+		});
+		await Chat.edit(context, sender("ana", "U_ana", replies), {
+			kind: "chat:edit",
+			rid: "comment-edit",
+			id: comment.id,
+			text: "rewritten",
+			ts: 0,
+		});
+		for (let rid of ["comment-cancel", "comment-edit"]) {
+			expect(frame(replies, rid)).toMatchObject({ kind: "session:error" });
+		}
+		expect(chat.waiting.map(item => item.text)).toEqual(["ana's message", "a comment prompt"]);
+		expect(shown(sent)).toEqual(before);
+	});
+
+	it("lets the author edit it: the queue and the turn read the new text, the references that still stand move with it", async () => {
+		let { chat, context, sent } = await queuedMessages(["see #Release now"]);
+		let release = { ...resolvedReference("#Release"), start: 4, end: 12 };
+		let waiting = chat.waiting[0]!;
+		waiting.text = "see #Release now";
+		waiting.references = [release];
+		let replies: Sent[] = [];
+
+		await Chat.edit(context, sender("ana", "U_ana", replies), {
+			kind: "chat:edit",
+			rid: "edit",
+			id: waiting.id,
+			text: "please see #Release now",
+			ts: 0,
+		});
+
+		expect(frame(replies, "edit")).toMatchObject({
+			kind: "chat:edit",
+			id: waiting.id,
+			text: "please see #Release now",
+			references: [{ id: release.id, start: 11, end: 19, label: "#Release" }],
+		});
+		expect(shown(sent)).toEqual(["please see #Release now"]);
+		let next = Chat.pending(chat)!;
+		expect(next.text).toBe("please see #Release now");
+		expect(next.references).toMatchObject([{ id: release.id, start: 11, end: 19 }]);
+		// Taken into the transcript as what it now says, once.
+		expect(chat.entries).toMatchObject([{ text: "please see #Release now" }]);
+
+		// An edit that touches the reference drops it, and the text stays the person's.
+		let second = await queuedMessages(["see #Release now"]);
+		second.chat.waiting[0]!.references = [release];
+		await Chat.edit(second.context, sender("ana", "U_ana", replies), {
+			kind: "chat:edit",
+			rid: "touch",
+			id: second.chat.waiting[0]!.id,
+			text: "see #Releas now",
+			ts: 0,
+		});
+		expect(frame(replies, "touch")).toMatchObject({ kind: "chat:edit", text: "see #Releas now" });
+		expect(frame(replies, "touch")?.references).toBeUndefined();
+	});
+
+	it("refuses an edit a send would refuse, and an edit of a message whose turn has begun", async () => {
+		let { chat, context } = await queuedMessages(["keep", "begin"]);
+		let replies: Sent[] = [];
+		let ana = sender("ana", "U_ana", replies);
+		let [keep, begin] = chat.waiting;
+		for (
+			let [rid, text] of [["blank", "  "], ["mention", "@chopin"], [
+				"large",
+				"x".repeat(64 * 1024 + 1),
+			]] as const
+		) {
+			await Chat.edit(context, ana, { kind: "chat:edit", rid, id: keep!.id, text, ts: 0 });
+			expect(frame(replies, rid)).toMatchObject({ kind: "session:error" });
+		}
+		expect(chat.waiting[0]!.text).toBe("keep");
+
+		expect(Chat.pending(chat)?.id).toBe(keep!.id);
+		expect(Chat.pending(chat)?.id).toBe(begin!.id);
+		for (let id of [keep!.id, begin!.id, crypto.randomUUID()]) {
+			await Chat.edit(context, ana, {
+				kind: "chat:edit",
+				rid: `late-${id}`,
+				id,
+				text: "late",
+				ts: 0,
+			});
+			expect(frame(replies, `late-${id}`)).toMatchObject({
+				kind: "session:error",
+				code: "already-started",
+			});
+		}
 	});
 });

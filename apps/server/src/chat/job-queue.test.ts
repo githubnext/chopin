@@ -107,7 +107,7 @@ test("archive reset fences a job shifted out of the queue during persistence", a
 	expect(state.prompts).toHaveLength(1);
 });
 
-test("a job queued behind a turn never reaches clients as a queued message", async () => {
+test("a job queued behind a turn reaches clients in plain words, never as its prompt", async () => {
 	let state = harness();
 	await Chat.send(state.context, socket(), member("Human first"));
 	await until(() => state.prompts.length === 1);
@@ -115,9 +115,18 @@ test("a job queued behind a turn never reaches clients as a queued message", asy
 	await Chat.send(state.context, socket(), member("Human later"));
 	expect(state.chat.waiting).toHaveLength(2);
 	let frame = state.frames.findLast(f => f.kind === "chat:queue");
-	expect(frame).toMatchObject({ waiting: [{ text: "Human later" }] });
+	expect(frame).toMatchObject({
+		waiting: [
+			{ kind: "job", handle: "chopin", text: expect.stringMatching(/\S/) },
+			{ text: "Human later" },
+		],
+	});
+	expect(JSON.stringify(frame)).not.toContain("job later");
 	Chat.cancelQueuedJobs(state.context, "This document was archived.");
 	await queued;
+	expect(state.frames.findLast(f => f.kind === "chat:queue")).toMatchObject({
+		waiting: [{ text: "Human later" }],
+	});
 	state.emit("session.idle");
 	await until(() => state.prompts.length === 2);
 	state.emit("session.idle");

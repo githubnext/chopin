@@ -37,6 +37,8 @@ import { settledStages } from "@chopin/protocol/run-stages";
 
 import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
 import { createNotices } from "./notices";
+import { carryReferences, project } from "./queued-work";
+import { editableDeferredKind } from "../storage/model";
 import { ChatReferenceError } from "./references";
 import {
 	cancelledNotice,
@@ -48,7 +50,14 @@ import {
 	move,
 	newTurn,
 } from "./deferred";
-import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
+import {
+	createJobQueue,
+	dequeue,
+	finishJob,
+	jobReason,
+	type JobTurn,
+	safeProjection,
+} from "./job-queue";
 import { translateJob } from "./job-translate";
 import { argsText, outputText, textOutput } from "./activity";
 import { toolErrorSchema } from "@chopin/agent-link";
@@ -147,6 +156,11 @@ export type Waiting = Wire.Waiting & {
 	deferred?: Deferred;
 	/** The session opened for this request before its row moved, which its turn then runs in. */
 	opened?: { session: PlannerSession; binding: ActiveOwnerBinding };
+	/**
+	 * Set while an edit of this message is being saved. The queue does not start it until the edit
+	 * has been saved or refused, so a turn never reads text an edit is about to change.
+	 */
+	editing?: Promise<void>;
 };
 
 /** A request for implementation tasks, live while its turn is queued or running. */
@@ -725,23 +739,14 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
 }
 
 /**
- * The queue as clients see it.
+ * The queue as clients see it: everything waiting for the Planner, in the order it will start.
  *
- * Internal queue metadata decides how and under whose authority a turn runs.
- * None of it belongs in the wire projection. Queued background jobs are not messages
- * anyone sent, so they stay off the wire entirely.
+ * Internal queue metadata decides how and under whose authority a turn runs. None of it belongs
+ * in the wire projection, and neither does the prompt of work nobody typed: `project` says what
+ * it is in plain words instead.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.filter(item =>
-		!item.draft && !item.job && !item.quiet && !(item.deferred && item.message)
-	).map((
-		{ handle, id, text, references },
-	) => ({
-		handle,
-		id,
-		text,
-		...(references?.length ? { references } : {}),
-	}));
+	return chat.waiting.map(project);
 }
 
 function queued(chat: Chat, server: Server<SocketData>, room: string): void {
@@ -1430,6 +1435,7 @@ async function deferMessage(
 	});
 	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: requestId, queued: true });
 	announce(server, room, entry);
+	queued(chat, server, room);
 	context.memberMessagePersisted?.(entry, context.claimantSessionId);
 	void kick(context);
 }
@@ -1744,6 +1750,7 @@ async function postDraft(
 	if (!chat.waiting.includes(waiting)) return answer();
 	if (occupied(chat) || turn) {
 		drafting(server, room, draft, "queued");
+		queued(chat, server, room);
 		if (turn) void kick(context);
 		return answer();
 	}
@@ -1762,26 +1769,77 @@ let jobState = safeProjection(state);
 let jobQueued = safeProjection(queued);
 let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
 	queued: jobQueued,
+	report,
 	state: jobState,
 	startRun,
 	MAX_QUEUE,
 });
 export { cancelQueuedJobs, job };
 
-/** Withdraw a queued message. Only whoever wrote it may. */
-export function unqueue(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): void {
-	let { chat, room, server } = context;
+/**
+ * Cancel a message waiting in the queue. Only whoever wrote it may. A message kept as a row is
+ * taken back with its row in one commit; one kept in memory leaves through `cancelQueuedJobs`.
+ * A message that is no longer waiting is refused as already started, which is also what a turn
+ * that starts while this is being asked decides.
+ */
+export function unqueue(
+	context: Room,
+	ws: Socket,
+	msg: Request<Wire.Unqueue>,
+): void | Promise<void> {
+	let found = context.chat.waiting.find(item => item.id === msg.id);
+	if (found && !found.deferred) return unqueueMemory(context, ws, msg, found);
+	// After every send already admitted, as a delete is, so it never overtakes the message it cancels.
+	let process = () =>
+		unqueueNow(context, ws, msg).catch(err => {
+			console.error("[chat] a queued message could not be cancelled:", err);
+			fail(ws, msg.rid, "could not cancel message", PASSING);
+		});
+	let accepted = context.chat.sending.then(process, process);
+	context.chat.sending = accepted.then(() => {}, () => {});
+	return accepted;
+}
+
+const NOT_THEIRS = "only the author of a queued message can change it";
+
+function alreadyStarted(ws: Socket, rid: string): void {
+	fail(ws, rid, "its turn has already started", "already-started");
+}
+
+function unqueueMemory(
+	context: Room,
+	ws: Socket,
+	msg: Request<Wire.Unqueue>,
+	found: Waiting,
+): void {
+	if (!found.message || found.handle !== ws.data.handle) return fail(ws, msg.rid, NOT_THEIRS);
+	cancelQueuedJobs(context, "Cancelled by its author.", found);
+	reply(ws, msg.rid, { kind: "chat:unqueue", ts: 0, id: msg.id });
+}
+
+async function unqueueNow(context: Room, ws: Socket, msg: Request<Wire.Unqueue>): Promise<void> {
+	let { chat, room } = context;
 	let found = chat.waiting.find(item => item.id === msg.id);
-	if (!found || found.job || found.handle !== ws.data.handle) return;
-	// A request kept as a row is withdrawn with its row, or it would come back with a restart.
-	if (found.deferred) {
-		if (found.message) void remove(context, ws, msg as unknown as Request<Wire.Delete>);
-		else void cancelRow(context, found, "spent");
-		return;
+	if (!found) {
+		// Cancelling twice leaves it cancelled, as asking twice would.
+		let row = context.deferred
+			? await context.plan.persistence.storage.deferredTurns.get(room, msg.id)
+			: undefined;
+		if (
+			row?.state === "cancelled" && row.handle === ws.data.handle && editableDeferredKind(row.kind)
+		) {
+			return reply(ws, msg.rid, { kind: "chat:unqueue", ts: 0, id: msg.id });
+		}
+		return alreadyStarted(ws, msg.rid);
 	}
-	chat.waiting = chat.waiting.filter(item => item.id !== msg.id);
-	queued(chat, server, room);
-	void report(found, { status: "skipped" });
+	if (!found.message || found.handle !== ws.data.handle) return fail(ws, msg.rid, NOT_THEIRS);
+	if (!found.deferred) return unqueueMemory(context, ws, msg, found);
+	let entry = chat.entries.find(value => value.id === (found.deferred!.entry ?? found.id));
+	if (entry?.deliveryState !== "sent") return alreadyStarted(ws, msg.rid);
+	let answer = () => reply(ws, msg.rid, { kind: "chat:unqueue", ts: 0, id: msg.id });
+	if (!await takeBack(context, entry, found, answer)) {
+		return fail(ws, msg.rid, "could not cancel message", PASSING);
+	}
 }
 
 /**
@@ -3433,6 +3491,11 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 		let first = chat.waiting[0];
 		if (!first) return undefined;
 		if (!first.deferred || !context.deferred) return pending(chat);
+		// An edit being saved decides its text first; the head is looked at again once it has.
+		if (first.editing) {
+			await first.editing;
+			continue;
+		}
 		if (first.spent?.()) {
 			chat.waiting.shift();
 			await cancelRow(context, first, "spent");
@@ -3454,7 +3517,7 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 			await cancelRow(context, first, "access");
 			continue;
 		}
-		if (chat.waiting[0] !== first) continue;
+		if (chat.waiting[0] !== first || first.editing) continue;
 		if (gate.claimant) first.sessionId = gate.claimant;
 		return pending(chat);
 	}
@@ -3658,7 +3721,7 @@ export function remove(context: Room, ws: Socket, msg: Request<Wire.Delete>): Pr
 }
 
 async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): Promise<void> {
-	let { chat, room, server } = context;
+	let { chat, room } = context;
 	let entry = chat.entries.find(value => value.id === msg.id);
 	let item = chat.waiting.find(value => value.id === msg.id && value.message && value.deferred);
 	if (!entry && context.deferred) {
@@ -3696,14 +3759,34 @@ async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): 
 		entry?.author.kind !== "member" || entry.author.handle !== ws.data.handle
 		|| entry.deliveryState === "delivered" || entry.deliveryState === undefined
 	) return fail(ws, msg.rid, "this message cannot be deleted", "message-not-deletable");
+	// Being taken by the machine right now: if that fails it waits again, so this is not the last
+	// word, and the browser asks again until it is delivered or deleted.
+	if (entry.deliveryState === "sent" && !item?.deferred) {
+		return fail(ws, msg.rid, "this message is already on its way");
+	}
+	let answer = () => reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
+	if (!await takeBack(context, entry, item, answer)) {
+		return fail(ws, msg.rid, "could not delete message");
+	}
+}
+
+/**
+ * Takes a message out of the Chat and, with its row, out of the queue, in one commit. Out of the
+ * queue first, so a turn that ends now cannot start it; back where it was if the commit fails.
+ * `answer` is called once it is committed, and the room hears of it after that.
+ */
+async function takeBack(
+	context: Room,
+	entry: MemberEntry,
+	item: Waiting | undefined,
+	answer: () => void,
+): Promise<boolean> {
+	let { chat, room, server } = context;
 	let index = chat.entries.indexOf(entry);
+	let at = item ? chat.waiting.indexOf(item) : -1;
 	let changes: DeferredTurnChange[] = [];
-	if (entry.deliveryState === "sent") {
-		// Out of the queue first, so a turn that ends now cannot start it.
-		// Being taken by the machine right now: if that fails it waits again, so this is not the last
-		// word, and the browser asks again until it is delivered or deleted.
-		if (!item?.deferred) return fail(ws, msg.rid, "this message is already on its way");
-		chat.waiting = chat.waiting.filter(value => value !== item);
+	if (entry.deliveryState === "sent" && item?.deferred) {
+		dequeue(chat, item);
 		changes.push(move(item.deferred.row, "waiting", "cancelled"));
 	}
 	chat.entries.splice(index, 1);
@@ -3715,12 +3798,154 @@ async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): 
 	} catch {
 		chat.entries.splice(index, 0, entry);
 		if (shifted) chat.turn!.entryOffset++;
-		if (item) chat.waiting.push(item);
-		return fail(ws, msg.rid, "could not delete message");
+		if (item && at >= 0 && !chat.waiting.includes(item)) chat.waiting.splice(at, 0, item);
+		return false;
 	}
-	reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
-	broadcast(server, room, { kind: "chat:removed", ts: 0, id: msg.id });
+	answer();
+	broadcast(server, room, { kind: "chat:removed", ts: 0, id: entry.id });
+	queued(chat, server, room);
 	if (item) void report(item, { status: "skipped" });
+	return true;
+}
+
+/**
+ * Change the text of a message waiting in the queue. Only its author may, only while it waits, and
+ * only if they can still write to the document: what the Planner then reads is theirs. The text
+ * follows the rules of a send to the Planner. The change and the check that the row still waits are
+ * one commit, and the queue does not start the message while it is being saved, so a turn that
+ * starts first is never rewritten and the edit is refused as already started.
+ */
+export function edit(context: Room, ws: Socket, msg: Request<Wire.Edit>): Promise<void> {
+	let process = () =>
+		editNow(context, ws, msg).catch(err => {
+			console.error("[chat] a queued message could not be edited:", err);
+			fail(ws, msg.rid, "could not edit message", PASSING);
+		});
+	let accepted = context.chat.sending.then(process, process);
+	context.chat.sending = accepted.then(() => {}, () => {});
+	return accepted;
+}
+
+async function editNow(context: Room, ws: Socket, msg: Request<Wire.Edit>): Promise<void> {
+	let { chat, room, server } = context;
+	if (typeof msg.id !== "string" || typeof msg.text !== "string") {
+		return fail(ws, msg.rid, "invalid message edit");
+	}
+	if (Buffer.byteLength(msg.text) > MAX_MESSAGE_BYTES) {
+		return fail(ws, msg.rid, "chat message exceeds the 64 KiB limit");
+	}
+	if (chat.closed) return refuseClosed(ws, msg.rid);
+	let item = chat.waiting.find(value => value.id === msg.id);
+	if (!item) return alreadyStarted(ws, msg.rid);
+	if (!item.message || item.handle !== ws.data.handle) return fail(ws, msg.rid, NOT_THEIRS);
+	let projected: { text: string; references?: Wire.Reference[] };
+	try {
+		if (context.references) {
+			projected = await context.references.resolve({
+				channelId: room,
+				repositoryId: context.repository.id,
+				text: msg.text,
+				destination: "planner",
+				requests: msg.references,
+			});
+		} else {
+			if (
+				msg.references !== undefined && (!Array.isArray(msg.references) || msg.references.length)
+			) {
+				return fail(ws, msg.rid, "chat references are unavailable");
+			}
+			projected = { text: instruction(msg.text.trim()) };
+		}
+	} catch (err) {
+		if (err instanceof ChatReferenceError) {
+			return fail(ws, msg.rid, "invalid or unavailable chat reference");
+		}
+		console.error("[chat] could not resolve an edited message's references:", err);
+		return fail(ws, msg.rid, "chat references are temporarily unavailable", PASSING);
+	}
+	let text = projected.text;
+	if (!text) return fail(ws, msg.rid, "message text is empty");
+	// What was looked up above took time: the message may have started, or been cancelled, since.
+	if (chat.closed) return refuseClosed(ws, msg.rid);
+	if (!chat.waiting.includes(item) || item.editing) return alreadyStarted(ws, msg.rid);
+	let references = msg.references !== undefined
+		? projected.references ?? []
+		: carryReferences(item.text, text, item.references);
+	let entry = item.deferred
+		? chat.entries.find(value => value.id === (item.deferred!.entry ?? item.id))
+		: undefined;
+	if (item.deferred && !entry) return alreadyStarted(ws, msg.rid);
+	// The saved delivery says what the message canonically reads, which a restart checks against its
+	// text: it is rewritten with the text, and keeps the fingerprint of the request that sent it, so
+	// a send tried again after its answer was lost is still recognized as that request.
+	let delivered = (value: { text: string; references?: Wire.Reference[] }) =>
+		item!.delivery && {
+			...item!.delivery,
+			canonicalFingerprint: canonicalFingerprint(
+				item!.delivery.destination,
+				value.text,
+				value.references,
+			),
+		};
+	let before = { text: item.text, references: item.references, delivery: item.delivery };
+	let apply = (
+		value: { text: string; references?: Wire.Reference[]; delivery?: Delivery },
+	) => {
+		item!.text = value.text;
+		if (value.references?.length) item!.references = value.references;
+		else delete item!.references;
+		if (value.delivery) item!.delivery = value.delivery;
+		if (!entry) return;
+		entry.text = value.text;
+		if (value.references?.length) entry.references = value.references;
+		else delete entry.references;
+		if (value.delivery) (entry as MemberEntry).delivery = value.delivery;
+	};
+	let said = () =>
+		reply(ws, msg.rid, {
+			kind: "chat:edit",
+			ts: 0,
+			id: msg.id,
+			text,
+			...(references.length ? { references } : {}),
+		});
+	let rewritten = delivered({ text, references });
+	apply({ text, references, delivery: rewritten });
+	if (!item.deferred || !context.deferred) {
+		// Kept in memory only: nothing saves it, and the turn it starts has not read it yet.
+		said();
+		return queued(chat, server, room);
+	}
+	let release!: () => void;
+	item.editing = new Promise<void>(resolve => release = resolve);
+	try {
+		let outcome = (await context.persist(undefined, [{
+			action: "edit",
+			id: item.deferred.row,
+			text,
+			...(rewritten
+				? {
+					delivery: {
+						...rewritten,
+						entry: item.deferred.entry ?? item.id,
+					} as unknown as JsonValue,
+				}
+				: {}),
+		}]))?.[0];
+		if (outcome && outcome.action === "edit" && !outcome.changed) {
+			apply(before);
+			return alreadyStarted(ws, msg.rid);
+		}
+		said();
+		if (entry) announce(server, room, entry);
+		queued(chat, server, room);
+	} catch {
+		apply(before);
+		fail(ws, msg.rid, "could not edit message", PASSING);
+	} finally {
+		delete item.editing;
+		release();
+	}
 }
 
 /** Send a message that could not be delivered again, as it was. Only its author may. */
@@ -3780,6 +4005,7 @@ async function retryNow(context: Room, ws: Socket, msg: Request<Wire.Retry>): Pr
 	});
 	reply(ws, msg.rid, { kind: "chat:retry", ts: 0, id: entry.id });
 	announce(server, room, entry);
+	queued(chat, server, room);
 	void kick(context);
 }
 

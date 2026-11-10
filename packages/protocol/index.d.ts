@@ -183,12 +183,15 @@ export declare namespace Session {
 		 * `message-not-deletable`: the answer to a `chat:delete` that is final: the machine already
 		 * took the message, or it is not the sender's. Any other refusal of a delete is for a passing
 		 * reason, and the delete is asked again.
+		 * `already-started`: the answer to a `chat:unqueue` or `chat:edit` of a message that is no
+		 * longer waiting, because the Planner's turn for it started first. It is final.
 		 */
 		code?:
 			| "planner-not-attached"
 			| "planner-queue-full"
 			| "temporarily-unavailable"
-			| "message-not-deletable";
+			| "message-not-deletable"
+			| "already-started";
 	};
 
 	/** Liveness, and the smallest thing that proves request correlation works. */
