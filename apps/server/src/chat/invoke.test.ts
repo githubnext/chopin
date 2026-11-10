@@ -10,6 +10,7 @@ import { decideReplying } from "../conversation-plan/decisions.test-fixtures";
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
 import { fullPlanner } from "../harness/atomic/full";
+import { ToolBoundaryError } from "../harness/remote/link";
 import { createHumanInput, PendingInputs } from "../harness/atomic/human-input";
 import { forgetWorkspaces } from "../harness/atomic/workspace";
 import { openPlannerSession } from "../harness/session";
@@ -2193,4 +2194,30 @@ test("a tool the turn was refused ends it as refused, once, whatever else ends w
 	let refused = context.chat.entries.filter(entry => entry.turnFailure);
 	expect(refused.map(entry => entry.turnFailure?.kind)).toEqual(["refused"]);
 	expect(refused[0]!.text).toBe("Chopin's tool approval was denied.");
+});
+
+test("a tool the remote Planner used without declaring it ends the turn as a tool failure, with no boundary words in what the room is told", async () => {
+	for (
+		let ending of [
+			async function*() {
+				yield {
+					type: "error",
+					error: new ToolBoundaryError("Chopin's tool boundary failure: bash"),
+				};
+			},
+			async () => {
+				throw new ToolBoundaryError("Chopin's tool boundary failure: bash");
+			},
+		]
+	) {
+		let { context, user } = await setup(configured(ATOMIC));
+		failingMemberTurn(context, ending as never);
+		await Chat.invoke(context, user, "Run a command");
+		await context.chat.running;
+		let failed = context.chat.entries.filter(entry => entry.turnFailure);
+		expect(failed.map(entry => entry.turnFailure?.kind)).toEqual(["tool"]);
+		expect(failed[0]!.turnFailure?.detail).toBeUndefined();
+		expect(failed[0]!.text).not.toMatch(/boundary|Chopin's tool/i);
+		expect(failed[0]!.text).toBe("The reply stopped: a tool it needed isn't available.");
+	}
 });

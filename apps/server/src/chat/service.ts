@@ -61,7 +61,7 @@ import { broadcast, fail, PASSING, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
-import { turnFailureOf } from "./turn-failure";
+import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { runDuration } from "./run-duration";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
@@ -3018,6 +3018,8 @@ async function run(
 				text: suspended
 					? "The machine's connection dropped during this reply. Its workflows and open "
 						+ "questions are kept; ask again once it has reconnected."
+					: failure.kind === "tool"
+					? TOOL_UNAVAILABLE
 					: err instanceof Error
 					? err.message
 					: "The agent could not be reached.",
@@ -4068,16 +4070,17 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 		case "error": {
 			chat.tooling = undefined;
 			let reported = part.error instanceof Error ? part.error : new Error(String(part.error));
+			let failure = turnFailureOf({
+				error: reported,
+				suspended: false,
+				request: chat.activeRequest?.entryId,
+				focus: chat.focus?.channelId,
+			});
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: reported.message,
-				turnFailure: turnFailureOf({
-					error: reported,
-					suspended: false,
-					request: chat.activeRequest?.entryId,
-					focus: chat.focus?.channelId,
-				}),
+				text: failure.kind === "tool" ? TOOL_UNAVAILABLE : reported.message,
+				turnFailure: failure,
 				ts: now(),
 			});
 			return;
