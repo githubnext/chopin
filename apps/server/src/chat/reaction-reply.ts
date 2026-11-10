@@ -36,6 +36,7 @@ type Candidate = {
 	actor: string;
 	sessionId: string | undefined;
 	due: number;
+	generation: number;
 };
 
 const GUIDANCE: Partial<Record<ReactionIntent, string>> = {
@@ -122,6 +123,7 @@ export function createResponder(
 	let clock = options.clock ?? SYSTEM_CLOCK;
 	let delay = options.delayMs ?? DEBOUNCE_MS;
 	let pending = new Map<string, Candidate>();
+	let generations = new Map<string, number>();
 	let asked = new Set<string>();
 	// Reactions that gave a reading another person's turn is already answering. They are answered
 	// if that turn ends without answering it, because the first reactor took theirs back.
@@ -130,6 +132,12 @@ export function createResponder(
 	let timer: unknown;
 	let closed = false;
 	let sleeping = new Set<{ timer: unknown; wake: () => void }>();
+
+	function held(candidate: Candidate) {
+		return generations.get(key(candidate)) === candidate.generation
+			? present(candidate.context, candidate.entryId, candidate.handle, candidate.emoji)
+			: undefined;
+	}
 
 	function sleep(ms: number): Promise<void> {
 		return new Promise(resolve => {
@@ -163,10 +171,7 @@ export function createResponder(
 		let due = [...pending.values()].filter(candidate => candidate.due <= horizon);
 		for (let candidate of due) pending.delete(key(candidate));
 		arm();
-		let live = due.filter(candidate => {
-			let entry = present(candidate.context, candidate.entryId, candidate.handle, candidate.emoji);
-			return answerable(entry) && !!candidate.context.decide;
-		});
+		let live = due.filter(candidate => answerable(held(candidate)) && !!candidate.context.decide);
 		if (live.length === 0) return;
 		let { decide } = live[0]!.context;
 		let items = live.map((candidate, index) =>
@@ -198,10 +203,10 @@ export function createResponder(
 	}
 
 	async function dispatch(candidate: Candidate, outcome: Reading) {
-		let { context, handle, emoji } = candidate;
+		let { context } = candidate;
 		let { chat } = context;
 		let intent = outcome.intent;
-		let entry = present(context, candidate.entryId, handle, emoji);
+		let entry = held(candidate);
 		if (!entry || !candidate.sessionId) return;
 		let guard = `${entry.id}\u0000${intent}`;
 		// Asked first: the reading is recorded as answered from the moment its turn is queued, and
@@ -250,10 +255,8 @@ export function createResponder(
 	}
 
 	async function until(candidate: Candidate, ready: () => boolean): Promise<boolean> {
-		let { context, handle, emoji } = candidate;
-		let alive = () =>
-			!closed && !context.chat.closed
-			&& !!answerable(present(context, candidate.entryId, handle, emoji));
+		let { context } = candidate;
+		let alive = () => !closed && !context.chat.closed && !!answerable(held(candidate));
 		while (alive()) {
 			if (ready()) return true;
 			await sleep(IDLE_POLL_MS);
@@ -276,7 +279,7 @@ export function createResponder(
 			again = false;
 			if (!await until(candidate, () => !full(chat)) || !await authorize()) return release();
 			let accept = async () => {
-				let current = present(context, candidate.entryId, handle, emoji);
+				let current = held(candidate);
 				if (closed || chat.closed || !current) return release();
 				if (full(chat)) return void (again = true);
 				// Saved before the turn is queued, so a restart can never answer the same reading twice.
@@ -322,8 +325,7 @@ export function createResponder(
 						{
 							authorize,
 							...(reader ? { reader: true as const } : {}),
-							spent: () =>
-								closed || chat.closed || !present(context, candidate.entryId, handle, emoji),
+							spent: () => closed || chat.closed || !held(candidate),
 							started: () => {
 								chat.reactionTurn = chat.turn?.id;
 							},
@@ -358,8 +360,11 @@ export function createResponder(
 				actor: actorOf(reacted.ws),
 				sessionId: context.claimantSessionId,
 				due: clock.now() + delay,
+				generation: 0,
 			};
 			if (closed) return;
+			candidate.generation = (generations.get(key(candidate)) ?? 0) + 1;
+			generations.set(key(candidate), candidate.generation);
 			if (!reacted.on) {
 				pending.delete(key(candidate));
 				return;
@@ -377,6 +382,7 @@ export function createResponder(
 			if (timer !== undefined) clock.clear(timer);
 			timer = undefined;
 			pending.clear();
+			generations.clear();
 			backlog.clear();
 			for (let sleeper of sleeping) sleeper.wake();
 		},
