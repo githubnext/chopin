@@ -45,7 +45,6 @@ import {
 	imageLabel,
 	imageSource,
 	loadState,
-	remoteImagePath,
 	settledOnMount,
 } from "./image-state";
 import { dataImageSize } from "./image-size";
@@ -74,7 +73,7 @@ export const ChatImageDocument = DocumentContext.Provider;
 
 type Loadable = Exclude<ImageSource, { kind: "unavailable" }>;
 
-type Shown = { source: Loadable; url: string; type?: string; remote?: string };
+type Shown = { source: Loadable; url: string; type?: string };
 
 type Entry = Shown & { data: ChatImageData; element: HTMLElement; image: LightboxImage };
 
@@ -110,14 +109,14 @@ export function MessageImages({ children }: { children: ReactNode }) {
 				<Suspense fallback={null}>
 					<Lightbox
 						actions={(_, index) => {
-							let { data, remote, source, type, url } = view.entries[index]!;
+							let { data, source, type, url } = view.entries[index]!;
 							return (
 								<ImageButtons
 									compact={false}
 									data={data}
 									key={index}
 									inLightbox
-									shown={{ remote, source, type, url }}
+									shown={{ source, type, url }}
 								/>
 							);
 						}}
@@ -296,20 +295,11 @@ async function fetchImage(url: string): Promise<Blob> {
 	return response.blob();
 }
 
-async function fetchShown({ remote, url }: Shown): Promise<Blob> {
-	try {
-		return await fetchImage(url);
-	} catch (error) {
-		if (!remote) throw error;
-		return fetchImage(remote);
-	}
-}
-
-async function copyImage(shown: Shown): Promise<void> {
+async function copyImage(url: string): Promise<void> {
 	if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
 		throw new Error("Clipboard API is not available in this environment.");
 	}
-	let png = fetchShown(shown).then(blob => blob.type === "image/png" ? blob : toPng(blob));
+	let png = fetchImage(url).then(blob => blob.type === "image/png" ? blob : toPng(blob));
 	// The item holds the promise, so the write starts inside the click that asked for it.
 	await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
 }
@@ -324,9 +314,9 @@ function save(href: string, name: string): void {
 	document.body.removeChild(link);
 }
 
-async function downloadImage(shown: Shown, name: string): Promise<void> {
-	if (shown.source.kind !== "external") return save(shown.url, name);
-	let object = URL.createObjectURL(await fetchShown(shown));
+async function downloadImage({ source, url }: Shown, name: string): Promise<void> {
+	if (source.kind !== "external") return save(url, name);
+	let object = URL.createObjectURL(await fetchImage(url));
 	save(object, name);
 	setTimeout(() => URL.revokeObjectURL(object), 40_000);
 }
@@ -357,7 +347,8 @@ function ImageButtons(
 					inLightbox ? "btn-secondary" : "btn-outline"
 				}`}
 				data-chat-image-action="copy"
-				onClick={() => copyImage(shown).then(() => setCopied("copied"), () => setCopied("failed"))}
+				onClick={() =>
+					copyImage(shown.url).then(() => setCopied("copied"), () => setCopied("failed"))}
 				type="button"
 			>
 				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
@@ -443,7 +434,6 @@ function useImageEntry(
 		: source.kind === "unavailable"
 		? undefined
 		: source.url;
-	let remote = source.kind === "external" ? remoteImagePath(source.url, document) : undefined;
 
 	useLayoutEffect(() => {
 		let element = anchor.current;
@@ -452,14 +442,13 @@ function useImageEntry(
 			data: image,
 			element,
 			image: { src: url, alt: label, caption: image.caption, generated: image.generated },
-			remote,
 			source,
 			type: local.type,
 			url,
 		});
-	}, [host, anchor, id, url, remote, label, image.src, image.alt, image.caption, image.generated]);
+	}, [host, anchor, id, url, label, image.src, image.alt, image.caption, image.generated]);
 
-	return { id, label, pending: local.pending, remote, source, type: local.type, url };
+	return { id, label, pending: local.pending, source, type: local.type, url };
 }
 
 export function HiddenImage({ host, image }: { host: Host; image: ChatImageData }) {
@@ -478,7 +467,7 @@ export function ImageFigure(
 	},
 ) {
 	let anchor = useRef<HTMLSpanElement>(null);
-	let { id, label, pending, remote, source, type, url } = useImageEntry(host, image, anchor);
+	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
 	let framed = useFrameImage(image, source);
 	let open = () => {
@@ -516,7 +505,7 @@ export function ImageFigure(
 						data={image}
 						label={label}
 						onOpen={open}
-						shown={{ remote, source, type, url }}
+						shown={{ source, type, url }}
 					/>
 				)}
 			</div>
