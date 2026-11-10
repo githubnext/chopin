@@ -28,13 +28,15 @@ import { trace } from "./motion";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { HARNESS, HOST, ROOT } from "./servers";
 
 import type { BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 import type { AgentClient, AgentHandlers } from "../packages/agent-link/src/client";
 
-const PORT = 8793;
+const PORT = e2ePort(8793);
 const ORIGIN = `http://${HOST}:${PORT}`;
+const DATABASE = e2eDatabaseName("chopin_planner_attachment");
 const GRACE_MS = 8_000;
 const HANDLE = "mona";
 
@@ -45,7 +47,7 @@ function databaseUrls() {
 			|| "postgresql://chopin:chopin@127.0.0.1:5436/chopin?sslmode=disable",
 	);
 	let own = new URL(cluster);
-	own.pathname = "/chopin_planner_attachment";
+	own.pathname = `/${DATABASE}`;
 	return { cluster: cluster.href, own: own.href };
 }
 
@@ -53,8 +55,8 @@ async function freshDatabase(): Promise<string> {
 	let { cluster, own } = databaseUrls();
 	let admin = new SQL(cluster);
 	try {
-		await admin.unsafe("DROP DATABASE IF EXISTS chopin_planner_attachment WITH (FORCE)");
-		await admin.unsafe("CREATE DATABASE chopin_planner_attachment");
+		await admin.unsafe(`DROP DATABASE IF EXISTS ${DATABASE} WITH (FORCE)`);
+		await admin.unsafe(`CREATE DATABASE ${DATABASE}`);
 	} finally {
 		await admin.close();
 	}

@@ -1,14 +1,15 @@
 import { SQL } from "bun";
 import { ulid } from "../packages/dialect/src/ulid";
 import { testChannelPath } from "./database";
+import { e2ePort } from "./ports";
 
 const DEFAULT_DATABASES: Record<number, string> = {
-	8788: "postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
-	8789: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
+	[e2ePort(8788)]: "postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
+	[e2ePort(8789)]: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
 };
 
 function url(port: number): string {
-	let index = port === 8789 ? 1 : 0;
+	let index = port === e2ePort(8789) ? 1 : 0;
 	return process.env[`E2E_DATABASE_URL_${index}`] || DEFAULT_DATABASES[port]!;
 }
 

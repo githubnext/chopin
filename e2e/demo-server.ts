@@ -6,11 +6,12 @@ import { join } from "node:path";
 import { expect, test as base } from "@playwright/test";
 
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
+import { e2ePort } from "./ports";
 import { ROOT } from "./servers";
 
 import type { Page } from "@playwright/test";
 
-export const ORIGIN = "http://127.0.0.1:8791";
+export const ORIGIN = `http://127.0.0.1:${e2ePort(8791)}`;
 
 type DemoServer = {
 	login(page: Page): Promise<void>;
@@ -62,7 +63,7 @@ export const test = base.extend<{ demo: DemoServer; room: string }>({
 					DEMO_PERSONAS: enabled ? "on" : "off",
 					APP_ORIGIN: ORIGIN,
 					SERVER_HOST: "127.0.0.1",
-					PORT: "8791",
+					PORT: String(e2ePort(8791)),
 					DATABASE_URL: process.env.E2E_DATABASE_URL_3!,
 					GITHUB_APP_SLUG: "chopin-e2e",
 					GITHUB_APP_CLIENT_ID: "e2e",
@@ -123,10 +124,14 @@ export const test = base.extend<{ demo: DemoServer; room: string }>({
 	},
 	room: async ({ demo }, use) => {
 		void demo;
-		registerTestDatabase(8791, process.env.E2E_DATABASE_URL_3!);
+		registerTestDatabase(e2ePort(8791), process.env.E2E_DATABASE_URL_3!);
 		let room = crypto.randomUUID();
-		await createChannel(8791, room);
-		await seedChannel(8791, room, "A shared passage for the local demo.\n\nA second paragraph.\n");
+		await createChannel(e2ePort(8791), room);
+		await seedChannel(
+			e2ePort(8791),
+			room,
+			"A shared passage for the local demo.\n\nA second paragraph.\n",
+		);
 		await use(room);
 	},
 });

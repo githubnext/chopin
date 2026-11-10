@@ -2,6 +2,7 @@ import { bringForward, openDecisionDocument } from "./decision-deck-fixtures";
 import { resetPlannerJobs } from "./planner-jobs";
 import { SQL } from "bun";
 
+import { e2ePort } from "./ports";
 import { openJevWire, sendChat, wireState } from "./jev-wire";
 import { authenticate, expect, roomPath, test } from "./room";
 
@@ -74,7 +75,7 @@ async function persistedConversation(port: number, room: string) {
 	let database = new SQL(
 		process.env.E2E_DATABASE_URL_0
 			?? `postgresql://chopin:chopin@127.0.0.1:${
-				port === 8789 ? 5434 : 5433
+				port === e2ePort(8789) ? 5434 : 5433
 			}/chopin?sslmode=disable`,
 	);
 	try {

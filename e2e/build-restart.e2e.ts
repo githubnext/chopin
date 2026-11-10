@@ -12,13 +12,14 @@ import { SQL } from "bun";
 
 import { createChannel, registerTestDatabase, seedChannel, testChannelPath } from "./database";
 import { authenticate, expect, test } from "./room";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { HOST, ROOT } from "./servers";
 
 import type { Graph } from "../apps/server/src/tasks/graphs";
 
-const PORT = 8795;
+const PORT = e2ePort(8795);
 const ORIGIN = `http://${HOST}:${PORT}`;
-const DATABASE = "chopin_build_restart";
+const DATABASE = e2eDatabaseName("chopin_build_restart");
 
 function databaseUrls() {
 	let cluster = new URL(

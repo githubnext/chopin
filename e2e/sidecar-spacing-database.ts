@@ -2,16 +2,17 @@ import { createHash } from "node:crypto";
 import { SQL } from "bun";
 import { storedCardGapDocument } from "../apps/server/src/testing/card-gap-document";
 import { storedDocument } from "../apps/server/src/testing/plan";
+import { e2ePort } from "./ports";
 
 import type { SeedState } from "../apps/server/src/testing/plan";
 
 const DEFAULT_DATABASES: Record<number, string> = {
-	8788: "postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
-	8789: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
+	[e2ePort(8788)]: "postgresql://chopin:chopin@127.0.0.1:5433/chopin?sslmode=disable",
+	[e2ePort(8789)]: "postgresql://chopin:chopin@127.0.0.1:5434/chopin?sslmode=disable",
 };
 
 function url(port: number): string {
-	let index = port === 8789 ? 1 : 0;
+	let index = port === e2ePort(8789) ? 1 : 0;
 	return process.env[`E2E_DATABASE_URL_${index}`] || DEFAULT_DATABASES[port]!;
 }
 

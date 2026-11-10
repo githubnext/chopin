@@ -14,14 +14,15 @@ import { finishTurn } from "../apps/server/src/testing/agent-link";
 import { chatInput, expectChatValue, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, expect, ready, roomPath, test } from "./room";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { HOST, ROOT } from "./servers";
 
 import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 import type { AgentClient, AgentHandlers } from "../packages/agent-link/src/client";
 
-const PORT = 8798;
+const PORT = e2ePort(8798);
 const ORIGIN = `http://${HOST}:${PORT}`;
-const DATABASE = "chopin_message_delivery";
+const DATABASE = e2eDatabaseName("chopin_message_delivery");
 const HANDLE = "mona";
 const PHONE = {
 	hasTouch: true,

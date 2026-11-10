@@ -7,6 +7,8 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { e2ePort } from "./ports";
+
 export const HOST = "127.0.0.1";
 
 /**
@@ -14,21 +16,21 @@ export const HOST = "127.0.0.1";
  * suites spawn servers on. Somebody with the app already running is the normal
  * case, not a conflict worth resolving.
  */
-export const PLAIN = 8788;
+export const PLAIN = e2ePort(8788);
 
 /**
  * A second server, because `DEV_QUESTIONS` and `DEV_COMMENTS` are read from the
  * environment on every room open. One server would put a questionnaire and a
  * comment thread into every other suite's room.
  */
-export const FIXTURES = 8789;
+export const FIXTURES = e2ePort(8789);
 
 /**
  * A third, isolated server: `AGENT=on` with a fake harness and fake GitHub MCP,
  * so a scripted Planner turn can run without touching the other two projects'
  * `AGENT=off` servers or ports. Clear of #157's 8790/8791.
  */
-export const HARNESS = 8792;
+export const HARNESS = e2ePort(8792);
 
 /** The repository root, from this file rather than from the current directory. */
 export const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
