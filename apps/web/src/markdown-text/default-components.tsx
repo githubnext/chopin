@@ -9,7 +9,7 @@
  */
 
 import { memo, useEffect, useRef, useState } from "react";
-import { CheckIcon, CopyIcon } from "@chopin/icons";
+import { CheckIcon, CopyIcon, WarningIcon } from "@chopin/icons";
 
 import { useIsMarkdownCodeBlock } from "./code-blocks";
 import { memoCompareNodes } from "./memoization";
@@ -26,8 +26,9 @@ const COPIED_MS = 3000;
 /**
  * A fenced block's header: its language and a button that copies its code. The write starts in the
  * click itself, so the clipboard keeps the user's gesture. A page with no clipboard (an insecure
- * origin) and a write the browser refuses both say so in the button's name, for as long as a copy
- * says it worked, and the button then offers the copy again.
+ * origin) and a write the browser refuses both say so in the button's name and with a warning glyph
+ * in the danger role, since a touch screen shows no tooltip, for as long as a copy says it worked,
+ * and the button then offers the copy again.
  */
 export let CopyCodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
 	let [outcome, setOutcome] = useState<"copied" | "failed">();
@@ -62,7 +63,11 @@ export let CopyCodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
 				onClick={copy}
 				type="button"
 			>
-				{outcome === "copied" ? <CheckIcon aria-hidden="true" size={12} /> : <CopyIcon />}
+				{outcome === "copied"
+					? <CheckIcon aria-hidden="true" size={12} />
+					: outcome === "failed"
+					? <WarningIcon aria-hidden="true" className="icon-danger" size={12} />
+					: <CopyIcon />}
 			</button>
 		</div>
 	);
