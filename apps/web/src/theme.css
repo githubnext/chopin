@@ -1540,6 +1540,7 @@ body {
 
 :root[data-plan-coarse-pointer] .room-header :where(button, summary),
 :root[data-plan-coarse-pointer] .chat-composer button,
+:root[data-plan-coarse-pointer] .document-banner button,
 :root[data-plan-coarse-pointer] .hosted-header button,
 :root[data-plan-coarse-pointer] .channel-create-input,
 :root[data-plan-coarse-pointer] [data-hosted] .btn,
