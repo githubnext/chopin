@@ -153,6 +153,12 @@
 .chat-composer .composer-notice[data-success] .composer-notice-icon {
 	--color-icon: var(--color-success-icon);
 }
+/* A phase that is only under way, reconnecting or retrying, is neutral, as it is in the document. */
+.chat-composer
+	.composer-notice[data-banner]:not([data-warning], [data-success], [data-error])
+	.composer-notice-icon {
+	--color-icon: var(--color-neutral-icon);
+}
 .chat-composer .composer-notice > .composer-notice-count {
 	flex: none;
 	color: var(--color-text-tertiary);
