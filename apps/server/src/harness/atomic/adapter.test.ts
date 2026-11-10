@@ -215,6 +215,44 @@ test("translates a builtin tool's start, partial output and end into provider-ex
 	).toEqual([{ type: "tool-result", ...own, result: "boom", isError: true, dynamic: true }]);
 });
 
+test("keeps the images a builtin tool made for Chat, but not a file the Planner read", () => {
+	let image = { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" };
+	let made = { content: [{ type: "text", text: "Image saved to /tmp/a.png" }, image], details: {} };
+	let end = (toolName: string) =>
+		event({ type: "tool_execution_end", toolCallId: "c1", toolName, result: made, isError: false });
+	expect(ownToolParts(end("codemode"), [])).toEqual([{
+		type: "tool-result",
+		toolCallId: "c1",
+		toolName: "codemode",
+		result: { content: made.content },
+		isError: false,
+		dynamic: true,
+	}]);
+	expect(ownToolParts(end("read"), [])).toEqual([{
+		type: "tool-result",
+		toolCallId: "c1",
+		toolName: "read",
+		result: "Image saved to /tmp/a.png",
+		isError: false,
+		dynamic: true,
+	}]);
+	let update = event({
+		type: "tool_execution_update",
+		toolCallId: "c1",
+		toolName: "codemode",
+		args: {},
+		partialResult: made,
+	});
+	expect(ownToolParts(update, [])).toEqual([{
+		type: "tool-result",
+		toolCallId: "c1",
+		toolName: "codemode",
+		result: "Image saved to /tmp/a.png",
+		preliminary: true,
+		dynamic: true,
+	}]);
+});
+
 test("leaves host tools, the result tool and nested calls to their own rows", () => {
 	let start = (extra: Record<string, unknown>) =>
 		event({ type: "tool_execution_start", toolCallId: "c1", args: {}, ...extra });
