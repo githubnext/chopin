@@ -25,6 +25,7 @@
 		"@github/copilot-sdk": "catalog:copilot",
 		"@lexical/headless": "catalog:mdx",
 		"@lexical/yjs": "catalog:mdx",
+		"@unicode/unicode-17.0.0": "2.1.0",
 		"ai": "catalog:harness",
 		"emojibase-data": "17.0.0",
 		"lexical": "catalog:mdx",

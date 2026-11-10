@@ -116,31 +116,29 @@ describe("reading any other emoji", () => {
 		expect(choice.instructions).toContain("never instructions");
 	});
 
-	it("puts the emoji, its name, the person, the message and the three before it in the state", async () => {
+	it("puts the emoji, its names, the person, the message and the three before it in the state", async () => {
 		await loadNames();
 		let { decide, requests } = classifier(CLEAR);
 		await classify([item("r0", "👍🏽")], { decide });
 		let state = requests[0]!.state as { items: Array<Record<string, any>> };
-		let [first] = state.items;
-		expect(first).toMatchObject({
+		expect(state.items).toEqual([{
 			id: "r0",
-			reaction: { emoji: "👍🏽", name: "thumbs up: medium skin tone", person: "ben" },
+			reaction: {
+				emoji: "👍🏽",
+				emojiName: "thumbs up: medium skin tone",
+				codePoints: [
+					{ codePoint: "U+1F44D", name: "THUMBS UP SIGN" },
+					{ codePoint: "U+1F3FD", name: "EMOJI MODIFIER FITZPATRICK TYPE-4" },
+				],
+				person: "ben",
+			},
 			message: { author: "agent", text: "I proposed three phases." },
-		});
-		expect(first!.reaction.codePoints.map((point: { codePoint: string }) => point.codePoint))
-			.toEqual([
-				"U+1F44D",
-				"U+1F3FD",
-			]);
-		expect(first!.preceding.map((message: Record<string, string>) => message.author)).toEqual([
-			"member",
-			"agent",
-			"member",
-		]);
-		expect(first!.preceding[0]).toMatchObject({
-			person: "ana",
-			text: "Can you plan the harp rollout?",
-		});
+			preceding: [
+				{ author: "member", person: "ana", text: "Can you plan the harp rollout?" },
+				{ author: "agent", text: "Yes, reading the repository." },
+				{ author: "member", person: "cy", text: "Include the venue." },
+			],
+		}]);
 	});
 
 	it("reads many reactions in one request, and splits only at the request's own limit", async () => {
@@ -169,6 +167,18 @@ describe("reading any other emoji", () => {
 		expect(readings.has("huge")).toBe(false);
 		expect(JSON.stringify(errors.mock.calls)).not.toContain("secret");
 		expect(JSON.stringify(errors.mock.calls)).toContain("huge");
+		errors.mockRestore();
+	});
+
+	it("leaves unread an emoji whose names alone would overrun the request, logging neither it nor the message", async () => {
+		let errors = spyOn(console, "error").mockImplementation(() => {});
+		let { decide, requests } = classifier(CLEAR);
+		let readings = await classify([item("long", "🤔".repeat(1_000), "private words")], { decide });
+		expect(requests).toEqual([]);
+		expect(readings.size).toBe(0);
+		expect(JSON.stringify(errors.mock.calls)).toContain("long");
+		expect(JSON.stringify(errors.mock.calls)).not.toContain("🤔");
+		expect(JSON.stringify(errors.mock.calls)).not.toContain("private words");
 		errors.mockRestore();
 	});
 
@@ -260,12 +270,90 @@ describe("failures", () => {
 });
 
 describe("naming an emoji", () => {
-	it("names every code point it was sent, and says so when it has no name", async () => {
+	const CASES: Array<[string, string, string | null, Array<[string, string | null]>]> = [
+		["a scalar", "\u2753", "red question mark", [["U+2753", "BLACK QUESTION MARK ORNAMENT"]]],
+		["a scalar above the first plane", "👍", "thumbs up", [["U+1F44D", "THUMBS UP SIGN"]]],
+		["a flag", "🇳🇴", "flag: Norway", [
+			["U+1F1F3", "REGIONAL INDICATOR SYMBOL LETTER N"],
+			["U+1F1F4", "REGIONAL INDICATOR SYMBOL LETTER O"],
+		]],
+		[
+			"a subdivision flag",
+			"🏴\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+			"flag: England",
+			[
+				["U+1F3F4", "WAVING BLACK FLAG"],
+				["U+E0067", "TAG LATIN SMALL LETTER G"],
+				["U+E0062", "TAG LATIN SMALL LETTER B"],
+				["U+E0065", "TAG LATIN SMALL LETTER E"],
+				["U+E006E", "TAG LATIN SMALL LETTER N"],
+				["U+E0067", "TAG LATIN SMALL LETTER G"],
+				["U+E007F", "CANCEL TAG"],
+			],
+		],
+		["a skin tone", "👍🏽", "thumbs up: medium skin tone", [
+			["U+1F44D", "THUMBS UP SIGN"],
+			["U+1F3FD", "EMOJI MODIFIER FITZPATRICK TYPE-4"],
+		]],
+		["a family joined by zero width joiners", "👨‍👩‍👧‍👦", "family: man, woman, girl, boy", [
+			["U+1F468", "MAN"],
+			["U+200D", "ZERO WIDTH JOINER"],
+			["U+1F469", "WOMAN"],
+			["U+200D", "ZERO WIDTH JOINER"],
+			["U+1F467", "GIRL"],
+			["U+200D", "ZERO WIDTH JOINER"],
+			["U+1F466", "BOY"],
+		]],
+		["a joined sequence with a variation selector", "🏳\uFE0F\u200D🌈", "rainbow flag", [
+			["U+1F3F3", "WAVING WHITE FLAG"],
+			["U+FE0F", "VARIATION SELECTOR-16"],
+			["U+200D", "ZERO WIDTH JOINER"],
+			["U+1F308", "RAINBOW"],
+		]],
+		["a keycap", "1\uFE0F\u20E3", "keycap: 1", [
+			["U+0031", "DIGIT ONE"],
+			["U+FE0F", "VARIATION SELECTOR-16"],
+			["U+20E3", "COMBINING ENCLOSING KEYCAP"],
+		]],
+		["a keycap of a symbol", "#\uFE0F\u20E3", "keycap: #", [
+			["U+0023", "NUMBER SIGN"],
+			["U+FE0F", "VARIATION SELECTOR-16"],
+			["U+20E3", "COMBINING ENCLOSING KEYCAP"],
+		]],
+		["a symbol with and without its variation selector", "\u2764", "red heart", [
+			["U+2764", "HEAVY BLACK HEART"],
+		]],
+		["a letter, which is no emoji", "x", null, [["U+0078", "LATIN SMALL LETTER X"]]],
+		["a private use character, which has no name", "\uE000", null, [["U+E000", null]]],
+		["the last code point, which has no name", "\u{10FFFF}", null, [["U+10FFFF", null]]],
+		["an emoji with other text around it", "👍x", null, [
+			["U+1F44D", "THUMBS UP SIGN"],
+			["U+0078", "LATIN SMALL LETTER X"],
+		]],
+	];
+
+	it.each(CASES)("%s", async (_, emoji, emojiName, codePoints) => {
 		await loadNames();
-		let described = describeEmoji("🧑‍🚀");
-		expect(described.name).toBe("astronaut");
-		expect(described.codePoints).toHaveLength(3);
-		expect(describeEmoji("hello").name).toBeNull();
-		expect(describeEmoji("x".repeat(200)).codePoints).toHaveLength(200);
+		expect(describeEmoji(emoji)).toEqual({
+			emojiName,
+			codePoints: codePoints.map(([codePoint, name]) => ({ codePoint, name })),
+		});
+	});
+
+	it("names every code point of a string of any length and cuts none", async () => {
+		await loadNames();
+		let described = describeEmoji("x".repeat(200));
+		expect(described.codePoints).toHaveLength(200);
+		expect(described.emojiName).toBeNull();
+	});
+
+	it("sends the emoji raw in the state, whatever it is", async () => {
+		let { decide, requests } = classifier(CLEAR);
+		let emojis = CASES.map(([, emoji]) => emoji).filter(emoji => !fixedIntent(emoji));
+		for (let emoji of emojis) await classify([item("r0", emoji)], { decide });
+		let sent = requests.map(request =>
+			(request.state as { items: Array<{ reaction: { emoji: string } }> }).items[0]!.reaction.emoji
+		);
+		expect(sent).toEqual(emojis);
 	});
 });

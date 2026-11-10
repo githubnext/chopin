@@ -52,6 +52,7 @@
         "@github/copilot-sdk": "catalog:copilot",
         "@lexical/headless": "catalog:mdx",
         "@lexical/yjs": "catalog:mdx",
+        "@unicode/unicode-17.0.0": "2.1.0",
         "ai": "catalog:harness",
         "emojibase-data": "17.0.0",
         "lexical": "catalog:mdx",
@@ -1328,6 +1329,8 @@
     "@typescript/native-preview-win32-x64": ["@typescript/native-preview-win32-x64@7.0.0-dev.20260304.1", "", { "os": "win32", "cpu": "x64" }, "sha512-lg/w+rZ9NIUoqSsk2TbtDsqyD9nW0/rhTMYd14RFP7vuNijLrTbl7GPiMhFtMxaqCSOFapwbql7/3lU4BKHB6g=="],
 
     "@ungap/structured-clone": ["@ungap/structured-clone@1.4.0", "", {}, "sha512-1mEZtMKPM09vDmQt5y7YvmN2+DFTP7Tg0EWXdic8/C6VRnpb33e4ghisCIE3WZjsE2N8mf+QV1Zqh7ZFYLWInQ=="],
+
+    "@unicode/unicode-17.0.0": ["@unicode/unicode-17.0.0@2.1.0", "", {}, "sha512-vin4t0thqky14tLee7x9dAQRNoCVCSQTNcm4csNyKH5cbA0fpqLQ8TJvOYyHFbYDwRTngN6curl2Ae9+YjJjtA=="],
 
     "@upsetjs/venn.js": ["@upsetjs/venn.js@2.0.0", "", { "optionalDependencies": { "d3-selection": "^3.0.0", "d3-transition": "^3.0.1" } }, "sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw=="],
 
