@@ -46,6 +46,15 @@ const INVESTIGATE_PROMPT = "INVESTIGATE-ANCHOR";
 const INVESTIGATE_TARGET = "Cold start";
 const CAPTURE_PROMPT = "ANCHORED-DECISIONS";
 const PROVISIONAL = "The first version remains provisional.";
+/**
+ * A member message naming one way a reply ends without finishing: the model's own error, a
+ * timeout, a tool the turn was not given, or a tool it was refused.  `FAIL-ONCE` fails as the model does
+ * the first time that exact message is asked and answers it ordinarily after, so a Retry that
+ * re-sends the same turn can be seen to work.
+ */
+const FAIL_PROMPT = /FAIL-(MODEL|TIMEOUT|TOOL|REFUSED)/;
+const FAIL_ONCE_PROMPT = "FAIL-ONCE";
+const failedOnce = new Set<string>();
 
 function checked<T>(name: string, result: { output: unknown; isError?: boolean }): T {
 	if (result.isError || String(result.output).startsWith("Error")) {
@@ -256,6 +265,44 @@ export function createFakeHarness(
 							} catch (error) {
 								turn.emit({ type: "error", error });
 								settled.reject(error);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (
+						FAIL_PROMPT.test(requested)
+						|| (requested.includes(FAIL_ONCE_PROMPT) && !failedOnce.has(requested))
+					) {
+						void (async () => {
+							let how = FAIL_PROMPT.exec(requested)?.[1] ?? "MODEL";
+							failedOnce.add(requested);
+							try {
+								if (how === "TOOL") {
+									// A tool nobody offered this turn: the server ends the turn at its boundary.
+									turn.emit({
+										type: "tool-call",
+										toolCallId: crypto.randomUUID(),
+										toolName: "bash",
+										input: "{}",
+									});
+									await settled.promise;
+								} else if (how === "REFUSED") {
+									// A tool the turn was given, whose use needs an approval nobody can give.
+									let toolCallId = crypto.randomUUID();
+									turn.emit({ type: "tool-call", toolCallId, toolName: "read_plan", input: "{}" });
+									turn.emit({
+										type: "tool-approval-request",
+										approvalId: crypto.randomUUID(),
+										toolCallId,
+									});
+									await settled.promise;
+								} else {
+									let error = how === "TIMEOUT"
+										? Object.assign(new Error("The request timed out."), { name: "TimeoutError" })
+										: new Error("429 Too Many Requests");
+									turn.emit({ type: "error", error });
+									settled.reject(error);
+								}
 							} finally {
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}
