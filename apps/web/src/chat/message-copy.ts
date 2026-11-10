@@ -9,22 +9,6 @@ import { referenceRenderModel } from "./references";
 import type { Chat } from "@chopin/protocol";
 import type { MarkdownNode } from "./reference-markdown";
 
-let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
-
-export function leadingMention(text: string): number {
-	return LEADING_MENTION.exec(text)?.[0].length ?? 0;
-}
-
-/**
- * The stored text untouched. Only the Planner address of a message sent to the Planner is left out:
- * the page draws it from `to`, so it is addressing rather than something the author wrote.
- */
-export function markdownOf(message: { text: string; to?: Chat.Destination }): string {
-	return message.to === "planner"
-		? message.text.slice(leadingMention(message.text))
-		: message.text;
-}
-
 type Node = MarkdownNode & {
 	ordered?: boolean;
 	start?: number;
@@ -69,15 +53,20 @@ function block(node: Node, indent: string): string {
 	return inline(node).trim();
 }
 
-/** The words the page shows for a message, one paragraph per blank line and one list item per line. */
+/**
+ * The words the page shows for a message, one paragraph per blank line and one list item per line.
+ * `lead` is what the page draws before the text, such as the Planner address of a message sent to it.
+ */
 export function plainTextOf(
 	source: string,
 	references?: Chat.Reference[],
+	lead?: string,
 ): string {
 	let model = referenceRenderModel(source, references);
 	let tree = fromMarkdown(model.source) as unknown as Node;
 	referenceRemarkPlugin(model)(tree);
 	orderedRunsRemarkPlugin()(tree, { value: model.source });
-	return (tree.children ?? []).filter(child => BLOCKS.has(child.type))
+	let body = (tree.children ?? []).filter(child => BLOCKS.has(child.type))
 		.map(child => block(child, "")).filter(text => text !== "").join("\n\n");
+	return [lead, body].filter(Boolean).join(" ");
 }
