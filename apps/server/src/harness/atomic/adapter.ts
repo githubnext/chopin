@@ -494,6 +494,17 @@ export function resultText(result: unknown): string {
 }
 
 /**
+ * A finished tool's result, with the images it made kept as content blocks Chat shows. A file the
+ * Planner read is not an image it made.
+ */
+export function resultWithImages(result: unknown, toolName: string): NonNullable<unknown> {
+	let content = (result as { content?: unknown } | null)?.content;
+	let made = toolName !== "read" && Array.isArray(content)
+		&& content.some(part => part?.type === "image");
+	return made ? { content } : resultText(result);
+}
+
+/**
  * The stream parts for a tool Atomic runs itself: a builtin, extension, workflow
  * or subagent tool. Host tools report through `hostTool`, and a nested call
  * belongs to its parent's row.
@@ -523,7 +534,9 @@ export function ownToolParts(
 	return [{
 		type: "tool-result",
 		...own,
-		result: resultText(event.type === "tool_execution_end" ? event.result : event.partialResult),
+		result: event.type === "tool_execution_end"
+			? resultWithImages(event.result, event.toolName)
+			: resultText(event.partialResult),
 		...(event.type === "tool_execution_end"
 			? { isError: event.isError }
 			: { preliminary: true }),
