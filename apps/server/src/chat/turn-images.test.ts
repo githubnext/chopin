@@ -276,4 +276,30 @@ describe("images a turn makes", () => {
 			["Turn two", ["Turn two's"]],
 		]);
 	});
+
+	it("keep an image with the tool that made it when its result arrives with no earlier call and the store is slow", async () => {
+		let release!: () => void;
+		let gate = new Promise<void>(resolve => (release = resolve));
+		let { chat, send } = turn({ gate });
+		send({ type: "text-start", id: "t1" });
+		send({ type: "text-delta", id: "t1", text: "First message" });
+		send(toolResult("orphan", [{
+			type: "image",
+			data: base64(png(40, 30, 9)),
+			mimeType: "image/png",
+			alt: "Orphan",
+		}]));
+		send({ type: "text-end", id: "t1" });
+		send({ type: "text-start", id: "t2" });
+		send({ type: "text-delta", id: "t2", text: "Second message" });
+		await Bun.sleep(0);
+		release();
+		await endTurnImages(chat);
+		let holders = chat.entries.filter(entry => entry.images);
+		expect(holders.map(entry => [
+			entry.text,
+			entry.tools?.map(tool => tool.id),
+			entry.images!.map(image => image.alt),
+		])).toEqual([["First message", ["orphan"], ["Orphan"]]]);
+	});
 });
