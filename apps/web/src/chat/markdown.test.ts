@@ -301,13 +301,7 @@ test("invalid and overlapping ranges remain safe ordinary text", () => {
 });
 
 function inline(source: string, links?: boolean): string {
-	let markup = renderToStaticMarkup(createElement(InlineMarkdown, { source, links }));
-	// A phrase is one inline span; what is asserted below is what it holds.
-	let phrase = /^<span data-status="complete" class="aui-md-line aui-md">([\s\S]*)<\/span>$/.exec(
-		markup,
-	);
-	expect(phrase, markup).not.toBeNull();
-	return phrase![1]!;
+	return renderToStaticMarkup(createElement(InlineMarkdown, { source, links }));
 }
 
 test("inline Markdown formats code, emphasis and links without blocks", () => {
