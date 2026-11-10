@@ -303,7 +303,7 @@ test("Reconnect asks again at once, and the banner says it is back when the conn
 
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(reconnect(page)).toBeVisible({ timeout: 30_000 });
+	await expect(reconnect(page)).toBeVisible({ timeout: 25_000 });
 	// Pressing it is another attempt now, not after the rest of a long wait.
 	let before = wire.sockets.length;
 	wire.state.offline = false;
@@ -484,7 +484,7 @@ test("on a phone, Chat shows the banner by its composer, and Reconnect after rep
 		await expectInsideViewport(notice(page));
 		await snap(page, "banner-reconnecting-phone");
 
-		await expect(reconnect(page)).toBeVisible({ timeout: 30_000 });
+		await expect(reconnect(page)).toBeVisible({ timeout: 25_000 });
 		await expect(notice(page)).toHaveAttribute("data-phase", "dropped");
 		await expect(reconnect(page)).toBeInViewport();
 		await expect(notice(page)).toContainText(OFFLINE);
