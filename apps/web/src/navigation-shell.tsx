@@ -47,6 +47,8 @@ import {
 } from "./project-sidebar-chrome";
 import { clearRepositoryCache } from "./repository-cache";
 import { NavigationError } from "./navigation-error";
+import { unreached } from "./navigation-failure";
+import type { NavigationFailure } from "./navigation-failure";
 import { useProjectDocuments } from "./use-project-documents";
 import { useDocumentCreation } from "./use-document-creation";
 import { requestTitleEdit } from "./title-edit";
@@ -142,8 +144,6 @@ let KeyboardShortcutsDialog = lazy(() =>
 	}))
 );
 
-type NavigationFailure = { reason: unknown; retry?: "refresh" | "visit" };
-
 let NavigationDocument = createContext<{
 	navigationRevision: number;
 	channel?: Api.Channel;
@@ -156,6 +156,8 @@ let NavigationDocument = createContext<{
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
 	onProjectReveal: (repositoryId: string) => void;
+	/** A connection banner tells a lost connection; returns what ends it. */
+	onConnectionSpeaking: () => () => void;
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
@@ -171,6 +173,7 @@ let NavigationDocument = createContext<{
 	async onDocumentLoaded() {},
 	onDocumentRouteSettled() {},
 	onProjectReveal() {},
+	onConnectionSpeaking: () => () => {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
 	onResearchChildPublished() {},
@@ -254,6 +257,12 @@ export function NavigationShell(
 	let latestVisitedDocument = useRef<string | undefined>(undefined);
 	let catalogueRefreshes = useRef(new Map<string, number>([["navigation", Date.now()]]));
 	let [error, setError] = useState<NavigationFailure>();
+	// A connection banner in a room tells a lost connection; the same loss is not told again here.
+	let [bannersSpeaking, setBannersSpeaking] = useState(0);
+	let connectionSpeaking = useCallback(() => {
+		setBannersSpeaking(count => count + 1);
+		return () => setBannersSpeaking(count => count - 1);
+	}, []);
 	let [resolvedDocument, setResolvedDocument] = useState<{
 		channel: Api.Channel;
 		routeKey: DocumentRouteIdentity;
@@ -776,6 +785,7 @@ export function NavigationShell(
 		onDocumentLoaded: documentLoaded,
 		onDocumentRouteSettled: documentRouteSettled,
 		onProjectReveal: projectReveal,
+		onConnectionSpeaking: connectionSpeaking,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
@@ -787,6 +797,7 @@ export function NavigationShell(
 		documentLoaded,
 		documentRouteSettled,
 		projectReveal,
+		connectionSpeaking,
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
@@ -826,6 +837,14 @@ export function NavigationShell(
 			void documentLoaded(currentChannelRef.current, documentRouteIdentity(route));
 		} else void refresh();
 	};
+	// The connection is back: what failed while it was out is asked for again, so the notice goes
+	// when the server answers, and stays only if it still does not.
+	let shownError = bannersSpeaking > 0 && error && unreached(error) ? undefined : error;
+	let spoke = useRef(false);
+	useEffect(() => {
+		if (spoke.current && !bannersSpeaking && error?.retry && unreached(error)) retryError();
+		spoke.current = bannersSpeaking > 0;
+	}, [bannersSpeaking]);
 	let dismissDrawer = () => {
 		setDrawerOpen(false);
 		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
@@ -977,12 +996,12 @@ export function NavigationShell(
 					onRetry={retryProject ? () => void createDocument(retryProject) : undefined}
 				/>
 			)}
-			{error !== undefined && (
+			{shownError !== undefined && (
 				<NavigationError
-					message={error.reason instanceof Error
-						? error.reason.message
+					message={shownError.reason instanceof Error
+						? shownError.reason.message
 						: "Could not update navigation."}
-					onRetry={error.retry ? retryError : undefined}
+					onRetry={shownError.retry ? retryError : undefined}
 				/>
 			)}
 			<div className="navigation-body">
