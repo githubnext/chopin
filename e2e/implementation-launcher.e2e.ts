@@ -202,6 +202,59 @@ test(
 	},
 );
 
+test(
+	"Build draws task text in boxes a reader can find, and a long title keeps to two lines",
+	async ({ seed, join: enter, room }) => {
+		let graph = preparedGraph();
+		let [connect] = graph.versions[0]!.definition.tasks;
+		Object.assign(connect!, {
+			title: "Prove the decision core in `verified/src/login.rs`, then keep every login, refresh"
+				+ " and logout outcome reachable through that one proved function so that nothing"
+				+ " in the backend is decided twice or decided differently",
+		});
+		await seed("# Linked task\n\nThe second task is the one to read.\n", {
+			graph,
+			builds: [failedBuild(graph)],
+		});
+		let page = await enter("ana");
+		await page.goto(`${roomPath(room)}#task-review`);
+		let view = buildView(page);
+		await expect(view.getByRole("button", { name: /^Review the connection/ }))
+			.toHaveAttribute("aria-expanded", "true");
+		// A phrase is found by its words. A browser measures, scrolls to and waits for the rest of an
+		// element by its box, and text drawn in an element with none has a rectangle of nothing at the
+		// corner of the page: a test, or a screen magnifier, cannot tell where it is or whether it moves.
+		for (
+			let words of [
+				"Verify progress survives refresh.",
+				"The progress persists.",
+				"The dependency is visible.",
+			]
+		) {
+			let text = view.getByText(words, { exact: true });
+			await expect(text).toBeInViewport();
+			let box = (await text.boundingBox())!;
+			expect(box, words).not.toBeNull();
+			expect(box.width, words).toBeGreaterThan(0);
+			expect(box.height, words).toBeGreaterThan(0);
+		}
+		// The title clamps at two lines with its code chip in the running text, not on a line of its own.
+		let toggle = view.getByRole("button", { name: /^Prove the decision core/ });
+		let title = toggle.locator(".build-task-title");
+		let rows = await title.evaluate(element => {
+			let box = element.getBoundingClientRect();
+			let line = parseFloat(getComputedStyle(element).lineHeight);
+			let code = element.querySelector("code")!.getBoundingClientRect();
+			return {
+				lines: Math.round(box.height / line),
+				clamped: element.scrollHeight > element.clientHeight,
+				codeRow: Math.floor((code.top + code.height / 2 - box.top) / line),
+			};
+		});
+		expect(rows).toEqual({ lines: 2, clamped: true, codeRow: 0 });
+	},
+);
+
 async function connector(baseURL: string, command: string[], env: Record<string, string> = {}) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-implementation-checkout-"));
 	let state = await mkdtemp(join(tmpdir(), "chopin-implementation-state-"));
