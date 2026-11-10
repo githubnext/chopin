@@ -9,6 +9,7 @@ import {
 	useState,
 } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { defaultUrlTransform } from "react-markdown";
 import { useLinkHref } from "@chopin/editor";
 import { WarningIcon } from "@chopin/icons";
 
@@ -20,6 +21,9 @@ import {
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { sameJson } from "../same-json";
 import { messageGfmRemarkPlugin } from "./gfm";
+import { ChatImage, MessageImages, useImageHost } from "./image";
+import { imageBlocksRemarkPlugin, imagesOutOfLinksRemarkPlugin } from "./image-markdown";
+import { isDataImage } from "./image-state";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -46,6 +50,7 @@ export const CHAT_ELEMENTS = [
 	"h4",
 	"h5",
 	"h6",
+	"img",
 	"li",
 	"ol",
 	"p",
@@ -259,11 +264,34 @@ function ChatCodeHeader({ code, language }: Omit<CodeHeaderProps, "node">) {
 	);
 }
 
+/** A `p` may not hold the block an image is, so a paragraph with an image is a `div`. */
+let imageParagraph = (props: ComponentProps<"p">) => {
+	let marked = props as Record<string, unknown>;
+	return marked["data-chat-image-block"] !== undefined || marked.dataChatImageBlock !== undefined
+		? <div className="chat-markdown-paragraph">{props.children}</div>
+		: <UpstreamParagraph>{props.children}</UpstreamParagraph>;
+};
+
+let imageUrl = (url: string, key: string) =>
+	key === "src" && isDataImage(url) ? url : defaultUrlTransform(url);
+
+let markdownImage = ({ alt, src }: ComponentProps<"img">) => (
+	<ChatImage image={{ src: typeof src === "string" ? src : "", alt: alt ?? undefined }} />
+);
+
 let MESSAGE_COMPONENTS: MarkdownComponents = {
 	...CHAT_COMPONENTS,
 	CodeHeader: ChatCodeHeader,
 	a: MessageLink,
+	h1: imageParagraph,
+	h2: imageParagraph,
+	h3: imageParagraph,
+	h4: imageParagraph,
+	h5: imageParagraph,
+	h6: imageParagraph,
+	img: markdownImage,
 	input: TaskBox,
+	p: imageParagraph,
 };
 
 /** Keeps the identity of the references while what they say is unchanged. */
@@ -285,9 +313,16 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 	let model = useMemo(() => referenceRenderModel(deferred, held), [deferred, held]);
 	let remarkPlugins = useMemo(() => {
 		let gfm = messageGfmRemarkPlugin(model.source);
-		return [...(gfm ? [gfm] : []), [referenceRemarkPlugin, model], orderedRunsRemarkPlugin];
+		return [
+			...(gfm ? [gfm] : []),
+			[referenceRemarkPlugin, model],
+			orderedRunsRemarkPlugin,
+			imagesOutOfLinksRemarkPlugin,
+			imageBlocksRemarkPlugin,
+		];
 	}, [model]);
-	return (
+	let host = useImageHost();
+	let body = (
 		<References.Provider value={model.references}>
 			<MarkdownText
 				allowedElements={MESSAGE_ELEMENTS}
@@ -311,7 +346,9 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 				status={streaming ? "running" : "complete"}
 				text={model.source}
 				unwrapDisallowed
+				urlTransform={imageUrl}
 			/>
 		</References.Provider>
 	);
+	return host ? body : <MessageImages>{body}</MessageImages>;
 }, sameMessageMarkdown);

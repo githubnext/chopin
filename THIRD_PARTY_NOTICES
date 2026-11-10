@@ -1,0 +1,71 @@
+Third-party notices
+
+Chopin's own code is licensed as LICENSE.md says. The files below contain code adapted from
+other projects, under their licenses.
+
+
+assistant-ui
+============
+
+Project:   https://github.com/assistant-ui/assistant-ui
+License:   MIT, Copyright (c) 2026 AgentbaseAI Inc.
+Taken at:  commit f92028b466cba721846de6851e4dddb6c04ecfad of the main branch (fetched 2026-11-10)
+Obtained:  by hand from the registry the elements' Installation sections name
+           (https://r.assistant-ui.com/image.json and
+           https://r.assistant-ui.com/elements-image-gallery.json). The shadcn CLI does not fit this
+           repository: it has no components.json, uses base-ui rather than Radix, and draws icons
+           from @chopin/icons.
+
+Elements adopted (the standalone lane only, driven by props; nothing of the runtime lane, no
+AssistantRuntimeProvider, useAui or runtime primitives, and no dependency on the library):
+
+  Image
+    Source:  packages/ui/src/components/react/assistant-ui/elements/image.tsx
+             (last changed in commit 3b6591b1)
+    Here:    apps/web/src/chat/image.tsx, apps/web/src/chat/image.css
+    Kept:    ImageRoot, ImagePreview (the loading, loaded and broken states, and the check of an image
+             the browser already has), ImageActions with its copy and download, and the copy and
+             download helpers.
+    Changed: Chopin's tokens, icons and buttons in place of Tailwind's palette, lucide-react and
+             class-variance-authority; a frame that holds the image's own shape while it loads; the
+             alt text always shown; a Generated label; the editor's lightbox in place of the zoom
+             overlay; copy writes PNG, the one type a browser lets a page copy; actions are offered
+             only for an image that loaded. ImageFilename is ImageCaption.
+
+  Image gallery
+    Source:  packages/ui/src/components/react/assistant-ui/elements/image-gallery.tsx
+             (last changed in commit 9121416f)
+    Here:    apps/web/src/chat/image-gallery.tsx, apps/web/src/chat/image.css
+    Kept:    the images, maxVisible and onOpen props, the grid of up to six tiles with +N on the last,
+             and a lightbox that steps through every image by arrow key.
+    Changed: each tile is the Chat image element; the lightbox is the editor's
+             (packages/editor/src/widgets/image-lightbox.tsx), which also keeps the focus trap of the
+             library's zoom overlay; a plain CSS container query in place of the library's Tailwind one.
+
+  Helpers
+    The library's href and range utilities (elements-href at commit 87e76e00, elements-range at
+    commit 800494dc) are not copied. What Chopin needs of them, the clamp of the number of visible
+    tiles and the check of an address before it is loaded, is written in
+    apps/web/src/chat/image-state.ts.
+
+The MIT License
+
+Copyright (c) 2026 AgentbaseAI Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

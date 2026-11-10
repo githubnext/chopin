@@ -477,7 +477,6 @@ export function DownloadIcon(props: IconProps) {
 	);
 }
 
-/** A picture struck through: the image could not be shown. */
 export function ImageOffIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
@@ -489,7 +488,6 @@ export function ImageOffIcon(props: IconProps) {
 	);
 }
 
-/** An arrow leaving a box: open it in a new tab. */
 export function ExternalLinkIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

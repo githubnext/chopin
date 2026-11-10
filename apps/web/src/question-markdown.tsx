@@ -33,7 +33,7 @@ const ImageLightbox = lazy(() =>
 	import("@chopin/editor/image-lightbox").then(({ ImageLightbox }) => ({ default: ImageLightbox }))
 );
 
-const BLOCK_ELEMENTS = [...CHAT_ELEMENTS, "img"];
+const BLOCK_ELEMENTS = CHAT_ELEMENTS;
 /** An option's own visual may also be a small table. */
 const PREVIEW_ELEMENTS = [...BLOCK_ELEMENTS, "table", "thead", "tbody", "tr", "th", "td"];
 

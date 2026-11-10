@@ -7,19 +7,13 @@ import { arrowStep, stepImage, wrapTab } from "./image-lightbox-state";
 
 export type LightboxImage = {
 	src: string;
-	/** Shown under the image and used as its text alternative; empty for a decorative image. */
 	alt: string;
 	caption?: string;
-	/** The Planner or its harness made it. */
 	generated?: boolean;
 };
 
 const FOCUSABLE = "button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
-/**
- * A full-screen preview of one image, or of the images of one message with their own arrows,
- * Previous and Next. It traps focus and gives it back to the control that opened it.
- */
 export function ImageLightbox(
 	{ images, onClose, start = 0 }: {
 		images: readonly LightboxImage[];
@@ -53,7 +47,7 @@ export function ImageLightbox(
 	let show = (delta: -1 | 1) => {
 		let to = stepImage(index, delta, images.length);
 		if (to === index) return;
-		// The button that is about to be disabled cannot keep focus, so the other one takes it.
+		// A button about to be disabled cannot keep focus, so the other one takes it.
 		if (to === 0 && document.activeElement === previous.current) next.current?.focus();
 		else if (to === images.length - 1 && document.activeElement === next.current) {
 			previous.current?.focus();
@@ -63,7 +57,7 @@ export function ImageLightbox(
 		setNaturalWidth(undefined);
 	};
 
-	// The arrows and Tab are read before anything else on the page can, and only while open.
+	// Captured before anything else on the page reads them.
 	let latest = useRef(show);
 	latest.current = show;
 	useEffect(() => {

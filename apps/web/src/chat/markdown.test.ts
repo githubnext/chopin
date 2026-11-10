@@ -31,6 +31,12 @@ let PARTICIPANT_MESSAGE = [
 	"# Ordinary message text",
 	"",
 	"![remote](https://example.invalid/pixel.png)",
+].join("\n");
+
+/** Raw HTML is never drawn, whatever it holds. */
+let RAW_HTML_MESSAGE = [
+	"# Ordinary message text",
+	"",
 	'<img src="https://example.invalid/raw.png" alt="raw">',
 ].join("\n");
 
@@ -88,7 +94,10 @@ test("Chat Markdown admits formatting without document features", () => {
 	expect(markup).toContain('<code class="language-ts">let answer = 42;');
 	expect(markup).toContain("Ordinary message text");
 	expect(markup).not.toMatch(H1);
-	expect(markup).not.toContain("<img");
+	expect(markup).toContain(
+		'<img alt="remote" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="https://example.invalid/pixel.png"/>',
+	);
+	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">remote</span>');
 
 	expect(markdown("Planner wrote **strongly**.")).toContain(
 		`<strong class="${STRONG_CLASS}">strongly</strong>`,
@@ -138,6 +147,70 @@ test("a footnote, a bare address and a www link stay the plain text they were in
 	// A link someone wrote is still a link.
 	expect(markdown("[the page](https://example.com/page)")).toContain(
 		'href="https://example.com/page"',
+	);
+});
+
+test("raw HTML in a Chat message is never drawn, an image tag included", () => {
+	let markup = markdown(RAW_HTML_MESSAGE);
+
+	expect(markup).toContain("Ordinary message text");
+	expect(markup).not.toContain("<h1>");
+	expect(markup).not.toContain("<img");
+});
+
+test("every Markdown image draws where it is written, in order, and none is merged or dropped", () => {
+	let markup = markdown(
+		"First ![one](https://example.invalid/a.png) then ![two](https://example.invalid/a.png)\n\n![](https://example.invalid/b.png)",
+	);
+
+	expect(markup.match(/<img /g)).toHaveLength(3);
+	expect(markup.indexOf('alt="one"')).toBeLessThan(markup.indexOf('alt="two"'));
+	expect(markup.indexOf('alt="two"')).toBeLessThan(markup.indexOf('alt="Image"'));
+	expect(markup).not.toMatch(/<p[\s>][^]*<figure/);
+	expect(markup).toContain('<div class="aui-md-p chat-markdown-paragraph">First <figure');
+	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">Image</span>');
+});
+
+test("an image whose address is not one Chat loads shows its alt text and is never requested", () => {
+	for (
+		let src of [
+			"images/a.png",
+			"/auth/logout",
+			"javascript:alert(1)",
+			"data:image/svg+xml;base64,PHN2Zy8+",
+			"data:text/html;base64,PGI+",
+		]
+	) {
+		let markup = markdown(`![where it was](${src})`);
+		expect(markup, src).not.toContain("<img");
+		expect(markup, src).toContain('data-chat-image-broken="unavailable"');
+		expect(markup, src).toContain(">where it was</span>");
+	}
+	expect(markdown(`![mine](/images/${"a".repeat(64)}.png)`)).not.toContain("<img");
+});
+
+test("a PNG, JPEG, GIF or WebP written into a message is drawn as written", () => {
+	let src = "data:image/png;base64,iVBORw0KGgo=";
+	let markup = markdown(`![a dot](${src})`);
+
+	expect(markup).toContain(
+		`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+	);
+});
+
+test("an address on another site is drawn exactly as it was written", () => {
+	for (let src of ["https://example.invalid", "//example.invalid/a.png"]) {
+		expect(markdown(`![far](${src})`), src).toContain(`src="${src}"/>`);
+	}
+});
+
+test("an image inside a link is drawn as an image, with the link kept beside it", () => {
+	let markup = markdown("[![logo](https://example.invalid/l.png)](https://example.com)");
+
+	expect(markup).toContain('<img alt="logo"');
+	expect(markup).not.toMatch(/<a [^>]*>[^]*<figure/);
+	expect(markup).toContain(
+		'<a class="aui-md-a" href="https://example.com" rel="noopener noreferrer" target="_blank">logo</a>',
 	);
 });
 
