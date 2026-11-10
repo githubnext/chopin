@@ -261,9 +261,9 @@ function ReasoningLevels(
 		let at = Math.max(0, steps.findIndex(step => step.checked));
 		let next = (at + move + steps.length) % steps.length;
 		onChoose(steps[next]!.level);
-		requestAnimationFrame(() =>
-			group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
-		);
+		// Now, not on the next frame: a key that follows at once acts on the level just chosen. The
+		// buttons are the same nodes after the choice renders, so nothing takes the focus back.
+		group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
 	}
 	return (
 		<div className="composer-reasoning">
