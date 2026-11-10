@@ -29,16 +29,20 @@ export function fixedIntent(emoji: string): ReactionIntent | undefined {
 	return FIXED[bare(emoji)];
 }
 
-let names: Map<string, string> | undefined;
+let emojiNames: Map<string, string> | undefined;
+let characterNames: Map<number, string> | undefined;
 
 function hexcodes(emoji: string): string {
-	return [...emoji].map(char => char.codePointAt(0)!.toString(16).toUpperCase())
+	return [...emoji].map(char => char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0"))
 		.filter(hex => hex !== "FE0F").join("-");
 }
 
 export async function loadNames(): Promise<void> {
-	if (names) return;
-	let { default: data } = await import("emojibase-data/en/compact.json");
+	if (emojiNames && characterNames) return;
+	let [{ default: data }, { default: characters }] = await Promise.all([
+		import("emojibase-data/en/compact.json"),
+		import("@unicode/unicode-17.0.0/Names/index.mjs"),
+	]);
 	let table = new Map<string, string>();
 	let add = (item: { hexcode: string; label: string }) =>
 		table.set(item.hexcode.split("-").filter(hex => hex !== "FE0F").join("-"), item.label);
@@ -46,17 +50,23 @@ export async function loadNames(): Promise<void> {
 		add(item);
 		for (let skin of item.skins ?? []) add(skin);
 	}
-	names = table;
+	emojiNames = table;
+	characterNames = characters;
 }
 
+/**
+ * `emojiName` is the name Unicode's emoji data gives the whole emoji or sequence, and each code
+ * point has its name from the Unicode Character Database. A string Unicode names neither way has
+ * `null` there; no name is made up.
+ */
 export function describe(emoji: string) {
 	return {
-		name: names?.get(hexcodes(emoji)) ?? null,
+		emojiName: emojiNames?.get(hexcodes(emoji)) ?? null,
 		codePoints: [...emoji].map(char => {
 			let point = char.codePointAt(0)!;
 			return {
 				codePoint: `U+${point.toString(16).toUpperCase().padStart(4, "0")}`,
-				name: names?.get(point.toString(16).toUpperCase()) ?? null,
+				name: characterNames?.get(point) ?? null,
 			};
 		}),
 	};
