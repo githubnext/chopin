@@ -18,6 +18,7 @@ export type Message = {
 	references?: Chat.Reference[];
 	/** The images and files sent with it. */
 	attachments?: Chat.Attachment[];
+	reactions?: Chat.Reaction[];
 	/** Set only when the sender addressed the Planner. */
 	to?: Chat.Destination;
 	/** Only this browser has it so far (`delivery.ts`), and why the server refused it. */

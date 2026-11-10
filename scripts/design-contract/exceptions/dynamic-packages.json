@@ -471,6 +471,20 @@
 				"props",
 				"unresolved JSX props > ExternalLinkIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > EllipsisVerticalIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ReactionAddIcon > <LineIcon>",
+				1
 			]
 		],
 		"sourceHash": "5012ca933c502fbb522ea615abec9f6d9fe78cb1e6f7ab091fc6d095c6390e5f"

@@ -33,6 +33,7 @@ import {
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
 import { WireLost, WireRefusal } from "../wire";
+import { dueNow, intentsReducer } from "./pending-reactions";
 import {
 	echoes,
 	keepOutbox,
@@ -380,6 +381,7 @@ export function Chat(
 		undefined,
 		() => restoreOutbox(room, handle),
 	);
+	let [intents, dispatchIntents] = useReducer(intentsReducer, []);
 	let sendingId = useRef<string | undefined>(undefined);
 	let [flushed, setFlushed] = useState(0);
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
@@ -721,6 +723,7 @@ export function Chat(
 				seen = new Set(frame.entries.map(entry => entry.id));
 				dispatchTranscript({ kind: "history", entries: frame.entries, turn: frame.turn });
 				dispatchOutbox({ kind: "history", ids: frame.entries.map(entry => entry.id) });
+				dispatchIntents({ kind: "history", entries: frame.entries, handle });
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				setRuns(frame.runs);
@@ -738,6 +741,10 @@ export function Chat(
 				dispatchTranscript({ kind: "message", entry: frame.entry });
 				dispatchOutbox({ kind: "seen", ids: [frame.entry.id] });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
+			}),
+			wire.on<Wire.Reactions>("chat:reactions", frame => {
+				dispatchTranscript({ kind: "reactions", id: frame.id, reactions: frame.reactions });
+				dispatchIntents({ kind: "settle", id: frame.id, reactions: frame.reactions, handle });
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
 				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
@@ -1064,6 +1071,40 @@ export function Chat(
 	// A message the server refused is dropped from here: the server never kept it.
 	let deleteMessage = (id: string) => dispatchOutbox({ kind: "drop", id });
 	let retryMessage = (id: string) => dispatchOutbox({ kind: "again", id });
+	let savedIds = useMemo(() => new Set(entries.map(entry => entry.id)), [entries]);
+	let latestEntries = useRef(entries);
+	latestEntries.current = entries;
+	useEffect(() => {
+		if (!wire || !transcriptReady) return;
+		for (let { id, emoji, on } of dueNow(intents, savedIds)) {
+			dispatchIntents({ kind: "sent", id, emoji, on });
+			void wire.ask<Wire.Reacted>("chat:react", { id, emoji, on }).then(
+				() =>
+					dispatchIntents({
+						kind: "settle",
+						id,
+						reactions: latestEntries.current.find(entry => entry.id === id)?.reactions,
+						handle,
+					}),
+				error => {
+					if (error instanceof WireRefusal) dispatchIntents({ kind: "drop", id, emoji, on });
+				},
+			);
+		}
+	}, [wire, transcriptReady, intents, savedIds, handle]);
+	let outboxIds = outbox.map(item => item.entryId ?? item.payload.requestId).join("\n");
+	useEffect(() => {
+		if (!transcriptReady || intents.length === 0) return;
+		let present = new Set([
+			...savedIds,
+			...outboxIds.split("\n"),
+			...(workingTurn ? [workingTurn.id] : []),
+		]);
+		dispatchIntents({ kind: "prune", present });
+	}, [transcriptReady, intents.length, savedIds, outboxIds, workingTurn?.id]);
+	let reactTo = (id: string, emoji: string, on: boolean) => {
+		dispatchIntents({ kind: "ask", id, emoji, on });
+	};
 
 	// Stop and Resume pressed during a blip are sent once it is over, or never.
 	let heldControl = useRef<"chat:abort" | "chat:resume">(undefined);
@@ -1359,6 +1400,8 @@ export function Chat(
 				...echoes(outbox),
 			]}
 			onDelete={deleteMessage}
+			onReact={reactTo}
+			reactionIntents={intents}
 			onRetry={retryMessage}
 			quietFailures={quietFailures}
 			completedWork={transcript.completedWork}

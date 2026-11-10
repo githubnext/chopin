@@ -759,6 +759,12 @@ describe("migration", () => {
 				size: "btn-sm",
 				tiers: ["btn-ghost"],
 			}],
+			["apps/web/src/chat/actions/message-actions.tsx", {
+				action: "message actions menu button",
+				marker: 'aria-label="Message actions"',
+				size: "btn-icon",
+				tiers: ["btn-ghost"],
+			}],
 			["apps/web/src/chat/composer.tsx", {
 				action: "Resume Planner",
 				marker: 'aria-label="Resume Chopin"',

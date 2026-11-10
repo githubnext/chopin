@@ -1,0 +1,322 @@
+/*
+ * A message's hover toolbar, its row highlight, and the reactions under it.
+ *
+ * The row (`.message-actions`) is the standalone element adapted from assistant-ui (see NOTICE.md):
+ * a white bar of ghost icon buttons with the shared raised shadow. `.chat-message-toolbar` places it
+ * at the message's top right, straddling the edge of the highlight, and shows it on hover, on keyboard
+ * focus, and while anything it opened is open. On a touch screen it comes from a long press instead,
+ * and sits wholly above the message so it never covers the message's own text.
+ */
+
+.chat-message-body {
+	/* How far the highlight reaches above the message: a little, or up over the name line of the first. */
+	--chat-highlight-top: 0.125rem;
+	--chat-bleed-start: 3rem;
+	--chat-bleed-end: 0.75rem;
+	isolation: isolate;
+}
+
+.chat-message-body[data-chat-headed] {
+	--chat-highlight-top: calc(var(--text-sm) * var(--text-sm--line-height) + 0.375rem);
+}
+
+/* The whole message as one full-width row, in the hover surface. */
+.chat-message-body::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset-block: calc(-1 * var(--chat-highlight-top)) -0.125rem;
+	inset-inline: calc(-1 * var(--chat-bleed-start)) calc(-1 * var(--chat-bleed-end));
+	border-radius: var(--radius-md);
+	background: var(--color-hover);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+	.chat-message-body:hover::before {
+		opacity: 1;
+	}
+}
+
+.chat-message-body:has(:focus-visible)::before,
+.chat-message-body[data-chat-engaged]::before {
+	opacity: 1;
+}
+
+.message-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.125rem;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: 0.125rem;
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.message-actions-button[aria-pressed="true"] {
+	background: var(--color-brand-wash);
+}
+
+.message-actions-emoji {
+	font-size: var(--text-base);
+	line-height: 1;
+}
+
+.chat-message-toolbar {
+	position: absolute;
+	z-index: 2;
+	inset-inline-end: calc(-1 * var(--chat-bleed-end) + 0.25rem);
+	top: calc(-1 * var(--chat-highlight-top));
+	translate: 0 -50%;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (hover: hover) {
+	.chat-message-body:hover > .chat-message-toolbar {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+.chat-message-body:has(:focus-visible) > .chat-message-toolbar,
+.chat-message-body[data-chat-engaged] > .chat-message-toolbar {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+/*
+ * A touch screen has no hover, so the toolbar is out of reach until a long press, sits above the
+ * message rather than across it, and a long press must not also select the text under the finger.
+ */
+@media (hover: none) {
+	.chat-message-toolbar {
+		visibility: hidden;
+		translate: 0 calc(-100% - 0.25rem);
+	}
+
+	.chat-message-body[data-chat-engaged] > .chat-message-toolbar,
+	.chat-message-body:has(:focus-visible) > .chat-message-toolbar {
+		visibility: visible;
+	}
+
+	.chat-message-body [data-chat-message-text] {
+		-webkit-touch-callout: none;
+		user-select: none;
+	}
+}
+
+/* Upstream's icon swap: the copy and check icons crossfade in one grid cell. */
+.message-actions-swap {
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	--color-icon: currentColor;
+}
+
+.message-actions-swap > svg {
+	grid-area: 1 / 1;
+	transition:
+		opacity var(--duration-base) var(--ease-out),
+		scale var(--duration-base) var(--ease-out),
+		filter var(--duration-base) var(--ease-out);
+}
+
+.message-actions-swap > :nth-child(2),
+.message-actions-swap[data-copied] > :first-child {
+	opacity: 0;
+	scale: 0.25;
+	filter: blur(var(--spacing));
+}
+
+.message-actions-swap[data-copied] > :nth-child(2) {
+	opacity: 1;
+	scale: 1;
+	filter: none;
+	color: var(--color-success-icon);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-message-body::before,
+	.chat-message-toolbar,
+	.message-actions-swap > svg {
+		transition: none;
+	}
+}
+
+/* Reactions under a message. */
+.chat-reactions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin-top: 0.25rem;
+}
+
+.chat-reaction {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	height: 1.5rem;
+	border-radius: var(--radius-full);
+	background: var(--color-inset);
+	padding-inline: 0.5rem;
+	font-size: var(--text-xs);
+	line-height: 1;
+	color: var(--color-text-secondary);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.chat-reaction-emoji {
+	font-size: var(--text-sm);
+}
+
+.chat-reaction-count {
+	font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) {
+	.chat-reaction:hover:not(:disabled) {
+		background: var(--color-selected);
+	}
+}
+
+.chat-reaction[aria-pressed="true"] {
+	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
+	outline-color: var(--color-brand);
+}
+
+/* Where the coarse pointer's target grows, the pill keeps its look. */
+:root[data-plan-coarse-pointer] .chat-reaction {
+	position: relative;
+}
+
+:root[data-plan-coarse-pointer] .chat-reaction::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, var(--control-target-coarse));
+	height: max(100%, var(--control-target-coarse));
+	transform: translate(-50%, -50%);
+}
+
+/* The emoji picker, in a panel placed at its button. */
+.chat-message-picker {
+	position: fixed;
+	z-index: 60;
+	display: flex;
+	width: min(20rem, calc(100vw - 1rem));
+	max-height: min(24rem, calc(100vh - 1rem));
+	flex-direction: column;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.emoji-picker {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 0.25rem;
+}
+
+.emoji-picker-field {
+	height: 2rem;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding-inline: 0.5rem;
+	font-size: var(--text-sm);
+	outline: var(--edge-width) solid var(--color-control-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.emoji-picker-field::placeholder {
+	color: var(--color-text-tertiary);
+}
+
+.emoji-picker-list {
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.emoji-picker-heading {
+	margin: 0;
+	padding: 0.5rem 0.25rem 0.25rem;
+	font-size: var(--text-xs);
+	font-weight: 500;
+	color: var(--color-text-tertiary);
+}
+
+.emoji-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.emoji-picker-item {
+	display: grid;
+	aspect-ratio: 1;
+	place-items: center;
+	border-radius: var(--radius-md);
+	font-size: var(--text-base);
+	line-height: 1;
+}
+
+@media (hover: hover) {
+	.emoji-picker-item:hover {
+		background: var(--color-hover);
+	}
+}
+
+.emoji-picker-empty {
+	margin: 0;
+	padding: 1rem 0.5rem;
+	text-align: center;
+	font-size: var(--text-sm);
+	color: var(--color-text-tertiary);
+}
+
+:root[data-plan-coarse-pointer] .emoji-picker-item {
+	min-height: var(--control-target-coarse);
+}
+
+.emoji-picker-group {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 10rem;
+}
+
+.emoji-picker-tones {
+	display: flex;
+	justify-content: space-between;
+	border-top: var(--edge-width) solid var(--color-edge);
+	padding-top: 0.25rem;
+}
+
+.emoji-picker-tone {
+	display: grid;
+	width: 2rem;
+	height: 2rem;
+	place-items: center;
+	border-radius: var(--radius-md);
+	font-size: var(--text-base);
+	line-height: 1;
+}
+
+.emoji-picker-tone[aria-pressed="true"] {
+	background: var(--color-brand-wash);
+}
+
+.chat-reaction[data-pending] {
+	opacity: 0.6;
+}

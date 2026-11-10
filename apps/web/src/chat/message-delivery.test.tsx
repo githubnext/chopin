@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { echoes } from "./delivery";
+import { group } from "./model";
+import { messageMenuActions } from "./message-menu-actions";
 import { Transcript } from "./transcript";
 
 import type { Chat } from "@chopin/protocol";
@@ -32,6 +34,12 @@ function render(entries: Chat.Entry[], quietFailures = false): string {
 	}));
 }
 
+function menuOf(entry: Chat.Entry, handle = "ana", quietFailures = false) {
+	let [first] = group([entry]);
+	if (first?.kind !== "messages") throw new Error("not a message");
+	return messageMenuActions(first.messages[0]!, handle, quietFailures);
+}
+
 function mark(markup: string): string | undefined {
 	return /data-chat-delivery="(\w+)"/.exec(markup)?.[1];
 }
@@ -45,8 +53,9 @@ test("a message only this browser has says Sending, in words and with no clock, 
 	let markup = render([echo!]);
 	expect(mark(markup)).toBe("sending");
 	expect(markup).toContain(">Sending</span>");
-	expect(markup).not.toContain("<circle");
-	expect(markup).not.toContain("Message actions");
+	// The word alone, with no clock in the mark, and nothing in the message's menu to take it back.
+	expect(markup).toContain('data-chat-delivery="sending">Sending</span>');
+	expect(menuOf(echo!)).toEqual({ delete: false, retry: false });
 	expect(markup).toContain("outline it");
 	let sent = render([mine("a", "@chopin outline it")]);
 	expect(mark(sent)).toBeUndefined();
@@ -64,7 +73,7 @@ test("only the sender sees the mark; a teammate's message shows none", () => {
 	expect(markup).not.toContain("Sending");
 });
 
-test("a message the server refused says Couldn't send on itself, why, and offers Try again and Delete, never a strip", () => {
+test("a message the server refused says Couldn't send on itself and why, and offers Try again and Delete from its menu, never a strip", () => {
 	let [echo] = echoes([{
 		payload: { requestId: crypto.randomUUID(), text: "@chopin outline it", to: "planner" },
 		handle: "ana",
@@ -77,8 +86,9 @@ test("a message the server refused says Couldn't send on itself, why, and offers
 	expect(markup).toContain(
 		"Chopin can&#x27;t take messages while it works on this machine. Stop it to ask now.",
 	);
-	expect(markup).toMatch(/>Try again<\/button>/);
-	expect(markup).toMatch(/>Delete<\/button>/);
+	expect(markup).not.toMatch(/>Try again<\/button>/);
+	expect(markup).not.toMatch(/>Delete<\/button>/);
+	expect(menuOf(echo!)).toEqual({ delete: true, retry: true });
 	expect(mark(markup)).toBeUndefined();
 	expect(markup).not.toContain('role="alert"');
 });
@@ -95,6 +105,7 @@ test("while the page's connection banner shows, a message's Couldn't send gives 
 	expect(offline).not.toContain("Couldn&#x27;t send.");
 	expect(offline).not.toContain("No machine is connected to reply.");
 	expect(offline).toContain("outline it");
+	expect(menuOf(failed!, "ana", true)).toEqual({ delete: false, retry: false });
 	let online = render([failed!]);
 	expect(online).toContain("data-chat-failed");
 	expect(online).toContain("Couldn&#x27;t send.");

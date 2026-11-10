@@ -1,3 +1,5 @@
+import { withReactions } from "./reactions";
+
 import type { Chat } from "@chopin/protocol";
 import type { CompletedWork } from "./model";
 
@@ -14,6 +16,7 @@ export type TranscriptAction =
 	| { kind: "delta"; id: string; text: string }
 	| { kind: "tool"; entryId: string; activity: Chat.Activity }
 	| { kind: "turn"; turn?: Chat.Turn }
+	| { kind: "reactions"; id: string; reactions: Chat.Reaction[] }
 	| { kind: "responded" };
 
 /**
@@ -152,6 +155,10 @@ export function transcriptReducer(
 					: finish(state, action.turn?.entryOffset ?? state.entries.length),
 			});
 		}
+		case "reactions":
+			return state.entries.some(entry => entry.id === action.id)
+				? { ...state, entries: withReactions(state.entries, action.id, action.reactions) }
+				: state;
 		case "responded":
 			return state.turn && !state.turn.responded
 				? { ...state, turn: { ...state.turn, responded: true } }

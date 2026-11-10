@@ -17,6 +17,32 @@ and `elements-error-state.json`), which match `assistant-ui/assistant-ui` at com
 shadcn `cn` utility are not used; the classes are replaced with Chopin's tokens, text roles, button
 sizes and icons.
 
+## assistant-ui: Message actions
+
+The Chat message toolbar's row and its copy confirmation are adapted from the standalone (props and
+callbacks) lane of [assistant-ui](https://github.com/assistant-ui/assistant-ui)'s MessageActions
+element and its `use-copy-to-clipboard` hook. They use neither assistant-ui's runtime nor
+`AssistantRuntimeProvider` nor `useAui` nor any primitive that needs one, and Chopin does not depend
+on the library: its own state drives them through props.
+
+- **Element and hook:** MessageActions, from the registry item `elements-message-actions`
+  (<https://r.assistant-ui.com/elements-message-actions.json>), documented at
+  <https://www.assistant-ui.com/elements/message-actions>, and `use-copy-to-clipboard`, from the
+  registry item of that name. Chopin's files are `apps/web/src/chat/actions/message-actions.tsx`,
+  `use-copy-to-clipboard.ts` and the icon swap in `message-actions.css`.
+- **Version:** commit `f92028b466cba721846de6851e4dddb6c04ecfad` of `assistant-ui/assistant-ui`. The
+  registry content is byte-identical to
+  `packages/ui/src/components/react/assistant-ui/elements/message-actions.tsx` and
+  `packages/ui/src/hooks/use-copy-to-clipboard.ts` at that commit.
+- **What was kept:** the controlled-props shape (`copied`, `onCopy`, `onMore`, toggles with
+  `aria-pressed`), the `data-slot="message-actions"` row, the copy and check icons crossfading in one
+  grid cell, and the copy hook that turns `isCopied` on only after the clipboard accepts the text and
+  off after a delay.
+- **What changed:** the copy hook also writes an empty message instead of ignoring it and reports a
+  write the clipboard refused; icons come from `@chopin/icons`, styles use Chopin's tokens in
+  `message-actions.css`, the toggles are quick reactions, Copy moved into the overflow menu, and the
+  thumbs and regenerate buttons are left out because Chopin cannot honour them.
+
 ## assistant-ui and shadcn/ui: copied registry source
 
 Components in `apps/web/src/components/` (and `apps/web/src/lib/utils.ts`) are **copied unmodified**
@@ -91,6 +117,9 @@ phrases `MarkdownText`. None of assistant-ui's runtime is used.
 
 The adaptations above (the connection and failure banners) and the files copied from
 assistant-ui's registry are under assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners, the message actions and MarkdownText)
+and the files copied from assistant-ui's registry are under assistant-ui's MIT licence:
+
 
 ```
 MIT License
