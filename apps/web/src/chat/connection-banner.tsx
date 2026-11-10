@@ -115,7 +115,12 @@ export function useConnectionBanner(
 		if (!speech) return;
 		last.current = speech.spoken;
 		setSpoken(speech.said);
-	}, [step.view.phase, "layer" in step.view ? step.view.layer : undefined, plannerHeld]);
+	}, [
+		step.view.phase,
+		"layer" in step.view ? step.view.layer : undefined,
+		"plannerKind" in step.view ? step.view.plannerKind : undefined,
+		plannerHeld,
+	]);
 
 	let view = step.view;
 	let onRetry = view.phase === "dropped" && view.action === "reconnect"

@@ -49,6 +49,8 @@ export type ConnectionView =
 		phase: "reconnecting";
 		layer: ConnectionLayer;
 		text: string;
+		/** The Planner's status, where this phase tells it. */
+		plannerKind?: PlannerStatus["kind"];
 		/** The attempt in flight, or the next, where attempts are counted. */
 		attempt?: number;
 		detail?: readonly string[];
@@ -58,6 +60,8 @@ export type ConnectionView =
 		phase: "dropped";
 		layer: ConnectionLayer;
 		text: string;
+		/** The Planner's status, where this phase tells it. */
+		plannerKind?: PlannerStatus["kind"];
 		/** What a person may ask for from here; absent where only the machine can act. */
 		action?: ConnectionAction;
 		detail?: readonly string[];
@@ -192,12 +196,13 @@ function plannerView(status: PlannerStatus): ConnectionView {
 	let text = plannerSentence(status);
 	switch (status.kind) {
 		case "starting":
-			return { phase: "reconnecting", layer: "planner", text };
+			return { phase: "reconnecting", layer: "planner", text, plannerKind: status.kind };
 		case "cant-start":
 			return {
 				phase: "dropped",
 				layer: "planner",
 				text,
+				plannerKind: status.kind,
 				action: "wake",
 				detail: [status.reason, status.detail],
 				link: { label: "How to fix", href: PLANNER_HOW_TO_FIX },
@@ -205,7 +210,7 @@ function plannerView(status: PlannerStatus): ConnectionView {
 		case "disconnected":
 		case "held":
 		case "none":
-			return { phase: "dropped", layer: "planner", text };
+			return { phase: "dropped", layer: "planner", text, plannerKind: status.kind };
 	}
 }
 
@@ -320,7 +325,8 @@ export const NOTHING_SPOKEN: Spoken = { key: undefined, planner: undefined };
  * entered. A banner that carries on (one more attempt, the same layer dropped again) says nothing;
  * one that goes says nothing either, since the resumed words already said it was over. A Planner
  * state is remembered through the socket's own phases, so one that carried on through a loss is not
- * said again when the connection returns, and a different one is said once.
+ * said again when the connection returns, and a different one is said once. Its kind, rather than its
+ * words, distinguishes it: a machine's name or retry details can change without a new state.
  *
  * `held` is the Planner's status being only withheld for a moment, not over: the banner falling
  * silent is then a gap, and the same state coming back after it is not said twice.
@@ -343,7 +349,9 @@ export function connectionSpeech(
 			said: `${view.text} ${view.caught}`.trim(),
 		};
 	}
-	let key = `${view.phase}:${view.layer}`;
+	let key = view.layer === "planner"
+		? `${view.phase}:${view.layer}:${view.plannerKind}`
+		: `${view.phase}:${view.layer}`;
 	if (view.layer !== "planner") {
 		return key === previous.key ? undefined : { spoken: { ...previous, key }, said: view.text };
 	}
