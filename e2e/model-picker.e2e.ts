@@ -11,6 +11,7 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
+import { connectionBanner } from "./banner";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase } from "./database";
 import { NONE, strip } from "./planner-status";
@@ -19,7 +20,7 @@ import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { HOST, ROOT } from "./servers";
 
-import type { Browser, Locator, Page } from "@playwright/test";
+import type { Browser, Locator, Page, WebSocketRoute } from "@playwright/test";
 import type { CapabilityCatalog } from "../packages/agent-link/src/protocol";
 
 const PORT = e2ePort(8799);
@@ -59,6 +60,8 @@ const DEEP = {
 const CATALOG: CapabilityCatalog = {
 	models: { available: [LARGE, SMALL, DEEP], default: { id: "acme/small" } },
 };
+/** What the banner says of a machine that went after it had answered a turn: its work is kept. */
+const HELD = /^@mona's machine stepped away\. Your work is kept until \d{1,2}:\d{2}[^.]*\.$/;
 const WITHOUT_LARGE: CapabilityCatalog = {
 	models: { available: [SMALL, DEEP], default: { id: "acme/small" } },
 };
@@ -270,6 +273,39 @@ async function open(browser: Browser, handle: string, room: string, options: obj
 	return page;
 }
 
+/**
+ * A page whose room socket the test can cut and give back, as a network that fails and returns
+ * does: while it is cut, every socket the page opens is closed at once.
+ */
+async function openCuttable(browser: Browser, handle: string, room: string, options: object) {
+	let context = await browser.newContext(options);
+	let page = await context.newPage();
+	page.on("pageerror", error => thrown.push(error.message));
+	let away = false;
+	let sockets: WebSocketRoute[] = [];
+	await page.routeWebSocket("**/ws?**", socket => {
+		if (away) return void socket.close();
+		let upstream = socket.connectToServer();
+		socket.onMessage(message => upstream.send(message));
+		upstream.onMessage(message => socket.send(message));
+		sockets.push(socket);
+	});
+	await authenticate(page, handle, ORIGIN);
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	return {
+		page,
+		cut: async () => {
+			away = true;
+			await sockets.at(-1)!.close();
+		},
+		restore: async () => {
+			away = false;
+			await page.evaluate(() => dispatchEvent(new Event("online")));
+		},
+	};
+}
+
 async function newRoom() {
 	let room = crypto.randomUUID();
 	await createChannel(PORT, room);
@@ -278,6 +314,14 @@ async function newRoom() {
 
 function chat(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
+}
+
+/**
+ * The composer's own notice about the model, a notice and not a banner: `strip` finds the
+ * connection banner that can be drawn above it, and the two are different causes.
+ */
+function notice(page: Page) {
+	return page.locator(".chat-composer .composer-notice:not([data-banner])");
 }
 
 /** The control in the composer's footer: named for the model that will run and its level. */
@@ -927,9 +971,9 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	// The catalog no longer lists it, so it is named by the id the client gave it.
 	let gone = "acme/large is no longer available, so Chopin used its default model.";
 	await expect(trigger(page)).toHaveAccessibleName(`Model: Small, ${gone}`);
-	// The tooltip stays short: the strip above the composer already says why.
+	// The tooltip stays short: the composer's notice already says why.
 	await expect(trigger(page)).toHaveAttribute("title", "Model: Small");
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 	await shoot(chat(page), "model-picker-gone-desktop");
 	await openPicker(page);
 	await expect(option(page, "Large")).toHaveCount(0);
@@ -949,7 +993,7 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	// The model returns: the stored choice is back in force.
 	client.report(CATALOG);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 	await ask(page, "restored", 3);
 	expect(turnFor(asked, "restored")).toMatchObject({ model: "acme/large", thinkingLevel: "high" });
 
@@ -992,15 +1036,15 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 	// Nobody is attached: the choice is neither gone nor honored, and nothing says it has gone.
 	await first.client.detach();
 	await expect(trigger(page)).toHaveCount(0);
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 
 	// A client that offers the catalog and has yet to report is the same: nothing is said yet.
 	let silent = await attachClient(room, CATALOG, { silent: true });
 	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
 	await page.waitForTimeout(500);
 	await expect(trigger(page)).toHaveCount(0);
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
-	await expect(strip(teammate).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(teammate).filter({ hasText: gone })).toHaveCount(0);
 
 	// A turn runs the client's default and Chat says why. That fallback has happened now, so every
 	// composer that can write says it too, after a reload as well; somebody who only reads sees neither.
@@ -1008,21 +1052,21 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 	expect(turnFor(silent.asked, "while it never reports").model).toBeUndefined();
 	expect(turnFor(silent.asked, "while it never reports").thinkingLevel).toBeUndefined();
 	await expect(chat(page).getByText(gone, { exact: true })).toHaveCount(2);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
-	await expect(strip(teammate).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(teammate).filter({ hasText: gone })).toBeVisible();
 	await expect(trigger(page)).toHaveCount(0);
 	await expect(trigger(reader)).toHaveCount(0);
-	await expect(strip(reader).filter({ hasText: "no longer available" })).toHaveCount(0);
+	await expect(notice(reader).filter({ hasText: "no longer available" })).toHaveCount(0);
 	await shoot(chat(page), "model-picker-never-reported-desktop");
 	await page.reload();
 	await ready(page);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 
 	// It reports at last: the picker returns with the choice, and the notice goes.
 	silent.client.report(CATALOG);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
-	await expect(strip(teammate).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(teammate).filter({ hasText: gone })).toHaveCount(0);
 	await ask(page, "once it reports", 2);
 	expect(turnFor(silent.asked, "once it reports")).toMatchObject({
 		model: "acme/large",
@@ -1035,11 +1079,11 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 	let later = await attachClient(room, CATALOG, { silent: true });
 	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
 	await page.waitForTimeout(500);
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 	await ask(page, "while the next never reports", 3);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 	await later.client.detach();
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 });
 
 test("keeps a saved choice's notice when the client withdraws every model or an older client takes its place, before and after a turn", async ({ browser }) => {
@@ -1061,7 +1105,7 @@ test("keeps a saved choice's notice when the client withdraws every model or an 
 	await page.keyboard.press("Escape");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
-	await expect(strip(page).filter({ hasText: "no longer available" })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: "no longer available" })).toHaveCount(0);
 	let gone = "acme/large is no longer available, so Chopin used its default model.";
 
 	// The client withdraws every model: the picker goes, and the saved choice's words stay, to
@@ -1069,43 +1113,43 @@ test("keeps a saved choice's notice when the client withdraws every model or an 
 	client.report({ models: { available: [] } });
 	await expect(trigger(page)).toHaveCount(0);
 	await expect(trigger(teammate)).toHaveCount(0);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
-	await expect(strip(teammate).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(teammate).filter({ hasText: gone })).toBeVisible();
 	await expect(trigger(reader)).toHaveCount(0);
-	await expect(strip(reader).filter({ hasText: "no longer available" })).toHaveCount(0);
+	await expect(notice(reader).filter({ hasText: "no longer available" })).toHaveCount(0);
 	await shoot(chat(page), "model-picker-withdrawn-desktop");
 
-	// The default runs, Chat says so once, and the strip is still there after the turn and a reload.
+	// The default runs, Chat says so once, and the notice is still there after the turn and a reload.
 	await ask(page, "while it is withdrawn", 1);
 	expect(turnFor(asked, "while it is withdrawn").model).toBeUndefined();
 	expect(turnFor(asked, "while it is withdrawn").thinkingLevel).toBeUndefined();
-	// The line in Chat and the strip.
+	// The line in Chat and the notice.
 	await expect(chat(page).getByText(gone, { exact: true })).toHaveCount(2);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 	await page.reload();
 	await ready(page);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 	await expect(trigger(page)).toHaveCount(0);
 
 	// The client goes, and an older one that reports no models takes its place. Nothing is said while
 	// nobody is attached: the choice is neither gone nor honored, and the machine's status speaks.
 	await client.detach();
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 	let older = await attachClient(room);
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
-	await expect(strip(teammate).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(teammate).filter({ hasText: gone })).toBeVisible();
 	await expect(trigger(page)).toHaveCount(0);
 	await ask(page, "with an older client", 2);
 	expect(turnFor(older.asked, "with an older client").model).toBeUndefined();
 	expect(turnFor(older.asked, "with an older client").thinkingLevel).toBeUndefined();
-	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
 
 	// A client that offers the model again brings the picker and the choice back, as it was stored.
 	await older.client.detach();
 	let back = await attachClient(room, CATALOG);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
-	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
-	await expect(strip(teammate).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(notice(teammate).filter({ hasText: gone })).toHaveCount(0);
 	await ask(page, "restored", 3);
 	expect(turnFor(back.asked, "restored")).toMatchObject({
 		model: "acme/large",
@@ -1121,10 +1165,10 @@ test("says nothing of a model nobody chose when no model is offered, while a cli
 	// An older client, from the start: no picker, and the default is not a choice to be told as gone.
 	let older = await attachClient(room);
 	await expect(trigger(page)).toHaveCount(0);
-	await expect(strip(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveCount(0);
 	await ask(page, "with an older client", 1);
 	expect(turnFor(older.asked, "with an older client").model).toBeUndefined();
-	await expect(strip(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveCount(0);
 	await expect(chat(page).getByText("no longer available")).toHaveCount(0);
 	await older.client.detach();
 
@@ -1134,13 +1178,13 @@ test("says nothing of a model nobody chose when no model is offered, while a cli
 	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
 	client.report({ models: { available: [] } });
 	await expect(trigger(page)).toHaveCount(0);
-	await expect(strip(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveCount(0);
 	client.report(CATALOG);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
-	await expect(strip(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveCount(0);
 	await client.detach();
 	await expect(trigger(page)).toHaveCount(0);
-	await expect(strip(page).filter({ hasText: "no longer available" })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: "no longer available" })).toHaveCount(0);
 });
 
 test("says the default ran when a turn cannot read the document's model choice, to everyone, until one can", async ({ browser }) => {
@@ -1165,26 +1209,103 @@ test("says the default ran when a turn cannot read the document's model choice, 
 		await ask(page, "while it cannot be read", 1);
 		expect(turnFor(asked, "while it cannot be read").model).toBeUndefined();
 		expect(turnFor(asked, "while it cannot be read").thinkingLevel).toBeUndefined();
-		// Every composer says so in its strip, and Chat says it once on the turn.
-		await expect(strip(page).filter({ hasText: unread })).toBeVisible();
-		await expect(strip(teammate).filter({ hasText: unread })).toBeVisible();
+		// Every composer says so in its notice, and Chat says it once on the turn.
+		await expect(notice(page).filter({ hasText: unread })).toBeVisible();
+		await expect(notice(teammate).filter({ hasText: unread })).toBeVisible();
 		await expect(chat(page).getByText(unread, { exact: true })).toHaveCount(2);
 		await shoot(chat(page), "model-picker-unreadable-desktop");
 	} finally {
 		await choicesReadable(true);
 	}
 
-	// A turn that can read it runs the stored choice again, and the strip goes with the cause.
+	// A turn that can read it runs the stored choice again, and the notice goes with the cause.
 	await ask(page, "once it can", 2);
 	expect(turnFor(asked, "once it can")).toMatchObject({
 		model: "acme/large",
 		thinkingLevel: "high",
 	});
-	await expect(strip(page).filter({ hasText: unread })).toHaveCount(0);
-	await expect(strip(teammate).filter({ hasText: unread })).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: unread })).toHaveCount(0);
+	await expect(notice(teammate).filter({ hasText: unread })).toHaveCount(0);
 	await expect(chat(page).getByText(unread, { exact: true })).toHaveCount(1);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await client.detach();
+});
+
+test("gives way to the room's connection banner and comes back with the connection, and stays beside the machine's own banner", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let { page, cut, restore } = await openCuttable(browser, HANDLE, room, DESKTOP);
+	let { client } = await attachClient(room, CATALOG);
+	await expect(trigger(page)).toBeVisible();
+	await openPicker(page);
+	await option(page, "Large").click();
+	await openPicker(page);
+	await level(page, "high").click();
+	await page.keyboard.press("Escape");
+	let gone = "acme/large is no longer available, so Chopin used its default model.";
+	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+
+	// The model has gone: its notice is drawn, and no banner is above it.
+	client.report(WITHOUT_LARGE);
+	await expect(notice(page).filter({ hasText: gone })).toBeVisible();
+	await expect(connectionBanner(page)).toHaveCount(0);
+
+	// The room's own connection is lost: its banner is the one thing said while it lasts, as it is
+	// for the composer's other notices, and the picker is still there.
+	await cut();
+	await expect(connectionBanner(page)).toHaveAttribute("data-layer", "socket", {
+		timeout: 15_000,
+	});
+	await expect(notice(page)).toHaveCount(0);
+	await expect(trigger(page)).toBeVisible();
+
+	// It is back: the banner says so and goes, and the notice returns, once.
+	await restore();
+	await expect(connectionBanner(page)).toHaveCount(0, { timeout: 30_000 });
+	await expect(notice(page).filter({ hasText: gone })).toHaveCount(1);
+	await expect(trigger(page)).toHaveAccessibleName(`Model: Small, ${gone}`);
+
+	// The saved choice cannot be read: the turn runs the default, and the composer says so.
+	client.report(CATALOG);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
+	await choicesReadable(false);
+	try {
+		await ask(page, "while it cannot be read", 1);
+		await expect(notice(page).filter({ hasText: unread })).toBeVisible();
+
+		// The machine goes. Its banner is another cause: drawn above the notice, which stays, and
+		// both describe the draft.
+		await client.detach();
+		await expect(connectionBanner(page)).toHaveAttribute("data-layer", "planner");
+		await expect(strip(page)).toHaveText(HELD);
+		await expect(notice(page).filter({ hasText: unread })).toBeVisible();
+		await expect(connectionBanner(page)).toHaveCount(1);
+		let [banner, words] = await Promise.all([
+			strip(page).boundingBox(),
+			notice(page).boundingBox(),
+		]);
+		// Stacked as the composer's strips are: the notice starts below the banner's top and covers
+		// no more of it than the half rem each strip is tucked under the next.
+		expect(words!.y).toBeGreaterThan(banner!.y);
+		expect(banner!.y + banner!.height - words!.y).toBeLessThanOrEqual(9);
+		let described = await chatInput(chat(page)).getAttribute("aria-describedby");
+		expect(described).toContain((await strip(page).getAttribute("id"))!);
+		expect(described).toContain((await notice(page).getAttribute("id"))!);
+	} finally {
+		await choicesReadable(true);
+	}
+
+	// A machine returns: its banner goes and the notice stays until a turn can read the choice.
+	let again = await attachClient(room, CATALOG);
+	await expect(connectionBanner(page)).toHaveCount(0);
+	await expect(notice(page).filter({ hasText: unread })).toBeVisible();
+	await ask(page, "once it can", 2);
+	expect(turnFor(again.asked, "once it can")).toMatchObject({
+		model: "acme/large",
+		thinkingLevel: "high",
+	});
+	await expect(notice(page)).toHaveCount(0);
+	await again.client.detach();
 });
 
 test("names the model on a phone trigger, opens a list as wide as the composer and chooses by touch", async ({ browser }) => {
