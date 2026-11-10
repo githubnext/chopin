@@ -12,6 +12,7 @@ import type {
 } from "../../apps/server/src/harness/harness-v1";
 import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
 import { nameDocument } from "./fake-heading";
+import { READER_REPLY } from "./fixtures";
 import type { scopeSnapshot } from "../../apps/server/src/questions/decision-followup";
 
 type FakeHarnessSettings = {
@@ -138,11 +139,17 @@ export function createFakeHarness(
 						: prompt;
 					let heading = prompt.startsWith("[Background job: heading]\n");
 					let followup = prompt.startsWith("[Background job: decision-followup]\n");
+					let reader = turn.instructions?.includes("You have no tools") === true;
+					if (reader && available.size) {
+						throw new Error("e2e-fake reader turn received tools");
+					}
 					if (heading && available.size !== HEADING_TOOL_NAMES.length) {
 						throw new Error("e2e-fake heading job received tools outside its scope");
 					}
 					for (
-						let toolName of heading
+						let toolName of reader
+							? []
+							: heading
 							? HEADING_TOOL_NAMES
 							: followup
 							? ["read_decision_scope", "write_decision_scope"]
@@ -237,7 +244,25 @@ export function createFakeHarness(
 						}
 					};
 
-					if (heading) {
+					if (reader) {
+						void (async () => {
+							try {
+								await pause();
+								if (turn.abortSignal?.aborted) return;
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: READER_REPLY });
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (error) {
+								turn.emit({ type: "error", error });
+								settled.reject(error);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (heading) {
 						void (async () => {
 							try {
 								await nameDocument(prompt, callTool);

@@ -11,6 +11,8 @@ import { e2ePort } from "../ports";
  */
 export const FAKE_MCP_PORT = e2ePort(8797);
 
+export const READER_REPLY = "Reader answer: said again without any tool.";
+
 export const PULL_REQUESTS = [
 	{ number: 42, title: "Restring the harp section", state: "open" },
 ];
