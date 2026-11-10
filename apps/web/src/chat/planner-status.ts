@@ -1,4 +1,5 @@
 import type { Session } from "@chopin/protocol";
+import type { ConnectionView } from "./connection-phase";
 
 /** Where a machine that cannot be connected to is explained, and what to do about it. */
 export const PLANNER_HOW_TO_FIX =
@@ -6,9 +7,8 @@ export const PLANNER_HOW_TO_FIX =
 
 /**
  * What the document says about its remote Planner when it is not simply attached and healthy,
- * which says nothing at all. It is one status told in several places: the machine button's name
- * and its menu, a live region for a screen reader, and, where the person has no machine button,
- * the banner at the composer's top edge (see `connection-phase.ts`).
+ * which says nothing at all. The connection banner and the machine button use the same words
+ * (see `connection-phase.ts`).
  *
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
@@ -121,16 +121,20 @@ export function plannerButtonLabel(label: string, status: PlannerStatus | undefi
 	return status ? `${label}. ${plannerSentence(status)}` : label;
 }
 
-/**
- * Where the Planner's state is told on the machine button: the button carries every state, so a
- * person who has it reads the machine's own state there. Everyone's banner at the Chat composer
- * tells it as well (see `connection-phase.ts`), once, as it changes.
- */
-export type PlannerPlacement = { button: PlannerStatus | undefined };
+/** Null quiets the button's status, including its machine dot, without inventing a Planner state. */
+export type PlannerPlacement = { button: PlannerStatus | null | undefined };
 
+/** The button yields only to the same Planner status actually shown by Chat's banner. */
 export function plannerPlacement(
 	status: PlannerStatus | undefined,
 	hasButton: boolean,
+	view?: ConnectionView,
+	chatVisible = false,
 ): PlannerPlacement {
-	return { button: hasButton ? status : undefined };
+	if (!hasButton) return { button: undefined };
+	if (
+		status && chatVisible && view && (view.phase === "dropped" || view.phase === "reconnecting")
+		&& view.layer === "planner" && view.text === plannerSentence(status)
+	) return { button: null };
+	return { button: status };
 }

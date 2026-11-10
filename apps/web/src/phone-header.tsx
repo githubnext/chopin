@@ -42,8 +42,8 @@ type PhoneHeaderDocument = {
 	archivedAt?: string;
 	/** The person's machine choice for this document: its button opens a sheet from the bar. */
 	machine?: MachineChoice;
-	/** What is not well with the document's Planner, which the button and its sheet tell. */
-	planner?: PlannerStatus;
+	/** What is not well with the document's Planner; null quiets it for the connection banner. */
+	planner?: PlannerStatus | null;
 	canManage: boolean;
 	/** The room is a decision's page: its menu is Copy link and Discard decision only. */
 	decision?: boolean;

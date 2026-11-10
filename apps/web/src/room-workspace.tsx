@@ -1315,10 +1315,7 @@ export function RoomWorkspace(
 		&& (phone
 			? !(presentation.type === "parent-with-child" && planVisible)
 			: titleBuildShown);
-	let plannerWhere = useMemo(
-		() => plannerPlacement(plannerNote, hasMachineButton),
-		[plannerNote, hasMachineButton],
-	);
+	let chatShowsBanner = profile.chat && workspacePresentation.chatVisible;
 	// A lost connection and the Planner's own are told once, by one banner: at the Chat composer
 	// while Chat is on screen, else at the top of the document. Decided here, above both, so a
 	// person switching between them neither waits out the grace period again nor hears of it twice.
@@ -1327,7 +1324,9 @@ export function RoomWorkspace(
 		failures: outage?.failures ?? 0,
 		synced: planState.synced,
 		transcript: profile.chat ? transcriptFacts : NO_TRANSCRIPT,
-		planner: profile.chat ? plannerForBanner(plannerNote, hasMachineButton) : undefined,
+		planner: profile.chat
+			? plannerForBanner(plannerNote, hasMachineButton && !chatShowsBanner)
+			: undefined,
 		// Only the machine's own word on this socket is a return; a status that is withheld, hidden
 		// by the machine button or from another socket is not.
 		plannerAttached: profile.chat && attachment?.state === "attached",
@@ -1338,7 +1337,7 @@ export function RoomWorkspace(
 			void wire?.ask("chat:wake", {}).catch(() => {});
 		},
 	});
-	let chatShowsBanner = profile.chat && workspacePresentation.chatVisible;
+	let plannerWhere = plannerPlacement(plannerNote, hasMachineButton, banner.view, chatShowsBanner);
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,
 		room,

@@ -3,7 +3,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup as renderToStaticMarkupRaw } from "react-dom/server";
 
 import { BuildPlanButton } from "./build-plan-button";
-import { PLANNER_HOW_TO_FIX, plannerStatus } from "./chat/planner-status";
+import {
+	PLANNER_HOW_TO_FIX,
+	plannerPlacement,
+	plannerSentence,
+	plannerStatus,
+} from "./chat/planner-status";
+import { connectionStep, INITIAL_MEMORY, plannerForBanner } from "./chat/connection-phase";
 import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
 
 import type { MachineChoice } from "./machine-choice";
@@ -139,6 +145,95 @@ function button(
 		}),
 	);
 }
+
+test("a Planner's connection is told by the visible Chat banner, not repeated on the machine button", () => {
+	let status = plannerStatus({ state: "disconnected", login: "mona" }, "build-box")!;
+	let { view } = connectionStep(INITIAL_MEMORY, {
+		socket: "up",
+		failures: 0,
+		retrying: undefined,
+		synced: true,
+		current: true,
+		turn: undefined,
+		messages: 0,
+		planner: status,
+	});
+	expect(view).toMatchObject({ phase: "dropped", layer: "planner", text: plannerSentence(status) });
+	let placement = plannerPlacement(status, true, view, true);
+	let markup = renderToStaticMarkup(createElement(MachineButton, {
+		choice: choice(true, true),
+		planner: placement.button,
+	}));
+	expect(markup).toContain('aria-label="Runs on build-box"');
+	expect(markup).toContain('aria-haspopup="menu"');
+	expect(markup).not.toContain("status-dot");
+	expect(markup).not.toContain(plannerSentence(status));
+});
+
+test("no machine is reported by the Chat banner without inventing a connected machine", () => {
+	let status = plannerStatus({ state: "none" })!;
+	let { view } = connectionStep(INITIAL_MEMORY, {
+		socket: "up",
+		failures: 0,
+		retrying: undefined,
+		synced: true,
+		current: true,
+		turn: undefined,
+		messages: 0,
+		planner: plannerForBanner(status, false),
+	});
+	expect(view).toMatchObject({
+		phase: "dropped",
+		layer: "planner",
+		text: "No machine is connected.",
+	});
+	let noMachine = choice(false, false);
+	noMachine.state!.choice = null;
+	noMachine.state!.machines = [];
+	let markup = renderToStaticMarkup(createElement(MachineButton, {
+		choice: noMachine,
+		planner: plannerPlacement(status, true, view, true).button,
+	}));
+	expect(markup).toContain('aria-label="Choose machine"');
+	expect(markup).toContain('aria-haspopup="menu"');
+	expect(markup).not.toContain("status-dot");
+	expect(markup).not.toContain("no machine connected");
+});
+
+test("the machine button retains its status when Chat is hidden or the banner tells another cause", () => {
+	let status = plannerStatus({ state: "disconnected", login: "mona" }, "build-box")!;
+	let plannerView = connectionStep(INITIAL_MEMORY, {
+		socket: "up",
+		failures: 0,
+		retrying: undefined,
+		synced: true,
+		current: true,
+		turn: undefined,
+		messages: 0,
+		planner: status,
+	}).view;
+	let socketView = connectionStep(INITIAL_MEMORY, {
+		socket: "lost",
+		failures: 0,
+		retrying: undefined,
+		synced: false,
+		current: false,
+		turn: undefined,
+		messages: 0,
+		planner: status,
+	}).view;
+	expect(plannerPlacement(status, true, plannerView, false).button).toBe(status);
+	expect(plannerPlacement(status, true, socketView, true).button).toBe(status);
+	expect(plannerPlacement(status, true, { phase: "online" }, true).button).toBe(status);
+	expect(
+		plannerPlacement(
+			status,
+			true,
+			{ phase: "resumed", layer: "planner", text: "Back", caught: "" },
+			true,
+		).button,
+	).toBe(status);
+});
 
 test("a healthy Planner leaves the button and its machine's dot exactly as they were", () => {
 	let healthy = button({ state: "attached", login: "mona" });
