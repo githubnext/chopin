@@ -1588,6 +1588,35 @@ describe("Agent connection capability catalog", () => {
 		await raw.closed;
 	});
 
+	it("stops waiting for a catalog its client offered once a turn has run without it, and takes the report if it comes", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300);
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		expect(link.catalogPending).toBe(true);
+		link.settleWithoutCatalog();
+		expect(link.catalogPending).toBe(false);
+		// It is still no catalog: the client has offered nothing, and may yet.
+		expect(link.catalog).toBeUndefined();
+		raw.send({ type: "capabilities", catalog });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(catalog);
+		expect(link.catalogPending).toBe(false);
+		raw.send({ type: "detach" });
+		await raw.closed;
+
+		// A client of its own is waited for afresh: the earlier link's turn does not settle it.
+		let next = await rawLink(server.url, undefined, "capability-catalog");
+		next.send({ type: "attach", version: 1, document: channel.id });
+		await next.next("attached");
+		expect(server.links.at(-1)!.catalogPending).toBe(true);
+		next.send({ type: "detach" });
+		await next.closed;
+	});
+
 	it("keeps a report of more models than a person picks from, and a field it has no use for, and stays attached", async () => {
 		let { auth, channel } = await linkAuth();
 		let server = linkServer(auth, 300);

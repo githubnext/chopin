@@ -23,6 +23,12 @@ export type ModelChoiceDeps = {
 	 * told to the room with no catalog, since it is neither gone nor honored. Absent means known.
 	 */
 	known?: (channelId: string) => boolean;
+	/**
+	 * A turn fell back on a saved choice with no catalog to check it against while `known` was
+	 * false: the harness is to treat what it offers as known (nothing), and the room is to be told
+	 * the choice, since what the turn did is now a fact. Called once per such turn.
+	 */
+	fellBack?: (channelId: string) => void;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
 	lease: () => Lease;
 	now?: () => Date;
@@ -69,6 +75,11 @@ export async function modelState(
 export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promise<TurnModel> {
 	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
 	let resolved = resolveChoice(catalog, choice);
+	// The turn runs the default for a choice nothing could check, where the harness had not yet said
+	// what it offers: from now on that is known, and the composer is told what the turn did.
+	if (resolved.unavailable && !catalog && deps.known?.(channelId) === false) {
+		deps.fellBack?.(channelId);
+	}
 	return {
 		...(resolved.model !== undefined ? { model: resolved.model } : {}),
 		...(resolved.thinkingLevel !== undefined ? { thinkingLevel: resolved.thinkingLevel } : {}),

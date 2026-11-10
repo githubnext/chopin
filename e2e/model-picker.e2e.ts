@@ -192,9 +192,40 @@ function turnFor(asked: Asked[], text: string): Asked {
 	return found;
 }
 
-async function attachClient(room: string, capabilities?: CapabilityCatalog) {
+/**
+ * Makes the next link this process opens drop the first `capabilities` frame it sends, so the
+ * client asks for the catalog and never reports one. The link is made synchronously by
+ * `connectAgent`, so the global is put back before anything else can open a socket.
+ */
+function dropFirstReport(): () => void {
+	let Original = globalThis.WebSocket;
+	let dropped = false;
+	globalThis.WebSocket = class extends Original {
+		override send(data: Parameters<WebSocket["send"]>[0]) {
+			if (!dropped && typeof data === "string" && JSON.parse(data).type === "capabilities") {
+				dropped = true;
+				return;
+			}
+			super.send(data);
+		}
+	} as typeof WebSocket;
+	return () => {
+		globalThis.WebSocket = Original;
+	};
+}
+
+/**
+ * `silent` is a client that offers `capability-catalog` and never reports its models, until its
+ * own `client.report`, as a client that is slow or has none ready.
+ */
+async function attachClient(
+	room: string,
+	capabilities?: CapabilityCatalog,
+	options: { silent?: boolean } = {},
+) {
 	let asked: Asked[] = [];
-	let client = await connectAgent({
+	let restore = options.silent ? dropFirstReport() : undefined;
+	let connecting = connectAgent({
 		url: ORIGIN,
 		token: `ghu_e2e_${HANDLE}_1`,
 		document: room,
@@ -217,6 +248,8 @@ async function attachClient(room: string, capabilities?: CapabilityCatalog) {
 			},
 		},
 	});
+	restore?.();
+	let client = await connecting;
 	return { client, asked };
 }
 
@@ -871,6 +904,79 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	expect(turnFor(asked, "level gone")).toMatchObject({ model: "acme/large" });
 	expect(turnFor(asked, "level gone").thinkingLevel).toBeUndefined();
 	await client.detach();
+});
+
+test("says a saved choice has gone once a turn fell back for a client that offered the catalog and never reported it, and not before", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let teammate = await open(browser, "ana", room, DESKTOP);
+	let readerContext = await browser.newContext(DESKTOP);
+	let reader = await readerContext.newPage();
+	await authenticate(reader, `score-reader-${room.slice(0, 8)}`, ORIGIN);
+	await reader.goto(`${ORIGIN}${roomPath(room)}`);
+	await expect(content(reader)).toHaveAttribute("contenteditable", "false");
+	let first = await attachClient(room, CATALOG);
+	await expect(trigger(page)).toBeVisible();
+	await openPicker(page);
+	await option(page, "Large").click();
+	await openPicker(page);
+	await level(page, "high").click();
+	await page.keyboard.press("Escape");
+	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
+	let gone = "acme/large is no longer available, so Chopin used its default model.";
+
+	// Nobody is attached: the choice is neither gone nor honored, and nothing says it has gone.
+	await first.client.detach();
+	await expect(trigger(page)).toHaveCount(0);
+	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+
+	// A client that offers the catalog and has yet to report is the same: nothing is said yet.
+	let silent = await attachClient(room, CATALOG, { silent: true });
+	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
+	await page.waitForTimeout(500);
+	await expect(trigger(page)).toHaveCount(0);
+	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(strip(teammate).filter({ hasText: gone })).toHaveCount(0);
+
+	// A turn runs the client's default and Chat says why. That fallback has happened now, so every
+	// composer that can write says it too, after a reload as well; somebody who only reads sees neither.
+	await ask(page, "while it never reports", 1);
+	expect(turnFor(silent.asked, "while it never reports").model).toBeUndefined();
+	expect(turnFor(silent.asked, "while it never reports").thinkingLevel).toBeUndefined();
+	await expect(chat(page).getByText(gone, { exact: true })).toHaveCount(2);
+	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await expect(strip(teammate).filter({ hasText: gone })).toBeVisible();
+	await expect(trigger(page)).toHaveCount(0);
+	await expect(trigger(reader)).toHaveCount(0);
+	await expect(strip(reader).filter({ hasText: "no longer available" })).toHaveCount(0);
+	await shoot(chat(page), "model-picker-never-reported-desktop");
+	await page.reload();
+	await ready(page);
+	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+
+	// It reports at last: the picker returns with the choice, and the notice goes.
+	silent.client.report(CATALOG);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
+	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await expect(strip(teammate).filter({ hasText: gone })).toHaveCount(0);
+	await ask(page, "once it reports", 2);
+	expect(turnFor(silent.asked, "once it reports")).toMatchObject({
+		model: "acme/large",
+		thinkingLevel: "high",
+	});
+
+	// The next client that never reports starts over: what an earlier one fell back on is not said
+	// of it before a turn has, and nothing is said once it has gone.
+	await silent.client.detach();
+	let later = await attachClient(room, CATALOG, { silent: true });
+	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
+	await page.waitForTimeout(500);
+	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
+	await ask(page, "while the next never reports", 3);
+	await expect(strip(page).filter({ hasText: gone })).toBeVisible();
+	await later.client.detach();
+	await expect(strip(page).filter({ hasText: gone })).toHaveCount(0);
 });
 
 test("keeps a saved choice's notice when the client withdraws every model or an older client takes its place, before and after a turn", async ({ browser }) => {

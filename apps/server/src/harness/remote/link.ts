@@ -952,6 +952,8 @@ export class AgentLink {
 	/** Whether the server or the client chose to end this link, rather than the network failing. */
 	#planned = false;
 	#catalog: CapabilityCatalog | undefined;
+	/** Whether a turn has run without the catalog this client offered, so it is not waited for. */
+	#ranWithoutCatalog = false;
 	/** Set on a link rebuilt after a restart: told when its sessions are given back or end. */
 	#rebuilt: { ended(): void; resumed(): void } | undefined;
 
@@ -1134,12 +1136,22 @@ export class AgentLink {
 
 	/**
 	 * Whether what the client offers is yet to be told: it offered `capability-catalog` and has not
-	 * sent `capabilities`. A client from before the catalog never will, so nothing is pending for it,
-	 * and a report that withdraws everything is still a report.
+	 * sent `capabilities`, and no turn has run without it (`settleWithoutCatalog`). A client from
+	 * before the catalog never will, so nothing is pending for it, and a report that withdraws
+	 * everything is still a report.
 	 */
 	get catalogPending(): boolean {
-		return this.#catalog === undefined
+		return this.#catalog === undefined && !this.#ranWithoutCatalog
 			&& this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog) === true;
+	}
+
+	/**
+	 * A turn has run, and fallen back on a saved choice, for want of the catalog this client offered
+	 * and has not reported: what it offers is no longer waited for but taken as nothing, so that
+	 * what the turn did can be told to the room. A report that comes later replaces it as ever.
+	 */
+	settleWithoutCatalog(): void {
+		this.#ranWithoutCatalog = true;
 	}
 
 	/** Whether this link offered `resumable-sessions`. */
