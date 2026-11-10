@@ -13,10 +13,10 @@ test("plain text is the Markdown as the page draws it", () => {
 });
 
 test("plain text lists keep their markers, numbers and nesting", () => {
-	expect(plainTextOf("- first\n- second")).toBe("• first\n• second");
+	expect(plainTextOf("* first\n* second")).toBe("- first\n- second");
 	expect(plainTextOf("1. one\n2. two")).toBe("1. one\n2. two");
 	expect(plainTextOf("3. three\n4. four")).toBe("3. three\n4. four");
-	expect(plainTextOf("- parent\n  - child")).toBe("• parent\n  • child");
+	expect(plainTextOf("* parent\n  * child")).toBe("- parent\n  - child");
 });
 
 test("plain text breaks a line where the page does and joins a soft break with a space", () => {

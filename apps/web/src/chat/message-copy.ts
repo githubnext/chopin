@@ -39,7 +39,7 @@ function block(node: Node, indent: string): string {
 	if (node.type === "list") {
 		let number = node.start ?? 1;
 		return (node.children ?? []).map(item => {
-			let marker = node.ordered ? `${number++}. ` : "• ";
+			let marker = node.ordered ? `${number++}. ` : "- ";
 			let parts = (item.children ?? []).filter(child => BLOCKS.has(child.type));
 			let [first, ...rest] = parts.map(child => block(child, indent + "  "));
 			return [`${indent}${marker}${(first ?? "").trimStart()}`, ...rest].join("\n");
