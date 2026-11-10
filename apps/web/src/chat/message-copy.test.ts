@@ -1,36 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { markdownOf, plainTextOf } from "./message-copy";
+import { plainTextOf } from "./message-copy";
 
 import type { Chat } from "@chopin/protocol";
-
-test("Markdown copy is the stored text untouched, spaces and syntax included", () => {
-	let text = "  **Bold**, `code` and [a link](https://example.com/a?b=1).\n\n- one\n- two  \n";
-	expect(markdownOf({ text })).toBe(text);
-	expect(markdownOf({ text, to: "room" })).toBe(text);
-	expect(markdownOf({ text: "" })).toBe("");
-});
-
-test("Markdown copy keeps raw HTML, images and an @chopin written inside prose", () => {
-	let text = "Ask @chopin here <b>x</b> ![alt](https://example.com/p.png)";
-	expect(markdownOf({ text })).toBe(text);
-});
-
-test("Markdown copy leaves out only the Planner address the page draws from `to`", () => {
-	expect(markdownOf({ text: "@chopin explain the cache", to: "planner" })).toBe(
-		"explain the cache",
-	);
-	// What follows is the author's, newline and all.
-	expect(markdownOf({ text: "  @Chopin\nexplain", to: "planner" })).toBe("\nexplain");
-	expect(markdownOf({ text: "explain the cache", to: "planner" })).toBe("explain the cache");
-	// Not addressed to the Planner: an author's own @chopin stays.
-	expect(markdownOf({ text: "@chopin explain", to: "room" })).toBe("@chopin explain");
-	expect(markdownOf({ text: "@chopin explain" })).toBe("@chopin explain");
-	// A mention in the middle is prose, and `chopinx` is not the address.
-	expect(markdownOf({ text: "ask @chopin, then @chopinx", to: "planner" })).toBe(
-		"ask @chopin, then @chopinx",
-	);
-});
 
 test("plain text is the Markdown as the page draws it", () => {
 	expect(plainTextOf("**Bold**, *italic* and `code`")).toBe("Bold, italic and code");
@@ -75,4 +47,10 @@ test("plain text shows a reference as its label", () => {
 		observedSourceHash: "sha256:x",
 	};
 	expect(plainTextOf(source, [reference])).toBe("see #Design for the plan");
+});
+
+test("plain text starts with what the page draws before the text, such as the Planner address", () => {
+	expect(plainTextOf("explain the cache", undefined, "@chopin")).toBe("@chopin explain the cache");
+	expect(plainTextOf("", undefined, "@chopin")).toBe("@chopin");
+	expect(plainTextOf("explain the cache", undefined, undefined)).toBe("explain the cache");
 });
