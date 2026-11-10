@@ -358,6 +358,26 @@ test("on a phone every button of the toolbar a long press brings up is what the 
 	await expect.poll(() => unmet(toolbar(tall)), { message: "m6" }).toEqual([]);
 });
 
+test("on a phone every message's toolbar is in the accessibility tree and a key press brings it up, below the top bar and over no text", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await openChatOnPhone(page);
+	await expect(chatOf(page).getByRole("toolbar", { name: "Reactions and actions" })).toHaveCount(7);
+	for (let id of ["m2", "m3", "m7"]) {
+		let target = message(page, id);
+		await target.scrollIntoViewIfNeeded();
+		let bar = toolbar(target);
+		await expect(bar.getByRole("button", { name: "Message actions" }), id).toBeAttached();
+		await bar.getByRole("button", { name: "Message actions" }).focus();
+		await page.keyboard.press("ArrowLeft");
+		await expect(bar, id).toBeVisible();
+		await expect(bar, id).toHaveCSS("opacity", "1");
+		expect(await coveredText(bar), id).toEqual([]);
+		await expect.poll(() => unmet(bar), { message: id }).toEqual([]);
+		await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+	}
+});
+
 test("on a phone a long press in the middle of a message taller than the screen keeps the toolbar on screen, with every button a touch target", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);
