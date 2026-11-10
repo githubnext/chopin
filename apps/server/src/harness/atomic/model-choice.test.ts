@@ -1,6 +1,6 @@
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,6 +32,16 @@ const MODELS = [
 		input: ["text" as const],
 		cost: COST,
 		contextWindow: 1_000_000,
+		maxTokens: 4_096,
+	},
+	{
+		id: "other",
+		name: "Other",
+		reasoning: true,
+		thinkingLevelMap: { high: null },
+		input: ["text" as const],
+		cost: COST,
+		contextWindow: 200_000,
 		maxTokens: 4_096,
 	},
 ];
@@ -134,10 +144,20 @@ describe("the catalog Atomic offers for a document's Planner", () => {
 });
 
 describe("a chosen model and thinking level reach the Atomic session", () => {
+	/**
+	 * Runs `steps` as the turns of one full Planner session and reads what each asked the provider
+	 * for. The operator's Atomic settings are the ones given, never the developer's own.
+	 */
 	async function turns(
 		steps: { prompt: string; model?: string; thinkingLevel?: string }[],
+		operator: object = {},
 	) {
 		let root = await mkdtemp(join(tmpdir(), "chopin-atomic-choice-"));
+		let agentDir = join(root, "agent");
+		await mkdir(agentDir);
+		await writeFile(join(agentDir, "settings.json"), JSON.stringify(operator));
+		let previous = process.env.ATOMIC_CODING_AGENT_DIR;
+		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
 		let harness = adapter();
 		let sandbox = await createJustBashNetworkSandboxSession();
 		let sessionId = crypto.randomUUID();
@@ -175,6 +195,8 @@ describe("a chosen model and thinking level reach the Atomic session", () => {
 			await session.doDestroy();
 			release();
 			await harness.shutdown();
+			if (previous === undefined) delete process.env.ATOMIC_CODING_AGENT_DIR;
+			else process.env.ATOMIC_CODING_AGENT_DIR = previous;
 			await rm(root, { recursive: true, force: true });
 		}
 	}
@@ -199,7 +221,33 @@ describe("a chosen model and thinking level reach the Atomic session", () => {
 			["fourth", "plain"],
 		]);
 		expect(seen[1]![2]).toBe("high");
-		// Without a chosen level the session's own returns: none was configured, so none is sent.
-		expect(seen[2]![2]).toBeUndefined();
+		// Without a chosen level the model runs its own: the level Atomic gives a reasoning model
+		// that nobody has set (`medium`), not the `off` of the plain model the session began on.
+		expect(seen[2]![2]).toBe("medium");
+		// A model that does not reason has none to send.
+		expect(seen[3]![2]).toBeUndefined();
 	});
+
+	it("runs a model's own level the same whether or not a person chose one before it", async () => {
+		// Where a session has been must not change what a model runs when nobody chooses: Atomic's
+		// own level for it, the operator's saved one for that model or their default, else `medium`.
+		let last = async (steps: Parameters<typeof turns>[0], operator?: object) =>
+			(await turns(steps, operator)).at(-1)![2];
+		let chosen = { prompt: "chosen", model: "stub/deep", thinkingLevel: "high" };
+		let operators: Array<[object, Record<string, string>]> = [
+			[{}, { "stub/deep": "medium", "stub/other": "medium" }],
+			[
+				{ defaultThinkingLevel: "low", modelThinkingLevels: { "stub/other": "minimal" } },
+				{ "stub/deep": "low", "stub/other": "minimal" },
+			],
+		];
+		for (let [operator, own] of operators) {
+			for (let model of ["stub/deep", "stub/other"]) {
+				let next = { prompt: "next", model };
+				let straight = await last([{ prompt: "first" }, next], operator);
+				expect(straight).toBe(own[model]!);
+				expect(await last([{ prompt: "first" }, chosen, next], operator)).toBe(straight);
+			}
+		}
+	}, 30_000);
 });
