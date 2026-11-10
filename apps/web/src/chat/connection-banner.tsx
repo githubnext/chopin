@@ -10,6 +10,7 @@ import {
 	NOTHING_SPOKEN,
 	RESUMED_MS,
 } from "./connection-phase";
+import { useConnectionSpeaking } from "../connection-speaking";
 import { ConnectionState } from "./connection-state";
 import type { ConnectionFacts, ConnectionMemory, ConnectionView, Spoken } from "./connection-phase";
 import type { PlannerStatus } from "./planner-status";
@@ -127,6 +128,8 @@ export function useConnectionBanner(
 		: undefined;
 	let offline = (view.phase === "reconnecting" || view.phase === "dropped")
 		&& view.layer !== "planner";
+	// The page-top navigation error must not tell this loss a second time.
+	useConnectionSpeaking(offline);
 	return { view, offline, spoken, onRetry };
 }
 
