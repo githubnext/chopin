@@ -102,7 +102,7 @@
 	z-index: 2;
 	inset-inline-end: calc(-1 * var(--chat-bleed-end) + 0.25rem);
 	top: calc(-1 * var(--chat-highlight-top));
-	translate: 0 -50%;
+	translate: 0 calc(-50% + var(--chat-toolbar-shift, 0px));
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);

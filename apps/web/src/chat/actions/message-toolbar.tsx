@@ -15,6 +15,7 @@ import type { CSSProperties, KeyboardEvent, RefObject } from "react";
 export let COPIED_MS = 1500;
 
 const TOOLBAR_MARGIN = 8;
+const SHIFT = "--chat-toolbar-shift";
 
 type Which = "markdown" | "plain";
 
@@ -161,6 +162,45 @@ export let MessageToolbar = memo(function MessageToolbar(
 		element?.toggleAttribute("data-chat-engaged", engaged || persistent);
 		return () => element?.removeAttribute("data-chat-engaged");
 	}, [host, engaged, persistent]);
+
+	// A message taller than the pane has its top, and so its toolbar, above what is shown: while the
+	// pointer or focus is on it, the bar is moved down the message to the top of the visible part.
+	useEffect(() => {
+		let element = host.current;
+		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
+		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
+		let place = () => {
+			let bar = element.querySelector<HTMLElement>('[data-slot="message-actions"]');
+			if (!bar) return;
+			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
+			let natural = bar.getBoundingClientRect().top - shift;
+			let room = element.getBoundingClientRect().bottom - bar.offsetHeight - natural;
+			let seen = view.getBoundingClientRect().top;
+			// Only a message whose top has scrolled away; one whose top is shown keeps its bar where it is.
+			let wanted = element.getBoundingClientRect().top < seen ? seen + TOOLBAR_MARGIN - natural : 0;
+			element.style.setProperty(SHIFT, `${Math.max(0, Math.min(wanted, room))}px`);
+		};
+		let enter = () => {
+			place();
+			view.addEventListener("scroll", place, { passive: true });
+		};
+		let leave = () => {
+			view.removeEventListener("scroll", place);
+			if (!element.matches(":focus-within")) element.style.removeProperty(SHIFT);
+		};
+		element.addEventListener("pointerenter", enter);
+		element.addEventListener("pointerleave", leave);
+		element.addEventListener("focusin", enter);
+		element.addEventListener("focusout", leave);
+		return () => {
+			element.removeEventListener("pointerenter", enter);
+			element.removeEventListener("pointerleave", leave);
+			element.removeEventListener("focusin", enter);
+			element.removeEventListener("focusout", leave);
+			view.removeEventListener("scroll", place);
+			element.style.removeProperty(SHIFT);
+		};
+	}, [host]);
 
 	useEffect(() => {
 		if (!pinned) return;
