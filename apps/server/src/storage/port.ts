@@ -33,6 +33,7 @@ import type {
 	CreateWebSession,
 	DecisionAnswer,
 	DeferredTurn,
+	DeferredTurnEdit,
 	DeferredTurnOutcome,
 	DeferredTurnState,
 	DeferredTurnTransition,
@@ -473,6 +474,13 @@ export interface DeferredTurnStore {
 	 * for a final state, `at`. A turn ends only under the lease it started under.
 	 */
 	transition(lease: Lease, change: DeferredTurnTransition): Promise<DeferredTurnOutcome>;
+	/**
+	 * Rewrites the text of a message that is still `waiting`, in the same atomic step that checks
+	 * it is. A row that has started, ended or been cancelled, a kind whose text no person typed,
+	 * and one that does not exist change nothing and say why, so an edit that races the start of
+	 * its turn can lose and never rewrites what a turn already read.
+	 */
+	edit(lease: Lease, change: DeferredTurnEdit): Promise<DeferredTurnOutcome>;
 	/**
 	 * Marks every `started` row written under an older fencing token interrupted, in a document or
 	 * in all, and returns them in the order they were accepted. Fencing tokens compare only within

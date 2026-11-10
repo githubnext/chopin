@@ -1113,9 +1113,22 @@ export type DeferredTurnTransition = {
 	reason?: DeferredCancelReason;
 };
 
+/**
+ * Rewrites the text of a row that is still `waiting`, and its saved delivery with it when one is
+ * given. Only a message a person typed (`composer` or `invoke_planner`) has text of its own to
+ * rewrite; the row's order and every other field stay as they were accepted.
+ */
+export type DeferredTurnEdit = {
+	id: string;
+	text: string;
+	/** The saved delivery, rewritten for the new text; a row without one has none to rewrite. */
+	delivery?: JsonValue;
+};
+
 export type DeferredTurnChange =
 	| { action: "insert"; turn: NewDeferredTurn }
-	| ({ action: "transition" } & DeferredTurnTransition);
+	| ({ action: "transition" } & DeferredTurnTransition)
+	| ({ action: "edit" } & DeferredTurnEdit);
 
 export type DeferredTurnOutcome =
 	| {
@@ -1135,7 +1148,20 @@ export type DeferredTurnOutcome =
 		/** No such row, a pair the states do not allow, or a row not in the state asked for. */
 		reason: "missing" | "illegal" | "state";
 		turn?: DeferredTurn;
+	}
+	| { action: "edit"; changed: true; turn: DeferredTurn }
+	| {
+		action: "edit";
+		changed: false;
+		/** No such row, a kind with no text of its own to rewrite, or a row no longer waiting. */
+		reason: "missing" | "illegal" | "state";
+		turn?: DeferredTurn;
 	};
+
+/** The kinds whose text a person typed, and so the only ones an edit may rewrite. */
+export function editableDeferredKind(kind: DeferredTurnKind): boolean {
+	return kind === "composer" || kind === "invoke_planner";
+}
 
 export function legalDeferredTransition(from: DeferredTurnState, to: DeferredTurnState): boolean {
 	return (from === "waiting" && (to === "started" || to === "cancelled"))

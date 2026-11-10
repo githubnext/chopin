@@ -168,6 +168,94 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("rewrites only the text of a waiting message, atomically with the check that it still waits", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let first = turn(channelId, {
+					delivery: { destination: "planner", requestFingerprint: "sha256:abc" },
+					references: [],
+				});
+				let second = turn(channelId, { createdAt: later(1), kind: "invoke_planner" });
+				let saved = inserted(await storage.deferredTurns.insert(lease, first));
+				inserted(await storage.deferredTurns.insert(lease, second));
+
+				let edited = await storage.deferredTurns.edit(lease, { id: first.id, text: "Shorter." });
+				expect(edited).toMatchObject({ action: "edit", changed: true, turn: { text: "Shorter." } });
+				// Nothing but the text moves: order, delivery, state and fencing stay.
+				expect(await storage.deferredTurns.get(channelId, first.requestId)).toEqual({
+					...saved,
+					text: "Shorter.",
+				});
+				// Given a delivery, the row keeps that one with the new text.
+				let rewritten = { destination: "planner", requestFingerprint: "sha256:abc", entry: "e" };
+				await storage.deferredTurns.edit(lease, {
+					id: first.id,
+					text: "Shorter still.",
+					delivery: rewritten,
+				});
+				expect(await storage.deferredTurns.get(channelId, first.requestId)).toEqual({
+					...saved,
+					text: "Shorter still.",
+					delivery: rewritten,
+				});
+				await storage.deferredTurns.edit(lease, { id: first.id, text: "Shorter." });
+				expect((await storage.deferredTurns.get(channelId, first.requestId))!.delivery).toEqual(
+					rewritten,
+				);
+				expect((await storage.deferredTurns.list(channelId, ["waiting"])).map(row => row.id))
+					.toEqual([first.id, second.id]);
+				let invoked = await storage.deferredTurns.edit(lease, { id: second.id, text: "From MCP." });
+				expect(invoked).toMatchObject({ changed: true, turn: { text: "From MCP." } });
+
+				await storage.deferredTurns.transition(lease, {
+					id: first.id,
+					from: "waiting",
+					to: "started",
+					at: later(3),
+				});
+				let late = await storage.deferredTurns.edit(lease, { id: first.id, text: "Too late." });
+				expect(late).toMatchObject({
+					action: "edit",
+					changed: false,
+					reason: "state",
+					turn: { state: "started", text: "Shorter." },
+				});
+				expect((await storage.deferredTurns.get(channelId, first.requestId))!.text).toBe(
+					"Shorter.",
+				);
+
+				await storage.deferredTurns.transition(lease, {
+					id: second.id,
+					from: "waiting",
+					to: "cancelled",
+					at: later(4),
+				});
+				expect(await storage.deferredTurns.edit(lease, { id: second.id, text: "Gone." }))
+					.toMatchObject({ changed: false, reason: "state" });
+				expect(await storage.deferredTurns.edit(lease, { id: id("nothing"), text: "x" }))
+					.toEqual({ action: "edit", changed: false, reason: "missing" });
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("refuses to rewrite a row whose text no person typed", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				for (let kind of ["comment", "draft", "invoke_system"] as const) {
+					let row = turn(channelId, { kind, text: kind === "comment" ? "" : "kept" });
+					inserted(await storage.deferredTurns.insert(lease, row));
+					let outcome = await storage.deferredTurns.edit(lease, { id: row.id, text: "changed" });
+					expect(outcome).toMatchObject({ action: "edit", changed: false, reason: "illegal" });
+					expect((await storage.deferredTurns.get(channelId, row.requestId))!.text).toBe(row.text);
+				}
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("refuses a request for a document that does not exist", async () => {
 			let storage = await openedStorage(factory);
 			try {
@@ -542,6 +630,51 @@ export function deferredTurnContract(name: string, factory: StorageFactory) {
 				...input,
 			});
 		}
+
+		test("rewrites a waiting message in the commit that saves its entry, and loses to a start that came first", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, lease } = await userAndChannel(storage);
+				let row = turn(channelId);
+				await commit(storage, lease, channelId, {
+					deferredTurns: [{ action: "insert", turn: row }],
+				});
+
+				let edited = await commit(storage, lease, channelId, {
+					expectedRevision: 1,
+					sidecar: { text: "Edited in a commit." },
+					deferredTurns: [{ action: "edit", id: row.id, text: "Edited in a commit." }],
+				});
+				expect(edited.deferredTurns).toEqual([
+					expect.objectContaining({
+						action: "edit",
+						changed: true,
+						turn: expect.objectContaining({ text: "Edited in a commit.", state: "waiting" }),
+					}),
+				]);
+				expect((await storage.deferredTurns.get(channelId, row.requestId))!.text).toBe(
+					"Edited in a commit.",
+				);
+
+				// One commit that starts the row and then edits it: the edit finds it started.
+				let raced = await commit(storage, lease, channelId, {
+					expectedRevision: 2,
+					deferredTurns: [
+						{ action: "transition", id: row.id, from: "waiting", to: "started", at: later(1) },
+						{ action: "edit", id: row.id, text: "Too late." },
+					],
+				});
+				expect(raced.deferredTurns).toEqual([
+					expect.objectContaining({ action: "transition", changed: true }),
+					expect.objectContaining({ action: "edit", changed: false, reason: "state" }),
+				]);
+				expect((await storage.deferredTurns.get(channelId, row.requestId))!.text).toBe(
+					"Edited in a commit.",
+				);
+			} finally {
+				await storage.close();
+			}
+		});
 
 		test("is durable with the entry that acknowledges it, and reports what each change did", async () => {
 			let storage = await openedStorage(factory);

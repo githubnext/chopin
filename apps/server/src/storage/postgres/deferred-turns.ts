@@ -3,6 +3,7 @@ import {
 	DEFERRED_CANCEL_REASONS,
 	DEFERRED_TURN_KINDS,
 	DEFERRED_TURN_STATES,
+	editableDeferredKind,
 	legalDeferredTransition,
 } from "../model";
 
@@ -11,6 +12,7 @@ import type {
 	DeferredCancelReason,
 	DeferredTurn,
 	DeferredTurnChange,
+	DeferredTurnEdit,
 	DeferredTurnKind,
 	DeferredTurnOutcome,
 	DeferredTurnState,
@@ -188,6 +190,35 @@ async function transition(
 	return { action: "transition", changed: true, turn: turn(saved) };
 }
 
+async function edit(sql: TransactionSQL, change: DeferredTurnEdit): Promise<DeferredTurnOutcome> {
+	// The row lock is what makes an edit and the start of its turn exclusive: whichever takes it
+	// second reads the other's result.
+	let [current] = await sql<TurnRow[]>`
+		SELECT ${sql.unsafe(COLUMNS)} FROM planner_deferred_turns
+		WHERE id = ${change.id}
+		FOR UPDATE
+	`;
+	if (!current) return { action: "edit", changed: false, reason: "missing" };
+	let existing = turn(current);
+	if (!editableDeferredKind(existing.kind)) {
+		return { action: "edit", changed: false, reason: "illegal", turn: existing };
+	}
+	if (existing.state !== "waiting") {
+		return { action: "edit", changed: false, reason: "state", turn: existing };
+	}
+	let delivery = change.delivery === undefined
+		? sql`delivery`
+		: sql`${JSON.stringify(change.delivery)}::text::jsonb`;
+	let [saved] = await sql<TurnRow[]>`
+		UPDATE planner_deferred_turns
+		SET text = ${change.text}, delivery = ${delivery}
+		WHERE id = ${change.id}
+		RETURNING ${sql.unsafe(COLUMNS)}
+	`;
+	if (!saved) throw corrupt("editing a deferred turn returned no record");
+	return { action: "edit", changed: true, turn: turn(saved) };
+}
+
 /** Applies a commit's deferred-turn changes in its transaction, which has already been fenced. */
 export async function applyDeferredTurnChanges(
 	sql: TransactionSQL,
@@ -199,6 +230,8 @@ export async function applyDeferredTurnChanges(
 		outcomes.push(
 			change.action === "insert"
 				? await insert(sql, lease, change.turn)
+				: change.action === "edit"
+				? await edit(sql, change)
 				: await transition(sql, lease, change),
 		);
 	}
@@ -223,6 +256,13 @@ export class PostgresDeferredTurnStore implements DeferredTurnStore {
 			this.sql.begin(async sql => {
 				await this.fence(sql, lease);
 				return transition(sql, lease, change);
+			}));
+	}
+	edit(lease: Lease, change: DeferredTurnEdit) {
+		return this.run("edit a deferred Planner turn", () =>
+			this.sql.begin(async sql => {
+				await this.fence(sql, lease);
+				return edit(sql, change);
 			}));
 	}
 	interruptStale(lease: Lease, at: Date, documentId?: string) {

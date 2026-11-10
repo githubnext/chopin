@@ -1,9 +1,10 @@
 import { missing } from "../errors";
-import { legalDeferredTransition } from "../model";
+import { editableDeferredKind, legalDeferredTransition } from "../model";
 
 import type {
 	DeferredTurn,
 	DeferredTurnChange,
+	DeferredTurnEdit,
 	DeferredTurnOutcome,
 	DeferredTurnState,
 	DeferredTurnTransition,
@@ -42,6 +43,10 @@ export class MemoryDeferredTurnStore implements DeferredTurnStore {
 	async transition(lease: Lease, change: DeferredTurnTransition) {
 		this.deps.assertLease(lease);
 		return this.#transition(lease, change);
+	}
+	async edit(lease: Lease, change: DeferredTurnEdit) {
+		this.deps.assertLease(lease);
+		return this.#edit(change);
 	}
 	async interruptStale(lease: Lease, at: Date, documentId?: string) {
 		this.deps.assertLease(lease);
@@ -88,6 +93,8 @@ export class MemoryDeferredTurnStore implements DeferredTurnStore {
 		return changes.map(change =>
 			change.action === "insert"
 				? this.#insert(lease, change.turn)
+				: change.action === "edit"
+				? this.#edit(change)
 				: this.#transition(lease, change)
 		);
 	}
@@ -118,6 +125,19 @@ export class MemoryDeferredTurnStore implements DeferredTurnStore {
 		};
 		this.#rows.set(row.id, row);
 		return { action: "insert", status: "inserted", turn: copy(row) };
+	}
+	#edit(change: DeferredTurnEdit): DeferredTurnOutcome {
+		let row = this.#rows.get(change.id);
+		if (!row) return { action: "edit", changed: false, reason: "missing" };
+		if (!editableDeferredKind(row.kind)) {
+			return { action: "edit", changed: false, reason: "illegal", turn: copy(row) };
+		}
+		if (row.state !== "waiting") {
+			return { action: "edit", changed: false, reason: "state", turn: copy(row) };
+		}
+		row.text = change.text;
+		if (change.delivery !== undefined) row.delivery = structuredClone(change.delivery);
+		return { action: "edit", changed: true, turn: copy(row) };
 	}
 	#transition(lease: Lease, change: DeferredTurnTransition): DeferredTurnOutcome {
 		let row = this.#rows.get(change.id);
