@@ -83,12 +83,11 @@ function CardImage({ alt, document, src }: { alt: string; document: string; src?
 			{viewing && (
 				<Suspense fallback={null}>
 					<ImageLightbox
-						alt={alt}
+						images={[{ src: url, alt }]}
 						onClose={() => {
 							setViewing(false);
 							requestAnimationFrame(() => view.current?.focus());
 						}}
-						src={url}
 					/>
 				</Suspense>
 			)}
