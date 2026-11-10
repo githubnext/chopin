@@ -26,6 +26,34 @@ server process's user, on hosted instances as well as local ones.** No other fla
 turns this on or off. Operators who do not want it should use `copilot-sdk`. See [Self-hosting](self-hosting.md#choose-and-trust-a-harness) for
 `HARNESS`/`HARNESS_AUTH` selection and adapter trust.
 
+## Choosing the model and reasoning level
+
+A person with write access can choose the model and the level of reasoning (thinking) of a
+document's Planner from the Chat composer. The choice belongs to the document: everyone who opens
+it sees it, it survives a reload and a restart (`planner_model_choices`, see
+[Storage](storage.md)), and it applies from the next turn. Until somebody chooses, the harness
+runs what it always did, so nothing changes.
+
+The server owns what can be chosen, never the browser. It builds a catalog from the harness and
+sends it to the room in `chat:model` (with the stored choice) when somebody joins and when either
+changes:
+
+| Harness                     | Catalog                                                                                                                                                                                                                                                                                                                                                | Applied by                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `atomic`                    | The models of the Atomic model runtime the adapter builds: every chat model it has credentials for that `HARNESS_AUTH` would run, as `provider/model`, grouped by provider, with each model's thinking levels as Atomic reads them (`xhigh` and `max` only where the model maps them) and its context size as the description. `MODEL` is the default. | `setModel` and `setThinkingLevel` on the Planner's session; with no choice the session's own level returns.      |
+| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), with `MODEL` as the default when set. An older client, or one that reports no models, offers none.                                                                                                                                              | `model` and `thinkingLevel` in the `turn` message; the level only to a client that offered `capability-catalog`. |
+| `copilot-sdk` and any other | None: the composer offers no control, because a choice nobody honors is not offered.                                                                                                                                                                                                                                                                   | Not applicable.                                                                                                  |
+
+`chat:model` checks a choice against the catalog reported now, stores it under the writer lease
+and only then answers the sender and tells the room. It refuses a model or a level the catalog
+does not list, anything that is not a short non-empty string, a choice for a child document
+(which uses its root's), and every choice where no catalog is offered; choosing nothing goes back
+to the default. Every Planner turn a person started resolves the stored choice again. A model that
+has gone, or a level its model no longer lists, is not sent: the default runs, Chat says so once
+while the reason stands (and again if it changes, or comes back after the choice was honored), and
+the composer shows what will run. The stored choice is
+kept, so it returns to force if the model does. Background jobs never carry a choice.
+
 ## Coaching in an invoked turn
 
 The Planner is instructed to develop a small, provisional account of the problem
