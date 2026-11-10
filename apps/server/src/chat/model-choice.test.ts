@@ -109,7 +109,6 @@ describe("choosing a document's model and thinking level", () => {
 					thinkingLevels: ["extra high", "deep thought", "\u4f4e", "x".repeat(300)],
 				},
 				{ id: 'with space \n and "quotes"', name: "Spaced" },
-				{ id: "", name: "Empty", thinkingLevels: [""] },
 			],
 		};
 		let { opened, replies, choose, broadcasts } = await sets(() => odd);
@@ -125,13 +124,8 @@ describe("choosing a document's model and thinking level", () => {
 		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
 			model: 'with space \n and "quotes"',
 		});
-		await choose({ model: "", thinkingLevel: "" });
-		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
-			model: "",
-			thinkingLevel: "",
-		});
 		expect(replies.every(reply => reply.kind === "chat:model")).toBe(true);
-		expect(broadcasts()).toHaveLength(5);
+		expect(broadcasts()).toHaveLength(4);
 	});
 
 	test("refuses a string only because the catalog does not list it, however long", async () => {
@@ -139,10 +133,14 @@ describe("choosing a document's model and thinking level", () => {
 		await choose({ model: "x".repeat(257) });
 		await choose({ model: "acme/large", thinkingLevel: "x".repeat(1_000_000) });
 		await choose({ model: "" });
+		// A client's model with no id, or an empty level, never reaches a catalog (see the link), so
+		// an empty string is only ever a choice the catalog does not list.
+		await choose({ model: "acme/large", thinkingLevel: "" });
 		expect(replies.map(reply => reply.message)).toEqual([
 			"That model isn't available.",
 			"That model doesn't offer that level of reasoning.",
 			"That model isn't available.",
+			"That model doesn't offer that level of reasoning.",
 		]);
 		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
 		expect(broadcasts()).toEqual([]);

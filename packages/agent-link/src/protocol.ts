@@ -183,7 +183,8 @@ const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
  * or how long its text runs, so a value of the right type is never refused and never changed: an
  * odd entry cannot close the link, whatever it holds. Any number of entries is taken, and a field
  * this version has no use for is ignored and kept, so a client can report more than Chopin shows.
- * Only the frame's own limit bounds a catalog.
+ * Only the frame's own limit bounds a catalog. What nobody could be asked for, a model with an
+ * empty `id` or an empty level, is read like any string and left out afterwards (`usableCatalog`).
  */
 export const catalogModelSchema = z.looseObject({
 	id: z.string(),
@@ -216,6 +217,52 @@ export const capabilityCatalogSchema = z.looseObject({
 	}).optional(),
 	commands: z.array(catalogCommandSchema).optional(),
 });
+
+/**
+ * What Chopin offers of a client's catalog, and what it left out, each as words for a log. A turn
+ * names a model by its `id`, so a model whose `id` is empty is malformed: its entry is skipped,
+ * and no other is touched. A thinking level that is empty cannot be chosen either, so it is
+ * dropped from its model's levels (a model left with none has no reasoning control), and a
+ * default that names no model, or an empty level for the default, is dropped. That an empty id or
+ * level can then never be chosen is the whole of the rule: nothing else about an entry is judged,
+ * the schema still reads every string, and a catalog with nothing to skip comes back as it was.
+ */
+export function usableCatalog(
+	catalog: CapabilityCatalog,
+): { catalog: CapabilityCatalog; skipped: string[] } {
+	let models = catalog.models;
+	if (!models) return { catalog, skipped: [] };
+	let skipped: string[] = [];
+	let available: CatalogModel[] = [];
+	for (let model of models.available) {
+		if (model.id === "") {
+			skipped.push(`the model named ${JSON.stringify(model.name)} has no id`);
+		} else if (model.thinkingLevels?.includes("")) {
+			skipped.push(`${model.id} lists an empty thinking level`);
+			available.push({
+				...model,
+				thinkingLevels: model.thinkingLevels.filter(level => level !== ""),
+			});
+		} else available.push(model);
+	}
+	let { default: fallback, ...rest } = models;
+	if (fallback?.id === "") {
+		skipped.push("the default model has no id");
+		fallback = undefined;
+	} else if (fallback?.thinkingLevel === "") {
+		skipped.push("the default thinking level is empty");
+		let { thinkingLevel: _, ...withoutLevel } = fallback;
+		fallback = withoutLevel;
+	}
+	if (skipped.length === 0) return { catalog, skipped };
+	return {
+		catalog: {
+			...catalog,
+			models: { ...rest, available, ...(fallback ? { default: fallback } : {}) },
+		},
+		skipped,
+	};
+}
 
 /**
  * The structured error a failed `tool-result` may carry as its `result`, either

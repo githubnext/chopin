@@ -12,6 +12,7 @@ import {
 	encodeMessage,
 	LINK_CLOSE,
 	parseClientMessage,
+	usableCatalog,
 } from "@chopin/agent-link";
 
 import type {
@@ -1599,13 +1600,23 @@ export class AgentLink {
 				if (this.#resumed) return this.#violate("protocol", "resume must come first, once.");
 				this.#resumed = true;
 				return this.#resume(message);
-			case "capabilities":
+			case "capabilities": {
 				if (!this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog)) {
 					return this.#violate("protocol", "capabilities needs the capability-catalog feature.");
 				}
-				this.#catalog = message.catalog;
+				// What nobody can ask for (a model with no id, an empty level) is left out here, once,
+				// so every reader of the catalog sees only what can be chosen; the rest and the link stay.
+				let { catalog, skipped } = usableCatalog(message.catalog);
+				if (skipped.length > 0) {
+					console.warn(
+						`[agent] ${this.#channelId} reported catalog entries Chopin cannot offer; skipped:`,
+						skipped.join("; "),
+					);
+				}
+				this.#catalog = catalog;
 				this.#options.catalogChanged?.();
 				return;
+			}
 			case "attach":
 				return this.#violate("protocol", "This link is already attached.");
 			case "detach":

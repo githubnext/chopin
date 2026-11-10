@@ -15,6 +15,7 @@ import {
 	parseServerMessage,
 	RESTART_RESUME_RETRY_MS,
 	toolErrorSchema,
+	usableCatalog,
 } from "./protocol";
 
 describe("Agent connection messages", () => {
@@ -576,5 +577,96 @@ describe("The capability catalog", () => {
 			},
 		};
 		expect(parseClientMessage(JSON.stringify(long))).toEqual({ ok: true, message: long });
+	});
+});
+
+describe("What Chopin can offer of a capability catalog", () => {
+	it("skips a model whose id is empty and keeps every other entry, in the order given", () => {
+		let reported = {
+			models: {
+				available: [
+					{ id: "a", name: "A" },
+					{ id: "", name: "Blank", thinkingLevels: ["low"] },
+					{ id: "b", name: "B", description: "Second." },
+					{ id: "a", name: "A again" },
+				],
+				default: { id: "b" },
+			},
+			commands: [{ name: "notes", kind: "skill" }],
+		};
+		let { catalog, skipped } = usableCatalog(reported);
+		expect(catalog).toEqual({
+			models: {
+				available: [
+					{ id: "a", name: "A" },
+					{ id: "b", name: "B", description: "Second." },
+					{ id: "a", name: "A again" },
+				],
+				default: { id: "b" },
+			},
+			commands: [{ name: "notes", kind: "skill" }],
+		});
+		expect(skipped).toEqual(['the model named "Blank" has no id']);
+	});
+
+	it("drops an empty level from a model's levels and keeps the others as written", () => {
+		let { catalog, skipped } = usableCatalog({
+			models: {
+				available: [
+					{ id: "a", name: "A", thinkingLevels: ["", "high", "extra high", "", "high"] },
+					{ id: "b", name: "B", thinkingLevels: [""] },
+					{ id: "c", name: "C", thinkingLevels: ["low"] },
+				],
+			},
+		});
+		// A model left with no level has no reasoning control, as one that listed none.
+		expect(catalog.models?.available).toEqual([
+			{ id: "a", name: "A", thinkingLevels: ["high", "extra high", "high"] },
+			{ id: "b", name: "B", thinkingLevels: [] },
+			{ id: "c", name: "C", thinkingLevels: ["low"] },
+		]);
+		expect(skipped).toEqual(["a lists an empty thinking level", "b lists an empty thinking level"]);
+	});
+
+	it("takes no default that names no model, and no empty level for a default", () => {
+		let models = [{ id: "a", name: "A", thinkingLevels: ["low"] }];
+		expect(usableCatalog({ models: { available: models, default: { id: "" } } })).toEqual({
+			catalog: { models: { available: models } },
+			skipped: ["the default model has no id"],
+		});
+		expect(
+			usableCatalog({
+				models: { available: models, default: { id: "a", thinkingLevel: "", why: "cheapest" } },
+			}),
+		).toEqual({
+			catalog: { models: { available: models, default: { id: "a", why: "cheapest" } } },
+			skipped: ["the default thinking level is empty"],
+		});
+	});
+
+	it("leaves a catalog with nothing to skip exactly as the client wrote it, fields it does not use included", () => {
+		let reported = {
+			models: {
+				available: [
+					{
+						id: "x".repeat(300),
+						name: "",
+						description: "",
+						thinkingLevels: ["extra high", "\u4f4e"],
+						price: { input: 1 },
+					},
+				],
+				default: { id: "x".repeat(300), thinkingLevel: "extra high" },
+				recommended: ["a"],
+			},
+			attachments: { images: true },
+		};
+		let { catalog, skipped } = usableCatalog(reported);
+		expect(catalog).toEqual(reported);
+		expect(skipped).toEqual([]);
+		expect(usableCatalog({})).toEqual({ catalog: {}, skipped: [] });
+		expect(usableCatalog({ commands: [{ name: "", kind: "" }] }).catalog).toEqual({
+			commands: [{ name: "", kind: "" }],
+		});
 	});
 });

@@ -588,7 +588,7 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await client.detach();
 });
 
-test("lists and runs a catalog of any spelling as the client wrote it, and keeps the client attached", async ({ browser }) => {
+test("lists and runs a catalog of any spelling as the client wrote it, skipping a model with no id, and keeps the client attached", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, DESKTOP);
@@ -602,8 +602,10 @@ test("lists and runs a catalog of any spelling as the client wrote it, and keeps
 					name: "Long",
 					provider: { id: "lab", name: "Lab" },
 					description: "d".repeat(4_001),
-					thinkingLevels: ["extra high", "\u4f4e", "constructor"],
+					thinkingLevels: ["", "extra high", "\u4f4e", "constructor"],
 				},
+				// A model with no id cannot be named in a turn: it is skipped and nothing else is.
+				{ id: "", name: "Blank", provider: { id: "lab" }, thinkingLevels: ["low"] },
 				{ id: "lab/plain", name: "", provider: { id: "lab" }, description: "", thinkingLevels: [] },
 			],
 			default: { id: "lab/plain" },
@@ -616,9 +618,11 @@ test("lists and runs a catalog of any spelling as the client wrote it, and keeps
 		/^Long\s*d+$/,
 		/^lab\/plain\s*Default$/,
 	]);
+	await expect(popover(page).getByRole("option", { name: /Blank/ })).toHaveCount(0);
 	await expect(levels(page)).toHaveCount(0);
 	await option(page, "Long").click();
 	await openPicker(page);
+	// An empty level is not one: it is not listed between Default and the others.
 	await expect(levels(page).getByRole("radio")).toHaveText([
 		"Default",
 		"Extra high",
@@ -877,13 +881,18 @@ test("refuses a choice the catalog does not offer, whatever the browser sends, a
 		ask("probe-2", { model: "acme/large", thinkingLevel: "xhigh-plus" });
 		ask("probe-3", { model: 7 });
 		ask("probe-4", { model: "x".repeat(300) });
-		for (let waited = 0; replies.length < 4 && waited < 8_000; waited += 50) {
+		// An empty model or level is in no catalog, so it is refused like any other the catalog lacks.
+		ask("probe-5", { model: "" });
+		ask("probe-6", { model: "acme/large", thinkingLevel: "" });
+		for (let waited = 0; replies.length < 6 && waited < 8_000; waited += 50) {
 			await new Promise(resolve => setTimeout(resolve, 50));
 		}
 		socket.close();
 		return replies;
 	}, room);
 	expect(answers.map(answer => answer.kind)).toEqual([
+		"session:error",
+		"session:error",
 		"session:error",
 		"session:error",
 		"session:error",
@@ -895,6 +904,8 @@ test("refuses a choice the catalog does not offer, whatever the browser sends, a
 		"That is not a model choice.",
 		// Any string is a choice; only the catalog refuses one it does not list, however long.
 		"That model isn't available.",
+		"That model isn't available.",
+		"That model doesn't offer that level of reasoning.",
 	]);
 	// Nobody in the room sees any of it, and the next turn still runs the chosen model.
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large");
