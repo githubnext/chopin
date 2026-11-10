@@ -192,7 +192,7 @@ export declare namespace Chat {
 	 * document are served.
 	 */
 	export type Image = {
-		/** `/images/<sha256>.<png|jpg|webp|gif>`. */
+		/** `/images/<sha256>.<png|jpg|webp|gif|avif|bmp|ico>`. */
 		src: string;
 		/** What the image shows, in words, as its source gave it; absent when it gave none. */
 		alt?: string;

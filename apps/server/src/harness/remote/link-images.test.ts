@@ -3,7 +3,7 @@ import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { ulid } from "@chopin/dialect";
 
 import { create, translate } from "../../chat/service";
-import { bigPng } from "../../images/raster.test-fixtures";
+import { bigPng, fixture } from "../../images/raster.test-fixtures";
 import {
 	attach,
 	finishTurn,
@@ -53,6 +53,9 @@ const PNG = new Uint8Array([
 	0,
 ]);
 const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+const hashOf = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+const encoded = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
 async function drawn(content: Array<Record<string, string>>) {
 	let { auth, storage, channel } = await linkAuth();
@@ -198,5 +201,45 @@ describe("images over the agent connection", () => {
 			uploadedBy: "U_member",
 		});
 		expect(new Bun.CryptoHasher("sha256").update(stored!.bytes).digest("hex")).toBe(sha256);
+	});
+
+	it("store each raster a browser draws as the type its bytes are, and refuse one named as another", async () => {
+		let avif = fixture("raster-18x6.avif");
+		let icon = fixture("raster-6x18.ico");
+		let bitmap = fixture("raster-18x6.bmp");
+		let { chat, storage, channel } = await drawn([
+			{ type: "image", data: encoded(avif), mimeType: "image/avif", alt: "First" },
+			{ type: "image", data: encoded(icon), mimeType: "image/vnd.microsoft.icon" },
+			{ type: "image", data: encoded(bitmap), mimeType: "image/x-ms-bmp", caption: "A bitmap" },
+			{ type: "image", data: encoded(avif), mimeType: "image/avif", alt: "Again" },
+			{ type: "image", data: encoded(avif), mimeType: "image/png" },
+		]);
+
+		let entry = chat.entries.find(item => item.images);
+		expect(entry?.images).toEqual([
+			{ src: `/images/${hashOf(avif)}.avif`, alt: "First", width: 18, height: 6, generated: true },
+			{ src: `/images/${hashOf(icon)}.ico`, width: 6, height: 18, generated: true },
+			{
+				src: `/images/${hashOf(bitmap)}.bmp`,
+				caption: "A bitmap",
+				width: 18,
+				height: 6,
+				generated: true,
+			},
+			{ src: `/images/${hashOf(avif)}.avif`, alt: "Again", width: 18, height: 6, generated: true },
+		]);
+		expect(entry?.tools?.[0]?.result).toBe("5 images");
+		for (
+			let [bytes, mimeType] of [[avif, "image/avif"], [icon, "image/x-icon"], [
+				bitmap,
+				"image/bmp",
+			]] as const
+		) {
+			expect(await storage.images.get(channel.id, hashOf(bytes)), mimeType).toMatchObject({
+				mimeType,
+				bytes,
+				uploadedBy: "U_member",
+			});
+		}
 	});
 });

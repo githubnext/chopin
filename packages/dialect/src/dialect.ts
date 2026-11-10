@@ -462,7 +462,7 @@ export const IMAGE_PROTOCOLS: readonly string[] = Object.freeze(["https:"]);
  * SHA-256 of its bytes and served from the document's own origin. Every other
  * relative path still has nothing to resolve against.
  */
-export const HOSTED_IMAGE_PATH = /^\/images\/[0-9a-f]{64}\.(?:png|jpg|jpeg|webp|gif)$/;
+export const HOSTED_IMAGE_PATH = /^\/images\/[0-9a-f]{64}\.(?:png|jpg|jpeg|webp|gif|avif|bmp|ico)$/;
 
 /** Fenced code language that renders as a diagram. */
 export const MERMAID_LANGUAGE = "mermaid";
