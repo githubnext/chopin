@@ -2221,3 +2221,47 @@ test("a tool the remote Planner used without declaring it ends the turn as a too
 		expect(failed[0]!.text).toBe("The reply stopped: a tool it needed isn't available.");
 	}
 });
+
+test("an error the model's stream reports ends the turn with the words it gave, in one entry, not Chopin's own generic line", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	failingMemberTurn(context, async function*() {
+		yield { type: "text-delta", id: "m", text: "Which" };
+		yield { type: "error", error: new Error("429 Too Many Requests") };
+	} as never);
+	await Chat.invoke(context, user, "Shorten the summary");
+	await context.chat.running;
+	let failed = context.chat.entries.filter(entry => entry.turnFailure);
+	expect(failed).toHaveLength(1);
+	expect(failed[0]!.text).toBe("429 Too Many Requests");
+	expect(failed[0]!.turnFailure).toMatchObject({ kind: "error", detail: "429 Too Many Requests" });
+});
+
+test("a stream that timed out ends the turn as timed out, however the harness names it, with none of its words", async () => {
+	let timeout = new Error("The operation was aborted due to timeout");
+	timeout.name = "TimeoutError";
+	let { context, user } = await setup(configured(ATOMIC));
+	failingMemberTurn(context, async function*() {
+		yield { type: "error", error: timeout };
+	} as never);
+	await Chat.invoke(context, user, "Shorten the summary");
+	await context.chat.running;
+	let failed = context.chat.entries.filter(entry => entry.turnFailure);
+	expect(failed.map(entry => entry.turnFailure?.kind)).toEqual(["timed-out"]);
+	expect(failed[0]!.turnFailure?.detail).toBeUndefined();
+});
+
+test("a stream that stopped without saying why is a failed reply with no words repeating the banner's own", async () => {
+	for (let part of [{ type: "abort" }, { type: "error", error: undefined }]) {
+		let { context, user } = await setup(configured(ATOMIC));
+		failingMemberTurn(context, async function*() {
+			yield part;
+		} as never);
+		await Chat.invoke(context, user, "Shorten the summary");
+		await context.chat.running;
+		let failed = context.chat.entries.filter(entry => entry.turnFailure);
+		expect(failed).toHaveLength(1);
+		expect(failed[0]!.turnFailure?.kind).toBe("error");
+		expect(failed[0]!.turnFailure?.detail).toBeUndefined();
+		expect(failed[0]!.text).toBe("Chopin's reply failed. Try again.");
+	}
+});

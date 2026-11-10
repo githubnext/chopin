@@ -1,6 +1,6 @@
 import type { Chat as Wire } from "@chopin/protocol";
 
-import { isToolBoundaryError, PlannerReplyError } from "./reply-policy";
+import { isToolBoundaryError, PlannerReplyError, ReplyFailedError } from "./reply-policy";
 
 type Input = {
 	error: unknown;
@@ -39,7 +39,9 @@ export function turnFailureOf(input: Input): Wire.TurnFailure {
 	if (!(error instanceof Error)) return { kind: "unreachable", ...turn };
 	// Both harnesses' own boundary checks name their error so; their words are Chopin's, not the model's.
 	if (isToolBoundaryError(error)) return { kind: "tool", ...turn };
-	if (error instanceof PlannerReplyError) return { kind: "error", ...turn };
+	if (error instanceof PlannerReplyError || error instanceof ReplyFailedError) {
+		return { kind: "error", ...turn };
+	}
 	if (error.name === "TimeoutError" || TIMED_OUT.test(error.message)) {
 		return { kind: "timed-out", ...turn };
 	}

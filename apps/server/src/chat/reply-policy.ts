@@ -24,6 +24,28 @@ const UNVERIFIED = "Chopin could not verify its Chat response. Try again.";
 /** A failure of the Chat reply check alone; the Planner session that produced the reply is sound. */
 export class PlannerReplyError extends Error {}
 
+const REPLY_FAILED = "Chopin's reply failed. Try again.";
+
+/**
+ * A reply that ended with nothing from the model or harness to say why. The words are Chopin's
+ * own, so a client that already says the reply failed does not repeat them as the model's.
+ */
+export class ReplyFailedError extends Error {
+	constructor() {
+		super(REPLY_FAILED);
+	}
+}
+
+/**
+ * The error a stream part reported, as the model or harness gave it, so its words and its kind
+ * (a timeout is told as one) reach the room. Only a report with no words of its own is Chopin's.
+ */
+function reported(error: unknown): Error {
+	if (error instanceof Error) return error;
+	if (typeof error === "string" && error.trim()) return new Error(error);
+	return new ReplyFailedError();
+}
+
 /**
  * Whether a harness's own tool boundary stopped the turn. It names its error so, in both
  * harnesses, and that is how a failure of the turn is told apart from any other.
@@ -153,9 +175,8 @@ export async function publishPlannerReplies(options: {
 						}
 						// A boundary stop is the turn's own, whole: its kind is how the room is told.
 						if (part.type === "error" && isToolBoundaryError(part.error)) throw part.error;
-						if (part.type === "error" || part.type === "abort") {
-							throw new Error("Chopin's reply failed. Try again.");
-						}
+						if (part.type === "error") throw reported(part.error);
+						if (part.type === "abort") throw new ReplyFailedError();
 						publish(part);
 					}
 				} catch (error) {

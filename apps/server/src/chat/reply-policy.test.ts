@@ -157,7 +157,7 @@ test("a classifier failure still fails even after inline decisions were captured
 test("a stream failure after capture cannot become a success summary", async () => {
 	let f = fixture([[{ type: "error", error: new Error("Provider failed") }]]);
 	f.options.capturedDecisions = () => 4;
-	expect(await rejection(f.run())).toContain("reply failed");
+	expect(await rejection(f.run())).toContain("Provider failed");
 	expect(f.published).toEqual([]);
 });
 
@@ -229,7 +229,7 @@ test("an unterminated message is still checked before publication", async () => 
 test("a stream error discards partial text without starting a repair", async () => {
 	let failure: Part = { type: "error", error: new Error("Provider failed") };
 	let f = fixture([[{ type: "text-delta", id: "message", text: "Which" }, failure]], verdict(1));
-	expect(await rejection(f.run())).toContain("reply failed");
+	expect(await rejection(f.run())).toContain("Provider failed");
 	expect(f.published).toEqual([]);
 	expect(f.prompts).toHaveLength(1);
 });
