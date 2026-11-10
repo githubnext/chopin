@@ -6,6 +6,18 @@
 	flex-shrink: 0;
 }
 
+/* The queue's controls must be visible and reachable from the frame they appear. */
+.chat-queue-motion.motion-collapse:not(.is-closing) {
+	grid-template-rows: 1fr;
+	transition: none;
+}
+
+.chat-queue-motion.motion-collapse:not(.is-closing) > .motion-collapse-content {
+	opacity: 1;
+	transform: none;
+	transition: none;
+}
+
 /* Room for the rows' own focus rings, which the collapsing content would otherwise clip. */
 .chat-queue-inset {
 	padding: 0 calc(var(--spacing) * 2.5) calc(var(--spacing) * 2);

@@ -408,6 +408,61 @@ test("only the author may change a waiting message, whatever any browser sends: 
 	await writer.close();
 });
 
+test("a queue is visible and reachable throughout its entrance on a phone", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE);
+	try {
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await startBusyTurn(page);
+		await page.evaluate(() => {
+			let frames: Array<{ above: boolean; visible: boolean; reachable: boolean }> = [];
+			(window as unknown as { queueEntrance: typeof frames }).queueEntrance = frames;
+			let sample = () => {
+				let queue = document.querySelector<HTMLElement>("[data-chat-queue]");
+				let composer = document.querySelector<HTMLElement>(".chat-composer");
+				let buttons = queue?.querySelectorAll<HTMLButtonElement>(
+					'.chat-queue-actions button[aria-label^="Edit message"], '
+						+ '.chat-queue-actions button[aria-label^="Cancel message"]',
+				);
+				if (queue && composer && buttons?.length === 2) {
+					let box = queue.getBoundingClientRect();
+					let visible =
+						getComputedStyle(queue.closest(".motion-collapse-content")!).opacity === "1";
+					let reachable = [...buttons].every(button => {
+						let rect = button.getBoundingClientRect();
+						return [-21, 21].every(offset =>
+							button.contains(document.elementFromPoint(
+								rect.left + rect.width / 2,
+								rect.top + rect.height / 2 + offset,
+							))
+						);
+					});
+					frames.push({
+						above: box.bottom <= composer.getBoundingClientRect().top + 1,
+						visible,
+						reachable,
+					});
+				}
+				if (frames.length < 20) requestAnimationFrame(sample);
+			};
+			requestAnimationFrame(sample);
+		});
+		await say(page, "@chopin second: list the failure modes");
+		await expect.poll(() =>
+			page.evaluate(() => (window as unknown as { queueEntrance: unknown[] }).queueEntrance.length)
+		).toBe(20);
+		let frames = await page.evaluate(() =>
+			(window as unknown as {
+				queueEntrance: Array<{ above: boolean; visible: boolean; reachable: boolean }>;
+			}).queueEntrance
+		);
+		expect(frames.filter(frame => !frame.above || !frame.visible || !frame.reachable)).toEqual([]);
+	} finally {
+		await close();
+	}
+});
+
 test("on a phone the queue fits, its controls are reachable, and it passes an accessibility check", async ({ baseURL, browser, room, seed }) => {
 	await seed(SOURCE);
 	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE);
