@@ -113,6 +113,7 @@ async function reactNow(
 	if (
 		typeof msg.id !== "string" || typeof msg.emoji !== "string" || typeof msg.on !== "boolean"
 		|| !msg.emoji
+		|| msg.seq !== undefined && !(Number.isSafeInteger(msg.seq) && msg.seq >= 0)
 	) return fail(ws, msg.rid, "invalid reaction");
 	let entry = chat.entries.find(value => value.id === msg.id);
 	if (!reactable(entry)) {
@@ -120,7 +121,15 @@ async function reactNow(
 	}
 	let handle = ws.data.handle;
 	let next = toggle(entry.reactions, handle, msg.emoji, msg.on);
-	let answer = { kind: "chat:react", ts: 0, id: msg.id, emoji: msg.emoji, on: msg.on } as const;
+	let numbered = msg.seq === undefined ? {} : { seq: msg.seq };
+	let answer = {
+		kind: "chat:react",
+		ts: 0,
+		id: msg.id,
+		emoji: msg.emoji,
+		on: msg.on,
+		...numbered,
+	} as const;
 	if (!next.changed) return reply(ws, msg.rid, answer);
 	// Persistence before publication: the saved transcript carries the new list before the live one.
 	await context.persist(() => ({
@@ -142,6 +151,7 @@ async function reactNow(
 		ts: 0,
 		id: msg.id,
 		reactions: next.reactions,
+		...(msg.seq === undefined ? {} : { by: handle, emoji: msg.emoji, seq: msg.seq }),
 	});
 	changed?.({ entry, emoji: msg.emoji, handle, on: msg.on, ws });
 }

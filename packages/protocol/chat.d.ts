@@ -670,16 +670,35 @@ export declare namespace Chat {
 	 * Add (`on`) or take back the sender's own reaction to a member's or the Planner's message.
 	 * Anyone who can read the document may, including a reader who cannot write. Asking for what
 	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent, and a
-	 * message takes as many reactions as people give it.
+	 * message takes as many reactions as people give it. `seq` numbers the sender's asks, rising
+	 * with each, so that the answer and the broadcast of an earlier ask are told from those of a
+	 * later one.
 	 */
-	export type React = KIND<"chat:react"> & { id: string; emoji: string; on: boolean };
+	export type React = KIND<"chat:react"> & {
+		id: string;
+		emoji: string;
+		on: boolean;
+		seq?: number;
+	};
 
-	/** The reaction is as asked, saved. */
-	export type Reacted = KIND<"chat:react"> & { id: string; emoji: string; on: boolean };
+	/** The reaction is as asked, saved. `seq` is the ask's own. */
+	export type Reacted = KIND<"chat:react"> & {
+		id: string;
+		emoji: string;
+		on: boolean;
+		seq?: number;
+	};
 
 	/**
 	 * A message's reactions changed, saved first; sent to everyone with the Chat open. The list
-	 * replaces the one the message had, in the order `Entry.reactions` has.
+	 * replaces the one the message had, in the order `Entry.reactions` has. `by`, `emoji` and
+	 * `seq` name the ask that changed it, when that ask carried a `seq`.
 	 */
-	export type Reactions = KIND<"chat:reactions"> & { id: string; reactions: Reaction[] };
+	export type Reactions = KIND<"chat:reactions"> & {
+		id: string;
+		reactions: Reaction[];
+		by?: string;
+		emoji?: string;
+		seq?: number;
+	};
 }
