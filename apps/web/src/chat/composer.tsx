@@ -48,7 +48,9 @@ export type ChatComposerProps = {
 	/** Why the draft can't be sent, above the field. */
 	notice?: ComposerNotice;
 	/**
-	 * The page's one banner (connection or failure), above the field in place of a notice. `invalid`
+	 * The page's banners (a connection, a failure, a refused send), above the field. `id` lists the
+	 * ids of every banner in `node`, which the draft is described by. A notice is drawn beneath them
+	 * when it is given: the banner is a cause of its own and does not stand in for it. `invalid`
 	 * marks the field and draft invalid, as a refused send does.
 	 */
 	banner?: { id: string; node: ReactNode; invalid?: boolean };
@@ -182,7 +184,7 @@ export function ChatComposer(
 				</p>
 			)}
 			{!unavailable && banner?.node}
-			{!unavailable && !banner && stripBody && (notice?.tone === "error"
+			{!unavailable && stripBody && (notice?.tone === "error"
 				? stripBody
 				: (
 					<div
@@ -250,7 +252,8 @@ export function ChatComposer(
 								aria-autocomplete="list"
 								aria-describedby={[
 									references ? instructionsId : undefined,
-									banner ? banner.id : notice ? cueId : undefined,
+									banner?.id,
+									notice ? cueId : undefined,
 								].filter(Boolean).join(" ") || undefined}
 								aria-disabled={!draftable || sending}
 								aria-invalid={error || undefined}
