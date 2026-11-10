@@ -465,3 +465,37 @@ export function MicIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+/** An arrow into a tray: save the file. */
+export function DownloadIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="9" x2="9" y1="2.75" y2="11.25" />
+			<polyline points="5.5 7.75 9 11.25 12.5 7.75" />
+			<path d="M2.75 11.75v1.5c0 1.1.9 2 2 2h8.5c1.1 0 2-.9 2-2v-1.5" />
+		</LineIcon>
+	);
+}
+
+/** A picture struck through: the image could not be shown. */
+export function ImageOffIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="12.5" rx="2" ry="2" width="12.5" x="2.75" y="2.75" />
+			<circle cx="6.75" cy="6.75" r="1.25" />
+			<path d="M15.25 11.25 11.957 7.957c-.391-.391-1.024-.391-1.414 0L3.25 15.25" />
+			<line x1="1.75" x2="16.25" y1="1.75" y2="16.25" />
+		</LineIcon>
+	);
+}
+
+/** An arrow leaving a box: open it in a new tab. */
+export function ExternalLinkIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M13.25 10.25v3c0 1.1-.9 2-2 2h-6.5c-1.1 0-2-.9-2-2v-6.5c0-1.1.9-2 2-2h3" />
+			<polyline points="10.75 2.75 15.25 2.75 15.25 7.25" />
+			<line x1="15.25" x2="8.75" y1="2.75" y2="9.25" />
+		</LineIcon>
+	);
+}

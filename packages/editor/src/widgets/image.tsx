@@ -128,8 +128,7 @@ function Image(
 			)}
 			{viewing && (
 				<ImageLightbox
-					src={src}
-					alt={alt}
+					images={[{ src, alt }]}
 					onClose={() => {
 						setViewing(false);
 						requestAnimationFrame(() => viewButton.current?.focus());
