@@ -132,7 +132,8 @@ export function MachineButton(
 	{ choice, phone = false, planner }: {
 		choice: MachineChoice;
 		phone?: boolean;
-		planner?: PlannerStatus;
+		/** Null means the visible connection banner tells this status instead. */
+		planner?: PlannerStatus | null;
 	},
 ) {
 	let id = useId();
@@ -242,8 +243,10 @@ export function MachineButton(
 		// A row scrolled out of the panel comes into view as it takes focus.
 		items[next]?.scrollIntoView({ block: "nearest" });
 	};
-	let label = plannerButtonLabel(machineButtonLabel(state), planner);
-	let glyph = plannerGlyph(planner);
+	let label = planner === null && !shown && !state?.automatic?.label
+		? "Choose machine"
+		: plannerButtonLabel(machineButtonLabel(state), planner ?? undefined);
+	let glyph = planner === null ? "none" : plannerGlyph(planner);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. The menu row says why.
 	let offline = !!shown && !shown.connected;
@@ -302,7 +305,7 @@ export function MachineButton(
 				aria-label={label}
 				className={offline ? "machine-button machine-offline" : "machine-button"}
 				data-phone={phone || undefined}
-				data-planner={glyph ?? (planner ? planner.kind : undefined)}
+				data-planner={planner === null ? undefined : glyph ?? (planner ? planner.kind : undefined)}
 				data-tooltip={label}
 				data-tooltip-verbatim=""
 				onClick={() => open ? close(false) : openAt("first")}
