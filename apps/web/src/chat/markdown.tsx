@@ -89,7 +89,7 @@ export function inlineSource(source: string): string {
 let NO_PLUGINS: never[] = [];
 
 /**
- * One line of text, drawn in a `span` that adds no box of its own. Raw HTML is dropped when
+ * One line of text, drawn in an inline `span`. Raw HTML is dropped when
  * `skipHtml` is set, and shown as the text it was written as when it is not.
  */
 export function MarkdownPhrase(

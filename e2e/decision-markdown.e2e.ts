@@ -285,6 +285,34 @@ test("a Markdown decision reads the same inline in the document and in Decisions
 	expect(remote).toEqual([]);
 });
 
+test("a card's heading and an option's label are drawn in a box a pointer can find", async ({ join, seed }) => {
+	let fixture = seeded([{
+		widget: "01K0N4TR8K7JGM4R1J7PW4R8M5",
+		question: "01K0N4V4E7Y6P4MJ5WD8XZF3M5",
+		header: "Rollout",
+		prompt: "Pick the rollout",
+		options: [
+			{ id: "01K0N4W3B7P27CBAEC7A8C8WM6", label: "Ship it", description: "" },
+			{ id: "01K0N4W3B7P27CBAEC7A8C8WM7", label: "Wait a week", description: "" },
+		],
+	}]);
+	await seed(fixture.source, fixture.state);
+	let page = await join("ana", DESKTOP);
+	let scope = card(page, "plan", "Pick the rollout");
+	await expect(scope).toBeVisible();
+	// A browser measures, scrolls to and waits for a rest of an element by its box. Text that is
+	// drawn in an element with none has a rectangle of nothing at the page's corner, so a test (or
+	// a screen magnifier) that finds it by its words cannot tell where it is or whether it moves.
+	for (let words of ["Pick the rollout", "Ship it", "Wait a week"]) {
+		let text = scope.getByText(words, { exact: true });
+		await expect(text).toBeInViewport();
+		let box = (await text.boundingBox())!;
+		expect(box, words).not.toBeNull();
+		expect(box.width, words).toBeGreaterThan(0);
+		expect(box.height, words).toBeGreaterThan(0);
+	}
+});
+
 test("phone: the Decisions sheet reads the Markdown decision the same way", async ({ baseURL, join, room, seed }) => {
 	test.setTimeout(90_000);
 	let image = await seedChannelImage(Number(new URL(baseURL!).port), room, PICTURE, "image/webp");
