@@ -1776,3 +1776,81 @@ test("a refused reply's repair attempt may reuse a tool call id, and both attemp
 		[holders[0]!.id, ["First try", "Second try"]],
 	]);
 });
+
+test("a refused reply's first attempt image that finishes storing after the repair attempt began stays with its own tool's message", async () => {
+	let room = await remoteRoom();
+	let { context, storage } = room;
+	let release = Promise.withResolvers<void>();
+	let put = storage.images.put.bind(storage.images);
+	storage.images.put = async image => {
+		if (image.bytes[image.bytes.length - 1] === 8) await release.promise;
+		await put(image);
+	};
+	context.decide = async ({ state }) => ({
+		model: "test/classifier",
+		answers: {
+			input: { type: "noul", noul: (state as { reply: string }).reply.includes("?") ? 1 : 0 },
+		},
+		usage: { input_tokens: 0, output_tokens: 0 },
+		latencyMs: 0,
+	});
+	let attempts = 0;
+	let client = await attach(
+		room.server.url,
+		room.channel.id,
+		scriptedPlanner({
+			async turn(turn) {
+				let repair = ++attempts > 1;
+				if (!repair) {
+					turn.offerTools(["draw"]);
+					turn.emit({
+						type: "tool-call",
+						toolCallId: "draw-1",
+						toolName: "draw",
+						input: "{}",
+						providerExecuted: true,
+					});
+					turn.emit({
+						type: "tool-result",
+						toolCallId: "draw-1",
+						toolName: "draw",
+						result: {
+							content: [{
+								type: "image",
+								data: pixels(640, 480, 8),
+								mimeType: "image/png",
+								alt: "Slow first try",
+							}],
+						},
+					});
+				}
+				turn.emit({ type: "text-start", id: "answer" });
+				turn.emit({
+					type: "text-delta",
+					id: "answer",
+					delta: repair ? "Drew it." : "Which floor should I draw?",
+				});
+				turn.emit({ type: "text-end", id: "answer" });
+				finishTurn(turn);
+			},
+		}).handlers,
+	);
+	cleanups.push(() => client.detach());
+
+	expect(await room.send("@chopin draw it")).toMatchObject({ kind: "chat:send" });
+	while (!context.chat.entries.some(entry => entry.text === "Drew it.")) await Bun.sleep(5);
+	release.resolve();
+	await context.chat.running;
+
+	expect(attempts).toBe(2);
+	let holders = context.chat.entries.filter(entry => entry.images);
+	expect(holders.map(entry => [
+		entry.tools?.map(tool => [tool.id, tool.status, tool.result]),
+		entry.images!.map(item => item.alt),
+	])).toEqual([[[["draw-1", "done", "1 image"]], ["Slow first try"]]]);
+	let saved = (context.plan.persistence.committedSidecar as { transcript: Chat.Chat["entries"] })
+		.transcript.filter(entry => entry.images);
+	expect(saved.map(entry => [entry.id, entry.images!.map(item => item.alt)])).toEqual([
+		[holders[0]!.id, ["Slow first try"]],
+	]);
+});

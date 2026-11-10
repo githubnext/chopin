@@ -3766,12 +3766,12 @@ function showImages(
 	context: Room,
 	turn: TurnImages,
 	images: Wire.Image[],
-	call?: string,
+	held?: string,
 ): void {
 	let { chat, room, server } = context;
 	if (chat.closed || !images.length || chat.turnImages !== turn) return;
 	let entry = chat.entries.find(item => item.id === turn.entry)
-		?? (call ? holder(chat, call) : undefined)
+		?? chat.entries.find(item => item.id === held)
 		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);
 	if (!entry) {
@@ -3787,6 +3787,7 @@ function stageImages(context: Room, images: ToolImage[], call: string): void {
 	let { auth, room } = context;
 	let member = currentMemberRequest(context.chat)?.userId;
 	let turn = turnImages(context.chat);
+	let held = holder(context.chat, call)?.id;
 	later(turn, async () => {
 		let uploadedBy = await imageOwner(context, member);
 		let shown: Wire.Image[] = [];
@@ -3809,7 +3810,7 @@ function stageImages(context: Room, images: ToolImage[], call: string): void {
 				generated: true,
 			});
 		}
-		showImages(context, turn, shown, call);
+		showImages(context, turn, shown, held);
 	});
 }
 
