@@ -3,6 +3,7 @@ import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { ulid } from "@chopin/dialect";
 
 import { create, translate } from "../../chat/service";
+import { bigPng } from "../../images/raster.test-fixtures";
 import {
 	attach,
 	finishTurn,
@@ -53,13 +54,90 @@ const PNG = new Uint8Array([
 ]);
 const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
 
+async function drawn(content: Array<Record<string, string>>) {
+	let { auth, storage, channel } = await linkAuth();
+	let server = linkServer(auth, 300);
+	cleanups.push(server.stop);
+	let script = scriptedPlanner();
+	let result = { content };
+	let client = await attach(server.url, channel.id, {
+		...script.handlers,
+		async turn(context) {
+			context.offerTools(["draw"]);
+			context.emit({
+				type: "tool-call",
+				toolCallId: "draw-1",
+				toolName: "draw",
+				input: "{}",
+				providerExecuted: true,
+			});
+			context.emit({ type: "tool-result", toolCallId: "draw-1", toolName: "draw", result });
+			finishTurn(context);
+		},
+	});
+	cleanups.push(() => client.detach());
+
+	let harness = createRemoteAdapter(() => ({
+		link: server.links.at(-1)!,
+		planner: { channelId: channel.id, isolated: false },
+	}));
+	let agent = new HarnessAgent({ harness, tools: {}, permissionMode: "allow-reads" });
+	let session = await agent.createSession({
+		sandboxSession: {
+			defaultWorkingDirectory: "/tmp",
+			async run() {
+				return { exitCode: 0, stdout: "", stderr: "" };
+			},
+			async destroy() {},
+		} as never,
+	});
+	cleanups.push(() => session.destroy());
+
+	let chat = create();
+	chat.agent = { activeTools: ["draw"] } as never;
+	chat.busy = true;
+	chat.turnController = new AbortController();
+	let entryId = ulid();
+	chat.entries.push({
+		id: entryId,
+		author: { kind: "member", handle: "member" },
+		text: "Draw it",
+		ts: 1,
+	});
+	chat.turn = {
+		id: "turn-1",
+		handle: "member",
+		started: 1,
+		startedAt: 1,
+		entryOffset: 1,
+		responded: false,
+	};
+	chat.activeRequest = {
+		entryId,
+		userId: "U_member",
+		handle: "member",
+		text: "Draw it",
+		claimantSessionId: undefined,
+		turnId: "turn-1",
+		lifecycle: chat.lifecycle,
+	};
+	let context = {
+		chat,
+		server: { publish() {} },
+		room: channel.id,
+		plan: {},
+		config: {},
+		auth: { clock: () => new Date(), storage },
+	} as unknown as Room;
+	let stream = await agent.stream({ session, prompt: "Draw it" });
+	for await (let part of stream.fullStream) translate(context, part as TextStreamPart<ToolSet>);
+	await chat.turnImages?.work;
+	return { chat, storage, channel };
+}
+
 describe("images over the agent connection", () => {
 	it("reach Chat as stored image parts when a client's tool result carries image blocks", async () => {
-		let { auth, storage, channel } = await linkAuth();
-		let server = linkServer(auth, 300);
-		cleanups.push(server.stop);
-		let script = scriptedPlanner();
-		let content: Array<Record<string, string>> = [
+		let { chat, storage, channel } = await drawn([
 			{ type: "text", text: "Drew the floor plan" },
 			{
 				type: "image",
@@ -69,80 +147,7 @@ describe("images over the agent connection", () => {
 				caption: "Draft one",
 			},
 			{ type: "image", data: Buffer.from(SVG).toString("base64"), mimeType: "image/svg+xml" },
-		];
-		let result = { content };
-		let client = await attach(server.url, channel.id, {
-			...script.handlers,
-			async turn(context) {
-				context.offerTools(["draw"]);
-				context.emit({
-					type: "tool-call",
-					toolCallId: "draw-1",
-					toolName: "draw",
-					input: "{}",
-					providerExecuted: true,
-				});
-				context.emit({ type: "tool-result", toolCallId: "draw-1", toolName: "draw", result });
-				finishTurn(context);
-			},
-		});
-		cleanups.push(() => client.detach());
-
-		let harness = createRemoteAdapter(() => ({
-			link: server.links.at(-1)!,
-			planner: { channelId: channel.id, isolated: false },
-		}));
-		let agent = new HarnessAgent({ harness, tools: {}, permissionMode: "allow-reads" });
-		let session = await agent.createSession({
-			sandboxSession: {
-				defaultWorkingDirectory: "/tmp",
-				async run() {
-					return { exitCode: 0, stdout: "", stderr: "" };
-				},
-				async destroy() {},
-			} as never,
-		});
-		cleanups.push(() => session.destroy());
-
-		let chat = create();
-		chat.agent = { activeTools: ["draw"] } as never;
-		chat.busy = true;
-		chat.turnController = new AbortController();
-		let entryId = ulid();
-		chat.entries.push({
-			id: entryId,
-			author: { kind: "member", handle: "member" },
-			text: "Draw it",
-			ts: 1,
-		});
-		chat.turn = {
-			id: "turn-1",
-			handle: "member",
-			started: 1,
-			startedAt: 1,
-			entryOffset: 1,
-			responded: false,
-		};
-		chat.activeRequest = {
-			entryId,
-			userId: "U_member",
-			handle: "member",
-			text: "Draw it",
-			claimantSessionId: undefined,
-			turnId: "turn-1",
-			lifecycle: chat.lifecycle,
-		};
-		let context = {
-			chat,
-			server: { publish() {} },
-			room: channel.id,
-			plan: {},
-			config: {},
-			auth: { clock: () => new Date(), storage },
-		} as unknown as Room;
-		let stream = await agent.stream({ session, prompt: "Draw it" });
-		for await (let part of stream.fullStream) translate(context, part as TextStreamPart<ToolSet>);
-		await chat.turnImages?.work;
+		]);
 
 		let entry = chat.entries.find(item => item.images);
 		let sha256 = new Bun.CryptoHasher("sha256").update(PNG).digest("hex");
@@ -165,5 +170,33 @@ describe("images over the agent connection", () => {
 				new Bun.CryptoHasher("sha256").update(SVG).digest("hex"),
 			),
 		).toEqual([]);
+	});
+
+	it("reach Chat whole when a client's picture is over a megabyte, as the link carries it", async () => {
+		let picture = bigPng(1_080_993);
+		let { chat, storage, channel } = await drawn([
+			{
+				type: "image",
+				data: Buffer.from(picture).toString("base64"),
+				mimeType: "image/png",
+				alt: "A large plan",
+			},
+		]);
+
+		let sha256 = new Bun.CryptoHasher("sha256").update(picture).digest("hex");
+		expect(chat.entries.find(item => item.images)?.images).toEqual([{
+			src: `/images/${sha256}.png`,
+			alt: "A large plan",
+			width: 40,
+			height: 30,
+			generated: true,
+		}]);
+		let stored = await storage.images.get(channel.id, sha256);
+		expect(stored).toMatchObject({
+			mimeType: "image/png",
+			size: 1_080_993,
+			uploadedBy: "U_member",
+		});
+		expect(new Bun.CryptoHasher("sha256").update(stored!.bytes).digest("hex")).toBe(sha256);
 	});
 });

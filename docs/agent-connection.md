@@ -850,9 +850,9 @@ already have:
 - Extra keys in a block, and an `alt` or `caption` that is not a string, are
   ignored. The JSON text of the same object is read the same way.
 
-Chopin stores each image block it can host, a PNG, JPEG, WebP or GIF of at most
-1 MiB whose bytes are of its `mimeType` and whose size it can read, as one of the
-document's own images, the same store as `upload_image`. Only after the bytes are
+Chopin stores each image block it can host, a PNG, JPEG, WebP or GIF whose bytes
+are of its `mimeType` and whose size it can read, as one of the document's own
+images, the same store as `upload_image`. Only after the bytes are
 stored does Chat show it, labelled as generated, on the turn's message: every
 image a turn makes, from any call, goes on one message, in the order they were
 made, and several show as one gallery. Browsers load it from
@@ -865,8 +865,9 @@ never their bytes. A `preliminary` or failed result shows no images.
 `@chopin/agent-link` exports the block as `toolImageSchema`. Like the
 [structured tool error](#structured-tool-errors), it is a convention, not a new
 wire shape: `result` is still any JSON, so a client sends it to any server, and a
-server that does not know it shows the result as before. The whole message,
-images included, stays within the 2 MiB message limit.
+server that does not know it shows the result as before. A picture has no size
+limit of its own, unlike the 1 MiB of `upload_image`: the whole message, images
+included, stays within the 2 MiB message limit.
 
 ### Reading a large document
 
