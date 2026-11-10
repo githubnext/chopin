@@ -174,7 +174,6 @@ test("every Markdown image draws where it is written, in order, and none is merg
 test("an image whose address is not one Chat loads shows its alt text and is never requested", () => {
 	for (
 		let src of [
-			"images/a.png",
 			"/auth/logout",
 			"javascript:alert(1)",
 			"data:image/svg+xml;base64,PHN2Zy8+",
@@ -189,13 +188,32 @@ test("an image whose address is not one Chat loads shows its alt text and is nev
 	expect(markdown(`![mine](/images/${"a".repeat(64)}.png)`)).not.toContain("<img");
 });
 
-test("a PNG, JPEG, GIF or WebP written into a message is drawn as written", () => {
-	let src = "data:image/png;base64,iVBORw0KGgo=";
-	let markup = markdown(`![a dot](${src})`);
+test("an image on this site that is not an upload waits to be read, and is never handed to the browser's own request", () => {
+	for (let src of ["/icons/icon-192.png", "icons/icon-192.png", "./a.png", "/authors/a.png"]) {
+		let markup = markdown(`![on this site](${src})`);
+		expect(markup, src).not.toContain("<img");
+		expect(markup, src).not.toContain(src);
+		expect(markup, src).toContain('data-load="loading"');
+		expect(markup, src).toContain('data-chat-image="single"');
+		expect(markup, src).not.toContain("data-chat-image-broken");
+		expect(markup, src).toContain(">on this site</span>");
+	}
+});
 
-	expect(markup).toContain(
-		`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
-	);
+test("a raster image written into a message is drawn as written, whatever raster format it is", () => {
+	for (
+		let src of [
+			"data:image/png;base64,iVBORw0KGgo=",
+			"data:image/avif;base64,AAAAHGZ0eXBhdmlm",
+			"data:image/bmp;base64,Qk0=",
+			"data:image/x-icon;base64,AAABAAEA",
+		]
+	) {
+		let markup = markdown(`![a dot](${src})`);
+		expect(markup, src).toContain(
+			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+		);
+	}
 });
 
 test("an address on another site is drawn exactly as it was written", () => {
