@@ -587,6 +587,53 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await client.detach();
 });
 
+test("lists and runs a catalog of any spelling as the client wrote it, and keeps the client attached", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	// Nothing says how a client spells a model or a level, or how long either is.
+	let long = `lab/${"l".repeat(300)}`;
+	let { client, asked } = await attachClient(room, {
+		models: {
+			available: [
+				{
+					id: long,
+					name: "Long",
+					provider: { id: "lab", name: "Lab" },
+					description: "d".repeat(4_001),
+					thinkingLevels: ["extra high", "\u4f4e", "constructor"],
+				},
+				{ id: "lab/plain", name: "", provider: { id: "lab" }, description: "", thinkingLevels: [] },
+			],
+			default: { id: "lab/plain" },
+		},
+	});
+	// An empty name reads as the id, and an empty list of levels as no reasoning control.
+	await expect(trigger(page)).toHaveAccessibleName("Model: lab/plain");
+	await openPicker(page);
+	await expect(popover(page).getByRole("option")).toHaveText([
+		/^Long\s*d+$/,
+		/^lab\/plain\s*Default$/,
+	]);
+	await expect(levels(page)).toHaveCount(0);
+	await option(page, "Long").click();
+	await openPicker(page);
+	await expect(levels(page).getByRole("radio")).toHaveText([
+		"Default",
+		"Extra high",
+		"\u4f4e",
+		"Constructor",
+	]);
+	await level(page, "Constructor").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning constructor");
+	await level(page, "Extra high").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning extra high");
+	await page.keyboard.press("Escape");
+	await ask(page, "as spelled", 1);
+	expect(turnFor(asked, "as spelled")).toMatchObject({ model: long, thinkingLevel: "extra high" });
+	await client.detach();
+});
+
 test("lists every model of a catalog as large as two gateways' together, and searches it", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();

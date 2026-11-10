@@ -86,19 +86,23 @@ export function refusedChoice(catalog: Catalog | undefined, choice: Choice): str
 	return undefined;
 }
 
-const LEVELS: Record<string, string> = {
-	off: "Off",
-	minimal: "Minimal",
-	low: "Low",
-	medium: "Medium",
-	high: "High",
-	xhigh: "Extra high",
-	max: "Max",
-};
+const LEVELS = new Map([
+	["off", "Off"],
+	["minimal", "Minimal"],
+	["low", "Low"],
+	["medium", "Medium"],
+	["high", "High"],
+	["xhigh", "Extra high"],
+	["max", "Max"],
+]);
 
-/** A thinking level in words, in sentence case; one a harness invented keeps its own spelling. */
+/**
+ * A thinking level in words, in sentence case; one a harness invented keeps its own spelling. A
+ * level is any string a client chose, so it is looked up in a map, where `constructor` is a level
+ * like any other and not the property every object has.
+ */
 export function levelLabel(level: string): string {
-	return LEVELS[level] ?? level.charAt(0).toUpperCase() + level.slice(1);
+	return LEVELS.get(level) ?? level.charAt(0).toUpperCase() + level.slice(1);
 }
 
 /** The words a person reads for what could not be honoured, without Chopin's own terms. */
