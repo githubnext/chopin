@@ -301,6 +301,15 @@ export function retryLayer(view: ConnectionView): "socket" | "planner" | undefin
 	return view.action === "reconnect" ? "socket" : "planner";
 }
 
+/**
+ * Whether the banner already says why a send could not go, so a message's own "Couldn't send"
+ * gives way to it. Only the room's socket and sync do: a Planner that is away or absent is a
+ * different fact, and a message the server turned down for good must still say so.
+ */
+export function silencesFailedSends(view: ConnectionView): boolean {
+	return view.phase !== "online" && view.layer !== "planner";
+}
+
 /** What the live region last said: the phase it is on, and the last state of the Planner it told. */
 export type Spoken = { key: string | undefined; planner: string | undefined };
 
