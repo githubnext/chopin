@@ -108,6 +108,15 @@ export function triggerLabel(catalog: Catalog, choice: Choice | undefined): stri
 	].filter(Boolean).join(", ");
 }
 
+/**
+ * The trigger's tooltip: the model and level, without the sentence about a choice that has gone,
+ * which the strip above the composer already says and a screen reader hears in the name.
+ */
+export function triggerTitle(catalog: Catalog, choice: Choice | undefined): string {
+	let { name, level } = triggerText(catalog, choice);
+	return level ? `Model: ${name}, reasoning ${level.toLowerCase()}` : `Model: ${name}`;
+}
+
 /** What to say about a stored choice the harness no longer offers, if anything. */
 export function fallbackNotice(catalog: Catalog, choice: Choice | undefined): string | undefined {
 	let lost = resolveChoice(catalog, choice).unavailable;

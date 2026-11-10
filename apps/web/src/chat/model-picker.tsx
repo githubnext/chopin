@@ -24,6 +24,7 @@ import {
 	reasoningLevels,
 	triggerLabel,
 	triggerText,
+	triggerTitle,
 } from "./model-picker-state";
 import { referenceOptionId } from "./reference-picker";
 
@@ -52,7 +53,7 @@ export function ModelPickerTrigger(
 			model={name}
 			onClick={onToggle}
 			open={open}
-			title={label}
+			title={triggerTitle(control.catalog, control.choice)}
 		/>
 	);
 }

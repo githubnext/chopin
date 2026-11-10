@@ -14,6 +14,7 @@ import {
 	shownModel,
 	triggerLabel,
 	triggerText,
+	triggerTitle,
 } from "./model-picker-state";
 
 import type { Chat } from "@chopin/protocol";
@@ -114,6 +115,17 @@ describe("what the trigger says", () => {
 		expect(triggerLabel(catalog, { model: "acme/large", thinkingLevel: "xhigh" })).toBe(
 			"Model: Large, Extra high reasoning is no longer available for this model, so Chopin used its default.",
 		);
+	});
+
+	test("keeps the tooltip to the model and level, though the name also says what went missing", () => {
+		expect(triggerTitle(catalog, undefined)).toBe("Model: Small");
+		expect(triggerTitle(catalog, { model: "acme/large", thinkingLevel: "high" })).toBe(
+			"Model: Large, reasoning high",
+		);
+		expect(triggerTitle(catalog, { model: "acme/gone", thinkingLevel: "high" })).toBe(
+			"Model: Small",
+		);
+		expect(triggerLabel(catalog, { model: "acme/gone" })).toContain("no longer available");
 	});
 
 	test("says what a gone model fell back to, and nothing when the choice stands", () => {
