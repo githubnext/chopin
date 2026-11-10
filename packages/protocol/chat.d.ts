@@ -669,8 +669,8 @@ export declare namespace Chat {
 	/**
 	 * Add (`on`) or take back the sender's own reaction to a member's or the Planner's message.
 	 * Anyone who can read the document may, including a reader who cannot write. Asking for what
-	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent. What a
-	 * message's reactions hold in all, emoji and handles, may take as many bytes as a message may.
+	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent, and a
+	 * message takes as many reactions as people give it.
 	 */
 	export type React = KIND<"chat:react"> & { id: string; emoji: string; on: boolean };
 

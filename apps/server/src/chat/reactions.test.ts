@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
-import { MAX_REACTION_BYTES, react, reactionBytes, toggle, validateReactions } from "./reactions";
+import { react, toggle, validateReactions } from "./reactions";
 import { create } from "./service";
 
 import type { Server } from "bun";
@@ -161,20 +161,21 @@ describe("reacting to a message", () => {
 		expect(published).toEqual([]);
 	});
 
-	it("keeps an emoji of any form or length, and refuses only what the message's reactions cannot hold", async () => {
-		let { context, chat, saved } = harness();
+	it("accepts an emoji of any form or length and any number of emoji on one message", async () => {
+		let { context, chat, saved, published } = harness();
 		let { ws, sent } = socket("ana");
 		let long = "x".repeat(5_000);
 		await react(context, ws, ask("a1", long, true));
 		expect(chat.entries[1]!.reactions).toEqual([{ emoji: long, handles: ["ana"] }]);
-		chat.entries[1]!.reactions = [{ emoji: "y".repeat(MAX_REACTION_BYTES), handles: ["ben"] }];
-		let count = saved.length;
-		await react(context, ws, ask("a1", "new", true));
-		expect(sent.at(-1)).toMatchObject({ kind: "session:error" });
-		expect(saved).toHaveLength(count);
-		// Taking one back is never refused for size.
-		await react(context, socket("ben").ws, ask("a1", "y".repeat(MAX_REACTION_BYTES), false));
-		expect(reactionBytes(chat.entries[1]!.reactions ?? [])).toBe(0);
+		for (let index = 0; index < 300; index++) {
+			await react(context, ws, ask("a1", `e${index}`, true));
+		}
+		expect(chat.entries[1]!.reactions).toHaveLength(301);
+		expect(sent.every(frame => frame.kind === "chat:react")).toBe(true);
+		expect(saved).toHaveLength(301);
+		expect(published).toHaveLength(301);
+		// Saved so, a message like that is read back whole.
+		validateReactions(chat.entries[1]!);
 	});
 
 	it("keeps the unsaved reaction out of the room and tells the sender it may be asked again", async () => {
