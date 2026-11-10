@@ -225,18 +225,19 @@ async function watch(page: Page) {
 			let level = document.querySelector(".plan-status")?.getAttribute("data-level");
 			if (level && level !== "hidden") say(`status ${level}`);
 			// The error line, such as "Message not sent", as opposed to the composer's quiet notes.
-			let failure = document.querySelector(".composer-notice.motion-feedback")?.textContent?.trim();
+			let failure = document.querySelector(".composer-notice.motion-feedback, [data-error-banner]")
+				?.textContent?.trim();
 			if (failure) say(`composer error ${failure}`);
 			if (document.querySelector(".plan[data-plan-offline]")) say("locked");
 			if (document.querySelector(".plan-content")?.getAttribute("contenteditable") === "false") {
 				say("not editable");
 			}
-			// The one notice for a lost connection, and the word said when it has gone.
-			if (document.querySelector("[data-offline-notice]")) {
+			// The one banner for a lost connection, and the words said as its phases change.
+			if (document.querySelector("[data-connection-banner]")) {
 				probe.noticeAt ??= at();
 				if (!probe.allowOffline) say("offline notice");
 			}
-			let spoken = document.querySelector("[data-offline-status]")?.textContent?.trim();
+			let spoken = document.querySelector("[data-connection-status]")?.textContent?.trim();
 			if (spoken && !probe.allowOffline) say(`offline status ${spoken}`);
 		}, 25);
 	});
@@ -387,9 +388,9 @@ test("a restart that outlasts its quiet period is then told as any other lost co
 	let code = await stop(first);
 	expect(code, first.log.text).toBe(0);
 
-	// Nothing is said for the quiet period, and after it the document's one notice, as for any
-	// other loss, once its own moment of grace has passed.
-	let notice = page.locator("[data-offline-notice]");
+	// Nothing is said for the quiet period, and after it the one banner, as for any other loss,
+	// once its own moment of grace has passed.
+	let notice = page.locator("[data-connection-banner]");
 	await expect(notice).toBeVisible({ timeout: 20_000 });
 	let seen = await probe(page);
 	expect(seen.closes).toContain(1012);
@@ -401,9 +402,13 @@ test("a restart that outlasts its quiet period is then told as any other lost co
 		RESTART_QUIET_MS + 4_000,
 	);
 
+	// It says it is back, once, for the few seconds the banner stays, and then it is gone.
 	let second = await server(database);
+	await expect(page.locator("[data-connection-status]")).toHaveText(
+		"Back online. Your changes are synced",
+		{ timeout: 20_000 },
+	);
 	await expect(notice).toHaveCount(0, { timeout: 20_000 });
-	await expect(page.locator("[data-offline-status]")).toHaveText("Reconnected");
 	await expect(content(page)).toHaveAttribute("contenteditable", "true");
 	expect(await health("/api/health/ready"), second.log.text).toEqual([200, "ready"]);
 });
