@@ -37,12 +37,13 @@ const TASK_BOX = /\[[\s>]*(?:[xX][\s>]*)?\]/;
 
 /**
  * Which parts of GitHub's Markdown a source can use, from marks without which the syntax cannot
- * match: a delimiter row for a table, two tildes for strikethrough, and a bracket around a space,
- * a line ending, `x` or `X` for a task box. Each test only has to be necessary, never sufficient,
+ * match: a delimiter row for a table, a tilde for strikethrough, and a bracket around a space,
+ * a line ending, `x` or `X` for a task box. A single tilde is enough, because the strikethrough
+ * syntax, even with single-tilde strikethrough off, changes how emphasis around a tilde parses. Each test only has to be necessary, never sufficient,
  * since a part read for a source that has no use for it changes nothing.
  */
 function partsOf(source: string): number {
-	return (DELIMITER_ROW.test(source) ? TABLE : 0) | (source.includes("~~") ? STRIKETHROUGH : 0)
+	return (DELIMITER_ROW.test(source) ? TABLE : 0) | (source.includes("~") ? STRIKETHROUGH : 0)
 		| (TASK_BOX.test(source) ? TASKS : 0);
 }
 
