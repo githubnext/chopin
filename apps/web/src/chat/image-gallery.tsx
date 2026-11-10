@@ -16,25 +16,26 @@
  * image is reachable from the lightbox.
  */
 
-import { HiddenImage, ImageFigure, MessageImages, useImageHost } from "./image";
-import { galleryTiles } from "./image-state";
+import { HiddenImage, ImageFigure, MessageImages, RefusedImage, useImageHost } from "./image";
+import { galleryItems, galleryTiles } from "./image-state";
 import "./image.css";
 
 import type { ChatImageData } from "./image";
 
 export type ImageGalleryProps = {
 	images: readonly ChatImageData[];
+	refused?: ReadonlyArray<{ before: number; reason: string }>;
 	maxVisible?: number;
 	onOpen?: (index: number) => void;
 };
 
-export function ImageGallery({ images, maxVisible = 6, onOpen }: ImageGalleryProps) {
+export function ImageGallery({ images, maxVisible = 6, onOpen, refused }: ImageGalleryProps) {
 	let host = useImageHost();
 	if (images.length === 0) return null;
 	if (!host) {
 		return (
 			<MessageImages>
-				<ImageGallery images={images} maxVisible={maxVisible} onOpen={onOpen} />
+				<ImageGallery images={images} maxVisible={maxVisible} onOpen={onOpen} refused={refused} />
 			</MessageImages>
 		);
 	}
@@ -42,16 +43,20 @@ export function ImageGallery({ images, maxVisible = 6, onOpen }: ImageGalleryPro
 	return (
 		<div className="chat-image-gallery" data-chat-image-gallery>
 			<div className="chat-image-gallery-grid">
-				{images.slice(0, shown).map((image, index) => (
-					<ImageFigure
-						host={host}
-						image={image}
-						key={`${index}:${image.src}`}
-						more={index === shown - 1 && more ? more : undefined}
-						onOpen={onOpen && (() => onOpen(index))}
-						variant="tile"
-					/>
-				))}
+				{galleryItems(images.length, refused, maxVisible).map((item, position) =>
+					item.kind === "refused"
+						? <RefusedImage key={`refused:${position}`} reason={item.reason} />
+						: (
+							<ImageFigure
+								host={host}
+								image={images[item.index]!}
+								key={`${item.index}:${images[item.index]!.src}`}
+								more={item.index === shown - 1 && more ? more : undefined}
+								onOpen={onOpen && (() => onOpen(item.index))}
+								variant="tile"
+							/>
+						)
+				)}
 				{images.slice(shown).map((image, index) => (
 					<HiddenImage host={host} image={image} key={`${shown + index}:${image.src}`} />
 				))}

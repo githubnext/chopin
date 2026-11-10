@@ -5,6 +5,7 @@ import {
 	downloadLabel,
 	downloadName,
 	frameRatio,
+	galleryItems,
 	galleryTiles,
 	imageLabel,
 	imageSource,
@@ -27,6 +28,91 @@ test("an image on another site is read through this site for this document, with
 		url: "https://a.example/x.png?a=1&b=2#top",
 	});
 	expect(remoteImagePath("https://a.example/x.png", undefined)).toBeUndefined();
+});
+
+test("a refusal stands among the images where it came, and the images stay one set", () => {
+	let reason = "Image couldn't be shown: its data isn't valid base64.";
+
+	expect(galleryItems(3, [{ before: 1, reason }])).toEqual([
+		{ kind: "image", index: 0 },
+		{ kind: "refused", reason },
+		{ kind: "image", index: 1 },
+		{ kind: "image", index: 2 },
+	]);
+});
+
+test("a message's images are only its images when nothing was refused", () => {
+	expect(galleryItems(2, undefined)).toEqual([{ kind: "image", index: 0 }, {
+		kind: "image",
+		index: 1,
+	}]);
+	expect(galleryItems(2, [])).toEqual(galleryItems(2, undefined));
+	expect(galleryItems(0, undefined)).toEqual([]);
+});
+
+test("a refusal first or last is first or last, and a message with no images is only its reasons", () => {
+	let [one, two] = ["Image couldn't be shown: one.", "Image couldn't be shown: two."];
+
+	expect(galleryItems(1, [{ before: 0, reason: one }, { before: 1, reason: two }])).toEqual([
+		{ kind: "refused", reason: one },
+		{ kind: "image", index: 0 },
+		{ kind: "refused", reason: two },
+	]);
+	expect(galleryItems(0, [{ before: 0, reason: one }, { before: 0, reason: two }])).toEqual([
+		{ kind: "refused", reason: one },
+		{ kind: "refused", reason: two },
+	]);
+});
+
+test("refusals at one place, and the same reason twice, are all kept in the order they came", () => {
+	let [one, two] = ["Image couldn't be shown: one.", "Image couldn't be shown: two."];
+
+	expect(
+		galleryItems(2, [
+			{ before: 1, reason: two },
+			{ before: 1, reason: one },
+			{ before: 1, reason: two },
+		]),
+	).toEqual([
+		{ kind: "image", index: 0 },
+		{ kind: "refused", reason: two },
+		{ kind: "refused", reason: one },
+		{ kind: "refused", reason: two },
+		{ kind: "image", index: 1 },
+	]);
+});
+
+test("a refusal said to come before more images than there are is last, and none is lost or put out of order", () => {
+	let [one, two, three] = [
+		"Image couldn't be shown: one.",
+		"Image couldn't be shown: two.",
+		"Image couldn't be shown: three.",
+	];
+
+	expect(
+		galleryItems(2, [
+			{ before: 9, reason: one },
+			{ before: -3, reason: two },
+			{ before: Number.NaN, reason: three },
+		]),
+	).toEqual([
+		{ kind: "refused", reason: two },
+		{ kind: "refused", reason: three },
+		{ kind: "image", index: 0 },
+		{ kind: "image", index: 1 },
+		{ kind: "refused", reason: one },
+	]);
+});
+
+test("a refusal among images past the tiles a gallery draws still has its reason, after the tiles", () => {
+	let [near, far] = ["Image couldn't be shown: near.", "Image couldn't be shown: far."];
+
+	expect(galleryItems(4, [{ before: 1, reason: near }, { before: 3, reason: far }], 2)).toEqual([
+		{ kind: "image", index: 0 },
+		{ kind: "refused", reason: near },
+		{ kind: "image", index: 1 },
+		{ kind: "refused", reason: far },
+	]);
 });
 
 test("an upload of this document loads with the document named, however it is written", () => {

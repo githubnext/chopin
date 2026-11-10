@@ -525,6 +525,15 @@ export function ImageFigure(
 	);
 }
 
+export function RefusedImage({ reason }: { reason: string }) {
+	return (
+		<p className="chat-image-refused" data-chat-image-refused>
+			<ImageOffIcon aria-hidden="true" size={16} />
+			<span>{reason}</span>
+		</p>
+	);
+}
+
 export function ChatImage({ image }: { image: ChatImageData }) {
 	let host = useImageHost();
 	return host

@@ -25,9 +25,9 @@ import { EmptyState } from "@chopin/visuals";
 
 import { deliveryOf, failureOf } from "./delivery";
 import { DeliveryMark, FailedLine } from "./message-delivery";
-import { ChatImage, ChatImageDocument, MessageImages } from "./image";
-import { ImageGallery } from "./image-gallery";
+import { ChatImageDocument, MessageImages } from "./image";
 import { MessageMarkdown } from "./markdown";
+import { TurnImages } from "./turn-images";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
@@ -321,11 +321,7 @@ function MessageBody(
 							{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
 						</div>
 					)}
-					{!!message.images?.length && (
-						message.images.length === 1
-							? <ChatImage image={message.images[0]!} />
-							: <ImageGallery images={message.images} />
-					)}
+					<TurnImages images={message.images} refused={message.refusedImages} />
 					{!(text || toPlanner) && canThread && markers.threads && (
 						<div className="flex justify-end">
 							<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
