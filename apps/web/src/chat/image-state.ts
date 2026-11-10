@@ -84,6 +84,10 @@ export function imageSource(
 	return { kind: "unavailable" };
 }
 
+export function remoteImagePath(url: string, document: string | undefined): string | undefined {
+	return document ? `/images/remote?${new URLSearchParams({ document, url })}` : undefined;
+}
+
 export type Load = "loading" | "shown" | "broken";
 
 export type Settled = { src: string; outcome: "shown" | "broken" };
