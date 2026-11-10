@@ -1569,3 +1569,77 @@ test("a Stop while an attached Planner's image is uploading waits for it, keeps 
 		});
 	}
 });
+
+test("a turn that ends while its tool's image is still being stored waits for it, then saves the image with the turn", async () => {
+	let room = await remoteRoom();
+	let { context, storage } = room;
+	let started = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let put = storage.images.put.bind(storage.images);
+	storage.images.put = async image => {
+		if (image.bytes[image.bytes.length - 1] === 3) {
+			started.resolve();
+			await release.promise;
+		}
+		await put(image);
+	};
+	let image = (seed: number, alt: string) => ({
+		type: "image",
+		data: pixels(640, 480, seed),
+		mimeType: "image/png",
+		alt,
+	});
+	let client = await attach(
+		room.server.url,
+		room.channel.id,
+		scriptedPlanner({
+			async turn(turn) {
+				let next = turn.message.prompt.includes("next");
+				turn.offerTools(["draw"]);
+				let toolCallId = next ? "draw-2" : "draw-1";
+				turn.emit({
+					type: "tool-call",
+					toolCallId,
+					toolName: "draw",
+					input: "{}",
+					providerExecuted: true,
+				});
+				turn.emit({
+					type: "tool-result",
+					toolCallId,
+					toolName: "draw",
+					result: { content: [next ? image(4, "Next floor") : image(3, "Slow floor")] },
+				});
+				finishTurn(turn);
+			},
+		}).handlers,
+	);
+	cleanups.push(() => client.detach());
+
+	expect(await room.send("@chopin draw it")).toMatchObject({ kind: "chat:send" });
+	await started.promise;
+	let ended = false;
+	let running = context.chat.running!.then(() => (ended = true));
+	await Bun.sleep(50);
+	expect(ended).toBe(false);
+	expect(context.chat.busy).toBe(true);
+	release.resolve();
+	await running;
+
+	let saved = () =>
+		(context.plan.persistence.committedSidecar as { transcript: Chat.Chat["entries"] })
+			.transcript.filter(entry => entry.images)
+			.map(entry => [entry.id, entry.images!.map(item => item.alt)]);
+	let first = context.chat.entries.find(entry => entry.images);
+	expect(first?.tools?.map(tool => tool.result)).toEqual(["1 image"]);
+	expect(saved()).toEqual([[first!.id, ["Slow floor"]]]);
+
+	expect(await room.send("@chopin the next one")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+	let holders = context.chat.entries.filter(entry => entry.images);
+	expect(holders.map(entry => entry.images!.map(item => item.alt))).toEqual([
+		["Slow floor"],
+		["Next floor"],
+	]);
+	expect(saved()).toEqual(holders.map(entry => [entry.id, entry.images!.map(item => item.alt)]));
+});
