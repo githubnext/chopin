@@ -83,6 +83,12 @@ const queueOf = (w: World) =>
 const texts = async (w: World, states?: Parameters<World["rows"]>[0]) =>
 	(await w.rows(states)).map(row => row.text);
 
+type Placed = { references?: Array<{ start: number; channelId?: string }> } | undefined;
+
+/** Where each reference of a message, a row or a queue item stands, and which document it is. */
+const placed = (item: Placed) =>
+	item?.references?.map(reference => [reference.start, reference.channelId]);
+
 const said = (w: World) =>
 	w.context.chat.entries.filter(entry => entry.author.kind !== "system").map(entry => entry.text);
 
@@ -971,6 +977,87 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		expect(w.prompts[0]).toMatch(
 			/see #Other \[reference id: \w+\] and #More \[reference id: \w+\]/,
 		);
+	});
+
+	test("a label that stands twice keeps each reference at its own place through an edit at both ends: in the entry, the row, the room's queue, after a restart; and an edit that cannot be saved keeps them as they were", async () => {
+		let w = await open({ away: true });
+		w.context.references = references as never;
+		let one = crypto.randomUUID();
+		let other = crypto.randomUUID();
+		let before = "left #Doc then #Doc right";
+		let after = "start #Doc then #Doc finish";
+		let first = before.indexOf("#Doc");
+		let second = before.indexOf("#Doc", first + 4);
+		let start = after.indexOf("#Doc");
+		let next = after.indexOf("#Doc", start + 4);
+		let sent = async (requests: Array<{ start: number; channelId: string }>) => {
+			let requestId = crypto.randomUUID();
+			await Chat.send(
+				w.context,
+				w.socket().ws,
+				{
+					kind: "chat:send",
+					rid: `send-${requestId}`,
+					requestId,
+					to: "planner",
+					text: before,
+					references: requests.map(request => ({
+						kind: "document",
+						channelId: request.channelId,
+						start: request.start,
+						end: request.start + 4,
+					})),
+					ts: 0,
+				} as never,
+			);
+			return requestId;
+		};
+		let row = async () => (await w.rows(["waiting"]))[0] as unknown as Placed;
+
+		let both = await sent([{ channelId: one, start: first }, { channelId: other, start: second }]);
+		expect(placed(await row())).toEqual([[first, one], [second, other]]);
+
+		// An edit that cannot be saved changes nothing, in memory or in the row, and tells nobody.
+		let persist = w.context.persist;
+		w.context.persist = async () => {
+			throw new Error("commit failed");
+		};
+		let seen = w.events.length;
+		let failed = await editing(w, "ana", both, after);
+		w.context.persist = persist;
+		expect(failed.kind).toBe("session:error");
+		expect(w.events.slice(seen).some(event => event.kind === "chat:message")).toBe(false);
+		expect(memberEntry(w.context, before)?.references).toHaveLength(2);
+		expect(placed(await row())).toEqual([[first, one], [second, other]]);
+
+		// Both ends of the message change, and the two places the label stands are told apart.
+		let edited = await editing(w, "ana", both, after);
+		expect(edited).toMatchObject({
+			kind: "chat:edit",
+			references: [{ start, end: start + 4 }, { start: next, end: next + 4 }],
+		});
+		expect(placed(await row())).toEqual([[start, one], [next, other]]);
+		expect(placed(queueOf(w)[0] as Placed)).toEqual([[start, one], [next, other]]);
+		expect(placed(memberEntry(w.context, after) as Placed)).toEqual([[start, one], [next, other]]);
+
+		// One reference, and a second occurrence of its label that is plain text: it stays on its own.
+		let single = await sent([{ channelId: other, start: second }]);
+		let alone = await editing(w, "ana", single, after);
+		expect(alone).toMatchObject({
+			kind: "chat:edit",
+			references: [{ start: next, end: next + 4 }],
+		});
+		expect(placed(queueOf(w)[1] as Placed)).toEqual([[next, other]]);
+
+		// All of it is kept by the rows: the next process has each reference at its own place.
+		let restarted = await w.restart();
+		await Chat.recover(restarted);
+		await tick();
+		expect(restarted.chat.waiting.map(item => item.text)).toEqual([after, after]);
+		expect(restarted.chat.waiting.map(item => placed(item as Placed))).toEqual([
+			[[start, one], [next, other]],
+			[[next, other]],
+		]);
 	});
 
 	test("an edit is kept through a restart: the next process starts the message with the edited text", async () => {

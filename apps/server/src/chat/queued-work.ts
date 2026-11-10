@@ -57,9 +57,13 @@ export function project(item: Queued): Wire.Waiting | undefined {
  *
  * A reference stays where the text around the edit is unchanged, moved by what the edit added or
  * removed before it. One the edit did not touch but could not be placed that way, because the
- * edit changed both ends of the message, follows its label to where it now reads, when that label
- * stands exactly once before and once after. A reference the edit touched, or ran into the word
- * beside it, is dropped, so what remains still reads as the label it was resolved with.
+ * edit changed both ends of the message, follows its label through the stretch the edit changed:
+ * the label's nth place there is its nth place now, when the edit left as many of that label in
+ * the stretch as there were, whether or not every one of them was a reference. Told apart by
+ * their order, a label that stands twice keeps each of its references where it was. Where the edit
+ * added or removed a place for the label, which one is the reference's cannot be told, and it is
+ * dropped. A reference the edit touched, or ran into the word beside it, is dropped too, so what
+ * remains still reads as the label it was resolved with.
  */
 export function carryReferences(
 	before: string,
@@ -90,13 +94,13 @@ export function carryReferences(
 		else others.push(reference);
 	}
 	for (let reference of others) {
-		if (
-			before.slice(reference.start, reference.end) !== reference.label
-			|| occurrences(before, reference.label) !== 1
-			|| occurrences(after, reference.label) !== 1
-		) continue;
-		let start = after.indexOf(reference.label);
-		let moved = { ...reference, start, end: start + reference.label.length };
+		let { label } = reference;
+		if (before.slice(reference.start, reference.end) !== label) continue;
+		let was = within(before, label, head, before.length - tail);
+		let now = within(after, label, head, after.length - tail);
+		let nth = was.indexOf(reference.start);
+		if (nth < 0 || was.length !== now.length) continue;
+		let moved = { ...reference, start: now[nth]!, end: now[nth]! + label.length };
 		if (!joined(before, reference, after, moved)) carried.push(moved);
 	}
 	// In order and apart, as a message's references are.
@@ -126,8 +130,13 @@ function touching(text: string, at: Pick<Wire.Reference, "start" | "end">): bool
 		|| word.test(text.slice(at.end, at.end + 1));
 }
 
-function occurrences(text: string, part: string): number {
-	let count = 0;
-	for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + part.length)) count++;
-	return count;
+/** Where `part` stands, one after another, wholly between `from` and `to`. */
+function within(text: string, part: string, from: number, to: number): number[] {
+	let places: number[] = [];
+	if (!part) return places;
+	for (let at = text.indexOf(part, from); at >= 0 && at + part.length <= to;) {
+		places.push(at);
+		at = text.indexOf(part, at + part.length);
+	}
+	return places;
 }

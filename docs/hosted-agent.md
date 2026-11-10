@@ -1041,7 +1041,11 @@ still stop the turn that is running. `chat:unqueue` cancels a waiting message: i
 transcript entry go in one commit, and the room hears of it only after that commit. `chat:edit`
 rewrites its text with the rules of a send (the same size limit, the mention stripped, empty refused,
 `references` resolved as a send resolves them, or the references that still stand carried to where the
-new text puts them), after the same write check a send makes. The row's text, references and saved
+new text puts them), after the same write check a send makes. A reference the edit did not touch stays
+with its label even when the edit changed both ends of the message: a label that stands more than once
+keeps each of its references at its own place, told apart by their order, as long as the edit left as
+many places for it in the stretch it changed as there were; where it added or removed one, which place
+was the reference's cannot be told, and the reference is dropped. The row's text, references and saved
 delivery change with the transcript entry in one commit, and the queue does not start the message while
 that commit is being saved. Every cancel ends in `cancelQueuedJobs`, which takes the waiting turn out of
 the queue and tells whoever waits on it that it was skipped.

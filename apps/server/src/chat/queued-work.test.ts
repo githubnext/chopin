@@ -79,6 +79,12 @@ describe("what the queue says of each kind of waiting turn", () => {
 	});
 });
 
+/** Where the first or second `#Doc` of a text begins. */
+function at(text: string, nth: number): number {
+	let first = text.indexOf("#Doc");
+	return nth === 0 ? first : text.indexOf("#Doc", first + 4);
+}
+
 describe("references that stand after an edit", () => {
 	let text = "Compare #Plan with #Spec today";
 	let plan = reference("#Plan", 8);
@@ -127,6 +133,67 @@ describe("references that stand after an edit", () => {
 		let swapped = carryReferences(text, "Hey: compare #Plan with #Spec now!", two);
 		expect(swapped.map(item => item.label)).toEqual(["#Plan", "#Spec"]);
 		expect(swapped[0]!.end).toBeLessThanOrEqual(swapped[1]!.start);
+	});
+
+	describe("where one label stands more than once", () => {
+		let before = "left #Doc then #Doc right";
+		let after = "start #Doc then #Doc finish";
+
+		it("keeps two references to different documents, each at its own place, when the edit changed both ends", () => {
+			let first = reference("#Doc", at(before, 0));
+			let second = { ...reference("#Doc", at(before, 1)), channelId: crypto.randomUUID() };
+			let carried = carryReferences(before, after, [first, second]);
+			expect(carried).toEqual([
+				{ ...first, start: at(after, 0), end: at(after, 0) + 4 },
+				{ ...second, start: at(after, 1), end: at(after, 1) + 4 },
+			]);
+			expect(carried.map(item => after.slice(item.start, item.end))).toEqual(["#Doc", "#Doc"]);
+		});
+
+		it("keeps the one reference with the place it was on, whichever of the two it was", () => {
+			for (let nth of [0, 1]) {
+				let only = reference("#Doc", at(before, nth));
+				expect(carryReferences(before, after, [only])).toEqual([
+					{ ...only, start: at(after, nth), end: at(after, nth) + 4 },
+				]);
+			}
+			// Moved by what the edit added before it, and still the place it was on.
+			let later = "a much longer start #Doc then #Doc and a finish";
+			let only = reference("#Doc", at(before, 1));
+			expect(carryReferences(before, later, [only])).toEqual([
+				{ ...only, start: at(later, 1), end: at(later, 1) + 4 },
+			]);
+		});
+
+		it("tells the places apart by their order when the edit leaves as many as there were", () => {
+			let three = "x #Doc, #Doc and #Doc y";
+			let edited = "w #Doc, #Doc and #Doc z";
+			let middle = reference("#Doc", three.indexOf("#Doc", 6));
+			let carried = carryReferences(three, edited, [middle]);
+			expect(carried).toEqual([{
+				...middle,
+				start: edited.indexOf("#Doc", 6),
+				end: edited.indexOf("#Doc", 6) + 4,
+			}]);
+		});
+
+		it("drops a reference whose place cannot be told, when the edit added or removed one", () => {
+			let only = reference("#Doc", at(before, 1));
+			// A place added: the reference may be on any of three.
+			expect(carryReferences(before, "start #Doc then #Doc and #Doc finish", [only])).toEqual([]);
+			// A place removed (by touching it): the one that is left may be either.
+			expect(carryReferences(before, "start #Dac then #Doc finish", [only])).toEqual([]);
+			// None is left for it to point at.
+			expect(carryReferences(before, "start and then finish", [only])).toEqual([]);
+		});
+
+		it("keeps the order of the references that remain, and none overlaps another", () => {
+			let first = reference("#Doc", at(before, 0));
+			let second = reference("#Doc", at(before, 1));
+			let carried = carryReferences(before, after, [second, first]);
+			expect(carried.map(item => item.start)).toEqual([at(after, 0), at(after, 1)]);
+			expect(carried[0]!.end).toBeLessThanOrEqual(carried[1]!.start);
+		});
 	});
 
 	it("drops a reference the edit ran into the word beside it, and keeps one that already did", () => {
