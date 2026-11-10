@@ -51,6 +51,7 @@ export function useConnectionBanner(
 		lostEdits,
 		reconnect,
 		wake,
+		chooseMachine,
 	}: {
 		/** The room's connection is lost: it reports an outage (`isOffline`). */
 		lost: boolean;
@@ -72,6 +73,11 @@ export function useConnectionBanner(
 		reconnect: () => void;
 		/** Asks the machine to try now, where something can; without it no such button is drawn. */
 		wake?: () => void;
+		/**
+		 * Opens the machine choice, for a viewer who may choose; without it a Planner that is away
+		 * is told with no button, since Chopin cannot reconnect another's machine.
+		 */
+		chooseMachine?: () => void;
 	},
 ): ConnectionBanner {
 	let shown = useConnectionNotice(lost) !== "none";
@@ -97,6 +103,7 @@ export function useConnectionBanner(
 		lostEdits,
 		plannerAttached,
 		reopened: attempt.current,
+		chooseMachine: chooseMachine !== undefined,
 	};
 	let step = connectionStep(memory, facts);
 	useEffect(() => {
@@ -133,6 +140,8 @@ export function useConnectionBanner(
 		}
 		: view.phase === "dropped" && view.action === "wake"
 		? wake
+		: view.phase === "dropped" && view.action === "choose"
+		? chooseMachine
 		: undefined;
 	let offline = (view.phase === "reconnecting" || view.phase === "dropped")
 		&& view.layer !== "planner";
@@ -157,7 +166,11 @@ export function ConnectionBannerView(
 			message={view.text}
 			onRetry={onRetry}
 			phase={view.phase}
-			retryLabel={view.phase === "dropped" && view.action === "wake" ? "Try again" : undefined}
+			retryLabel={view.phase === "dropped" && view.action === "wake"
+				? "Try again"
+				: view.phase === "dropped" && view.action === "choose"
+				? "Choose machine"
+				: undefined}
 		/>
 	);
 }

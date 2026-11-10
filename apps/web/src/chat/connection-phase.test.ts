@@ -272,10 +272,35 @@ test("a Planner problem that outlasts the resume is told once the resume is gone
 	});
 });
 
-test("the Planner's dropped link offers no Reconnect from here and says so truthfully", () => {
-	let away = plannerStatus({ state: "disconnected", login: "mona" }, "Build box");
-	let { view } = step(INITIAL_MEMORY, { planner: away });
-	expect(retryLayer(view)).toBeUndefined();
+test("the Planner's dropped link never offers Reconnect: a person who may choose a machine is offered that, anyone else no button", () => {
+	let kept: Session.PlannerAttachment[] = [
+		{ state: "disconnected", login: "mona" },
+		{ state: "held", login: "mona", until: AT },
+	];
+	for (let attachment of kept) {
+		let state = attachment.state;
+		let away = plannerStatus(attachment, "Build box");
+		// Chopin cannot reconnect someone else's machine, so there is no retry from here.
+		let alone = step(INITIAL_MEMORY, { planner: away }).view;
+		expect(alone).toMatchObject({ phase: "dropped", layer: "planner", plannerKind: state });
+		expect("action" in alone).toBe(false);
+		expect(retryLayer(alone)).toBeUndefined();
+		// Where the viewer may choose a machine for the document, that is the action that can help.
+		let may = step(INITIAL_MEMORY, { planner: away, chooseMachine: true }).view;
+		expect(may).toMatchObject({ phase: "dropped", layer: "planner", action: "choose" });
+		expect(may).toMatchObject({ text: alone.phase === "dropped" ? alone.text : "" });
+		// Choosing a machine retries nothing, so it names no layer.
+		expect(retryLayer(may)).toBeUndefined();
+	}
+});
+
+test("a machine that cannot start keeps its Try again, and offers no Choose machine beside it", () => {
+	let view = step(INITIAL_MEMORY, {
+		planner: plannerStatus(FAILING(3), "Build box"),
+		chooseMachine: true,
+	}).view;
+	expect(view).toMatchObject({ phase: "dropped", action: "wake" });
+	expect(retryLayer(view)).toBe("planner");
 });
 
 test("only a banner that says the same cause as a refused send gives that send's line its quiet", () => {

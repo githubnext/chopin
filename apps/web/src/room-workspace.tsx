@@ -78,7 +78,7 @@ import {
 	plannerWordHeard,
 	useSettledPlannerStatus,
 } from "./chat/planner-settle";
-import { MachineButton } from "./machine-button";
+import { MachineButton, openMachinePicker } from "./machine-button";
 import { machines as machineStore, summarizeMachines, useLiveMachines } from "./machine-summary";
 import { useLiveBuild } from "./live-build";
 import { BuildView } from "./build-view";
@@ -1337,6 +1337,7 @@ export function RoomWorkspace(
 		wake: () => {
 			void wire?.ask("chat:wake", {}).catch(() => {});
 		},
+		chooseMachine: hasMachineButton ? openMachinePicker : undefined,
 	});
 	let plannerWhere = plannerPlacement(plannerNote, hasMachineButton, banner.view, chatShowsBanner);
 	useTitlingReport({
