@@ -29,6 +29,10 @@ function inline(node: Node): string {
 	}
 }
 
+function rendered(text: string): string {
+	return text.replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n");
+}
+
 function block(node: Node): string {
 	if (node.type === "list") {
 		return (node.children ?? []).map(item =>
@@ -39,7 +43,7 @@ function block(node: Node): string {
 		return (node.children ?? []).filter(child => BLOCKS.has(child.type)).map(block).join("\n\n");
 	}
 	if (node.type === "code") return node.value ?? "";
-	return inline(node).trim();
+	return rendered(inline(node)).trim();
 }
 
 export function plainTextOf(

@@ -33,6 +33,21 @@ test("plain text leaves out what the page does not draw", () => {
 	expect(plainTextOf("")).toBe("");
 });
 
+test("plain text collapses whitespace as the page does, also where something the page does not draw stood", () => {
+	expect(plainTextOf("a  b")).toBe("a b");
+	expect(plainTextOf("x   y\tz")).toBe("x y z");
+	expect(plainTextOf("image ![alt](https://example.com/image.png) end")).toBe("image end");
+	expect(plainTextOf("keep <b>x</b>  and <i>y</i>")).toBe("keep x and y");
+	expect(plainTextOf("a **bold**  *and* `code`   tail")).toBe("a bold and code tail");
+	expect(plainTextOf("one  \n  two  three")).toBe("one\ntwo three");
+	expect(plainTextOf("first  line\n\nsecond   line")).toBe("first line\n\nsecond line");
+	expect(plainTextOf("* a  b\n* c   d")).toBe("a b\nc d");
+});
+
+test("plain text keeps the whitespace the page keeps in a code block", () => {
+	expect(plainTextOf("```\na  b\n\tc\n```")).toBe("a  b\n\tc");
+});
+
 test("plain text shows a reference as its label", () => {
 	let source = "see #Design for the plan";
 	let reference: Chat.Reference = {
