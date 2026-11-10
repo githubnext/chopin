@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { modelLevels, refusedChoice } from "@chopin/protocol/model-choice";
+
 import { atomicCatalog, createAtomicAdapter } from "./adapter";
 import { registerFullPlanner } from "./full";
 import { startStubModelServer } from "./model-stub";
@@ -132,6 +134,61 @@ describe("the catalog Atomic offers for a document's Planner", () => {
 		expect(catalog.models.some(model => model.id === "stub/m709")).toBe(true);
 		expect(catalog.default).toEqual({ model: "stub/plain" });
 		await harness.shutdown();
+	});
+
+	it("lists the runtime's models in the order it reports them, each provider where it first appears", async () => {
+		let plain = { reasoning: false, contextWindow: 8_000 };
+		let runtime = {
+			getAvailable: async () => [
+				{ ...plain, provider: "zeta", id: "one", name: "One" },
+				{ ...plain, provider: "alpha", id: "two", name: "Two" },
+				{ ...plain, provider: "zeta", id: "three", name: "Three" },
+			],
+			getModel: () => undefined,
+			getProvider: (id: string) => ({ name: id === "zeta" ? "Zeta" : "Alpha" }),
+		};
+		let catalog = await atomicCatalog(runtime as never, { auth: "auto" }, undefined);
+		// Not sorted by provider name: the runtime's own order stands, and the picker groups by it.
+		expect(catalog.models.map(entry => entry.id)).toEqual(["zeta/one", "alpha/two", "zeta/three"]);
+	});
+
+	it("lists a model the runtime reports twice once for each entry, as the runtime resolves it", async () => {
+		let duplicates = [
+			{ ...MODELS[0]!, id: "twin", name: "First twin" },
+			{ ...MODELS[1]!, id: "twin", name: "Second twin" },
+			{ ...MODELS[0]!, id: "after", name: "After" },
+		];
+		let harness = createAtomicAdapter({
+			auth: "ai-gateway",
+			model: "stub/plain",
+			providers: {
+				stub: {
+					baseUrl: stub.baseUrl,
+					apiKey: "stub",
+					api: "openai-completions",
+					models: [MODELS[0]!, ...duplicates],
+				},
+			},
+		});
+		try {
+			let catalog = await harness.catalog("stub/plain");
+			let twins = catalog.models.filter(entry => entry.id === "stub/twin");
+			// Each entry stays, in the order reported, with the levels of its own model.
+			expect(twins.map(entry => entry.name)).toEqual(["First twin", "Second twin"]);
+			expect("thinkingLevels" in twins[0]!).toBe(false);
+			expect(twins[1]!.thinkingLevels).toEqual(["off", "minimal", "low", "medium", "high"]);
+			expect(catalog.models.map(entry => entry.id)).toEqual([
+				"stub/plain",
+				"stub/twin",
+				"stub/twin",
+				"stub/after",
+			]);
+			// A choice of that id is the first entry's, as the runtime runs it: no level is offered.
+			expect(modelLevels(catalog, "stub/twin")).toEqual([]);
+			expect(refusedChoice(catalog, { model: "stub/twin", thinkingLevel: "high" })).toBeString();
+		} finally {
+			await harness.shutdown();
+		}
 	});
 
 	it("keeps the deployment's default in the catalog when it is not among the available models", async () => {

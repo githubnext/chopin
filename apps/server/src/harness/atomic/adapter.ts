@@ -194,17 +194,21 @@ type ToolOutcome = { output: unknown; isError?: boolean };
 /**
  * The models a person may choose for a document's Planner: every chat model the runtime has
  * credentials for that `resolveModel` would run, as `provider/model`, with each model's thinking
- * levels from the model itself. `defaultModel` is the deployment's, whose entry is always listed.
+ * levels from the model itself. They are listed as the runtime reports them: in its order, which
+ * the picker groups by provider where each first appears, and an entry it reports twice stays
+ * twice, each with its own levels. A choice of that id runs the first, as `resolveModel` finds
+ * it, and the catalog's readers resolve it the same way. `defaultModel` is the deployment's,
+ * whose entry is always listed.
  */
 export async function atomicCatalog(
 	runtime: Pick<ModelRuntime, "getAvailable" | "getModel" | "getProvider">,
 	settings: Pick<AtomicSettings, "auth" | "providers">,
 	defaultModel: string | undefined,
 ): Promise<Wire.ModelCatalog> {
-	let found = new Map<string, Model>();
+	let listed: Array<[id: string, model: Model]> = [];
 	for (let model of await runtime.getAvailable()) {
 		if (!providerAllowed(settings, model.provider)) continue;
-		found.set(`${model.provider}/${model.id}`, model);
+		listed.push([`${model.provider}/${model.id}`, model]);
 	}
 	let fallback: Model | undefined;
 	if (defaultModel) {
@@ -213,12 +217,10 @@ export async function atomicCatalog(
 		} catch {
 			// A default Atomic cannot run is not offered; its turns fail as they always did.
 		}
-		if (fallback && !found.has(defaultModel)) found.set(defaultModel, fallback);
+		if (fallback && !listed.some(([id]) => id === defaultModel)) {
+			listed.push([defaultModel, fallback]);
+		}
 	}
-	let listed = [...found].sort(([, left], [, right]) =>
-		(runtime.getProvider(left.provider)?.name ?? left.provider)
-			.localeCompare(runtime.getProvider(right.provider)?.name ?? right.provider)
-	);
 	return {
 		models: listed.map(([id, model]) => {
 			let levels = atomicThinkingLevels(model);
