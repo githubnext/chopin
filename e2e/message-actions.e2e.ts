@@ -448,6 +448,33 @@ test("on a phone the toolbar comes from a long press, sits above the message, an
 		.toBeLessThanOrEqual(390);
 });
 
+test("on a phone a message's text stays selectable, and a long press on it still brings up the toolbar", async ({ join, seed }) => {
+	await seed("# Actions\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
+	let target = message(page, PERSON.id);
+	let styles = await target.locator("[data-chat-message-text]").evaluate(element => {
+		let paragraph = element.querySelector("p")!;
+		return [element, paragraph].map(item => getComputedStyle(item).userSelect);
+	});
+	expect(styles).not.toContain("none");
+	let selected = await target.locator("[data-chat-message-text] p").first().evaluate(paragraph => {
+		let range = document.createRange();
+		range.selectNodeContents(paragraph);
+		let selection = getSelection()!;
+		selection.removeAllRanges();
+		selection.addRange(range);
+		return selection.toString();
+	});
+	expect(selected).toBe("Please check the rollout docs and bun test.");
+
+	await page.evaluate(() => getSelection()!.removeAllRanges());
+	await longPress(page, target);
+	await expect(toolbar(target)).toBeVisible();
+});
+
 test("a long press on a link in a message brings up the toolbar and does not follow the link", async ({ join, seed }) => {
 	await seed("# Actions\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);

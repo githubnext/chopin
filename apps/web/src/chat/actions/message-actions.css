@@ -179,11 +179,6 @@
 		width: var(--control-target-coarse);
 		height: var(--control-target-coarse);
 	}
-
-	.chat-message-body [data-chat-message-text] {
-		-webkit-touch-callout: none;
-		user-select: none;
-	}
 }
 
 /* Upstream's icon swap: the copy and check icons crossfade in one grid cell. */
