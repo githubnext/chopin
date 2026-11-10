@@ -169,8 +169,10 @@ export let MessageToolbar = memo(function MessageToolbar(
 		if (!bar || !view) return;
 		let box = bar.getBoundingClientRect();
 		let frame = view.getBoundingClientRect();
-		if (box.top < frame.top || box.bottom > frame.bottom) {
-			view.scrollTop += box.top - frame.top - TOOLBAR_MARGIN;
+		// On a phone the transcript runs under the top bar, and its scroll padding is the bar's height.
+		let top = frame.top + (parseFloat(getComputedStyle(view).scrollPaddingTop) || 0);
+		if (box.top < top || box.bottom > frame.bottom) {
+			view.scrollTop += box.top - top - TOOLBAR_MARGIN;
 		}
 	}, [host, pinned]);
 
