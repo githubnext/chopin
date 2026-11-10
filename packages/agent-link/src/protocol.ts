@@ -345,7 +345,9 @@ export const toolErrorSchema = z.strictObject({
  * and shows it in Chat as a generated image; a block it cannot host is shown as a plain reason
  * beside the images (`Chat.Entry.refusedImages`), and every `text` block stays only in the tool's
  * own row.
- * Extra keys, and an `alt` or `caption` that is not text, are ignored. Like `toolErrorSchema` this
+ * A client whose result would not fit one message sends the block with an empty `data` and
+ * `tooLarge`, the bytes it would have taken, and Chat says so. Extra keys, and an `alt` or
+ * `caption` that is not text, are ignored. Like `toolErrorSchema` this
  * is a recognised convention: any JSON is still a result.
  */
 export const toolImageSchema = z.object({
@@ -354,6 +356,7 @@ export const toolImageSchema = z.object({
 	mimeType: z.string(),
 	alt: z.string().optional().catch(undefined),
 	caption: z.string().optional().catch(undefined),
+	tooLarge: z.number().int().positive().optional().catch(undefined),
 });
 
 export const toolContentSchema = z.object({

@@ -5,7 +5,7 @@ import { MAX_LINK_MESSAGE_BYTES, MAX_LINK_NOTE_LENGTH, parseClientMessage } from
 
 import type { ServerWebSocket } from "bun";
 import type { AgentHandlers, HostToolResult, TurnContext } from "./client";
-import type { ClientMessage, ServerMessage } from "./protocol";
+import type { ClientMessage, ClientMessageOf, ServerMessage } from "./protocol";
 
 let stops: Array<() => unknown> = [];
 afterEach(async () => {
@@ -99,6 +99,19 @@ const turn = (id: string) => ({
 	prompt: "p",
 	tools: [{ name: "read_plan" }],
 });
+
+const imageBlock = (data: string, alt: string, mimeType = "image/png") => ({
+	type: "image",
+	data,
+	mimeType,
+	alt,
+});
+
+function resultOf(message: ClientMessageOf<"part">): { content: unknown[]; isError?: boolean } {
+	let { part } = message;
+	if (part.type !== "tool-result") throw new Error("not a result");
+	return (typeof part.result === "string" ? JSON.parse(part.result) : part.result) as never;
+}
 
 describe("Agent connection client", () => {
 	it("opens /api/v1/agent offering chopin.agent.v1, with the bearer", async () => {
@@ -536,6 +549,110 @@ describe("Agent connection client", () => {
 			message: "The turn has ended.",
 		});
 		expect(steered).toEqual([]);
+	});
+
+	it("leaves out of a result too large for one message the images that do not fit, largest first, and says how big each was", async () => {
+		let server = fakeServer();
+		let content = [
+			{ type: "text", text: "Drew three" },
+			imageBlock("A".repeat(600_000), "small"),
+			imageBlock("A".repeat(1_400_000), "large"),
+			imageBlock("A".repeat(700_000), "middle"),
+		];
+		let results = [{ content }, JSON.stringify({ content })];
+		await connect(server, {
+			turn(context) {
+				for (let result of results) {
+					context.emit({ type: "tool-result", toolCallId: "c", toolName: "draw", result });
+				}
+			},
+		});
+		server.send(turn("big"));
+		let [object, text] = [await server.next("part"), await server.next("part")];
+		for (let sent of [object, text]) {
+			expect(JSON.stringify(sent).length).toBeLessThanOrEqual(MAX_LINK_MESSAGE_BYTES);
+		}
+		for (let sent of [object, text]) {
+			expect(resultOf(sent).content).toEqual([
+				content[0],
+				content[1],
+				{ type: "image", data: "", mimeType: "image/png", alt: "large", tooLarge: 1_050_000 },
+				content[3],
+			]);
+		}
+		expect(typeof (text.part as { result: unknown }).result).toBe("string");
+		expect(typeof (object.part as { result: unknown }).result).toBe("object");
+	});
+
+	it("leaves out as many images as it takes, and sends a result that fits as it was", async () => {
+		let server = fakeServer();
+		let data = `${"B".repeat(1_299_998)}==`;
+		let fits = { content: [{ type: "image", data: "C".repeat(1_000), mimeType: "image/png" }] };
+		await connect(server, {
+			turn(context) {
+				context.emit({
+					type: "tool-result",
+					toolCallId: "c",
+					toolName: "draw",
+					result: {
+						content: ["first", "second", "third"].map(alt => imageBlock(data, alt, "image/jpeg")),
+						isError: false,
+					},
+				});
+				context.emit({ type: "tool-result", toolCallId: "d", toolName: "draw", result: fits });
+			},
+		});
+		server.send(turn("many"));
+		let { part } = await server.next("part");
+		let result = part.type === "tool-result"
+			? part.result as {
+				content: Array<Record<string, unknown>>;
+				isError: boolean;
+			}
+			: undefined;
+		expect(result?.isError).toBe(false);
+		expect(result?.content.map(block => block.data === "")).toEqual([false, true, true]);
+		expect(result?.content.map(block => block.tooLarge)).toEqual([undefined, 974_998, 974_998]);
+		let unchanged = await server.next("part");
+		expect(unchanged.part).toMatchObject({ result: fits });
+	});
+
+	it("still fails a result it cannot fit by leaving images out, as it always did", async () => {
+		let server = fakeServer();
+		let failures: string[] = [];
+		await connect(server, {
+			turn(context) {
+				for (
+					let result of [
+						{ content: [{ type: "text", text: "x".repeat(MAX_LINK_MESSAGE_BYTES) }] },
+						"x".repeat(MAX_LINK_MESSAGE_BYTES),
+						{
+							content: [{ type: "text", text: "x".repeat(MAX_LINK_MESSAGE_BYTES) }, {
+								type: "image",
+								data: "A".repeat(1_000),
+								mimeType: "image/png",
+							}],
+						},
+					]
+				) {
+					try {
+						context.emit({
+							type: "tool-result",
+							toolCallId: "c",
+							toolName: "draw",
+							result: result as never,
+						});
+					} catch (error) {
+						failures.push((error as Error).message);
+					}
+				}
+			},
+		});
+		server.send(turn("huge"));
+		await server.next("turn-end");
+		expect(failures).toEqual(
+			Array(3).fill("The message exceeds the agent connection's size limit."),
+		);
 	});
 
 	it("settles requests made once the link has closed instead of leaving them pending", async () => {

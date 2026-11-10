@@ -871,8 +871,8 @@ with a plain sentence that starts `Image couldn't be shown:` and says why, and
 `before`, how many of the message's images come before it. The reasons are that
 its type is not one Chat shows, that its data is not base64, that its bytes are
 not the type it names (or are another type, or are cut short), that its block
-has no data or type, and that Chopin could not store it, which gives no detail
-of the failure. `refusedImages` is an optional field that old browsers ignore,
+has no data or type, that it did not fit one message, and that Chopin could not
+store it, which gives no detail of the failure. `refusedImages` is an optional field that old browsers ignore,
 saved with the message; a message may have it without `images`. The tool's row
 in Work details shows the `text` blocks and how many images the result carried,
 never their bytes. A `preliminary` or failed result shows no images and no
@@ -883,6 +883,18 @@ wire shape: `result` is still any JSON, so a client sends it to any server, and 
 server that does not know it shows the result as before. A picture has no size
 limit of its own, unlike the 1 MiB of `upload_image`: the whole message, images
 included, stays within the 2 MiB message limit.
+
+A connection refuses a message over that limit before the server reads it, so
+only the client can say that an image did not fit. The `@chopin/agent-link`
+client does: when a `tool-result` part would be over the limit, it sends the
+image blocks that do not fit, largest first and the later of equals first, with
+`data` empty and `tooLarge` set to the bytes the image would have taken, and
+Chat then says so beside the images. A block with `tooLarge` is never stored,
+whatever else it holds. A client that does not do this, as before it did, has its
+message refused and its link closed, and nothing is shown, since the server never
+sees it; a server that does not know `tooLarge` leaves such a block out without
+saying why. A result that still does not fit with its images left out is not sent,
+and its `emit` throws, as it always did.
 
 ### Reading a large document
 
