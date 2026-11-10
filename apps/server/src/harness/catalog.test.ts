@@ -73,7 +73,7 @@ describe("the catalog of a remote Planner", () => {
 		]);
 	});
 
-	it("leaves out empty level lists and carries the client's default", () => {
+	it("keeps the fields the client reported, an empty description or level list included, and carries its default", () => {
 		let catalog = remoteCatalog(reported, undefined)!;
 		expect(catalog.models[0]).toEqual({
 			id: "acme/large",
@@ -82,8 +82,27 @@ describe("the catalog of a remote Planner", () => {
 			description: "Careful.",
 			thinkingLevels: ["low", "high"],
 		});
-		expect(catalog.models[1]).toEqual({ id: "acme/small", name: "Small" });
+		// An empty list is what the client said: no levels, which the composer reads as no control.
+		expect(catalog.models[1]).toEqual({ id: "acme/small", name: "Small", thinkingLevels: [] });
 		expect(catalog.default).toEqual({ model: "acme/small", thinkingLevel: "low" });
+		let blank = remoteCatalog({
+			models: {
+				available: [
+					{
+						id: "a",
+						name: "A",
+						description: "",
+						thinkingLevels: [],
+						provider: { id: "p", name: "" },
+					},
+					{ id: "b", name: "B" },
+				],
+			},
+		}, undefined)!;
+		expect(blank.models).toEqual([
+			{ id: "a", name: "A", description: "", thinkingLevels: [], provider: { id: "p", name: "" } },
+			{ id: "b", name: "B" },
+		]);
 	});
 
 	it("lists every model a client reports, and shows the room only what the picker uses", () => {
@@ -102,6 +121,13 @@ describe("the catalog of a remote Planner", () => {
 		let catalog = remoteCatalog(many, undefined)!;
 		expect(catalog.models).toHaveLength(710);
 		expect(catalog.models[709]).toEqual({ id: "p/m709", name: "M 709", provider: { id: "p" } });
+	});
+
+	it("carries a default the client spelled with empty strings as it did", () => {
+		let catalog = remoteCatalog({
+			models: { available: [{ id: "", name: "" }], default: { id: "", thinkingLevel: "" } },
+		}, undefined)!;
+		expect(catalog.default).toEqual({ model: "", thinkingLevel: "" });
 	});
 
 	it("takes the operator's MODEL as the default in the client's place, with the client's level dropped", () => {

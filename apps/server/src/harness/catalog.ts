@@ -30,7 +30,10 @@ export function atomicThinkingLevels(
 /**
  * The catalog an attached client reported, for the browser. `MODEL`, when the operator set it,
  * is the default in the client's place; otherwise the client's own default stands. No models
- * reported means no catalog: a client that offers only commands offers no choice of model.
+ * reported means no catalog: a client that offers only commands offers no choice of model. Every
+ * field of a model is passed as the client gave it, an empty description or list of levels
+ * included: the composer reads an empty list as no reasoning control and an empty description as
+ * none.
  */
 export function remoteCatalog(
 	reported: CapabilityCatalog | undefined,
@@ -52,14 +55,14 @@ export function remoteCatalog(
 					},
 				}
 				: {}),
-			...(model.description ? { description: model.description } : {}),
-			...(model.thinkingLevels?.length ? { thinkingLevels: model.thinkingLevels } : {}),
+			...(model.description !== undefined ? { description: model.description } : {}),
+			...(model.thinkingLevels !== undefined ? { thinkingLevels: model.thinkingLevels } : {}),
 		})),
-		...(chosen
+		...(chosen !== undefined
 			? {
 				default: {
 					model: chosen,
-					...(!operatorModel && fallback?.thinkingLevel
+					...(!operatorModel && fallback?.thinkingLevel !== undefined
 						? { thinkingLevel: fallback.thinkingLevel }
 						: {}),
 				},

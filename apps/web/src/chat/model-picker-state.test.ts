@@ -154,6 +154,42 @@ describe("the reasoning control", () => {
 	});
 });
 
+describe("a catalog that leaves fields empty", () => {
+	// A client may report an empty description, list of levels, name or provider name; each is read
+	// as none, and the model is still listed under what it can be called.
+	let blank: Chat.ModelCatalog = {
+		models: [
+			{
+				id: "p/one",
+				name: "",
+				provider: { id: "p", name: "" },
+				description: "",
+				thinkingLevels: [],
+			},
+			{ id: "p/two", name: "Two", thinkingLevels: ["low"] },
+		],
+		default: { model: "p/one" },
+	};
+
+	test("reads an empty list of levels as no reasoning control", () => {
+		expect(reasoningLevels(blank, undefined)).toEqual({ levels: [], current: undefined });
+		expect(reasoningLevels(blank, { model: "p/two" }).levels).toEqual(["low"]);
+	});
+
+	test("names a model by its id and a provider by its id when their names are empty", () => {
+		let [group, ...others] = pickerGroups(blank, undefined, "");
+		expect(others).toHaveLength(1);
+		expect(group!.name).toBe("p");
+		expect(group!.models.map(model => model.name)).toEqual(["p/one"]);
+		expect(triggerText(blank, undefined)).toEqual({ name: "p/one" });
+		expect(triggerLabel(blank, undefined)).toBe("Model: p/one");
+		// A search still finds it by id, and an empty description matches nothing but adds nothing.
+		expect(pickerOptions(pickerGroups(blank, undefined, "one")).map(model => model.id)).toEqual([
+			"p/one",
+		]);
+	});
+});
+
 describe("what a pick asks for", () => {
 	test("choosing the harness's own model clears the model instead of pinning it", () => {
 		expect(chooseModel(catalog, { model: "acme/large" }, "acme/small")).toEqual({});

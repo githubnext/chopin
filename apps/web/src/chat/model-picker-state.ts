@@ -37,6 +37,11 @@ export function shownModel(
 	return catalogModel(catalog, resolved.model ?? catalog.default?.model);
 }
 
+/** What a person reads for a model: its name, or its id when the client reported an empty name. */
+function modelName(model: Chat.ModelOption): string {
+	return model.name || model.id;
+}
+
 /** Every term of the query appears in the model's name, id, provider or description. */
 export function matchesQuery(model: Chat.ModelOption, query: string): boolean {
 	let terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -71,7 +76,7 @@ export function pickerGroups(
 			group = {
 				id,
 				name: model.provider
-					? model.provider.name ?? model.provider.id
+					? model.provider.name || model.provider.id
 					: named
 					? "Other"
 					: undefined,
@@ -81,6 +86,7 @@ export function pickerGroups(
 		}
 		group.models.push({
 			...model,
+			name: modelName(model),
 			key: `${occurrence}:${model.id}`,
 			isDefault: model.id === catalog.default?.model,
 			selected: occurrence === 0 && model.id === shown,
@@ -100,7 +106,8 @@ export function triggerText(
 	choice: Choice | undefined,
 ): { name: string; level?: string } {
 	let resolved = resolveChoice(catalog, choice);
-	let name = shownModel(catalog, choice)?.name ?? "Default";
+	let shown = shownModel(catalog, choice);
+	let name = shown ? modelName(shown) : "Default";
 	return { name, ...(resolved.thinkingLevel ? { level: levelLabel(resolved.thinkingLevel) } : {}) };
 }
 
