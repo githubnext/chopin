@@ -39,6 +39,16 @@ standalone (props and callbacks) lane only. It uses neither assistant-ui's runti
   while open and anchored to the composer's edge, so its fit-in-composer measurement was dropped;
   the same menu and row now also draw Chopin's `/` command and `@` mention pickers.
 
+## assistant-ui: MessageQueue
+
+The queue of waiting Planner messages above the composer, `apps/web/src/chat/message-queue.tsx`, is adapted
+from the standalone `MessageQueue` element of [assistant-ui](https://github.com/assistant-ui/assistant-ui)
+(MIT licence), file `packages/ui/src/components/react/assistant-ui/elements/message-queue.tsx` at commit
+`f92028b466cba721846de6851e4dddb6c04ecfad`. It was copied by hand, because the registry's install brings
+a shadcn, Tailwind and lucide setup this repository does not use. Nothing of assistant-ui's runtime is
+imported. The element is driven by Chat's own state, restyled to Chopin's tokens, and extended with who
+asked, an edit before the message starts, and a refusal told in plain words.
+
 ## assistant-ui: MarkdownText
 
 Chopin's read-only Markdown (Chat messages, decision cards, the phrases inside them) is drawn by
@@ -88,8 +98,8 @@ because `remark-gfm` also reads footnotes and bare addresses, which Chat has alw
 
 ### License
 
-The adaptations above (the connection and failure banners, the model picker and MarkdownText) are
-under assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners, the model picker, the message queue and
+MarkdownText) are under assistant-ui's MIT licence:
 
 ```
 MIT License
