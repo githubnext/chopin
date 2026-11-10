@@ -158,3 +158,18 @@
 :where(.aui-md-pre code) {
 	font-family: var(--font-mono);
 }
+
+/* On touch the copy button keeps its look and an invisible target of the coarse size grows around it. */
+:root[data-plan-coarse-pointer] :where(.aui-code-header-root button) {
+	position: relative;
+}
+
+:root[data-plan-coarse-pointer] :where(.aui-code-header-root button)::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, var(--control-target-coarse));
+	height: max(100%, var(--control-target-coarse));
+	transform: translate(-50%, -50%);
+}

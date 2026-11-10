@@ -13,6 +13,11 @@
 	margin-block-end: 0;
 }
 
+/* The last line of a paragraph, an item or a quote is not left as one word. */
+.chat-markdown :is(p, li, blockquote) {
+	text-wrap: pretty;
+}
+
 .chat-markdown p,
 .chat-markdown ul,
 .chat-markdown ol,

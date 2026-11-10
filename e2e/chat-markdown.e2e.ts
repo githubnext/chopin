@@ -195,10 +195,168 @@ test("on a phone a table scrolls in its own lane, the page never widens and the 
 	await expect(lane).toBeVisible();
 	expect(await lane.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
 	expect(await lane.evaluate(element => getComputedStyle(element).overflowX)).toBe("auto");
-	let box = (await message.getByRole("button", { name: "Copy code" }).boundingBox())!;
-	expect(box.width).toBeGreaterThanOrEqual(24);
-	expect(box.height).toBeGreaterThanOrEqual(24);
+	// On touch the button keeps its look and an invisible target of Chopin's coarse size grows around
+	// it: a touch 20 px from its centre in every direction still lands on it.
+	let copy = message.getByRole("button", { name: "Copy code" });
+	await expect(page.locator(":root")).toHaveAttribute("data-plan-coarse-pointer", "");
+	let box = (await copy.boundingBox())!;
+	expect(box.width).toBeLessThan(30);
+	let target = await copy.evaluate(button => {
+		let size = parseFloat(
+			getComputedStyle(document.documentElement).getPropertyValue("--control-target-coarse"),
+		);
+		let unit = parseFloat(getComputedStyle(document.documentElement).fontSize);
+		let rect = button.getBoundingClientRect();
+		let hits = [];
+		for (let [dx, dy] of [[-20, 0], [20, 0], [0, -20], [0, 20], [-20, -20], [20, 20]]) {
+			let element = document.elementFromPoint(
+				rect.x + rect.width / 2 + dx,
+				rect.y + rect.height / 2 + dy,
+			);
+			hits.push(element === button);
+		}
+		let after = getComputedStyle(button, "::after");
+		return { hits, width: parseFloat(after.width), size: size * unit };
+	});
+	expect(target.hits).toEqual([true, true, true, true, true, true]);
+	expect(target.width).toBeGreaterThanOrEqual(43);
 });
+
+test("a copy that cannot be made says so, and offers the copy again", async ({ join, page, seed }) => {
+	await seed("# Refused\n", { transcript: transcript() });
+	let errors: string[] = [];
+	page.on("pageerror", error => errors.push(error.message));
+	// The first page has no clipboard at all, as on an insecure origin.
+	await page.addInitScript(() => {
+		Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+	});
+	await join("ana");
+	let message = messageOf(page);
+	await expect(message).toBeVisible();
+	await message.getByRole("button", { name: "Copy code" }).click();
+	await expect(message.getByRole("button", { name: "Couldn't copy" })).toBeVisible();
+	await expect(message.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 6_000 });
+	expect(errors).toEqual([]);
+});
+
+test("a clipboard that refuses the write says so, and a later copy can work", async ({ join, page, seed }) => {
+	await seed("# Denied\n", { transcript: transcript() });
+	let errors: string[] = [];
+	page.on("pageerror", error => errors.push(error.message));
+	await page.addInitScript(() => {
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText: () => Promise.reject(new DOMException("denied", "NotAllowedError")) },
+		});
+	});
+	await join("ana");
+	let message = messageOf(page);
+	await message.getByRole("button", { name: "Copy code" }).click();
+	await expect(message.getByRole("button", { name: "Couldn't copy" })).toBeVisible();
+	// The button is still a button while it says so, and offers the copy again.
+	await expect(message.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 6_000 });
+	expect(errors).toEqual([]);
+});
+
+const WIDE = [
+	"Rollout outline",
+	"",
+	"| Queue | Owner | State | Region | Notes | Cost |",
+	"| --- | --- | --- | --- | --- | --- |",
+	"| shared-queue-for-everyone-in-the-organisation | platform-engineering-and-reliability | retiring-in-march | eu-west-1 | needs-a-rollback-step-first | 1200 |",
+	"",
+	"```ts",
+	"export const longLine = 'a line that is much longer than the Chat pane is wide, so its block has to scroll sideways and cannot wrap';",
+	"```",
+].join("\n");
+
+test("a code block and a table wider than the message scroll, and the keyboard can reach and scroll them", async ({ join, page, seed }) => {
+	await seed("# Lanes\n", { transcript: transcript(WIDE) });
+	await join("ana");
+	let message = messageOf(page);
+	await expect(message).toBeVisible();
+	for (let lane of [message.locator(".aui-md-table-wrapper"), message.locator("pre")]) {
+		// Really overflowing: the content is wider than the lane.
+		expect(await lane.evaluate(element => element.scrollWidth - element.clientWidth))
+			.toBeGreaterThan(20);
+		expect(await lane.evaluate(element => getComputedStyle(element).overflowX)).toBe("auto");
+	}
+	// The keyboard reaches each lane in reading order (table, the copy button, code) and an arrow key
+	// scrolls it.
+	let table = message.locator(".aui-md-table-wrapper");
+	let code = message.locator("pre");
+	await message.getByRole("button", { name: "Copy code" }).focus();
+	await page.keyboard.press("Shift+Tab");
+	await expect(table).toBeFocused();
+	let before = await table.evaluate(element => element.scrollLeft);
+	await page.keyboard.press("ArrowRight");
+	await expect.poll(() => table.evaluate(element => element.scrollLeft)).toBeGreaterThan(before);
+	await page.keyboard.press("Tab");
+	await expect(message.getByRole("button", { name: "Copy code" })).toBeFocused();
+	await page.keyboard.press("Tab");
+	await expect(code).toBeFocused();
+	before = await code.evaluate(element => element.scrollLeft);
+	await page.keyboard.press("ArrowRight");
+	await expect.poll(() => code.evaluate(element => element.scrollLeft)).toBeGreaterThan(before);
+});
+
+/** The words of each line of an element, found by where each word is drawn. */
+function lineCounts(scope: Element, selector: string): number[] {
+	let lines: number[] = [];
+	for (let element of scope.querySelectorAll(selector)) {
+		let tops: number[] = [];
+		let walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			for (let match of (node.textContent ?? "").matchAll(/\S+/g)) {
+				let range = document.createRange();
+				range.setStart(node, match.index!);
+				range.setEnd(node, match.index! + match[0].length);
+				let rect = range.getClientRects()[0];
+				if (rect) tops.push(Math.round(rect.top / 4));
+			}
+		}
+		// How many words sit on the last line, for a paragraph of more than one line.
+		if (new Set(tops).size > 1) lines.push(tops.filter(top => top === Math.max(...tops)).length);
+	}
+	return lines;
+}
+
+const PROSE = Array.from({ length: 40 }, (_, index) =>
+	Array.from(
+		{ length: 8 + index },
+		(__, word) =>
+			[
+				"alpha",
+				"queue",
+				"pilot",
+				"rolling",
+				"team",
+				"flag",
+				"ship",
+				"migration",
+			][(word + index) % 8],
+	).join(" ") + ` ${["step.", "plan.", "done.", "wait."][index % 4]}`);
+
+for (
+	let [name, options] of [["desktop", {}], ["phone", { ...PHONE, permissions: [] }]] as const
+) {
+	test(`a paragraph's last line is never one word, on ${name}`, async ({ join, seed }) => {
+		await seed("# Lines\n", {
+			transcript: transcript(["Rollout outline", ...PROSE].join("\n\n")),
+		});
+		let page = await join("ana", options);
+		if (name === "phone") {
+			await page.getByRole("navigation", { name: "Workspace view" })
+				.getByRole("button", { name: /^Chat/ }).click();
+		}
+		let message = messageOf(page);
+		await expect(message).toBeVisible();
+		let counts = await message.evaluate(lineCounts, "p");
+		expect(counts.length).toBeGreaterThan(30);
+		expect(counts.filter(words => words === 1), `paragraphs ending in one word of ${counts.length}`)
+			.toEqual([]);
+	});
+}
 
 /** A page whose socket is scripted: the test sends the frames a Planner's reply is made of. */
 async function scripted(page: Page) {
