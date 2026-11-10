@@ -151,7 +151,12 @@ async function reactNow(
 		ts: 0,
 		id: msg.id,
 		reactions: next.reactions,
-		...(msg.seq === undefined ? {} : { by: handle, emoji: msg.emoji, seq: msg.seq }),
+		...(msg.seq === undefined ? {} : {
+			by: handle,
+			emoji: msg.emoji,
+			seq: msg.seq,
+			...(typeof msg.tab === "string" ? { tab: msg.tab } : {}),
+		}),
 	});
 	changed?.({ entry, emoji: msg.emoji, handle, on: msg.on, ws });
 }

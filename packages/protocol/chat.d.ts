@@ -672,13 +672,15 @@ export declare namespace Chat {
 	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent, and a
 	 * message takes as many reactions as people give it. `seq` numbers the sender's asks, rising
 	 * with each, so that the answer and the broadcast of an earlier ask are told from those of a
-	 * later one.
+	 * later one. `tab` names the sender's tab, which numbers its own asks: the broadcast of a
+	 * numbered ask carries it, because the sequences of one person's tabs are not comparable.
 	 */
 	export type React = KIND<"chat:react"> & {
 		id: string;
 		emoji: string;
 		on: boolean;
 		seq?: number;
+		tab?: string;
 	};
 
 	/** The reaction is as asked, saved. `seq` is the ask's own. */
@@ -692,7 +694,8 @@ export declare namespace Chat {
 	/**
 	 * A message's reactions changed, saved first; sent to everyone with the Chat open. The list
 	 * replaces the one the message had, in the order `Entry.reactions` has. `by`, `emoji` and
-	 * `seq` name the ask that changed it, when that ask carried a `seq`.
+	 * `seq` name the ask that changed it, when that ask carried a `seq`, and `tab` the tab that
+	 * made it, when that ask named one.
 	 */
 	export type Reactions = KIND<"chat:reactions"> & {
 		id: string;
@@ -700,5 +703,6 @@ export declare namespace Chat {
 		by?: string;
 		emoji?: string;
 		seq?: number;
+		tab?: string;
 	};
 }

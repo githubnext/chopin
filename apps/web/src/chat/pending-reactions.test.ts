@@ -242,6 +242,111 @@ describe("a broadcast settles an intent only if it is not older than the latest 
 	});
 });
 
+let answer = (reactions: Chat.Reaction[] | undefined) => ({
+	kind: "settle" as const,
+	id: "a",
+	answers: { emoji: "✅", on: true, seq: 3 },
+	reactions,
+	handle: "ana",
+	tab: "one",
+});
+
+describe("a broadcast settles an ask only for the tab that made it", () => {
+	let asked = (): readonly Intent[] =>
+		intentsReducer(intentsReducer([], { kind: "ask", id: "a", emoji: "✅", on: true, seq: 3 }), {
+			kind: "sent",
+			id: "a",
+			emoji: "✅",
+			on: true,
+			seq: 3,
+		});
+	let answeredAfter = (intents: readonly Intent[], seq: number) =>
+		intentsReducer(intents, { kind: "answered", id: "a", emoji: "✅", on: true, seq });
+	let heard = (from: string, seq: number) => ({
+		kind: "settle" as const,
+		id: "a",
+		reactions: [reaction("✅", "ana")],
+		handle: "ana",
+		tab: "one",
+		applied: { by: "ana", emoji: "✅", seq, tab: from },
+	});
+	let heardFromTabWithNoName = (seq: number) => ({
+		kind: "settle" as const,
+		id: "a",
+		reactions: [reaction("✅", "ana")],
+		handle: "ana",
+		tab: "one",
+		applied: { by: "ana", emoji: "✅", seq },
+	});
+	let listWithNoAsk = {
+		kind: "settle" as const,
+		id: "a",
+		reactions: [reaction("✅", "ana")],
+		handle: "ana",
+		tab: "one",
+	};
+	it("is not settled by another tab of the same person, whatever sequence that tab has reached", () => {
+		let intents = asked();
+		for (let seq of [1, 3, 4, 40]) {
+			expect(intentsReducer(intents, heard("two", seq))).toEqual(intents);
+		}
+		expect(intentsReducer(intents, heard("one", 3))).toEqual([]);
+	});
+
+	it("is not settled by a numbered broadcast that names no tab until the server has answered it", () => {
+		let intents = asked();
+		for (let seq of [1, 3, 4, 40]) {
+			expect(intentsReducer(intents, heardFromTabWithNoName(seq))).toEqual(intents);
+		}
+		let answered = answeredAfter(intentsReducer(intents, answer(undefined)), 3);
+		expect(intentsReducer(answered, heardFromTabWithNoName(3))).toEqual([]);
+	});
+
+	it("is asked again after a fresh history that shows only the other tab's work undone", () => {
+		let kept = intentsReducer(asked(), heard("two", 4));
+		let reconnected = intentsReducer(kept, {
+			kind: "history",
+			entries: [entry("a")],
+			handle: "ana",
+		});
+		expect(reconnected).toEqual([{ id: "a", emoji: "✅", on: true, seq: 3 }]);
+		expect(dueNow(reconnected, new Set(["a"]))).toHaveLength(1);
+	});
+
+	it("is settled by the server's answer alone when it changed nothing and so told no one", () => {
+		let kept = intentsReducer(asked(), heard("two", 4));
+		expect(kept).toEqual(asked());
+		expect(intentsReducer(kept, answer([reaction("✅", "ana")]))).toEqual([]);
+	});
+
+	it("is not settled by a list that names no ask until the server has answered it", () => {
+		let intents = asked();
+		expect(intentsReducer(intents, listWithNoAsk)).toEqual(intents);
+		let kept = intentsReducer(intents, answer(undefined));
+		expect(kept).toEqual(intents);
+		expect(intentsReducer(answeredAfter(kept, 3), listWithNoAsk)).toEqual([]);
+	});
+
+	it("is not taken for answered by the answer of an earlier ask", () => {
+		expect(intentsReducer(answeredAfter(asked(), 2), listWithNoAsk)).toEqual(asked());
+	});
+
+	it("is not answered any more once it is asked again after a fresh history", () => {
+		let reconnected = intentsReducer(answeredAfter(asked(), 3), {
+			kind: "history",
+			entries: [entry("a")],
+			handle: "ana",
+		});
+		expect(reconnected).toEqual([{ id: "a", emoji: "✅", on: true, seq: 3 }]);
+		expect(intentsReducer(reconnected, listWithNoAsk)).toEqual(reconnected);
+	});
+
+	it("settles, as before, a list that names no tab for an ask that names no sequence", () => {
+		let plain = intentsReducer([], { kind: "ask", id: "a", emoji: "✅", on: true });
+		expect(intentsReducer(plain, listWithNoAsk)).toEqual([]);
+	});
+});
+
 describe("a message with unconfirmed reactions", () => {
 	it("shows your ask on top of what the server says, and which emoji are still waiting", () => {
 		let shown = withIntents(

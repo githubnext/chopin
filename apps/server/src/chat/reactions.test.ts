@@ -196,6 +196,45 @@ describe("reacting to a message", () => {
 		expect(last).not.toHaveProperty("emoji");
 	});
 
+	it("names the tab that made a numbered ask in the broadcast, so another tab of the person is told from it", async () => {
+		let { context, published } = harness();
+		let { ws } = socket("ana");
+		let other = socket("ana");
+		await react(context, ws, { ...ask("a1", "✅", true, "r1", 1), tab: "one" } as never);
+		await react(context, other.ws, { ...ask("a1", "✅", false, "r2", 1), tab: "two" } as never);
+		expect(published).toMatchObject([
+			{ id: "a1", by: "ana", emoji: "✅", seq: 1, tab: "one" },
+			{ id: "a1", by: "ana", emoji: "✅", seq: 1, tab: "two" },
+		]);
+	});
+
+	it("takes an ask for what it says without a tab, or with one that is not a name, and refuses none of them", async () => {
+		let { context, published } = harness();
+		let { ws, sent } = socket("ana");
+		let tabs: unknown[] = [undefined, 1, null, {}, ["one"], true];
+		for (let [index, tab] of tabs.entries()) {
+			await react(context, ws, {
+				...ask("a1", "✅", index % 2 === 0, `r${index}`, index),
+				...(tab === undefined ? {} : { tab }),
+			} as never);
+		}
+		expect(sent.map(frame => frame.kind)).toEqual(Array(tabs.length).fill("chat:react"));
+		expect(published).toHaveLength(tabs.length);
+		for (let frame of published) {
+			expect(frame).toMatchObject({ by: "ana", emoji: "✅" });
+			expect(frame).not.toHaveProperty("tab");
+		}
+	});
+
+	it("names no tab in the broadcast of an ask that names no sequence", async () => {
+		let { context, published } = harness();
+		let { ws } = socket("ana");
+		await react(context, ws, { ...ask("a1", "✅", true), tab: "one" } as never);
+		let last = published.at(-1)!;
+		expect(last).not.toHaveProperty("tab");
+		expect(last).not.toHaveProperty("by");
+	});
+
 	it("refuses a sequence that is not a whole number", async () => {
 		let { context, saved, published } = harness();
 		let { ws, sent } = socket("ana");
