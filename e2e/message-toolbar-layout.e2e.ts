@@ -378,6 +378,66 @@ test("on a phone every message's toolbar is in the accessibility tree and a key 
 	}
 });
 
+test("on a phone a reaction pill is a 44 px target in both directions, and a tap on its edge toggles it", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await openChatOnPhone(page);
+	let target = message(page, "m2");
+	await target.scrollIntoViewIfNeeded();
+	let pill = target.locator('[data-chat-reaction="❓"]');
+	await expect(pill).toBeVisible();
+	let reach = async () =>
+		pill.evaluate(element => {
+			let box = element.getBoundingClientRect();
+			let at = (x: number, y: number) => {
+				let hit = document.elementFromPoint(x, y);
+				return !!hit && element.contains(hit);
+			};
+			let x = box.x + box.width / 2;
+			let y = box.y + box.height / 2;
+			return {
+				up: at(x, y - 21),
+				down: at(x, y + 21),
+				left: at(x - 21, y),
+				right: at(x + 21, y),
+			};
+		});
+	expect(await reach()).toEqual({ up: true, down: true, left: true, right: true });
+	let box = (await pill.boundingBox())!;
+	await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height + 15);
+	await expect(target.getByRole("button", { name: "You reacted with ❓" })).toBeVisible();
+});
+
+test("on a desktop the toolbar of a message taller than the viewport stays in the visible part of it while the pointer is on it", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana");
+	let target = message(page, "m6");
+	let view = (await scroller(page).boundingBox())!;
+	await scroller(page).evaluate((element, wanted) => {
+		let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
+			- element.getBoundingClientRect().top;
+		element.scrollTop += top + wanted;
+	}, 80);
+	expect((await target.boundingBox())!.y).toBeLessThan(view.y - 40);
+	await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+	let bar = toolbar(target);
+	await expect(bar).toHaveCSS("opacity", "1");
+	await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(view.y);
+	let barBox = (await bar.boundingBox())!;
+	expect(barBox.y + barBox.height).toBeLessThanOrEqual(view.y + view.height);
+	for (let button of await bar.getByRole("button").all()) {
+		let hit = await button.evaluate(element => {
+			let box = element.getBoundingClientRect();
+			let at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+			return !!at && element.contains(at);
+		});
+		expect(hit).toBe(true);
+	}
+	let first = (await bar.getByRole("button").first().boundingBox())!;
+	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
+	await expect(bar).toHaveCSS("opacity", "1");
+});
+
 test("on a phone a long press in the middle of a message taller than the screen keeps the toolbar on screen, with every button a touch target", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);
