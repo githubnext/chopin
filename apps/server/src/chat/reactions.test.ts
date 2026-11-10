@@ -46,8 +46,22 @@ function socket(handle: string) {
 	return { ws, sent };
 }
 
-function ask(id: string, emoji: string, on: boolean, rid: string = crypto.randomUUID()) {
-	return { kind: "chat:react", rid, ts: 0, id, emoji, on } as Request<Wire.React>;
+function ask(
+	id: string,
+	emoji: string,
+	on: boolean,
+	rid: string = crypto.randomUUID(),
+	seq?: number,
+) {
+	return {
+		kind: "chat:react",
+		rid,
+		ts: 0,
+		id,
+		emoji,
+		on,
+		...(seq === undefined ? {} : { seq }),
+	} as Request<Wire.React>;
 }
 
 describe("toggling a reaction", () => {
@@ -147,6 +161,50 @@ describe("reacting to a message", () => {
 		expect(saved).toHaveLength(1);
 		expect(published).toHaveLength(1);
 		expect(sent.at(-1)).toMatchObject({ kind: "chat:react", on: true, rid: "again" });
+	});
+
+	it("names the ask in its answer and in the broadcast, so an earlier ask's is told from a later one's", async () => {
+		let { context, published } = harness();
+		let { ws, sent } = socket("ana");
+		await react(context, ws, ask("a1", "✅", true, "r1", 1));
+		await react(context, ws, ask("a1", "✅", false, "r2", 2));
+		await react(context, ws, ask("a1", "✅", true, "r3", 3));
+		expect(sent).toMatchObject([
+			{ rid: "r1", on: true, seq: 1 },
+			{ rid: "r2", on: false, seq: 2 },
+			{ rid: "r3", on: true, seq: 3 },
+		]);
+		expect(published).toMatchObject([
+			{ id: "a1", by: "ana", emoji: "✅", seq: 1, reactions: [{ emoji: "✅", handles: ["ana"] }] },
+			{ id: "a1", by: "ana", emoji: "✅", seq: 2, reactions: [] },
+			{ id: "a1", by: "ana", emoji: "✅", seq: 3, reactions: [{ emoji: "✅", handles: ["ana"] }] },
+		]);
+	});
+
+	it("answers a repeated ask with its own sequence, and an ask with none without one", async () => {
+		let { context, published } = harness();
+		let { ws, sent } = socket("ana");
+		await react(context, ws, ask("a1", "✅", true, "r1", 4));
+		await react(context, ws, ask("a1", "✅", true, "r2", 5));
+		expect(sent.at(-1)).toMatchObject({ rid: "r2", seq: 5 });
+		expect(published).toHaveLength(1);
+		await react(context, ws, ask("a1", "👎", true, "r3"));
+		expect(sent.at(-1)).not.toHaveProperty("seq");
+		let last = published.at(-1)!;
+		expect(last).not.toHaveProperty("seq");
+		expect(last).not.toHaveProperty("by");
+		expect(last).not.toHaveProperty("emoji");
+	});
+
+	it("refuses a sequence that is not a whole number", async () => {
+		let { context, saved, published } = harness();
+		let { ws, sent } = socket("ana");
+		for (let seq of ["1", -1, 1.5, Number.NaN, null]) {
+			await react(context, ws, { ...ask("a1", "✅", true), seq } as never);
+		}
+		expect(sent.map(frame => frame.kind)).toEqual(Array(5).fill("session:error"));
+		expect(saved).toEqual([]);
+		expect(published).toEqual([]);
 	});
 
 	it("refuses a system notice, a message that is not there and a request that is not one", async () => {

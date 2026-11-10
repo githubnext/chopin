@@ -744,7 +744,15 @@ export function Chat(
 			}),
 			wire.on<Wire.Reactions>("chat:reactions", frame => {
 				dispatchTranscript({ kind: "reactions", id: frame.id, reactions: frame.reactions });
-				dispatchIntents({ kind: "settle", id: frame.id, reactions: frame.reactions, handle });
+				dispatchIntents({
+					kind: "settle",
+					id: frame.id,
+					reactions: frame.reactions,
+					handle,
+					...(frame.by !== undefined && frame.emoji !== undefined
+						? { applied: { by: frame.by, emoji: frame.emoji, seq: frame.seq } }
+						: {}),
+				});
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
 				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
@@ -1076,19 +1084,19 @@ export function Chat(
 	latestEntries.current = entries;
 	useEffect(() => {
 		if (!wire || !transcriptReady) return;
-		for (let { id, emoji, on } of dueNow(intents, savedIds)) {
-			dispatchIntents({ kind: "sent", id, emoji, on });
-			void wire.ask<Wire.Reacted>("chat:react", { id, emoji, on }).then(
+		for (let { id, emoji, on, seq } of dueNow(intents, savedIds)) {
+			dispatchIntents({ kind: "sent", id, emoji, on, seq });
+			void wire.ask<Wire.Reacted>("chat:react", { id, emoji, on, seq }).then(
 				() =>
 					dispatchIntents({
 						kind: "settle",
 						id,
-						answers: { emoji, on },
+						answers: { emoji, on, seq },
 						reactions: latestEntries.current.find(entry => entry.id === id)?.reactions,
 						handle,
 					}),
 				error => {
-					if (error instanceof WireRefusal) dispatchIntents({ kind: "drop", id, emoji, on });
+					if (error instanceof WireRefusal) dispatchIntents({ kind: "drop", id, emoji, on, seq });
 				},
 			);
 		}
@@ -1103,8 +1111,9 @@ export function Chat(
 		]);
 		dispatchIntents({ kind: "prune", present });
 	}, [transcriptReady, intents.length, savedIds, outboxIds, workingTurn?.id]);
+	let reactionSeq = useRef(0);
 	let reactTo = (id: string, emoji: string, on: boolean) => {
-		dispatchIntents({ kind: "ask", id, emoji, on });
+		dispatchIntents({ kind: "ask", id, emoji, on, seq: ++reactionSeq.current });
 	};
 
 	// Stop and Resume pressed during a blip are sent once it is over, or never.

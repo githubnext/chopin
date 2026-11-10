@@ -13,6 +13,14 @@ let entry = (id: string, reactions?: Chat.Reaction[]): Chat.Entry => ({
 	reactions,
 });
 
+let broadcast = (reactions: Chat.Reaction[], by: string, seq: number) => ({
+	kind: "settle" as const,
+	id: "a",
+	reactions,
+	handle: "ana",
+	applied: { by, emoji: "✅", seq },
+});
+
 describe("asking for a reaction", () => {
 	it("keeps one intent per message and emoji, the latest ask winning and going out again", () => {
 		let first = intentsReducer([], { kind: "ask", id: "a", emoji: "✅", on: true });
@@ -150,6 +158,87 @@ describe("an acknowledgement settles only the request it answers", () => {
 		let two = intentsReducer(added(), { kind: "ask", id: "a", emoji: "👎", on: false });
 		let settled = intentsReducer(two, { ...acknowledgedAdd, reactions: [reaction("✅", "ana")] });
 		expect(settled).toEqual([{ id: "a", emoji: "👎", on: false }]);
+	});
+});
+
+describe("a broadcast settles an intent only if it is not older than the latest ask", () => {
+	let ask = (intents: readonly Intent[], on: boolean, seq: number) =>
+		intentsReducer(intents, { kind: "ask", id: "a", emoji: "✅", on, seq });
+	let sent = (intents: readonly Intent[], on: boolean, seq: number) =>
+		intentsReducer(intents, { kind: "sent", id: "a", emoji: "✅", on, seq });
+	let sequence = () => ask(sent(ask(sent(ask([], true, 1), true, 1), false, 2), false, 2), true, 3);
+
+	it("keeps the latest ask when the broadcast of an earlier one arrives, and settles it by its own", () => {
+		let intents = sequence();
+		expect(intents).toEqual([{ id: "a", emoji: "✅", on: true, seq: 3 }]);
+		let stale = intentsReducer(intents, broadcast([reaction("✅", "ana")], "ana", 1));
+		expect(stale).toEqual(intents);
+		expect(dueNow(stale, new Set(["a"]))).toEqual([...intents]);
+		let removed = intentsReducer(stale, broadcast([], "ana", 2));
+		expect(removed).toEqual(intents);
+		expect(intentsReducer(removed, broadcast([reaction("✅", "ana")], "ana", 3))).toEqual([]);
+	});
+
+	it("keeps a removal asked after an add whose broadcast arrives first", () => {
+		let removed = ask(sent(ask([], true, 1), true, 1), false, 2);
+		let intents = intentsReducer(removed, broadcast([reaction("✅", "ana")], "ana", 1));
+		expect(intents).toEqual([{ id: "a", emoji: "✅", on: false, seq: 2 }]);
+		expect(intentsReducer(intents, broadcast([], "ana", 2))).toEqual([]);
+	});
+
+	it("is not settled by what another person did, whatever it shows of this person", () => {
+		let intents = sequence();
+		expect(intentsReducer(intents, broadcast([reaction("✅", "ana", "ben")], "ben", 9))).toEqual(
+			intents,
+		);
+	});
+
+	it("does not take another emoji's broadcast for this one's", () => {
+		let intents = sequence();
+		let other = {
+			...broadcast([reaction("✅", "ana")], "ana", 9),
+			applied: { by: "ana", emoji: "👎", seq: 9 },
+		};
+		expect(intentsReducer(intents, other)).toEqual(intents);
+	});
+
+	it("does not retire a later ask in the same direction on the acknowledgement of an earlier one", () => {
+		let again = ask(sent(ask([], true, 1), true, 1), true, 2);
+		let settled = intentsReducer(again, {
+			kind: "settle",
+			id: "a",
+			answers: { emoji: "✅", on: true, seq: 1 },
+			reactions: [reaction("✅", "ana")],
+			handle: "ana",
+		});
+		expect(settled).toEqual(again);
+	});
+
+	it("marks sent, unsent and dropped only the request with the sequence it names", () => {
+		let intents = ask(ask([], true, 1), true, 2);
+		expect(sent(intents, true, 1)).toEqual(intents);
+		let going = sent(intents, true, 2);
+		expect(going).toEqual([{ id: "a", emoji: "✅", on: true, seq: 2, sent: true }]);
+		expect(intentsReducer(going, { kind: "unsent", id: "a", emoji: "✅", on: true, seq: 1 }))
+			.toEqual(
+				going,
+			);
+		expect(intentsReducer(going, { kind: "drop", id: "a", emoji: "✅", on: true, seq: 1 })).toEqual(
+			going,
+		);
+		expect(intentsReducer(going, { kind: "drop", id: "a", emoji: "✅", on: true, seq: 2 })).toEqual(
+			[],
+		);
+	});
+
+	it("keeps the sequence of an ask that is sent again after a fresh history", () => {
+		let going = sent(ask([], true, 4), true, 4);
+		let reconnected = intentsReducer(going, {
+			kind: "history",
+			entries: [entry("a")],
+			handle: "ana",
+		});
+		expect(reconnected).toEqual([{ id: "a", emoji: "✅", on: true, seq: 4 }]);
 	});
 });
 
