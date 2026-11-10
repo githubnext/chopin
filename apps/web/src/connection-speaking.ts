@@ -9,6 +9,10 @@ import { useNavigationDocument } from "./navigation-shell";
  * child, each with a banner, count separately. Outside a shell nothing listens.
  */
 export function useConnectionSpeaking(speaking: boolean): void {
-	let { onConnectionSpeaking } = useNavigationDocument();
-	useEffect(() => speaking ? onConnectionSpeaking() : undefined, [speaking, onConnectionSpeaking]);
+	let { setBanners } = useNavigationDocument();
+	useEffect(() => {
+		if (!speaking || !setBanners) return;
+		setBanners(count => count + 1);
+		return () => setBanners(count => count - 1);
+	}, [speaking, setBanners]);
 }

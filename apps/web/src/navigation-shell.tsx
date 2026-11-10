@@ -13,6 +13,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
@@ -156,8 +157,8 @@ let NavigationDocument = createContext<{
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
 	onProjectReveal: (repositoryId: string) => void;
-	/** A connection banner tells a lost connection; returns what ends it. */
-	onConnectionSpeaking: () => () => void;
+	/** Counts the connection banners telling a lost connection (see `connection-speaking.ts`). */
+	setBanners?: Dispatch<SetStateAction<number>>;
 	onRepositoryAccessChanged: () => void;
 	onResearchChildOpen: (
 		parentId: string,
@@ -173,7 +174,6 @@ let NavigationDocument = createContext<{
 	async onDocumentLoaded() {},
 	onDocumentRouteSettled() {},
 	onProjectReveal() {},
-	onConnectionSpeaking: () => () => {},
 	onRepositoryAccessChanged() {},
 	onResearchChildOpen() {},
 	onResearchChildPublished() {},
@@ -258,11 +258,7 @@ export function NavigationShell(
 	let catalogueRefreshes = useRef(new Map<string, number>([["navigation", Date.now()]]));
 	let [error, setError] = useState<NavigationFailure>();
 	// A connection banner in a room tells a lost connection; the same loss is not told again here.
-	let [bannersSpeaking, setBannersSpeaking] = useState(0);
-	let connectionSpeaking = useCallback(() => {
-		setBannersSpeaking(count => count + 1);
-		return () => setBannersSpeaking(count => count - 1);
-	}, []);
+	let [banners, setBanners] = useState(0);
 	let [resolvedDocument, setResolvedDocument] = useState<{
 		channel: Api.Channel;
 		routeKey: DocumentRouteIdentity;
@@ -785,7 +781,7 @@ export function NavigationShell(
 		onDocumentLoaded: documentLoaded,
 		onDocumentRouteSettled: documentRouteSettled,
 		onProjectReveal: projectReveal,
-		onConnectionSpeaking: connectionSpeaking,
+		setBanners,
 		onRepositoryAccessChanged: repositoryAccessChanged,
 		onResearchChildOpen: researchChildOpen,
 		onResearchChildPublished: researchChildPublished,
@@ -797,7 +793,6 @@ export function NavigationShell(
 		documentLoaded,
 		documentRouteSettled,
 		projectReveal,
-		connectionSpeaking,
 		repositoryAccessChanged,
 		researchChildOpen,
 		researchChildPublished,
@@ -832,22 +827,22 @@ export function NavigationShell(
 	};
 
 	let retryError = () => {
-		if (!error) return;
-		if (error.retry === "visit" && currentChannelRef.current && isDocumentWorkspaceRoute(route)) {
+		if (error?.retry === "visit" && currentChannelRef.current && isDocumentWorkspaceRoute(route)) {
 			void documentLoaded(currentChannelRef.current, documentRouteIdentity(route));
 		} else void refresh();
 	};
 	// The connection is back: what failed while it was out is asked for again, so the notice goes
 	// when the server answers, and stays only if it still does not.
-	let shownError = bannersSpeaking > 0 && error && unreached(error) ? undefined : error;
-	let spoke = useRef(false);
+	let lost = error && unreached(error);
+	let shownError = banners && lost ? undefined : error;
 	useEffect(() => {
-		if (spoke.current && !bannersSpeaking && error?.retry && unreached(error)) retryError();
-		spoke.current = bannersSpeaking > 0;
-	}, [bannersSpeaking]);
+		if (!banners && lost && error?.retry) retryError();
+	}, [banners]);
+	let focusDrawerOpener = () =>
+		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
 	let dismissDrawer = () => {
 		setDrawerOpen(false);
-		requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+		focusDrawerOpener();
 	};
 	let dismissDialog = () => setDialog(undefined);
 	let [sidebarShortcut, setSidebarShortcut] = useState<string>();
@@ -867,7 +862,7 @@ export function NavigationShell(
 			if (collapsed) return showSidebar();
 			let inside = document.activeElement?.closest(".project-sidebar-frame");
 			setCollapsed(true);
-			if (inside) requestAnimationFrame(() => drawerOpener.current?.focus({ preventScroll: true }));
+			if (inside) focusDrawerOpener();
 		},
 	};
 	// The listener and its registry load after first paint; the shell only names its actions.
