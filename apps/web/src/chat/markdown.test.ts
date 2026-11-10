@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RepositoryLinksProvider } from "@chopin/editor";
 
 import { inlineText } from "./inline-text";
+import { MarkdownText } from "../markdown-text/markdown-text";
 import { InlineMarkdown, MessageMarkdown, sameMessageMarkdown } from "./markdown";
 import { referenceRenderModel } from "./references";
 
@@ -31,6 +32,9 @@ let PARTICIPANT_MESSAGE = [
 	"![remote](https://example.invalid/pixel.png)",
 	'<img src="https://example.invalid/raw.png" alt="raw">',
 ].join("\n");
+
+/** An h1 start tag with or without attributes: MarkdownText's elements carry an aui-md class. */
+const H1 = /<h1(?:\s|>)/;
 
 function reference(source: string, token: string, id = "reference-one"): Chat.Reference {
 	let start = source.indexOf(token);
@@ -70,12 +74,24 @@ test("Chat Markdown admits formatting without document features", () => {
 	);
 	expect(markup).toContain('<code class="language-ts">let answer = 42;');
 	expect(markup).toContain("Ordinary message text");
-	expect(markup).not.toContain("<h1>");
+	expect(markup).not.toMatch(H1);
 	expect(markup).not.toContain("<img");
 
 	expect(markdown("Planner wrote **strongly**.")).toContain(
 		'<strong class="aui-md-strong">strongly</strong>',
 	);
+});
+
+test("the check that Chat draws no h1 recognises an h1 that carries a class", () => {
+	let drawn = renderToStaticMarkup(createElement(MarkdownText, { text: "# Title" }));
+	// MarkdownText draws a heading as an h1 with its class, which "<h1>" alone would never match.
+	expect(drawn).toContain('<h1 class="aui-md-h1">Title</h1>');
+	expect(drawn).not.toContain("<h1>");
+	expect(drawn).toMatch(H1);
+	expect(H1.test("<h1>")).toBe(true);
+	// Chat's message draws the same source as a line of text.
+	expect(markdown("# Title")).not.toMatch(H1);
+	expect(markdown("# Title")).toContain('<p class="aui-md-p">Title</p>');
 });
 
 test("indentation keeps nested lists and code blocks intact", () => {
