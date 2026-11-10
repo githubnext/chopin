@@ -308,10 +308,11 @@ test("several images of one turn are a compact gallery with their words under ea
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles).toHaveCount(3);
 	await expect(chat(page).locator('[data-chat-image="single"]')).toHaveCount(0);
-	for (let tile of await tiles.all()) {
+	for (let [index, tile] of (await tiles.all()).entries()) {
 		await expect(tile).toHaveAttribute("data-load", "shown");
 		let box = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
-		expect(box.width / box.height).toBeCloseTo(4 / 3, 1);
+		let { height, width } = three(stored)[index]!;
+		expect(box.width / box.height).toBeCloseTo(width / height, 1);
 	}
 	await expect(tiles.nth(0).getByText("The cap is a balance of 100.")).toBeVisible();
 	await expect(tiles.nth(1).getByText("Faster, and a crash can lose the last writes."))
@@ -320,6 +321,62 @@ test("several images of one turn are a compact gallery with their words under ea
 	let first = (await tiles.nth(0).boundingBox())!;
 	let third = (await tiles.nth(2).boundingBox())!;
 	expect(third.y).toBe(first.y);
+});
+
+test("a gallery tile has its image's own shape before the image arrives, and the shape the image turns out to have", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let at = port(baseURL);
+	let sizes = [[300, 200], [400, 100], [90, 270]] as const;
+	let images: Chat.Image[] = [];
+	for (let [width, height] of sizes) {
+		images.push({
+			src: await seedChannelImage(at, room, png(width, height), "image/png"),
+			alt: `${width} by ${height}`,
+			width,
+			height,
+			generated: true,
+		});
+	}
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	await page.route("**/images/**", async route => {
+		await gate;
+		await route.continue();
+	});
+	await seed("# Shapes\n", { transcript: turn(images) });
+	await join("ana");
+
+	let tiles = chat(page).locator('[data-chat-image="tile"]');
+	await expect(tiles).toHaveCount(3);
+	let frames = tiles.locator("[data-chat-image-frame]");
+	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "loading");
+	await settled(tiles.first());
+	let before = await frames.evaluateAll(all =>
+		all.map(frame => frame.getBoundingClientRect().toJSON())
+	);
+	for (let [index, [width, height]] of sizes.entries()) {
+		let box = before[index]!;
+		expect(Math.abs(box.width / box.height / (width / height) - 1), `${width} by ${height}`)
+			.toBeLessThan(0.01);
+	}
+
+	release();
+	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
+	let after = await frames.evaluateAll(all =>
+		all.map(frame => frame.getBoundingClientRect().toJSON())
+	);
+	expect(after).toEqual(before);
+	for (let [index, tile] of (await tiles.all()).entries()) {
+		let natural = await tile.locator("img").evaluate(image => ({
+			height: (image as HTMLImageElement).naturalHeight,
+			width: (image as HTMLImageElement).naturalWidth,
+		}));
+		let box = after[index]!;
+		expect(
+			Math.abs(box.width / box.height / (natural.width / natural.height) - 1),
+			`${natural.width} by ${natural.height}`,
+		).toBeLessThan(0.01);
+	}
 });
 
 test("more than six images show six tiles, and the lightbox reaches all of them", async ({ baseURL, join, page, room, seed }) => {
@@ -360,7 +417,7 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles.nth(1)).toHaveAttribute("data-load", "shown");
-	await tiles.nth(1).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 60 } });
+	await tiles.nth(1).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Write-back: write, cache, then database later" }))
@@ -385,7 +442,7 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 	await box.getByRole("button", { name: "Close image preview" }).click();
 	await expect(box).toHaveCount(0);
 
-	await tiles.nth(0).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 60 } });
+	await tiles.nth(0).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
 	await expect(box).toBeVisible();
 	await box.click({ position: { x: 6, y: 300 } });
 	await expect(box).toHaveCount(0);
