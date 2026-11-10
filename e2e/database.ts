@@ -299,6 +299,15 @@ async function seed(
 	});
 }
 
+export async function readPlannerOwner(port: number, id: string): Promise<string | null> {
+	return sql(port, async database => {
+		let [row] = await database<{ owner: string | null }[]>`
+			SELECT owner_session_id AS owner FROM agent_state WHERE channel_id = ${id}
+		`;
+		return row?.owner ?? null;
+	});
+}
+
 export async function readSource(port: number, id: string): Promise<string> {
 	return sql(port, async database => {
 		let [row] = await database<{ source: string }[]>`
