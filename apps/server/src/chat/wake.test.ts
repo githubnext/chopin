@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { wakePlanner } from "./wake";
+import { answerWake, wakePlanner } from "./wake";
 
 import type { Session } from "@chopin/protocol";
 
@@ -52,4 +52,52 @@ test("a server that does not run Planners on machines says so and asks nobody", 
 	expect(await wakePlanner("doc", { ...wired, attachments: undefined }))
 		.toEqual({ asked: false, why: "unavailable" });
 	expect(asked).toEqual([]);
+});
+
+function socket() {
+	let sent: Array<Record<string, unknown>> = [];
+	return {
+		sent,
+		ws: { send: (data: string | BufferSource) => sent.push(JSON.parse(String(data))) } as never,
+	};
+}
+
+test("a request the write check refuses is answered by that check alone and asks no machine", async () => {
+	let { deps: wired, asked } = deps({ state: "none" }, true);
+	let { ws, sent } = socket();
+	await answerWake(ws, "r1", { id: "doc" }, async () => false, wired);
+	expect(sent).toEqual([]);
+	expect(asked).toEqual([]);
+});
+
+test("a request that passes the write check on a root document asks the machine once and is answered", async () => {
+	let { deps: wired, asked } = deps({ state: "none" }, true);
+	let { ws, sent } = socket();
+	await answerWake(ws, "r1", { id: "doc" }, async () => true, wired);
+	expect(asked).toEqual([["doc", true]]);
+	expect(sent).toHaveLength(1);
+	expect(sent[0]).toMatchObject({ kind: "chat:wake", rid: "r1", asked: true });
+});
+
+test("a child document is refused, since its Chat is its root's, and asks no machine", async () => {
+	let { deps: wired, asked } = deps({ state: "none" }, true);
+	let { ws, sent } = socket();
+	await answerWake(ws, "r1", { id: "child", parentChannelId: "root" }, async () => true, wired);
+	expect(asked).toEqual([]);
+	expect(sent).toHaveLength(1);
+	expect(sent[0]).toMatchObject({ kind: "session:error", rid: "r1" });
+});
+
+test("a failure while asking is a passing refusal the client sends again", async () => {
+	let { deps: wired } = deps({ state: "none" }, true);
+	wired.experiments.plannerUsed = async () => {
+		throw new Error("storage");
+	};
+	let { ws, sent } = socket();
+	await answerWake(ws, "r1", { id: "doc" }, async () => true, wired);
+	expect(sent[0]).toMatchObject({
+		kind: "session:error",
+		code: "temporarily-unavailable",
+		message: "storage",
+	});
 });
