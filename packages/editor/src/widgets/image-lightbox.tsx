@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { ChevronIcon, CloseIcon, ImageOffIcon, MinusIcon, PlusIcon } from "@chopin/icons";
@@ -15,7 +16,8 @@ export type LightboxImage = {
 const FOCUSABLE = "button:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
 export function ImageLightbox(
-	{ images, onClose, start = 0 }: {
+	{ actions, images, onClose, start = 0 }: {
+		actions?: (image: LightboxImage, index: number) => ReactNode;
 		images: readonly LightboxImage[];
 		onClose: () => void;
 		start?: number;
@@ -101,6 +103,7 @@ export function ImageLightbox(
 			}}
 		>
 			<div className="plan-image-lightbox-toolbar">
+				{actions?.(image, index)}
 				<button
 					type="button"
 					className="btn btn-icon btn-secondary"

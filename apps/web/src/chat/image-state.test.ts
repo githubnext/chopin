@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
 	copyLabel,
+	downloadLabel,
 	downloadName,
 	frameRatio,
 	galleryTiles,
@@ -137,4 +138,6 @@ test("the copy button says what happened", () => {
 	expect(copyLabel("idle")).toBe("Copy image");
 	expect(copyLabel("copied")).toBe("Copied image");
 	expect(copyLabel("failed")).toBe("Couldn’t copy image");
+	expect(downloadLabel("idle")).toBe("Download image");
+	expect(downloadLabel("failed")).toBe("Couldn’t download image");
 });
