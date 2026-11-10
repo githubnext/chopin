@@ -12,11 +12,12 @@ test("plain text is the Markdown as the page draws it", () => {
 	expect(plainTextOf("```ts\nlet answer = 42;\n```")).toBe("let answer = 42;");
 });
 
-test("plain text lists keep their markers, numbers and nesting", () => {
-	expect(plainTextOf("* first\n* second")).toBe("- first\n- second");
-	expect(plainTextOf("1. one\n2. two")).toBe("1. one\n2. two");
-	expect(plainTextOf("3. three\n4. four")).toBe("3. three\n4. four");
-	expect(plainTextOf("* parent\n  * child")).toBe("- parent\n  - child");
+test("plain text lists put each item on a line of its own, as the browser copies a rendered list", () => {
+	expect(plainTextOf("* first\n* second")).toBe("first\nsecond");
+	expect(plainTextOf("1. one\n2. two")).toBe("one\ntwo");
+	expect(plainTextOf("3. three\n4. four")).toBe("three\nfour");
+	expect(plainTextOf("* parent\n  * child")).toBe("parent\nchild");
+	expect(plainTextOf("Lead\n\n* a\n* b\n\nTail")).toBe("Lead\n\na\nb\n\nTail");
 });
 
 test("plain text breaks a line where the page does and joins a soft break with a space", () => {
