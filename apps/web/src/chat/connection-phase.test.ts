@@ -120,6 +120,43 @@ test("a return with nothing running and nothing new says the work is in sync", (
 	});
 });
 
+test("a return waits for edits to be acknowledged before saying they are synced", () => {
+	let loss = step(INITIAL_MEMORY, { socket: "lost" });
+	let back = step(loss.memory, { unsaved: true });
+	expect(back.view).toEqual({ phase: "resumed", text: "Back online.", caught: "" });
+	let said = connectionSpeech(NOTHING_SPOKEN, back.view)!;
+	expect(said.said).toBe("Back online.");
+
+	let saved = step(back.memory, { unsaved: false });
+	expect(saved.view).toEqual({
+		phase: "resumed",
+		text: "Back online.",
+		caught: "Your changes are synced",
+	});
+	expect(connectionSpeech(said.spoken, saved.view)).toBeUndefined();
+	// A later edit may be pending while the same return is still shown.
+	let editing = step(saved.memory, { unsaved: true });
+	expect(editing.view).toMatchObject({ caught: "" });
+	expect(step(editing.memory, { unsaved: false }).view).toMatchObject({
+		caught: "Your changes are synced",
+	});
+});
+
+test("edits lost while awaiting acknowledgement are never called synced", () => {
+	let loss = step(INITIAL_MEMORY, { socket: "lost", lostEdits: 0 });
+	let back = step(loss.memory, { unsaved: true, lostEdits: 0 });
+	let reset = step(back.memory, { unsaved: false, lostEdits: 1 });
+	expect(reset.view).toEqual({ phase: "resumed", text: "Back online.", caught: "" });
+	expect(step(reset.memory, { unsaved: false, lostEdits: 1 }).view).toEqual(reset.view);
+});
+
+test("a return with new messages keeps those words while edits are acknowledged", () => {
+	let loss = step(INITIAL_MEMORY, { socket: "lost", messages: 12 });
+	let back = step(loss.memory, { unsaved: true, messages: 14 });
+	expect(back.view).toMatchObject({ caught: "2 new messages" });
+	expect(step(back.memory, { unsaved: false, messages: 14 }).view).toEqual(back.view);
+});
+
 test("one new message is not plural", () => {
 	let { view } = run({ socket: "lost" }, { messages: 13 });
 	expect(view).toMatchObject({ phase: "resumed", caught: "1 new message" });

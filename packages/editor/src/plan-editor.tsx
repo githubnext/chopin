@@ -138,6 +138,8 @@ export type PlanEditorProps = {
 	onScrollTop?: (top: number) => void;
 	/** Whether the document has opened, for status chrome the host renders. */
 	onState?: (state: PlanState) => void;
+	/** Watch the outbox edges while the host is showing a socket return. */
+	watchUnsaved?: boolean;
 	/** Host-owned context shown above the document, in the prose column. */
 	preface?: ReactNode;
 	className?: string;
@@ -146,6 +148,8 @@ export type PlanEditorProps = {
 export type PlanState = {
 	/** True once the shared document has been received. */
 	synced: boolean;
+	/** Whether document edits are awaiting acknowledgement, read live from the provider. */
+	unsaved?: boolean;
 	/** Why the document was last replaced, if it was. */
 	reset?: Plan.Reset["reason"];
 	/**
@@ -199,6 +203,7 @@ export function PlanEditor(
 		scrollTop,
 		threads,
 		user,
+		watchUnsaved,
 		wire,
 	}: PlanEditorProps,
 ) {
@@ -207,6 +212,8 @@ export function PlanEditor(
 	let [state, setState] = useState<PlanState>({ synced: false });
 	let [generation, setGeneration] = useState(0);
 	let provider = useRef<PlanProvider>(undefined);
+	// The host can read a loss immediately, before React has published the reset state.
+	let lostEdits = useRef(0);
 	// Presence renders, so it needs the provider as state; edits need it
 	// synchronously during an event, so they keep reading the ref.
 	let [presence, setPresence] = useState<PlanProvider>();
@@ -225,12 +232,13 @@ export function PlanEditor(
 	let onReset = useCallback((reason: Plan.Reset["reason"], lost: boolean) => {
 		changes.clear();
 		questions?.resetDocument();
+		if (lost) lostEdits.current++;
 		setState(prev => ({
 			...prev,
 			synced: false,
 			reset: reason,
 			failed: undefined,
-			lost: lost ? (prev.lost ?? 0) + 1 : prev.lost,
+			lost: lost ? lostEdits.current : prev.lost,
 		}));
 		setGeneration(value => value + 1);
 	}, [changes, questions]);
@@ -332,8 +340,26 @@ export function PlanEditor(
 	useEffect(() => () => changes.dispose(), [changes]);
 
 	useEffect(() => {
-		onState?.(state);
+		onState?.({
+			...state,
+			get unsaved() {
+				return provider.current?.unsaved ?? false;
+			},
+			get lost() {
+				return lostEdits.current || undefined;
+			},
+		});
 	}, [onState, state]);
+
+	// The host samples the live outbox whenever it renders. Only while a return is on screen
+	// does it need a render for each edge; ordinary typing never re-renders the room for this.
+	useEffect(() => {
+		if (!watchUnsaved || !presence) return;
+		let changed = () => setState(prev => ({ ...prev }));
+		presence.on("unsaved", changed);
+		changed(); // Include an edge that arrived before the subscription was installed.
+		return () => presence.off("unsaved", changed);
+	}, [presence, watchUnsaved]);
 
 	let onProvider = useCallback((value: PlanProvider | undefined) => {
 		provider.current = value;
@@ -567,6 +593,7 @@ export function PlanEditor(
 
 	if (previousWire.current !== wire) {
 		previousWire.current = wire;
+		lostEdits.current = 0;
 		setState({ synced: false });
 		setGeneration(value => value + 1);
 	}

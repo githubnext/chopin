@@ -452,6 +452,50 @@ describe("delivering local edits", () => {
 		expect(provider.unsaved).toBe(false);
 	});
 
+	it("reports an unacknowledged outbox until its last edit is acknowledged", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let provider = new PlanProvider({ wire: room.transport, doc });
+		let pending: boolean[] = [];
+		provider.on("unsaved", value => pending.push(value));
+		await provider.connect();
+
+		typing(doc, 1);
+		jest.advanceTimersByTime(20);
+		typing(doc, 1);
+		let [first, second] = room.received.map(entry => entry.id);
+		expect(pending).toEqual([true]);
+		room.transport.emit("plan:ack", { kind: "plan:ack", id: first });
+		room.transport.emit("plan:ack", { kind: "plan:ack", id: first });
+		expect(pending).toEqual([true]);
+		room.transport.emit("plan:ack", { kind: "plan:ack", id: second });
+		expect(pending).toEqual([true, false]);
+		provider.disconnect();
+	});
+
+	it("reports a discarded outbox only after reporting that edits were lost", async () => {
+		jest.useFakeTimers();
+		let room = server(() => true);
+		let doc = new Y.Doc();
+		let events: string[] = [];
+		let provider = new PlanProvider({
+			wire: room.transport,
+			doc,
+			onReset: (_reason, lost) => events.push(`lost:${lost}`),
+		});
+		provider.on("unsaved", value => events.push(`unsaved:${value}`));
+		await provider.connect();
+		typing(doc, 2);
+		room.transport.emit("plan:reset", {
+			kind: "plan:reset",
+			epoch: "01K0N4TR8K7JGM4R1J7PW4R8YK",
+			reason: "rebuilt",
+		});
+		expect(events).toEqual(["unsaved:true", "lost:true", "unsaved:false"]);
+		provider.disconnect();
+	});
+
 	it("leaves acknowledged edits alone", async () => {
 		jest.useFakeTimers();
 		let room = server(() => false);
