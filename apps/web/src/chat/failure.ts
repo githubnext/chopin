@@ -51,7 +51,10 @@ export function failureView(failure: Chat.TurnFailure): FailureView | undefined 
 	};
 }
 
-/** The refused room message, in the server's words, and where to look when no machine took it. */
+/**
+ * The refused room message, in the server's words. Where no machine took it, sending it again
+ * cannot help, so the action that can is offered instead: where to look at the machines.
+ */
 export function sendFailureView(
 	failure: Pick<SendFailure, "text">,
 	code: string | undefined,
@@ -59,7 +62,7 @@ export function sendFailureView(
 	return {
 		kind: "send",
 		title: failure.text,
-		retry: true,
+		retry: code !== "planner-not-attached",
 		...(code === "planner-not-attached"
 			? { link: { label: "Open machines", href: "/machines" } }
 			: {}),
