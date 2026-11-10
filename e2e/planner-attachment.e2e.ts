@@ -966,7 +966,7 @@ for (
 			await expect(runs.locator("[data-run-disconnected-note], [data-run-disconnected]"))
 				.toHaveCount(0);
 			await expect(page.locator('[data-connection-banner][data-layer="planner"]')).toHaveCount(0);
-			await expectNoMachineWords(page);
+			await expectNoMachineWords(page, OFFLINE);
 			let lost = await heard(page);
 			expect(lost.slice(0, said.length)).toEqual(said);
 			expect(lost.slice(said.length)).toEqual([RECONNECTING, OFFLINE]);
