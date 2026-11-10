@@ -735,13 +735,18 @@ test("asking a machine to start the Planner reaches the paired machine that serv
 	expect(settled).toBe(false);
 
 	// A writer asks for the Planner: the answer says a machine was asked, and the machine's own
-	// waiting poll is woken by it, at once, with nothing new to run.
+	// waiting poll is woken by it, at once, with the same Planner to run and this document named
+	// as one a person asked to have started again now.
 	let asked = Date.now();
 	let answer = await ask(page, room, "chat:wake");
 	expect(answer).toMatchObject({ kind: "chat:wake", asked: true });
 	expect(answer).not.toHaveProperty("why");
 	let woken = await poll;
-	expect(woken.answer).toEqual({ waiting: true });
+	expect(woken.answer).toEqual({
+		kind: "planners",
+		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
+		retry: [room],
+	});
 	expect(woken.at - asked).toBeLessThan(5_000);
 	expect(woken.at - waited).toBeLessThan(15_000);
 	await studio.disconnect();

@@ -1431,6 +1431,21 @@ for (let [shape, options] of SHAPES) {
 		await expect(button).toHaveAccessibleName("Runs on studio");
 		// The one live word is said as the state is entered, and not again as its detail arrives.
 		await expect(announced(page)).toHaveText(/^studio is offline\./);
+		// Chopin cannot reconnect the machine, so the banner offers no Reconnect; this person may
+		// choose another machine, so it offers that, and it opens the same list the button does.
+		let choose = strip(page).getByRole("button", { name: "Choose machine", exact: true });
+		await expect(strip(page).getByRole("button")).toHaveCount(1);
+		await expect(choose).toBeVisible();
+		await choose.click();
+		let chosen = shape === "phone"
+			? page.getByRole("dialog", { name: "Runs on", exact: true })
+			: page.getByRole("menu", { name: "Runs on", exact: true });
+		await expect(chosen.getByRole("menuitemradio", { name: /^studio/ })).toContainText("Offline");
+		await shoot(page, `machine-offline-choose-${shape}`);
+		// A phone's sheet takes focus once it has risen, as it does when the button opens it.
+		if (shape === "phone") await expect(chosen).toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(chosen).toBeHidden();
 		// The banner tells it, so the machine's menu does not tell it a second time. A desktop's list
 		// of machines is the menu named "Runs on"; a phone's is a sheet, a dialog of that name, with
 		// the same list, so each is looked at as what it is, and has its machine's own row and no note.
@@ -1494,6 +1509,8 @@ for (let [shape, options] of SHAPES) {
 		for (let [name, planner, text] of states) {
 			carriage.say(planner);
 			await expect(strip(page)).toContainText(text);
+			// A machine that is away offers this person, who may not choose one, no button at all.
+			if (name === "away") await expect(strip(page).getByRole("button")).toHaveCount(0);
 
 			await carriage.lose();
 			await expect(notice).toBeVisible();
