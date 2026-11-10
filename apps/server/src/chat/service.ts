@@ -2969,6 +2969,10 @@ async function run(
 						&& record.origin === "planner" && !!record.followUp && holdsQuestion(record.status)
 					).length,
 				publish: part => translate(context, part),
+				beginAttempt: () => {
+					chat.toolEntries = new Map();
+					if (chat.turnImages) chat.turnImages.calls = new Set();
+				},
 			});
 		}
 		if (jobTurn && chat.closed) throw new Error("The document closed.");

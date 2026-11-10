@@ -111,6 +111,7 @@ export async function publishPlannerReplies(options: {
 	/** Count decisions that already existed and that the Planner repeated this turn. */
 	keptDecisions?: () => number;
 	publish: (part: Part) => void;
+	beginAttempt?: () => void;
 }): Promise<void> {
 	let { session, decide, publish } = options;
 	let controller = new AbortController();
@@ -151,6 +152,7 @@ export async function publishPlannerReplies(options: {
 		}`;
 		let failure: unknown;
 		try {
+			options.beginAttempt?.();
 			let result = await session.stream(
 				prompt,
 				signal,
