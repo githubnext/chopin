@@ -497,6 +497,67 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	await client.detach();
 });
 
+test("lists a catalog that repeats a model or a level as the client reported it", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	// Valid on the wire, so kept as written: a model listed three times, a level listed twice and one
+	// named `default`, a provider whose id has a space and another whose id is what no provider is called.
+	let { client, asked } = await attachClient(room, {
+		models: {
+			available: [
+				{
+					id: "echo/one",
+					name: "Echo one",
+					provider: { id: "the echo lab", name: "Echo Lab" },
+					thinkingLevels: ["high", "off", "high", "default"],
+				},
+				{ id: "none/two", name: "Two", provider: { id: "none", name: "None" } },
+				{ id: "echo/one", name: "Echo again", provider: { id: "the echo lab", name: "Echo Lab" } },
+				{ id: "echo/one", name: "Echo third" },
+			],
+			default: { id: "echo/one" },
+		},
+	});
+	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one");
+	await openPicker(page);
+
+	// Every entry is listed in the order given, and only the first of an id is the model that runs.
+	let rows = popover(page).getByRole("option");
+	await expect(rows).toHaveCount(4);
+	await expect(rows.locator(".composer-model-row-name")).toHaveText([
+		"Echo one",
+		"Echo again",
+		"Two",
+		"Echo third",
+	]);
+	await expect(popover(page).locator('[role="option"][aria-selected="true"]')).toHaveCount(1);
+	await expect(rows.first()).toHaveAttribute("aria-selected", "true");
+	// Each group is named by its own heading, whatever its provider's id is made of.
+	await expect(popover(page).getByRole("group", { name: "Echo Lab" })).toHaveCount(1);
+	await expect(popover(page).getByRole("group", { name: "None" })).toHaveCount(1);
+	await expect(popover(page).getByRole("group", { name: "Other" })).toHaveCount(1);
+
+	// Default, then every level as listed; only the first of a repeated level is the one chosen.
+	let radios = levels(page).getByRole("radio");
+	await expect(radios).toHaveText(["Default", "High", "Off", "High", "Default"]);
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Default"]);
+	await radios.nth(3).click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning high");
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
+	await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true");
+	// A level named `default` is a level the client asked for, not the model's own.
+	await radios.nth(4).click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning default");
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
+	await expect(radios.nth(4)).toHaveAttribute("aria-checked", "true");
+	await expectAccessible(page);
+	await page.keyboard.press("Escape");
+	await ask(page, "default level", 1);
+	expect(turnFor(asked, "default level")).toMatchObject({ thinkingLevel: "default" });
+	await client.detach();
+});
+
 test("keeps the choice across a reload and shows it live to a second person", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();

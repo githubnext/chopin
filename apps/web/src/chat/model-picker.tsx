@@ -17,6 +17,7 @@ import {
 	chooseLevel,
 	chooseModel,
 	fallbackNotice,
+	levelSteps,
 	movedIndex,
 	pickerGroups,
 	pickerKey,
@@ -183,8 +184,9 @@ export function ModelPicker(
 			)}
 			<div className="composer-model-list">
 				<div aria-label="Models" id={listId} role="listbox">
-					{groups.map(group => {
-						let heading = `${listId}-group-${group.id || "none"}`;
+					{groups.map((group, position) => {
+						// By place: a provider's own id may hold spaces, or be what a model with none is called.
+						let heading = `${listId}-group-${position}`;
 						return (
 							<div
 								aria-labelledby={group.name ? heading : undefined}
@@ -205,7 +207,7 @@ export function ModelPicker(
 												meta: model.isDefault ? "Default" : undefined,
 											}}
 											id={referenceOptionId(listId, index)}
-											key={model.id}
+											key={model.key}
 											onClick={() => pick(index)}
 											onMouseDown={event => event.preventDefault()}
 											onMouseEnter={() => setCursor({ query, index })}
@@ -250,15 +252,15 @@ function ReasoningLevels(
 	},
 ) {
 	let group = useRef<HTMLDivElement>(null);
-	let steps: Array<string | undefined> = [undefined, ...levels];
+	let steps = levelSteps(levels, current);
 	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
 		let moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-		let step = moves[event.key];
-		if (step === undefined) return;
+		let move = moves[event.key];
+		if (move === undefined) return;
 		event.preventDefault();
-		let at = Math.max(0, steps.indexOf(current));
-		let next = (at + step + steps.length) % steps.length;
-		onChoose(steps[next]);
+		let at = Math.max(0, steps.findIndex(step => step.checked));
+		let next = (at + move + steps.length) % steps.length;
+		onChoose(steps[next]!.level);
 		requestAnimationFrame(() =>
 			group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
 		);
@@ -273,23 +275,20 @@ function ReasoningLevels(
 				onKeyDown={onKeyDown}
 				role="radiogroup"
 			>
-				{steps.map(level => {
-					let checked = level === current;
-					return (
-						<button
-							aria-checked={checked}
-							className="composer-reasoning-level"
-							data-press="none"
-							key={level ?? "default"}
-							onClick={() => onChoose(level)}
-							role="radio"
-							tabIndex={checked ? 0 : -1}
-							type="button"
-						>
-							{level === undefined ? "Default" : levelLabel(level)}
-						</button>
-					);
-				})}
+				{steps.map(({ key, level, checked }) => (
+					<button
+						aria-checked={checked}
+						className="composer-reasoning-level"
+						data-press="none"
+						key={key}
+						onClick={() => onChoose(level)}
+						role="radio"
+						tabIndex={checked ? 0 : -1}
+						type="button"
+					>
+						{level === undefined ? "Default" : levelLabel(level)}
+					</button>
+				))}
 			</div>
 		</div>
 	);

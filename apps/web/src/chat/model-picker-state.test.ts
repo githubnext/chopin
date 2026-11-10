@@ -4,6 +4,7 @@ import {
 	chooseLevel,
 	chooseModel,
 	fallbackNotice,
+	levelSteps,
 	matchesQuery,
 	movedIndex,
 	pickerGroups,
@@ -220,5 +221,62 @@ describe("the keyboard", () => {
 		expect(movedIndex("next", 0, 3)).toBe(1);
 		expect(movedIndex("next", 0, 0)).toBe(0);
 		expect(movedIndex("pick", 1, 3)).toBe(1);
+	});
+});
+
+describe("a catalog that repeats an id or a level", () => {
+	// All of it is valid on the wire, and Chopin keeps it as the client wrote it.
+	let repeated: Chat.ModelCatalog = {
+		models: [
+			{
+				id: "acme/a",
+				name: "A, first",
+				provider: { id: "acme", name: "Acme" },
+				thinkingLevels: ["high", "off", "high", "default"],
+			},
+			{ id: "beta/b", name: "B", provider: { id: "beta", name: "Beta" } },
+			{ id: "acme/a", name: "A, again", provider: { id: "acme", name: "Acme" } },
+			{ id: "acme/a", name: "A, third" },
+		],
+		default: { model: "acme/a" },
+	};
+
+	test("lists every entry in the catalog's order and tells each apart", () => {
+		let flat = pickerOptions(pickerGroups(repeated, undefined, ""));
+		expect(flat.map(model => model.name)).toEqual(["A, first", "A, again", "B", "A, third"]);
+		expect(new Set(flat.map(model => model.key)).size).toBe(flat.length);
+	});
+
+	test("selects only the first entry of the id that will run", () => {
+		let flat = (choice?: Chat.ModelChoice) => pickerOptions(pickerGroups(repeated, choice, ""));
+		expect(flat().filter(model => model.selected).map(model => model.name)).toEqual(["A, first"]);
+		expect(flat({ model: "beta/b" }).filter(model => model.selected).map(model => model.name))
+			.toEqual(["B"]);
+	});
+
+	test("keeps an entry's key while a search removes the others", () => {
+		let key = (query: string, name: string) =>
+			pickerOptions(pickerGroups(repeated, undefined, query)).find(model => model.name === name)
+				?.key;
+		expect(key("again", "A, again")).toBeDefined();
+		expect(key("again", "A, again")).toBe(key("", "A, again"));
+		expect(key("third", "A, third")).toBe(key("", "A, third"));
+	});
+
+	test("steps through Default and every level once, checking the first that is the choice", () => {
+		let steps = levelSteps(["high", "off", "high", "default"], "high");
+		expect(steps.map(step => step.level)).toEqual([undefined, "high", "off", "high", "default"]);
+		expect(new Set(steps.map(step => step.key)).size).toBe(steps.length);
+		expect(steps.map(step => step.checked)).toEqual([false, true, false, false, false]);
+	});
+
+	test("takes a level named default for a level, and Default for the model's own", () => {
+		let levels = ["off", "default"];
+		expect(levelSteps(levels, undefined).map(step => step.checked)).toEqual([true, false, false]);
+		expect(levelSteps(levels, "default").map(step => step.checked)).toEqual([false, false, true]);
+		expect(levelSteps(levels, "default").map(step => step.key)).toEqual(
+			levelSteps(levels, undefined).map(step => step.key),
+		);
+		expect(new Set(levelSteps(levels, undefined).map(step => step.key)).size).toBe(3);
 	});
 });

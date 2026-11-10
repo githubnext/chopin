@@ -18,9 +18,11 @@ type Catalog = Chat.ModelCatalog;
 type Choice = Chat.ModelChoice;
 
 export type PickerModel = Chat.ModelOption & {
+	/** Tells this entry from the others, even one with the same `id`; it holds while a search runs. */
+	key: string;
 	/** The harness runs it when nobody has chosen. */
 	isDefault: boolean;
-	/** It is the model that will run. */
+	/** It is the model that will run: of entries sharing its `id`, the first, as the server finds it. */
 	selected: boolean;
 };
 
@@ -57,7 +59,11 @@ export function pickerGroups(
 	let shown = shownModel(catalog, choice)?.id;
 	let named = catalog.models.some(model => model.provider);
 	let groups = new Map<string, PickerGroup>();
+	let seen = new Map<string, number>();
 	for (let model of catalog.models) {
+		// A catalog may list an id twice; each entry stays, and the count is of the whole catalog.
+		let occurrence = seen.get(model.id) ?? 0;
+		seen.set(model.id, occurrence + 1);
 		if (!matchesQuery(model, query)) continue;
 		let id = model.provider?.id ?? "";
 		let group = groups.get(id);
@@ -75,8 +81,9 @@ export function pickerGroups(
 		}
 		group.models.push({
 			...model,
+			key: `${occurrence}:${model.id}`,
 			isDefault: model.id === catalog.default?.model,
-			selected: model.id === shown,
+			selected: occurrence === 0 && model.id === shown,
 		});
 	}
 	return [...groups.values()];
@@ -136,6 +143,23 @@ export function reasoningLevels(
 		levels: modelLevels(catalog, resolved.model),
 		current: resolved.thinkingLevel,
 	};
+}
+
+export type LevelStep = { key: string; level: string | undefined; checked: boolean };
+
+/**
+ * What the reasoning control draws: Default (the model's own, `level` absent) and then each level
+ * as the catalog lists it. A catalog may list a level twice, or one named `default`, so a step is
+ * told apart by its place, and the first step that is the choice is the one checked.
+ */
+export function levelSteps(levels: readonly string[], current: string | undefined): LevelStep[] {
+	let steps: Array<string | undefined> = [undefined, ...levels];
+	let chosen = steps.indexOf(current);
+	return steps.map((level, position) => ({
+		key: `${position}`,
+		level,
+		checked: position === chosen,
+	}));
 }
 
 /**
