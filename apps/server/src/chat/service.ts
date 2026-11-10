@@ -221,13 +221,9 @@ export type Instruction = {
 	 * never can.
 	 */
 	asked?: true;
-	/**
-	 * Answers a reader's reaction. The turn is an ordinary one in the Chat, queued, streamed and
-	 * stopped like any other, but it has no tools, runs under the document's existing owner without
-	 * claiming it for anyone, and never uses or changes the Planner session kept for the writers.
-	 */
+	/** Answers a reader's reaction: no tools, no owner claimed, the writers' kept session untouched. */
 	reader?: true;
-	/** Asked as the turn is about to start, which can be long after it was queued; `false` ends it unrun. */
+	/** Asked as the turn starts, long after it may have been queued; `false` ends it unrun. */
 	authorize?: () => Promise<boolean>;
 };
 
@@ -354,7 +350,6 @@ export type Chat = {
 	reactions?: import("./reaction-reply").ReactionResponder;
 	/** The id of the running turn when it is answering a reaction. */
 	reactionTurn?: string;
-	/** The running turn answers a reader's reaction; see `Instruction.reader`. */
 	reader?: true;
 	entries: Wire.Entry[];
 	/** Chopin's own turns waiting for the running one to end; never a person's message. */
@@ -2608,7 +2603,6 @@ async function repositorySession(
 	let reader = !!context.chat.reader;
 	let isolated = reader || !!context.chat.job;
 	// A background job keeps its isolated session: it never borrows or ends the retained Planner.
-	// Nor does a reader's answer, whose session has no tools at all.
 	if (retained && !isolated) {
 		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
 			context.chat.agent = retained.session;
@@ -2933,7 +2927,7 @@ async function run(
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
 		} else if (reader) {
-			// What the Planner has not been told yet, and the references it can read, are the writers'.
+			// The backscroll and references are the writers' to take.
 			prompt = text;
 		} else {
 			// A skill or a prompt template is Atomic's own `/name args`, which has to open the prompt:

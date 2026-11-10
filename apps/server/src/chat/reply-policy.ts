@@ -106,7 +106,7 @@ export async function publishPlannerReplies(options: {
 	files?: PlannerFiles;
 	signal: AbortSignal;
 	decide: Decide | undefined;
-	/** False for a session with no tools: a withheld reply is not repaired through them, only reported. */
+	/** False for a session with no tools to repair with. */
 	repair?: boolean;
 	/** Count new, durably captured Planner decisions from the authoritative document state. */
 	capturedDecisions?: () => number;

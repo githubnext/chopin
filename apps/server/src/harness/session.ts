@@ -76,11 +76,7 @@ export type PlannerChannel = {
 	>;
 	/** Session-tree and remote fork hooks for Chat threads. */
 	fork?: PlannerForkHooks;
-	/**
-	 * An answer to a reader's reaction: a session with no tools, isolated on every harness, so it
-	 * is never a full Atomic session, never offers what an attached client brings, and reads and
-	 * writes nothing but its reply.
-	 */
+	/** An answer to a reader's reaction: no tools, isolated on every harness. */
 	reader?: true;
 };
 
